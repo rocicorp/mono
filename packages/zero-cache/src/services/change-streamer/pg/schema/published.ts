@@ -3,23 +3,12 @@ import type postgres from 'postgres';
 import {equals} from '../../../../../../shared/src/set-utils.js';
 import * as v from '../../../../../../shared/src/valita.js';
 import type {FilteredTableSpec, IndexSpec} from '../../../../db/specs.js';
-import {APP_PUBLICATION_PREFIX, INTERNAL_PUBLICATION_PREFIX} from './zero.js';
 
 type PublishedTableQueryResult = {
   tables: FilteredTableSpec[];
 };
 
-function restrictTo(publications: string[] | undefined) {
-  return publications !== undefined
-    ? `pb.pubname IN (${literal(publications)})`
-    : `( STARTS_WITH(pb.pubname, ${literal(APP_PUBLICATION_PREFIX)})
-      OR STARTS_WITH(pb.pubname, ${literal(INTERNAL_PUBLICATION_PREFIX)}) )`;
-}
-
-export function publishedTableQuery(
-  publications?: string[] | undefined,
-  join = '',
-) {
+export function publishedTableQuery(publications: string[], join = '') {
   return `
 WITH published_columns AS (SELECT 
   nspname AS "schema", 
@@ -46,7 +35,7 @@ JOIN pg_publication_tables as pb ON
 ${join}
 LEFT JOIN pg_constraint pk ON pk.contype = 'p' AND pk.connamespace = relnamespace AND pk.conrelid = attrelid
 LEFT JOIN pg_attrdef pd ON pd.adrelid = attrelid AND pd.adnum = attnum
-WHERE ${restrictTo(publications)}
+WHERE pb.pubname IN (${literal(publications)})
 ORDER BY nspname, pc.relname),
 
 tables AS (SELECT json_build_object(
@@ -90,10 +79,7 @@ type IndexDefinitionsQueryResult = {
   indexes: IndexSpec[];
 };
 
-export function indexDefinitionsQuery(
-  publications?: string[] | undefined,
-  join = '',
-) {
+export function indexDefinitionsQuery(publications: string[], join = '') {
   // Note: pg_attribute contains column names for tables and for indexes.
   // However, the latter does not get updated when a column in a table is
   // renamed.
@@ -130,7 +116,7 @@ export function indexDefinitionsQuery(
     ) AS index_column ON true
     ${join}
     LEFT JOIN pg_constraint ON pg_constraint.conindid = pc.oid
-    WHERE ${restrictTo(publications)}
+    WHERE pb.pubname IN (${literal(publications)})
       AND pg_constraint.contype is distinct from 'p'
       AND pg_constraint.contype is distinct from 'f'
     ORDER BY
@@ -177,7 +163,7 @@ export type PublicationInfo = {
  */
 export async function getPublicationInfo(
   sql: postgres.Sql,
-  publications?: string[],
+  publications: string[],
 ): Promise<PublicationInfo> {
   const result = await sql.unsafe(`
   SELECT 
@@ -185,13 +171,13 @@ export async function getPublicationInfo(
     tablename AS "table", 
     json_object_agg(pubname, attnames) AS "publications"
     FROM pg_publication_tables pb
-    WHERE ${restrictTo(publications)}
+    WHERE pb.pubname IN (${literal(publications)})
     GROUP BY schemaname, tablename;
 
   SELECT ${Object.keys(publicationSchema.shape).join(
     ',',
   )} FROM pg_publication pb
-    WHERE ${restrictTo(publications)}
+    WHERE pb.pubname IN (${literal(publications)})
     ORDER BY pubname;
 
   ${publishedTableQuery(publications)};

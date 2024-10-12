@@ -1,3 +1,4 @@
+import {ident as id, literal as lit} from 'pg-format';
 import * as v from '../../../../../../shared/src/valita.js';
 import {filteredTableSpec, indexSpec} from '../../../../db/specs.js';
 import {indexDefinitionsQuery, publishedTableQuery} from './published.js';
@@ -78,7 +79,7 @@ export const errorEventSchema = v.object({
 
 export type ErrorEvent = v.Infer<typeof errorEventSchema>;
 
-const COMMON_TRIGGER_FUNCTIONS = `
+const GLOBAL_TRIGGER_FUNCTIONS = `
 CREATE OR REPLACE FUNCTION zero.get_trigger_context()
 RETURNS record
 AS $$
@@ -90,7 +91,7 @@ BEGIN
 END
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION zero.emit_error(message TEXT)
+CREATE OR REPLACE FUNCTION zero.emit_error(shardID TEXT, message TEXT)
 RETURNS void
 AS $$
 DECLARE
@@ -104,14 +105,22 @@ BEGIN
     )
   ) into event;
 
-  PERFORM pg_logical_emit_message(true, 'zero', event);
+  PERFORM pg_logical_emit_message(true, 'zero/' || shardID, event);
 END
 $$ LANGUAGE plpgsql;
 `;
 
-export function replicateCreateOrAlterTable() {
+function append(shardID: string) {
+  return (name: string) => id(name + '_' + shardID);
+}
+
+export function replicateCreateOrAlterTable(
+  shardID: string,
+  publications: string[],
+) {
+  const sharded = append(shardID);
   return `
-CREATE OR REPLACE FUNCTION zero.replicate_create_or_alter_table()
+CREATE OR REPLACE FUNCTION zero.${sharded('replicate_create_or_alter_table')}()
 RETURNS event_trigger
 AS $$
 DECLARE
@@ -127,7 +136,7 @@ BEGIN
   END IF;
 
   ${publishedTableQuery(
-    undefined,
+    publications,
     `JOIN pg_event_trigger_ddl_commands() ddl ON ddl.objid = pc.oid`,
   )} INTO tables;
 
@@ -137,6 +146,7 @@ BEGIN
   IF json_array_length(tables.tables) > 1
   THEN
     PERFORM zero.emit_error(
+      ${lit(shardID)},
       FORMAT('unexpected number of tables for "%s": %s',
         tag, json_array_length(tables.tables))
     );
@@ -144,7 +154,7 @@ BEGIN
   END IF;
 
   ${indexDefinitionsQuery(
-    undefined,
+    publications,
     `JOIN pg_event_trigger_ddl_commands() ddl on ddl.objid = pg_index.indrelid`,
   )} INTO indexes;
   
@@ -159,15 +169,16 @@ BEGIN
     )
   ) INTO event;
 
-  PERFORM pg_logical_emit_message(true, 'zero', event);
+  PERFORM pg_logical_emit_message(true, ${lit('zero/' + shardID)}, event);
 END 
 $$ LANGUAGE plpgsql;
   `;
 }
 
-export function replicateCreateIndex() {
+export function replicateCreateIndex(shardID: string, publications: string[]) {
+  const sharded = append(shardID);
   return `
-CREATE OR REPLACE FUNCTION zero.replicate_create_index()
+CREATE OR REPLACE FUNCTION zero.${sharded('replicate_create_index')}()
 RETURNS event_trigger
 AS $$
 DECLARE
@@ -175,7 +186,7 @@ DECLARE
   event text;
 BEGIN 
   ${indexDefinitionsQuery(
-    undefined,
+    publications,
     `JOIN pg_event_trigger_ddl_commands() ddl on ddl.objid = pc.oid`,
   )} INTO indexes;
 
@@ -185,6 +196,7 @@ BEGIN
   IF json_array_length(indexes.indexes) > 1
   THEN
     PERFORM zero.emit_error(
+      ${lit(shardID)},
       FORMAT('unexpected number of indexes for "CREATE INDEX": %s', 
         json_array_length(indexes.indexes))
     );
@@ -201,14 +213,16 @@ BEGIN
     )
   ) INTO event;
 
-  PERFORM pg_logical_emit_message(true, 'zero', event);
+  PERFORM pg_logical_emit_message(true, ${lit('zero/' + shardID)}, event);
 END
 $$ LANGUAGE plpgsql;
   `;
 }
-
-const DROP_EVENT_TRIGGERS = `
-CREATE OR REPLACE FUNCTION zero.replicate_drop_event(tag TEXT, type TEXT, dropped TEXT)
+export function replicateDropEvents(shardID: string) {
+  const sharded = append(shardID);
+  return `
+CREATE OR REPLACE FUNCTION zero.${sharded('replicate_drop_event')}(
+  tag TEXT, type TEXT, dropped TEXT)
 RETURNS void
 AS $$
 DECLARE
@@ -229,56 +243,65 @@ BEGIN
     WHERE object_type = type
     INTO event;
 
-  PERFORM pg_logical_emit_message(true, 'zero', event);
+  PERFORM pg_logical_emit_message(true, ${lit('zero/' + shardID)}, event);
 END
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION zero.replicate_drop_table()
+CREATE OR REPLACE FUNCTION zero.${sharded('replicate_drop_table')}()
 RETURNS event_trigger
 AS $$
 BEGIN
-  PERFORM zero.replicate_drop_event('DROP TABLE', 'table', 'tables');
+  PERFORM zero.${sharded('replicate_drop_event')}(
+    'DROP TABLE', 'table', 'tables');
 END
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION zero.replicate_drop_index()
+CREATE OR REPLACE FUNCTION zero.${sharded('replicate_drop_index')}()
 RETURNS event_trigger
 AS $$
 BEGIN
-  PERFORM zero.replicate_drop_event('DROP INDEX', 'index', 'indexes');
+  PERFORM zero.${sharded('replicate_drop_event')}(
+    'DROP INDEX', 'index', 'indexes');
 END
 $$ LANGUAGE plpgsql;
 `;
+}
 
-export function createEventTriggerStatements() {
+export function createEventTriggerStatements(
+  shardID: string,
+  publications: string[],
+) {
+  const sharded = append(shardID);
   return [
-    COMMON_TRIGGER_FUNCTIONS,
+    GLOBAL_TRIGGER_FUNCTIONS,
 
-    replicateCreateOrAlterTable(),
-    `DROP EVENT TRIGGER IF EXISTS zero_replicate_create_or_alter_table`,
-    `CREATE EVENT TRIGGER zero_replicate_create_or_alter_table
+    replicateCreateOrAlterTable(shardID, publications),
+    `DROP EVENT TRIGGER IF EXISTS ${sharded(
+      'zero_replicate_create_or_alter_table',
+    )}`,
+    `CREATE EVENT TRIGGER ${sharded('zero_replicate_create_or_alter_table')}
       ON ddl_command_end
       WHEN TAG IN ('CREATE TABLE', 'ALTER TABLE')
-      EXECUTE PROCEDURE zero.replicate_create_or_alter_table()`,
+      EXECUTE PROCEDURE zero.${sharded('replicate_create_or_alter_table')}()`,
 
-    replicateCreateIndex(),
-    `DROP EVENT TRIGGER IF EXISTS zero_replicate_create_index`,
-    `CREATE EVENT TRIGGER zero_replicate_create_index
+    replicateCreateIndex(shardID, publications),
+    `DROP EVENT TRIGGER IF EXISTS ${sharded('zero_replicate_create_index')}`,
+    `CREATE EVENT TRIGGER ${sharded('zero_replicate_create_index')}
       ON ddl_command_end
       WHEN TAG IN ('CREATE INDEX')
-      EXECUTE PROCEDURE zero.replicate_create_index()`,
+      EXECUTE PROCEDURE zero.${sharded('replicate_create_index')}()`,
 
-    DROP_EVENT_TRIGGERS,
-    `DROP EVENT TRIGGER IF EXISTS zero_replicate_drop_table`,
-    `CREATE EVENT TRIGGER zero_replicate_drop_table
+    replicateDropEvents(shardID),
+    `DROP EVENT TRIGGER IF EXISTS ${sharded('zero_replicate_drop_table')}`,
+    `CREATE EVENT TRIGGER ${sharded('zero_replicate_drop_table')}
       ON sql_drop
       WHEN TAG IN ('DROP TABLE')
-      EXECUTE PROCEDURE zero.replicate_drop_table()`,
+      EXECUTE PROCEDURE zero.${sharded('replicate_drop_table')}()`,
 
-    `DROP EVENT TRIGGER IF EXISTS zero_replicate_drop_index`,
-    `CREATE EVENT TRIGGER zero_replicate_drop_index
+    `DROP EVENT TRIGGER IF EXISTS ${sharded('zero_replicate_drop_index')}`,
+    `CREATE EVENT TRIGGER ${sharded('zero_replicate_drop_index')}
         ON sql_drop
         WHEN TAG IN ('DROP INDEX')
-        EXECUTE PROCEDURE zero.replicate_drop_index()`,
+        EXECUTE PROCEDURE zero.${sharded('replicate_drop_index')}()`,
   ].join(';\n');
 }
