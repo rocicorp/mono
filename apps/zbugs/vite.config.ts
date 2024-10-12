@@ -28,15 +28,5 @@ export default defineConfig({
   define: makeDefine(),
   build: {
     target: 'esnext',
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes('zero-setup')) {
-            return 'zero-setup';
-          }
-          return;
-        },
-      },
-    },
   },
 });

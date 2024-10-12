@@ -1,3 +1,4 @@
+import './zero-setup.js';
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import {must} from 'shared/src/must.js';
