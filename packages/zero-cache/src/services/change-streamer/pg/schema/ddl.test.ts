@@ -971,8 +971,8 @@ describe('change-source/tables/ddl', () => {
               },
               primaryKey: ['id'],
               publications: {
-                zero_all: {rowFilter: null},
-                zero_sum: {rowFilter: null},
+                ['zero_all']: {rowFilter: null},
+                ['zero_sum']: {rowFilter: null},
               },
             },
             {
@@ -1052,7 +1052,7 @@ describe('change-source/tables/ddl', () => {
               },
               primaryKey: ['id'],
               publications: {
-                zero_all: {rowFilter: null}, // Now part of zero_all
+                ['zero_all']: {rowFilter: null}, // Now part of zero_all
               },
             },
           ],
