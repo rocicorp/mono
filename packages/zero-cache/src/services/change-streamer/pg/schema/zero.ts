@@ -50,6 +50,9 @@ export async function setupTablesAndReplication(
 ): Promise<PublicationInfo> {
   // Validate requested publications.
   for (const pub of publications) {
+    // TODO: We can consider relaxing this now that we use per-shard
+    // triggers rather than global prefix-basd triggers. We should
+    // probably still disallow the INTERNAL_PUBLICATION_PREFIX though.
     if (!pub.startsWith(APP_PUBLICATION_PREFIX)) {
       throw new Error(
         `Publication ${pub} does not start with ${APP_PUBLICATION_PREFIX}`,
@@ -66,9 +69,6 @@ export async function setupTablesAndReplication(
     await tx.unsafe(GLOBAL_SETUP);
   }
   allPublications.push(SCHEMA_VERSIONS_PUBLICATION);
-
-  // Setup DDL trigger events.
-  await tx.unsafe(createEventTriggerStatements());
 
   // Setup the zero.clients publication for rows for this shardID.
   const clientsPublication = INTERNAL_PUBLICATION_PREFIX + id + '_clients';
@@ -105,6 +105,9 @@ export async function setupTablesAndReplication(
     }
     allPublications.push(DEFAULT_APP_PUBLICATION);
   }
+
+  // Setup DDL trigger events.
+  await tx.unsafe(createEventTriggerStatements(id, allPublications));
 
   return getPublicationInfo(tx, allPublications);
 }

@@ -860,7 +860,10 @@ describe('replicator/initial-sync', () => {
         getConnectionURI(upstream),
       );
 
-      const {publications, tables} = await getPublicationInfo(upstream);
+      const {publications, tables} = await getPublicationInfo(
+        upstream,
+        c.resultingPublications,
+      );
       expect(
         Object.fromEntries(
           tables.map(table => [`${table.schema}.${table.name}`, table]),

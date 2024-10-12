@@ -21,6 +21,8 @@ describe('change-source/tables/ddl', () => {
   let messages: Queue<Pgoutput.Message>;
   let service: LogicalReplicationService;
 
+  const SHARD_ID = '0';
+
   beforeEach(async () => {
     createSilentLogContext();
     upstream = await testDBs.create('ddl_test_upstream');
@@ -45,7 +47,9 @@ describe('change-source/tables/ddl', () => {
     CREATE PUBLICATION zero_sum FOR TABLE pub.foo, pub.boo;
     `);
 
-    await upstream.unsafe(createEventTriggerStatements());
+    await upstream.unsafe(
+      createEventTriggerStatements(SHARD_ID, ['zero_all', 'zero_sum']),
+    );
 
     await upstream`SELECT pg_create_logical_replication_slot(${SLOT_NAME}, 'pgoutput')`;
 
@@ -644,7 +648,7 @@ describe('change-source/tables/ddl', () => {
       {tag: 'insert'},
       {
         tag: 'message',
-        prefix: 'zero',
+        prefix: 'zero/' + SHARD_ID,
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,
@@ -691,7 +695,7 @@ describe('change-source/tables/ddl', () => {
       {tag: 'begin'},
       {
         tag: 'message',
-        prefix: 'zero',
+        prefix: 'zero/' + SHARD_ID,
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,
@@ -701,14 +705,14 @@ describe('change-source/tables/ddl', () => {
       {tag: 'begin'},
       {
         tag: 'message',
-        prefix: 'zero',
+        prefix: 'zero/' + SHARD_ID,
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,
       },
       {
         tag: 'message',
-        prefix: 'zero',
+        prefix: 'zero/' + SHARD_ID,
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,

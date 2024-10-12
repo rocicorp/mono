@@ -13,15 +13,6 @@ describe('tables/published', () => {
 
   const cases: Case[] = [
     {
-      name: 'Nothing published',
-      setupQuery: `CREATE SCHEMA zero`,
-      expectedResult: {
-        publications: [],
-        tables: [],
-        indices: [],
-      },
-    },
-    {
       name: 'zero.clients',
       setupQuery: `
       CREATE SCHEMA zero;
@@ -1005,28 +996,29 @@ describe('tables/published', () => {
       await db.unsafe(c.setupQuery);
 
       // Make sure both lookup methods work (e.g. name prefix and list membership)
-      for (const restrictions of [
-        undefined,
-        [
-          'zero_all',
-          'zero_data',
-          'zero_one',
-          'zero_two',
-          'zero_keys',
-          '_zero_meta',
-          'zero_tables',
-        ],
-      ])
-        try {
-          const tables = await getPublicationInfo(db, restrictions);
-          expect(tables).toEqual(c.expectedResult);
-        } catch (e) {
-          if (c.expectedError) {
-            expect(c.expectedError).toMatch(String(e));
-          } else {
-            throw e;
-          }
+      try {
+        const tables = await getPublicationInfo(
+          db,
+          c.expectedResult
+            ? c.expectedResult.publications.map(p => p.pubname)
+            : [
+                'zero_all',
+                'zero_data',
+                'zero_one',
+                'zero_two',
+                'zero_keys',
+                '_zero_meta',
+                'zero_tables',
+              ],
+        );
+        expect(tables).toEqual(c.expectedResult);
+      } catch (e) {
+        if (c.expectedError) {
+          expect(c.expectedError).toMatch(String(e));
+        } else {
+          throw e;
         }
+      }
     });
   }
 });

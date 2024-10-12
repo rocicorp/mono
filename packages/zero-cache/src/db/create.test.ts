@@ -348,7 +348,7 @@ describe('tables/create', () => {
         );
         await db.unsafe(createStatement);
 
-        const published = await getPublicationInfo(db);
+        const published = await getPublicationInfo(db, ['zero_all']);
         expect(published.tables).toEqual([
           {
             ...(c.dstTableSpec ?? c.srcTableSpec),
