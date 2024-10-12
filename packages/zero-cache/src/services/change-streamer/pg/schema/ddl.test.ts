@@ -1107,8 +1107,8 @@ describe('change-source/tables/ddl', () => {
       await tx`INSERT INTO pub.boo(id) VALUES('1')`;
       await tx.unsafe(query);
     });
-    // In the subsequent transaction, perform the same dll operation
-    // in the "private" schema.
+    // In the subsequent transaction, perform similar DDL operation(s)
+    // that should not result in a message.
     await upstream.begin(async tx => {
       // For the second transaction, commit unrelated DDL events to ensure
       // that they do not result in a message.
