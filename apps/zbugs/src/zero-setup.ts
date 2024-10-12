@@ -40,14 +40,14 @@ authRef.onChange(auth => {
   // To enable accessing zero in the devtools easily.
   (window as {z?: Zero<Schema>}).z = z;
 
-  const baseIssueQuery = z.query.issue
-    .related('creator')
-    .related('labels')
-    .related('comments', c => c.limit(10).related('creator'))
-    .orderBy('modified', 'desc');
+  const baseIssueQuery = z.query.issue.related('creator').related('labels');
 
-  const {complete} = baseIssueQuery.preload();
-  complete.then(() => mark('issue preload complete'));
+  const {cleanup, complete} = baseIssueQuery.preload();
+  complete.then(() => {
+    mark('preload complete');
+    cleanup();
+    baseIssueQuery.related('comments', q => q.limit(10)).preload();
+  });
 
   z.query.user.preload();
   z.query.label.preload();
