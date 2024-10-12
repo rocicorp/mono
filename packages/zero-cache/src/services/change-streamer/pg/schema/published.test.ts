@@ -995,7 +995,6 @@ describe('tables/published', () => {
     test(c.name, async () => {
       await db.unsafe(c.setupQuery);
 
-      // Make sure both lookup methods work (e.g. name prefix and list membership)
       try {
         const tables = await getPublicationInfo(
           db,
