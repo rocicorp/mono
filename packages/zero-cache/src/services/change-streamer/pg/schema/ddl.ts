@@ -59,6 +59,15 @@ const dropIndexEventSchema = triggerEvent.extend({
   indexes: v.array(identifier),
 });
 
+const alterPublicationTagSchema = v.literal('ALTER PUBLICATION');
+
+const alterPublicationEventSchema = triggerEvent.extend({
+  tag: alterPublicationTagSchema,
+  publication: v.string(),
+  tables: v.array(filteredTableSpec),
+  indexes: v.array(indexSpec),
+});
+
 export const ddlEventSchema = v.object({
   type: v.literal('ddl'),
   version: v.literal(PROTOCOL_VERSION),
@@ -67,6 +76,7 @@ export const ddlEventSchema = v.object({
     createIndexEventSchema,
     dropTableEventSchema,
     dropIndexEventSchema,
+    alterPublicationEventSchema,
   ),
 });
 
@@ -218,6 +228,94 @@ END
 $$ LANGUAGE plpgsql;
   `;
 }
+
+export function replicateAlterPublication(
+  shardID: string,
+  publications: string[],
+) {
+  const sharded = append(shardID);
+  return `
+CREATE OR REPLACE FUNCTION zero.${sharded('replicate_alter_publication')}()
+RETURNS event_trigger
+AS $$
+DECLARE
+  r record;
+  pub text;
+BEGIN 
+  SELECT objid, object_type, object_identity FROM pg_event_trigger_ddl_commands() INTO r;
+
+  IF r.objid IS NULL THEN RETURN; END IF;  -- e.g. DROP alteration
+
+  IF r.object_type = 'publication relation' THEN
+    SELECT pub.pubname FROM pg_publication_rel AS rel
+      JOIN pg_publication AS pub ON pub.oid = rel.prpubid
+      WHERE rel.oid = r.objid INTO pub;
+
+  ELSIF r.object_type = 'publication namespace' THEN
+    SELECT pub.pubname FROM pg_publication_namespace AS ns
+      JOIN pg_publication AS pub ON pub.oid = ns.pnpubid
+      WHERE ns.oid = r.objid INTO pub;
+  END IF;
+
+  IF pub IN (${lit(publications)})
+  THEN
+    PERFORM zero.${sharded('emit_all_publications')}(pub);
+  ELSE
+    RAISE NOTICE ${lit('zero(' + shardID + ') ignoring %')}, r.object_identity;
+  END IF;
+END
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION zero.${sharded('replicate_alter_publication_drop')}()
+RETURNS event_trigger
+AS $$
+DECLARE
+  object_id text;
+  pub text;
+BEGIN 
+  SELECT object_identity FROM pg_event_trigger_dropped_objects() INTO object_id;
+
+  SELECT SPLIT_PART(object_id, ' in publication ', 2) INTO pub;
+
+  IF pub IN (${lit(publications)})
+  THEN
+    PERFORM zero.${sharded('emit_all_publications')}(pub);
+  END IF;
+END
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION zero.${sharded('emit_all_publications')}(pub TEXT)
+RETURNS void
+AS $$
+DECLARE
+  tables record;
+  indexes record;
+  event text;
+BEGIN
+  ${publishedTableQuery(publications)} INTO tables;
+
+  ${indexDefinitionsQuery(publications)} INTO indexes;
+  
+  SELECT json_build_object(
+    'type', 'ddl',
+    'version', ${PROTOCOL_VERSION},
+    'event', json_build_object(
+      'context', zero.get_trigger_context(),
+      'tag', 'ALTER PUBLICATION',
+      'publication', pub,
+      'tables', tables.tables,
+      'indexes', indexes.indexes
+    )
+  ) INTO event;
+
+  PERFORM pg_logical_emit_message(true, ${lit('zero/' + shardID)}, event);
+END 
+$$ LANGUAGE plpgsql;
+  `;
+}
+
 export function replicateDropEvents(shardID: string) {
   const sharded = append(shardID);
   return `
@@ -290,6 +388,23 @@ export function createEventTriggerStatements(
       ON ddl_command_end
       WHEN TAG IN ('CREATE INDEX')
       EXECUTE PROCEDURE zero.${sharded('replicate_create_index')}()`,
+
+    replicateAlterPublication(shardID, publications),
+    `DROP EVENT TRIGGER IF EXISTS ${sharded(
+      'zero_replicate_alter_publication',
+    )}`,
+    `CREATE EVENT TRIGGER ${sharded('zero_replicate_alter_publication')}
+      ON ddl_command_end
+      WHEN TAG IN ('ALTER PUBLICATION')
+      EXECUTE PROCEDURE zero.${sharded('replicate_alter_publication')}()`,
+
+    `DROP EVENT TRIGGER IF EXISTS ${sharded(
+      'zero_replicate_alter_publication_drop',
+    )}`,
+    `CREATE EVENT TRIGGER ${sharded('zero_replicate_alter_publication_drop')}
+      ON sql_drop
+      WHEN TAG IN ('ALTER PUBLICATION')
+      EXECUTE PROCEDURE zero.${sharded('replicate_alter_publication_drop')}()`,
 
     replicateDropEvents(shardID),
     `DROP EVENT TRIGGER IF EXISTS ${sharded('zero_replicate_drop_table')}`,
