@@ -73,7 +73,10 @@ export async function initialSync(
     );
     await Promise.all(
       tables.map(table =>
-        copiers.processReadTask(db => copy(lc, table, db, tx)),
+        copiers.process(db => {
+          copy(lc, table, db, tx);
+          return [];
+        }),
       ),
     );
     copiers.setDone();
