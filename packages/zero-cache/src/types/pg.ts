@@ -26,9 +26,13 @@ export function registerPostgresTypeParsers() {
   for (const type of TIMESTAMP_TYPES) {
     setTypeParser(type, parseTimestampToMicroseconds);
   }
+  // Timestamps are converted to epoch microseconds via the PreciseDate object.
   for (const type of TIMESTAMP_ARRAYS) {
     setTypeParser(type, val => array.parse(val, parseTimestampToMicroseconds));
   }
+  // Override the conversion of DATE to Javascript Date() objects.
+  // Store the normalized PG string as is.
+  setTypeParser(builtins.DATE, v => v);
 }
 
 function parseTimestampToMicroseconds(timestamp: string): bigint {
@@ -86,11 +90,20 @@ export const postgresTypeConfig = () => ({
       serialize: BigIntJSON.stringify,
       parse: BigIntJSON.parse,
     },
-    date: {
+    // Timestamps are converted to PreciseDate objects.
+    timestamp: {
       to: builtins.TIMESTAMP as number,
       from: TIMESTAMP_TYPES as number[],
       serialize: serializeTimestamp,
       parse: parseTimestamp,
+    },
+    // The DATE type is stored directly as the PG normalized date string.
+    date: {
+      to: builtins.DATE as number,
+      from: [builtins.DATE] as number[],
+      serialize: (x: string | Date) =>
+        (x instanceof Date ? x : new Date(x)).toISOString(),
+      parse: (x: string) => x,
     },
   },
 });
