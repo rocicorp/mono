@@ -1,8 +1,7 @@
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {Queue} from '../../../../shared/src/queue.js';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {StatementRunner} from '../../db/statements.js';
-import {DbFile} from '../../test/lite.js';
+import {sleep} from '../../../../shared/src/sleep.js';
 import type {
   Downstream,
   PokePartBody,
@@ -11,7 +10,10 @@ import type {
 } from '../../../../zero-protocol/src/mod.js';
 import type {AST} from '../../../../zql/src/zql/ast/ast.js';
 import {Database} from '../../../../zqlite/src/db.js';
+import {StatementRunner} from '../../db/statements.js';
 import {testDBs} from '../../test/db.js';
+import {DbFile} from '../../test/lite.js';
+import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {Subscription} from '../../types/subscription.js';
 import type {ReplicaState} from '../replicator/replicator.js';
@@ -32,7 +34,6 @@ import {PipelineDriver} from './pipeline-driver.js';
 import {initViewSyncerSchema} from './schema/pg-migrations.js';
 import {Snapshotter} from './snapshotter.js';
 import {type SyncContext, ViewSyncerService} from './view-syncer.js';
-import {ErrorForClient} from '../../types/error-for-client.js';
 
 const EXPECTED_LMIDS_AST: AST = {
   schema: '',
@@ -539,6 +540,34 @@ describe('view-syncer/service', () => {
     ]);
     stateChanges.push({state: 'version-ready'});
 
+    const dequeuePromise = client.dequeue();
+    await expect(dequeuePromise).rejects.toBeInstanceOf(ErrorForClient);
+    await expect(dequeuePromise).rejects.toHaveProperty('errorMessage', [
+      'error',
+      'SchemaVersionNotSupported',
+      'Schema version 1 is not in range of supported schema versions [2, 3].',
+    ]);
+  });
+
+  test('initial hydration, schemaVersion unsupported with bad query', async () => {
+    // Simulate a connection when the replica is already ready.
+    stateChanges.push({state: 'version-ready'});
+    await sleep(5);
+
+    const client = await connect({...SYNC_CONTEXT, schemaVersion: 1}, [
+      {
+        op: 'put',
+        hash: 'query-hash1',
+        ast: {
+          ...ISSUES_QUERY,
+          // simulate an "invalid" query for an old schema version with an empty orderBy
+          orderBy: [],
+        },
+      },
+    ]);
+
+    // Make sure it's the SchemaVersionNotSupported error that gets
+    // propagated, and not any error related to the bad query.
     const dequeuePromise = client.dequeue();
     await expect(dequeuePromise).rejects.toBeInstanceOf(ErrorForClient);
     await expect(dequeuePromise).rejects.toHaveProperty('errorMessage', [

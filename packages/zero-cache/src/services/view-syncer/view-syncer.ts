@@ -5,8 +5,6 @@ import {assert, unreachable} from '../../../../shared/src/asserts.js';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.js';
 import {must} from '../../../../shared/src/must.js';
 import {difference} from '../../../../shared/src/set-utils.js';
-import {stringify} from '../../types/bigint-json.js';
-import {rowIDHash, type RowKey} from '../../types/row-key.js';
 import type {
   ChangeDesiredQueriesBody,
   ChangeDesiredQueriesMessage,
@@ -15,7 +13,9 @@ import type {
 } from '../../../../zero-protocol/src/mod.js';
 import type {AST} from '../../../../zql/src/zql/ast/ast.js';
 import type {Row} from '../../../../zql/src/zql/ivm/data.js';
+import {stringify} from '../../types/bigint-json.js';
 import type {PostgresDB} from '../../types/pg.js';
+import {rowIDHash, type RowKey} from '../../types/row-key.js';
 import type {Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import type {ReplicaState} from '../replicator/replicator.js';
@@ -313,8 +313,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       });
     } catch (e) {
       lc.error?.(`closing connection with error`, e);
-      client?.fail(e);
-      throw e;
+      if (client) {
+        // Ideally, propagate the exception to the client's downstream subscription ...
+        client.fail(e);
+      } else {
+        // unless the exception happened before the client could be looked up.
+        throw e;
+      }
     }
 
     // Clear and cancel any idle timeout.
