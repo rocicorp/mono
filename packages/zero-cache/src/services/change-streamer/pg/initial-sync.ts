@@ -288,6 +288,8 @@ async function copy(
       ? ''
       : ` WHERE ${filterConditions.join(' OR ')}`);
 
+  lc.info?.(`Starting copy of ${tableName}:`, selectStmt);
+
   const cursor = from.unsafe(selectStmt).cursor(BATCH_SIZE);
   for await (const rows of cursor) {
     for (const row of rows) {
