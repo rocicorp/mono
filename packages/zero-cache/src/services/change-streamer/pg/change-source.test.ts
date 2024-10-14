@@ -47,7 +47,9 @@ describe('change-source/pg', () => {
       flt FLOAT8,
       bool BOOLEAN,
       timea TIMESTAMPTZ,
-      timeb TIMESTAMPTZ
+      timeb TIMESTAMPTZ,
+      date DATE,
+      time TIME
     );
     CREATE PUBLICATION zero_all FOR TABLE foo WHERE (id != 'exclude-me');
     `);
@@ -94,14 +96,16 @@ describe('change-source/pg', () => {
       await tx`INSERT INTO foo(id) VALUES('hello')`;
       await tx`INSERT INTO foo(id) VALUES('world')`;
       await tx`
-      INSERT INTO foo(id, int, big, flt, bool, timea, timeb) 
+      INSERT INTO foo(id, int, big, flt, bool, timea, timeb, date, time) 
         VALUES('datatypes',
                123456789, 
                987654321987654321, 
                123.456, 
                true, 
                '2003-04-12 04:05:06 America/New_York',
-               '2019-01-12T00:30:35.381101032Z'
+               '2019-01-12T00:30:35.381101032Z',
+               'April 12, 2003',
+               '04:05:06.123456789'
                )`;
       // zero.schemaVersions
       await tx`
@@ -137,6 +141,8 @@ describe('change-source/pg', () => {
           bool: true,
           timea: 1050134706000000n,
           timeb: 1547253035381101n,
+          date: '2003-04-12',
+          time: '04:05:06.123457', // PG rounds to microseconds
         },
       },
     ]);
