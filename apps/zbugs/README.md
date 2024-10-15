@@ -33,7 +33,7 @@ Create a `.env` file in the `zbugs` directory:
 #### zero.config.js Variables ####
 
 # The "upstream" authoritative postgres database
-# In the future we will support other types of upstreams besides PG.
+# In the future we will support other types of upstreams besides PG
 UPSTREAM_URI = "postgresql://user:password@127.0.0.1:6434/postgres"
 
 # A separate Postgres database we use to store CVRs. CVRs (client view records)
