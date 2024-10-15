@@ -108,7 +108,7 @@ class PostgresChangeSource implements ChangeSource {
     const clientStart = oneAfter(clientWatermark);
 
     try {
-      await this.stopExistingReplicationSlotSubscriber(db, slot);
+      await this.#stopExistingReplicationSlotSubscriber(db, slot);
       this.#lc.info?.(`starting replication stream @${slot}`);
 
       // Unlike the postgres.js client, the pg client does not have an option to
@@ -174,9 +174,10 @@ class PostgresChangeSource implements ChangeSource {
       {acknowledge: {auto: false, timeoutSeconds: 0}},
     )
       .on('start', () =>
-        this.getNextWatermark(db, slot, clientStart)
-          .then(resolve)
-          .catch(e => reject(translateError(e))),
+        this.#getNextWatermark(db, slot, clientStart).then(
+          resolve,
+          handleError,
+        ),
       )
       .on('heartbeat', (_lsn, _time, respond) => {
         respond && ack();
@@ -198,8 +199,7 @@ class PostgresChangeSource implements ChangeSource {
         slot,
         fromLexiVersion(clientStart),
       )
-      .then(() => changes.cancel())
-      .catch(handleError);
+      .then(() => changes.cancel(), handleError);
 
     const initialWatermark = await nextWatermark;
     this.#lc.info?.(
@@ -208,7 +208,7 @@ class PostgresChangeSource implements ChangeSource {
     return {initialWatermark, changes, acks: {push: ack}};
   }
 
-  async stopExistingReplicationSlotSubscriber(
+  async #stopExistingReplicationSlotSubscriber(
     db: PostgresDB,
     slot: string,
   ): Promise<void> {
@@ -245,7 +245,7 @@ class PostgresChangeSource implements ChangeSource {
   //                          or if the `confirmed_flush_lsn` was wiped.
   // * `confirmed_flush_lsn`: ahead of the `clientWatermark` if the ChangeDB was wiped.
   // * `restart_lsn`        : if both the `confirmed_flush_lsn` and ChangeDB were wiped.
-  async getNextWatermark(
+  async #getNextWatermark(
     db: PostgresDB,
     slot: string,
     clientStart: string,
