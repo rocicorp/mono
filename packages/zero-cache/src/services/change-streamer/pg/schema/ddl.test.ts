@@ -185,6 +185,69 @@ describe('change-source/tables/ddl', () => {
       },
     ],
     [
+      'rename table',
+      `ALTER TABLE pub.foo RENAME TO food`,
+      {
+        type: 'ddl',
+        version: 1,
+        event: {
+          tag: 'ALTER TABLE',
+          context: {query: 'ALTER TABLE pub.foo RENAME TO food'},
+          table: {
+            schema: 'pub',
+            name: 'food',
+            columns: {
+              description: {
+                characterMaximumLength: null,
+                dataType: 'text',
+                notNull: false,
+                dflt: null,
+                pos: 3,
+              },
+              id: {
+                characterMaximumLength: null,
+                dataType: 'text',
+                notNull: true,
+                dflt: null,
+                pos: 1,
+              },
+              name: {
+                characterMaximumLength: null,
+                dataType: 'text',
+                notNull: false,
+                dflt: null,
+                pos: 2,
+              },
+            },
+            primaryKey: ['id'],
+            publications: {
+              ['zero_all']: {rowFilter: null},
+              ['zero_sum']: {rowFilter: null},
+            },
+          },
+          indexes: [
+            {
+              schemaName: 'pub',
+              tableName: 'food',
+              name: 'foo_custom_index',
+              columns: {
+                description: 'ASC',
+                name: 'ASC',
+              },
+              unique: false,
+            },
+            {
+              schemaName: 'pub',
+              tableName: 'food',
+              name: 'foo_name_key',
+              columns: {name: 'ASC'},
+              unique: true,
+            },
+          ],
+        },
+      },
+    ],
+    [
       'add column',
       `ALTER TABLE pub.foo ADD bar text`,
       {
