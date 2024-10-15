@@ -34,14 +34,6 @@ Create a `.env` file in the `zbugs` directory:
 
 # The "upstream" authoritative postgres database
 # In the future we will support other types of upstreams besides PG.
-#
-# For Postgres instances that require SSL connections, add the `?ssl=no-verify`
-# parameter to the URI, which instructs the zero-cache to connect to Postgres
-# with SSL, but skips verification of the server certificate.
-#
-# (Most Postgres instances, including Amazon RDS, use certificates that are not
-#  signed by the Mozilla-curated list of Certificate Authorities used by the
-#  Node TLS package.)
 UPSTREAM_URI = "postgresql://user:password@127.0.0.1:6434/postgres"
 
 # A separate Postgres database we use to store CVRs. CVRs (client view records)
