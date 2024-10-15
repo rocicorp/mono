@@ -2,7 +2,6 @@
  * These types represent the _compiled_ config whereas `define-config` types represent the _source_ config.
  */
 
-import {must} from '../../../shared/src/must.js';
 import * as v from '../../../shared/src/valita.js';
 import {astSchema} from '../../../zero-protocol/src/mod.js';
 import {tsImport} from 'tsx/esm/api';
@@ -43,7 +42,7 @@ const stringLiteral = v.string();
 const numberLiteral = v.number();
 const booleanLiteral = v.boolean();
 
-const configStringValueSchema = v.union(envRefSchema, stringLiteral);
+const configStringValueSchema = stringLiteral;
 
 /**
  * Configures the view of the upstream database replicated to this zero-cache.
@@ -79,9 +78,8 @@ const shardConfigSchema = v.object({
    *
    * To use a different set of publications, a new shard should be created.
    */
-  publications: configStringValueSchema.optional(),
+  publications: v.array(stringLiteral).optional(),
 });
-type ShardConfigType = v.Infer<typeof shardConfigSchema>;
 
 const logConfigSchema = v.object({
   /**
@@ -111,14 +109,6 @@ const logConfigSchema = v.object({
   datadogLogsApiKey: configStringValueSchema.optional(),
   datadogServiceLabel: configStringValueSchema.optional(),
 });
-type LogConfigType = v.Infer<typeof logConfigSchema>;
-
-const configValueSchema = v.union(
-  configStringValueSchema,
-  booleanLiteral,
-  numberLiteral,
-);
-type ConfigValue = v.Infer<typeof configValueSchema>;
 
 const rateLimitConfigSchema = v.object({
   // Limits to `max` transactions per `windowMs` milliseconds.
@@ -129,7 +119,6 @@ const rateLimitConfigSchema = v.object({
     maxTransactions: v.union(envRefSchema, numberLiteral),
   }),
 });
-type RateLimitConfigType = v.Infer<typeof rateLimitConfigSchema>;
 
 const zeroConfigSchemaSansAuthorization = v.object({
   upstreamDBConnStr: configStringValueSchema,
@@ -172,7 +161,7 @@ export const zeroConfigSchema = zeroConfigSchemaSansAuthorization.extend({
   authorization: authorizationConfigSchema.optional(),
 });
 
-export type ZeroConfigType = v.Infer<typeof zeroConfigSchema>;
+export type ZeroConfig = v.Infer<typeof zeroConfigSchema>;
 
 let loadedConfig: Promise<ZeroConfig> | undefined;
 
@@ -188,160 +177,4 @@ export function getZeroConfig(): Promise<ZeroConfig> {
       throw e;
     });
   return loadedConfig;
-}
-
-export class ZeroConfig {
-  readonly #config: ZeroConfigType;
-  readonly #log: LogConfig;
-  readonly #shard: ShardConfig;
-  readonly #rateLimit: RateLimitConfig | undefined;
-
-  constructor(config: ZeroConfigType) {
-    this.#config = config;
-    this.#log = new LogConfig(config.log);
-    this.#shard = new ShardConfig(config.shard);
-    if (config.rateLimit) {
-      this.#rateLimit = new RateLimitConfig(config.rateLimit);
-    }
-  }
-
-  get upstreamDBConnStr() {
-    return mustResolveValue(this.#config.upstreamDBConnStr);
-  }
-
-  get cvrDBConnStr() {
-    return mustResolveValue(this.#config.cvrDBConnStr);
-  }
-
-  get changeDBConnStr() {
-    return mustResolveValue(this.#config.changeDBConnStr);
-  }
-
-  get taskID() {
-    return resolveValue(this.#config.taskId);
-  }
-
-  get replicaDBFile() {
-    return mustResolveValue(this.#config.replicaDBFile);
-  }
-
-  get storageDBTmpDir() {
-    return resolveValue(this.#config.storageDbTmpDir);
-  }
-
-  get numSyncWorkers() {
-    return resolveValue(this.#config.numSyncWorkers);
-  }
-
-  get changeStreamerConnStr() {
-    return resolveValue(this.#config.changeStreamerConnStr);
-  }
-
-  get litestream() {
-    return resolveValue(this.#config.litestream);
-  }
-
-  get warmWebsocket() {
-    return this.#config.warmWebsocket;
-  }
-
-  get jwtSecret() {
-    return resolveValue(this.#config.jwtSecret);
-  }
-
-  get shard() {
-    return this.#shard;
-  }
-
-  get log() {
-    return this.#log;
-  }
-
-  get rateLimit() {
-    return this.#rateLimit;
-  }
-
-  get authorization() {
-    return this.#config.authorization;
-  }
-}
-
-export class RateLimitConfig {
-  readonly #mutationTransactions: MutationTransactionLimits;
-  constructor(config: RateLimitConfigType) {
-    this.#mutationTransactions = new MutationTransactionLimits(
-      config.mutationTransactions,
-    );
-  }
-
-  get mutationTransactions() {
-    return this.#mutationTransactions;
-  }
-}
-
-export class MutationTransactionLimits {
-  readonly #config: RateLimitConfigType['mutationTransactions'];
-  constructor(config: RateLimitConfigType['mutationTransactions']) {
-    this.#config = config;
-  }
-
-  get windowMs() {
-    return mustResolveValue(this.#config.windowMs);
-  }
-
-  get maxTransactions() {
-    return mustResolveValue(this.#config.maxTransactions);
-  }
-}
-
-export class LogConfig {
-  readonly #config: LogConfigType;
-  constructor(config: LogConfigType | undefined) {
-    this.#config = config ?? {};
-  }
-
-  get level() {
-    return resolveValue(this.#config.level) ?? 'info';
-  }
-
-  get format() {
-    return resolveValue(this.#config.format) ?? 'text';
-  }
-
-  get datadogLogsApiKey() {
-    return resolveValue(this.#config.datadogLogsApiKey);
-  }
-
-  get datadogServiceLabel() {
-    return resolveValue(this.#config.datadogServiceLabel);
-  }
-}
-
-const DEFAULT_SHARD_ID = '0';
-
-export class ShardConfig {
-  readonly id: string;
-  readonly publications: readonly string[];
-
-  constructor(config: ShardConfigType | undefined) {
-    this.id = resolveValue(config?.id) ?? DEFAULT_SHARD_ID;
-    const p = resolveValue(config?.publications);
-    this.publications = p ? p.split(',') : [];
-  }
-}
-
-function resolveValue<T extends ConfigValue>(
-  value: T | undefined,
-): Exclude<T, EnvRef> | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (typeof value === 'object' && value.tag === 'env') {
-    return process.env[value.name] as Exclude<T, EnvRef>;
-  }
-  return value as Exclude<T, EnvRef>;
-}
-
-function mustResolveValue<T extends ConfigValue>(value: T | undefined) {
-  return must(resolveValue(value));
 }

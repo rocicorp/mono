@@ -13,7 +13,7 @@ import type {
   Action,
   AssetAuthorization as CompiledAssetAuthorization,
   AuthorizationConfig as CompiledAuthorizationConfig,
-  ZeroConfigType as CompiledZeroConfig,
+  ZeroConfig as CompiledZeroConfig,
   EnvRef,
   ZeroConfigSansAuthorization,
 } from './zero-config.js';
@@ -85,12 +85,17 @@ export function defineConfig<TAuthDataShape, TSchema extends Schema>(
   return compileConfig(config);
 }
 
+const DEFAULT_SHARD_ID = '0';
 function compileConfig<TAuthDataShape, TSchema extends Schema>(
   config: ZeroConfig<TAuthDataShape, TSchema>,
 ): CompiledZeroConfig {
   return {
     ...config,
     authorization: compileAuthorization(config.authorization),
+    shard: {
+      id: config.shard?.id ?? DEFAULT_SHARD_ID,
+      publications: config?.shard?.publications ?? [],
+    },
   };
 }
 
