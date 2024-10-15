@@ -15,7 +15,7 @@ import type {
   AuthorizationConfig as CompiledAuthorizationConfig,
   ZeroConfig as CompiledZeroConfig,
   LogConfig,
-  ZeroConfigSansAuthorization,
+  ZeroConfigBase,
 } from './zero-config.js';
 
 type Schema = {
@@ -63,7 +63,7 @@ export type AuthorizationConfig<TAuthDataShape, TSchema extends Schema> = {
 export type ZeroConfig<
   TAuthDataShape,
   TSchema extends Schema,
-> = ZeroConfigSansAuthorization & {
+> = ZeroConfigBase & {
   authorization?: AuthorizationConfig<TAuthDataShape, TSchema>;
   shard?: {
     id?: string;

@@ -42,7 +42,7 @@ export default defineConfig<AuthData, Schema>(schema, queries => {
     jwtSecret: process.env['JWT_SECRET'],
     litestream: !!process.env['LITESTREAM'],
     shard: {
-      id: process.env['SHARD_ID'],
+      id: process.env['SHARD_ID'] ?? '0',
       publications: process.env['PUBLICATIONS']
         ? process.env['PUBLICATIONS'].split(',')
         : [],
