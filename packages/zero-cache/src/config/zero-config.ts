@@ -180,17 +180,18 @@ export function getZeroConfig(): Promise<ZeroConfig> {
   if (loadedConfig) {
     return loadedConfig;
   }
-  const zeroConfigPath = process.env['ZERO_CONFIG_PATH'];
-  if (!zeroConfigPath) {
-    // TODO: Use a specific error type and report it to the user in a nicer way.
-    return Promise.reject(new Error('ZERO_CONFIG_PATH is not set'));
-  }
+  const zeroConfigPath =
+    process.env['ZERO_CONFIG_PATH'] ?? './zero.config.json';
   loadedConfig = fs
     .readFile(zeroConfigPath, 'utf-8')
     .then(
       rawContent =>
         new ZeroConfig(v.parse(JSON.parse(rawContent), zeroConfigSchema)),
-    );
+    )
+    .catch(err => {
+      console.error(`Failed to load zero config: ${err}`);
+      throw err;
+    });
   return loadedConfig;
 }
 
