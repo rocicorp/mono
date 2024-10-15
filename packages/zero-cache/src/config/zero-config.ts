@@ -139,7 +139,7 @@ const zeroConfigBase = v.object({
   rateLimit: rateLimitConfigSchema.optional(),
 });
 
-export type ZeroConfigSansAuthorization = v.Infer<typeof zeroConfigBase>;
+export type ZeroConfigBase = v.Infer<typeof zeroConfigBase>;
 
 export const zeroConfigSchema = zeroConfigBase.extend({
   authorization: authorizationConfigSchema.optional(),
