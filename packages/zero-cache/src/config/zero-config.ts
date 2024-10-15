@@ -2,10 +2,10 @@
  * These types represent the _compiled_ config whereas `define-config` types represent the _source_ config.
  */
 
-import fs from 'node:fs/promises';
 import {must} from '../../../shared/src/must.js';
 import * as v from '../../../shared/src/valita.js';
 import {astSchema} from '../../../zero-protocol/src/mod.js';
+import {tsImport} from 'tsx/esm/api';
 
 export type Action = 'select' | 'insert' | 'update' | 'delete';
 
@@ -180,17 +180,12 @@ export function getZeroConfig(): Promise<ZeroConfig> {
   if (loadedConfig) {
     return loadedConfig;
   }
-  const zeroConfigPath =
-    process.env['ZERO_CONFIG_PATH'] ?? './zero.config.json';
-  loadedConfig = fs
-    .readFile(zeroConfigPath, 'utf-8')
-    .then(
-      rawContent =>
-        new ZeroConfig(v.parse(JSON.parse(rawContent), zeroConfigSchema)),
-    )
-    .catch(err => {
-      console.error(`Failed to load zero config: ${err}`);
-      throw err;
+  const zeroConfigPath = process.env['ZERO_CONFIG_PATH'] ?? './zero.config.ts';
+  loadedConfig = tsImport(zeroConfigPath, import.meta.url)
+    .then(module => module.default as ZeroConfig)
+    .catch(e => {
+      console.error(`Failed to load zero config from ${zeroConfigPath}: ${e}`);
+      throw e;
     });
   return loadedConfig;
 }

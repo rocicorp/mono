@@ -10,7 +10,7 @@ type AuthData = {
   sub: string;
 };
 
-defineConfig<AuthData, Schema>(schema, queries => {
+export default defineConfig<AuthData, Schema>(schema, queries => {
   // TODO: We need `querify` so we can just check the authData without having to
   // read the DB E.g., `queries.querify(authData).where('sub', 'IS NOT', null)`
   const allowIfLoggedIn = (authData: AuthData) =>

@@ -3,8 +3,6 @@
  * These types represent the shape that their config must adhere to
  * so we can compile it to a JSON ZeroConfig.
  */
-import fs from 'node:fs';
-import path from 'node:path';
 import {normalizeSchema} from '../../../zero-client/src/client/normalized-schema.js';
 import type {AST} from '../../../zql/src/zql/ast/ast.js';
 import type {Query, SchemaToRow} from '../../../zql/src/zql/query/query.js';
@@ -76,7 +74,7 @@ export function runtimeEnv(key: string): EnvRef {
 export function defineConfig<TAuthDataShape, TSchema extends Schema>(
   schema: TSchema,
   definer: (queries: Queries<TSchema>) => ZeroConfig<TAuthDataShape, TSchema>,
-) {
+): CompiledZeroConfig {
   const normalizedSchema = normalizeSchema(schema);
   const queries = {} as Record<string, Query<TableSchema>>;
   for (const [name, tableSchema] of Object.entries(normalizedSchema.tables)) {
@@ -84,10 +82,7 @@ export function defineConfig<TAuthDataShape, TSchema extends Schema>(
   }
 
   const config = definer(queries as Queries<TSchema>);
-  const compiled = compileConfig(config);
-  const serializedConfig = JSON.stringify(compiled, null, 2);
-  const dest = path.join(process.cwd(), 'zero.config.json');
-  return fs.writeFileSync(dest, serializedConfig);
+  return compileConfig(config);
 }
 
 function compileConfig<TAuthDataShape, TSchema extends Schema>(
