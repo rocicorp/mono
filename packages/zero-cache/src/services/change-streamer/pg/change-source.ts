@@ -8,8 +8,10 @@ import {
 } from 'pg-logical-replication';
 import {DatabaseError} from 'pg-protocol';
 import {AbortError} from '../../../../../shared/src/abort-error.js';
+import {unreachable} from '../../../../../shared/src/asserts.js';
 import {deepEqual} from '../../../../../shared/src/json.js';
 import {sleep} from '../../../../../shared/src/sleep.js';
+import {Database} from '../../../../../zqlite/src/db.js';
 import {StatementRunner} from '../../../db/statements.js';
 import {stringify} from '../../../types/bigint-json.js';
 import {max, oneAfter} from '../../../types/lexi-version.js';
@@ -19,7 +21,6 @@ import {
   type PostgresDB,
 } from '../../../types/pg.js';
 import {Subscription} from '../../../types/subscription.js';
-import {Database} from '../../../../../zqlite/src/db.js';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
 import type {ChangeSource, ChangeStream} from '../change-streamer-service.js';
 import type {Commit, DownstreamChange} from '../change-streamer.js';
@@ -110,6 +111,9 @@ class PostgresChangeSource implements ChangeSource {
     try {
       let lastLSN = '0/0';
 
+      await this.stopExistingReplicationSlotSubscriber(db, slot);
+      this.#lc.info?.(`starting replication stream @${slot}`);
+
       const ack = (commit?: Commit) => {
         if (commit) {
           const {watermark} = commit[2];
@@ -128,57 +132,76 @@ class PostgresChangeSource implements ChangeSource {
       // is guaranteed not to change (i.e. until we ACK a commit).
       const {promise: nextWatermark, resolve, reject} = resolver<string>();
 
-      const service = new LogicalReplicationService(
-        {connectionString: this.#upstreamUri},
-        {acknowledge: {auto: false, timeoutSeconds: 0}},
-      )
-        .on('start', () =>
-          this.getNextWatermark(db, slot, clientStart)
-            .then(resolve)
-            .catch(e => reject(translateError(e))),
-        )
-        .on('heartbeat', (_lsn, _time, respond) => {
-          respond && ack();
-        })
-        .on('data', (lsn, msg) => {
-          const change = messageToDownstream(lsn, msg);
-          if (change) {
-            changes.push(change);
+      let service: LogicalReplicationService;
+
+      // Unlike the postgres.js client, the pg client does not have a mode to
+      // only use SSL if the server supports it. We achieve it here by trying
+      // SSL first, and then falling back to connecting without SSL.
+      for (const ssl of [{rejectUnauthorized: false}, undefined] as const) {
+        const {promise: retryWithoutSSL, resolve: disableSSL} = resolver();
+
+        const handleError = (err: Error) => {
+          if (
+            ssl &&
+            // https://github.com/brianc/node-postgres/blob/8b2768f91d284ff6b97070aaf6602560addac852/packages/pg/lib/connection.js#L74
+            err.message === 'The server does not support SSL connections'
+          ) {
+            disableSSL();
+          } else {
+            const e = translateError(err);
+            reject(e);
+            changes.fail(e);
           }
-        })
-        .on('error', err => {
-          this.#lc.error?.('error from upstream postgres', err);
-          changes.fail(err);
-        });
+        };
 
-      await this.stopExistingReplicationSlotSubscriber(db, slot);
-
-      this.#lc.info?.(`starting replication stream @${slot}`);
-      service
-        .subscribe(
-          new PgoutputPlugin({
-            protoVersion: 1,
-            publicationNames: this.#replicationConfig.publications,
-          }),
-          slot,
-          fromLexiVersion(clientStart),
+        service = new LogicalReplicationService(
+          {connectionString: this.#upstreamUri, ssl},
+          {acknowledge: {auto: false, timeoutSeconds: 0}},
         )
-        .catch(e => {
-          const err = translateError(e);
-          reject(err);
-          changes.fail(err);
-        })
-        .finally(() => changes.cancel());
+          .on('start', () =>
+            this.getNextWatermark(db, slot, clientStart)
+              .then(resolve)
+              .catch(e => reject(translateError(e))),
+          )
+          .on('heartbeat', (_lsn, _time, respond) => {
+            respond && ack();
+          })
+          .on('data', (lsn, msg) => {
+            const change = messageToDownstream(lsn, msg);
+            if (change) {
+              changes.push(change);
+            }
+          })
+          .on('error', handleError);
 
-      const initialWatermark = await nextWatermark;
-      this.#lc.info?.(
-        `replication stream@${slot} started at ${initialWatermark}`,
-      );
+        service
+          .subscribe(
+            new PgoutputPlugin({
+              protoVersion: 1,
+              publicationNames: this.#replicationConfig.publications,
+            }),
+            slot,
+            fromLexiVersion(clientStart),
+          )
+          .then(() => changes.cancel())
+          .catch(handleError);
 
-      return {initialWatermark, changes, acks: {push: ack}};
+        const initialWatermark = await Promise.race([
+          nextWatermark,
+          retryWithoutSSL,
+        ]);
+        if (typeof initialWatermark === 'string') {
+          this.#lc.info?.(
+            `replication stream@${slot} started at ${initialWatermark}`,
+          );
+          return {initialWatermark, changes, acks: {push: ack}};
+        }
+        this.#lc.info?.('retrying upstream connection without SSL');
+      }
     } finally {
       await db.end();
     }
+    unreachable();
   }
 
   async stopExistingReplicationSlotSubscriber(

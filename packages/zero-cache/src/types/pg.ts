@@ -147,6 +147,7 @@ export function pgClient(
   return postgres(connectionURI, {
     ...postgresTypeConfig(),
     onnotice,
+    ssl: 'prefer',
     ...options,
   });
 }
