@@ -20,4 +20,4 @@ ENV LITESTREAM=1
 ENV NUM_SYNC_WORKERS=0
 ENV LOG_LEVEL=debug
 ENV LOG_FORMAT=json
-CMD ["(./restore-litestream-db.sh || true) && npx tsx ../../apps/zbugs/zero.config.ts && litestream replicate -config /opt/app/prod/sandbox/replication-manager.yml"]
+CMD ["(./restore-litestream-db.sh || true) && litestream replicate -config /opt/app/prod/sandbox/replication-manager.yml"]

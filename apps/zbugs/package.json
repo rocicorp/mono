@@ -5,14 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsx ./zero.config.ts && tsc && vite build",
+    "build": "tsc && vite build",
     "check-types": "tsc && tsc -p tsconfig.node.json",
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "preview": "vite preview",
-    "zero": "tsx ./zero.config.ts && tsx ../../packages/zero-cache/src/server/main.ts"
+    "zero": "tsx ../../packages/zero-cache/src/server/main.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^10.0.0",

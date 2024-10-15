@@ -18,4 +18,4 @@ EXPOSE 4848
 ENTRYPOINT ["/bin/sh", "-c"]
 ENV LOG_LEVEL=debug
 ENV LOG_FORMAT=json
-CMD ["(./restore-litestream-db.sh || true) && npx tsx ../../apps/zbugs/zero.config.ts && litestream replicate -config /opt/app/prod/zbugs/litestream.yml"]
+CMD ["(./restore-litestream-db.sh || true) && litestream replicate -config /opt/app/prod/zbugs/litestream.yml"]
