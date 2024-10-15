@@ -65,6 +65,10 @@
     "./server": {
       "types": "./out/zero-cache/src/server/main.d.ts",
       "default": "./out/zero-cache/src/server/main.js"
+    },
+    "./config": {
+      "types": "./out/zero/src/config.d.ts",
+      "default": "./out/zero/src/config.js"
     }
   },
   "bin": {
