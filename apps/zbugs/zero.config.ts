@@ -1,4 +1,4 @@
-import {defineConfig} from '@rocicorp/zero/config';
+import {type CompiledZeroConfig, defineConfig} from '@rocicorp/zero/config';
 import {schema, type Schema} from './src/domain/schema.js';
 
 /** The contents of the zbugs JWT */
@@ -83,12 +83,12 @@ export default defineConfig<AuthData, Schema>(schema, queries => {
       },
     },
   };
-});
+}) as CompiledZeroConfig;
 
-export function must<T>(v: T | undefined | null, msg?: string): T {
+function must<T>(v: T | undefined | null): T {
   // eslint-disable-next-line eqeqeq
   if (v == null) {
-    throw new Error(msg ?? `Unexpected ${v} value`);
+    throw new Error(`Unexpected ${v} value`);
   }
   return v;
 }

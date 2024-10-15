@@ -17,6 +17,7 @@ import type {
   LogConfig,
   ZeroConfigBase,
 } from './zero-config.js';
+export type {ZeroConfig as CompiledZeroConfig} from './zero-config.js';
 
 type Schema = {
   readonly version: number;
