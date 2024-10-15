@@ -59,7 +59,7 @@ const shardConfigSchema = v.object({
    *
    * Defaults to "0".
    */
-  id: configStringValueSchema,
+  id: configStringValueSchema.optional(),
 
   /**
    * Optional (comma-separated) list of of Postgres `PUBLICATION`s that the
@@ -79,7 +79,7 @@ const shardConfigSchema = v.object({
    *
    * To use a different set of publications, a new shard should be created.
    */
-  publications: configStringValueSchema,
+  publications: configStringValueSchema.optional(),
 });
 type ShardConfigType = v.Infer<typeof shardConfigSchema>;
 

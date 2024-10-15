@@ -1,7 +1,5 @@
-import {
-  defineConfig,
-  runtimeEnv,
-} from '../../packages/zero-cache/src/config/define-config.js';
+import {must} from '../../packages/shared/src/must.js';
+import {defineConfig} from '../../packages/zero-cache/src/config/define-config.js';
 import {schema, type Schema} from './src/domain/schema.js';
 
 /** The contents of the zbugs JWT */
@@ -33,23 +31,23 @@ export default defineConfig<AuthData, Schema>(schema, queries => {
     queries.user.where('id', '=', authData.sub).where('role', '=', 'crew');
 
   return {
-    upstreamDBConnStr: runtimeEnv('UPSTREAM_URI'),
-    cvrDBConnStr: runtimeEnv('CVR_DB_URI'),
-    changeDBConnStr: runtimeEnv('CHANGE_DB_URI'),
+    upstreamDBConnStr: must(process.env['UPSTREAM_URI']),
+    cvrDBConnStr: must(process.env['CVR_DB_URI']),
+    changeDBConnStr: must(process.env['CHANGE_DB_URI']),
 
-    numSyncWorkers: runtimeEnv('NUM_SYNC_WORKERS'),
-    changeStreamerConnStr: runtimeEnv('CHANGE_STREAMER_URI'),
+    numSyncWorkers: parseInt(process.env['NUM_SYNC_WORKERS'] ?? '1'),
+    changeStreamerConnStr: process.env['CHANGE_STREAMER_URI'],
 
-    replicaDBFile: runtimeEnv('REPLICA_DB_FILE'),
-    jwtSecret: runtimeEnv('JWT_SECRET'),
-    litestream: runtimeEnv('LITESTREAM'),
+    replicaDBFile: must(process.env['REPLICA_DB_FILE']),
+    jwtSecret: process.env['JWT_SECRET'],
+    litestream: !!process.env['LITESTREAM'],
     shard: {
-      id: runtimeEnv('SHARD_ID'),
-      publications: runtimeEnv('PUBLICATIONS'),
+      id: process.env['SHARD_ID'],
+      publications: process.env['PUBLICATIONS'],
     },
     log: {
-      level: runtimeEnv('LOG_LEVEL'),
-      format: runtimeEnv('LOG_FORMAT'),
+      level: process.env['LOG_LEVEL'] as 'debug' | 'info' | 'warn' | 'error',
+      format: process.env['LOG_FORMAT'] as 'text' | 'json' | undefined,
     },
     rateLimit: {
       mutationTransactions: {
