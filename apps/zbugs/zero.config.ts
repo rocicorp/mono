@@ -43,7 +43,9 @@ export default defineConfig<AuthData, Schema>(schema, queries => {
     litestream: !!process.env['LITESTREAM'],
     shard: {
       id: process.env['SHARD_ID'],
-      publications: process.env['PUBLICATIONS'],
+      publications: process.env['PUBLICATIONS']
+        ? process.env['PUBLICATIONS'].split(',')
+        : [],
     },
     log: {
       level: process.env['LOG_LEVEL'] as 'debug' | 'info' | 'warn' | 'error',
