@@ -14,7 +14,7 @@ import type {
   AssetAuthorization as CompiledAssetAuthorization,
   AuthorizationConfig as CompiledAuthorizationConfig,
   ZeroConfig as CompiledZeroConfig,
-  EnvRef,
+  LogConfig,
   ZeroConfigSansAuthorization,
 } from './zero-config.js';
 
@@ -65,11 +65,12 @@ export type ZeroConfig<
   TSchema extends Schema,
 > = ZeroConfigSansAuthorization & {
   authorization?: AuthorizationConfig<TAuthDataShape, TSchema>;
+  shard?: {
+    id?: string;
+    publications?: string[];
+  };
+  log?: LogConfig;
 };
-
-export function runtimeEnv(key: string): EnvRef {
-  return {tag: 'env', name: key};
-}
 
 export function defineConfig<TAuthDataShape, TSchema extends Schema>(
   schema: TSchema,
@@ -95,6 +96,12 @@ function compileConfig<TAuthDataShape, TSchema extends Schema>(
     shard: {
       id: config.shard?.id ?? DEFAULT_SHARD_ID,
       publications: config?.shard?.publications ?? [],
+    },
+    log: {
+      format: config.log?.format ?? 'text',
+      level: config.log?.level ?? 'info',
+      datadogLogsApiKey: config.log?.datadogLogsApiKey,
+      datadogServiceLabel: config.log?.datadogServiceLabel,
     },
   };
 }
