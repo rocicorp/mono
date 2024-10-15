@@ -1,5 +1,4 @@
-import {must} from '../../packages/shared/src/must.js';
-import {defineConfig} from '../../packages/zero-cache/src/config/define-config.js';
+import {defineConfig} from '@rocicorp/zero/config';
 import {schema, type Schema} from './src/domain/schema.js';
 
 /** The contents of the zbugs JWT */
@@ -85,3 +84,11 @@ export default defineConfig<AuthData, Schema>(schema, queries => {
     },
   };
 });
+
+export function must<T>(v: T | undefined | null, msg?: string): T {
+  // eslint-disable-next-line eqeqeq
+  if (v == null) {
+    throw new Error(msg ?? `Unexpected ${v} value`);
+  }
+  return v;
+}
