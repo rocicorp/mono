@@ -33,16 +33,9 @@ const authorizationConfigSchema = v.record(
 
 export type AuthorizationConfig = v.Infer<typeof authorizationConfigSchema>;
 
-const envRefSchema = v.object({
-  tag: v.literal('env'),
-  name: v.string(),
-});
-export type EnvRef = v.Infer<typeof envRefSchema>;
 const stringLiteral = v.string();
 const numberLiteral = v.number();
 const booleanLiteral = v.boolean();
-
-const configStringValueSchema = stringLiteral;
 
 /**
  * Configures the view of the upstream database replicated to this zero-cache.
@@ -58,7 +51,7 @@ const shardConfigSchema = v.object({
    *
    * Defaults to "0".
    */
-  id: configStringValueSchema.optional(),
+  id: stringLiteral,
 
   /**
    * Optional (comma-separated) list of of Postgres `PUBLICATION`s that the
@@ -78,7 +71,7 @@ const shardConfigSchema = v.object({
    *
    * To use a different set of publications, a new shard should be created.
    */
-  publications: v.array(stringLiteral).optional(),
+  publications: v.array(stringLiteral),
 });
 
 const logConfigSchema = v.object({
@@ -88,13 +81,10 @@ const logConfigSchema = v.object({
    */
   level: v
     .union(
-      envRefSchema,
-      v.union(
-        v.literal('debug'),
-        v.literal('info'),
-        v.literal('warn'),
-        v.literal('error'),
-      ),
+      v.literal('debug'),
+      v.literal('info'),
+      v.literal('warn'),
+      v.literal('error'),
     )
     .optional(),
 
@@ -102,63 +92,59 @@ const logConfigSchema = v.object({
    * Defaults to `text` for developer-friendly console logging.
    * Also supports `json` for consumption by structured-logging services.
    */
-  format: v
-    .union(envRefSchema, v.union(v.literal('text'), v.literal('json')))
-    .optional(),
+  format: v.union(v.literal('text'), v.literal('json')).optional(),
 
-  datadogLogsApiKey: configStringValueSchema.optional(),
-  datadogServiceLabel: configStringValueSchema.optional(),
+  datadogLogsApiKey: stringLiteral.optional(),
+  datadogServiceLabel: stringLiteral.optional(),
 });
+export type LogConfig = v.Infer<typeof logConfigSchema>;
 
 const rateLimitConfigSchema = v.object({
   // Limits to `max` transactions per `windowMs` milliseconds.
   // This uses a sliding window algorithm to track number of transactions in the current window.
   mutationTransactions: v.object({
     algorithm: v.literal('sliding-window'),
-    windowMs: v.union(envRefSchema, numberLiteral),
-    maxTransactions: v.union(envRefSchema, numberLiteral),
+    windowMs: numberLiteral,
+    maxTransactions: numberLiteral,
   }),
 });
 
-const zeroConfigSchemaSansAuthorization = v.object({
-  upstreamDBConnStr: configStringValueSchema,
-  cvrDBConnStr: configStringValueSchema,
-  changeDBConnStr: configStringValueSchema,
-  taskId: configStringValueSchema.optional(),
-  replicaDBFile: configStringValueSchema,
-  storageDbTmpDir: configStringValueSchema.optional(),
+const zeroConfigBase = v.object({
+  upstreamDBConnStr: stringLiteral,
+  cvrDBConnStr: stringLiteral,
+  changeDBConnStr: stringLiteral,
+  taskId: stringLiteral.optional(),
+  replicaDBFile: stringLiteral,
+  storageDBTmpDir: stringLiteral.optional(),
   warmWebsocket: numberLiteral.optional(),
 
   // The number of sync workers defaults to available-cores - 1.
   // It should be set to 0 for the `replication-manager`.
-  numSyncWorkers: v.union(envRefSchema, numberLiteral).optional(),
+  numSyncWorkers: numberLiteral.optional(),
 
   // In development, the `zero-cache` runs its own `replication-manager`
   // (i.e. `change-streamer`). In production, this URI should point to
   // to the `replication-manager`, which runs a `change-streamer`
   // on port 4849.
-  changeStreamerConnStr: configStringValueSchema.optional(),
+  changeStreamerConnStr: stringLiteral.optional(),
 
   // Indicates that a `litestream replicate` process is backing up
   // the `replicatDbFile`. This should be the production configuration
   // for the `replication-manager`. It is okay to run this in
   // development too.
-  litestream: v.union(envRefSchema, booleanLiteral).optional(),
+  litestream: booleanLiteral.optional(),
 
-  jwtSecret: configStringValueSchema.optional(),
+  jwtSecret: stringLiteral.optional(),
 
-  log: logConfigSchema.optional(),
-
-  shard: shardConfigSchema.optional(),
   rateLimit: rateLimitConfigSchema.optional(),
 });
 
-export type ZeroConfigSansAuthorization = v.Infer<
-  typeof zeroConfigSchemaSansAuthorization
->;
+export type ZeroConfigSansAuthorization = v.Infer<typeof zeroConfigBase>;
 
-export const zeroConfigSchema = zeroConfigSchemaSansAuthorization.extend({
+export const zeroConfigSchema = zeroConfigBase.extend({
   authorization: authorizationConfigSchema.optional(),
+  shard: shardConfigSchema,
+  log: logConfigSchema,
 });
 
 export type ZeroConfig = v.Infer<typeof zeroConfigSchema>;
