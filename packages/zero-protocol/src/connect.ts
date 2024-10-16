@@ -1,4 +1,3 @@
-import {assert} from '../../shared/src/asserts.js';
 import * as v from '../../shared/src/valita.js';
 import {queriesPatchSchema} from './queries-patch.js';
 
@@ -36,29 +35,20 @@ export type InitConnectionBody = v.Infer<typeof initConnectionBodySchema>;
 export type InitConnectionMessage = v.Infer<typeof initConnectionMessageSchema>;
 
 export function encodeSecProtocols(
-  initConnectionMessage: InitConnectionMessage,
-  authToken?: string | undefined,
+  initConnectionMessage: InitConnectionMessage | undefined,
+  authToken: string | undefined,
 ) {
+  const protocols = {
+    initConnectionMessage,
+    authToken,
+  };
   // base64 encoding the JSON before URI encoding it results in a smaller payload.
-  const protocols: string[] = [btoa(JSON.stringify(initConnectionMessage))];
-  if (authToken !== undefined) {
-    protocols.push(authToken);
-  }
-  return encodeURIComponent(protocols.join(','));
+  return encodeURIComponent(btoa(JSON.stringify(protocols)));
 }
 
-/**
- * The initConnectionMessage is purposely returned as a string
- * since it is passed directly into the WebSocket message handler
- * which does JSON.parse and Valita.parse on the message.
- */
-export function decodeSecProtocols(
-  secProtocol: string,
-): [initConnectionMessage: string, maybeAuthToken: string | undefined] {
-  const ret = decodeURIComponent(secProtocol)
-    .split(',')
-    .map((s, i) => (i === 0 ? atob(s) : s));
-
-  assert(ret.length === 1 || ret.length === 2);
-  return ret.length === 1 ? [ret[0], undefined] : [ret[0], ret[1]];
+export function decodeSecProtocols(secProtocol: string): {
+  initConnectionMessage: InitConnectionMessage | undefined;
+  authToken: string | undefined;
+} {
+  return JSON.parse(atob(decodeURIComponent(secProtocol)));
 }

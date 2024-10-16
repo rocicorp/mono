@@ -17,6 +17,7 @@ import {
   encodeSecProtocols,
   ErrorKind,
   initConnectionMessageSchema,
+  type QueriesPatchOp,
 } from '../../../zero-protocol/src/mod.js';
 import {
   type Mutation,
@@ -282,7 +283,7 @@ test('disconnects if ping fails', async () => {
 
 const mockRep = {
   query() {
-    return Promise.resolve([]);
+    return Promise.resolve(new Map());
   },
 } as unknown as ReplicacheImpl;
 const mockQueryManager = {
@@ -307,28 +308,49 @@ suite('createSocket', () => {
     const schemaVersion = 3;
     test(expectedURL, async () => {
       sinon.stub(performance, 'now').returns(now);
-      const mockSocket = (
-        await createSocket(
-          mockRep,
-          mockQueryManager,
-          socketURL,
-          baseCookie,
-          clientID,
-          'testClientGroupID',
-          schemaVersion,
-          userID,
-          auth,
-          jurisdiction,
-          lmid,
-          'wsidx',
-          debugPerf,
-          new LogContext('error', undefined, new TestLogSink()),
-        )
-      )[0] as unknown as MockSocket;
+      const [mockSocket, queriesPatch] = (await createSocket(
+        mockRep,
+        mockQueryManager,
+        socketURL,
+        baseCookie,
+        clientID,
+        'testClientGroupID',
+        schemaVersion,
+        userID,
+        auth,
+        jurisdiction,
+        lmid,
+        'wsidx',
+        debugPerf,
+        new LogContext('error', undefined, new TestLogSink()),
+      )) as unknown as [MockSocket, Map<string, QueriesPatchOp>];
       expect(`${mockSocket.url}`).equal(expectedURL);
       expect(mockSocket.protocol).equal(
         encodeSecProtocols(['initConnection', {desiredQueriesPatch: []}], auth),
       );
+      expect(queriesPatch).toEqual(new Map());
+
+      const [mockSocket2, queriesPatch2] = (await createSocket(
+        mockRep,
+        mockQueryManager,
+        socketURL,
+        baseCookie,
+        clientID,
+        'testClientGroupID',
+        schemaVersion,
+        userID,
+        auth,
+        jurisdiction,
+        lmid,
+        'wsidx',
+        debugPerf,
+        new LogContext('error', undefined, new TestLogSink()),
+        0, // do not put any extra information into headers
+      )) as unknown as [MockSocket, Map<string, QueriesPatchOp>];
+      expect(`${mockSocket.url}`).equal(expectedURL);
+      expect(mockSocket2.protocol).equal(encodeSecProtocols(undefined, auth));
+      // if we did not encode queries into the sec-protocol header, we should not have a queriesPatch
+      expect(queriesPatch2).toBeUndefined();
     });
   };
 
@@ -462,6 +484,23 @@ suite('initConnection', () => {
     expect(mockSocket.messages.length).toEqual(0);
   });
 
+  test('sent when connected message received but before ConnectionState.Connected desired queries > maxHeaderLength', async () => {
+    const r = zeroForTest({
+      maxHeaderLength: 0,
+    });
+    const mockSocket = await r.socket;
+    mockSocket.onUpstream = msg => {
+      expect(
+        valita.parse(JSON.parse(msg), initConnectionMessageSchema),
+      ).toEqual(['initConnection', {desiredQueriesPatch: []}]);
+      expect(r.connectionState).toEqual(ConnectionState.Connecting);
+    };
+
+    expect(mockSocket.messages.length).toEqual(0);
+    await r.triggerConnected();
+    expect(mockSocket.messages.length).toEqual(1);
+  });
+
   test('sends desired queries patch in sec-protocol header', async () => {
     const r = zeroForTest({
       schema: {
@@ -487,7 +526,7 @@ suite('initConnection', () => {
 
     expect(
       valita.parse(
-        JSON.parse(decodeSecProtocols(mockSocket.protocol)[0]),
+        decodeSecProtocols(mockSocket.protocol).initConnectionMessage,
         initConnectionMessageSchema,
       ),
     ).toEqual([
@@ -509,6 +548,54 @@ suite('initConnection', () => {
     expect(mockSocket.messages.length).toEqual(0);
     await r.triggerConnected();
     expect(mockSocket.messages.length).toEqual(0);
+  });
+
+  test('sends desired queries patch in `initConnectionMessage` when the patch is over maxHeaderLength', async () => {
+    const r = zeroForTest({
+      maxHeaderLength: 0,
+      schema: {
+        version: 1,
+        tables: {
+          e: {
+            tableName: 'e',
+            columns: {
+              id: {type: 'string'},
+              value: {type: 'number'},
+            },
+            primaryKey: ['id'],
+            relationships: {},
+          },
+        },
+      },
+    });
+    const mockSocket = await r.socket;
+
+    mockSocket.onUpstream = msg => {
+      expect(
+        valita.parse(JSON.parse(msg), initConnectionMessageSchema),
+      ).toEqual([
+        'initConnection',
+        {
+          desiredQueriesPatch: [
+            {
+              ast: {
+                table: 'e',
+                orderBy: [['id', 'asc']],
+              } satisfies AST,
+              hash: '1jnb9n35hhddz',
+              op: 'put',
+            },
+          ],
+        },
+      ]);
+      expect(r.connectionState).toEqual(ConnectionState.Connecting);
+    };
+
+    expect(mockSocket.messages.length).toEqual(0);
+    const view = r.query.e.select('id', 'value').materialize();
+    view.addListener(() => {});
+    await r.triggerConnected();
+    expect(mockSocket.messages.length).toEqual(1);
   });
 
   test('sends changeDesiredQueries if new queries are added after initConnection but before connected', async () => {
@@ -553,7 +640,7 @@ suite('initConnection', () => {
 
     expect(
       valita.parse(
-        JSON.parse(decodeSecProtocols(mockSocket.protocol)[0]),
+        decodeSecProtocols(mockSocket.protocol).initConnectionMessage,
         initConnectionMessageSchema,
       ),
     ).toEqual([
@@ -1190,7 +1277,7 @@ test('Authentication', async () => {
     expectedAuthToken: string,
     expectedTimeOfCall: number,
   ) => {
-    expect(decodeSecProtocols((await r.socket).protocol)[1]).equal(
+    expect(decodeSecProtocols((await r.socket).protocol).authToken).equal(
       expectedAuthToken,
     );
     await r.triggerError(ErrorKind.Unauthorized, 'auth error ' + authCounter);
@@ -1225,7 +1312,9 @@ test('Authentication', async () => {
   {
     await r.waitForConnectionState(ConnectionState.Connecting);
     socket = await r.socket;
-    expect(decodeSecProtocols(socket.protocol)[1]).equal('new-auth-token-8');
+    expect(decodeSecProtocols(socket.protocol).authToken).equal(
+      'new-auth-token-8',
+    );
     await r.triggerConnected();
     await r.waitForConnectionState(ConnectionState.Connected);
     // getAuth should not be called again.
@@ -1258,7 +1347,7 @@ test(ErrorKind.AuthInvalidated, async () => {
   });
 
   await r.triggerConnected();
-  expect(decodeSecProtocols((await r.socket).protocol)[1]).equal(
+  expect(decodeSecProtocols((await r.socket).protocol).authToken).equal(
     'auth-token-1',
   );
 
@@ -1266,7 +1355,7 @@ test(ErrorKind.AuthInvalidated, async () => {
   await r.waitForConnectionState(ConnectionState.Disconnected);
 
   await r.waitForConnectionState(ConnectionState.Connecting);
-  expect(decodeSecProtocols((await r.socket).protocol)[1]).equal(
+  expect(decodeSecProtocols((await r.socket).protocol).authToken).equal(
     'auth-token-2',
   );
 });

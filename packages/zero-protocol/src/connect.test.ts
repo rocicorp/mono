@@ -35,11 +35,11 @@ test('encode/decodeSecProtocols round-trip', () => {
       }),
       ({initConnectionMessage, authToken}) => {
         const encoded = encodeSecProtocols(initConnectionMessage, authToken);
-        const [decodedInitConnectionMessage, decodedAuthToken] =
-          decodeSecProtocols(encoded);
-        expect(JSON.parse(decodedInitConnectionMessage)).toEqual(
-          initConnectionMessage,
-        );
+        const {
+          initConnectionMessage: decodedInitConnectionMessage,
+          authToken: decodedAuthToken,
+        } = decodeSecProtocols(encoded);
+        expect(decodedInitConnectionMessage).toEqual(initConnectionMessage);
         expect(decodedAuthToken).toEqual(authToken);
       },
     ),
