@@ -8,15 +8,7 @@ type PublishedTableQueryResult = {
   tables: FilteredTableSpec[];
 };
 
-export function publishedTableQuery(
-  publicationsVariableOrLiteralArray: string | string[],
-  join = '',
-) {
-  const inPublications =
-    typeof publicationsVariableOrLiteralArray === 'string'
-      ? `= ANY(${publicationsVariableOrLiteralArray})`
-      : `IN (${literal(publicationsVariableOrLiteralArray)})`;
-
+export function publishedTableQuery(publications: string[]) {
   return `
 WITH published_columns AS (SELECT 
   nspname AS "schema", 
@@ -40,10 +32,9 @@ JOIN pg_publication_tables as pb ON
   pb.schemaname = nspname AND 
   pb.tablename = pc.relname AND
   attname = ANY(pb.attnames)
-${join}
 LEFT JOIN pg_constraint pk ON pk.contype = 'p' AND pk.connamespace = relnamespace AND pk.conrelid = attrelid
 LEFT JOIN pg_attrdef pd ON pd.adrelid = attrelid AND pd.adnum = attnum
-WHERE pb.pubname ${inPublications}
+WHERE pb.pubname IN (${literal(publications)})
 ORDER BY nspname, pc.relname),
 
 tables AS (SELECT json_build_object(
@@ -87,15 +78,7 @@ type IndexDefinitionsQueryResult = {
   indexes: IndexSpec[];
 };
 
-export function indexDefinitionsQuery(
-  publicationsVariableOrLiteralArray: string | string[],
-  join = '',
-) {
-  const inPublications =
-    typeof publicationsVariableOrLiteralArray === 'string'
-      ? `= ANY(${publicationsVariableOrLiteralArray})`
-      : `IN (${literal(publicationsVariableOrLiteralArray)})`;
-
+export function indexDefinitionsQuery(publications: string[]) {
   // Note: pg_attribute contains column names for tables and for indexes.
   // However, the latter does not get updated when a column in a table is
   // renamed.
@@ -130,9 +113,8 @@ export function indexDefinitionsQuery(
         FROM UNNEST(pg_index.indkey) WITH ORDINALITY as col(table_pos, index_pos)
         JOIN pg_attribute ON attrelid = pg_index.indrelid AND attnum = col.table_pos
     ) AS index_column ON true
-    ${join}
     LEFT JOIN pg_constraint ON pg_constraint.conindid = pc.oid
-    WHERE pb.pubname ${inPublications}
+    WHERE pb.pubname IN (${literal(publications)})
       AND pg_constraint.contype is distinct from 'p'
       AND pg_constraint.contype is distinct from 'f'
     ORDER BY

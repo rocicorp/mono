@@ -3,6 +3,7 @@ import {
   Pgoutput,
   PgoutputPlugin,
 } from 'pg-logical-replication';
+import type postgres from 'postgres';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {Queue} from '../../../../../../shared/src/queue.js';
 import {
@@ -22,12 +23,16 @@ const SLOT_NAME = 'ddl_test_slot';
 describe('change-source/tables/ddl', () => {
   let upstream: PostgresDB;
   let messages: Queue<Pgoutput.Message>;
+  let notices: Queue<postgres.Notice>;
   let service: LogicalReplicationService;
 
   const SHARD_ID = '0';
 
   beforeEach(async () => {
-    upstream = await testDBs.create('ddl_test_upstream');
+    notices = new Queue();
+    upstream = await testDBs.create('ddl_test_upstream', n =>
+      notices.enqueue(n),
+    );
 
     const upstreamURI = getConnectionURI(upstream);
     await upstream.unsafe(STARTING_SCHEMA);
@@ -778,7 +783,6 @@ describe('change-source/tables/ddl', () => {
         },
       },
     ],
-
     [
       'drop index',
       `DROP INDEX pub.foo_custom_index, pub.yoo_custom_index`,
@@ -944,27 +948,14 @@ describe('change-source/tables/ddl', () => {
     ],
   ] satisfies [string, string, DdlUpdateEvent][])(
     '%s',
-    async (name, query, ddlUpdate) => {
+    async (_, query, ddlUpdate) => {
       await upstream.begin(async tx => {
         await tx`INSERT INTO pub.boo(id) VALUES('1')`;
         await tx.unsafe(query);
       });
-      // In the subsequent transaction, perform similar DDL operation(s)
-      // that should not result in a message.
-      await upstream.begin(async tx => {
-        // For the second transaction, commit unrelated DDL events to ensure
-        // that they do not result in a message.
-        if (name.includes('publication')) {
-          await tx`ALTER PUBLICATION nonzeropub ADD TABLE pub.yoo`;
-        } else if (!name.includes('drop')) {
-          // Perform CREATE or ALTER table statements in the private schema.
-          await tx.unsafe(query.replaceAll('pub.', 'private.'));
-        }
-        await tx`INSERT INTO pub.boo(id) VALUES('2')`;
-      });
 
-      const messages = await drainReplicationMessages(9);
-      expect(messages.slice(0, 6)).toMatchObject([
+      const messages = await drainReplicationMessages(6);
+      expect(messages).toMatchObject([
         {tag: 'begin'},
         {tag: 'relation'},
         {tag: 'insert'},
@@ -993,30 +984,81 @@ describe('change-source/tables/ddl', () => {
 
       const {content: update} = messages[4] as Pgoutput.MessageMessage;
       expect(JSON.parse(new TextDecoder().decode(update))).toEqual(ddlUpdate);
+    },
+  );
 
-      // Depending on how busy Postgres is, the remaining messages will either
-      // be:
-      //
-      // {tag: 'begin'},
-      // {tag: 'message'}  // ddlStart
-      // {tag: 'insert'},
-      // {tag: 'commit'},
-      //
-      // or:
-      //
-      // {tag: 'begin'},
-      // {tag: 'message'}  // ddlStart
-      // {tag: 'relation'},
-      // {tag: 'insert'},
-      // {tag: 'commit'},
-      //
-      // the latter happening when Postgres loses some state and resends
-      // the relation from messages[2]. What we want to verify is that
-      // no `tag: 'message'` message arrives, as the schema changes
-      // in the 'private' schema should not result in schema updates.
-      expect(
-        messages.slice(6).filter(m => m.tag === 'message').length,
-      ).toBeLessThanOrEqual(1); // only ddlStart
+  // Run the same DDL commands on tables in the "private" schema
+  // (or the "nonzeropub" publication) and verify that they do not trigger
+  // "ddlUpdate" events.
+  test.each([
+    [
+      'CREATE TABLE private.bar(id TEXT PRIMARY KEY, a INT4 UNIQUE, b INT8 UNIQUE, UNIQUE(b, a))',
+      'zero(0) ignoring private.bar',
+    ],
+    [
+      'CREATE INDEX foo_name_index on private.foo (name desc, id)',
+      'zero(0) ignoring private.foo_name_index',
+    ],
+    ['ALTER TABLE private.foo RENAME TO food', 'zero(0) ignoring private.food'],
+    [
+      'ALTER TABLE private.foo ADD username TEXT UNIQUE',
+      'zero(0) ignoring private.foo',
+    ],
+    [
+      `ALTER TABLE private.foo ADD bar text DEFAULT 'boo'`,
+      'zero(0) ignoring private.foo',
+    ],
+    [
+      `ALTER TABLE private.foo ALTER name SET DEFAULT 'alice'`,
+      'zero(0) ignoring private.foo',
+    ],
+    [
+      `ALTER TABLE private.foo RENAME name to handle`,
+      'zero(0) ignoring private.foo.handle',
+    ],
+    [
+      `ALTER TABLE private.foo drop description`,
+      'zero(0) ignoring private.foo',
+    ],
+    [
+      `ALTER PUBLICATION nonzeropub ADD TABLE pub.yoo`,
+      'zero(0) ignoring pub.yoo in publication nonzeropub',
+    ],
+  ] satisfies [string, string][])(
+    'ignore unrelated events: %s',
+    async (query, expectedNotice) => {
+      while (notices.size()) {
+        await notices.dequeue();
+      }
+
+      await upstream.begin(async tx => {
+        await tx`INSERT INTO pub.boo(id) VALUES('1')`;
+        await tx.unsafe(query);
+      });
+
+      // There should only be a ddlStart message, and no ddlUpdate message.
+      const messages = await drainReplicationMessages(5);
+      expect(messages).toMatchObject([
+        {tag: 'begin'},
+        {tag: 'relation'},
+        {tag: 'insert'},
+        {
+          tag: 'message',
+          prefix: 'zero/' + SHARD_ID,
+          content: expect.any(Uint8Array),
+          flags: 1,
+          transactional: true,
+        },
+        {tag: 'commit'},
+      ]);
+
+      const {content: start} = messages[3] as Pgoutput.MessageMessage;
+      expect(JSON.parse(new TextDecoder().decode(start))).toMatchObject({
+        type: 'ddlStart',
+      });
+
+      const notice = await notices.dequeue();
+      expect(notice.message).toBe(expectedNotice);
     },
   );
 

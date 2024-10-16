@@ -125,16 +125,36 @@ export const errorEventSchema = triggerEvent
 
 export type ErrorEvent = v.Infer<typeof errorEventSchema>;
 
+// Creates a function that appends `_SHARD_ID` to the input.
+function append(shardID: string) {
+  return (name: string) => id(name + '_' + shardID);
+}
+
 /**
- * Global trigger functions contain the core logic parameterized by
- * `shardID` and/or the list of `publications`.
+ * Event trigger functions contain the core logic that are invoked by triggers.
  *
- * Shard-specific trigger functions (constructed in
- * {@link createTriggerEventStatements()}) are wrappers that invoke
- * the global trigger functions with the shard-specific information.
+ * Note that although many of these functions can technically be parameterized and
+ * shared across shards, it is advantageous to keep the functions in each shard
+ * isolated from each other in order to avoid the complexity of shared-function
+ * versioning.
+ *
+ * If, for example, per-shard triggers called into shared functions, we would have
+ * to consider versioning the functions if we were to change their behavior,
+ * and think about backwards compatibility, removal of unused versions, etc.
+ * (not unlike versions of npm packages).
+ *
+ * Instead, we opt for the simplicity and isolation of having each function
+ * completely own the entirety of its trigger/function stack.
  */
-const GLOBAL_TRIGGER_FUNCTIONS = `
-CREATE OR REPLACE FUNCTION zero.get_trigger_context()
+function createEventFunctionStatements(
+  shardID: string,
+  publications: string[],
+) {
+  const schema = append(shardID)('zero'); // e.g. "zero_SHARD_ID"
+  return `
+CREATE SCHEMA IF NOT EXISTS ${schema};
+
+CREATE OR REPLACE FUNCTION ${schema}.get_trigger_context()
 RETURNS record AS $$
 DECLARE
   result record;
@@ -144,21 +164,23 @@ BEGIN
 END
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION zero.notice_ignore(shardID TEXT, object_id TEXT)
+
+CREATE OR REPLACE FUNCTION ${schema}.notice_ignore(object_id TEXT)
 RETURNS void AS $$
 BEGIN
-  RAISE NOTICE 'zero(%) ignoring %', shardID, object_id;
+  RAISE NOTICE 'zero(%) ignoring %', ${lit(shardID)}, object_id;
 END
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION zero.schema_specs(publications TEXT[])
+
+CREATE OR REPLACE FUNCTION ${schema}.schema_specs()
 RETURNS TEXT AS $$
 DECLARE
   tables record;
   indexes record;
 BEGIN
-  ${publishedTableQuery('publications')} INTO tables;
-  ${indexDefinitionsQuery('publications')} INTO indexes;
+  ${publishedTableQuery(publications)} INTO tables;
+  ${indexDefinitionsQuery(publications)} INTO indexes;
   RETURN json_build_object(
     'tables', tables.tables,
     'indexes', indexes.indexes
@@ -166,28 +188,31 @@ BEGIN
 END
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION zero.emit_ddl_start(shardID TEXT, publications TEXT[])
-RETURNS void AS $$
+
+CREATE OR REPLACE FUNCTION ${schema}.emit_ddl_start()
+RETURNS event_trigger AS $$
 DECLARE
   schema_specs TEXT;
   message TEXT;
 BEGIN
-  SELECT zero.schema_specs(publications) INTO schema_specs;
+  SELECT ${schema}.schema_specs() INTO schema_specs;
 
   SELECT json_build_object(
     'type', 'ddlStart',
     'version', ${PROTOCOL_VERSION},
     'schema', schema_specs::json,
-    'context', zero.get_trigger_context()
+    'context', ${schema}.get_trigger_context()
   ) INTO message;
 
-  PERFORM pg_logical_emit_message(true, 'zero/' || shardID, message);
+  PERFORM pg_logical_emit_message(true, ${lit('zero/' + shardID)}, message);
 END
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION zero.emit_ddl_end(tag TEXT, shardID TEXT, publications TEXT[])
+
+CREATE OR REPLACE FUNCTION ${schema}.emit_ddl_end(tag TEXT)
 RETURNS void AS $$
 DECLARE
+  publications TEXT[];
   cmd RECORD;
   target RECORD;
   pub RECORD;
@@ -196,6 +221,8 @@ DECLARE
   message TEXT;
   event TEXT;
 BEGIN
+  publications := ARRAY[${lit(publications)}];
+
   SELECT objid, object_type, object_identity FROM pg_event_trigger_ddl_commands() LIMIT 1 INTO cmd;
 
   -- Filter DDL updates that are not relevant to the shard (i.e. publications) when possible.
@@ -207,7 +234,7 @@ BEGIN
       WHERE c.oid = cmd.objid AND pb.pubname = ANY (publications)
       INTO target;
     IF target IS NULL THEN
-      PERFORM zero.notice_ignore(shardID, cmd.object_identity);
+      PERFORM ${schema}.notice_ignore(cmd.object_identity);
       RETURN;
     END IF;
 
@@ -221,7 +248,7 @@ BEGIN
       WHERE c.oid = cmd.objid AND pb.pubname = ANY (publications)
       INTO target;
     IF target IS NULL THEN
-      PERFORM zero.notice_ignore(shardID, cmd.object_identity);
+      PERFORM ${schema}.notice_ignore(cmd.object_identity);
       RETURN;
     END IF;
 
@@ -231,7 +258,7 @@ BEGIN
       WHERE rel.oid = cmd.objid AND pb.pubname = ANY (publications) 
       INTO pub;
     IF pub IS NULL THEN
-      PERFORM zero.notice_ignore(shardID, cmd.object_identity);
+      PERFORM ${schema}.notice_ignore(cmd.object_identity);
       RETURN;
     END IF;
 
@@ -241,12 +268,12 @@ BEGIN
       WHERE ns.oid = cmd.objid AND pb.pubname = ANY (publications) 
       INTO pub;
     IF pub IS NULL THEN
-      PERFORM zero.notice_ignore(shardID, cmd.object_identity);
+      PERFORM ${schema}.notice_ignore(cmd.object_identity);
       RETURN;
     END IF;
   END IF;
 
-  -- Construct and emit the message.
+  -- Construct and emit the DdlUpdateEvent message.
 
   IF target IS NOT NULL
   THEN
@@ -255,20 +282,21 @@ BEGIN
     SELECT json_build_object('tag', tag) INTO event;
   END IF;
   
-  SELECT zero.schema_specs(publications) INTO schema_specs;
+  SELECT ${schema}.schema_specs() INTO schema_specs;
 
   SELECT json_build_object(
     'type', 'ddlUpdate',
     'version', ${PROTOCOL_VERSION},
     'schema', schema_specs::json,
     'event', event::json,
-    'context', zero.get_trigger_context()
+    'context', ${schema}.get_trigger_context()
   ) INTO message;
 
-  PERFORM pg_logical_emit_message(true, 'zero/' || shardID, message);
+  PERFORM pg_logical_emit_message(true, ${lit('zero/' + shardID)}, message);
 END
 $$ LANGUAGE plpgsql;
 `;
+}
 
 const TAGS = [
   'CREATE TABLE',
@@ -279,28 +307,19 @@ const TAGS = [
   'ALTER PUBLICATION',
 ] as const;
 
-export function createEventTriggerStatements(shardID: string, pubs: string[]) {
-  // append is used for EVENT TRIGGER names, which are in the global namespace.
-  // Shard-specific functions have constant names in a schema named after the shard.
-  function append(shardID: string) {
-    return (name: string) => id(name + '_' + shardID);
-  }
+export function createEventTriggerStatements(
+  shardID: string,
+  publications: string[],
+) {
+  // Unlike functions, which are namespaced in shard-specific schemas,
+  // EVENT TRIGGER names are in the global namespace and instead have the shardID appended.
   const sharded = append(shardID);
   const schema = sharded('zero');
 
-  const triggers = [GLOBAL_TRIGGER_FUNCTIONS];
+  const triggers = [createEventFunctionStatements(shardID, publications)];
 
   // A single ddl_command_start trigger covering all relevant tags.
   triggers.push(`
-CREATE SCHEMA IF NOT EXISTS ${schema};
-
-CREATE OR REPLACE FUNCTION ${schema}.emit_ddl_start() 
-RETURNS event_trigger AS $$
-BEGIN
-  PERFORM zero.emit_ddl_start(${lit(shardID)}, ARRAY[${lit(pubs)}]);
-END
-$$ LANGUAGE plpgsql;
-
 DROP EVENT TRIGGER IF EXISTS ${sharded('zero_ddl_start')};
 CREATE EVENT TRIGGER ${sharded('zero_ddl_start')}
   ON ddl_command_start
@@ -308,16 +327,17 @@ CREATE EVENT TRIGGER ${sharded('zero_ddl_start')}
   EXECUTE PROCEDURE ${schema}.emit_ddl_start();
 `);
 
-  // A per-tag ddl_command_end trigger that dispatches to zero.emit_ddl_end(tag, ...).
+  // A per-tag ddl_command_end trigger that dispatches to ${schema}.emit_ddl_end(tag)
   for (const tag of TAGS) {
     const tagID = tag.toLowerCase().replace(' ', '_');
     triggers.push(`
 CREATE OR REPLACE FUNCTION ${schema}.emit_${tagID}() 
 RETURNS event_trigger AS $$
 BEGIN
-  PERFORM zero.emit_ddl_end(${lit(tag)}, ${lit(shardID)}, ARRAY[${lit(pubs)}]);
+  PERFORM ${schema}.emit_ddl_end(${lit(tag)});
 END
 $$ LANGUAGE plpgsql;
+
 
 DROP EVENT TRIGGER IF EXISTS ${sharded(`zero_${tagID}`)};
 CREATE EVENT TRIGGER ${sharded(`zero_${tagID}`)}
