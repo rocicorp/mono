@@ -162,6 +162,78 @@ export default function IssuePage() {
           </div>
         )}
 
+        {/* Right sidebar */}
+        <div className="issue-sidebar">
+          <div className="sidebar-item">
+            <p className="issue-detail-label">Status</p>
+            <Selector
+              items={[
+                {
+                  text: 'Open',
+                  value: true,
+                  icon: statusOpen,
+                },
+                {
+                  text: 'Closed',
+                  value: false,
+                  icon: statusClosed,
+                },
+              ]}
+              selectedValue={issue.open}
+              onChange={value =>
+                z.mutate.issue.update({id: issue.id, open: value})
+              }
+            />
+          </div>
+
+          <div className="sidebar-item">
+            <p className="issue-detail-label">Creator</p>
+            <button className="sidebar-button issue-creator">
+              <img
+                src={issue.creator?.avatar}
+                className="issue-creator-avatar"
+                alt={issue.creator?.name}
+              />
+              <span className="issue-creator-name">{issue.creator.login}</span>
+            </button>
+          </div>
+
+          <div className="sidebar-item">
+            <p className="issue-detail-label">Assignee</p>
+            <UserPicker
+              selected={{login: issue.assignee?.login}}
+              onSelect={user => {
+                z.mutate.issue.update({id: issue.id, assigneeID: user.id});
+                // 🙄 - this can go away when https://bugs.rocicorp.dev/issue/k_h0Dy_6_6yHFDWFxNke2 is fixed.
+                window.setTimeout(() => location.reload(), 100);
+              }}
+            />
+          </div>
+
+          <div className="sidebar-item">
+            <p className="issue-detail-label">Labels</p>
+            <div className="issue-detail-label-container">
+              {issue.labels.map(label => (
+                <span className="pill label" key={label.id}>
+                  {label.name}
+                </span>
+              ))}
+            </div>
+            <LabelPicker
+              selected={labelSet}
+              onAssociateLabel={labelID =>
+                z.mutate.issueLabel.create({
+                  issueID: issue.id,
+                  labelID,
+                })
+              }
+              onDisassociateLabel={labelID =>
+                z.mutate.issueLabel.delete({issueID: issue.id, labelID})
+              }
+            />
+          </div>
+        </div>
+
         <h2 className="issue-detail-label">Comments</h2>
         {issue.comments.length > 0 ? (
           <div className="comments-container">
@@ -177,78 +249,6 @@ export default function IssuePage() {
         ) : (
           <CommentComposer issueID={issue.id} />
         )}
-      </div>
-
-      {/* Right sidebar */}
-      <div className="issue-sidebar">
-        <div className="sidebar-item">
-          <p className="issue-detail-label">Status</p>
-          <Selector
-            items={[
-              {
-                text: 'Open',
-                value: true,
-                icon: statusOpen,
-              },
-              {
-                text: 'Closed',
-                value: false,
-                icon: statusClosed,
-              },
-            ]}
-            selectedValue={issue.open}
-            onChange={value =>
-              z.mutate.issue.update({id: issue.id, open: value})
-            }
-          />
-        </div>
-
-        <div className="sidebar-item">
-          <p className="issue-detail-label">Creator</p>
-          <button className="sidebar-button issue-creator">
-            <img
-              src={issue.creator?.avatar}
-              className="issue-creator-avatar"
-              alt={issue.creator?.name}
-            />
-            <span className="issue-creator-name">{issue.creator.login}</span>
-          </button>
-        </div>
-
-        <div className="sidebar-item">
-          <p className="issue-detail-label">Assignee</p>
-          <UserPicker
-            selected={{login: issue.assignee?.login}}
-            onSelect={user => {
-              z.mutate.issue.update({id: issue.id, assigneeID: user.id});
-              // 🙄 - this can go away when https://bugs.rocicorp.dev/issue/k_h0Dy_6_6yHFDWFxNke2 is fixed.
-              window.setTimeout(() => location.reload(), 100);
-            }}
-          />
-        </div>
-
-        <div className="sidebar-item">
-          <p className="issue-detail-label">Labels</p>
-          <div className="issue-detail-label-container">
-            {issue.labels.map(label => (
-              <span className="pill label" key={label.id}>
-                {label.name}
-              </span>
-            ))}
-          </div>
-          <LabelPicker
-            selected={labelSet}
-            onAssociateLabel={labelID =>
-              z.mutate.issueLabel.create({
-                issueID: issue.id,
-                labelID,
-              })
-            }
-            onDisassociateLabel={labelID =>
-              z.mutate.issueLabel.delete({issueID: issue.id, labelID})
-            }
-          />
-        </div>
       </div>
     </div>
   );

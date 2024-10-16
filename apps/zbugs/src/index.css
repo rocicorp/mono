@@ -99,6 +99,10 @@ h1 {
   height: auto;
 }
 
+.zero-mark {
+  display: none;
+}
+
 .primary-cta {
   color: var(--color-background);
   border-radius: 0.5rem;
@@ -778,6 +782,8 @@ h1 {
 
   .section-tabs {
     flex-direction: row;
+    font-size: var(--typo-label-size);
+    font-weight: var(--typo-label-weight);
   }
 
   .primary-cta {
@@ -807,11 +813,41 @@ h1 {
     display: none;
   }
 
+  .primary-content .issue-taglist .pill {
+    display: none;
+  }
+
+  .primary-content .issue-taglist .pill:first-child {
+    display: block;
+  }
+
+  .issue-detail {
+    padding-right: 0;
+  }
+
   .issue-sidebar {
-    top: 7rem;
+    position: static;
+    margin-top: 3rem;
   }
 
   .modal {
     margin-top: 10rem;
+  }
+
+  .issue-creator-avatar {
+    margin-right: 0;
+  }
+
+  .logout-button {
+    display: none;
+  }
+}
+
+@media (max-width: 650px) {
+  .zero-logo {
+    display: none;
+  }
+  .zero-mark {
+    display: block;
   }
 }
