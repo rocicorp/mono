@@ -8,7 +8,15 @@ type PublishedTableQueryResult = {
   tables: FilteredTableSpec[];
 };
 
-export function publishedTableQuery(publications: string[], join = '') {
+export function publishedTableQuery(
+  publicationsVariableOrLiteralArray: string | string[],
+  join = '',
+) {
+  const inPublications =
+    typeof publicationsVariableOrLiteralArray === 'string'
+      ? `= ANY(${publicationsVariableOrLiteralArray})`
+      : `IN (${literal(publicationsVariableOrLiteralArray)})`;
+
   return `
 WITH published_columns AS (SELECT 
   nspname AS "schema", 
@@ -35,7 +43,7 @@ JOIN pg_publication_tables as pb ON
 ${join}
 LEFT JOIN pg_constraint pk ON pk.contype = 'p' AND pk.connamespace = relnamespace AND pk.conrelid = attrelid
 LEFT JOIN pg_attrdef pd ON pd.adrelid = attrelid AND pd.adnum = attnum
-WHERE pb.pubname IN (${literal(publications)})
+WHERE pb.pubname ${inPublications}
 ORDER BY nspname, pc.relname),
 
 tables AS (SELECT json_build_object(
@@ -79,7 +87,15 @@ type IndexDefinitionsQueryResult = {
   indexes: IndexSpec[];
 };
 
-export function indexDefinitionsQuery(publications: string[], join = '') {
+export function indexDefinitionsQuery(
+  publicationsVariableOrLiteralArray: string | string[],
+  join = '',
+) {
+  const inPublications =
+    typeof publicationsVariableOrLiteralArray === 'string'
+      ? `= ANY(${publicationsVariableOrLiteralArray})`
+      : `IN (${literal(publicationsVariableOrLiteralArray)})`;
+
   // Note: pg_attribute contains column names for tables and for indexes.
   // However, the latter does not get updated when a column in a table is
   // renamed.
@@ -116,7 +132,7 @@ export function indexDefinitionsQuery(publications: string[], join = '') {
     ) AS index_column ON true
     ${join}
     LEFT JOIN pg_constraint ON pg_constraint.conindid = pc.oid
-    WHERE pb.pubname IN (${literal(publications)})
+    WHERE pb.pubname ${inPublications}
       AND pg_constraint.contype is distinct from 'p'
       AND pg_constraint.contype is distinct from 'f'
     ORDER BY
