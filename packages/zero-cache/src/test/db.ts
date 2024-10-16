@@ -1,7 +1,7 @@
 import postgres from 'postgres';
+import {afterAll, expect} from 'vitest';
 import {assert, assertString} from '../../../shared/src/asserts.js';
 import {sleep} from '../../../shared/src/sleep.js';
-import {afterAll, expect} from 'vitest';
 import {type PostgresDB, postgresTypeConfig} from '../types/pg.js';
 
 // Set by ./test/pg-container-setup.ts
@@ -12,6 +12,12 @@ assert(
   'pg-container-setup.ts must be executed to setup the PG_CONTAINER_CONNECTION_URI',
 );
 
+export type OnNoticeFn = (n: postgres.Notice) => void;
+
+const defaultOnNotice: OnNoticeFn = n => {
+  n.severity !== 'NOTICE' && console.log(n);
+};
+
 class TestDBs {
   readonly #sql = postgres(CONNECTION_URI, {
     onnotice: n => n.severity !== 'NOTICE' && console.log(n),
@@ -19,7 +25,7 @@ class TestDBs {
   });
   readonly #dbs: Record<string, postgres.Sql> = {};
 
-  async create(database: string): Promise<PostgresDB> {
+  async create(database: string, onNotice?: OnNoticeFn): Promise<PostgresDB> {
     assert(!(database in this.#dbs), `${database} has already been created`);
 
     const sql = this.#sql;
@@ -33,7 +39,10 @@ class TestDBs {
       username,
       password: pass ?? undefined,
       database,
-      onnotice: n => n.severity !== 'NOTICE' && console.log(n),
+      onnotice: n => {
+        onNotice?.(n);
+        defaultOnNotice(n);
+      },
       ...postgresTypeConfig(),
     });
     this.#dbs[database] = db;
