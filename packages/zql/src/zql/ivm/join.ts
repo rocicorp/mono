@@ -8,7 +8,7 @@ import {
   type Row,
 } from './data.js';
 import type {FetchRequest, Input, Output, Storage} from './operator.js';
-import type {TableSchema} from './schema.js';
+import type {PrimaryKey, TableSchema} from './schema.js';
 import {first, take, type Stream} from './stream.js';
 
 type Args = {
@@ -138,26 +138,84 @@ export class Join implements Input {
       case 'child':
         this.#output.push(change);
         break;
-      case 'edit':
-        // If the join key value didn't change we push the change down
-        if (
-          normalizeUndefined(change.row[this.#parentKey]) ===
-          normalizeUndefined(change.oldRow[this.#parentKey])
-        ) {
-          this.#output.push(change);
-        } else {
-          // The join key value changed so we treat this as a remove followed by
-          // an add.
-          this.#output.push({
-            type: 'remove',
-            node: this.#processParentNode(change.oldRow, {}, 'cleanup'),
+      case 'edit': {
+        // When an edit comes in we need to:
+        // - Update the parent node.
+        // - If the value of the join key changed we need to remove the old relation rows and add the new ones.
+
+        this.#output.push({
+          type: 'edit',
+          row: change.row,
+          oldRow: change.oldRow,
+        });
+
+        const oldKeyValue = normalizeUndefined(change.oldRow[this.#parentKey]);
+        const newKeyValue = normalizeUndefined(change.row[this.#parentKey]);
+
+        if (newKeyValue !== oldKeyValue) {
+          const childrenToRemoveStream = this.#child.cleanup({
+            constraint: {
+              key: this.#childKey,
+              value: oldKeyValue,
+            },
           });
-          this.#output.push({
-            type: 'add',
-            node: this.#processParentNode(change.row, {}, 'fetch'),
+          for (const childNode of childrenToRemoveStream) {
+            this.#output.push({
+              type: 'child',
+              // This is the new row since we already changed it in the edit above.
+              row: change.row,
+              child: {
+                relationshipName: this.#relationshipName,
+                change: {
+                  type: 'remove',
+                  node: childNode,
+                },
+              },
+            });
+          }
+
+          const childrenToAddStream = this.#child.fetch({
+            constraint: {
+              key: this.#childKey,
+              value: newKeyValue,
+            },
           });
+          for (const childNode of childrenToAddStream) {
+            this.#output.push({
+              type: 'child',
+              row: change.row,
+              child: {
+                relationshipName: this.#relationshipName,
+                change: {
+                  type: 'add',
+                  node: childNode,
+                },
+              },
+            });
+          }
         }
+
+        const {primaryKey} = this.#parent.getSchema();
+        const oldStorageKey = makeStorageKey(
+          oldKeyValue,
+          primaryKey,
+          change.oldRow,
+        );
+        const newStorageKey = makeStorageKey(
+          newKeyValue,
+          primaryKey,
+          change.row,
+        );
+
+        // This can be true for both cases. Even if the join key value didn't
+        // change the primary key values might have.
+        if (oldStorageKey !== newStorageKey) {
+          this.#storage.del(oldStorageKey);
+          this.#storage.set(newStorageKey, true);
+        }
+
         break;
+      }
       default:
         unreachable(change);
     }
@@ -250,17 +308,14 @@ export class Join implements Input {
     mode: ProcessParentMode,
   ): Node {
     const parentKeyValue = normalizeUndefined(parentNodeRow[this.#parentKey]);
-    const parentPrimaryKey: NormalizedValue[] = [];
-    for (const key of this.#parent.getSchema().primaryKey) {
-      parentPrimaryKey.push(normalizeUndefined(parentNodeRow[key]));
-    }
 
     // This storage key tracks the primary keys seen for each unique
     // value joined on. This is used to know when to cleanup a child's state.
-    const storageKey: string = createPrimaryKeySetStorageKey([
+    const storageKey = makeStorageKey(
       parentKeyValue,
-      ...parentPrimaryKey,
-    ]);
+      this.#parent.getSchema().primaryKey,
+      parentNodeRow,
+    );
 
     let method: ProcessParentMode = mode;
     if (mode === 'cleanup') {
@@ -301,7 +356,7 @@ type ProcessParentMode = 'fetch' | 'cleanup';
 
 /** Exported for testing. */
 export function createPrimaryKeySetStorageKey(
-  values: NormalizedValue[],
+  values: readonly NormalizedValue[],
 ): string {
   const json = JSON.stringify(['pKeySet', ...values]);
   return json.substring(1, json.length - 1) + ',';
@@ -311,4 +366,16 @@ export function createPrimaryKeySetStorageKeyPrefix(
   value: NormalizedValue,
 ): string {
   return createPrimaryKeySetStorageKey([value]);
+}
+
+function makeStorageKey(
+  keyValue: NormalizedValue,
+  primaryKey: PrimaryKey,
+  row: Row,
+): string {
+  const parentPrimaryKey: NormalizedValue[] = [keyValue];
+  for (const key of primaryKey) {
+    parentPrimaryKey.push(normalizeUndefined(row[key]));
+  }
+  return createPrimaryKeySetStorageKey(parentPrimaryKey);
 }
