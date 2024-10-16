@@ -35,23 +35,28 @@ export type ConnectedMessage = v.Infer<typeof connectedMessageSchema>;
 export type InitConnectionBody = v.Infer<typeof initConnectionBodySchema>;
 export type InitConnectionMessage = v.Infer<typeof initConnectionMessageSchema>;
 
-export function encodeProtocols(
+export function encodeSecProtocols(
   initConnectionMessage: InitConnectionMessage,
   authToken?: string | undefined,
 ) {
+  // base64 encoding the JSON before URI encoding it results in a smaller payload.
   const protocols: string[] = [btoa(JSON.stringify(initConnectionMessage))];
-  if (authToken) {
+  if (authToken !== undefined) {
     protocols.push(authToken);
   }
   return encodeURIComponent(protocols.join(','));
 }
 
-export function decodeProtocols(
+/**
+ * The initConnectionMessage is purposely returned as a string
+ * since it is passed directly into the WebSocket message handler
+ * which does JSON.parse and Valita.parse on the message.
+ */
+export function decodeSecProtocols(
   secProtocol: string,
 ): [initConnectionMessage: string, maybeAuthToken: string | undefined] {
   const ret = decodeURIComponent(secProtocol)
     .split(',')
-    // base64 encoding the JSON before URI encoding it results in a smaller payload.
     .map((s, i) => (i === 0 ? atob(s) : s));
 
   assert(ret.length === 1 || ret.length === 2);
