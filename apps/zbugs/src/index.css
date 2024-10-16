@@ -794,8 +794,8 @@ h1 {
 
   .primary-cta {
     position: fixed;
-    bottom: 4rem;
-    right: 4rem;
+    bottom: 2rem;
+    right: 2rem;
     z-index: 9999;
     height: 4rem;
     width: 4rem;
@@ -844,6 +844,17 @@ h1 {
 
   .modal {
     margin-top: 10rem;
+  }
+
+  .list-view-filter-container {
+    flex-wrap: wrap;
+  }
+
+  .add-filter-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
   }
 
   .logged-in-user .issue-creator-avatar {
