@@ -51,7 +51,7 @@ import {
   type PushMessage,
   type QueriesPatchOp,
   downstreamSchema,
-  encodeProtocols,
+  encodeSecProtocols,
   nullableVersionSchema,
 } from '../../../zero-protocol/src/mod.js';
 import type {
@@ -1645,7 +1645,7 @@ export async function createSocket(
     new WS(
       // toString() required for RN URL polyfill.
       url.toString(),
-      encodeProtocols(
+      encodeSecProtocols(
         ['initConnection', {desiredQueriesPatch: [...queriesPatch.values()]}],
         auth,
       ),
