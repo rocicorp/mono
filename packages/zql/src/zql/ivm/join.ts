@@ -139,6 +139,10 @@ export class Join implements Input {
         this.#output.push(change);
         break;
       case 'edit': {
+        // When an edit comes in we need to:
+        // - Update the parent node.
+        // - If the value of the join key changed we need to remove the old relation rows and add the new ones.
+
         this.#output.push({
           type: 'edit',
           row: change.row,
@@ -203,6 +207,8 @@ export class Join implements Input {
           change.row,
         );
 
+        // This can be true for both cases. Even if the join key value didn't
+        // change the primary key values might have.
         if (oldStorageKey !== newStorageKey) {
           this.#storage.del(oldStorageKey);
           this.#storage.set(newStorageKey, true);
