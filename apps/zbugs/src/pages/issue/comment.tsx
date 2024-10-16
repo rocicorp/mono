@@ -47,7 +47,9 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
           onDone={() => setEditing(false)}
         />
       ) : (
-        <Markdown>{comment.body}</Markdown>
+        <div className="markdown-container">
+          <Markdown>{comment.body}</Markdown>
+        </div>
       )}
       {editing || comment.creatorID !== login.loginState?.decoded.sub ? null : (
         <div className={style.commentActions}>
