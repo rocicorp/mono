@@ -148,6 +148,27 @@ export class PipelineDriver {
   }
 
   /**
+   * Clears the current pipelines and TableSources, returning the PipelineDriver
+   * to its initial state. This should be called in response to a schema change,
+   * as TableSources need to be recomputed.
+   */
+  reset() {
+    const tableSpecs = this.#tableSpecs;
+    assert(tableSpecs);
+    for (const {input} of this.#pipelines.values()) {
+      input.destroy();
+    }
+    this.#pipelines.clear();
+    this.#tables.clear();
+    tableSpecs.clear();
+
+    const {db} = this.#snapshotter.current();
+    listTables(db.db).forEach(spec =>
+      tableSpecs.set(spec.name, normalize(spec)),
+    );
+  }
+
+  /**
    * Clears storage used for the pipelines. Call this when the
    * PipelineDriver will no longer be used.
    */

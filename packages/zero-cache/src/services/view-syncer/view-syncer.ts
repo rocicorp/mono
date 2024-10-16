@@ -41,6 +41,7 @@ import {
   versionString,
   versionToCookie,
 } from './schema/types.js';
+import {SchemaChangeError} from './snapshotter.js';
 
 export type SyncContext = {
   readonly clientID: string;
@@ -124,8 +125,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
         await this.#runInLockWithCVR(async cvr => {
           if (this.#pipelinesSynced) {
-            await this.#advancePipelines(cvr);
-            return;
+            const result = await this.#advancePipelines(cvr);
+            if (result === 'success') {
+              return;
+            }
+            this.#lc.info?.(`resetting for schema change: ${result.message}`);
+            this.#pipelines.reset();
           }
 
           // Advance the snapshot to the current version.
@@ -677,8 +682,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    * changes.
    *
    * Must be called from within the #lock.
+   *
+   * Returns false if the advancement failed due to a schema change.
    */
-  async #advancePipelines(cvr: CVRSnapshot) {
+  async #advancePipelines(
+    cvr: CVRSnapshot,
+  ): Promise<'success' | SchemaChangeError> {
     assert(this.#pipelines.initialized());
     const start = Date.now();
 
@@ -695,7 +704,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
 
     lc.debug?.(`applying ${numChanges} to advance to ${version}`);
-    await this.#processChanges(lc, changes, updater, pokers);
+    try {
+      await this.#processChanges(lc, changes, updater, pokers);
+    } catch (e) {
+      if (e instanceof SchemaChangeError) {
+        // TODO: cancel pokes before returning.
+        return e;
+      }
+      throw e;
+    }
 
     // Commit the changes and update the CVR snapshot.
     this.#cvr = (await updater.flush(lc)).cvr;
@@ -704,6 +721,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     pokers.forEach(poker => poker.end());
 
     lc.info?.(`finished processing advancement (${Date.now() - start} ms)`);
+    return 'success';
   }
 
   stop(): Promise<void> {

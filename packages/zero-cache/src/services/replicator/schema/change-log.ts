@@ -22,21 +22,41 @@ import {normalizedKeyOrder} from '../../../types/row-key.js';
  * new contents. (In the common case, the new contents will have just been applied
  * and thus has a high likelihood of being in the SQLite cache.)
  *
- * The postgres TRUNCATE operation is represented as a log entry with a `null` row
- * key, which means that it is sorted before any row operations for that table.
+ * There are two table-wide operations:
+ * - `t` corresponds to the postgres `TRUNCATE` operation
+ * - `r` represents any schema (i.e. column) change
+ *
+ * For both operations, the corresponding row changes are not explicitly included
+ * in the change log. The consumer has the option of simulating them be reading
+ * from pre- and post- snapshots, or resetting their state entirely with the current
+ * snapshot.
+ *
+ * To achieve the desired ordering semantics when processing tables that have been
+ * truncated, reset, and modified, the "rowKey" is set to `null` for resets and
+ * the empty string `""` for truncates. This means that resets will be encountered
+ * before truncates, which will be processed before any subsequent row changes.
+ *
+ * This ordering is chosen because resets are currently the more "destructive" op
+ * and result in aborting the processing (and starting from scratch); doing this
+ * earlier reduces wasted work.
  */
 
 export const SET_OP = 's';
 export const DEL_OP = 'd';
 export const TRUNCATE_OP = 't';
+export const RESET_OP = 'r';
 
 const CREATE_CHANGELOG_SCHEMA =
   // stateVersion : a.k.a. row version
   // table        : The table associated with the change
   // rowKey       : JSON row key for a row change, or NULL for a table TRUNCATE.
-  //                Note that SQLite will sort rows such that TRUNCATE operations appear
-  //                before row operations (as desired), as NULL appears before non-NULL values.
-  // op           : 't' for table truncation, 's' for set (insert/update), and 'd' for delete
+  //                Note that SQLite will sort rows such that TRUNCATE and RESET operations
+  //                appear before row operations (as desired), as NULL appears before non-NULL
+  //                 values.
+  // op           : 't' for table truncation
+  //              : 'r' for table reset (schema change)
+  //                's' for set (insert/update)
+  //                'd' for delete
   `
   CREATE TABLE "_zero.ChangeLog" (
     "stateVersion" TEXT NOT NULL,
@@ -53,10 +73,16 @@ export const changeLogEntrySchema = v
     stateVersion: v.string(),
     table: v.string(),
     rowKey: v.string().nullable(),
-    op: v.union(v.literal(SET_OP), v.literal(DEL_OP), v.literal(TRUNCATE_OP)),
+    op: v.union(
+      v.literal(SET_OP),
+      v.literal(DEL_OP),
+      v.literal(TRUNCATE_OP),
+      v.literal(RESET_OP),
+    ),
   })
   .map(val => ({
     ...val,
+    // Note: both `null` (for reset) and empty string "" (for truncate) will result in `null`
     rowKey: val.rowKey ? v.parse(parse(val.rowKey), jsonObjectSchema) : null,
   }));
 
@@ -102,24 +128,44 @@ function logRowOp(
     {version, table, rowKey, op},
   );
 }
-
 export function logTruncateOp(
   db: StatementRunner,
   version: LexiVersion,
   table: string,
 ) {
+  logTableWideOp(db, version, table, TRUNCATE_OP);
+}
+
+export function logResetOp(
+  db: StatementRunner,
+  version: LexiVersion,
+  table: string,
+) {
+  logTableWideOp(db, version, table, RESET_OP);
+}
+
+function logTableWideOp(
+  db: StatementRunner,
+  version: LexiVersion,
+  table: string,
+  op: 't' | 'r',
+) {
   db.run(
+    // Delete all row ops for the table (`rowKey > ''`),
+    // and any previous instance of the same (table-wide) op (`op = ?`).
     `
-    DELETE FROM "_zero.ChangeLog" WHERE "table" = ?
+    DELETE FROM "_zero.ChangeLog" WHERE "table" = ? AND (rowKey > '' OR op = ?)
     `,
     table,
+    op,
   );
 
   db.run(
     `
-    INSERT INTO "_zero.ChangeLog" (stateVersion, "table", op) 
-      VALUES (@version, @table, @op)
+    INSERT INTO "_zero.ChangeLog" (stateVersion, "table", rowKey, op) 
+      VALUES (@version, @table, @rowKey, @op)
     `,
-    {version, table, op: TRUNCATE_OP},
+    // See file JSDoc for explanation of the rowKey w.r.t. ordering of table-wide ops.
+    {version, table, rowKey: op === RESET_OP ? null : '', op},
   );
 }
