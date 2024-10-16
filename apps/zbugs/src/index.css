@@ -611,10 +611,6 @@ h1 {
   margin-right: 0.8175rem;
 }
 
-.comments-container a {
-  color: var(--color-primary-cta);
-}
-
 /* Issue Composer */
 
 .save-issue {
@@ -657,35 +653,35 @@ h1 {
 /* Markdown */
 /************/
 
-.description-container p {
+.markdown-container p {
   line-height: 1.5;
   margin-bottom: 0.5rem;
 }
 
-.description-container ul,
-.description-container ol {
+.markdown-container ul,
+.markdown-container ol {
   padding-left: 2rem;
 }
 
-.description-container ul {
+.markdown-container ul {
   list-style-type: disc;
   list-style-position: inside;
 }
 
-.description-container ol {
+.markdown-container ol {
   counter-reset: list-counter;
   list-style: none;
   padding-left: 0;
 }
 
-.description-container ol li {
+.markdown-container ol li {
   counter-increment: list-counter;
   position: relative;
   padding: 0.25rem 0 0.25rem 3.35em;
   line-height: 2;
 }
 
-.description-container ol li::before {
+.markdown-container ol li::before {
   content: counter(list-counter) '.';
   position: absolute;
   left: 0;
@@ -693,7 +689,7 @@ h1 {
   text-align: right;
 }
 
-.description-container ul li {
+.markdown-container ul li {
   padding: 0.25rem 0;
   line-height: 2;
 }
@@ -723,7 +719,7 @@ h1 {
 }
 
 /* Markdown: Blockquotes */
-.description-container blockquote {
+.markdown-container blockquote {
   margin: 1rem 0;
   padding: 0.5em 1em;
   border-left: 0.4rem solid var(--color-nav-selected);
@@ -732,29 +728,29 @@ h1 {
 }
 
 /* Markdown: Horizontal rule */
-.description-container hr {
+.markdown-container hr {
   margin: 1rem 0;
   border-color: var(--color-nav-selected);
 }
 
 /* Markdown: Headers */
-.description-container h1 {
+.markdown-container h1 {
   font-size: 3rem;
 }
 
-.description-container h2 {
+.markdown-container h2 {
   font-size: 2rem;
   margin: 3rem 0 1rem;
 }
 
-.description-container h3 {
+.markdown-container h3 {
   font-size: 1.25rem;
   font-weight: 700;
   margin: 2rem 0 1rem;
 }
 
 /* Markdown: Links */
-.description-container a {
+.markdown-container a {
   color: var(--color-primary-cta);
 }
 

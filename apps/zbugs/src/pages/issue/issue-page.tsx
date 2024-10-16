@@ -148,7 +148,7 @@ export default function IssuePage() {
          HTML mixed in. We need to find some way to render them, or convert to
          standard markdown? break-spaces makes it render a little better */}
         {!editing ? (
-          <div className="description-container">
+          <div className="description-container markdown-container">
             <Markdown>{rendering.description}</Markdown>
           </div>
         ) : (
