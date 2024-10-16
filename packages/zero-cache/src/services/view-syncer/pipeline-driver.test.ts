@@ -363,6 +363,123 @@ describe('view-syncer/pipeline-driver', () => {
     `);
   });
 
+  test('reset', () => {
+    pipelines.init();
+    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
+    expect(pipelines.addedQueries()).toEqual(new Set(['hash1']));
+
+    db.exec(`ALTER TABLE issues ADD COLUMN newColumn TEXT`);
+    pipelines.advanceWithoutDiff();
+    pipelines.reset();
+
+    expect(pipelines.addedQueries()).toEqual(new Set());
+
+    // The newColumn should be reflected after a reset.
+    expect([...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)])
+      .toMatchInlineSnapshot(`
+      [
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "00",
+            "closed": false,
+            "id": "3",
+            "newColumn": null,
+          },
+          "rowKey": {
+            "id": "3",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "00",
+            "closed": true,
+            "id": "2",
+            "newColumn": null,
+          },
+          "rowKey": {
+            "id": "2",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "00",
+            "id": "22",
+            "issueID": "2",
+            "upvotes": 20000,
+          },
+          "rowKey": {
+            "id": "22",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "00",
+            "id": "21",
+            "issueID": "2",
+            "upvotes": 10000,
+          },
+          "rowKey": {
+            "id": "21",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "00",
+            "id": "20",
+            "issueID": "2",
+            "upvotes": 1,
+          },
+          "rowKey": {
+            "id": "20",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "00",
+            "closed": false,
+            "id": "1",
+            "newColumn": null,
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "00",
+            "id": "10",
+            "issueID": "1",
+            "upvotes": 0,
+          },
+          "rowKey": {
+            "id": "10",
+          },
+          "table": "comments",
+          "type": "add",
+        },
+      ]
+    `);
+  });
+
   test('getRow', () => {
     pipelines.init();
 

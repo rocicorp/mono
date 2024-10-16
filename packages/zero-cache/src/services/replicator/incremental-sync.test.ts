@@ -460,13 +460,13 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '02',
             table: 'baz',
             op: 't',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
             table: 'foo',
             op: 't',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',

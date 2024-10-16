@@ -14,6 +14,7 @@ import {
 } from '../../types/row-key.js';
 import {type SchemaVersions} from '../../types/schema-versions.js';
 import {
+  RESET_OP,
   changeLogEntrySchema as schema,
   SET_OP,
   TRUNCATE_OP,
@@ -215,6 +216,18 @@ export interface SnapshotDiff extends Iterable<Change> {
   readonly changes: number;
 }
 
+/**
+ * Thrown during an iteration of a {@link SnapshotDiff} when a schema
+ * change is encountered.
+ */
+export class SchemaChangeError extends Error {
+  readonly name = 'SchemaChangeError';
+
+  constructor(table: string) {
+    super(`schema for table ${table} has changed`);
+  }
+}
+
 function getSchemaVersions(db: StatementRunner): SchemaVersions {
   return db.get(
     'SELECT minSupportedVersion, maxSupportedVersion FROM "zero.schemaVersions"',
@@ -331,42 +344,54 @@ class Diff implements SnapshotDiff {
 
     return {
       next: () => {
-        for (;;) {
-          // Exhaust the TRUNCATE iteration before continuing the Change sequence.
-          const truncatedRow = truncates.next();
-          if (truncatedRow) {
-            return truncatedRow;
+        try {
+          for (;;) {
+            // Exhaust the TRUNCATE iteration before continuing the Change sequence.
+            const truncatedRow = truncates.next();
+            if (truncatedRow) {
+              return truncatedRow;
+            }
+
+            const {value, done} = changes.next();
+            if (done) {
+              cleanup();
+              return {value, done: true};
+            }
+
+            const {table, rowKey, op, stateVersion} = v.parse(value, schema);
+            if (op === RESET_OP) {
+              // The current map of `TableSpec`s may not have the correct or complete information.
+              throw new SchemaChangeError(table);
+            }
+            const tableSpec = must(this.tables.get(table));
+            if (op === TRUNCATE_OP) {
+              truncates.startTruncate(tableSpec);
+              continue; // loop around to pull rows from the TruncateTracker.
+            }
+
+            assert(rowKey !== null);
+            const prevValue =
+              truncates.getRowIfNotTruncated(tableSpec, rowKey) ?? null;
+            const nextValue =
+              op === SET_OP ? this.curr.getRow(tableSpec, rowKey) : null;
+
+            // Sanity check detects if the diff is being accessed after the Snapshots have advanced.
+            this.checkThatDiffIsValid(stateVersion, op, prevValue, nextValue);
+
+            if (prevValue === null && nextValue === null) {
+              // Filter out no-op changes (e.g. a delete of a row that does not exist in prev).
+              // TODO: Consider doing this for deep-equal values.
+              continue;
+            }
+
+            return {value: {table, prevValue, nextValue} satisfies Change};
           }
-
-          const {value, done} = changes.next();
-          if (done) {
-            cleanup();
-            return {value, done: true};
-          }
-
-          const {table, rowKey, op, stateVersion} = v.parse(value, schema);
-          const tableSpec = must(this.tables.get(table));
-          if (op === TRUNCATE_OP) {
-            truncates.startTruncate(tableSpec);
-            continue; // loop around to pull rows from the TruncateTracker.
-          }
-
-          assert(rowKey !== null);
-          const prevValue =
-            truncates.getRowIfNotTruncated(tableSpec, rowKey) ?? null;
-          const nextValue =
-            op === SET_OP ? this.curr.getRow(tableSpec, rowKey) : null;
-
-          // Sanity check detects if the diff is being accessed after the Snapshots have advanced.
-          this.checkThatDiffIsValid(stateVersion, op, prevValue, nextValue);
-
-          if (prevValue === null && nextValue === null) {
-            // Filter out no-op changes (e.g. a delete of a row that does not exist in prev).
-            // TODO: Consider doing this for deep-equal values.
-            continue;
-          }
-
-          return {value: {table, prevValue, nextValue} satisfies Change};
+        } catch (e) {
+          // This control flow path is not covered by the return() and throw() methods.
+          truncates.iterReturn(null);
+          changes.return?.(null);
+          cleanup();
+          throw e;
         }
       },
 

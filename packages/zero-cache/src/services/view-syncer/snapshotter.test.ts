@@ -3,21 +3,30 @@ import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {listTables} from '../../db/lite-tables.js';
 import type {TableSpec} from '../../db/specs.js';
+import {StatementRunner} from '../../db/statements.js';
 import {DbFile, expectTables} from '../../test/lite.js';
 import {MessageProcessor} from '../replicator/incremental-sync.js';
 import {initChangeLog} from '../replicator/schema/change-log.js';
-import {initReplicationState} from '../replicator/schema/replication-state.js';
+import {
+  initReplicationState,
+  updateReplicationWatermark,
+} from '../replicator/schema/replication-state.js';
 import {
   createMessageProcessor,
   ReplicationMessages,
 } from '../replicator/test-utils.js';
-import {InvalidDiffError, Snapshotter} from './snapshotter.js';
+import {
+  InvalidDiffError,
+  SchemaChangeError,
+  Snapshotter,
+} from './snapshotter.js';
 
 describe('view-syncer/snapshotter', () => {
   let lc: LogContext;
   let dbFile: DbFile;
   let replicator: MessageProcessor;
   let tableSpecs: Map<string, TableSpec>;
+  let s: Snapshotter;
 
   beforeEach(() => {
     lc = createSilentLogContext();
@@ -55,14 +64,15 @@ describe('view-syncer/snapshotter', () => {
     tableSpecs = new Map(tables.map(spec => [spec.name, spec]));
 
     replicator = createMessageProcessor(db);
+    s = new Snapshotter(lc, dbFile.path).init();
   });
 
   afterEach(async () => {
+    s.destroy();
     await dbFile.unlink();
   });
 
   test('initial snapshot', () => {
-    const s = new Snapshotter(lc, dbFile.path).init();
     const {db, version, schemaVersions} = s.current();
 
     expect(version).toBe('00');
@@ -84,7 +94,6 @@ describe('view-syncer/snapshotter', () => {
   });
 
   test('empty diff', () => {
-    const s = new Snapshotter(lc, dbFile.path).init();
     const {version} = s.current();
 
     expect(version).toBe('00');
@@ -111,7 +120,6 @@ describe('view-syncer/snapshotter', () => {
   );
 
   test('schemaVersions change', () => {
-    const s = new Snapshotter(lc, dbFile.path).init();
     expect(s.current().version).toBe('00');
     expect(s.current().schemaVersions).toEqual({
       minSupportedVersion: 1,
@@ -432,10 +440,12 @@ describe('view-syncer/snapshotter', () => {
         },
       ]
     `);
+
+    s1.destroy();
+    s2.destroy();
   });
 
   test('noop-truncate diff', () => {
-    const s = new Snapshotter(lc, dbFile.path).init();
     const {version} = s.current();
 
     expect(version).toBe('00');
@@ -457,7 +467,6 @@ describe('view-syncer/snapshotter', () => {
   });
 
   test('truncate diff', () => {
-    const s = new Snapshotter(lc, dbFile.path).init();
     const {version} = s.current();
 
     expect(version).toBe('00');
@@ -500,7 +509,6 @@ describe('view-syncer/snapshotter', () => {
   });
 
   test('consecutive truncates', () => {
-    const s = new Snapshotter(lc, dbFile.path).init();
     const {version} = s.current();
 
     expect(version).toBe('00');
@@ -574,7 +582,6 @@ describe('view-syncer/snapshotter', () => {
   });
 
   test('truncate followed by inserts into same table', () => {
-    const s = new Snapshotter(lc, dbFile.path).init();
     const {version} = s.current();
 
     expect(version).toBe('00');
@@ -643,7 +650,6 @@ describe('view-syncer/snapshotter', () => {
   });
 
   test('changelog iterator cleaned up on aborted iteration', () => {
-    const s = new Snapshotter(lc, dbFile.path).init();
     const {version} = s.current();
 
     expect(version).toBe('00');
@@ -727,5 +733,27 @@ describe('view-syncer/snapshotter', () => {
     // iterations should have been returned to the cache.
     expect(diff.curr.db.statementCache.size).toBe(currStmts + 1);
     expect(diff.prev.db.statementCache.size).toBe(prevStmts + 1);
+  });
+
+  test('schema change diff iteration throws SchemaChangeError', () => {
+    const {version} = s.current();
+
+    expect(version).toBe('00');
+
+    // TODO: Replace this with the replicator processing a schema change
+    // after some row changes.
+    const db = dbFile.connect(lc);
+    db.prepare(
+      `INSERT INTO "_zero.ChangeLog" (stateVersion, "table", rowKey, op)
+        VALUES ('07', 'comments', null, 'r')`,
+    ).run();
+    updateReplicationWatermark(new StatementRunner(db), '07');
+
+    const diff = s.advance(tableSpecs);
+    expect(diff.prev.version).toBe('00');
+    expect(diff.curr.version).toBe('01');
+    expect(diff.changes).toBe(1);
+
+    expect(() => [...diff]).toThrow(SchemaChangeError);
   });
 });
