@@ -9,6 +9,7 @@ import IssueComposer from '../pages/issue/issue-composer.js';
 import {useState} from 'react';
 import {useZero} from '../hooks/use-zero.js';
 import {useQuery} from 'zero-react/src/use-query.js';
+import {navigate} from 'wouter/use-browser-location';
 
 export function Nav() {
   const qs = new URLSearchParams(useSearch());
@@ -101,7 +102,12 @@ export function Nav() {
       </div>
       <IssueComposer
         isOpen={showIssueModal}
-        onDismiss={() => setShowIssueModal(false)}
+        onDismiss={id => {
+          setShowIssueModal(false);
+          if (id) {
+            navigate(`/issue/${id}`);
+          }
+        }}
       />
     </>
   );
