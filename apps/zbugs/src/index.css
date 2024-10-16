@@ -230,6 +230,7 @@ h1 {
 .list-view-filter-container {
   display: flex;
   flex: 0;
+  flex-wrap: wrap;
   gap: 0.5rem;
   box-shadow: 0px 1px 0px 0px var(--color-light-outline) inset;
   padding: 1rem 0.5rem 1rem 2rem;
@@ -794,8 +795,8 @@ h1 {
 
   .primary-cta {
     position: fixed;
-    bottom: 4rem;
-    right: 4rem;
+    bottom: 2rem;
+    right: 2rem;
     z-index: 9999;
     height: 4rem;
     width: 4rem;
@@ -859,7 +860,15 @@ h1 {
   .zero-logo {
     display: none;
   }
+
   .zero-mark {
     display: block;
+  }
+
+  .add-filter-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
   }
 }
