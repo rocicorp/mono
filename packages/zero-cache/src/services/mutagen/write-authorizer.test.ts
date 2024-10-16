@@ -1,20 +1,17 @@
 import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {Database} from '../../../../zqlite/src/db.js';
-import {
-  ZeroConfig,
-  type Rule,
-  type ZeroConfigType,
-} from '../../config/zero-config.js';
+import {type ZeroConfig, type Rule} from '../../config/zero-config.js';
 import {WriteAuthorizerImpl} from './write-authorizer.js';
 
 const lc = createSilentLogContext();
-const baseConfig: ZeroConfigType = {
+const baseConfig: ZeroConfig = {
   upstreamDBConnStr: 'upstream',
   cvrDBConnStr: 'cvr',
   changeDBConnStr: 'change',
   replicaDBFile: 'replica',
   log: {level: 'debug', format: 'json'},
+  shard: {id: '0', publications: []},
 };
 
 const allowIfSubject = [
@@ -162,14 +159,14 @@ describe('can insert/update/delete/upsert', () => {
     id?: string | undefined;
     actions?: ('Insert' | 'Update' | 'Delete' | 'Upsert')[] | undefined;
     expected: boolean;
-    authorization: ZeroConfigType['authorization'];
+    authorization: ZeroConfig['authorization'];
   }[])('$name', ({authorization, sub, id, actions, expected}) => {
     const authorizer = new WriteAuthorizerImpl(
       lc,
-      new ZeroConfig({
+      {
         ...baseConfig,
         authorization,
-      }),
+      },
       replica,
       'cg',
     );

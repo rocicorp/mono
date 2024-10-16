@@ -2,10 +2,11 @@
  * These types represent the _compiled_ config whereas `define-config` types represent the _source_ config.
  */
 
-import fs from 'node:fs/promises';
-import {must} from '../../../shared/src/must.js';
+import path from 'node:path';
 import * as v from '../../../shared/src/valita.js';
 import {astSchema} from '../../../zero-protocol/src/mod.js';
+import {tsImport} from 'tsx/esm/api';
+import {fileURLToPath} from 'node:url';
 
 export type Action = 'select' | 'insert' | 'update' | 'delete';
 
@@ -34,16 +35,9 @@ const authorizationConfigSchema = v.record(
 
 export type AuthorizationConfig = v.Infer<typeof authorizationConfigSchema>;
 
-const envRefSchema = v.object({
-  tag: v.literal('env'),
-  name: v.string(),
-});
-export type EnvRef = v.Infer<typeof envRefSchema>;
 const stringLiteral = v.string();
 const numberLiteral = v.number();
 const booleanLiteral = v.boolean();
-
-const configStringValueSchema = v.union(envRefSchema, stringLiteral);
 
 /**
  * Configures the view of the upstream database replicated to this zero-cache.
@@ -59,7 +53,7 @@ const shardConfigSchema = v.object({
    *
    * Defaults to "0".
    */
-  id: configStringValueSchema,
+  id: stringLiteral,
 
   /**
    * Optional (comma-separated) list of of Postgres `PUBLICATION`s that the
@@ -79,9 +73,8 @@ const shardConfigSchema = v.object({
    *
    * To use a different set of publications, a new shard should be created.
    */
-  publications: configStringValueSchema,
+  publications: v.array(stringLiteral),
 });
-type ShardConfigType = v.Infer<typeof shardConfigSchema>;
 
 const logConfigSchema = v.object({
   /**
@@ -90,13 +83,10 @@ const logConfigSchema = v.object({
    */
   level: v
     .union(
-      envRefSchema,
-      v.union(
-        v.literal('debug'),
-        v.literal('info'),
-        v.literal('warn'),
-        v.literal('error'),
-      ),
+      v.literal('debug'),
+      v.literal('info'),
+      v.literal('warn'),
+      v.literal('error'),
     )
     .optional(),
 
@@ -104,75 +94,62 @@ const logConfigSchema = v.object({
    * Defaults to `text` for developer-friendly console logging.
    * Also supports `json` for consumption by structured-logging services.
    */
-  format: v
-    .union(envRefSchema, v.union(v.literal('text'), v.literal('json')))
-    .optional(),
+  format: v.union(v.literal('text'), v.literal('json')).optional(),
 
-  datadogLogsApiKey: configStringValueSchema.optional(),
-  datadogServiceLabel: configStringValueSchema.optional(),
+  datadogLogsApiKey: stringLiteral.optional(),
+  datadogServiceLabel: stringLiteral.optional(),
 });
-type LogConfigType = v.Infer<typeof logConfigSchema>;
-
-const configValueSchema = v.union(
-  configStringValueSchema,
-  booleanLiteral,
-  numberLiteral,
-);
-type ConfigValue = v.Infer<typeof configValueSchema>;
+export type LogConfig = v.Infer<typeof logConfigSchema>;
 
 const rateLimitConfigSchema = v.object({
   // Limits to `max` transactions per `windowMs` milliseconds.
   // This uses a sliding window algorithm to track number of transactions in the current window.
   mutationTransactions: v.object({
     algorithm: v.literal('sliding-window'),
-    windowMs: v.union(envRefSchema, numberLiteral),
-    maxTransactions: v.union(envRefSchema, numberLiteral),
+    windowMs: numberLiteral,
+    maxTransactions: numberLiteral,
   }),
 });
-type RateLimitConfigType = v.Infer<typeof rateLimitConfigSchema>;
 
-const zeroConfigSchemaSansAuthorization = v.object({
-  upstreamDBConnStr: configStringValueSchema,
-  cvrDBConnStr: configStringValueSchema,
-  changeDBConnStr: configStringValueSchema,
-  taskId: configStringValueSchema.optional(),
-  replicaDBFile: configStringValueSchema,
-  storageDbTmpDir: configStringValueSchema.optional(),
+const zeroConfigBase = v.object({
+  upstreamDBConnStr: stringLiteral,
+  cvrDBConnStr: stringLiteral,
+  changeDBConnStr: stringLiteral,
+  taskId: stringLiteral.optional(),
+  replicaDBFile: stringLiteral,
+  storageDBTmpDir: stringLiteral.optional(),
   warmWebsocket: numberLiteral.optional(),
 
   // The number of sync workers defaults to available-cores - 1.
   // It should be set to 0 for the `replication-manager`.
-  numSyncWorkers: v.union(envRefSchema, numberLiteral).optional(),
+  numSyncWorkers: numberLiteral.optional(),
 
   // In development, the `zero-cache` runs its own `replication-manager`
   // (i.e. `change-streamer`). In production, this URI should point to
   // to the `replication-manager`, which runs a `change-streamer`
   // on port 4849.
-  changeStreamerConnStr: configStringValueSchema.optional(),
+  changeStreamerConnStr: stringLiteral.optional(),
 
   // Indicates that a `litestream replicate` process is backing up
   // the `replicatDbFile`. This should be the production configuration
   // for the `replication-manager`. It is okay to run this in
   // development too.
-  litestream: v.union(envRefSchema, booleanLiteral).optional(),
+  litestream: booleanLiteral.optional(),
 
-  jwtSecret: configStringValueSchema.optional(),
+  jwtSecret: stringLiteral.optional(),
 
-  log: logConfigSchema.optional(),
-
-  shard: shardConfigSchema.optional(),
   rateLimit: rateLimitConfigSchema.optional(),
 });
 
-export type ZeroConfigSansAuthorization = v.Infer<
-  typeof zeroConfigSchemaSansAuthorization
->;
+export type ZeroConfigBase = v.Infer<typeof zeroConfigBase>;
 
-export const zeroConfigSchema = zeroConfigSchemaSansAuthorization.extend({
+export const zeroConfigSchema = zeroConfigBase.extend({
   authorization: authorizationConfigSchema.optional(),
+  shard: shardConfigSchema,
+  log: logConfigSchema,
 });
 
-export type ZeroConfigType = v.Infer<typeof zeroConfigSchema>;
+export type ZeroConfig = v.Infer<typeof zeroConfigSchema>;
 
 let loadedConfig: Promise<ZeroConfig> | undefined;
 
@@ -180,172 +157,22 @@ export function getZeroConfig(): Promise<ZeroConfig> {
   if (loadedConfig) {
     return loadedConfig;
   }
-  const zeroConfigPath = process.env['ZERO_CONFIG_PATH'];
-  if (!zeroConfigPath) {
-    // TODO: Use a specific error type and report it to the user in a nicer way.
-    return Promise.reject(new Error('ZERO_CONFIG_PATH is not set'));
-  }
-  loadedConfig = fs
-    .readFile(zeroConfigPath, 'utf-8')
-    .then(
-      rawContent =>
-        new ZeroConfig(v.parse(JSON.parse(rawContent), zeroConfigSchema)),
-    );
+
+  const dirname = path.dirname(fileURLToPath(import.meta.url));
+  const configFile = process.env['ZERO_CONFIG_PATH'] ?? './zero.config.ts';
+  const absoluteConfigPath = path.resolve(configFile);
+  const relativePath = path.join(
+    path.relative(dirname, path.dirname(absoluteConfigPath)),
+    path.basename(absoluteConfigPath),
+  );
+
+  loadedConfig = tsImport(relativePath, import.meta.url)
+    .then(module => module.default as ZeroConfig)
+    .catch(e => {
+      console.error(
+        `Failed to load zero config from ${absoluteConfigPath}: ${e}`,
+      );
+      throw e;
+    });
   return loadedConfig;
-}
-
-export class ZeroConfig {
-  readonly #config: ZeroConfigType;
-  readonly #log: LogConfig;
-  readonly #shard: ShardConfig;
-  readonly #rateLimit: RateLimitConfig | undefined;
-
-  constructor(config: ZeroConfigType) {
-    this.#config = config;
-    this.#log = new LogConfig(config.log);
-    this.#shard = new ShardConfig(config.shard);
-    if (config.rateLimit) {
-      this.#rateLimit = new RateLimitConfig(config.rateLimit);
-    }
-  }
-
-  get upstreamDBConnStr() {
-    return mustResolveValue(this.#config.upstreamDBConnStr);
-  }
-
-  get cvrDBConnStr() {
-    return mustResolveValue(this.#config.cvrDBConnStr);
-  }
-
-  get changeDBConnStr() {
-    return mustResolveValue(this.#config.changeDBConnStr);
-  }
-
-  get taskID() {
-    return resolveValue(this.#config.taskId);
-  }
-
-  get replicaDBFile() {
-    return mustResolveValue(this.#config.replicaDBFile);
-  }
-
-  get storageDBTmpDir() {
-    return resolveValue(this.#config.storageDbTmpDir);
-  }
-
-  get numSyncWorkers() {
-    return resolveValue(this.#config.numSyncWorkers);
-  }
-
-  get changeStreamerConnStr() {
-    return resolveValue(this.#config.changeStreamerConnStr);
-  }
-
-  get litestream() {
-    return resolveValue(this.#config.litestream);
-  }
-
-  get warmWebsocket() {
-    return this.#config.warmWebsocket;
-  }
-
-  get jwtSecret() {
-    return resolveValue(this.#config.jwtSecret);
-  }
-
-  get shard() {
-    return this.#shard;
-  }
-
-  get log() {
-    return this.#log;
-  }
-
-  get rateLimit() {
-    return this.#rateLimit;
-  }
-
-  get authorization() {
-    return this.#config.authorization;
-  }
-}
-
-export class RateLimitConfig {
-  readonly #mutationTransactions: MutationTransactionLimits;
-  constructor(config: RateLimitConfigType) {
-    this.#mutationTransactions = new MutationTransactionLimits(
-      config.mutationTransactions,
-    );
-  }
-
-  get mutationTransactions() {
-    return this.#mutationTransactions;
-  }
-}
-
-export class MutationTransactionLimits {
-  readonly #config: RateLimitConfigType['mutationTransactions'];
-  constructor(config: RateLimitConfigType['mutationTransactions']) {
-    this.#config = config;
-  }
-
-  get windowMs() {
-    return mustResolveValue(this.#config.windowMs);
-  }
-
-  get maxTransactions() {
-    return mustResolveValue(this.#config.maxTransactions);
-  }
-}
-
-export class LogConfig {
-  readonly #config: LogConfigType;
-  constructor(config: LogConfigType | undefined) {
-    this.#config = config ?? {};
-  }
-
-  get level() {
-    return resolveValue(this.#config.level) ?? 'info';
-  }
-
-  get format() {
-    return resolveValue(this.#config.format) ?? 'text';
-  }
-
-  get datadogLogsApiKey() {
-    return resolveValue(this.#config.datadogLogsApiKey);
-  }
-
-  get datadogServiceLabel() {
-    return resolveValue(this.#config.datadogServiceLabel);
-  }
-}
-
-const DEFAULT_SHARD_ID = '0';
-
-export class ShardConfig {
-  readonly id: string;
-  readonly publications: readonly string[];
-
-  constructor(config: ShardConfigType | undefined) {
-    this.id = resolveValue(config?.id) ?? DEFAULT_SHARD_ID;
-    const p = resolveValue(config?.publications);
-    this.publications = p ? p.split(',') : [];
-  }
-}
-
-function resolveValue<T extends ConfigValue>(
-  value: T | undefined,
-): Exclude<T, EnvRef> | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (typeof value === 'object' && value.tag === 'env') {
-    return process.env[value.name] as Exclude<T, EnvRef>;
-  }
-  return value as Exclude<T, EnvRef>;
-}
-
-function mustResolveValue<T extends ConfigValue>(value: T | undefined) {
-  return must(resolveValue(value));
 }

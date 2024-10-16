@@ -3,8 +3,6 @@
  * These types represent the shape that their config must adhere to
  * so we can compile it to a JSON ZeroConfig.
  */
-import fs from 'node:fs';
-import path from 'node:path';
 import {normalizeSchema} from '../../../zero-client/src/client/normalized-schema.js';
 import type {AST} from '../../../zql/src/zql/ast/ast.js';
 import type {Query, SchemaToRow} from '../../../zql/src/zql/query/query.js';
@@ -15,10 +13,11 @@ import type {
   Action,
   AssetAuthorization as CompiledAssetAuthorization,
   AuthorizationConfig as CompiledAuthorizationConfig,
-  ZeroConfigType as CompiledZeroConfig,
-  EnvRef,
-  ZeroConfigSansAuthorization,
+  ZeroConfig as CompiledZeroConfig,
+  LogConfig,
+  ZeroConfigBase,
 } from './zero-config.js';
+export type {ZeroConfig as CompiledZeroConfig} from './zero-config.js';
 
 type Schema = {
   readonly version: number;
@@ -65,18 +64,19 @@ export type AuthorizationConfig<TAuthDataShape, TSchema extends Schema> = {
 export type ZeroConfig<
   TAuthDataShape,
   TSchema extends Schema,
-> = ZeroConfigSansAuthorization & {
+> = ZeroConfigBase & {
   authorization?: AuthorizationConfig<TAuthDataShape, TSchema>;
+  shard?: {
+    id?: string;
+    publications?: string[];
+  };
+  log?: LogConfig;
 };
-
-export function runtimeEnv(key: string): EnvRef {
-  return {tag: 'env', name: key};
-}
 
 export function defineConfig<TAuthDataShape, TSchema extends Schema>(
   schema: TSchema,
   definer: (queries: Queries<TSchema>) => ZeroConfig<TAuthDataShape, TSchema>,
-) {
+): CompiledZeroConfig {
   const normalizedSchema = normalizeSchema(schema);
   const queries = {} as Record<string, Query<TableSchema>>;
   for (const [name, tableSchema] of Object.entries(normalizedSchema.tables)) {
@@ -84,18 +84,26 @@ export function defineConfig<TAuthDataShape, TSchema extends Schema>(
   }
 
   const config = definer(queries as Queries<TSchema>);
-  const compiled = compileConfig(config);
-  const serializedConfig = JSON.stringify(compiled, null, 2);
-  const dest = path.join(process.cwd(), 'zero.config.json');
-  return fs.writeFileSync(dest, serializedConfig);
+  return compileConfig(config);
 }
 
+const DEFAULT_SHARD_ID = '0';
 function compileConfig<TAuthDataShape, TSchema extends Schema>(
   config: ZeroConfig<TAuthDataShape, TSchema>,
 ): CompiledZeroConfig {
   return {
     ...config,
     authorization: compileAuthorization(config.authorization),
+    shard: {
+      id: config.shard?.id ?? DEFAULT_SHARD_ID,
+      publications: config?.shard?.publications ?? [],
+    },
+    log: {
+      format: config.log?.format ?? 'text',
+      level: config.log?.level ?? 'info',
+      datadogLogsApiKey: config.log?.datadogLogsApiKey,
+      datadogServiceLabel: config.log?.datadogServiceLabel,
+    },
   };
 }
 
