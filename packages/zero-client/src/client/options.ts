@@ -100,4 +100,15 @@ export interface ZeroOptions<S extends Schema> {
    * allowing a custom implementation of the underlying storage layer.
    */
   kvStore?: 'mem' | 'idb' | KVStoreProvider | undefined;
+
+  /**
+   * The maximum number of bytes to allow in a single header.
+   *
+   * Zero adds some extra information to headers on initialization if possible.
+   * This speeds up data synchronization. This number should be kept less than
+   * or equal to the maximum header size allowed by the server and any load balancers.
+   *
+   * Default value: 8kb.
+   */
+  maxHeaderLength?: number | undefined;
 }

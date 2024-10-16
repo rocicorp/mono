@@ -268,12 +268,15 @@ export class Zero<const S extends Schema> {
   readonly #queryManager: QueryManager;
 
   /**
-   * The queries we sent when establishing a connection.
+   * The queries we sent when inside the sec-protocol header when establishing a connection.
    * More queries could be registered while we're waiting for the 'connected' message
    * to come back from the server. To understand what queries we need to send
    * to the server, we diff the `initConnectionQueries` with the current set of desired queries.
+   *
+   * If this is set to `undefined` that means no queries were sent inside the `sec-protocol` header
+   * and an `initConnection` message must be sent to the server after receiving the `connected` message.
    */
-  #initConnectionQueries: Map<string, QueriesPatchOp> = new Map();
+  #initConnectionQueries: Map<string, QueriesPatchOp> | undefined;
 
   #lastMutationIDSent: {clientID: string; id: number} =
     NULL_LAST_MUTATION_ID_SENT;
@@ -880,15 +883,24 @@ export class Zero<const S extends Schema> {
     const queriesPatch = await this.#rep.query(tx =>
       this.#queryManager.getQueriesPatch(tx, this.#initConnectionQueries),
     );
-    if (queriesPatch.size > 0) {
+    if (queriesPatch.size > 0 && this.#initConnectionQueries !== undefined) {
       send(this.#socket, [
         'changeDesiredQueries',
         {
           desiredQueriesPatch: [...queriesPatch.values()],
         },
       ]);
+    } else if (this.#initConnectionQueries === undefined) {
+      // if #initConnectionQueries was undefined that means we never
+      // sent `initConnection` to the server inside the sec-protocol header.
+      send(this.#socket, [
+        'initConnection',
+        {
+          desiredQueriesPatch: [...queriesPatch.values()],
+        },
+      ]);
     }
-    this.#initConnectionQueries = new Map();
+    this.#initConnectionQueries = undefined;
 
     this.#setConnectionState(ConnectionState.Connected);
     this.#connectResolver.resolve();
@@ -970,6 +982,7 @@ export class Zero<const S extends Schema> {
       wsid,
       this.#options.logLevel === 'debug',
       l,
+      this.#options.maxHeaderLength,
     );
 
     if (this.closed) {
@@ -1614,7 +1627,8 @@ export async function createSocket(
   wsid: string,
   debugPerf: boolean,
   lc: LogContext,
-): Promise<[WebSocket, Map<string, QueriesPatchOp>]> {
+  maxHeaderLength = 1024 * 8,
+): Promise<[WebSocket, Map<string, QueriesPatchOp> | undefined]> {
   const url = new URL(socketOrigin);
   // Keep this in sync with the server.
   url.pathname = `/api/sync/v${REFLECT_VERSION}/connect`;
@@ -1642,15 +1656,22 @@ export async function createSocket(
   // instead.  encodeURIComponent to ensure it only contains chars allowed
   // for a `protocol`.
   const WS = mustGetBrowserGlobal('WebSocket');
-  const queriesPatch = await rep.query(tx => queryManager.getQueriesPatch(tx));
+  let queriesPatch: Map<string, QueriesPatchOp> | undefined = await rep.query(
+    tx => queryManager.getQueriesPatch(tx),
+  );
+  let secProtocol = encodeSecProtocols(
+    ['initConnection', {desiredQueriesPatch: [...queriesPatch.values()]}],
+    auth,
+  );
+  if (secProtocol.length > maxHeaderLength) {
+    secProtocol = encodeSecProtocols(undefined, auth);
+    queriesPatch = undefined;
+  }
   return [
     new WS(
       // toString() required for RN URL polyfill.
       url.toString(),
-      encodeSecProtocols(
-        ['initConnection', {desiredQueriesPatch: [...queriesPatch.values()]}],
-        auth,
-      ),
+      secProtocol,
     ),
     queriesPatch,
   ];
