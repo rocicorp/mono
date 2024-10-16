@@ -1,7 +1,7 @@
 import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {type CSSProperties, useRef} from 'react';
-import {FixedSizeList as List} from 'react-window';
+import {FixedSizeList as List, type ListOnScrollProps} from 'react-window';
 import {useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
 import Filter, {type Selection} from '../../components/filter.js';
@@ -79,6 +79,12 @@ export default function ListPage() {
     } else {
       navigate(addFilter('label', selection.label));
     }
+  };
+
+  const initialScrollOffset = (history.state?.['-zbugs-list'] as number) ?? 0;
+
+  const onScroll = ({scrollOffset}: ListOnScrollProps) => {
+    history.replaceState({...history.state, '-zbugs-list': scrollOffset}, '');
   };
 
   const Row = ({index, style}: {index: number; style: CSSProperties}) => {
@@ -160,6 +166,8 @@ export default function ListPage() {
             height={size.height}
             itemSize={56}
             itemCount={issues.length}
+            onScroll={onScroll}
+            initialScrollOffset={initialScrollOffset}
           >
             {Row}
           </List>
