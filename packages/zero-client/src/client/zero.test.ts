@@ -11,8 +11,8 @@ import {TestLogSink} from '../../../shared/src/logging-test-utils.js';
 import * as valita from '../../../shared/src/valita.js';
 import {
   changeDesiredQueriesMessageSchema,
-  decodeProtocols,
-  encodeProtocols,
+  decodeSecProtocols,
+  encodeSecProtocols,
   ErrorKind,
   initConnectionMessageSchema,
 } from '../../../zero-protocol/src/mod.js';
@@ -325,7 +325,7 @@ suite('createSocket', () => {
       )[0] as unknown as MockSocket;
       expect(`${mockSocket.url}`).equal(expectedURL);
       expect(mockSocket.protocol).equal(
-        encodeProtocols(['initConnection', {desiredQueriesPatch: []}], auth),
+        encodeSecProtocols(['initConnection', {desiredQueriesPatch: []}], auth),
       );
     });
   };
@@ -485,7 +485,7 @@ suite('initConnection', () => {
 
     expect(
       valita.parse(
-        JSON.parse(decodeProtocols(mockSocket.protocol)[0]),
+        JSON.parse(decodeSecProtocols(mockSocket.protocol)[0]),
         initConnectionMessageSchema,
       ),
     ).toEqual([
@@ -551,7 +551,7 @@ suite('initConnection', () => {
 
     expect(
       valita.parse(
-        JSON.parse(decodeProtocols(mockSocket.protocol)[0]),
+        JSON.parse(decodeSecProtocols(mockSocket.protocol)[0]),
         initConnectionMessageSchema,
       ),
     ).toEqual([
@@ -1189,7 +1189,7 @@ test('Authentication', async () => {
     expectedAuthToken: string,
     expectedTimeOfCall: number,
   ) => {
-    expect(decodeProtocols((await r.socket).protocol)[1]).equal(
+    expect(decodeSecProtocols((await r.socket).protocol)[1]).equal(
       expectedAuthToken,
     );
     await r.triggerError(ErrorKind.Unauthorized, 'auth error ' + authCounter);
@@ -1224,7 +1224,7 @@ test('Authentication', async () => {
   {
     await r.waitForConnectionState(ConnectionState.Connecting);
     socket = await r.socket;
-    expect(decodeProtocols(socket.protocol)[1]).equal('new-auth-token-8');
+    expect(decodeSecProtocols(socket.protocol)[1]).equal('new-auth-token-8');
     await r.triggerConnected();
     await r.waitForConnectionState(ConnectionState.Connected);
     // getAuth should not be called again.
@@ -1257,13 +1257,17 @@ test(ErrorKind.AuthInvalidated, async () => {
   });
 
   await r.triggerConnected();
-  expect(decodeProtocols((await r.socket).protocol)[1]).equal('auth-token-1');
+  expect(decodeSecProtocols((await r.socket).protocol)[1]).equal(
+    'auth-token-1',
+  );
 
   await r.triggerError(ErrorKind.AuthInvalidated, 'auth error');
   await r.waitForConnectionState(ConnectionState.Disconnected);
 
   await r.waitForConnectionState(ConnectionState.Connecting);
-  expect(decodeProtocols((await r.socket).protocol)[1]).equal('auth-token-2');
+  expect(decodeSecProtocols((await r.socket).protocol)[1]).equal(
+    'auth-token-2',
+  );
 });
 
 test('Disconnect on error', async () => {
