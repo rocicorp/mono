@@ -29,7 +29,7 @@ function shouldAllow(el: HTMLElement): boolean {
     case 'TEXTAREA':
     case 'SELECT':
     case 'INPUT':
-      // To be fair. We could probably allow on type=radio,button and many more. Add more as
+      // To be fair. We could probably allow on type=radio,button and many more. Add more as required.
       return false;
   }
   return !el.isContentEditable;
