@@ -159,14 +159,18 @@ export function getZeroConfig(): Promise<ZeroConfig> {
   }
 
   const dirname = path.dirname(fileURLToPath(import.meta.url));
-  const cwd = process.cwd();
-  const relativePath = path.relative(dirname, cwd) + '/zero.config.ts';
+  const configFile = process.env['ZERO_CONFIG_PATH'] ?? './zero.config.ts';
+  const absoluteConfigPath = path.resolve(configFile);
+  const relativePath = path.join(
+    path.relative(dirname, path.dirname(absoluteConfigPath)),
+    path.basename(absoluteConfigPath),
+  );
 
   loadedConfig = tsImport(relativePath, import.meta.url)
     .then(module => module.default as ZeroConfig)
     .catch(e => {
       console.error(
-        `Failed to load zero config from ${cwd}/zero.config.ts: ${e}`,
+        `Failed to load zero config from ${absoluteConfigPath}: ${e}`,
       );
       throw e;
     });
