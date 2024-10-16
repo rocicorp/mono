@@ -5,15 +5,15 @@ import {useRoute} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
+import LabelPicker from '../../components/label-picker.js';
 import Markdown from '../../components/markdown.js';
 import Selector from '../../components/selector.js';
+import UserPicker from '../../components/user-picker.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useZero} from '../../hooks/use-zero.js';
+import {isNumeric} from '../../util.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
-import LabelPicker from '../../components/label-picker.js';
-import UserPicker from '../../components/user-picker.js';
-import {isNumeric} from '../../util.js';
 
 export default function IssuePage() {
   const z = useZero();
@@ -204,8 +204,6 @@ export default function IssuePage() {
               selected={{login: issue.assignee?.login}}
               onSelect={user => {
                 z.mutate.issue.update({id: issue.id, assigneeID: user.id});
-                // 🙄 - this can go away when https://bugs.rocicorp.dev/issue/k_h0Dy_6_6yHFDWFxNke2 is fixed.
-                window.setTimeout(() => location.reload(), 100);
               }}
             />
           </div>
