@@ -20,7 +20,7 @@ export function useLogin() {
 
 export function LoginProvider({children}: {children: React.ReactNode}) {
   const [loginState, setLoginState] = useState<LoginState | undefined>(
-    authRef.get(),
+    authRef.value,
   );
 
   useEffect(() => authRef.onChange(setLoginState), []);
@@ -30,7 +30,7 @@ export function LoginProvider({children}: {children: React.ReactNode}) {
       value={{
         logout: () => {
           clearJwt();
-          authRef.set(undefined);
+          authRef.value = undefined;
         },
         loginState,
       }}

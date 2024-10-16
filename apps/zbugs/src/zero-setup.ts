@@ -16,17 +16,16 @@ const authRef = new Ref<LoginState>();
 const jwt = getJwt();
 const encodedJwt = getRawJwt();
 
-authRef.set(
+authRef.value =
   encodedJwt && jwt
     ? {
         encoded: encodedJwt,
         decoded: jwt as LoginState['decoded'],
       }
-    : undefined,
-);
+    : undefined;
 
 authRef.onChange(auth => {
-  zeroRef.get()?.close();
+  zeroRef.value?.close();
   mark('creating new zero');
   const z = new Zero({
     logLevel: 'info',
@@ -35,7 +34,7 @@ authRef.onChange(auth => {
     auth: auth?.encoded,
     schema,
   });
-  zeroRef.set(z);
+  zeroRef.value = z;
 
   // To enable accessing zero in the devtools easily.
   (window as {z?: Zero<Schema>}).z = z;
