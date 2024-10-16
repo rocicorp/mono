@@ -7,11 +7,15 @@ import {
 import * as v from '../../../../shared/src/valita.js';
 import type {
   Downstream,
-  EntitiesPatchOp,
   PokePartBody,
+  RowsPatchOp,
 } from '../../../../zero-protocol/src/mod.js';
 import type {AST} from '../../../../zql/src/zql/ast/ast.js';
 import type {JSONObject, JSONValue} from '../../types/bigint-json.js';
+import {
+  getErrorForClientIfSchemaVersionNotSupported,
+  type SchemaVersions,
+} from '../../types/schema-versions.js';
 import type {Subscription} from '../../types/subscription.js';
 import {
   type ClientPatch,
@@ -25,10 +29,6 @@ import {
   versionToCookie,
   versionToNullableCookie,
 } from './schema/types.js';
-import {
-  getErrorForClientIfSchemaVersionNotSupported,
-  type SchemaVersions,
-} from '../../types/schema-versions.js';
 
 export type PutRowPatch = {
   type: 'row';
@@ -241,14 +241,14 @@ const lmidRowSchema = v.object({
   lastMutationID: v.number(), // Actually returned as a bigint, but converted by ensureSafeJSON().
 });
 
-function makeEntityPatch(patch: RowPatch): EntitiesPatchOp {
+function makeEntityPatch(patch: RowPatch): RowsPatchOp {
   const {
     op,
-    id: {table: entityType, rowKey: entityID},
+    id: {table: tableName, rowKey: entityID},
   } = patch;
 
   assertStringValues(entityID); // TODO: Enforce this ZQL constraint at sync time.
-  const entity = {entityType, entityID};
+  const entity = {tableName, entityID};
 
   switch (op) {
     case 'put': {

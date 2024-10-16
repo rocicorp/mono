@@ -75,7 +75,7 @@ test('completed poke plays on first raf', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo1'},
       },
@@ -89,13 +89,13 @@ test('completed poke plays on first raf', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo2'},
       },
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue2'},
         value: {id: 'issue2', title: 'bar1'},
       },
@@ -180,7 +180,7 @@ test('multiple pokes received before raf callback are merged', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo1'},
       },
@@ -194,13 +194,13 @@ test('multiple pokes received before raf callback are merged', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo2'},
       },
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue2'},
         value: {id: 'issue2', title: 'bar1'},
       },
@@ -227,7 +227,7 @@ test('multiple pokes received before raf callback are merged', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue3'},
         value: {id: 'issue3', title: 'baz1'},
       },
@@ -241,7 +241,7 @@ test('multiple pokes received before raf callback are merged', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue2'},
         value: {id: 'issue2', title: 'bar2'},
       },
@@ -337,7 +337,7 @@ test('playback over series of rafs', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo1'},
       },
@@ -351,13 +351,13 @@ test('playback over series of rafs', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo2'},
       },
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue2'},
         value: {id: 'issue2', title: 'bar1'},
       },
@@ -419,7 +419,7 @@ test('playback over series of rafs', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue3'},
         value: {id: 'issue3', title: 'baz1'},
       },
@@ -433,7 +433,7 @@ test('playback over series of rafs', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue2'},
         value: {id: 'issue2', title: 'bar2'},
       },
@@ -575,7 +575,7 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo1'},
       },
@@ -589,13 +589,13 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo2'},
       },
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue2'},
         value: {id: 'issue2', title: 'bar1'},
       },
@@ -632,7 +632,7 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue3'},
         value: {id: 'issue3', title: 'baz1'},
       },
@@ -686,7 +686,7 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo1'},
       },
@@ -700,13 +700,13 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo2'},
       },
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue2'},
         value: {id: 'issue2', title: 'bar1'},
       },
@@ -759,7 +759,7 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue3'},
         value: {id: 'issue3', title: 'baz1'},
       },
@@ -812,7 +812,7 @@ test('onDisconnect clears pending pokes', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo1'},
       },
@@ -826,13 +826,13 @@ test('onDisconnect clears pending pokes', async () => {
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo2'},
       },
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue2'},
         value: {id: 'issue2', title: 'bar1'},
       },
@@ -884,7 +884,7 @@ test('handlePoke returns the last mutation id change for this client from pokePa
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo1'},
       },
@@ -899,13 +899,13 @@ test('handlePoke returns the last mutation id change for this client from pokePa
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo2'},
       },
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue2'},
         value: {id: 'issue2', title: 'bar1'},
       },
@@ -921,13 +921,13 @@ test('handlePoke returns the last mutation id change for this client from pokePa
     entitiesPatch: [
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue1'},
         value: {id: 'issue1', title: 'foo2'},
       },
       {
         op: 'put',
-        entityType: 'issues',
+        tableName: 'issues',
         entityID: {id: 'issue2'},
         value: {id: 'issue2', title: 'bar1'},
       },
@@ -981,13 +981,13 @@ test('mergePokes with all optionals defined', () => {
             entitiesPatch: [
               {
                 op: 'put',
-                entityType: 'issues',
+                tableName: 'issues',
                 entityID: {id: 'issue1'},
                 value: {id: 'issue1', title: 'foo1'},
               },
               {
                 op: 'update',
-                entityType: 'issues',
+                tableName: 'issues',
                 entityID: {id: 'issue2'},
                 merge: {id: 'issue2', title: 'bar1'},
                 constrain: ['id', 'title'],
@@ -1024,7 +1024,7 @@ test('mergePokes with all optionals defined', () => {
             entitiesPatch: [
               {
                 op: 'put',
-                entityType: 'issues',
+                tableName: 'issues',
                 entityID: {id: 'issue3'},
                 value: {id: 'issue3', title: 'baz1'},
               },
@@ -1062,7 +1062,7 @@ test('mergePokes with all optionals defined', () => {
               },
             ],
             entitiesPatch: [
-              {op: 'del', entityType: 'issues', entityID: {id: 'issue3'}},
+              {op: 'del', tableName: 'issues', entityID: {id: 'issue3'}},
             ],
           },
         ],
@@ -1193,13 +1193,13 @@ test('mergePokes sparse', () => {
             entitiesPatch: [
               {
                 op: 'put',
-                entityType: 'issues',
+                tableName: 'issues',
                 entityID: {id: 'issue1'},
                 value: {id: 'issue1', title: 'foo1'},
               },
               {
                 op: 'update',
-                entityType: 'issues',
+                tableName: 'issues',
                 entityID: {id: 'issue2'},
                 merge: {id: 'issue2', title: 'bar1'},
                 constrain: ['id', 'title'],
@@ -1248,7 +1248,7 @@ test('mergePokes sparse', () => {
               ],
             },
             entitiesPatch: [
-              {op: 'del', entityType: 'issues', entityID: {id: 'issue3'}},
+              {op: 'del', tableName: 'issues', entityID: {id: 'issue3'}},
             ],
           },
         ],

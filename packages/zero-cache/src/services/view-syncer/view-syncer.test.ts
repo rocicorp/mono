@@ -365,7 +365,7 @@ describe('view-syncer/service', () => {
                 "entityID": {
                   "id": "1",
                 },
-                "entityType": "issues",
+                "tableName": "issues",
                 "op": "put",
                 "value": {
                   "big": 9007199254740991,
@@ -379,7 +379,7 @@ describe('view-syncer/service', () => {
                 "entityID": {
                   "id": "2",
                 },
-                "entityType": "issues",
+                "tableName": "issues",
                 "op": "put",
                 "value": {
                   "big": -9007199254740991,
@@ -393,7 +393,7 @@ describe('view-syncer/service', () => {
                 "entityID": {
                   "id": "3",
                 },
-                "entityType": "issues",
+                "tableName": "issues",
                 "op": "put",
                 "value": {
                   "big": 123,
@@ -407,7 +407,7 @@ describe('view-syncer/service', () => {
                 "entityID": {
                   "id": "4",
                 },
-                "entityType": "issues",
+                "tableName": "issues",
                 "op": "put",
                 "value": {
                   "big": 100,
@@ -629,7 +629,7 @@ describe('view-syncer/service', () => {
                 "entityID": {
                   "id": "1",
                 },
-                "entityType": "issues",
+                "tableName": "issues",
                 "op": "put",
                 "value": {
                   "big": 9007199254740991,
@@ -643,7 +643,7 @@ describe('view-syncer/service', () => {
                 "entityID": {
                   "id": "2",
                 },
-                "entityType": "issues",
+                "tableName": "issues",
                 "op": "del",
               },
             ],
@@ -811,7 +811,7 @@ describe('view-syncer/service', () => {
                 "entityID": {
                   "id": "1",
                 },
-                "entityType": "issues",
+                "tableName": "issues",
                 "op": "put",
                 "value": {
                   "big": 9007199254740991,
@@ -825,7 +825,7 @@ describe('view-syncer/service', () => {
                 "entityID": {
                   "id": "2",
                 },
-                "entityType": "issues",
+                "tableName": "issues",
                 "op": "del",
               },
             ],
@@ -1010,7 +1010,7 @@ describe('view-syncer/service', () => {
       entitiesPatch: [
         {
           entityID: {id: '1'},
-          entityType: 'issues',
+          tableName: 'issues',
           op: 'put',
           value: {
             big: 9007199254740991,
@@ -1022,7 +1022,7 @@ describe('view-syncer/service', () => {
         },
         {
           entityID: {id: '2'},
-          entityType: 'issues',
+          tableName: 'issues',
           op: 'del',
         },
       ],
@@ -1106,7 +1106,7 @@ describe('view-syncer/service', () => {
                 "entityID": {
                   "id": "1",
                 },
-                "entityType": "issues",
+                "tableName": "issues",
                 "op": "put",
                 "value": {
                   "big": 9007199254740991,
@@ -1120,7 +1120,7 @@ describe('view-syncer/service', () => {
                 "entityID": {
                   "id": "2",
                 },
-                "entityType": "issues",
+                "tableName": "issues",
                 "op": "del",
               },
             ],
@@ -1305,7 +1305,7 @@ describe('view-syncer/service', () => {
                 "entityID": {
                   "id": "4",
                 },
-                "entityType": "issues",
+                "tableName": "issues",
                 "op": "put",
                 "value": {
                   "big": 100,

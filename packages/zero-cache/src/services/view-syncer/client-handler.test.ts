@@ -225,13 +225,13 @@ describe('view-syncer/client-handler', () => {
           entitiesPatch: [
             {
               op: 'put',
-              entityType: 'issues',
+              tableName: 'issues',
               entityID: {id: 'bar'},
               value: {id: 'bar', name: 'hello', num: 123},
             },
             {
               op: 'put',
-              entityType: 'issues',
+              tableName: 'issues',
               entityID: {id: 'boo'},
               value: {id: 'boo', name: 'world', num: 123456},
             },
@@ -279,14 +279,14 @@ describe('view-syncer/client-handler', () => {
           entitiesPatch: [
             {
               op: 'put',
-              entityType: 'issues',
+              tableName: 'issues',
               entityID: {id: 'bar'},
               value: {id: 'bar', name: 'hello', num: 123},
             },
-            {op: 'del', entityType: 'issues', entityID: {id: 'foo'}},
+            {op: 'del', tableName: 'issues', entityID: {id: 'foo'}},
             {
               op: 'put',
-              entityType: 'issues',
+              tableName: 'issues',
               entityID: {id: 'boo'},
               value: {id: 'boo', name: 'world', num: 123456},
             },

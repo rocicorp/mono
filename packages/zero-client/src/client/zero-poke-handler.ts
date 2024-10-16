@@ -7,11 +7,11 @@ import type {
 import type {ClientID, PatchOperation} from '../../../replicache/src/mod.js';
 import type {
   ClientsPatchOp,
-  EntitiesPatchOp,
   PokeEndBody,
   PokePartBody,
   PokeStartBody,
   QueriesPatchOp,
+  RowsPatchOp,
 } from '../../../zero-protocol/src/mod.js';
 import {
   toClientsKey,
@@ -297,7 +297,7 @@ function queryPatchOpToReplicachePatchOp(
 }
 
 function entitiesPatchOpToReplicachePatchOp(
-  op: EntitiesPatchOp,
+  op: RowsPatchOp,
   schema: NormalizedSchema,
 ): PatchOperationInternal {
   switch (op.op) {
@@ -307,8 +307,8 @@ function entitiesPatchOpToReplicachePatchOp(
       return {
         op: 'del',
         key: toPrimaryKeyString(
-          op.entityType,
-          schema.tables[op.entityType].primaryKey,
+          op.tableName,
+          schema.tables[op.tableName].primaryKey,
           op.entityID,
         ),
       };
@@ -316,8 +316,8 @@ function entitiesPatchOpToReplicachePatchOp(
       return {
         op: 'put',
         key: toPrimaryKeyString(
-          op.entityType,
-          schema.tables[op.entityType].primaryKey,
+          op.tableName,
+          schema.tables[op.tableName].primaryKey,
           op.entityID,
         ),
         value: op.value,
@@ -326,8 +326,8 @@ function entitiesPatchOpToReplicachePatchOp(
       return {
         op: 'update',
         key: toPrimaryKeyString(
-          op.entityType,
-          schema.tables[op.entityType].primaryKey,
+          op.tableName,
+          schema.tables[op.tableName].primaryKey,
           op.entityID,
         ),
         merge: op.merge,
