@@ -1,5 +1,5 @@
 import {useQuery} from '@rocicorp/zero/react';
-import {useMemo, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {useRoute} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
@@ -36,6 +36,11 @@ export default function IssuePage() {
 
   const [editing, setEditing] = useState<typeof issue | null>(null);
   const [edits, setEdits] = useState<Partial<typeof issue>>({});
+  useEffect(() => {
+    if (issue?.shortID !== undefined && idField !== 'shortID') {
+      location.replace(`/issue/${issue.shortID}`);
+    }
+  }, [issue?.shortID, idField]);
 
   const save = () => {
     if (!editing) {
