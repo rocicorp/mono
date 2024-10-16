@@ -27,3 +27,13 @@
 .selected {
   background-color: var(--color-nav-selected);
 }
+
+@media (max-width: 650px) {
+  .popover {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    height: 60vh;
+  }
+}
