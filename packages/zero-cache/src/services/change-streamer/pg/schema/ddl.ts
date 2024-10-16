@@ -3,9 +3,9 @@ import * as v from '../../../../../../shared/src/valita.js';
 import {filteredTableSpec, indexSpec} from '../../../../db/specs.js';
 import {indexDefinitionsQuery, publishedTableQuery} from './published.js';
 
-// Sent in the 'version' tag of "ddl" event messages. This is used to ensure
-// that the message constructed in the upstream Trigger function is compatible
-// with the code processing it in the zero-cache.
+// Sent in the 'version' tag of "ddlStart" and "ddlUpdate" event messages.
+// This is used to ensure that the message constructed in the upstream
+// Trigger function is compatible with the code processing it in the zero-cache.
 //
 // Increment this when changing the format of the contents of the "ddl" events.
 // This will allow old / incompatible code to detect the change and abort.
@@ -15,84 +15,148 @@ const triggerEvent = v.object({
   context: v.object({query: v.string()}).rest(v.string()),
 });
 
-const createOrAlterTableTagSchema = v.union(
-  v.literal('CREATE TABLE'),
-  v.literal('ALTER TABLE'),
-);
-
-const createIndexTagSchema = v.literal('CREATE INDEX');
-
-const createOrAlterTableEventSchema = triggerEvent.extend({
-  tag: createOrAlterTableTagSchema,
-  table: filteredTableSpec,
-  indexes: v.array(indexSpec),
-});
-
-export type CreateOrAlterTableEvent = v.Infer<
-  typeof createOrAlterTableEventSchema
->;
-
-const createIndexEventSchema = triggerEvent.extend({
-  tag: createIndexTagSchema,
-  index: indexSpec,
-});
-
-export type CreateIndexEvent = v.Infer<typeof createIndexEventSchema>;
-
-const dropTableTagSchema = v.literal('DROP TABLE');
-const dropIndexTagSchema = v.literal('DROP INDEX');
-
-const identifier = v.object({
-  schema: v.string(),
-  // `object_identity` field, as defined in
-  // https://www.postgresql.org/docs/current/functions-event-triggers.html#PG-EVENT-TRIGGER-SQL-DROP-FUNCTIONS
-  objectIdentity: v.string(),
-});
-
-const dropTableEventSchema = triggerEvent.extend({
-  tag: dropTableTagSchema,
-  tables: v.array(identifier),
-});
-
-const dropIndexEventSchema = triggerEvent.extend({
-  tag: dropIndexTagSchema,
-  indexes: v.array(identifier),
-});
-
-const alterPublicationTagSchema = v.literal('ALTER PUBLICATION');
-
-const alterPublicationEventSchema = triggerEvent.extend({
-  tag: alterPublicationTagSchema,
-  publication: v.string(),
+// The Schema type encapsulates a snapshot of the tables and indexes that
+// are published / relevant to the shard.
+const publishedSchema = v.object({
   tables: v.array(filteredTableSpec),
   indexes: v.array(indexSpec),
 });
 
-export const ddlEventSchema = v.object({
-  type: v.literal('ddl'),
+// All DDL events contain a snapshot of the current tables and indexes that
+// are published / relevant to the shard.
+export const ddlEventSchema = triggerEvent.extend({
   version: v.literal(PROTOCOL_VERSION),
-  event: v.union(
-    createOrAlterTableEventSchema,
-    createIndexEventSchema,
-    dropTableEventSchema,
-    dropIndexEventSchema,
-    alterPublicationEventSchema,
-  ),
+  schema: publishedSchema,
 });
 
-export type DdlEvent = v.Infer<typeof ddlEventSchema>;
-
-export const errorEventSchema = v.object({
-  type: v.literal('error'),
-  event: triggerEvent.extend({message: v.string()}).rest(v.string()),
+// The `ddlStart` message is computed before every DDL event, regardless of
+// whether the subsequent event affects the shard. Downstream processing should
+// capture the contained schema information in order to determine the schema
+// changes necessary to apply a subsequent `ddlUpdate` message. Note that a
+// `ddlUpdate` message may not follow, as updates determined to be irrelevant
+// to the shard will not result in a message. However, all `ddlUpdate` messages
+// are guaranteed to be preceded by a `ddlStart` message.
+export const ddlStartSchema = ddlEventSchema.extend({
+  type: v.literal('ddlStart'),
 });
+
+export type DdlStartEvent = v.Infer<typeof ddlStartSchema>;
+
+/**
+ * An tableEvent indicates the table that was created or altered. Note that
+ * this may result in changes to indexes.
+ *
+ * Note that a table alteration can only consistent of a single change, whether
+ * that be the name of the table, or an aspect of a single column. In particular,
+ * if the update contains a new column and removes an old column, that must
+ * necessarily mean that the old column was renamed.
+ *
+ * tableEvents are only emitted for tables published to the shard.
+ */
+const tableEvent = v.object({
+  tag: v.union(v.literal('CREATE TABLE'), v.literal('ALTER TABLE')),
+  table: v.object({schema: v.string(), name: v.string()}),
+});
+
+/**
+ * An indexEvent indicates an index that was manually created.
+ *
+ * indexEvents are only emitted for (indexes of) tables published to the shard.
+ */
+const indexEvent = v.object({
+  tag: v.literal('CREATE INDEX'),
+  index: v.object({schema: v.string(), name: v.string()}),
+});
+
+/**
+ * A drop event indicates the dropping of table(s) or index(es). Note
+ * that a `DROP TABLE` event can result in the dropping of both tables
+ * and their indexes.
+ *
+ * Drop events are emitted to all shards. It is up to the downstream
+ * processor to determine (from the preceding {@link DdlStartEvent})
+ * whether the dropped objects are relevant to the shard.
+ */
+const dropEvent = v.object({
+  tag: v.union(v.literal('DROP TABLE'), v.literal('DROP INDEX')),
+});
+
+/**
+ * A publication event indicates a change in the visibility of tables
+ * and/or columns. This can mean any number of columns added or
+ * removed. However, it will never represent table or column renames
+ * (as those are only possible with `ALTER TABLE` statements).
+ *
+ * Publication events are not emitted if the altered publication is
+ * known and not included by the shard. However, due to the way
+ * Postgres Triggers work, the publication is not always known, and
+ * so it is possible for a shard to receive irrelevant publication
+ * events.
+ */
+const publicationEvent = v.object({
+  tag: v.literal('ALTER PUBLICATION'),
+});
+
+/**
+ * The {@link DdlUpdateEvent} contains an updated schema resulting from
+ * a particular ddl event. The event type provides information
+ * (i.e. constraints) on the difference from the schema of the preceding
+ * {@link DdlStartEvent}.
+ *
+ * Note that in almost all cases (the exception being `CREATE` events),
+ * it is possible that there is no relevant difference between the
+ * ddl-start schema and the ddl-update schema, as many aspects of the
+ * schema (e.g. column constraints) are not relevant to downstream
+ * replication.
+ */
+export const ddlUpdateSchema = ddlEventSchema.extend({
+  type: v.literal('ddlUpdate'),
+  event: v.union(tableEvent, indexEvent, dropEvent, publicationEvent),
+});
+
+export type DdlUpdateEvent = v.Infer<typeof ddlUpdateSchema>;
+
+export const errorEventSchema = triggerEvent
+  .extend({
+    type: v.literal('error'),
+    message: v.string(),
+  })
+  .rest(v.string());
 
 export type ErrorEvent = v.Infer<typeof errorEventSchema>;
 
-const GLOBAL_TRIGGER_FUNCTIONS = `
-CREATE OR REPLACE FUNCTION zero.get_trigger_context()
-RETURNS record
-AS $$
+// Creates a function that appends `_SHARD_ID` to the input.
+function append(shardID: string) {
+  return (name: string) => id(name + '_' + shardID);
+}
+
+/**
+ * Event trigger functions contain the core logic that are invoked by triggers.
+ *
+ * Note that although many of these functions can theoretically be parameterized and
+ * shared across shards, it is advantageous to keep the functions in each shard
+ * isolated from each other in order to avoid the complexity of shared-function
+ * versioning.
+ *
+ * In a sense, shards (and their triggers and functions) should be thought of as
+ * execution environments that can be updated at different schedules. If per-shard
+ * triggers called into shared functions, we would have to consider versioning the
+ * functions when changing their behavior, backwards compatibility, removal of
+ * unused versions, etc. (not unlike versioning of npm packages).
+ *
+ * Instead, we opt for the simplicity and isolation of having each shard
+ * completely own (and maintain) the entirety of its trigger/function stack.
+ */
+function createEventFunctionStatements(
+  shardID: string,
+  publications: string[],
+) {
+  const schema = append(shardID)('zero'); // e.g. "zero_SHARD_ID"
+  return `
+CREATE SCHEMA IF NOT EXISTS ${schema};
+
+CREATE OR REPLACE FUNCTION ${schema}.get_trigger_context()
+RETURNS record AS $$
 DECLARE
   result record;
 BEGIN
@@ -101,322 +165,187 @@ BEGIN
 END
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION zero.emit_error(shardID TEXT, message TEXT)
-RETURNS void
-AS $$
-DECLARE
-  event text;
+
+CREATE OR REPLACE FUNCTION ${schema}.notice_ignore(object_id TEXT)
+RETURNS void AS $$
 BEGIN
-  SELECT json_build_object(
-    'type', 'error',
-    'event', json_build_object(
-      'context', zero.get_trigger_context(),
-      'message', message
-    )
-  ) into event;
-
-  PERFORM pg_logical_emit_message(true, 'zero/' || shardID, event);
-END
-$$ LANGUAGE plpgsql;
-`;
-
-function append(shardID: string) {
-  return (name: string) => id(name + '_' + shardID);
-}
-
-export function replicateCreateOrAlterTable(
-  shardID: string,
-  publications: string[],
-) {
-  const sharded = append(shardID);
-  return `
-CREATE OR REPLACE FUNCTION zero.${sharded('replicate_create_or_alter_table')}()
-RETURNS event_trigger
-AS $$
-DECLARE
-  tag text;
-  tables record;
-  indexes record;
-  event text;
-BEGIN 
-  SELECT command_tag FROM pg_event_trigger_ddl_commands() INTO tag;
-  IF LENGTH(tag) = 0  -- should be impossible
-  THEN
-    RAISE EXCEPTION 'missing command_tag from pg_event_trigger_ddl_commands() for %', query;
-  END IF;
-
-  ${publishedTableQuery(
-    publications,
-    `JOIN pg_event_trigger_ddl_commands() ddl ON ddl.objid = pc.oid`,
-  )} INTO tables;
-
-  IF json_array_length(tables.tables) = 0
-  THEN RETURN; END IF;  -- not a table published by "pubPrefix"
-
-  IF json_array_length(tables.tables) > 1
-  THEN
-    PERFORM zero.emit_error(
-      ${lit(shardID)},
-      FORMAT('unexpected number of tables for "%s": %s',
-        tag, json_array_length(tables.tables))
-    );
-    RETURN;
-  END IF;
-
-  ${indexDefinitionsQuery(
-    publications,
-    `JOIN pg_event_trigger_ddl_commands() ddl on ddl.objid = pg_index.indrelid`,
-  )} INTO indexes;
-  
-  SELECT json_build_object(
-    'type', 'ddl',
-    'version', ${PROTOCOL_VERSION},
-    'event', json_build_object(
-      'context', zero.get_trigger_context(),
-      'tag', tag,
-      'table', tables.tables -> 0,
-      'indexes', indexes.indexes
-    )
-  ) INTO event;
-
-  PERFORM pg_logical_emit_message(true, ${lit('zero/' + shardID)}, event);
-END 
-$$ LANGUAGE plpgsql;
-  `;
-}
-
-export function replicateCreateIndex(shardID: string, publications: string[]) {
-  const sharded = append(shardID);
-  return `
-CREATE OR REPLACE FUNCTION zero.${sharded('replicate_create_index')}()
-RETURNS event_trigger
-AS $$
-DECLARE
-  indexes record;
-  event text;
-BEGIN 
-  ${indexDefinitionsQuery(
-    publications,
-    `JOIN pg_event_trigger_ddl_commands() ddl on ddl.objid = pc.oid`,
-  )} INTO indexes;
-
-  IF json_array_length(indexes.indexes) = 0
-  THEN RETURN; END IF;  -- not an index published by "pubPrefix"
-
-  IF json_array_length(indexes.indexes) > 1
-  THEN
-    PERFORM zero.emit_error(
-      ${lit(shardID)},
-      FORMAT('unexpected number of indexes for "CREATE INDEX": %s', 
-        json_array_length(indexes.indexes))
-    );
-    RETURN;
-  END IF;
-  
-  SELECT json_build_object(
-    'type', 'ddl',
-    'version', ${PROTOCOL_VERSION},
-    'event', json_build_object(
-      'context', zero.get_trigger_context(),
-      'tag', 'CREATE INDEX',
-      'index', indexes.indexes -> 0
-    )
-  ) INTO event;
-
-  PERFORM pg_logical_emit_message(true, ${lit('zero/' + shardID)}, event);
-END
-$$ LANGUAGE plpgsql;
-  `;
-}
-
-export function replicateAlterPublication(
-  shardID: string,
-  publications: string[],
-) {
-  const sharded = append(shardID);
-  return `
-CREATE OR REPLACE FUNCTION zero.${sharded('replicate_alter_publication')}()
-RETURNS event_trigger
-AS $$
-DECLARE
-  r record;
-  pub text;
-BEGIN 
-  SELECT objid, object_type, object_identity FROM pg_event_trigger_ddl_commands() INTO r;
-
-  IF r.objid IS NULL THEN RETURN; END IF;  -- e.g. DROP alteration
-
-  IF r.object_type = 'publication relation' THEN
-    SELECT pub.pubname FROM pg_publication_rel AS rel
-      JOIN pg_publication AS pub ON pub.oid = rel.prpubid
-      WHERE rel.oid = r.objid INTO pub;
-
-  ELSIF r.object_type = 'publication namespace' THEN
-    SELECT pub.pubname FROM pg_publication_namespace AS ns
-      JOIN pg_publication AS pub ON pub.oid = ns.pnpubid
-      WHERE ns.oid = r.objid INTO pub;
-  END IF;
-
-  IF pub IN (${lit(publications)})
-  THEN
-    PERFORM zero.${sharded('emit_all_publications')}(pub);
-  ELSE
-    RAISE NOTICE ${lit('zero(' + shardID + ') ignoring %')}, r.object_identity;
-  END IF;
+  RAISE NOTICE 'zero(%) ignoring %', ${lit(shardID)}, object_id;
 END
 $$ LANGUAGE plpgsql;
 
 
-CREATE OR REPLACE FUNCTION zero.${sharded('replicate_alter_publication_drop')}()
-RETURNS event_trigger
-AS $$
-DECLARE
-  object_id text;
-  pub text;
-BEGIN 
-  SELECT object_identity FROM pg_event_trigger_dropped_objects() INTO object_id;
-
-  SELECT SPLIT_PART(object_id, ' in publication ', 2) INTO pub;
-
-  IF pub IN (${lit(publications)})
-  THEN
-    PERFORM zero.${sharded('emit_all_publications')}(pub);
-  END IF;
-END
-$$ LANGUAGE plpgsql;
-
-
-CREATE OR REPLACE FUNCTION zero.${sharded('emit_all_publications')}(pub TEXT)
-RETURNS void
-AS $$
+CREATE OR REPLACE FUNCTION ${schema}.schema_specs()
+RETURNS TEXT AS $$
 DECLARE
   tables record;
   indexes record;
-  event text;
 BEGIN
   ${publishedTableQuery(publications)} INTO tables;
-
   ${indexDefinitionsQuery(publications)} INTO indexes;
-  
-  SELECT json_build_object(
-    'type', 'ddl',
-    'version', ${PROTOCOL_VERSION},
-    'event', json_build_object(
-      'context', zero.get_trigger_context(),
-      'tag', 'ALTER PUBLICATION',
-      'publication', pub,
-      'tables', tables.tables,
-      'indexes', indexes.indexes
-    )
-  ) INTO event;
-
-  PERFORM pg_logical_emit_message(true, ${lit('zero/' + shardID)}, event);
-END 
+  RETURN json_build_object(
+    'tables', tables.tables,
+    'indexes', indexes.indexes
+  );
+END
 $$ LANGUAGE plpgsql;
-  `;
-}
 
-export function replicateDropEvents(shardID: string) {
-  const sharded = append(shardID);
-  return `
-CREATE OR REPLACE FUNCTION zero.${sharded('replicate_drop_event')}(
-  tag TEXT, type TEXT, dropped TEXT)
-RETURNS void
-AS $$
+
+CREATE OR REPLACE FUNCTION ${schema}.emit_ddl_start()
+RETURNS event_trigger AS $$
 DECLARE
-  event text;
+  schema_specs TEXT;
+  message TEXT;
 BEGIN
+  SELECT ${schema}.schema_specs() INTO schema_specs;
+
   SELECT json_build_object(
-    'type', 'ddl',
+    'type', 'ddlStart',
     'version', ${PROTOCOL_VERSION},
-    'event', json_build_object(
-      'context', zero.get_trigger_context(),
-      'tag', tag,
-      dropped, json_agg(json_build_object(
-        'schema', schema_name,
-        'objectIdentity', object_identity
-      ))
-    )
-  ) FROM pg_event_trigger_dropped_objects() 
-    WHERE object_type = type
-    INTO event;
+    'schema', schema_specs::json,
+    'context', ${schema}.get_trigger_context()
+  ) INTO message;
 
-  PERFORM pg_logical_emit_message(true, ${lit('zero/' + shardID)}, event);
+  PERFORM pg_logical_emit_message(true, ${lit('zero/' + shardID)}, message);
 END
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION zero.${sharded('replicate_drop_table')}()
-RETURNS event_trigger
-AS $$
-BEGIN
-  PERFORM zero.${sharded('replicate_drop_event')}(
-    'DROP TABLE', 'table', 'tables');
-END
-$$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION zero.${sharded('replicate_drop_index')}()
-RETURNS event_trigger
-AS $$
+CREATE OR REPLACE FUNCTION ${schema}.emit_ddl_end(tag TEXT)
+RETURNS void AS $$
+DECLARE
+  publications TEXT[];
+  cmd RECORD;
+  target RECORD;
+  pub RECORD;
+  in_shard RECORD;
+  schema_specs TEXT;
+  message TEXT;
+  event TEXT;
 BEGIN
-  PERFORM zero.${sharded('replicate_drop_event')}(
-    'DROP INDEX', 'index', 'indexes');
+  publications := ARRAY[${lit(publications)}];
+
+  SELECT objid, object_type, object_identity FROM pg_event_trigger_ddl_commands() LIMIT 1 INTO cmd;
+
+  -- Filter DDL updates that are not relevant to the shard (i.e. publications) when possible.
+
+  IF cmd.object_type = 'table' OR cmd.object_type = 'table column' THEN
+    SELECT ns.nspname as "schema", c.relname as "name" FROM pg_class AS c
+      JOIN pg_namespace As ns ON c.relnamespace = ns.oid
+      JOIN pg_publication_tables AS pb ON pb.schemaname = ns.nspname AND pb.tablename = c.relname
+      WHERE c.oid = cmd.objid AND pb.pubname = ANY (publications)
+      INTO target;
+    IF target IS NULL THEN
+      PERFORM ${schema}.notice_ignore(cmd.object_identity);
+      RETURN;
+    END IF;
+
+    cmd.object_type := 'table';  -- normalize the 'table column' target to 'table'
+
+  ELSIF cmd.object_type = 'index' THEN
+    SELECT ns.nspname as "schema", c.relname as "name" FROM pg_class AS c
+      JOIN pg_namespace As ns ON c.relnamespace = ns.oid
+      JOIN pg_indexes as ind ON ind.schemaname = ns.nspname AND ind.indexname = c.relname
+      JOIN pg_publication_tables AS pb ON pb.schemaname = ns.nspname AND pb.tablename = ind.tablename
+      WHERE c.oid = cmd.objid AND pb.pubname = ANY (publications)
+      INTO target;
+    IF target IS NULL THEN
+      PERFORM ${schema}.notice_ignore(cmd.object_identity);
+      RETURN;
+    END IF;
+
+  ELSIF cmd.object_type = 'publication relation' THEN
+    SELECT pb.pubname FROM pg_publication_rel AS rel
+      JOIN pg_publication AS pb ON pb.oid = rel.prpubid
+      WHERE rel.oid = cmd.objid AND pb.pubname = ANY (publications) 
+      INTO pub;
+    IF pub IS NULL THEN
+      PERFORM ${schema}.notice_ignore(cmd.object_identity);
+      RETURN;
+    END IF;
+
+  ELSIF cmd.object_type = 'publication namespace' THEN
+    SELECT pb.pubname FROM pg_publication_namespace AS ns
+      JOIN pg_publication AS pb ON pb.oid = ns.pnpubid
+      WHERE ns.oid = cmd.objid AND pb.pubname = ANY (publications) 
+      INTO pub;
+    IF pub IS NULL THEN
+      PERFORM ${schema}.notice_ignore(cmd.object_identity);
+      RETURN;
+    END IF;
+  END IF;
+
+  -- Construct and emit the DdlUpdateEvent message.
+
+  IF target IS NOT NULL
+  THEN
+    SELECT json_build_object('tag', tag, cmd.object_type, target) INTO event;
+  ELSE
+    SELECT json_build_object('tag', tag) INTO event;
+  END IF;
+  
+  SELECT ${schema}.schema_specs() INTO schema_specs;
+
+  SELECT json_build_object(
+    'type', 'ddlUpdate',
+    'version', ${PROTOCOL_VERSION},
+    'schema', schema_specs::json,
+    'event', event::json,
+    'context', ${schema}.get_trigger_context()
+  ) INTO message;
+
+  PERFORM pg_logical_emit_message(true, ${lit('zero/' + shardID)}, message);
 END
 $$ LANGUAGE plpgsql;
 `;
 }
+
+const TAGS = [
+  'CREATE TABLE',
+  'ALTER TABLE',
+  'CREATE INDEX',
+  'DROP TABLE',
+  'DROP INDEX',
+  'ALTER PUBLICATION',
+] as const;
 
 export function createEventTriggerStatements(
   shardID: string,
   publications: string[],
 ) {
+  // Unlike functions, which are namespaced in shard-specific schemas,
+  // EVENT TRIGGER names are in the global namespace and instead have the shardID appended.
   const sharded = append(shardID);
-  return [
-    GLOBAL_TRIGGER_FUNCTIONS,
+  const schema = sharded('zero');
 
-    replicateCreateOrAlterTable(shardID, publications),
-    `DROP EVENT TRIGGER IF EXISTS ${sharded(
-      'zero_replicate_create_or_alter_table',
-    )}`,
-    `CREATE EVENT TRIGGER ${sharded('zero_replicate_create_or_alter_table')}
-      ON ddl_command_end
-      WHEN TAG IN ('CREATE TABLE', 'ALTER TABLE')
-      EXECUTE PROCEDURE zero.${sharded('replicate_create_or_alter_table')}()`,
+  const triggers = [createEventFunctionStatements(shardID, publications)];
 
-    replicateCreateIndex(shardID, publications),
-    `DROP EVENT TRIGGER IF EXISTS ${sharded('zero_replicate_create_index')}`,
-    `CREATE EVENT TRIGGER ${sharded('zero_replicate_create_index')}
-      ON ddl_command_end
-      WHEN TAG IN ('CREATE INDEX')
-      EXECUTE PROCEDURE zero.${sharded('replicate_create_index')}()`,
+  // A single ddl_command_start trigger covering all relevant tags.
+  triggers.push(`
+DROP EVENT TRIGGER IF EXISTS ${sharded('zero_ddl_start')};
+CREATE EVENT TRIGGER ${sharded('zero_ddl_start')}
+  ON ddl_command_start
+  WHEN TAG IN (${lit(TAGS)})
+  EXECUTE PROCEDURE ${schema}.emit_ddl_start();
+`);
 
-    replicateAlterPublication(shardID, publications),
-    `DROP EVENT TRIGGER IF EXISTS ${sharded(
-      'zero_replicate_alter_publication',
-    )}`,
-    `CREATE EVENT TRIGGER ${sharded('zero_replicate_alter_publication')}
-      ON ddl_command_end
-      WHEN TAG IN ('ALTER PUBLICATION')
-      EXECUTE PROCEDURE zero.${sharded('replicate_alter_publication')}()`,
+  // A per-tag ddl_command_end trigger that dispatches to ${schema}.emit_ddl_end(tag)
+  for (const tag of TAGS) {
+    const tagID = tag.toLowerCase().replace(' ', '_');
+    triggers.push(`
+CREATE OR REPLACE FUNCTION ${schema}.emit_${tagID}() 
+RETURNS event_trigger AS $$
+BEGIN
+  PERFORM ${schema}.emit_ddl_end(${lit(tag)});
+END
+$$ LANGUAGE plpgsql;
 
-    `DROP EVENT TRIGGER IF EXISTS ${sharded(
-      'zero_replicate_alter_publication_drop',
-    )}`,
-    `CREATE EVENT TRIGGER ${sharded('zero_replicate_alter_publication_drop')}
-      ON sql_drop
-      WHEN TAG IN ('ALTER PUBLICATION')
-      EXECUTE PROCEDURE zero.${sharded('replicate_alter_publication_drop')}()`,
 
-    replicateDropEvents(shardID),
-    `DROP EVENT TRIGGER IF EXISTS ${sharded('zero_replicate_drop_table')}`,
-    `CREATE EVENT TRIGGER ${sharded('zero_replicate_drop_table')}
-      ON sql_drop
-      WHEN TAG IN ('DROP TABLE')
-      EXECUTE PROCEDURE zero.${sharded('replicate_drop_table')}()`,
-
-    `DROP EVENT TRIGGER IF EXISTS ${sharded('zero_replicate_drop_index')}`,
-    `CREATE EVENT TRIGGER ${sharded('zero_replicate_drop_index')}
-        ON sql_drop
-        WHEN TAG IN ('DROP INDEX')
-        EXECUTE PROCEDURE zero.${sharded('replicate_drop_index')}()`,
-  ].join(';\n');
+DROP EVENT TRIGGER IF EXISTS ${sharded(`zero_${tagID}`)};
+CREATE EVENT TRIGGER ${sharded(`zero_${tagID}`)}
+  ON ddl_command_end
+  WHEN TAG IN (${lit(tag)})
+  EXECUTE PROCEDURE ${schema}.emit_${tagID}();
+`);
+  }
+  return triggers.join('');
 }

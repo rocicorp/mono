@@ -34,16 +34,16 @@ Create a `.env` file in the `zbugs` directory:
 
 # The "upstream" authoritative postgres database
 # In the future we will support other types of upstreams besides PG
-UPSTREAM_URI = "postgresql://user:password@127.0.0.1:6434/postgres"
+UPSTREAM_URI = "postgresql://user:password@127.0.0.1:4848/postgres"
 
 # A separate Postgres database we use to store CVRs. CVRs (client view records)
 # keep track of which clients have which data. This is how we know what diff to
 # send on reconnect. It can be same database as above, but it makes most sense
 # for it to be a separate "database" in the same postgres "cluster".
-CVR_DB_URI = "postgresql://user:password@127.0.0.1:6435/postgres"
+CVR_DB_URI = "postgresql://user:password@127.0.0.1:4849/postgres"
 
 # Yet another Postgres database which we used to store a replication log.
-CHANGE_DB_URI = "postgresql://user:password@127.0.0.1:6435/postgres"
+CHANGE_DB_URI = "postgresql://user:password@127.0.0.1:4849/postgres"
 
 # Place to store the SQLite data zero-cache maintains. This can be lost, but if
 # it is, zero-cache will have to re-replicate next time it starts up.

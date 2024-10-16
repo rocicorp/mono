@@ -3,6 +3,7 @@ import {
   Pgoutput,
   PgoutputPlugin,
 } from 'pg-logical-replication';
+import type postgres from 'postgres';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {Queue} from '../../../../../../shared/src/queue.js';
 import {
@@ -11,42 +12,30 @@ import {
   testDBs,
 } from '../../../../test/db.js';
 import type {PostgresDB} from '../../../../types/pg.js';
-import {createEventTriggerStatements} from './ddl.js';
+import {
+  createEventTriggerStatements,
+  type DdlStartEvent,
+  type DdlUpdateEvent,
+} from './ddl.js';
 
 const SLOT_NAME = 'ddl_test_slot';
 
 describe('change-source/tables/ddl', () => {
   let upstream: PostgresDB;
   let messages: Queue<Pgoutput.Message>;
+  let notices: Queue<postgres.Notice>;
   let service: LogicalReplicationService;
 
   const SHARD_ID = '0';
 
   beforeEach(async () => {
-    upstream = await testDBs.create('ddl_test_upstream');
+    notices = new Queue();
+    upstream = await testDBs.create('ddl_test_upstream', n =>
+      notices.enqueue(n),
+    );
 
     const upstreamURI = getConnectionURI(upstream);
-    await upstream.unsafe(`
-    CREATE SCHEMA zero;
-    CREATE SCHEMA pub;
-    CREATE SCHEMA private;
-
-    CREATE TABLE zero.foo(id TEXT PRIMARY KEY);
-
-    CREATE TABLE pub.foo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);
-    CREATE TABLE pub.boo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);
-    CREATE TABLE pub.yoo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);
-
-    CREATE TABLE private.foo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);
-    CREATE TABLE private.yoo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);
-
-    CREATE INDEX foo_custom_index ON pub.foo (description, name);
-    CREATE INDEX yoo_custom_index ON pub.yoo (description, name);
-    
-    CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA pub;
-    CREATE PUBLICATION zero_sum FOR TABLE pub.foo (id, name), pub.boo;
-    CREATE PUBLICATION nonzeropub FOR TABLE pub.foo, pub.boo;
-    `);
+    await upstream.unsafe(STARTING_SCHEMA);
 
     await upstream.unsafe(
       createEventTriggerStatements(SHARD_ID, ['zero_all', 'zero_sum']),
@@ -90,19 +79,214 @@ describe('change-source/tables/ddl', () => {
     return drained;
   }
 
+  const STARTING_SCHEMA = `
+    CREATE SCHEMA zero;
+    CREATE SCHEMA pub;
+    CREATE SCHEMA private;
+
+    CREATE TABLE zero.foo(id TEXT PRIMARY KEY);
+
+    CREATE TABLE pub.foo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);
+    CREATE TABLE pub.boo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);
+    CREATE TABLE pub.yoo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);
+
+    CREATE TABLE private.foo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);
+    CREATE TABLE private.yoo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);
+
+    CREATE INDEX foo_custom_index ON pub.foo (description, name);
+    CREATE INDEX yoo_custom_index ON pub.yoo (description, name);
+    
+    CREATE PUBLICATION zero_all FOR TABLES IN SCHEMA pub;
+    CREATE PUBLICATION zero_sum FOR TABLE pub.foo (id, name), pub.boo;
+    CREATE PUBLICATION nonzeropub FOR TABLE pub.foo, pub.boo;
+    `;
+
+  // For zero_all, zero_sum
+  const DDL_START: Omit<DdlStartEvent, 'context'> = {
+    type: 'ddlStart',
+    version: 1,
+    schema: {
+      tables: [
+        {
+          schema: 'pub',
+          name: 'boo',
+          columns: {
+            description: {
+              characterMaximumLength: null,
+              dataType: 'text',
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            id: {
+              characterMaximumLength: null,
+              dataType: 'text',
+              dflt: null,
+              notNull: true,
+              pos: 1,
+            },
+            name: {
+              characterMaximumLength: null,
+              dataType: 'text',
+              dflt: null,
+              notNull: false,
+              pos: 2,
+            },
+          },
+          primaryKey: ['id'],
+          publications: {
+            ['zero_all']: {rowFilter: null},
+            ['zero_sum']: {rowFilter: null},
+          },
+        },
+        {
+          schema: 'pub',
+          name: 'foo',
+          columns: {
+            description: {
+              characterMaximumLength: null,
+              dataType: 'text',
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            id: {
+              characterMaximumLength: null,
+              dataType: 'text',
+              dflt: null,
+              notNull: true,
+              pos: 1,
+            },
+            name: {
+              characterMaximumLength: null,
+              dataType: 'text',
+              dflt: null,
+              notNull: false,
+              pos: 2,
+            },
+          },
+          primaryKey: ['id'],
+          publications: {
+            ['zero_all']: {rowFilter: null},
+            ['zero_sum']: {rowFilter: null},
+          },
+        },
+        {
+          schema: 'pub',
+          name: 'yoo',
+          columns: {
+            description: {
+              characterMaximumLength: null,
+              dataType: 'text',
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            id: {
+              characterMaximumLength: null,
+              dataType: 'text',
+              dflt: null,
+              notNull: true,
+              pos: 1,
+            },
+            name: {
+              characterMaximumLength: null,
+              dataType: 'text',
+              dflt: null,
+              notNull: false,
+              pos: 2,
+            },
+          },
+          primaryKey: ['id'],
+          publications: {['zero_all']: {rowFilter: null}},
+        },
+      ],
+      indexes: [
+        {
+          name: 'boo_name_key',
+          schemaName: 'pub',
+          tableName: 'boo',
+          columns: {name: 'ASC'},
+          unique: true,
+        },
+        {
+          name: 'foo_custom_index',
+          schemaName: 'pub',
+          tableName: 'foo',
+          columns: {
+            description: 'ASC',
+            name: 'ASC',
+          },
+          unique: false,
+        },
+        {
+          name: 'foo_name_key',
+          schemaName: 'pub',
+          tableName: 'foo',
+          columns: {name: 'ASC'},
+          unique: true,
+        },
+        {
+          name: 'yoo_custom_index',
+          schemaName: 'pub',
+          tableName: 'yoo',
+          columns: {
+            description: 'ASC',
+            name: 'ASC',
+          },
+          unique: false,
+        },
+        {
+          name: 'yoo_name_key',
+          schemaName: 'pub',
+          tableName: 'yoo',
+          columns: {name: 'ASC'},
+          unique: true,
+        },
+      ],
+    },
+  } as const;
+
+  function inserted<T>(arr: readonly T[], pos: number, ...items: T[]): T[] {
+    return replaced(arr, pos, 0, ...items);
+  }
+
+  function dropped<T>(
+    arr: readonly T[],
+    pos: number,
+    deleteCount: number,
+  ): T[] {
+    return replaced(arr, pos, deleteCount);
+  }
+
+  function replaced<T>(
+    arr: readonly T[],
+    pos: number,
+    deleteCount: number,
+    ...items: T[]
+  ): T[] {
+    const copy = arr.slice();
+    copy.splice(pos, deleteCount, ...items);
+    return copy;
+  }
+
   test.each([
     [
       'create table',
       `CREATE TABLE pub.bar(id TEXT PRIMARY KEY, a INT4 UNIQUE, b INT8 UNIQUE, UNIQUE(b, a))`,
       {
-        type: 'ddl',
+        context: {
+          query:
+            'CREATE TABLE pub.bar(id TEXT PRIMARY KEY, a INT4 UNIQUE, b INT8 UNIQUE, UNIQUE(b, a))',
+        },
+        type: 'ddlUpdate',
         version: 1,
         event: {
-          context: {
-            query: `CREATE TABLE pub.bar(id TEXT PRIMARY KEY, a INT4 UNIQUE, b INT8 UNIQUE, UNIQUE(b, a))`,
-          },
           tag: 'CREATE TABLE',
-          table: {
+          table: {schema: 'pub', name: 'bar'},
+        },
+        schema: {
+          tables: inserted(DDL_START.schema.tables, 0, {
             schema: 'pub',
             name: 'bar',
             columns: {
@@ -130,8 +314,10 @@ describe('change-source/tables/ddl', () => {
             },
             primaryKey: ['id'],
             publications: {['zero_all']: {rowFilter: null}},
-          },
-          indexes: [
+          }),
+          indexes: inserted(
+            DDL_START.schema.indexes,
+            0,
             {
               columns: {a: 'ASC'},
               name: 'bar_a_key',
@@ -156,7 +342,7 @@ describe('change-source/tables/ddl', () => {
               tableName: 'bar',
               unique: true,
             },
-          ],
+          ),
         },
       },
     ],
@@ -164,14 +350,18 @@ describe('change-source/tables/ddl', () => {
       'create index',
       `CREATE INDEX foo_name_index on pub.foo (name desc, id)`,
       {
-        type: 'ddl',
+        context: {
+          query: 'CREATE INDEX foo_name_index on pub.foo (name desc, id)',
+        },
+        type: 'ddlUpdate',
         version: 1,
         event: {
           tag: 'CREATE INDEX',
-          context: {
-            query: `CREATE INDEX foo_name_index on pub.foo (name desc, id)`,
-          },
-          index: {
+          index: {schema: 'pub', name: 'foo_name_index'},
+        },
+        schema: {
+          tables: DDL_START.schema.tables,
+          indexes: inserted(DDL_START.schema.indexes, 2, {
             columns: {
               name: 'DESC',
               id: 'ASC',
@@ -180,7 +370,7 @@ describe('change-source/tables/ddl', () => {
             schemaName: 'pub',
             tableName: 'foo',
             unique: false,
-          },
+          }),
         },
       },
     ],
@@ -188,12 +378,17 @@ describe('change-source/tables/ddl', () => {
       'rename table',
       `ALTER TABLE pub.foo RENAME TO food`,
       {
-        type: 'ddl',
+        context: {
+          query: 'ALTER TABLE pub.foo RENAME TO food',
+        },
+        type: 'ddlUpdate',
         version: 1,
         event: {
           tag: 'ALTER TABLE',
-          context: {query: 'ALTER TABLE pub.foo RENAME TO food'},
-          table: {
+          table: {schema: 'pub', name: 'food'},
+        },
+        schema: {
+          tables: replaced(DDL_START.schema.tables, 1, 1, {
             schema: 'pub',
             name: 'food',
             columns: {
@@ -224,96 +419,29 @@ describe('change-source/tables/ddl', () => {
               ['zero_all']: {rowFilter: null},
               ['zero_sum']: {rowFilter: null},
             },
-          },
-          indexes: [
+          }),
+          indexes: replaced(
+            DDL_START.schema.indexes,
+            1,
+            2,
             {
-              schemaName: 'pub',
-              tableName: 'food',
-              name: 'foo_custom_index',
               columns: {
                 description: 'ASC',
                 name: 'ASC',
               },
-              unique: false,
-            },
-            {
+              name: 'foo_custom_index',
               schemaName: 'pub',
               tableName: 'food',
-              name: 'foo_name_key',
-              columns: {name: 'ASC'},
-              unique: true,
-            },
-          ],
-        },
-      },
-    ],
-    [
-      'add column',
-      `ALTER TABLE pub.foo ADD bar text`,
-      {
-        type: 'ddl',
-        version: 1,
-        event: {
-          tag: 'ALTER TABLE',
-          context: {query: 'ALTER TABLE pub.foo ADD bar text'},
-          table: {
-            schema: 'pub',
-            name: 'foo',
-            columns: {
-              bar: {
-                characterMaximumLength: null,
-                dataType: 'text',
-                notNull: false,
-                dflt: null,
-                pos: 4,
-              },
-              description: {
-                characterMaximumLength: null,
-                dataType: 'text',
-                notNull: false,
-                dflt: null,
-                pos: 3,
-              },
-              id: {
-                characterMaximumLength: null,
-                dataType: 'text',
-                notNull: true,
-                dflt: null,
-                pos: 1,
-              },
-              name: {
-                characterMaximumLength: null,
-                dataType: 'text',
-                notNull: false,
-                dflt: null,
-                pos: 2,
-              },
-            },
-            primaryKey: ['id'],
-            publications: {
-              ['zero_all']: {rowFilter: null},
-              ['zero_sum']: {rowFilter: null},
-            },
-          },
-          indexes: [
-            {
-              schemaName: 'pub',
-              tableName: 'foo',
-              name: 'foo_custom_index',
-              columns: {
-                description: 'ASC',
-                name: 'ASC',
-              },
               unique: false,
             },
             {
-              schemaName: 'pub',
-              tableName: 'foo',
-              name: 'foo_name_key',
               columns: {name: 'ASC'},
+              name: 'foo_name_key',
+              schemaName: 'pub',
+              tableName: 'food',
               unique: true,
             },
-          ],
+          ),
         },
       },
     ],
@@ -321,15 +449,41 @@ describe('change-source/tables/ddl', () => {
       'add column that results in a new index',
       `ALTER TABLE pub.foo ADD username TEXT UNIQUE`,
       {
-        type: 'ddl',
-        version: 1,
+        context: {
+          query: 'ALTER TABLE pub.foo ADD username TEXT UNIQUE',
+        },
         event: {
           tag: 'ALTER TABLE',
-          context: {query: 'ALTER TABLE pub.foo ADD username TEXT UNIQUE'},
-          table: {
+          table: {schema: 'pub', name: 'foo'},
+        },
+        type: 'ddlUpdate',
+        version: 1,
+        schema: {
+          tables: replaced(DDL_START.schema.tables, 1, 1, {
             schema: 'pub',
             name: 'foo',
             columns: {
+              description: {
+                characterMaximumLength: null,
+                dataType: 'text',
+                notNull: false,
+                dflt: null,
+                pos: 3,
+              },
+              id: {
+                characterMaximumLength: null,
+                dataType: 'text',
+                notNull: true,
+                dflt: null,
+                pos: 1,
+              },
+              name: {
+                characterMaximumLength: null,
+                dataType: 'text',
+                notNull: false,
+                dflt: null,
+                pos: 2,
+              },
               username: {
                 characterMaximumLength: null,
                 dataType: 'text',
@@ -337,60 +491,20 @@ describe('change-source/tables/ddl', () => {
                 dflt: null,
                 pos: 4,
               },
-              description: {
-                characterMaximumLength: null,
-                dataType: 'text',
-                notNull: false,
-                dflt: null,
-                pos: 3,
-              },
-              id: {
-                characterMaximumLength: null,
-                dataType: 'text',
-                notNull: true,
-                dflt: null,
-                pos: 1,
-              },
-              name: {
-                characterMaximumLength: null,
-                dataType: 'text',
-                notNull: false,
-                dflt: null,
-                pos: 2,
-              },
             },
             primaryKey: ['id'],
             publications: {
               ['zero_all']: {rowFilter: null},
               ['zero_sum']: {rowFilter: null},
             },
-          },
-          indexes: [
-            {
-              schemaName: 'pub',
-              tableName: 'foo',
-              name: 'foo_custom_index',
-              columns: {
-                description: 'ASC',
-                name: 'ASC',
-              },
-              unique: false,
-            },
-            {
-              schemaName: 'pub',
-              tableName: 'foo',
-              name: 'foo_name_key',
-              columns: {name: 'ASC'},
-              unique: true,
-            },
-            {
-              schemaName: 'pub',
-              tableName: 'foo',
-              name: 'foo_username_key',
-              columns: {username: 'ASC'},
-              unique: true,
-            },
-          ],
+          }),
+          indexes: replaced(DDL_START.schema.indexes, 3, 0, {
+            columns: {username: 'ASC'},
+            name: 'foo_username_key',
+            schemaName: 'pub',
+            tableName: 'foo',
+            unique: true,
+          }),
         },
       },
     ],
@@ -398,12 +512,18 @@ describe('change-source/tables/ddl', () => {
       'add column with default value',
       `ALTER TABLE pub.foo ADD bar text DEFAULT 'boo'`,
       {
-        type: 'ddl',
+        context: {
+          query: "ALTER TABLE pub.foo ADD bar text DEFAULT 'boo'",
+        },
+        type: 'ddlUpdate',
         version: 1,
         event: {
           tag: 'ALTER TABLE',
-          context: {query: `ALTER TABLE pub.foo ADD bar text DEFAULT 'boo'`},
-          table: {
+          table: {schema: 'pub', name: 'foo'},
+        },
+        schema: {
+          indexes: DDL_START.schema.indexes,
+          tables: replaced(DDL_START.schema.tables, 1, 1, {
             schema: 'pub',
             name: 'foo',
             columns: {
@@ -411,7 +531,7 @@ describe('change-source/tables/ddl', () => {
                 characterMaximumLength: null,
                 dataType: 'text',
                 notNull: false,
-                dflt: `'boo'::text`,
+                dflt: "'boo'::text",
                 pos: 4,
               },
               description: {
@@ -441,26 +561,7 @@ describe('change-source/tables/ddl', () => {
               ['zero_all']: {rowFilter: null},
               ['zero_sum']: {rowFilter: null},
             },
-          },
-          indexes: [
-            {
-              schemaName: 'pub',
-              tableName: 'foo',
-              name: 'foo_custom_index',
-              columns: {
-                description: 'ASC',
-                name: 'ASC',
-              },
-              unique: false,
-            },
-            {
-              schemaName: 'pub',
-              tableName: 'foo',
-              name: 'foo_name_key',
-              columns: {name: 'ASC'},
-              unique: true,
-            },
-          ],
+          }),
         },
       },
     ],
@@ -468,14 +569,18 @@ describe('change-source/tables/ddl', () => {
       'alter column default value',
       `ALTER TABLE pub.foo ALTER name SET DEFAULT 'alice'`,
       {
-        type: 'ddl',
+        context: {
+          query: "ALTER TABLE pub.foo ALTER name SET DEFAULT 'alice'",
+        },
+        type: 'ddlUpdate',
         version: 1,
         event: {
           tag: 'ALTER TABLE',
-          context: {
-            query: `ALTER TABLE pub.foo ALTER name SET DEFAULT 'alice'`,
-          },
-          table: {
+          table: {schema: 'pub', name: 'foo'},
+        },
+        schema: {
+          indexes: DDL_START.schema.indexes,
+          tables: replaced(DDL_START.schema.tables, 1, 1, {
             schema: 'pub',
             name: 'foo',
             columns: {
@@ -497,7 +602,7 @@ describe('change-source/tables/ddl', () => {
                 characterMaximumLength: null,
                 dataType: 'text',
                 notNull: false,
-                dflt: `'alice'::text`,
+                dflt: "'alice'::text",
                 pos: 2,
               },
             },
@@ -506,26 +611,7 @@ describe('change-source/tables/ddl', () => {
               ['zero_all']: {rowFilter: null},
               ['zero_sum']: {rowFilter: null},
             },
-          },
-          indexes: [
-            {
-              schemaName: 'pub',
-              tableName: 'foo',
-              name: 'foo_custom_index',
-              columns: {
-                description: 'ASC',
-                name: 'ASC',
-              },
-              unique: false,
-            },
-            {
-              schemaName: 'pub',
-              tableName: 'foo',
-              name: 'foo_name_key',
-              columns: {name: 'ASC'},
-              unique: true,
-            },
-          ],
+          }),
         },
       },
     ],
@@ -533,12 +619,17 @@ describe('change-source/tables/ddl', () => {
       'rename column',
       `ALTER TABLE pub.foo RENAME name to handle`,
       {
-        type: 'ddl',
+        context: {
+          query: 'ALTER TABLE pub.foo RENAME name to handle',
+        },
+        type: 'ddlUpdate',
         version: 1,
         event: {
           tag: 'ALTER TABLE',
-          context: {query: 'ALTER TABLE pub.foo RENAME name to handle'},
-          table: {
+          table: {schema: 'pub', name: 'foo'},
+        },
+        schema: {
+          tables: replaced(DDL_START.schema.tables, 1, 1, {
             schema: 'pub',
             name: 'foo',
             columns: {
@@ -569,26 +660,29 @@ describe('change-source/tables/ddl', () => {
               ['zero_all']: {rowFilter: null},
               ['zero_sum']: {rowFilter: null},
             },
-          },
-          indexes: [
+          }),
+          indexes: replaced(
+            DDL_START.schema.indexes,
+            1,
+            2,
             {
-              schemaName: 'pub',
-              tableName: 'foo',
-              name: 'foo_custom_index',
               columns: {
                 description: 'ASC',
                 handle: 'ASC',
               },
+              name: 'foo_custom_index',
+              schemaName: 'pub',
+              tableName: 'foo',
               unique: false,
             },
             {
+              columns: {handle: 'ASC'},
+              name: 'foo_name_key',
               schemaName: 'pub',
               tableName: 'foo',
-              name: 'foo_name_key',
-              columns: {handle: 'ASC'},
               unique: true,
             },
-          ],
+          ),
         },
       },
     ],
@@ -596,12 +690,15 @@ describe('change-source/tables/ddl', () => {
       'drop column',
       `ALTER TABLE pub.foo drop description`,
       {
-        type: 'ddl',
+        context: {query: 'ALTER TABLE pub.foo drop description'},
+        type: 'ddlUpdate',
         version: 1,
         event: {
           tag: 'ALTER TABLE',
-          context: {query: 'ALTER TABLE pub.foo drop description'},
-          table: {
+          table: {schema: 'pub', name: 'foo'},
+        },
+        schema: {
+          tables: replaced(DDL_START.schema.tables, 1, 1, {
             schema: 'pub',
             name: 'foo',
             columns: {
@@ -625,17 +722,9 @@ describe('change-source/tables/ddl', () => {
               ['zero_all']: {rowFilter: null},
               ['zero_sum']: {rowFilter: null},
             },
-          },
-          indexes: [
-            // Note: foo_custom_index is dropped because it depended on the columns.
-            {
-              schemaName: 'pub',
-              tableName: 'foo',
-              name: 'foo_name_key',
-              columns: {name: 'ASC'},
-              unique: true,
-            },
-          ],
+          }),
+          // "foo_custom_index" depended on the "description column"
+          indexes: dropped(DDL_START.schema.indexes, 1, 1),
         },
       },
     ],
@@ -643,46 +732,92 @@ describe('change-source/tables/ddl', () => {
       'drop table',
       `DROP TABLE pub.foo, pub.yoo`,
       {
-        type: 'ddl',
+        context: {query: 'DROP TABLE pub.foo, pub.yoo'},
+        type: 'ddlUpdate',
         version: 1,
-        event: {
-          tag: 'DROP TABLE',
-          context: {query: `DROP TABLE pub.foo, pub.yoo`},
+        event: {tag: 'DROP TABLE'},
+        schema: {
           tables: [
             {
               schema: 'pub',
-              objectIdentity: 'pub.yoo',
+              name: 'boo',
+              columns: {
+                description: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  dflt: null,
+                  notNull: false,
+                  pos: 3,
+                },
+                id: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  dflt: null,
+                  notNull: true,
+                  pos: 1,
+                },
+                name: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  dflt: null,
+                  notNull: false,
+                  pos: 2,
+                },
+              },
+              primaryKey: ['id'],
+              publications: {
+                ['zero_all']: {rowFilter: null},
+                ['zero_sum']: {rowFilter: null},
+              },
             },
+          ],
+          indexes: [
             {
-              schema: 'pub',
-              objectIdentity: 'pub.foo',
+              columns: {name: 'ASC'},
+              name: 'boo_name_key',
+              schemaName: 'pub',
+              tableName: 'boo',
+              unique: true,
             },
           ],
         },
       },
     ],
-
     [
       'drop index',
       `DROP INDEX pub.foo_custom_index, pub.yoo_custom_index`,
       {
-        type: 'ddl',
+        context: {
+          query: 'DROP INDEX pub.foo_custom_index, pub.yoo_custom_index',
+        },
+        type: 'ddlUpdate',
         version: 1,
-        event: {
-          tag: 'DROP INDEX',
-          context: {
-            query: `DROP INDEX pub.foo_custom_index, pub.yoo_custom_index`,
-          },
+        event: {tag: 'DROP INDEX'},
+        schema: {
           indexes: [
             {
-              schema: 'pub',
-              objectIdentity: 'pub.yoo_custom_index',
+              columns: {name: 'ASC'},
+              name: 'boo_name_key',
+              schemaName: 'pub',
+              tableName: 'boo',
+              unique: true,
             },
             {
-              schema: 'pub',
-              objectIdentity: 'pub.foo_custom_index',
+              columns: {name: 'ASC'},
+              name: 'foo_name_key',
+              schemaName: 'pub',
+              tableName: 'foo',
+              unique: true,
+            },
+            {
+              columns: {name: 'ASC'},
+              name: 'yoo_name_key',
+              schemaName: 'pub',
+              tableName: 'yoo',
+              unique: true,
             },
           ],
+          tables: DDL_START.schema.tables,
         },
       },
     ],
@@ -690,153 +825,44 @@ describe('change-source/tables/ddl', () => {
       'alter table publication add table',
       `ALTER PUBLICATION zero_sum ADD TABLE pub.yoo`,
       {
-        type: 'ddl',
+        context: {query: 'ALTER PUBLICATION zero_sum ADD TABLE pub.yoo'},
+        type: 'ddlUpdate',
         version: 1,
-        event: {
-          tag: 'ALTER PUBLICATION',
-          publication: 'zero_sum',
-          context: {query: 'ALTER PUBLICATION zero_sum ADD TABLE pub.yoo'},
-          tables: [
-            {
-              schema: 'pub',
-              name: 'boo',
-              columns: {
-                id: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: true,
-                  pos: 1,
-                },
-                name: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: false,
-                  pos: 2,
-                },
-                description: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: false,
-                  pos: 3,
-                },
+        event: {tag: 'ALTER PUBLICATION'},
+        schema: {
+          indexes: DDL_START.schema.indexes,
+          tables: replaced(DDL_START.schema.tables, 2, 1, {
+            schema: 'pub',
+            name: 'yoo',
+            columns: {
+              description: {
+                characterMaximumLength: null,
+                dataType: 'text',
+                dflt: null,
+                notNull: false,
+                pos: 3,
               },
-              primaryKey: ['id'],
-              publications: {
-                ['zero_all']: {rowFilter: null},
-                ['zero_sum']: {rowFilter: null},
+              id: {
+                characterMaximumLength: null,
+                dataType: 'text',
+                dflt: null,
+                notNull: true,
+                pos: 1,
+              },
+              name: {
+                characterMaximumLength: null,
+                dataType: 'text',
+                dflt: null,
+                notNull: false,
+                pos: 2,
               },
             },
-            {
-              schema: 'pub',
-              name: 'foo',
-              columns: {
-                id: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: true,
-                  pos: 1,
-                },
-                name: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: false,
-                  pos: 2,
-                },
-                description: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: false,
-                  pos: 3,
-                },
-              },
-              primaryKey: ['id'],
-              publications: {
-                ['zero_all']: {rowFilter: null},
-                ['zero_sum']: {rowFilter: null},
-              },
+            primaryKey: ['id'],
+            publications: {
+              ['zero_all']: {rowFilter: null},
+              ['zero_sum']: {rowFilter: null}, // Now part of zero_sum
             },
-            {
-              schema: 'pub',
-              name: 'yoo',
-              columns: {
-                id: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: true,
-                  pos: 1,
-                },
-                name: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: false,
-                  pos: 2,
-                },
-                description: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: false,
-                  pos: 3,
-                },
-              },
-              primaryKey: ['id'],
-              publications: {
-                ['zero_all']: {rowFilter: null},
-                ['zero_sum']: {rowFilter: null}, // Now part of zero_sum
-              },
-            },
-          ],
-          indexes: [
-            {
-              name: 'boo_name_key',
-              schemaName: 'pub',
-              tableName: 'boo',
-              unique: true,
-              columns: {name: 'ASC'},
-            },
-            {
-              name: 'foo_custom_index',
-              schemaName: 'pub',
-              tableName: 'foo',
-              unique: false,
-              columns: {
-                description: 'ASC',
-                name: 'ASC',
-              },
-            },
-            {
-              name: 'foo_name_key',
-              schemaName: 'pub',
-              tableName: 'foo',
-              unique: true,
-              columns: {name: 'ASC'},
-            },
-            {
-              name: 'yoo_custom_index',
-              schemaName: 'pub',
-              tableName: 'yoo',
-              unique: false,
-              columns: {
-                description: 'ASC',
-                name: 'ASC',
-              },
-            },
-            {
-              name: 'yoo_name_key',
-              schemaName: 'pub',
-              tableName: 'yoo',
-              unique: true,
-              columns: {name: 'ASC'},
-            },
-          ],
+          }),
         },
       },
     ],
@@ -844,152 +870,44 @@ describe('change-source/tables/ddl', () => {
       'alter table publication drop table',
       `ALTER PUBLICATION zero_sum DROP TABLE pub.foo`,
       {
-        type: 'ddl',
+        context: {query: 'ALTER PUBLICATION zero_sum DROP TABLE pub.foo'},
+        type: 'ddlUpdate',
         version: 1,
-        event: {
-          tag: 'ALTER PUBLICATION',
-          publication: 'zero_sum',
-          context: {query: 'ALTER PUBLICATION zero_sum DROP TABLE pub.foo'},
-          tables: [
-            {
-              schema: 'pub',
-              name: 'boo',
-              columns: {
-                id: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: true,
-                  pos: 1,
-                },
-                name: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: false,
-                  pos: 2,
-                },
-                description: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: false,
-                  pos: 3,
-                },
+        event: {tag: 'ALTER PUBLICATION'},
+        schema: {
+          indexes: DDL_START.schema.indexes,
+          tables: replaced(DDL_START.schema.tables, 1, 1, {
+            schema: 'pub',
+            name: 'foo',
+            columns: {
+              description: {
+                characterMaximumLength: null,
+                dataType: 'text',
+                dflt: null,
+                notNull: false,
+                pos: 3,
               },
-              primaryKey: ['id'],
-              publications: {
-                ['zero_all']: {rowFilter: null},
-                ['zero_sum']: {rowFilter: null},
+              id: {
+                characterMaximumLength: null,
+                dataType: 'text',
+                dflt: null,
+                notNull: true,
+                pos: 1,
+              },
+              name: {
+                characterMaximumLength: null,
+                dataType: 'text',
+                dflt: null,
+                notNull: false,
+                pos: 2,
               },
             },
-            {
-              schema: 'pub',
-              name: 'foo',
-              columns: {
-                id: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: true,
-                  pos: 1,
-                },
-                name: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: false,
-                  pos: 2,
-                },
-                description: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: false,
-                  pos: 3,
-                },
-              },
-              primaryKey: ['id'],
-              publications: {
-                ['zero_all']: {rowFilter: null},
-                // Not in zero_sum anymore
-              },
+            primaryKey: ['id'],
+            publications: {
+              // No longer part of zero_sum
+              ['zero_all']: {rowFilter: null},
             },
-            {
-              schema: 'pub',
-              name: 'yoo',
-              columns: {
-                id: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: true,
-                  pos: 1,
-                },
-                name: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: false,
-                  pos: 2,
-                },
-                description: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: false,
-                  pos: 3,
-                },
-              },
-              primaryKey: ['id'],
-              publications: {
-                ['zero_all']: {rowFilter: null},
-              },
-            },
-          ],
-          indexes: [
-            {
-              name: 'boo_name_key',
-              schemaName: 'pub',
-              tableName: 'boo',
-              unique: true,
-              columns: {name: 'ASC'},
-            },
-            {
-              name: 'foo_custom_index',
-              schemaName: 'pub',
-              tableName: 'foo',
-              unique: false,
-              columns: {
-                description: 'ASC',
-                name: 'ASC',
-              },
-            },
-            {
-              name: 'foo_name_key',
-              schemaName: 'pub',
-              tableName: 'foo',
-              unique: true,
-              columns: {name: 'ASC'},
-            },
-            {
-              name: 'yoo_custom_index',
-              schemaName: 'pub',
-              tableName: 'yoo',
-              unique: false,
-              columns: {
-                description: 'ASC',
-                name: 'ASC',
-              },
-            },
-            {
-              name: 'yoo_name_key',
-              schemaName: 'pub',
-              tableName: 'yoo',
-              unique: true,
-              columns: {name: 'ASC'},
-            },
-          ],
+          }),
         },
       },
     ],
@@ -997,110 +915,16 @@ describe('change-source/tables/ddl', () => {
       'alter schema publication',
       `ALTER PUBLICATION zero_all ADD TABLES IN SCHEMA zero`,
       {
-        type: 'ddl',
+        context: {
+          query: 'ALTER PUBLICATION zero_all ADD TABLES IN SCHEMA zero',
+        },
+        type: 'ddlUpdate',
         version: 1,
-        event: {
-          tag: 'ALTER PUBLICATION',
-          publication: 'zero_all',
-          context: {
-            query: 'ALTER PUBLICATION zero_all ADD TABLES IN SCHEMA zero',
-          },
+        event: {tag: 'ALTER PUBLICATION'},
+        schema: {
+          indexes: DDL_START.schema.indexes,
           tables: [
-            {
-              schema: 'pub',
-              name: 'boo',
-              columns: {
-                id: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: true,
-                  pos: 1,
-                },
-                name: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: false,
-                  pos: 2,
-                },
-                description: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: false,
-                  pos: 3,
-                },
-              },
-              primaryKey: ['id'],
-              publications: {
-                ['zero_all']: {rowFilter: null},
-                ['zero_sum']: {rowFilter: null},
-              },
-            },
-            {
-              schema: 'pub',
-              name: 'foo',
-              columns: {
-                id: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: true,
-                  pos: 1,
-                },
-                name: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: false,
-                  pos: 2,
-                },
-                description: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: false,
-                  pos: 3,
-                },
-              },
-              primaryKey: ['id'],
-              publications: {
-                ['zero_all']: {rowFilter: null},
-                ['zero_sum']: {rowFilter: null},
-              },
-            },
-            {
-              schema: 'pub',
-              name: 'yoo',
-              columns: {
-                id: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: true,
-                  pos: 1,
-                },
-                name: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: false,
-                  pos: 2,
-                },
-                description: {
-                  characterMaximumLength: null,
-                  dataType: 'text',
-                  dflt: null,
-                  notNull: false,
-                  pos: 3,
-                },
-              },
-              primaryKey: ['id'],
-              publications: {
-                ['zero_all']: {rowFilter: null},
-              },
-            },
+            ...DDL_START.schema.tables,
             {
               schema: 'zero',
               name: 'foo',
@@ -1119,109 +943,124 @@ describe('change-source/tables/ddl', () => {
               },
             },
           ],
-          indexes: [
-            {
-              name: 'boo_name_key',
-              schemaName: 'pub',
-              tableName: 'boo',
-              unique: true,
-              columns: {name: 'ASC'},
-            },
-            {
-              name: 'foo_custom_index',
-              schemaName: 'pub',
-              tableName: 'foo',
-              unique: false,
-              columns: {
-                description: 'ASC',
-                name: 'ASC',
-              },
-            },
-            {
-              name: 'foo_name_key',
-              schemaName: 'pub',
-              tableName: 'foo',
-              unique: true,
-              columns: {name: 'ASC'},
-            },
-            {
-              name: 'yoo_custom_index',
-              schemaName: 'pub',
-              tableName: 'yoo',
-              unique: false,
-              columns: {
-                description: 'ASC',
-                name: 'ASC',
-              },
-            },
-            {
-              name: 'yoo_name_key',
-              schemaName: 'pub',
-              tableName: 'yoo',
-              unique: true,
-              columns: {name: 'ASC'},
-            },
-          ],
         },
       },
     ],
-  ])('%s', async (name, query, event) => {
-    await upstream.begin(async tx => {
-      await tx`INSERT INTO pub.boo(id) VALUES('1')`;
-      await tx.unsafe(query);
-    });
-    // In the subsequent transaction, perform similar DDL operation(s)
-    // that should not result in a message.
-    await upstream.begin(async tx => {
-      // For the second transaction, commit unrelated DDL events to ensure
-      // that they do not result in a message.
-      if (name.includes('publication')) {
-        await tx`ALTER PUBLICATION nonzeropub ADD TABLE pub.yoo`;
-      } else if (!name.includes('drop')) {
-        // Perform CREATE or ALTER table statements in the private schema.
-        await tx.unsafe(query.replaceAll('pub.', 'private.'));
+  ] satisfies [string, string, DdlUpdateEvent][])(
+    '%s',
+    async (_, query, ddlUpdate) => {
+      await upstream.begin(async tx => {
+        await tx`INSERT INTO pub.boo(id) VALUES('1')`;
+        await tx.unsafe(query);
+      });
+
+      const messages = await drainReplicationMessages(6);
+      expect(messages).toMatchObject([
+        {tag: 'begin'},
+        {tag: 'relation'},
+        {tag: 'insert'},
+        {
+          tag: 'message',
+          prefix: 'zero/' + SHARD_ID,
+          content: expect.any(Uint8Array),
+          flags: 1,
+          transactional: true,
+        },
+        {
+          tag: 'message',
+          prefix: 'zero/' + SHARD_ID,
+          content: expect.any(Uint8Array),
+          flags: 1,
+          transactional: true,
+        },
+        {tag: 'commit'},
+      ]);
+
+      const {content: start} = messages[3] as Pgoutput.MessageMessage;
+      expect(JSON.parse(new TextDecoder().decode(start))).toEqual({
+        ...DDL_START,
+        context: {query},
+      } satisfies DdlStartEvent);
+
+      const {content: update} = messages[4] as Pgoutput.MessageMessage;
+      expect(JSON.parse(new TextDecoder().decode(update))).toEqual(ddlUpdate);
+    },
+  );
+
+  // Run the same DDL commands on tables in the "private" schema
+  // (or the "nonzeropub" publication) and verify that they do not trigger
+  // "ddlUpdate" events.
+  test.each([
+    [
+      'CREATE TABLE private.bar(id TEXT PRIMARY KEY, a INT4 UNIQUE, b INT8 UNIQUE, UNIQUE(b, a))',
+      'zero(0) ignoring private.bar',
+    ],
+    [
+      'CREATE INDEX foo_name_index on private.foo (name desc, id)',
+      'zero(0) ignoring private.foo_name_index',
+    ],
+    ['ALTER TABLE private.foo RENAME TO food', 'zero(0) ignoring private.food'],
+    [
+      'ALTER TABLE private.foo ADD username TEXT UNIQUE',
+      'zero(0) ignoring private.foo',
+    ],
+    [
+      `ALTER TABLE private.foo ADD bar text DEFAULT 'boo'`,
+      'zero(0) ignoring private.foo',
+    ],
+    [
+      `ALTER TABLE private.foo ALTER name SET DEFAULT 'alice'`,
+      'zero(0) ignoring private.foo',
+    ],
+    [
+      `ALTER TABLE private.foo RENAME name to handle`,
+      'zero(0) ignoring private.foo.handle',
+    ],
+    [
+      `ALTER TABLE private.foo drop description`,
+      'zero(0) ignoring private.foo',
+    ],
+    [
+      `ALTER PUBLICATION nonzeropub ADD TABLE pub.yoo`,
+      'zero(0) ignoring pub.yoo in publication nonzeropub',
+    ],
+  ] satisfies [string, string][])(
+    'ignore unrelated events: %s',
+    async (query, expectedNotice) => {
+      while (notices.size()) {
+        await notices.dequeue();
       }
-      await tx`INSERT INTO pub.boo(id) VALUES('2')`;
-    });
 
-    const messages = await drainReplicationMessages(8);
-    expect(messages.slice(0, 5)).toMatchObject([
-      {tag: 'begin'},
-      {tag: 'relation'},
-      {tag: 'insert'},
-      {
-        tag: 'message',
-        prefix: 'zero/' + SHARD_ID,
-        content: expect.any(Uint8Array),
-        flags: 1,
-        transactional: true,
-      },
-      {tag: 'commit'},
-    ]);
+      await upstream.begin(async tx => {
+        await tx`INSERT INTO pub.boo(id) VALUES('1')`;
+        await tx.unsafe(query);
+      });
 
-    const {content} = messages[3] as Pgoutput.MessageMessage;
-    expect(JSON.parse(new TextDecoder().decode(content))).toEqual(event);
+      // There should only be a ddlStart message, and no ddlUpdate message.
+      const messages = await drainReplicationMessages(5);
+      expect(messages).toMatchObject([
+        {tag: 'begin'},
+        {tag: 'relation'},
+        {tag: 'insert'},
+        {
+          tag: 'message',
+          prefix: 'zero/' + SHARD_ID,
+          content: expect.any(Uint8Array),
+          flags: 1,
+          transactional: true,
+        },
+        {tag: 'commit'},
+      ]);
 
-    // Depending on how busy Postgres is, the remaining messages will either
-    // be:
-    //
-    // {tag: 'begin'},
-    // {tag: 'insert'},
-    // {tag: 'commit'},
-    //
-    // or:
-    //
-    // {tag: 'begin'},
-    // {tag: 'relation'},
-    // {tag: 'insert'},
-    // {tag: 'commit'},
-    //
-    // the latter happening when Postgres loses some state and resends
-    // the relation from messages[2]. What we want to verify is that
-    // no `tag: 'message'` message arrives, as the schema changes
-    // in the 'private' schema should not result in schema updates.
-    expect(messages.slice(5).find(m => m.tag === 'message')).toBeUndefined();
-  });
+      const {content: start} = messages[3] as Pgoutput.MessageMessage;
+      expect(JSON.parse(new TextDecoder().decode(start))).toMatchObject({
+        type: 'ddlStart',
+      });
+
+      const notice = await notices.dequeue();
+      expect(notice.message).toBe(expectedNotice);
+    },
+  );
 
   test('postgres documentation: current_query() is unreliable', async () => {
     await upstream`CREATE PROCEDURE procedure_name()
@@ -1233,9 +1072,16 @@ describe('change-source/tables/ddl', () => {
       `ALTER TABLE pub.foo ADD boo text; ALTER TABLE pub.foo DROP boo;`,
     );
 
-    const messages = await drainReplicationMessages(7);
+    const messages = await drainReplicationMessages(10);
     expect(messages).toMatchObject([
       {tag: 'begin'},
+      {
+        tag: 'message',
+        prefix: 'zero/' + SHARD_ID,
+        content: expect.any(Uint8Array),
+        flags: 1,
+        transactional: true,
+      },
       {
         tag: 'message',
         prefix: 'zero/' + SHARD_ID,
@@ -1246,6 +1092,20 @@ describe('change-source/tables/ddl', () => {
       {tag: 'commit'},
 
       {tag: 'begin'},
+      {
+        tag: 'message',
+        prefix: 'zero/' + SHARD_ID,
+        content: expect.any(Uint8Array),
+        flags: 1,
+        transactional: true,
+      },
+      {
+        tag: 'message',
+        prefix: 'zero/' + SHARD_ID,
+        content: expect.any(Uint8Array),
+        flags: 1,
+        transactional: true,
+      },
       {
         tag: 'message',
         prefix: 'zero/' + SHARD_ID,
@@ -1263,40 +1123,34 @@ describe('change-source/tables/ddl', () => {
       {tag: 'commit'},
     ]);
 
-    let msg = messages[1] as Pgoutput.MessageMessage;
+    let msg = messages[2] as Pgoutput.MessageMessage;
     expect(JSON.parse(new TextDecoder().decode(msg.content))).toMatchObject({
-      type: 'ddl',
+      type: 'ddlUpdate',
       version: 1,
-      event: {
-        tag: 'ALTER TABLE',
-        // Top level query may not provide any information about the actual DDL command.
-        context: {query: 'CALL procedure_name()'},
-      },
+      // Top level query may not provide any information about the actual DDL command.
+      context: {query: 'CALL procedure_name()'},
+      event: {tag: 'ALTER TABLE'},
     });
 
-    msg = messages[4] as Pgoutput.MessageMessage;
+    msg = messages[6] as Pgoutput.MessageMessage;
     expect(JSON.parse(new TextDecoder().decode(msg.content))).toMatchObject({
-      type: 'ddl',
+      type: 'ddlUpdate',
       version: 1,
-      event: {
-        tag: 'ALTER TABLE',
+      context: {
         // A compound top level query may contain more than one DDL command.
-        context: {
-          query: `ALTER TABLE pub.foo ADD boo text; ALTER TABLE pub.foo DROP boo;`,
-        },
+        query: `ALTER TABLE pub.foo ADD boo text; ALTER TABLE pub.foo DROP boo;`,
       },
+      event: {tag: 'ALTER TABLE'},
     });
-    msg = messages[5] as Pgoutput.MessageMessage;
+    msg = messages[8] as Pgoutput.MessageMessage;
     expect(JSON.parse(new TextDecoder().decode(msg.content))).toMatchObject({
-      type: 'ddl',
+      type: 'ddlUpdate',
       version: 1,
-      event: {
-        tag: 'ALTER TABLE',
+      context: {
         // A compound top level query may contain more than one DDL command.
-        context: {
-          query: `ALTER TABLE pub.foo ADD boo text; ALTER TABLE pub.foo DROP boo;`,
-        },
+        query: `ALTER TABLE pub.foo ADD boo text; ALTER TABLE pub.foo DROP boo;`,
       },
+      event: {tag: 'ALTER TABLE'},
     });
   });
 });
