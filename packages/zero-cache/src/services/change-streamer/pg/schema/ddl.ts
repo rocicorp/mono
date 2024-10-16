@@ -133,18 +133,19 @@ function append(shardID: string) {
 /**
  * Event trigger functions contain the core logic that are invoked by triggers.
  *
- * Note that although many of these functions can technically be parameterized and
+ * Note that although many of these functions can theoretically be parameterized and
  * shared across shards, it is advantageous to keep the functions in each shard
  * isolated from each other in order to avoid the complexity of shared-function
  * versioning.
  *
- * If, for example, per-shard triggers called into shared functions, we would have
- * to consider versioning the functions if we were to change their behavior,
- * and think about backwards compatibility, removal of unused versions, etc.
- * (not unlike versions of npm packages).
+ * In a sense, shards (and their triggers and functions) should be thought of as
+ * execution environments that can be updated at different schedules. If per-shard
+ * triggers called into shared functions, we would have to consider versioning the
+ * functions when changing their behavior, backwards compatibility, removal of
+ * unused versions, etc. (not unlike versioning of npm packages).
  *
- * Instead, we opt for the simplicity and isolation of having each function
- * completely own the entirety of its trigger/function stack.
+ * Instead, we opt for the simplicity and isolation of having each shard
+ * completely own (and maintain) the entirety of its trigger/function stack.
  */
 function createEventFunctionStatements(
   shardID: string,
