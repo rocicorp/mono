@@ -332,7 +332,11 @@ function getUpdateSQL(
   for (const key of primaryKey) {
     id[key] = v.parse(value[key], primaryKeyValueSchema);
   }
-  return tx`UPDATE ${tx(table)} SET ${tx(value)} WHERE ${tx(id)}`;
+  return tx`UPDATE ${tx(table)} SET ${tx(value)} WHERE ${Object.entries(
+    id,
+  ).flatMap(([key, value], i) =>
+    i ? [tx`AND`, tx`${tx(key)} = ${value}`] : tx`${tx(key)} = ${value}`,
+  )}`;
 }
 
 function getDeleteSQL(

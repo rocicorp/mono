@@ -30,9 +30,30 @@ export default function IssuePage() {
     .related('creator', creator => creator.one())
     .related('assignee', assignee => assignee.one())
     .related('labels')
+    .related('viewState', q => q.where('userID', z.userID).one())
     .related('comments', q => q.orderBy('created', 'asc'))
     .one();
   const issue = useQuery(q);
+
+  useEffect(() => {
+    // only push viewed forward if the issue has been modified since the last viewing
+    if (
+      z.userID !== 'anon' &&
+      issue &&
+      issue.modified > (issue?.viewState?.viewed ?? 0)
+    ) {
+      // only set to viewed if the user has looked at it for > 1 second
+      const handle = setTimeout(() => {
+        z.mutate.viewState.set({
+          issueID: issue.id,
+          userID: z.userID,
+          viewed: Date.now(),
+        });
+      }, 1000);
+      return () => clearTimeout(handle);
+    }
+    return;
+  }, [issue, z]);
 
   const [editing, setEditing] = useState<typeof issue | null>(null);
   const [edits, setEdits] = useState<Partial<typeof issue>>({});
