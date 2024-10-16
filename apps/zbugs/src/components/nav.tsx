@@ -1,4 +1,5 @@
 import logoURL from '../assets/images/logo.svg';
+import markURL from '../assets/images/mark.svg';
 import {Link} from './link.js';
 import classNames from 'classnames';
 import {FPSMeter} from '@schickling/fps-meter';
@@ -8,6 +9,7 @@ import IssueComposer from '../pages/issue/issue-composer.js';
 import {useState} from 'react';
 import {useZero} from '../hooks/use-zero.js';
 import {useQuery} from 'zero-react/src/use-query.js';
+import {navigate} from 'wouter/use-browser-location';
 
 export function Nav() {
   const qs = new URLSearchParams(useSearch());
@@ -35,6 +37,7 @@ export function Nav() {
       <div className="nav-container flex flex-col">
         <Link href="/">
           <img src={logoURL} className="zero-logo" />
+          <img src={markURL} className="zero-mark" />
         </Link>
         {/* could not figure out how to add this color to tailwind.config.js */}
         <button
@@ -99,7 +102,12 @@ export function Nav() {
       </div>
       <IssueComposer
         isOpen={showIssueModal}
-        onDismiss={() => setShowIssueModal(false)}
+        onDismiss={id => {
+          setShowIssueModal(false);
+          if (id) {
+            navigate(`/issue/${id}`);
+          }
+        }}
       />
     </>
   );

@@ -148,7 +148,7 @@ describe('view-syncer/service', () => {
       serviceID,
       cvrDB,
       new PipelineDriver(
-        lc,
+        lc.withContext('component', 'pipeline-driver'),
         new Snapshotter(lc, replicaDbFile.path),
         operatorStorage,
       ),
@@ -827,6 +827,141 @@ describe('view-syncer/service', () => {
                 },
                 "entityType": "issues",
                 "op": "del",
+              },
+            ],
+            "pokeID": "01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "01",
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('process advancement with schema change', async () => {
+    const client = await connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+
+    stateChanges.push({state: 'version-ready'});
+    expect((await nextPoke(client))[0]).toEqual([
+      'pokeStart',
+      {
+        baseCookie: null,
+        cookie: '00:02',
+        pokeID: '00:02',
+        schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
+      },
+    ]);
+
+    // TODO: Use the fakeReplicator to produce the schema change.
+    // For now, simulating it with low-level changes.
+    replica.exec(`
+      ALTER TABLE issues ADD COLUMN newColumn TEXT;
+
+      UPDATE issues SET _0_version = '07';
+
+      INSERT INTO "_zero.ChangeLog" (stateVersion, "table", rowKey, op)
+        VALUES ('07', 'issues', null, 'r')`);
+    updateReplicationWatermark(new StatementRunner(replica), '07');
+
+    stateChanges.push({state: 'version-ready'});
+
+    // The "newColumn" should be arrive in the nextPoke.
+    // TODO: The first pokeStart should be followed by a pokeCancel.
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "00:02",
+            "cookie": "01",
+            "pokeID": "01",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokeStart",
+          {
+            "baseCookie": "00:02",
+            "cookie": "01",
+            "pokeID": "01",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "entitiesPatch": [
+              {
+                "entityID": {
+                  "id": "1",
+                },
+                "entityType": "issues",
+                "op": "put",
+                "value": {
+                  "big": 9007199254740991,
+                  "id": "1",
+                  "newColumn": null,
+                  "owner": "100",
+                  "parent": null,
+                  "title": "parent issue foo",
+                },
+              },
+              {
+                "entityID": {
+                  "id": "2",
+                },
+                "entityType": "issues",
+                "op": "put",
+                "value": {
+                  "big": -9007199254740991,
+                  "id": "2",
+                  "newColumn": null,
+                  "owner": "101",
+                  "parent": null,
+                  "title": "parent issue bar",
+                },
+              },
+              {
+                "entityID": {
+                  "id": "3",
+                },
+                "entityType": "issues",
+                "op": "put",
+                "value": {
+                  "big": 123,
+                  "id": "3",
+                  "newColumn": null,
+                  "owner": "102",
+                  "parent": "1",
+                  "title": "foo",
+                },
+              },
+              {
+                "entityID": {
+                  "id": "4",
+                },
+                "entityType": "issues",
+                "op": "put",
+                "value": {
+                  "big": 100,
+                  "id": "4",
+                  "newColumn": null,
+                  "owner": "101",
+                  "parent": "2",
+                  "title": "bar",
+                },
               },
             ],
             "pokeID": "01",

@@ -9,13 +9,14 @@ import {Link} from '../../components/link.js';
 import {useElementSize} from '../../hooks/use-element-size.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {mark} from '../../perf-log.js';
+import IssueLink from '../../components/issue-link.js';
 
 let firstRowRendered = false;
 export default function ListPage() {
   const z = useZero();
 
   const qs = new URLSearchParams(useSearch());
-  const status = qs.get('status');
+  const status = qs.get('status')?.toLowerCase() ?? 'open';
   const creator = qs.get('creator');
   const assignee = qs.get('assignee');
   const labels = qs.getAll('label');
@@ -34,7 +35,7 @@ export default function ListPage() {
 
   let q = z.query.issue.orderBy('modified', 'desc').related('labels');
 
-  if (status === null) {
+  if (status === 'open') {
     q = q.where('open', true);
   } else if (status === 'closed') {
     q = q.where('open', false);
@@ -100,15 +101,15 @@ export default function ListPage() {
           ...style,
         }}
       >
-        <Link
+        <IssueLink
           className={classNames('issue-title', {
             'issue-closed': !issue.open,
           })}
+          issue={issue}
           title={issue.title}
-          href={`/issue/${issue.id}`}
         >
           {issue.title}
-        </Link>
+        </IssueLink>
         <div className="issue-taglist">
           {issue.labels.map(label => (
             <Link
@@ -131,8 +132,7 @@ export default function ListPage() {
     <>
       <div className="list-view-header-container">
         <h1 className="list-view-header">
-          {/* Need to make this dynamic */}
-          Open Issues
+          {status.charAt(0).toUpperCase() + status.slice(1)} Issues
           <span className="issue-count">{issues.length}</span>
         </h1>
       </div>

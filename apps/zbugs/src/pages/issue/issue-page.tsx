@@ -1,26 +1,32 @@
 import {useQuery} from '@rocicorp/zero/react';
-import {useMemo, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {useRoute} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
+import LabelPicker from '../../components/label-picker.js';
 import Markdown from '../../components/markdown.js';
 import Selector from '../../components/selector.js';
+import UserPicker from '../../components/user-picker.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useZero} from '../../hooks/use-zero.js';
+import {isNumeric} from '../../util.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
-import LabelPicker from '../../components/label-picker.js';
-import UserPicker from '../../components/user-picker.js';
 
 export default function IssuePage() {
   const z = useZero();
   const [match, params] = useRoute('/issue/:id');
+  let idField: 'id' | 'shortID' = 'id';
+  const id = params?.id ?? '';
+  if (isNumeric(id)) {
+    idField = 'shortID';
+  }
 
   // todo: one should be in the schema
   const q = z.query.issue
-    .where('id', params?.id ?? '')
+    .where(idField, idField === 'shortID' ? parseInt(id) : id)
     .related('creator', creator => creator.one())
     .related('assignee', assignee => assignee.one())
     .related('labels')
@@ -30,6 +36,11 @@ export default function IssuePage() {
 
   const [editing, setEditing] = useState<typeof issue | null>(null);
   const [edits, setEdits] = useState<Partial<typeof issue>>({});
+  useEffect(() => {
+    if (match && issue?.shortID !== undefined && idField !== 'shortID') {
+      window.location.replace(`/issue/${issue.shortID}`);
+    }
+  }, [issue?.shortID, idField, match]);
 
   const save = () => {
     if (!editing) {
@@ -137,7 +148,7 @@ export default function IssuePage() {
          HTML mixed in. We need to find some way to render them, or convert to
          standard markdown? break-spaces makes it render a little better */}
         {!editing ? (
-          <div className="description-container">
+          <div className="description-container markdown-container">
             <Markdown>{rendering.description}</Markdown>
           </div>
         ) : (
@@ -150,6 +161,76 @@ export default function IssuePage() {
             />
           </div>
         )}
+
+        {/* Right sidebar */}
+        <div className="issue-sidebar">
+          <div className="sidebar-item">
+            <p className="issue-detail-label">Status</p>
+            <Selector
+              items={[
+                {
+                  text: 'Open',
+                  value: true,
+                  icon: statusOpen,
+                },
+                {
+                  text: 'Closed',
+                  value: false,
+                  icon: statusClosed,
+                },
+              ]}
+              selectedValue={issue.open}
+              onChange={value =>
+                z.mutate.issue.update({id: issue.id, open: value})
+              }
+            />
+          </div>
+
+          <div className="sidebar-item">
+            <p className="issue-detail-label">Creator</p>
+            <button className="sidebar-button issue-creator">
+              <img
+                src={issue.creator?.avatar}
+                className="issue-creator-avatar"
+                alt={issue.creator?.name}
+              />
+              <span className="issue-creator-name">{issue.creator.login}</span>
+            </button>
+          </div>
+
+          <div className="sidebar-item">
+            <p className="issue-detail-label">Assignee</p>
+            <UserPicker
+              selected={{login: issue.assignee?.login}}
+              onSelect={user => {
+                z.mutate.issue.update({id: issue.id, assigneeID: user.id});
+              }}
+            />
+          </div>
+
+          <div className="sidebar-item">
+            <p className="issue-detail-label">Labels</p>
+            <div className="issue-detail-label-container">
+              {issue.labels.map(label => (
+                <span className="pill label" key={label.id}>
+                  {label.name}
+                </span>
+              ))}
+            </div>
+            <LabelPicker
+              selected={labelSet}
+              onAssociateLabel={labelID =>
+                z.mutate.issueLabel.create({
+                  issueID: issue.id,
+                  labelID,
+                })
+              }
+              onDisassociateLabel={labelID =>
+                z.mutate.issueLabel.delete({issueID: issue.id, labelID})
+              }
+            />
+          </div>
+        </div>
 
         <h2 className="issue-detail-label">Comments</h2>
         {issue.comments.length > 0 ? (
@@ -166,78 +247,6 @@ export default function IssuePage() {
         ) : (
           <CommentComposer issueID={issue.id} />
         )}
-      </div>
-
-      {/* Right sidebar */}
-      <div className="issue-sidebar">
-        <div className="sidebar-item">
-          <p className="issue-detail-label">Status</p>
-          <Selector
-            items={[
-              {
-                text: 'Open',
-                value: true,
-                icon: statusOpen,
-              },
-              {
-                text: 'Closed',
-                value: false,
-                icon: statusClosed,
-              },
-            ]}
-            selectedValue={issue.open}
-            onChange={value =>
-              z.mutate.issue.update({id: issue.id, open: value})
-            }
-          />
-        </div>
-
-        <div className="sidebar-item">
-          <p className="issue-detail-label">Creator</p>
-          <button className="sidebar-button issue-creator">
-            <img
-              src={issue.creator?.avatar}
-              className="issue-creator-avatar"
-              alt={issue.creator?.name}
-            />
-            <span className="issue-creator-name">{issue.creator.login}</span>
-          </button>
-        </div>
-
-        <div className="sidebar-item">
-          <p className="issue-detail-label">Assignee</p>
-          <UserPicker
-            selected={{login: issue.assignee?.login}}
-            onSelect={user => {
-              z.mutate.issue.update({id: issue.id, assigneeID: user.id});
-              // 🙄 - this can go away when https://bugs.rocicorp.dev/issue/k_h0Dy_6_6yHFDWFxNke2 is fixed.
-              window.setTimeout(() => location.reload(), 100);
-            }}
-          />
-        </div>
-
-        <div className="sidebar-item">
-          <p className="issue-detail-label">Labels</p>
-          <div className="issue-detail-label-container">
-            {issue.labels.map(label => (
-              <span className="pill label" key={label.id}>
-                {label.name}
-              </span>
-            ))}
-          </div>
-          <LabelPicker
-            selected={labelSet}
-            onAssociateLabel={labelID =>
-              z.mutate.issueLabel.create({
-                issueID: issue.id,
-                labelID,
-              })
-            }
-            onDisassociateLabel={labelID =>
-              z.mutate.issueLabel.delete({issueID: issue.id, labelID})
-            }
-          />
-        </div>
       </div>
     </div>
   );
