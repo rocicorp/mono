@@ -1,12 +1,16 @@
+import {describe, expect, suite, test} from 'vitest';
 import {assert} from '../../../../shared/src/asserts.js';
-import {expect, suite, test} from 'vitest';
+import type {JSONObject} from '../../../../shared/src/json.js';
+import {must} from '../../../../shared/src/must.js';
 import type {Ordering} from '../ast/ast.js';
+import {ArrayView, type Format} from './array-view.js';
 import {Catch} from './catch.js';
 import type {Change} from './change.js';
 import type {NormalizedValue, Row} from './data.js';
 import {Join, createPrimaryKeySetStorageKey} from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
+import type {Input} from './operator.js';
 import type {PrimaryKey, SchemaValue} from './schema.js';
 import {Snitch, type SnitchMessage} from './snitch.js';
 import type {SourceChange} from './source.js';
@@ -622,45 +626,56 @@ suite('push one:many', () => {
       ],
       expectedOutput: [
         {
-          type: 'remove',
-          node: {
-            row: {
-              id: 'i1',
-              text: 'issue 1',
-            },
-            relationships: {
-              comments: [
-                {
-                  row: {
-                    id: 'c1',
-                    issueID: 'i1',
-                    text: 'comment 1',
-                  },
-                  relationships: {},
-                },
-              ],
-            },
+          type: 'edit',
+          oldRow: {
+            id: 'i1',
+            text: 'issue 1',
+          },
+          row: {
+            id: 'i3',
+            text: 'issue 1.3',
           },
         },
         {
-          type: 'add',
-          node: {
-            row: {
-              id: 'i3',
-              text: 'issue 1.3',
-            },
-            relationships: {
-              comments: [
-                {
-                  relationships: {},
-                  row: {
-                    id: 'c3',
-                    issueID: 'i3',
-                    text: 'comment 3',
-                  },
+          type: 'child',
+          child: {
+            change: {
+              type: 'remove',
+              node: {
+                row: {
+                  id: 'c1',
+                  issueID: 'i1',
+                  text: 'comment 1',
                 },
-              ],
+                relationships: {},
+              },
             },
+            relationshipName: 'comments',
+          },
+          row: {
+            id: 'i3',
+            text: 'issue 1.3',
+          },
+        },
+        {
+          type: 'child',
+          child: {
+            change: {
+              node: {
+                relationships: {},
+                row: {
+                  id: 'c3',
+                  issueID: 'i3',
+                  text: 'comment 3',
+                },
+              },
+              type: 'add',
+            },
+            relationshipName: 'comments',
+          },
+          row: {
+            id: 'i3',
+            text: 'issue 1.3',
           },
         },
       ],
@@ -1453,18 +1468,16 @@ function pushTest(t: PushTest) {
 
     const log: SnitchMessage[] = [];
 
-    const sources = t.sources.map((fetch, i) => {
-      const ordering = t.sorts?.[i] ?? [['id', 'asc']];
-      const source = new MemorySource('test', t.columns[i], t.primaryKeys[i]);
-      for (const row of fetch) {
-        source.push({type: 'add', row});
-      }
-      const snitch = new Snitch(source.connect(ordering), String(i), log);
-      return {
-        source,
-        snitch,
-      };
-    });
+    const sources = t.sources.map((rows, i) =>
+      makeSource(
+        rows,
+        t.sorts?.[i] ?? [['id', 'asc']],
+        t.columns[i],
+        t.primaryKeys[i],
+        String(i),
+        log,
+      ),
+    );
 
     const joins: {
       join: Join;
@@ -1534,3 +1547,1285 @@ type PushTest = {
   expectedPrimaryKeySetStorageKeys: NormalizedValue[][][];
   expectedOutput: Change[];
 };
+
+function makeSource(
+  rows: Row[],
+  ordering: Ordering,
+  columns: Record<string, SchemaValue>,
+  primaryKeys: PrimaryKey,
+  snitchName: string,
+  log: SnitchMessage[],
+): {source: MemorySource; snitch: Snitch} {
+  const source = new MemorySource('test', columns, primaryKeys);
+  for (const row of rows) {
+    source.push({type: 'add', row});
+  }
+  const snitch = new Snitch(source.connect(ordering), snitchName, log);
+  return {
+    source,
+    snitch,
+  };
+}
+
+type Sources = Record<
+  string,
+  {
+    columns: Record<string, SchemaValue>;
+    primaryKeys: PrimaryKey;
+    sorts: Ordering;
+    rows: Row[];
+  }
+>;
+
+type Joins = Record<
+  string,
+  {
+    parentKey: string;
+    parentSource: string;
+    childKey: string;
+    childSource: string;
+    relationshipName: string;
+  }
+>;
+
+type Pushes = [sourceName: string, change: SourceChange][];
+
+type NewPushTest = {
+  sources: Sources;
+  format: Format;
+  joins: Joins;
+  pushes: Pushes;
+};
+
+function runJoinTest(t: NewPushTest) {
+  function innerTest<T>(makeFinalOutput: (j: Input) => T) {
+    const log: SnitchMessage[] = [];
+
+    const sources: Record<
+      string,
+      {
+        source: MemorySource;
+        snitch: Snitch;
+      }
+    > = Object.fromEntries(
+      Object.entries(t.sources).map(
+        ([name, {columns, primaryKeys, sorts, rows}]) => [
+          name,
+          makeSource(rows, sorts, columns, primaryKeys, name, log),
+        ],
+      ),
+    );
+
+    const joins: Record<
+      string,
+      {
+        join: Join;
+        storage: MemoryStorage;
+        snitch: Snitch;
+      }
+    > = {};
+    let last;
+    for (const [name, info] of Object.entries(t.joins)) {
+      const storage = new MemoryStorage();
+      const join = new Join({
+        parent: (sources[info.parentSource] ?? joins[info.parentSource]).snitch,
+        parentKey: info.parentKey,
+        child: (sources[info.childSource] ?? joins[info.childSource]).snitch,
+        childKey: info.childKey,
+        storage,
+        relationshipName: info.relationshipName,
+        hidden: false,
+      });
+      const snitch = new Snitch(join, name, log);
+      last = joins[name] = {
+        join,
+        storage,
+        snitch,
+      };
+    }
+
+    // By convention we put them in the test bottom up. Why? Easier to think
+    // left-to-right.
+    const finalOutput = makeFinalOutput(must(last).snitch);
+
+    log.length = 0;
+
+    for (const [sourceIndex, change] of t.pushes) {
+      sources[sourceIndex].source.push(change);
+    }
+
+    const actualStorage: Record<string, JSONObject> = {};
+    for (const [name, {storage}] of Object.entries(joins)) {
+      actualStorage[name] = storage.cloneData();
+    }
+
+    return {
+      log,
+      finalOutput,
+      actualStorage,
+    };
+  }
+
+  const {
+    log,
+    finalOutput: catchOp,
+    actualStorage,
+  } = innerTest(j => {
+    const c = new Catch(j);
+    c.fetch();
+    return c;
+  });
+
+  let data;
+  const {
+    log: log2,
+    finalOutput: view,
+    actualStorage: actualStorage2,
+  } = innerTest(j => {
+    const view = new ArrayView(j, t.format);
+    view.hydrate();
+    data = view.data;
+    return view;
+  });
+
+  view.addListener(v => {
+    data = v;
+  });
+
+  expect(log).toEqual(log2);
+  expect(actualStorage).toEqual(actualStorage2);
+
+  view.flush();
+  return {
+    log,
+    actualStorage,
+    pushes: catchOp.pushes,
+    data,
+  };
+}
+
+describe('edit assignee', () => {
+  const sources: Sources = {
+    issue: {
+      columns: {
+        issueID: {type: 'string'},
+        text: {type: 'string'},
+        assigneeID: {type: 'string', optional: true},
+        creatorID: {type: 'string'},
+      },
+      primaryKeys: ['issueID'],
+      sorts: [['issueID', 'asc']],
+      rows: [
+        {
+          issueID: 'i1',
+          text: 'first issue',
+          assigneeID: undefined,
+          creatorID: 'u1',
+        },
+        {
+          issueID: 'i2',
+          text: 'second issue',
+          assigneeID: 'u2',
+          creatorID: 'u2',
+        },
+      ],
+    },
+    user: {
+      columns: {
+        userID: {type: 'string'},
+        name: {type: 'string'},
+      },
+      primaryKeys: ['userID'],
+      sorts: [['userID', 'asc']],
+      rows: [
+        {userID: 'u1', name: 'user 1'},
+        {userID: 'u2', name: 'user 2'},
+      ],
+    },
+  };
+
+  const joins: Joins = {
+    creator: {
+      parentKey: 'creatorID',
+      parentSource: 'issue',
+      childKey: 'userID',
+      childSource: 'user',
+      relationshipName: 'creator',
+    },
+    assignee: {
+      parentKey: 'assigneeID',
+      parentSource: 'creator',
+      childKey: 'userID',
+      childSource: 'user',
+      relationshipName: 'assignee',
+    },
+  };
+
+  const format: Format = {
+    singular: false,
+    relationships: {
+      creator: {
+        singular: false,
+        relationships: {},
+      },
+      assignee: {
+        singular: false,
+        relationships: {},
+      },
+    },
+  };
+
+  test('from none to one', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      joins,
+      pushes: [
+        [
+          'issue',
+          {
+            type: 'edit',
+            oldRow: {
+              issueID: 'i1',
+              text: 'first issue',
+              assigneeID: undefined,
+              creatorID: 'u1',
+            },
+            row: {
+              issueID: 'i1',
+              text: 'first issue',
+              assigneeID: 'u1',
+              creatorID: 'u1',
+            },
+          },
+        ],
+      ],
+      format,
+    });
+
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "assignee": [
+            {
+              "name": "user 1",
+              "userID": "u1",
+            },
+          ],
+          "assigneeID": "u1",
+          "creator": [
+            {
+              "name": "user 1",
+              "userID": "u1",
+            },
+          ],
+          "creatorID": "u1",
+          "issueID": "i1",
+          "text": "first issue",
+        },
+        {
+          "assignee": [
+            {
+              "name": "user 2",
+              "userID": "u2",
+            },
+          ],
+          "assigneeID": "u2",
+          "creator": [
+            {
+              "name": "user 2",
+              "userID": "u2",
+            },
+          ],
+          "creatorID": "u2",
+          "issueID": "i2",
+          "text": "second issue",
+        },
+      ]
+    `);
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "issue",
+          "push",
+          {
+            "oldRow": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "row": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "edit",
+          },
+        ],
+        [
+          "creator",
+          "push",
+          {
+            "oldRow": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "row": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "edit",
+          },
+        ],
+        [
+          "assignee",
+          "push",
+          {
+            "oldRow": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "row": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "edit",
+          },
+        ],
+        [
+          "user",
+          "cleanup",
+          {
+            "constraint": {
+              "key": "userID",
+              "value": null,
+            },
+          },
+        ],
+        [
+          "user",
+          "fetch",
+          {
+            "constraint": {
+              "key": "userID",
+              "value": "u1",
+            },
+          },
+        ],
+        [
+          "assignee",
+          "push",
+          {
+            "child": {
+              "row": {
+                "name": "user 1",
+                "userID": "u1",
+              },
+              "type": "add",
+            },
+            "row": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "child",
+          },
+        ],
+      ]
+    `);
+
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "oldRow": {
+            "assigneeID": undefined,
+            "creatorID": "u1",
+            "issueID": "i1",
+            "text": "first issue",
+          },
+          "row": {
+            "assigneeID": "u1",
+            "creatorID": "u1",
+            "issueID": "i1",
+            "text": "first issue",
+          },
+          "type": "edit",
+        },
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "name": "user 1",
+                  "userID": "u1",
+                },
+              },
+              "type": "add",
+            },
+            "relationshipName": "assignee",
+          },
+          "row": {
+            "assigneeID": "u1",
+            "creatorID": "u1",
+            "issueID": "i1",
+            "text": "first issue",
+          },
+          "type": "child",
+        },
+      ]
+    `);
+
+    expect(actualStorage).toMatchInlineSnapshot(`
+    {
+      "assignee": {
+        ""pKeySet","u1","i1",": true,
+        ""pKeySet","u2","i2",": true,
+      },
+      "creator": {
+        ""pKeySet","u1","i1",": true,
+        ""pKeySet","u2","i2",": true,
+      },
+    }
+  `);
+  });
+
+  test('from none to many', () => {
+    const localSources: Sources = {
+      ...sources,
+      user: {
+        columns: {
+          userID: {type: 'string'},
+          id: {type: 'number'},
+          name: {type: 'string'},
+        },
+        primaryKeys: ['userID', 'id'],
+        sorts: [
+          ['userID', 'asc'],
+          ['id', 'asc'],
+        ],
+        rows: [
+          {userID: 'u1', id: 1, name: 'user 1'},
+          {userID: 'u1', id: 1.5, name: 'user 1.5'},
+          {userID: 'u2', id: 2, name: 'user 2'},
+        ],
+      },
+    };
+
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources: localSources,
+      joins,
+      pushes: [
+        [
+          'issue',
+          {
+            type: 'edit',
+            oldRow: {
+              issueID: 'i1',
+              text: 'first issue',
+              assigneeID: undefined,
+              creatorID: 'u1',
+            },
+            row: {
+              issueID: 'i1',
+              text: 'first issue',
+              assigneeID: 'u1',
+              creatorID: 'u1',
+            },
+          },
+        ],
+      ],
+      format,
+    });
+
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "assignee": [
+            {
+              "id": 1,
+              "name": "user 1",
+              "userID": "u1",
+            },
+            {
+              "id": 1.5,
+              "name": "user 1.5",
+              "userID": "u1",
+            },
+          ],
+          "assigneeID": "u1",
+          "creator": [
+            {
+              "id": 1,
+              "name": "user 1",
+              "userID": "u1",
+            },
+            {
+              "id": 1.5,
+              "name": "user 1.5",
+              "userID": "u1",
+            },
+          ],
+          "creatorID": "u1",
+          "issueID": "i1",
+          "text": "first issue",
+        },
+        {
+          "assignee": [
+            {
+              "id": 2,
+              "name": "user 2",
+              "userID": "u2",
+            },
+          ],
+          "assigneeID": "u2",
+          "creator": [
+            {
+              "id": 2,
+              "name": "user 2",
+              "userID": "u2",
+            },
+          ],
+          "creatorID": "u2",
+          "issueID": "i2",
+          "text": "second issue",
+        },
+      ]
+    `);
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "issue",
+          "push",
+          {
+            "oldRow": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "row": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "edit",
+          },
+        ],
+        [
+          "creator",
+          "push",
+          {
+            "oldRow": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "row": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "edit",
+          },
+        ],
+        [
+          "assignee",
+          "push",
+          {
+            "oldRow": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "row": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "edit",
+          },
+        ],
+        [
+          "user",
+          "cleanup",
+          {
+            "constraint": {
+              "key": "userID",
+              "value": null,
+            },
+          },
+        ],
+        [
+          "user",
+          "fetch",
+          {
+            "constraint": {
+              "key": "userID",
+              "value": "u1",
+            },
+          },
+        ],
+        [
+          "assignee",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": 1,
+                "name": "user 1",
+                "userID": "u1",
+              },
+              "type": "add",
+            },
+            "row": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          "assignee",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": 1.5,
+                "name": "user 1.5",
+                "userID": "u1",
+              },
+              "type": "add",
+            },
+            "row": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "child",
+          },
+        ],
+      ]
+    `);
+
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "oldRow": {
+            "assigneeID": undefined,
+            "creatorID": "u1",
+            "issueID": "i1",
+            "text": "first issue",
+          },
+          "row": {
+            "assigneeID": "u1",
+            "creatorID": "u1",
+            "issueID": "i1",
+            "text": "first issue",
+          },
+          "type": "edit",
+        },
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "id": 1,
+                  "name": "user 1",
+                  "userID": "u1",
+                },
+              },
+              "type": "add",
+            },
+            "relationshipName": "assignee",
+          },
+          "row": {
+            "assigneeID": "u1",
+            "creatorID": "u1",
+            "issueID": "i1",
+            "text": "first issue",
+          },
+          "type": "child",
+        },
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "id": 1.5,
+                  "name": "user 1.5",
+                  "userID": "u1",
+                },
+              },
+              "type": "add",
+            },
+            "relationshipName": "assignee",
+          },
+          "row": {
+            "assigneeID": "u1",
+            "creatorID": "u1",
+            "issueID": "i1",
+            "text": "first issue",
+          },
+          "type": "child",
+        },
+      ]
+    `);
+
+    expect(actualStorage).toMatchInlineSnapshot(`
+    {
+      "assignee": {
+        ""pKeySet","u1","i1",": true,
+        ""pKeySet","u2","i2",": true,
+      },
+      "creator": {
+        ""pKeySet","u1","i1",": true,
+        ""pKeySet","u2","i2",": true,
+      },
+    }
+  `);
+  });
+
+  test('from one to none', () => {
+    const localSources = structuredClone(sources);
+    localSources.issue.rows[0].assigneeID = 'u1';
+
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources: localSources,
+      joins,
+      pushes: [
+        [
+          'issue',
+          {
+            type: 'edit',
+            oldRow: {
+              issueID: 'i1',
+              text: 'first issue',
+              assigneeID: 'u1',
+              creatorID: 'u1',
+            },
+            row: {
+              issueID: 'i1',
+              text: 'first issue',
+              assigneeID: undefined,
+              creatorID: 'u1',
+            },
+          },
+        ],
+      ],
+      format,
+    });
+
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "assignee": [],
+          "assigneeID": undefined,
+          "creator": [
+            {
+              "name": "user 1",
+              "userID": "u1",
+            },
+          ],
+          "creatorID": "u1",
+          "issueID": "i1",
+          "text": "first issue",
+        },
+        {
+          "assignee": [
+            {
+              "name": "user 2",
+              "userID": "u2",
+            },
+          ],
+          "assigneeID": "u2",
+          "creator": [
+            {
+              "name": "user 2",
+              "userID": "u2",
+            },
+          ],
+          "creatorID": "u2",
+          "issueID": "i2",
+          "text": "second issue",
+        },
+      ]
+    `);
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "issue",
+          "push",
+          {
+            "oldRow": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "edit",
+          },
+        ],
+        [
+          "creator",
+          "push",
+          {
+            "oldRow": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "edit",
+          },
+        ],
+        [
+          "assignee",
+          "push",
+          {
+            "oldRow": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "edit",
+          },
+        ],
+        [
+          "user",
+          "cleanup",
+          {
+            "constraint": {
+              "key": "userID",
+              "value": "u1",
+            },
+          },
+        ],
+        [
+          "assignee",
+          "push",
+          {
+            "child": {
+              "row": {
+                "name": "user 1",
+                "userID": "u1",
+              },
+              "type": "remove",
+            },
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          "user",
+          "fetch",
+          {
+            "constraint": {
+              "key": "userID",
+              "value": null,
+            },
+          },
+        ],
+      ]
+    `);
+
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "oldRow": {
+            "assigneeID": "u1",
+            "creatorID": "u1",
+            "issueID": "i1",
+            "text": "first issue",
+          },
+          "row": {
+            "assigneeID": undefined,
+            "creatorID": "u1",
+            "issueID": "i1",
+            "text": "first issue",
+          },
+          "type": "edit",
+        },
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "name": "user 1",
+                  "userID": "u1",
+                },
+              },
+              "type": "remove",
+            },
+            "relationshipName": "assignee",
+          },
+          "row": {
+            "assigneeID": undefined,
+            "creatorID": "u1",
+            "issueID": "i1",
+            "text": "first issue",
+          },
+          "type": "child",
+        },
+      ]
+    `);
+
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "assignee": {
+          ""pKeySet","u2","i2",": true,
+          ""pKeySet",null,"i1",": true,
+        },
+        "creator": {
+          ""pKeySet","u1","i1",": true,
+          ""pKeySet","u2","i2",": true,
+        },
+      }
+    `);
+  });
+
+  test('from many to none', () => {
+    const issue = structuredClone(sources.issue);
+    issue.rows[0].assigneeID = 'u1';
+    const localSources: Sources = {
+      issue,
+      user: {
+        columns: {
+          userID: {type: 'string'},
+          id: {type: 'number'},
+          name: {type: 'string'},
+        },
+        primaryKeys: ['userID', 'id'],
+        sorts: [
+          ['userID', 'asc'],
+          ['id', 'asc'],
+        ],
+        rows: [
+          {userID: 'u1', id: 1, name: 'user 1'},
+          {userID: 'u1', id: 1.5, name: 'user 1.5'},
+          {userID: 'u2', id: 2, name: 'user 2'},
+        ],
+      },
+    };
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources: localSources,
+      joins,
+      pushes: [
+        [
+          'issue',
+          {
+            type: 'edit',
+            oldRow: {
+              issueID: 'i1',
+              text: 'first issue',
+              assigneeID: 'u1',
+              creatorID: 'u1',
+            },
+            row: {
+              issueID: 'i1',
+              text: 'first issue',
+              assigneeID: undefined,
+              creatorID: 'u1',
+            },
+          },
+        ],
+      ],
+      format,
+    });
+
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "assignee": [],
+          "assigneeID": undefined,
+          "creator": [
+            {
+              "id": 1,
+              "name": "user 1",
+              "userID": "u1",
+            },
+            {
+              "id": 1.5,
+              "name": "user 1.5",
+              "userID": "u1",
+            },
+          ],
+          "creatorID": "u1",
+          "issueID": "i1",
+          "text": "first issue",
+        },
+        {
+          "assignee": [
+            {
+              "id": 2,
+              "name": "user 2",
+              "userID": "u2",
+            },
+          ],
+          "assigneeID": "u2",
+          "creator": [
+            {
+              "id": 2,
+              "name": "user 2",
+              "userID": "u2",
+            },
+          ],
+          "creatorID": "u2",
+          "issueID": "i2",
+          "text": "second issue",
+        },
+      ]
+    `);
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "issue",
+          "push",
+          {
+            "oldRow": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "edit",
+          },
+        ],
+        [
+          "creator",
+          "push",
+          {
+            "oldRow": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "edit",
+          },
+        ],
+        [
+          "assignee",
+          "push",
+          {
+            "oldRow": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "edit",
+          },
+        ],
+        [
+          "user",
+          "cleanup",
+          {
+            "constraint": {
+              "key": "userID",
+              "value": "u1",
+            },
+          },
+        ],
+        [
+          "assignee",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": 1,
+                "name": "user 1",
+                "userID": "u1",
+              },
+              "type": "remove",
+            },
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          "assignee",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": 1.5,
+                "name": "user 1.5",
+                "userID": "u1",
+              },
+              "type": "remove",
+            },
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          "user",
+          "fetch",
+          {
+            "constraint": {
+              "key": "userID",
+              "value": null,
+            },
+          },
+        ],
+      ]
+    `);
+
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "oldRow": {
+            "assigneeID": "u1",
+            "creatorID": "u1",
+            "issueID": "i1",
+            "text": "first issue",
+          },
+          "row": {
+            "assigneeID": undefined,
+            "creatorID": "u1",
+            "issueID": "i1",
+            "text": "first issue",
+          },
+          "type": "edit",
+        },
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "id": 1,
+                  "name": "user 1",
+                  "userID": "u1",
+                },
+              },
+              "type": "remove",
+            },
+            "relationshipName": "assignee",
+          },
+          "row": {
+            "assigneeID": undefined,
+            "creatorID": "u1",
+            "issueID": "i1",
+            "text": "first issue",
+          },
+          "type": "child",
+        },
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "id": 1.5,
+                  "name": "user 1.5",
+                  "userID": "u1",
+                },
+              },
+              "type": "remove",
+            },
+            "relationshipName": "assignee",
+          },
+          "row": {
+            "assigneeID": undefined,
+            "creatorID": "u1",
+            "issueID": "i1",
+            "text": "first issue",
+          },
+          "type": "child",
+        },
+      ]
+    `);
+
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "assignee": {
+          ""pKeySet","u2","i2",": true,
+          ""pKeySet",null,"i1",": true,
+        },
+        "creator": {
+          ""pKeySet","u1","i1",": true,
+          ""pKeySet","u2","i2",": true,
+        },
+      }
+    `);
+  });
+});

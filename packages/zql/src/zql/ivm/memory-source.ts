@@ -387,6 +387,9 @@ export class MemorySource implements Source {
           break;
         }
         case 'edit': {
+          // TODO: We could see if the PK (form the index tree's perspective)
+          // changed and if not we could use set.
+
           // We cannot just do `set` with the new value since the `oldRow` might
           // not map to the same entry as the new `row` in the index btree.
           const removed = data.delete(change.oldRow);

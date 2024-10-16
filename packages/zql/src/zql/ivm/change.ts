@@ -3,6 +3,9 @@ import type {Node, Row} from './data.js';
 export type Change = AddChange | RemoveChange | ChildChange | EditChange;
 export type ChangeType = Change['type'];
 
+// TODO: We should change these to classes to achieve monomorphic dispatch.
+// or add some runtime asserts that the order of the keys is always the same.
+
 /**
  * Represents a node (and all its children) getting added to the result.
  */
