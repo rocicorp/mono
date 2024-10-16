@@ -338,8 +338,14 @@ class Diff implements SnapshotDiff {
     const truncates = new TruncateTracker(this.prev);
 
     const cleanup = () => {
-      done();
-      truncates.done();
+      try {
+        // Allow open iterators to clean up their state.
+        truncates.iterReturn(undefined);
+        changes.return?.(undefined);
+      } finally {
+        done();
+        truncates.done();
+      }
     };
 
     return {
@@ -387,34 +393,15 @@ class Diff implements SnapshotDiff {
             return {value: {table, prevValue, nextValue} satisfies Change};
           }
         } catch (e) {
-          // This control flow path is not covered by the return() and throw() methods.
-          truncates.iterReturn(null);
-          changes.return?.(null);
+          // This control flow path is not covered by the return() method (i.e. `break`).
           cleanup();
           throw e;
         }
       },
 
       return: (value: unknown) => {
-        try {
-          // Allow open iterators to clean up their state.
-          truncates.iterReturn(value);
-          changes.return?.(value);
-          return {value, done: true};
-        } finally {
-          cleanup();
-        }
-      },
-
-      throw: (err: unknown) => {
-        try {
-          // Allow open iterators to clean up their state.
-          truncates.iterThrow(err);
-          changes.throw?.(err);
-          return {value: undefined, done: true};
-        } finally {
-          cleanup();
-        }
+        cleanup();
+        return {value, done: true};
       },
     };
   }
