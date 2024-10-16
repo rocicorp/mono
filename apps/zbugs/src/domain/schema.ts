@@ -15,6 +15,7 @@ const issueSchema = {
   tableName: 'issue',
   columns: {
     id: {type: 'string'},
+    shortID: {type: 'number', optional: true},
     title: {type: 'string'},
     open: {type: 'boolean'},
     modified: {type: 'number'},

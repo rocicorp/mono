@@ -9,6 +9,7 @@ import {Link} from '../../components/link.js';
 import {useElementSize} from '../../hooks/use-element-size.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {mark} from '../../perf-log.js';
+import IssueLink from '../../components/issue-link.js';
 
 let firstRowRendered = false;
 export default function ListPage() {
@@ -94,15 +95,15 @@ export default function ListPage() {
           ...style,
         }}
       >
-        <Link
+        <IssueLink
           className={classNames('issue-title', {
             'issue-closed': !issue.open,
           })}
+          issue={issue}
           title={issue.title}
-          href={`/issue/${issue.id}`}
         >
           {issue.title}
-        </Link>
+        </IssueLink>
         <div className="issue-taglist">
           {issue.labels.map(label => (
             <Link

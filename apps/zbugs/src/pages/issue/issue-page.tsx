@@ -13,14 +13,20 @@ import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
 import LabelPicker from '../../components/label-picker.js';
 import UserPicker from '../../components/user-picker.js';
+import {isNumeric} from '../../util.js';
 
 export default function IssuePage() {
   const z = useZero();
   const [match, params] = useRoute('/issue/:id');
+  let idField: 'id' | 'shortID' = 'id';
+  const id = params?.id ?? '';
+  if (isNumeric(id)) {
+    idField = 'shortID';
+  }
 
   // todo: one should be in the schema
   const q = z.query.issue
-    .where('id', params?.id ?? '')
+    .where(idField, idField === 'shortID' ? parseInt(id) : id)
     .related('creator', creator => creator.one())
     .related('assignee', assignee => assignee.one())
     .related('labels')
