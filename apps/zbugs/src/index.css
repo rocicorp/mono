@@ -610,6 +610,10 @@ h1 {
   margin-right: 0.8175rem;
 }
 
+.comments-container a {
+  color: var(--color-primary-cta);
+}
+
 /* Issue Composer */
 
 .save-issue {
