@@ -872,7 +872,7 @@ describe('view-syncer/service', () => {
     stateChanges.push({state: 'version-ready'});
 
     // The "newColumn" should be arrive in the nextPoke.
-    // TODO: The first pokeStart should be eliminated.
+    // TODO: The first pokeStart should be followed by a pokeCancel.
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
       [
         [
