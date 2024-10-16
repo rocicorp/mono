@@ -5,7 +5,8 @@ import Modal from '../../components/modal.js';
 import {useZero} from '../../hooks/use-zero.js';
 
 interface Props {
-  onDismiss?: () => void;
+  /** If id is defined the issue created by the composer. */
+  onDismiss?: (id?: string | undefined) => void;
   isOpen: boolean;
 }
 
@@ -16,8 +17,9 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
   const z = useZero();
 
   const handleSubmit = () => {
+    const id = nanoid();
     z.mutate.issue.create({
-      id: nanoid(),
+      id,
       shortID: undefined,
       title,
       description: description ?? '',
@@ -30,7 +32,7 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
       labelIDs: '',
     });
     reset();
-    onDismiss?.();
+    onDismiss?.(id);
   };
 
   const reset = () => {
