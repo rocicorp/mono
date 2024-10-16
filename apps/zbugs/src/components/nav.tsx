@@ -1,4 +1,5 @@
 import logoURL from '../assets/images/logo.svg';
+import markURL from '../assets/images/mark.svg';
 import {Link} from './link.js';
 import classNames from 'classnames';
 import {FPSMeter} from '@schickling/fps-meter';
@@ -35,6 +36,7 @@ export function Nav() {
       <div className="nav-container flex flex-col">
         <Link href="/">
           <img src={logoURL} className="zero-logo" />
+          <img src={markURL} className="zero-mark" />
         </Link>
         {/* could not figure out how to add this color to tailwind.config.js */}
         <button
