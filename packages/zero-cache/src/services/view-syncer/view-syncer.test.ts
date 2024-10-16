@@ -360,64 +360,6 @@ describe('view-syncer/service', () => {
                 },
               ],
             },
-            "entitiesPatch": [
-              {
-                "entityID": {
-                  "id": "1",
-                },
-                "tableName": "issues",
-                "op": "put",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
-                },
-              },
-              {
-                "entityID": {
-                  "id": "2",
-                },
-                "tableName": "issues",
-                "op": "put",
-                "value": {
-                  "big": -9007199254740991,
-                  "id": "2",
-                  "owner": "101",
-                  "parent": null,
-                  "title": "parent issue bar",
-                },
-              },
-              {
-                "entityID": {
-                  "id": "3",
-                },
-                "tableName": "issues",
-                "op": "put",
-                "value": {
-                  "big": 123,
-                  "id": "3",
-                  "owner": "102",
-                  "parent": "1",
-                  "title": "foo",
-                },
-              },
-              {
-                "entityID": {
-                  "id": "4",
-                },
-                "tableName": "issues",
-                "op": "put",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "bar",
-                },
-              },
-            ],
             "gotQueriesPatch": [
               {
                 "ast": {
@@ -450,6 +392,52 @@ describe('view-syncer/service', () => {
               "foo": 42,
             },
             "pokeID": "00:02",
+            "rowsPatch": [
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 9007199254740991,
+                  "id": "1",
+                  "owner": "100",
+                  "parent": null,
+                  "title": "parent issue foo",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": -9007199254740991,
+                  "id": "2",
+                  "owner": "101",
+                  "parent": null,
+                  "title": "parent issue bar",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 123,
+                  "id": "3",
+                  "owner": "102",
+                  "parent": "1",
+                  "title": "foo",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 100,
+                  "id": "4",
+                  "owner": "101",
+                  "parent": "2",
+                  "title": "bar",
+                },
+              },
+            ],
           },
         ],
         [
@@ -624,13 +612,11 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "entitiesPatch": [
+            "pokeID": "01",
+            "rowsPatch": [
               {
-                "entityID": {
-                  "id": "1",
-                },
-                "tableName": "issues",
                 "op": "put",
+                "tableName": "issues",
                 "value": {
                   "big": 9007199254740991,
                   "id": "1",
@@ -640,14 +626,13 @@ describe('view-syncer/service', () => {
                 },
               },
               {
-                "entityID": {
+                "id": {
                   "id": "2",
                 },
-                "tableName": "issues",
                 "op": "del",
+                "tableName": "issues",
               },
             ],
-            "pokeID": "01",
           },
         ],
         [
@@ -806,13 +791,11 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "entitiesPatch": [
+            "pokeID": "01",
+            "rowsPatch": [
               {
-                "entityID": {
-                  "id": "1",
-                },
-                "tableName": "issues",
                 "op": "put",
+                "tableName": "issues",
                 "value": {
                   "big": 9007199254740991,
                   "id": "1",
@@ -822,14 +805,13 @@ describe('view-syncer/service', () => {
                 },
               },
               {
-                "entityID": {
+                "id": {
                   "id": "2",
                 },
-                "tableName": "issues",
                 "op": "del",
+                "tableName": "issues",
               },
             ],
-            "pokeID": "01",
           },
         ],
         [
@@ -1007,9 +989,8 @@ describe('view-syncer/service', () => {
     stateChanges.push({state: 'version-ready'});
     const advancement = (await nextPoke(client1))[1][1] as PokePartBody;
     expect(advancement).toEqual({
-      entitiesPatch: [
+      rowsPatch: [
         {
-          entityID: {id: '1'},
           tableName: 'issues',
           op: 'put',
           value: {
@@ -1021,7 +1002,7 @@ describe('view-syncer/service', () => {
           },
         },
         {
-          entityID: {id: '2'},
+          id: {id: '2'},
           tableName: 'issues',
           op: 'del',
         },
@@ -1041,7 +1022,7 @@ describe('view-syncer/service', () => {
       [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
     );
 
-    // Response should catch client2 up with the entitiesPatch from
+    // Response should catch client2 up with the rowsPatch from
     // the advancement.
     const response2 = await nextPoke(client2);
     expect(response2[1][1]).toMatchObject({
@@ -1101,13 +1082,11 @@ describe('view-syncer/service', () => {
                 },
               ],
             },
-            "entitiesPatch": [
+            "pokeID": "01:01",
+            "rowsPatch": [
               {
-                "entityID": {
-                  "id": "1",
-                },
-                "tableName": "issues",
                 "op": "put",
+                "tableName": "issues",
                 "value": {
                   "big": 9007199254740991,
                   "id": "1",
@@ -1117,14 +1096,13 @@ describe('view-syncer/service', () => {
                 },
               },
               {
-                "entityID": {
+                "id": {
                   "id": "2",
                 },
-                "tableName": "issues",
                 "op": "del",
+                "tableName": "issues",
               },
             ],
-            "pokeID": "01:01",
           },
         ],
         [
@@ -1300,22 +1278,6 @@ describe('view-syncer/service', () => {
                 },
               ],
             },
-            "entitiesPatch": [
-              {
-                "entityID": {
-                  "id": "4",
-                },
-                "tableName": "issues",
-                "op": "put",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "caught up",
-                },
-              },
-            ],
             "gotQueriesPatch": [
               {
                 "ast": {
@@ -1348,6 +1310,19 @@ describe('view-syncer/service', () => {
               "foo": 42,
             },
             "pokeID": "07:02",
+            "rowsPatch": [
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 100,
+                  "id": "4",
+                  "owner": "101",
+                  "parent": "2",
+                  "title": "caught up",
+                },
+              },
+            ],
           },
         ],
         [

@@ -11,7 +11,7 @@ import type {
   PokePartBody,
   PokeStartBody,
   QueriesPatchOp,
-  RowsPatchOp,
+  RowPatchOp,
 } from '../../../zero-protocol/src/mod.js';
 import {
   toClientsKey,
@@ -236,10 +236,10 @@ export function mergePokes(
           ),
         );
       }
-      if (pokePart.entitiesPatch) {
+      if (pokePart.rowsPatch) {
         mergedPatch.push(
-          ...pokePart.entitiesPatch.map(p =>
-            entitiesPatchOpToReplicachePatchOp(p, schema),
+          ...pokePart.rowsPatch.map(p =>
+            rowsPatchOpToReplicachePatchOp(p, schema),
           ),
         );
       }
@@ -296,8 +296,8 @@ function queryPatchOpToReplicachePatchOp(
   }
 }
 
-function entitiesPatchOpToReplicachePatchOp(
-  op: RowsPatchOp,
+function rowsPatchOpToReplicachePatchOp(
+  op: RowPatchOp,
   schema: NormalizedSchema,
 ): PatchOperationInternal {
   switch (op.op) {
@@ -309,7 +309,7 @@ function entitiesPatchOpToReplicachePatchOp(
         key: toPrimaryKeyString(
           op.tableName,
           schema.tables[op.tableName].primaryKey,
-          op.entityID,
+          op.id,
         ),
       };
     case 'put':
@@ -318,7 +318,7 @@ function entitiesPatchOpToReplicachePatchOp(
         key: toPrimaryKeyString(
           op.tableName,
           schema.tables[op.tableName].primaryKey,
-          op.entityID,
+          op.value,
         ),
         value: op.value,
       };
@@ -328,7 +328,7 @@ function entitiesPatchOpToReplicachePatchOp(
         key: toPrimaryKeyString(
           op.tableName,
           schema.tables[op.tableName].primaryKey,
-          op.entityID,
+          op.id,
         ),
         merge: op.merge,
         constrain: op.constrain,

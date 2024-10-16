@@ -53,10 +53,10 @@ export const pokePartBodySchema = v.object({
   // Patches to the desired query sets by client id.
   desiredQueriesPatches: v.record(queriesPatchSchema).optional(),
   // Patches to the set of queries for which entities are sync'd in
-  // entitiesPatch.
+  // rowsPatch.
   gotQueriesPatch: queriesPatchSchema.optional(),
-  // Patches to the entities set.
-  entitiesPatch: rowsPatchSchema.optional(),
+  // Patches to the rows set.
+  rowsPatch: rowsPatchSchema.optional(),
 });
 
 export const pokeEndBodySchema = v.object({
