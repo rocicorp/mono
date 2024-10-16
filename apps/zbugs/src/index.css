@@ -311,6 +311,10 @@ h1 {
   padding-left: 2.5rem;
 }
 
+.row.unread {
+  border-right: 1px solid var(--color-primary-cta);
+}
+
 .primary-content .row {
   display: flex;
   flex-direction: row;

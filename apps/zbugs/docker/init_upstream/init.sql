@@ -38,6 +38,13 @@ CREATE TABLE issue (
     "labelIDs" TEXT
 );
 
+CREATE TABLE "viewState" (
+    "userID" VARCHAR REFERENCES "user"(id) ON DELETE CASCADE,
+    "issueID" VARCHAR REFERENCES issue(id) ON DELETE CASCADE,
+    "viewed" double precision,
+    PRIMARY KEY ("userID", "issueID")
+);
+
 CREATE TABLE comment (
     id VARCHAR PRIMARY KEY,
     "issueID" VARCHAR REFERENCES issue(id) ON DELETE CASCADE,

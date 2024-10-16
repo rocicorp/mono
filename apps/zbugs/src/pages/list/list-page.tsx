@@ -33,7 +33,10 @@ export default function ListPage() {
   )?.id;
   const labelIDs = useQuery(z.query.label.where('name', 'IN', labels));
 
-  let q = z.query.issue.orderBy('modified', 'desc').related('labels');
+  let q = z.query.issue
+    .orderBy('modified', 'desc')
+    .related('labels')
+    .related('viewState', q => q.where('userID', z.userID).one());
 
   if (status === 'open') {
     q = q.where('open', true);
@@ -96,7 +99,10 @@ export default function ListPage() {
     return (
       <div
         key={issue.id}
-        className="row"
+        className={classNames(
+          'row',
+          issue.modified > (issue.viewState?.viewed ?? 0) ? 'unread' : null,
+        )}
         style={{
           ...style,
         }}

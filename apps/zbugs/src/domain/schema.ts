@@ -60,7 +60,25 @@ const issueSchema = {
         schema: () => userSchema,
       },
     },
+    viewState: {
+      source: 'id',
+      dest: {
+        field: 'issueID',
+        schema: () => viewStateSchema,
+      },
+    },
   },
+} as const;
+
+const viewStateSchema = {
+  tableName: 'viewState',
+  columns: {
+    issueID: {type: 'string'},
+    userID: {type: 'string'},
+    viewed: {type: 'number'},
+  },
+  primaryKey: ['userID', 'issueID'],
+  relationships: {},
 } as const;
 
 const commentSchema = {
@@ -112,6 +130,7 @@ export const schema = {
     comment: commentSchema,
     label: labelSchema,
     issueLabel: issueLabelSchema,
+    viewState: viewStateSchema,
   },
 } as const;
 
