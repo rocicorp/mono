@@ -38,6 +38,7 @@
     "pg-logical-replication": "^2.0.7",
     "postgres": "^3.4.4",
     "postgres-array": "^3.0.2",
+    "tsx": "^4.19.1",
     "ws": "^8.18.0",
     "xxhash-wasm": "^1.0.2",
     "zero-protocol": "0.0.0",
@@ -55,7 +56,6 @@
     "@types/ws": "^8.5.12",
     "concurrently": "^8.2.1",
     "shared": "0.0.0",
-    "tsx": "^4.19.1",
     "typescript": "^5.6.3",
     "vitest": "^2.0.3"
   },

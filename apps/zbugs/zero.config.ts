@@ -1,7 +1,4 @@
-import {
-  defineConfig,
-  runtimeEnv,
-} from '../../packages/zero-cache/src/config/define-config.js';
+import {type CompiledZeroConfig, defineConfig} from '@rocicorp/zero/config';
 import {schema, type Schema} from './src/domain/schema.js';
 
 /** The contents of the zbugs JWT */
@@ -10,7 +7,7 @@ type AuthData = {
   sub: string;
 };
 
-defineConfig<AuthData, Schema>(schema, queries => {
+export default defineConfig<AuthData, Schema>(schema, queries => {
   // TODO: We need `querify` so we can just check the authData without having to
   // read the DB E.g., `queries.querify(authData).where('sub', 'IS NOT', null)`
   const allowIfLoggedIn = (authData: AuthData) =>
@@ -33,23 +30,25 @@ defineConfig<AuthData, Schema>(schema, queries => {
     queries.user.where('id', '=', authData.sub).where('role', '=', 'crew');
 
   return {
-    upstreamDBConnStr: runtimeEnv('UPSTREAM_URI'),
-    cvrDBConnStr: runtimeEnv('CVR_DB_URI'),
-    changeDBConnStr: runtimeEnv('CHANGE_DB_URI'),
+    upstreamDBConnStr: must(process.env['UPSTREAM_URI']),
+    cvrDBConnStr: must(process.env['CVR_DB_URI']),
+    changeDBConnStr: must(process.env['CHANGE_DB_URI']),
 
-    numSyncWorkers: runtimeEnv('NUM_SYNC_WORKERS'),
-    changeStreamerConnStr: runtimeEnv('CHANGE_STREAMER_URI'),
+    numSyncWorkers: parseInt(process.env['NUM_SYNC_WORKERS'] ?? '1'),
+    changeStreamerConnStr: process.env['CHANGE_STREAMER_URI'],
 
-    replicaDBFile: runtimeEnv('REPLICA_DB_FILE'),
-    jwtSecret: runtimeEnv('JWT_SECRET'),
-    litestream: runtimeEnv('LITESTREAM'),
+    replicaDBFile: must(process.env['REPLICA_DB_FILE']),
+    jwtSecret: process.env['JWT_SECRET'],
+    litestream: !!process.env['LITESTREAM'],
     shard: {
-      id: runtimeEnv('SHARD_ID'),
-      publications: runtimeEnv('PUBLICATIONS'),
+      id: process.env['SHARD_ID'] ?? '0',
+      publications: process.env['PUBLICATIONS']
+        ? process.env['PUBLICATIONS'].split(',')
+        : [],
     },
     log: {
-      level: runtimeEnv('LOG_LEVEL'),
-      format: runtimeEnv('LOG_FORMAT'),
+      level: process.env['LOG_LEVEL'] as 'debug' | 'info' | 'warn' | 'error',
+      format: process.env['LOG_FORMAT'] as 'text' | 'json' | undefined,
     },
     rateLimit: {
       mutationTransactions: {
@@ -84,4 +83,12 @@ defineConfig<AuthData, Schema>(schema, queries => {
       },
     },
   };
-});
+}) as CompiledZeroConfig;
+
+function must<T>(v: T | undefined | null): T {
+  // eslint-disable-next-line eqeqeq
+  if (v == null) {
+    throw new Error(`Unexpected ${v} value`);
+  }
+  return v;
+}
