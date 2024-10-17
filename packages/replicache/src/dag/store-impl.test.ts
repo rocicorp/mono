@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {describe, expect, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.js';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 import {deepFreeze} from '../frozen-json.js';
@@ -22,7 +22,7 @@ import {ReadImpl, StoreImpl, WriteImpl} from './store-impl.js';
 import {ChunkNotFoundError} from './store.js';
 import {TestStore} from './test-store.js';
 
-suite('read', () => {
+describe('read', () => {
   test('has chunk', async () => {
     const t = async (hash: Hash, expectHas: boolean) => {
       const h = fakeHash('e5e');
@@ -86,7 +86,7 @@ suite('read', () => {
   });
 });
 
-suite('write', () => {
+describe('write', () => {
   test('put chunk', async () => {
     const chunkHasher = makeNewFakeHashFunction();
     const t = async (data: ReadonlyJSONValue, refs: Refs) => {

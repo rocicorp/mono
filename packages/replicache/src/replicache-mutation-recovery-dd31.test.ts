@@ -1,9 +1,9 @@
-import {expect} from 'chai';
+import sinon from 'sinon';
+import {describe, expect, test} from 'vitest';
 import {assert} from '../../shared/src/asserts.js';
 import {type JSONObject, assertJSONObject} from '../../shared/src/json.js';
 import {randomUint64} from '../../shared/src/random-uint64.js';
 import {stringCompare} from '../../shared/src/string-compare.js';
-import sinon from 'sinon';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
 import * as FormatVersion from './format-version-enum.js';
@@ -56,7 +56,7 @@ import {withRead, withWriteNoImplicitCommit} from './with-transactions.js';
 import fetchMock from 'fetch-mock/esm/client';
 
 // Add test for ClientV5, logic is same as ClientV6
-suite('DD31', () => {
+describe('DD31', () => {
   initReplicacheTesting();
 
   async function testRecoveringMutationsOfClientV6(args: {
@@ -278,7 +278,7 @@ suite('DD31', () => {
   }
 
   for (const formatVersion of [FormatVersion.V6, FormatVersion.V7] as const) {
-    suite(`v${formatVersion}`, () => {
+    describe(`v${formatVersion}`, () => {
       test('successfully recovering mutations of client with same schema version and replicache format version', async () => {
         await testRecoveringMutationsOfClientV6({
           schemaVersionOfClientWPendingMutations: 'testSchema1',
@@ -1588,7 +1588,7 @@ suite('DD31', () => {
     expect(rep.recoverMutationsFake.callCount).to.equal(3);
   });
 
-  suite('Recover mutations across replicache format versions', () => {
+  describe('Recover mutations across replicache format versions', () => {
     test('DD31 client with one old SDD format client should be recovered', async () => {
       const client1ID = 'client1';
       const auth = '1';

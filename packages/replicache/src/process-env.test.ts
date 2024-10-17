@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 
 declare const process: {
   env: {
@@ -8,5 +8,5 @@ declare const process: {
 };
 
 test('process', () => {
-  expect(process.env.NODE_ENV).to.equal('development');
+  expect(process.env.NODE_ENV).to.equal('test');
 });

@@ -1,9 +1,9 @@
-import {expect} from 'chai';
 import * as sinon from 'sinon';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {withRead, withWrite} from '../with-transactions.js';
+import {dropIDBStoreWithMemFallback} from './idb-store-with-mem-fallback.js';
 import {IDBNotFoundError, IDBStore} from './idb-store.js';
 import {runAll} from './store-test-util.js';
-import {dropIDBStoreWithMemFallback} from './idb-store-with-mem-fallback.js';
 
 async function newRandomIDBStore() {
   const name = `test-idbstore-${Math.random()}`;
@@ -39,12 +39,12 @@ test('dropStore', async () => {
   });
 });
 
-suite('reopening IDB', () => {
+describe('reopening IDB', () => {
   let name: string;
   let idb: Promise<IDBDatabase>;
   let store: IDBStore;
 
-  setup(async () => {
+  beforeEach(async () => {
     name = `reopen-${Math.random()}`;
     await dropIDBStoreWithMemFallback(name);
 
@@ -59,7 +59,7 @@ suite('reopening IDB', () => {
     });
   });
 
-  teardown(() => {
+  afterEach(() => {
     sinon.restore();
   });
 

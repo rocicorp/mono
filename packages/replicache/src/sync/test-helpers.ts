@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect} from 'vitest';
 import type {Store} from '../dag/store.js';
 import {
   Commit,

@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import {PeekIterator} from './peek-iterator.js';
 
 test('PeekIterator', () => {

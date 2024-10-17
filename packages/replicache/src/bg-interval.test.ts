@@ -1,15 +1,16 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {expect} from 'chai';
 import sinon, {type SinonFakeTimers, useFakeTimers} from 'sinon';
+import {afterEach, beforeEach, expect, test} from 'vitest';
+import {TestLogSink} from '../../shared/src/logging-test-utils.js';
 import {initBgIntervalProcess} from './bg-interval.js';
 
 let clock: SinonFakeTimers;
-setup(() => {
+beforeEach(() => {
   clock = useFakeTimers();
 });
 
-teardown(() => {
+afterEach(() => {
   clock.restore();
   sinon.restore();
 });
@@ -125,9 +126,8 @@ test('error thrown during process (before stop is called) is logged to error', a
 });
 
 test('error thrown during process (after stop is called) is logged to debug', async () => {
-  const lc = new LogContext('debug');
-  const errorStub = sinon.stub(console, 'error');
-  const debugStub = sinon.stub(console, 'debug');
+  const testLogSink = new TestLogSink();
+  const lc = new LogContext('debug', undefined, testLogSink);
 
   let processCallCount = 0;
   const processResolver = resolver();
@@ -153,12 +153,14 @@ test('error thrown during process (after stop is called) is logged to debug', as
   } catch (e) {
     expect(e).to.equal('TestErrorAfterStop');
   }
-  expect(errorStub.callCount).to.equal(0);
-  expect(debugStub.callCount).to.be.greaterThan(0);
-  sinon.assert.calledWithExactly(
-    debugStub,
-    'bgIntervalProcess=testProcess',
-    'Error running most likely due to close.',
-    'TestErrorAfterStop',
-  );
+  expect(testLogSink.messages).to.deep.equal([
+    ['debug', {bgIntervalProcess: 'testProcess'}, ['Starting']],
+    ['debug', {bgIntervalProcess: 'testProcess'}, ['Running']],
+    [
+      'debug',
+      {bgIntervalProcess: 'testProcess'},
+      ['Error running most likely due to close.', 'TestErrorAfterStop'],
+    ],
+    ['debug', {bgIntervalProcess: 'testProcess'}, ['Stopping']],
+  ]);
 });

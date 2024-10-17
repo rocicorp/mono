@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import {arrayCompare} from './array-compare.js';
 
 test('array compare', () => {

@@ -1,9 +1,9 @@
 import {LogContext, type LogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {expect} from 'chai';
-import {assert, assertNotUndefined} from '../../../shared/src/asserts.js';
 import * as sinon from 'sinon';
 import {type SinonFakeTimers, useFakeTimers} from 'sinon';
+import {afterEach, beforeEach, expect, test} from 'vitest';
+import {assert, assertNotUndefined} from '../../../shared/src/asserts.js';
 import {StoreImpl} from '../dag/store-impl.js';
 import type {Read} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
@@ -27,11 +27,11 @@ import {
 let clock: SinonFakeTimers;
 const START_TIME = 100000;
 const ONE_MIN_IN_MS = 60 * 1000;
-setup(() => {
+beforeEach(() => {
   clock = useFakeTimers(START_TIME);
 });
 
-teardown(() => {
+afterEach(() => {
   sinon.restore();
   clock.restore();
 });

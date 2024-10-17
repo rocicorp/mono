@@ -1,5 +1,6 @@
 /* eslint-disable require-await */
 
+import {test} from 'vitest';
 import {assert} from '../../shared/src/asserts.js';
 import type {ReadonlyJSONObject} from '../../shared/src/json.js';
 import type {IndexKey} from './db/index.js';

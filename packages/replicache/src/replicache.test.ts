@@ -41,6 +41,7 @@ import {withRead} from './with-transactions.js';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
+import {describe, test} from 'vitest';
 
 const {fail} = chaiAssert;
 
@@ -2103,7 +2104,7 @@ test('mutation timestamps are immutable', async () => {
 // Define this here to prevent issues with building docs
 type DocumentVisibilityState = 'hidden' | 'visible';
 
-suite('check for client not found in visibilitychange', () => {
+describe('check for client not found in visibilitychange', () => {
   const t = (
     visibilityState: DocumentVisibilityState,
     shouldBeCalled: boolean,

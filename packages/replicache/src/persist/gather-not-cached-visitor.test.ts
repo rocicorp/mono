@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {describe, expect, test} from 'vitest';
 import {LazyStore} from '../dag/lazy-store.js';
 import {TestStore} from '../dag/test-store.js';
 import * as MetaType from '../db/meta-type-enum.js';
@@ -7,7 +7,7 @@ import {assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {GatherNotCachedVisitor} from './gather-not-cached-visitor.js';
 
-suite('GatherNotCachedVisitor', () => {
+describe('GatherNotCachedVisitor', () => {
   test('when gatherSizeLimit not exceeded, if none cached gathers all, if all cached gathers none', async () => {
     const {perdag, memdag, pb, getSize, allChunksInVisitOrder} = await setup();
 

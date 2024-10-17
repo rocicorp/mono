@@ -1,9 +1,9 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
+import {type SinonFakeTimers, useFakeTimers} from 'sinon';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {getDocumentVisibilityWatcher} from '../../shared/src/document-visible.js';
 import {promiseTrue} from '../../shared/src/resolved-promises.js';
 import {sleep} from '../../shared/src/sleep.js';
-import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import {
   ConnectionLoop,
   type ConnectionLoopDelegate,
@@ -13,7 +13,7 @@ import {
 } from './connection-loop.js';
 
 let clock: SinonFakeTimers;
-setup(() => {
+beforeEach(() => {
   clock = useFakeTimers(0);
 });
 
@@ -23,7 +23,7 @@ async function tickUntilTimeIs(t: number) {
   }
 }
 
-teardown(() => {
+afterEach(() => {
   clock.restore();
   loop?.close();
   loop = undefined;
@@ -738,7 +738,7 @@ test('Send promise', async () => {
   expect(await p3).undefined;
 });
 
-suite('Send when closed should resolve with error', () => {
+describe('Send when closed should resolve with error', () => {
   for (const now of [true, false] as const) {
     test(`now = ${now}`, async () => {
       loop = new ConnectionLoop(new LogContext(), {
@@ -767,7 +767,7 @@ suite('Send when closed should resolve with error', () => {
   }
 });
 
-suite('With Document Visibility Watcher', () => {
+describe('With Document Visibility Watcher', () => {
   class Document extends EventTarget {
     #visibilityState: DocumentVisibilityState = 'visible';
     set visibilityState(v) {

@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
+import {expect} from 'vitest';
 import {assert, assertNotUndefined} from '../../../shared/src/asserts.js';
 import type {JSONValue} from '../../../shared/src/json.js';
 import {emptyDataNode} from '../btree/node.js';

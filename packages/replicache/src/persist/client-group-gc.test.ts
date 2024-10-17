@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
-import {assertNotUndefined} from '../../../shared/src/asserts.js';
 import {type SinonFakeTimers, useFakeTimers} from 'sinon';
+import {afterEach, beforeEach, expect, test} from 'vitest';
+import {assertNotUndefined} from '../../../shared/src/asserts.js';
 import type {Read} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
 import {fakeHash} from '../hash.js';
@@ -19,11 +19,11 @@ import {makeClientV6, setClientsForTesting} from './clients-test-helpers.js';
 let clock: SinonFakeTimers;
 const START_TIME = 0;
 const FIVE_MINS_IN_MS = 5 * 60 * 1000;
-setup(() => {
+beforeEach(() => {
   clock = useFakeTimers(0);
 });
 
-teardown(() => {
+afterEach(() => {
   clock.restore();
 });
 

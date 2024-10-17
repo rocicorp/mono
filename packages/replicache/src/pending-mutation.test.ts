@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import type {JSONValue} from '../../shared/src/json.js';
 import {
   initReplicacheTesting,

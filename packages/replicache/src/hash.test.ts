@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import * as valita from '../../shared/src/valita.js';
 import {
   type Hash,

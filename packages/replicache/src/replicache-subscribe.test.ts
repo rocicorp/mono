@@ -1,8 +1,9 @@
 import {resolver} from '@rocicorp/resolver';
 import {assert, expect} from 'chai';
-import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.js';
-import {sleep} from '../../shared/src/sleep.js';
 import * as sinon from 'sinon';
+import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.js';
+import {TestLogSink} from '../../shared/src/logging-test-utils.js';
+import {sleep} from '../../shared/src/sleep.js';
 import type {IndexKey} from './db/index.js';
 import type {IndexDefinitions} from './index-defs.js';
 import type {PatchOperation} from './patch-operation.js';
@@ -16,13 +17,13 @@ import {
   tickAFewTimes,
   tickUntil,
 } from './test-util.js';
-import {TestLogSink} from '../../shared/src/logging-test-utils.js';
 import type {ReadTransaction, WriteTransaction} from './transactions.js';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
+import {describe, test} from 'vitest';
 
 initReplicacheTesting();
 
@@ -95,7 +96,7 @@ test('subscribe', async () => {
   expect(queryCallCount).to.equal(4);
 });
 
-suite('subscribe', () => {
+describe('subscribe', () => {
   async function make(
     indexes: IndexDefinitions | undefined,
     scanOptions: ScanOptions,

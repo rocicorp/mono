@@ -1,8 +1,8 @@
-import {expect} from 'chai';
+import sinon from 'sinon';
+import {describe, expect, test} from 'vitest';
 import {assertNotUndefined} from '../../shared/src/asserts.js';
 import {type JSONObject, assertJSONObject} from '../../shared/src/json.js';
 import {randomUint64} from '../../shared/src/random-uint64.js';
-import sinon from 'sinon';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
 import * as FormatVersion from './format-version-enum.js';
@@ -29,7 +29,7 @@ import fetchMock from 'fetch-mock/esm/client';
 
 initReplicacheTesting();
 
-suite('SDD', () => {
+describe('SDD', () => {
   async function testRecoveringMutationsOfClientV4(args: {
     schemaVersionOfClientWPendingMutations: string;
     schemaVersionOfClientRecoveringMutations: string;

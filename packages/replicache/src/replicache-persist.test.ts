@@ -1,5 +1,5 @@
-import {expect} from 'chai';
 import * as sinon from 'sinon';
+import {afterEach, describe, expect, test} from 'vitest';
 import {
   addData,
   clock,
@@ -41,7 +41,7 @@ import {withRead, withWriteNoImplicitCommit} from './with-transactions.js';
 initReplicacheTesting();
 
 let perdag: Store | undefined;
-teardown(async () => {
+afterEach(async () => {
   await perdag?.close();
 });
 
@@ -143,7 +143,7 @@ test('basic persist & load', async () => {
   await perdag.close();
 });
 
-suite('onClientStateNotFound', () => {
+describe('onClientStateNotFound', () => {
   test('Called in persist if collected', async () => {
     const consoleErrorStub = sinon.stub(console, 'error');
 

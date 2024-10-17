@@ -1,9 +1,9 @@
 // This test file is loaded by worker.test.ts
 
-import {expect} from 'chai';
-import type {JSONValue} from '../../shared/src/json.js';
+import {assert} from '../../shared/src/asserts.js';
+import {deepEqual, type JSONValue} from '../../shared/src/json.js';
 import {asyncIterableToArray} from './async-iterable-to-array.js';
-import {ReplicacheTest, closeAllReps, reps} from './test-util.js';
+import {Replicache} from './replicache.js';
 import type {ReadTransaction, WriteTransaction} from './transactions.js';
 
 onmessage = async (e: MessageEvent) => {
@@ -11,15 +11,13 @@ onmessage = async (e: MessageEvent) => {
   try {
     await testGetHasScanOnEmptyDB(name);
     postMessage(undefined);
-    await closeAllReps();
   } catch (ex) {
-    await closeAllReps();
     postMessage(ex);
   }
 };
 
 async function testGetHasScanOnEmptyDB(name: string) {
-  const rep = new ReplicacheTest({
+  const rep = new Replicache({
     pushDelay: 60_000, // Large to prevent interfering
     name,
     mutators: {
@@ -29,16 +27,15 @@ async function testGetHasScanOnEmptyDB(name: string) {
       ) => {
         const {key, value} = args;
         await tx.set(key, value);
-        expect(await tx.has(key)).to.equal(true);
+        assert((await tx.has(key)) === true);
         const v = await tx.get(key);
-        expect(v).to.deep.equal(value);
+        assert(deepEqual(v, value));
 
-        expect(await tx.del(key)).to.equal(true);
-        expect(await tx.has(key)).to.be.false;
+        assert((await tx.del(key)) === true);
+        assert((await tx.has(key)) === false);
       },
     },
   });
-  reps.add(rep);
 
   const {testMut} = rep.mutate;
 
@@ -57,11 +54,11 @@ async function testGetHasScanOnEmptyDB(name: string) {
   }
 
   async function t(tx: ReadTransaction) {
-    expect(await tx.get('key')).to.equal(undefined);
-    expect(await tx.has('key')).to.be.false;
+    assert((await tx.get('key')) === undefined);
+    assert((await tx.has('key')) === false);
 
     const scanItems = await asyncIterableToArray(tx.scan());
-    expect(scanItems).to.have.length(0);
+    assert(scanItems.length === 0);
   }
 
   await rep.query(t);

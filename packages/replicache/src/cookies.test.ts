@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import {compareCookies, type Cookie} from './cookies.js';
 
 test('compareCookies', () => {

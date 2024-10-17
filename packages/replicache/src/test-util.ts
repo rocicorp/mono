@@ -1,10 +1,11 @@
 import {resolver} from '@rocicorp/resolver';
 import {expect} from 'chai';
+import * as sinon from 'sinon';
+import {type SinonFakeTimers, useFakeTimers} from 'sinon';
+import {afterEach, beforeEach} from 'vitest';
 import type {JSONValue} from '../../shared/src/json.js';
 import {must} from '../../shared/src/must.js';
 import {randomUint64} from '../../shared/src/random-uint64.js';
-import * as sinon from 'sinon';
-import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import type {Cookie} from './cookies.js';
 import type {Store} from './dag/store.js';
 import type {Hash} from './hash.js';
@@ -221,12 +222,12 @@ export let clock: SinonFakeTimers;
 export function initReplicacheTesting(): void {
   fetchMock.config.overwriteRoutes = true;
 
-  setup(() => {
+  beforeEach(() => {
     clock = useFakeTimers(0);
     setupIDBDatabasesStoreForTest();
   });
 
-  teardown(async () => {
+  afterEach(async () => {
     restoreMakeImplForTest();
     clock.restore();
     fetchMock.restore();

@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import {binarySearch} from './binary-search.js';
 
 test('binarySearch', () => {

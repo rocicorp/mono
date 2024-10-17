@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
-import {assertNotUndefined} from '../../../shared/src/asserts.js';
 import {type SinonFakeTimers, useFakeTimers} from 'sinon';
+import {afterEach, beforeEach, expect, test} from 'vitest';
+import {assertNotUndefined} from '../../../shared/src/asserts.js';
 import type {Read} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
 import {newRandomHash} from '../hash.js';
@@ -20,11 +20,11 @@ const START_TIME = 0;
 const MINUTES = 60 * 1000;
 const HOURS = 60 * 60 * 1000;
 
-setup(() => {
+beforeEach(() => {
   clock = useFakeTimers(START_TIME);
 });
 
-teardown(() => {
+afterEach(() => {
   clock.restore();
 });
 

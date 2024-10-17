@@ -1,12 +1,12 @@
 import {resolver} from '@rocicorp/resolver';
-import {expect} from 'chai';
+import {afterEach, describe, expect, test} from 'vitest';
 import {BroadcastChannel} from './broadcast-channel.js';
 import {initOnPersistChannel, type PersistInfo} from './on-persist-channel.js';
 
-suite('initOnPersistChannel', () => {
+describe('initOnPersistChannel', () => {
   let channel: BroadcastChannel | undefined;
 
-  teardown(() => {
+  afterEach(() => {
     if (channel) {
       channel.close();
     }

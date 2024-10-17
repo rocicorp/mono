@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
+import {describe, expect, test} from 'vitest';
 import type {JSONValue} from '../../../shared/src/json.js';
 import {TestStore} from '../dag/test-store.js';
 import {ChainBuilder} from '../db/test-helpers.js';
@@ -17,7 +17,7 @@ import {
 import {withWriteNoImplicitCommit} from '../with-transactions.js';
 import {apply} from './patch.js';
 
-suite('patch', () => {
+describe('patch', () => {
   const t = (formatVersion: FormatVersion.Type) => {
     const clientID = 'client-id';
     const store = new TestStore();
@@ -360,6 +360,6 @@ suite('patch', () => {
     }
   };
 
-  suite('dd31', () => t(FormatVersion.Latest));
-  suite('sdd', () => t(FormatVersion.SDD));
+  describe('dd31', () => t(FormatVersion.Latest));
+  describe('sdd', () => t(FormatVersion.SDD));
 });

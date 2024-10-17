@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
-import {assert, assertNotUndefined} from '../../../shared/src/asserts.js';
 import {type SinonFakeTimers, useFakeTimers} from 'sinon';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {assert, assertNotUndefined} from '../../../shared/src/asserts.js';
 import {BTreeRead} from '../btree/read.js';
 import type {Read, Write} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
@@ -45,11 +45,11 @@ import {
 import {makeClientID} from './make-client-id.js';
 
 let clock: SinonFakeTimers;
-setup(() => {
+beforeEach(() => {
   clock = useFakeTimers(0);
 });
 
-teardown(() => {
+afterEach(() => {
   clock.restore();
 });
 
@@ -520,7 +520,7 @@ test('getClientGroupID', async () => {
   expect(actualClientGroup2).to.be.undefined;
 });
 
-suite('findMatchingClient', () => {
+describe('findMatchingClient', () => {
   test('new (empty perdag)', async () => {
     const perdag = new TestStore();
     await withRead(perdag, async read => {
@@ -673,9 +673,9 @@ suite('findMatchingClient', () => {
   });
 });
 
-suite('initClientV6', () => {
+describe('initClientV6', () => {
   function makeSuite(enableClientGroupForking: boolean) {
-    suite(`enableClientGroupForking: ${enableClientGroupForking}`, () => {
+    describe(`enableClientGroupForking: ${enableClientGroupForking}`, () => {
       test('new client for empty db', async () => {
         const formatVersion = FormatVersion.Latest;
         const lc = new LogContext();

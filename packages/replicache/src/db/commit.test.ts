@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {describe, expect, test} from 'vitest';
 import {Chunk, type Refs, toRefs} from '../dag/chunk.js';
 import {TestStore} from '../dag/test-store.js';
 import * as FormatVersion from '../format-version-enum.js';
@@ -28,7 +28,7 @@ import {
 import * as MetaType from './meta-type-enum.js';
 import {ChainBuilder} from './test-helpers.js';
 
-suite('base snapshot', () => {
+describe('base snapshot', () => {
   const t = async (formatVersion: FormatVersion.Type) => {
     const clientID = 'client-id';
     const store = new TestStore();
@@ -90,7 +90,7 @@ suite('base snapshot', () => {
   test('SDD', () => t(FormatVersion.SDD));
 });
 
-suite('local mutations', () => {
+describe('local mutations', () => {
   const t = async (formatVersion: FormatVersion.Type) => {
     const clientID = 'client-id';
     const store = new TestStore();
@@ -198,7 +198,7 @@ test('local mutations greater than', async () => {
   ).to.deep.equal([]);
 });
 
-suite('chain', () => {
+describe('chain', () => {
   const t = async (formatVersion: FormatVersion.Type) => {
     const clientID = 'client-id';
     const store = new TestStore();

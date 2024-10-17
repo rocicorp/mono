@@ -1,5 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
+import sinon from 'sinon';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {
   assert,
   assertNotNull,
@@ -7,7 +8,6 @@ import {
 } from '../../../shared/src/asserts.js';
 import type {JSONValue} from '../../../shared/src/json.js';
 import {promiseVoid} from '../../../shared/src/resolved-promises.js';
-import sinon from 'sinon';
 import {BTreeRead} from '../btree/read.js';
 import {LazyStore, LazyWrite} from '../dag/lazy-store.js';
 import {TestStore} from '../dag/test-store.js';
@@ -54,7 +54,7 @@ import * as PersistedExpectation from './persisted-expectation-enum.js';
 
 const PERDAG_TEST_SETUP_HEAD_NAME = 'test-setup-head';
 
-suite('persistDD31', () => {
+describe('persistDD31', () => {
   let memdag: LazyStore,
     perdag: TestStore,
     memdagChainBuilder: ChainBuilder,
@@ -66,7 +66,7 @@ suite('persistDD31', () => {
       onGatherMemOnlyChunksForTest?: () => Promise<void>,
     ) => Promise<void>;
 
-  setup(async () => {
+  beforeEach(async () => {
     ({
       memdag,
       perdag,
@@ -78,7 +78,7 @@ suite('persistDD31', () => {
     } = await setupPersistTest());
   });
 
-  teardown(async () => {
+  afterEach(async () => {
     await memdag.close();
     await perdag.close();
     sinon.restore();
