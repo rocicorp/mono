@@ -34,7 +34,11 @@ export default defineConfig<AuthData, Schema>(schema, queries => {
     cvrDBConnStr: must(process.env['CVR_DB_URI']),
     changeDBConnStr: must(process.env['CHANGE_DB_URI']),
 
-    numSyncWorkers: parseInt(process.env['NUM_SYNC_WORKERS'] ?? '1'),
+    numSyncWorkers:
+      process.env['NUM_SYNC_WORKERS'] === undefined
+        ? undefined // this means numCores - 1
+        : parseInt(process.env['NUM_SYNC_WORKERS']),
+
     changeStreamerConnStr: process.env['CHANGE_STREAMER_URI'],
 
     replicaDBFile: must(process.env['REPLICA_DB_FILE']),
