@@ -8,14 +8,14 @@ import {createTableStatement} from './create.js';
 import {listTables} from './lite-tables.js';
 import {mapPostgresToLite} from './pg-to-lite.js';
 import {stripCommentsAndWhitespace} from './query-test-util.js';
-import type {TableSpec} from './specs.js';
+import type {LiteTableSpec, TableSpec} from './specs.js';
 
 describe('tables/create', () => {
   type Case = {
     name: string;
     srcTableSpec: TableSpec;
     createStatement: string;
-    liteTableSpec: TableSpec;
+    liteTableSpec: LiteTableSpec;
     dstTableSpec?: TableSpec;
   };
 
@@ -71,7 +71,6 @@ describe('tables/create', () => {
         primaryKey: ['clientID'],
       },
       liteTableSpec: {
-        schema: '',
         name: 'clients',
         columns: {
           clientID: {
@@ -150,7 +149,6 @@ describe('tables/create', () => {
         primaryKey: ['clientID'],
       },
       liteTableSpec: {
-        schema: '',
         name: 'zero.clients',
         columns: {
           clientID: {
@@ -274,7 +272,6 @@ describe('tables/create', () => {
         primaryKey: ['user_id'],
       },
       liteTableSpec: {
-        schema: '',
         name: 'users',
         columns: {
           ['user_id']: {
