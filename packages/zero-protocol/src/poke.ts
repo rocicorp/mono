@@ -1,8 +1,8 @@
 import * as v from '../../shared/src/valita.js';
-import {nullableVersionSchema, versionSchema} from './version.js';
 import {clientsPatchSchema} from './clients-patch.js';
 import {queriesPatchSchema} from './queries-patch.js';
-import {entitiesPatchSchema} from './entities-patch.js';
+import {rowsPatchSchema} from './row-patch.js';
+import {nullableVersionSchema, versionSchema} from './version.js';
 
 /**
  * Pokes use a multi-part format. Pokes send entity data to the client and can
@@ -53,10 +53,10 @@ export const pokePartBodySchema = v.object({
   // Patches to the desired query sets by client id.
   desiredQueriesPatches: v.record(queriesPatchSchema).optional(),
   // Patches to the set of queries for which entities are sync'd in
-  // entitiesPatch.
+  // rowsPatch.
   gotQueriesPatch: queriesPatchSchema.optional(),
-  // Patches to the entities set.
-  entitiesPatch: entitiesPatchSchema.optional(),
+  // Patches to the rows set.
+  rowsPatch: rowsPatchSchema.optional(),
 });
 
 export const pokeEndBodySchema = v.object({

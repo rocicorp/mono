@@ -3,10 +3,10 @@
  */
 
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {tsImport} from 'tsx/esm/api';
 import * as v from '../../../shared/src/valita.js';
 import {astSchema} from '../../../zero-protocol/src/mod.js';
-import {tsImport} from 'tsx/esm/api';
-import {fileURLToPath} from 'node:url';
 
 export type Action = 'select' | 'insert' | 'update' | 'delete';
 
@@ -35,10 +35,6 @@ const authorizationConfigSchema = v.record(
 
 export type AuthorizationConfig = v.Infer<typeof authorizationConfigSchema>;
 
-const stringLiteral = v.string();
-const numberLiteral = v.number();
-const booleanLiteral = v.boolean();
-
 /**
  * Configures the view of the upstream database replicated to this zero-cache.
  */
@@ -53,7 +49,7 @@ const shardConfigSchema = v.object({
    *
    * Defaults to "0".
    */
-  id: stringLiteral,
+  id: v.string(),
 
   /**
    * Optional (comma-separated) list of of Postgres `PUBLICATION`s that the
@@ -73,7 +69,7 @@ const shardConfigSchema = v.object({
    *
    * To use a different set of publications, a new shard should be created.
    */
-  publications: v.array(stringLiteral),
+  publications: v.array(v.string()),
 });
 
 const logConfigSchema = v.object({
@@ -96,8 +92,8 @@ const logConfigSchema = v.object({
    */
   format: v.union(v.literal('text'), v.literal('json')).optional(),
 
-  datadogLogsApiKey: stringLiteral.optional(),
-  datadogServiceLabel: stringLiteral.optional(),
+  datadogLogsApiKey: v.string().optional(),
+  datadogServiceLabel: v.string().optional(),
 });
 export type LogConfig = v.Infer<typeof logConfigSchema>;
 
@@ -106,37 +102,37 @@ const rateLimitConfigSchema = v.object({
   // This uses a sliding window algorithm to track number of transactions in the current window.
   mutationTransactions: v.object({
     algorithm: v.literal('sliding-window'),
-    windowMs: numberLiteral,
-    maxTransactions: numberLiteral,
+    windowMs: v.number(),
+    maxTransactions: v.number(),
   }),
 });
 
 const zeroConfigBase = v.object({
-  upstreamDBConnStr: stringLiteral,
-  cvrDBConnStr: stringLiteral,
-  changeDBConnStr: stringLiteral,
-  taskId: stringLiteral.optional(),
-  replicaDBFile: stringLiteral,
-  storageDBTmpDir: stringLiteral.optional(),
-  warmWebsocket: numberLiteral.optional(),
+  upstreamDBConnStr: v.string(),
+  cvrDBConnStr: v.string(),
+  changeDBConnStr: v.string(),
+  taskId: v.string().optional(),
+  replicaDBFile: v.string(),
+  storageDBTmpDir: v.string().optional(),
+  warmWebsocket: v.number().optional(),
 
   // The number of sync workers defaults to available-cores - 1.
   // It should be set to 0 for the `replication-manager`.
-  numSyncWorkers: numberLiteral.optional(),
+  numSyncWorkers: v.number().optional(),
 
   // In development, the `zero-cache` runs its own `replication-manager`
   // (i.e. `change-streamer`). In production, this URI should point to
   // to the `replication-manager`, which runs a `change-streamer`
   // on port 4849.
-  changeStreamerConnStr: stringLiteral.optional(),
+  changeStreamerConnStr: v.string().optional(),
 
   // Indicates that a `litestream replicate` process is backing up
   // the `replicatDbFile`. This should be the production configuration
   // for the `replication-manager`. It is okay to run this in
   // development too.
-  litestream: booleanLiteral.optional(),
+  litestream: v.boolean().optional(),
 
-  jwtSecret: stringLiteral.optional(),
+  jwtSecret: v.string().optional(),
 
   rateLimit: rateLimitConfigSchema.optional(),
 });

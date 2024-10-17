@@ -5,13 +5,19 @@ import {
   type JSONObject as SafeJSONObject,
 } from '../../../../shared/src/json.js';
 import * as v from '../../../../shared/src/valita.js';
+import {rowSchema} from '../../../../zero-protocol/src/data.js';
 import type {
   Downstream,
-  EntitiesPatchOp,
   PokePartBody,
+  RowPatchOp,
 } from '../../../../zero-protocol/src/mod.js';
+import {primaryKeyValueRecordSchema} from '../../../../zero-protocol/src/primary-key.js';
 import type {AST} from '../../../../zql/src/zql/ast/ast.js';
-import type {JSONObject, JSONValue} from '../../types/bigint-json.js';
+import type {JSONObject} from '../../types/bigint-json.js';
+import {
+  getErrorForClientIfSchemaVersionNotSupported,
+  type SchemaVersions,
+} from '../../types/schema-versions.js';
 import type {Subscription} from '../../types/subscription.js';
 import {
   type ClientPatch,
@@ -25,10 +31,6 @@ import {
   versionToCookie,
   versionToNullableCookie,
 } from './schema/types.js';
-import {
-  getErrorForClientIfSchemaVersionNotSupported,
-  type SchemaVersions,
-} from '../../types/schema-versions.js';
 
 export type PutRowPatch = {
   type: 'row';
@@ -182,7 +184,7 @@ export class ClientHandler {
           if (patch.id.table === 'zero.clients') {
             this.#updateLMIDs((body.lastMutationIDChanges ??= {}), patch);
           } else {
-            (body.entitiesPatch ??= []).push(makeEntityPatch(patch));
+            (body.rowsPatch ??= []).push(makeRowPatch(patch));
           }
           break;
         default:
@@ -241,34 +243,29 @@ const lmidRowSchema = v.object({
   lastMutationID: v.number(), // Actually returned as a bigint, but converted by ensureSafeJSON().
 });
 
-function makeEntityPatch(patch: RowPatch): EntitiesPatchOp {
+function makeRowPatch(patch: RowPatch): RowPatchOp {
   const {
     op,
-    id: {table: entityType, rowKey: entityID},
+    id: {table: tableName, rowKey: id},
   } = patch;
 
-  assertStringValues(entityID); // TODO: Enforce this ZQL constraint at sync time.
-  const entity = {entityType, entityID};
-
   switch (op) {
-    case 'put': {
-      const {contents} = patch;
-      return {...entity, op: 'put', value: ensureSafeJSON(contents)};
-    }
+    case 'put':
+      return {
+        op: 'put',
+        tableName,
+        value: v.parse(ensureSafeJSON(patch.contents), rowSchema),
+      };
+
     case 'del':
-      return {...entity, op};
+      return {
+        op,
+        tableName,
+        id: v.parse(id, primaryKeyValueRecordSchema),
+      };
+
     default:
       unreachable(op);
-  }
-}
-
-function assertStringValues(
-  rowKey: Record<string, JSONValue>,
-): asserts rowKey is Record<string, string> {
-  for (const value of Object.values(rowKey)) {
-    if (typeof value !== 'string') {
-      throw new Error(`invalid row key type ${typeof value}`);
-    }
   }
 }
 

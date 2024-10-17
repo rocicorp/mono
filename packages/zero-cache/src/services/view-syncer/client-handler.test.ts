@@ -222,17 +222,15 @@ describe('view-syncer/client-handler', () => {
           gotQueriesPatch: [
             {op: 'put', hash: 'bazhash', ast: {table: 'labels'}},
           ],
-          entitiesPatch: [
+          rowsPatch: [
             {
               op: 'put',
-              entityType: 'issues',
-              entityID: {id: 'bar'},
+              tableName: 'issues',
               value: {id: 'bar', name: 'hello', num: 123},
             },
             {
               op: 'put',
-              entityType: 'issues',
-              entityID: {id: 'boo'},
+              tableName: 'issues',
               value: {id: 'boo', name: 'world', num: 123456},
             },
           ],
@@ -276,18 +274,16 @@ describe('view-syncer/client-handler', () => {
           gotQueriesPatch: [
             {op: 'put', hash: 'bazhash', ast: {table: 'labels'}},
           ],
-          entitiesPatch: [
+          rowsPatch: [
             {
               op: 'put',
-              entityType: 'issues',
-              entityID: {id: 'bar'},
+              tableName: 'issues',
               value: {id: 'bar', name: 'hello', num: 123},
             },
-            {op: 'del', entityType: 'issues', entityID: {id: 'foo'}},
+            {op: 'del', tableName: 'issues', id: {id: 'foo'}},
             {
               op: 'put',
-              entityType: 'issues',
-              entityID: {id: 'boo'},
+              tableName: 'issues',
               value: {id: 'boo', name: 'world', num: 123456},
             },
           ],
