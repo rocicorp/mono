@@ -63,7 +63,7 @@ export default function IssuePage() {
   );
   useKeypress('j', () => {
     if (next) {
-      navigate(`/issue/${next.id}`);
+      navigate(`/issue/${next.shortID ?? next.id}`);
     }
   });
 
