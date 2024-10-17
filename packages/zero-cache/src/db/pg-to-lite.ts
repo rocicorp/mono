@@ -1,8 +1,14 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {ColumnSpec, TableSpec} from '../../../../db/specs.js';
-import {dataTypeToZqlValueType} from '../../../../types/lite.js';
-import {liteTableName} from '../../../../types/names.js';
-import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/replication-state.js';
+import {ZERO_VERSION_COLUMN_NAME} from '../services/replicator/schema/replication-state.js';
+import {dataTypeToZqlValueType} from '../types/lite.js';
+import {liteTableName} from '../types/names.js';
+import type {
+  ColumnSpec,
+  IndexSpec,
+  LiteIndexSpec,
+  LiteTableSpec,
+  TableSpec,
+} from './specs.js';
 
 export const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {
   pos: Number.MAX_SAFE_INTEGER, // i.e. last
@@ -61,11 +67,11 @@ function mapPostgresToLiteDefault(
   return match[1];
 }
 
-export function mapPostgresToLite(t: TableSpec): TableSpec {
+export function mapPostgresToLite(t: TableSpec): LiteTableSpec {
+  const {schema: _, ...liteSpec} = t;
   const name = liteTableName(t);
   return {
-    ...t,
-    schema: '', // SQLite does not support schemas
+    ...liteSpec,
     name,
     columns: {
       ...Object.fromEntries(
@@ -85,4 +91,9 @@ export function mapPostgresToLite(t: TableSpec): TableSpec {
       [ZERO_VERSION_COLUMN_NAME]: ZERO_VERSION_COLUMN_SPEC,
     },
   };
+}
+
+export function mapPostgresToLiteIndex(index: IndexSpec): LiteIndexSpec {
+  const {schemaName: schema, tableName: name, ...liteIndex} = index;
+  return {tableName: liteTableName({schema, name}), ...liteIndex};
 }
