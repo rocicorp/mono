@@ -67,6 +67,20 @@ function mapPostgresToLiteDefault(
   return match[1];
 }
 
+export function mapPostgresToLiteColumn(
+  table: string,
+  column: {name: string; spec: ColumnSpec},
+): ColumnSpec {
+  const {pos, dataType, notNull, dflt} = column.spec;
+  return {
+    pos,
+    dataType,
+    characterMaximumLength: null,
+    notNull,
+    dflt: mapPostgresToLiteDefault(table, column.name, dataType, dflt),
+  };
+}
+
 export function mapPostgresToLite(t: TableSpec): LiteTableSpec {
   const {schema: _, ...liteSpec} = t;
   const name = liteTableName(t);
@@ -75,18 +89,10 @@ export function mapPostgresToLite(t: TableSpec): LiteTableSpec {
     name,
     columns: {
       ...Object.fromEntries(
-        Object.entries(t.columns).map(
-          ([col, {pos, dataType, notNull, dflt}]) => [
-            col,
-            {
-              pos,
-              dataType,
-              characterMaximumLength: null,
-              notNull,
-              dflt: mapPostgresToLiteDefault(name, col, dataType, dflt),
-            } satisfies ColumnSpec,
-          ],
-        ),
+        Object.entries(t.columns).map(([col, spec]) => [
+          col,
+          mapPostgresToLiteColumn(name, {name: col, spec}),
+        ]),
       ),
       [ZERO_VERSION_COLUMN_NAME]: ZERO_VERSION_COLUMN_SPEC,
     },
