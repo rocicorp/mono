@@ -1,10 +1,16 @@
 import {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.js';
 import {Database} from '../../../../zqlite/src/db.js';
+import type {ColumnSpec, IndexSpec, TableSpec} from '../../db/specs.js';
 import {StatementRunner} from '../../db/statements.js';
 import type {RowKey, RowValue} from '../../types/row-key.js';
 import type {
+  ColumnAdd,
+  ColumnDrop,
+  ColumnUpdate,
   DataChange,
+  IndexCreate,
+  IndexDrop,
   MessageBegin,
   MessageCommit,
   MessageDelete,
@@ -12,6 +18,9 @@ import type {
   MessageRelation,
   MessageTruncate,
   MessageUpdate,
+  TableCreate,
+  TableDrop,
+  TableRename,
 } from '../change-streamer/schema/change.js';
 import {MessageProcessor} from './incremental-sync.js';
 
@@ -121,6 +130,69 @@ export class ReplicationMessages<
       tag: 'truncate',
       relations: tables.map(t => this.#relationOrFail(t)),
     };
+  }
+
+  createTable(spec: TableSpec): TableCreate {
+    return {tag: 'create-table', spec};
+  }
+
+  renameTable<TableName extends string & keyof TablesAndKeys>(
+    from: TableName,
+    to: string,
+  ): TableRename {
+    return {
+      tag: 'rename-table',
+      old: {schema: 'public', name: from},
+      new: {schema: 'public', name: to},
+    };
+  }
+
+  addColumn<TableName extends string & keyof TablesAndKeys>(
+    table: TableName,
+    column: string,
+    spec: ColumnSpec,
+  ): ColumnAdd {
+    return {
+      tag: 'add-column',
+      table: {schema: 'public', name: table},
+      column: {name: column, spec},
+    };
+  }
+
+  updateColumn<TableName extends string & keyof TablesAndKeys>(
+    table: TableName,
+    oldCol: {name: string; spec: ColumnSpec},
+    newCol: {name: string; spec: ColumnSpec},
+  ): ColumnUpdate {
+    return {
+      tag: 'update-column',
+      table: {schema: 'public', name: table},
+      old: oldCol,
+      new: newCol,
+    };
+  }
+
+  dropColumn<TableName extends string & keyof TablesAndKeys>(
+    table: TableName,
+    column: string,
+  ): ColumnDrop {
+    return {
+      tag: 'drop-column',
+      table: {schema: 'public', name: table},
+      column,
+    };
+  }
+
+  createIndex(spec: IndexSpec): IndexCreate {
+    return {tag: 'create-index', spec};
+  }
+
+  dropTable(name: string, schema = 'public'): TableDrop {
+    return {tag: 'drop-table', id: {schema, name}};
+  }
+
+  dropIndex(name: string, schema = 'public'): IndexDrop {
+    return {tag: 'drop-index', id: {schema, name}};
   }
 
   commit(extra?: object): MessageCommit {

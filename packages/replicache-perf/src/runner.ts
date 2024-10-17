@@ -1,13 +1,13 @@
-import {startDevServer} from '@web/dev-server';
-import {esbuildPlugin} from '@web/dev-server-esbuild';
 import commandLineArgs from 'command-line-args';
 import commandLineUsage from 'command-line-usage';
 import getPort from 'get-port';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import process from 'node:process';
 import {fileURLToPath} from 'node:url';
 import * as playwright from 'playwright';
+import {createServer} from 'vite';
 import {assert} from '../../shared/src/asserts.js';
 import {makeDefine} from '../../shared/src/build.js';
 import {
@@ -167,24 +167,17 @@ async function main() {
 
   const port = await getPort({port: 8080});
 
-  const server = await startDevServer({
-    config: {
-      nodeResolve: true,
-      rootDir,
-      port,
-      watch: false,
-      plugins: [
-        esbuildPlugin({
-          ts: true,
-          target: 'es2022',
-          define: makeDefine('release'),
-        }),
-      ],
+  const define = makeDefine('release');
+
+  const server = await createServer({
+    define,
+    esbuild: {
+      define,
     },
-    readCliArgs: false,
-    readFileConfig: false,
-    logStartMessage: options.verbose,
+    root: rootDir,
+    mode: 'production',
   });
+  await server.listen(port);
 
   const userDataDir = await fs.mkdtemp(
     path.join(os.tmpdir(), 'replicache-playwright-'),
@@ -218,7 +211,7 @@ async function main() {
       process.exit(1);
     });
 
-    const url = new URL(`http://127.0.0.1:${port}/index.html`);
+    const url = new URL(`http://localhost:${port}/index.html`);
     if (options.devtools) {
       for (const group of options.groups ?? ['replicache']) {
         url.searchParams.append('group', group);
@@ -253,7 +246,7 @@ async function main() {
   } catch {
     // Ignore.
   }
-  await server.stop();
+  await server.close();
 }
 
 async function runInBrowser(

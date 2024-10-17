@@ -1,5 +1,4 @@
 import {resolver} from '@rocicorp/resolver';
-import {assert, expect} from 'chai';
 import * as sinon from 'sinon';
 import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.js';
 import {TestLogSink} from '../../shared/src/logging-test-utils.js';
@@ -23,7 +22,7 @@ import type {ReadTransaction, WriteTransaction} from './transactions.js';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import {describe, test} from 'vitest';
+import {describe, expect, test} from 'vitest';
 
 initReplicacheTesting();
 
@@ -1053,10 +1052,10 @@ test('Errors in subscriptions are logged if no onError', async () => {
 
     await tickUntil(() => called);
     if (onError) {
-      assert.equal(testLogSink.messages.length, 0);
+      expect(testLogSink.messages.length).toBe(0);
     } else {
-      assert.equal(testLogSink.messages.length, 1);
-      assert.deepEqual(testLogSink.messages[0], [
+      expect(testLogSink.messages.length).toBe(1);
+      expect(testLogSink.messages[0]).toEqual([
         'error',
         {name: rep.name},
         ['Error in subscription body:', err],
@@ -1071,8 +1070,8 @@ test('Errors in subscriptions are logged if no onError', async () => {
   const f = sinon.fake();
   const err = new Error('b');
   await t(f, err);
-  assert.equal(f.callCount, 1);
-  assert.isTrue(f.calledWith(err));
+  expect(f.callCount).toBe(1);
+  expect(f.calledWith(err)).toBe(true);
 });
 
 test('subscribe using a function', async () => {
@@ -1122,7 +1121,7 @@ test('subscribe where body returns non json', async () => {
     },
     {
       onData(values) {
-        assert.instanceOf(values, Map);
+        expect(values).instanceOf(Map);
         for (const entry of values) {
           log.push(entry);
         }

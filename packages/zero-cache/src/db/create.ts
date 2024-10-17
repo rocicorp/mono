@@ -6,26 +6,29 @@ import type {
   TableSpec,
 } from './specs.js';
 
+export function columnDef(spec: ColumnSpec) {
+  const parts = [spec.dataType];
+  if (spec.characterMaximumLength) {
+    parts.push(`(${spec.characterMaximumLength})`);
+  }
+  if (spec.notNull) {
+    parts.push(' NOT NULL');
+  }
+  if (spec.dflt) {
+    parts.push(` DEFAULT ${spec.dflt}`);
+  }
+  return parts.join('');
+}
+
 /**
  * Constructs a `CREATE TABLE` statement for a {@link TableSpec}.
  */
 export function createTableStatement(spec: TableSpec | LiteTableSpec): string {
-  function colDef(name: string, colSpec: ColumnSpec): string {
-    const parts = [`${id(name)} ${colSpec.dataType}`];
-    if (colSpec.characterMaximumLength) {
-      parts.push(`(${colSpec.characterMaximumLength})`);
-    }
-    if (colSpec.notNull) {
-      parts.push(' NOT NULL');
-    }
-    // Note: DEFAULT expressions are ignored for CREATE TABLE statements,
-    // as in that case, row values always come from the replication stream.
-    return parts.join('');
-  }
-
+  // Note: DEFAULT expressions are ignored for CREATE TABLE statements,
+  // as in that case, row values always come from the replication stream.
   const defs = Object.entries(spec.columns)
     .sort(([_a, {pos: a}], [_b, {pos: b}]) => a - b)
-    .map(([name, col]) => colDef(name, col));
+    .map(([name, spec]) => `${id(name)} ${columnDef({...spec, dflt: null})}`);
   if (spec.primaryKey) {
     defs.push(`PRIMARY KEY (${idList(spec.primaryKey)})`);
   }

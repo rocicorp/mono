@@ -147,6 +147,121 @@ test('completed poke plays on first raf', async () => {
   expect(rafStub).toHaveBeenCalledTimes(2);
 });
 
+test('canceled poke is not applied', async () => {
+  const onPokeErrorStub = vi.fn();
+  const replicachePokeStub = vi.fn();
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
+  const pokeHandler = new PokeHandler(
+    replicachePokeStub,
+    onPokeErrorStub,
+    clientID,
+    schema,
+    logContext,
+  );
+  expect(rafStub).toHaveBeenCalledTimes(0);
+
+  const pokeStartAndParts = (pokeID: string) => {
+    pokeHandler.handlePokeStart({
+      pokeID,
+      baseCookie: '1',
+      cookie: '2',
+      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
+    });
+    pokeHandler.handlePokePart({
+      pokeID,
+      lastMutationIDChanges: {
+        c1: 1,
+        c2: 2,
+      },
+      rowsPatch: [
+        {
+          op: 'put',
+          tableName: 'issues',
+          value: {id: 'issue1', title: 'foo1'},
+        },
+      ],
+    });
+    pokeHandler.handlePokePart({
+      pokeID,
+      lastMutationIDChanges: {
+        c1: 2,
+      },
+      rowsPatch: [
+        {
+          op: 'put',
+          tableName: 'issues',
+          value: {id: 'issue1', title: 'foo2'},
+        },
+        {
+          op: 'put',
+          tableName: 'issues',
+          value: {id: 'issue2', title: 'bar1'},
+        },
+      ],
+    });
+  };
+  pokeStartAndParts('poke1');
+
+  expect(rafStub).toHaveBeenCalledTimes(0);
+
+  pokeHandler.handlePokeEnd({pokeID: 'poke1', cancel: true});
+
+  // raf is not scheduled because poke was canceled;
+  expect(rafStub).toHaveBeenCalledTimes(0);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(0);
+
+  // now test receiving a poke after the canceled poke
+  pokeStartAndParts('poke2');
+
+  expect(rafStub).toHaveBeenCalledTimes(0);
+
+  pokeHandler.handlePokeEnd({pokeID: 'poke2'});
+
+  expect(rafStub).toHaveBeenCalledTimes(1);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(0);
+
+  const rafCallback0 = rafStub.mock.calls[0][0];
+  await rafCallback0(UNUSED_RAF_ARG);
+
+  expect(replicachePokeStub).toHaveBeenCalledTimes(1);
+  const replicachePoke0 = replicachePokeStub.mock.calls[0][0];
+  expect(replicachePoke0).to.deep.equal({
+    baseCookie: '1',
+    pullResponse: {
+      cookie: '2',
+      lastMutationIDChanges: {
+        c1: 2,
+        c2: 2,
+      },
+      patch: [
+        {
+          op: 'put',
+          key: 'e/issues/issue1',
+          value: {id: 'issue1', title: 'foo1'},
+        },
+        {
+          op: 'put',
+          key: 'e/issues/issue1',
+          value: {id: 'issue1', title: 'foo2'},
+        },
+        {
+          op: 'put',
+          key: 'e/issues/issue2',
+          value: {id: 'issue2', title: 'bar1'},
+        },
+      ],
+    },
+  });
+
+  expect(rafStub).toHaveBeenCalledTimes(2);
+
+  const rafCallback1 = rafStub.mock.calls[1][0];
+  await rafCallback1(UNUSED_RAF_ARG);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(1);
+  expect(rafStub).toHaveBeenCalledTimes(2);
+});
+
 test('multiple pokes received before raf callback are merged', async () => {
   const onPokeErrorStub = vi.fn();
   const replicachePokeStub = vi.fn();
@@ -286,6 +401,190 @@ test('multiple pokes received before raf callback are merged', async () => {
           op: 'put',
           key: 'e/issues/issue2',
           value: {id: 'issue2', title: 'bar2'},
+        },
+      ],
+    },
+  });
+
+  expect(rafStub).toHaveBeenCalledTimes(2);
+
+  const rafCallback1 = rafStub.mock.calls[1][0];
+  await rafCallback1(UNUSED_RAF_ARG);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(1);
+  expect(rafStub).toHaveBeenCalledTimes(2);
+});
+
+test('multiple pokes received before raf callback are merged, canceled pokes are not merged', async () => {
+  const onPokeErrorStub = vi.fn();
+  const replicachePokeStub = vi.fn();
+  const clientID = 'c1';
+  const logContext = new LogContext('error');
+  const pokeHandler = new PokeHandler(
+    replicachePokeStub,
+    onPokeErrorStub,
+    clientID,
+    schema,
+    logContext,
+  );
+
+  expect(rafStub).toHaveBeenCalledTimes(0);
+
+  pokeHandler.handlePokeStart({
+    pokeID: 'poke1',
+    baseCookie: '1',
+    cookie: '2',
+    schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
+  });
+  pokeHandler.handlePokePart({
+    pokeID: 'poke1',
+    lastMutationIDChanges: {
+      c1: 1,
+      c2: 2,
+    },
+    rowsPatch: [
+      {
+        op: 'put',
+        tableName: 'issues',
+        value: {id: 'issue1', title: 'foo1'},
+      },
+    ],
+  });
+  pokeHandler.handlePokePart({
+    pokeID: 'poke1',
+    lastMutationIDChanges: {
+      c1: 2,
+    },
+    rowsPatch: [
+      {
+        op: 'put',
+        tableName: 'issues',
+        value: {id: 'issue1', title: 'foo2'},
+      },
+      {
+        op: 'put',
+        tableName: 'issues',
+        value: {id: 'issue2', title: 'bar1'},
+      },
+    ],
+  });
+
+  expect(rafStub).toHaveBeenCalledTimes(0);
+  pokeHandler.handlePokeEnd({pokeID: 'poke1'});
+
+  expect(rafStub).toHaveBeenCalledTimes(1);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(0);
+
+  pokeHandler.handlePokeStart({
+    pokeID: 'poke2',
+    baseCookie: '2',
+    cookie: '3',
+    schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
+  });
+  pokeHandler.handlePokePart({
+    pokeID: 'poke2',
+    lastMutationIDChanges: {
+      c1: 3,
+    },
+    rowsPatch: [
+      {
+        op: 'put',
+        tableName: 'issues',
+        value: {id: 'issue3', title: 'baz1'},
+      },
+    ],
+  });
+  pokeHandler.handlePokePart({
+    pokeID: 'poke2',
+    lastMutationIDChanges: {
+      c3: 1,
+    },
+    rowsPatch: [
+      {
+        op: 'put',
+        tableName: 'issues',
+        value: {id: 'issue2', title: 'bar2'},
+      },
+    ],
+  });
+
+  expect(rafStub).toHaveBeenCalledTimes(1);
+
+  pokeHandler.handlePokeEnd({pokeID: 'poke2', cancel: true});
+
+  expect(rafStub).toHaveBeenCalledTimes(1);
+  expect(replicachePokeStub).toHaveBeenCalledTimes(0);
+
+  pokeHandler.handlePokeStart({
+    pokeID: 'poke3',
+    baseCookie: '2',
+    cookie: '3',
+    schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
+  });
+  pokeHandler.handlePokePart({
+    pokeID: 'poke3',
+    lastMutationIDChanges: {
+      c1: 3,
+    },
+    rowsPatch: [
+      {
+        op: 'put',
+        tableName: 'issues',
+        value: {id: 'issue4', title: 'baz2'},
+      },
+    ],
+  });
+
+  expect(rafStub).toHaveBeenCalledTimes(1);
+
+  pokeHandler.handlePokeEnd({pokeID: 'poke3'});
+
+  const rafCallback0 = rafStub.mock.calls[0][0];
+  await rafCallback0(UNUSED_RAF_ARG);
+
+  expect(replicachePokeStub).toHaveBeenCalledTimes(1);
+  const replicachePoke0 = replicachePokeStub.mock.calls[0][0];
+  expect(replicachePoke0).to.deep.equal({
+    baseCookie: '1',
+    pullResponse: {
+      cookie: '3',
+      lastMutationIDChanges: {
+        c1: 3,
+        c2: 2,
+        // Not included because corresponding poke was canceled
+        // c3: 1,
+      },
+      patch: [
+        {
+          op: 'put',
+          key: 'e/issues/issue1',
+          value: {id: 'issue1', title: 'foo1'},
+        },
+        {
+          op: 'put',
+          key: 'e/issues/issue1',
+          value: {id: 'issue1', title: 'foo2'},
+        },
+        {
+          op: 'put',
+          key: 'e/issues/issue2',
+          value: {id: 'issue2', title: 'bar1'},
+        },
+        // Following not included because corresponding poke was canceled
+        // {
+        //   op: 'put',
+        //   key: 'e/issues/issue3',
+        //   value: {id: 'issue3', title: 'baz1'},
+        // },
+        // {
+        //   op: 'put',
+        //   key: 'e/issues/issue2',
+        //   value: {id: 'issue2', title: 'bar2'},
+        // },
+        // non-canceled poke after canceled poke is merged
+        {
+          op: 'put',
+          key: 'e/issues/issue4',
+          value: {id: 'issue4', title: 'baz2'},
         },
       ],
     },

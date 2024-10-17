@@ -8,6 +8,7 @@ import {
 } from 'pg-logical-replication';
 import {DatabaseError} from 'pg-protocol';
 import {AbortError} from '../../../../../shared/src/abort-error.js';
+import {assert} from '../../../../../shared/src/asserts.js';
 import {deepEqual} from '../../../../../shared/src/json.js';
 import {sleep} from '../../../../../shared/src/sleep.js';
 import {Database} from '../../../../../zqlite/src/db.js';
@@ -23,7 +24,7 @@ import {Subscription} from '../../../types/subscription.js';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
 import type {ChangeSource, ChangeStream} from '../change-streamer-service.js';
 import type {Commit, DownstreamChange} from '../change-streamer.js';
-import type {Change} from '../schema/change.js';
+import type {MessageDelete} from '../schema/change.js';
 import type {ReplicationConfig} from '../schema/tables.js';
 import {replicationSlot} from './initial-sync.js';
 import {fromLexiVersion, toLexiVersion} from './lsn.js';
@@ -277,43 +278,41 @@ function messageToDownstream(
   lsn: string,
   msg: Pgoutput.Message,
 ): DownstreamChange | undefined {
-  const change = msg as Change;
-  const {tag} = change;
-  switch (tag) {
+  switch (msg.tag) {
     case 'begin':
-      return ['begin', change];
+      return ['begin', msg];
+    case 'delete':
+      assert(msg.key);
+      return ['data', msg as MessageDelete];
     case 'insert':
     case 'update':
-    case 'delete':
     case 'truncate':
-      return ['data', change];
+      return ['data', msg];
     case 'commit': {
       const watermark = toLexiVersion(lsn);
-      return ['commit', change, {watermark}];
+      return ['commit', msg, {watermark}];
     }
 
-    default:
-      change satisfies never; // All Change types are covered.
+    case 'relation':
+      return undefined; // Explicitly ignored. Schema handling is TODO.
 
-      // But we can technically receive other Message types.
-      switch (msg.tag) {
-        case 'relation':
-          return undefined; // Explicitly ignored. Schema handling is TODO.
-        case 'type':
-          throw new Error(
-            `Custom types are not supported (received "${msg.typeName}")`,
-          );
-        case 'origin':
-          // We do not set the `origin` option in the pgoutput parameters:
-          // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
-          throw new Error(`Unexpected ORIGIN message ${stringify(msg)}`);
-        case 'message':
-          // We do not set the `messages` option in the pgoutput parameters:
-          // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
-          throw new Error(`Unexpected MESSAGE message ${stringify(msg)}`);
-        default:
-          throw new Error(`Unexpected message type ${stringify(msg)}`);
-      }
+    case 'type':
+      throw new Error(
+        `Custom types are not supported (received "${msg.typeName}")`,
+      );
+    case 'origin':
+      // We do not set the `origin` option in the pgoutput parameters:
+      // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
+      throw new Error(`Unexpected ORIGIN message ${stringify(msg)}`);
+    case 'message':
+      // We do not set the `messages` option in the pgoutput parameters:
+      // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
+      //
+      // TODO: Handle DDL events and convert them to schema Change messages here.
+      throw new Error(`Unexpected MESSAGE message ${stringify(msg)}`);
+    default:
+      msg satisfies never;
+      throw new Error(`Unexpected message type ${stringify(msg)}`);
   }
 }
 

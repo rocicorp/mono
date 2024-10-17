@@ -22,7 +22,11 @@ import {
   initReplicationState,
   updateReplicationWatermark,
 } from '../replicator/schema/replication-state.js';
-import {fakeReplicator, ReplicationMessages} from '../replicator/test-utils.js';
+import {
+  fakeReplicator,
+  type FakeReplicator,
+  ReplicationMessages,
+} from '../replicator/test-utils.js';
 import {CVRStore} from './cvr-store.js';
 import {CVRQueryDrivenUpdater} from './cvr.js';
 import {
@@ -64,6 +68,7 @@ describe('view-syncer/service', () => {
   let operatorStorage: ClientGroupStorage;
   let vs: ViewSyncerService;
   let viewSyncerDone: Promise<void>;
+  let replicator: FakeReplicator;
 
   const SYNC_CONTEXT = {
     clientID: 'foo',
@@ -139,6 +144,7 @@ describe('view-syncer/service', () => {
     cvrDB = await testDBs.create('view_syncer_service_test');
     await initViewSyncerSchema(lc, cvrDB);
 
+    replicator = fakeReplicator(lc, replica);
     stateChanges = Subscription.create();
     operatorStorage = new DatabaseStorage(storageDB).createClientGroupStorage(
       serviceID,
@@ -581,7 +587,6 @@ describe('view-syncer/service', () => {
       },
     ]);
 
-    const replicator = fakeReplicator(lc, replica);
     replicator.processTransaction(
       '123',
       messages.update('issues', {
@@ -744,7 +749,6 @@ describe('view-syncer/service', () => {
       },
     ]);
 
-    const replicator = fakeReplicator(lc, replica);
     replicator.processTransaction(
       '123',
       messages.update('issues', {
@@ -840,16 +844,10 @@ describe('view-syncer/service', () => {
       },
     ]);
 
-    // TODO: Use the fakeReplicator to produce the schema change.
-    // For now, simulating it with low-level changes.
-    replica.exec(`
-      ALTER TABLE issues ADD COLUMN newColumn TEXT;
-
-      UPDATE issues SET _0_version = '07';
-
-      INSERT INTO "_zero.ChangeLog" (stateVersion, "table", rowKey, op)
-        VALUES ('07', 'issues', null, 'r')`);
-    updateReplicationWatermark(new StatementRunner(replica), '07');
+    replicator.processTransaction(
+      '07',
+      messages.addColumn('issues', 'newColumn', {dataType: 'TEXT', pos: 0}),
+    );
 
     stateChanges.push({state: 'version-ready'});
 
@@ -961,7 +959,6 @@ describe('view-syncer/service', () => {
       schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
     });
 
-    const replicator = fakeReplicator(lc, replica);
     replicator.processTransaction(
       '123',
       messages.update('issues', {

@@ -2,13 +2,13 @@ import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {Database} from '../../../zqlite/src/db.js';
 import {listIndexes, listTables} from './lite-tables.js';
-import type {LiteIndexSpec, TableSpec} from './specs.js';
+import type {LiteIndexSpec, LiteTableSpec} from './specs.js';
 
 describe('lite/tables', () => {
   type Case = {
     name: string;
     setupQuery: string;
-    expectedResult: TableSpec[];
+    expectedResult: LiteTableSpec[];
   };
 
   const cases: Case[] = [
@@ -27,7 +27,6 @@ describe('lite/tables', () => {
       `,
       expectedResult: [
         {
-          schema: '',
           name: 'zero.clients',
           columns: {
             clientID: {
@@ -65,7 +64,6 @@ describe('lite/tables', () => {
       `,
       expectedResult: [
         {
-          schema: '',
           name: 'users',
           columns: {
             ['user_id']: {
@@ -142,7 +140,6 @@ describe('lite/tables', () => {
       `,
       expectedResult: [
         {
-          schema: '',
           name: 'issues',
           columns: {
             ['issue_id']: {

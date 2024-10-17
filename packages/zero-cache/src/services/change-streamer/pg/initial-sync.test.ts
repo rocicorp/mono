@@ -5,7 +5,7 @@ import {listIndexes, listTables} from '../../../db/lite-tables.js';
 import type {
   FilteredTableSpec,
   LiteIndexSpec,
-  TableSpec,
+  LiteTableSpec,
 } from '../../../db/specs.js';
 import {
   dropReplicationSlot,
@@ -99,7 +99,7 @@ const ZERO_CLIENTS_SPEC: FilteredTableSpec = {
   },
 } as const;
 
-const REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC: TableSpec = {
+const REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC: LiteTableSpec = {
   columns: {
     minSupportedVersion: {
       characterMaximumLength: null,
@@ -125,10 +125,9 @@ const REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC: TableSpec = {
   },
   name: 'zero.schemaVersions',
   primaryKey: ['lock'],
-  schema: '',
 } as const;
 
-const REPLICATED_ZERO_CLIENTS_SPEC: TableSpec = {
+const REPLICATED_ZERO_CLIENTS_SPEC: LiteTableSpec = {
   columns: {
     shardID: {
       pos: 1,
@@ -168,7 +167,6 @@ const REPLICATED_ZERO_CLIENTS_SPEC: TableSpec = {
   },
   name: 'zero.clients',
   primaryKey: ['shardID', 'clientGroupID', 'clientID'],
-  schema: '',
 } as const;
 
 describe('replicator/initial-sync', () => {
@@ -179,7 +177,7 @@ describe('replicator/initial-sync', () => {
     setupReplicaQuery?: string;
     published: Record<string, FilteredTableSpec>;
     upstream?: Record<string, object[]>;
-    replicatedSchema: Record<string, TableSpec>;
+    replicatedSchema: Record<string, LiteTableSpec>;
     replicatedIndices?: LiteIndexSpec[];
     replicatedData: Record<string, object[]>;
     resultingPublications: string[];
@@ -443,7 +441,6 @@ describe('replicator/initial-sync', () => {
           },
           name: 'issues',
           primaryKey: ['orgID', 'issueID'],
-          schema: '',
         },
       },
       upstream: {
@@ -615,7 +612,6 @@ describe('replicator/initial-sync', () => {
           },
           name: 'users',
           primaryKey: ['userID'],
-          schema: '',
         },
       },
       upstream: {
@@ -714,7 +710,6 @@ describe('replicator/initial-sync', () => {
           },
           name: 'users',
           primaryKey: ['userID'],
-          schema: '',
         },
       },
       upstream: {
@@ -841,7 +836,6 @@ describe('replicator/initial-sync', () => {
           },
           name: 'issues',
           primaryKey: ['orgID', 'issueID'],
-          schema: '',
         },
       },
       upstream: {},

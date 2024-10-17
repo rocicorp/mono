@@ -1,10 +1,20 @@
 import type {LogContext} from '@rocicorp/logger';
 import {SqliteError} from 'better-sqlite3';
-import {ident} from 'pg-format';
+import {ident as id} from 'pg-format';
 import {LogicalReplicationService} from 'pg-logical-replication';
 import {AbortError} from '../../../../shared/src/abort-error.js';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
 import {Database} from '../../../../zqlite/src/db.js';
+import {
+  columnDef,
+  createIndexStatement,
+  createTableStatement,
+} from '../../db/create.js';
+import {
+  mapPostgresToLite,
+  mapPostgresToLiteColumn,
+  mapPostgresToLiteIndex,
+} from '../../db/pg-to-lite.js';
 import {StatementRunner} from '../../db/statements.js';
 import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
@@ -18,16 +28,29 @@ import type {
 } from '../change-streamer/change-streamer.js';
 import type {
   Change,
+  ColumnAdd,
+  ColumnDrop,
+  ColumnUpdate,
+  IndexCreate,
+  IndexDrop,
   MessageCommit,
   MessageDelete,
   MessageInsert,
   MessageTruncate,
   MessageUpdate,
+  TableCreate,
+  TableDrop,
+  TableRename,
 } from '../change-streamer/schema/change.js';
 import {RunningState} from '../running-state.js';
 import {Notifier} from './notifier.js';
 import type {ReplicaState} from './replicator.js';
-import {logDeleteOp, logSetOp, logTruncateOp} from './schema/change-log.js';
+import {
+  logDeleteOp,
+  logResetOp,
+  logSetOp,
+  logTruncateOp,
+} from './schema/change-log.js';
 import {
   ZERO_VERSION_COLUMN_NAME,
   getReplicationVersions,
@@ -224,7 +247,7 @@ export class MessageProcessor {
     let start = Date.now();
     for (let i = 0; ; i++) {
       try {
-        return new TransactionProcessor(this.#db, this.#txMode);
+        return new TransactionProcessor(lc, this.#db, this.#txMode);
       } catch (e) {
         // The db occasionally errors with a 'database is locked' error when
         // being concurrently processed by `litestream replicate`, even with
@@ -294,7 +317,30 @@ export class MessageProcessor {
       case 'truncate':
         tx.processTruncate(msg);
         break;
-
+      case 'create-table':
+        tx.processCreateTable(msg);
+        break;
+      case 'rename-table':
+        tx.processRenameTable(msg);
+        break;
+      case 'add-column':
+        tx.processAddColumn(msg);
+        break;
+      case 'update-column':
+        tx.processUpdateColumn(msg);
+        break;
+      case 'drop-column':
+        tx.processDropColumn(msg);
+        break;
+      case 'drop-table':
+        tx.processDropTable(msg);
+        break;
+      case 'create-index':
+        tx.processCreateIndex(msg);
+        break;
+      case 'drop-index':
+        tx.processDropIndex(msg);
+        break;
       default:
         unreachable(msg);
     }
@@ -325,11 +371,12 @@ export class MessageProcessor {
  * UPSERTs. See {@link processInsert} for the underlying motivation.
  */
 class TransactionProcessor {
+  readonly #lc: LogContext;
   readonly #startMs: number;
   readonly #db: StatementRunner;
   readonly #version: LexiVersion;
 
-  constructor(db: StatementRunner, txMode: TransactionMode) {
+  constructor(lc: LogContext, db: StatementRunner, txMode: TransactionMode) {
     this.#startMs = Date.now();
 
     if (txMode === 'CONCURRENT') {
@@ -351,6 +398,7 @@ class TransactionProcessor {
     const {nextStateVersion} = getReplicationVersions(db);
     this.#db = db;
     this.#version = nextStateVersion;
+    this.#lc = lc.withContext('version', nextStateVersion);
   }
 
   /**
@@ -380,12 +428,12 @@ class TransactionProcessor {
       insert.relation.keyColumns.map(col => [col, newRow[col]]),
     );
     const rawColumns = Object.keys(row);
-    const keyColumns = insert.relation.keyColumns.map(c => ident(c));
-    const columns = rawColumns.map(c => ident(c));
-    const upsert = rawColumns.map(c => `${ident(c)}=EXCLUDED.${ident(c)}`);
+    const keyColumns = insert.relation.keyColumns.map(c => id(c));
+    const columns = rawColumns.map(c => id(c));
+    const upsert = rawColumns.map(c => `${id(c)}=EXCLUDED.${id(c)}`);
     this.#db.run(
       `
-      INSERT INTO ${ident(table)} (${columns.join(',')})
+      INSERT INTO ${id(table)} (${columns.join(',')})
         VALUES (${new Array(columns.length).fill('?').join(',')})
         ON CONFLICT (${keyColumns.join(',')})
         DO UPDATE SET ${upsert.join(',')}
@@ -409,12 +457,12 @@ class TransactionProcessor {
       update.relation.keyColumns.map(col => [col, newRow[col]]),
     );
     const currKey = oldKey ?? newKey;
-    const setExprs = Object.keys(row).map(col => `${ident(col)}=?`);
-    const conds = Object.keys(currKey).map(col => `${ident(col)}=?`);
+    const setExprs = Object.keys(row).map(col => `${id(col)}=?`);
+    const conds = Object.keys(currKey).map(col => `${id(col)}=?`);
 
     this.#db.run(
       `
-      UPDATE ${ident(table)}
+      UPDATE ${id(table)}
         SET ${setExprs.join(',')}
         WHERE ${conds.join(' AND ')}
       `,
@@ -434,9 +482,9 @@ class TransactionProcessor {
     const rowKey = liteRow(del.key);
     const table = liteTableName(del.relation);
 
-    const conds = Object.keys(rowKey).map(col => `${ident(col)}=?`);
+    const conds = Object.keys(rowKey).map(col => `${id(col)}=?`);
     this.#db.run(
-      `DELETE FROM ${ident(table)} WHERE ${conds.join(' AND ')}`,
+      `DELETE FROM ${id(table)} WHERE ${conds.join(' AND ')}`,
       Object.values(rowKey),
     );
 
@@ -447,11 +495,110 @@ class TransactionProcessor {
     for (const relation of truncate.relations) {
       const table = liteTableName(relation);
       // Update replica data.
-      this.#db.run(`DELETE FROM ${ident(table)}`);
+      this.#db.run(`DELETE FROM ${id(table)}`);
 
       // Update change log.
       logTruncateOp(this.#db, this.#version, table);
     }
+  }
+  processCreateTable(create: TableCreate) {
+    const table = mapPostgresToLite(create.spec);
+    this.#db.db.exec(createTableStatement(table));
+
+    logResetOp(this.#db, this.#version, table.name);
+    this.#lc.info?.(create.tag, table.name);
+  }
+
+  processRenameTable(rename: TableRename) {
+    const oldName = liteTableName(rename.old);
+    const newName = liteTableName(rename.new);
+    this.#db.db.exec(`ALTER TABLE ${id(oldName)} RENAME TO ${id(newName)}`);
+
+    this.#bumpVersions(newName);
+    logResetOp(this.#db, this.#version, oldName);
+    this.#lc.info?.(rename.tag, oldName, newName);
+  }
+
+  processAddColumn(msg: ColumnAdd) {
+    const table = liteTableName(msg.table);
+    const {name} = msg.column;
+    const spec = mapPostgresToLiteColumn(table, msg.column);
+    this.#db.db.exec(
+      `ALTER TABLE ${id(table)} ADD ${id(name)} ${columnDef(spec)}`,
+    );
+
+    this.#bumpVersions(table);
+    this.#lc.info?.(msg.tag, table, msg.column);
+  }
+
+  processUpdateColumn(msg: ColumnUpdate) {
+    const table = liteTableName(msg.table);
+    let oldName = msg.old.name;
+    const newName = msg.new.name;
+
+    const oldSpec = mapPostgresToLiteColumn(table, msg.old);
+    const newSpec = mapPostgresToLiteColumn(table, msg.new);
+
+    // The only updates that are relevant are the column name and the data type.
+    if (oldName === newName && oldSpec.dataType === newSpec.dataType) {
+      this.#lc.info?.(msg.tag, 'no thing to update', oldSpec, newSpec);
+      return;
+    }
+    // If the data type changes, we have to make a new column with the new data type
+    // and copy the values over.
+    if (oldSpec.dataType !== newSpec.dataType) {
+      const tmpName = `tmp.${newName}`;
+      this.#db.db.exec(`
+        ALTER TABLE ${id(table)} ADD ${id(tmpName)} ${columnDef(newSpec)};
+        UPDATE ${id(table)} SET ${id(tmpName)} = ${id(oldName)};
+        ALTER TABLE ${id(table)} DROP ${id(oldName)};
+        `);
+      oldName = tmpName;
+    }
+    if (oldName !== newName) {
+      this.#db.db.exec(
+        `ALTER TABLE ${id(table)} RENAME ${id(oldName)} TO ${id(newName)}`,
+      );
+    }
+    this.#bumpVersions(table);
+    this.#lc.info?.(msg.tag, table, msg.new);
+  }
+
+  processDropColumn(msg: ColumnDrop) {
+    const table = liteTableName(msg.table);
+    const {column} = msg;
+    this.#db.db.exec(`ALTER TABLE ${id(table)} DROP ${id(column)}`);
+
+    this.#bumpVersions(table);
+    this.#lc.info?.(msg.tag, table, column);
+  }
+
+  processDropTable(drop: TableDrop) {
+    const name = liteTableName(drop.id);
+    this.#db.db.exec(`DROP TABLE IF EXISTS ${id(name)}`);
+
+    logResetOp(this.#db, this.#version, name);
+    this.#lc.info?.(drop.tag, name);
+  }
+
+  processCreateIndex(create: IndexCreate) {
+    const index = mapPostgresToLiteIndex(create.spec);
+    this.#db.db.exec(createIndexStatement(index));
+    this.#lc.info?.(create.tag, index.name);
+  }
+
+  processDropIndex(drop: IndexDrop) {
+    const name = liteTableName(drop.id);
+    this.#db.db.exec(`DROP INDEX IF EXISTS ${id(name)}`);
+    this.#lc.info?.(drop.tag, name);
+  }
+
+  #bumpVersions(table: string) {
+    this.#db.run(
+      `UPDATE ${id(table)} SET ${id(ZERO_VERSION_COLUMN_NAME)} = ?`,
+      this.#version,
+    );
+    logResetOp(this.#db, this.#version, table);
   }
 
   processCommit(commit: MessageCommit, watermark: string) {

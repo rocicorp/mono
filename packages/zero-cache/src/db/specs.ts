@@ -25,11 +25,11 @@ export const filteredTableSpec = tableSpec.extend({
   publications: v.record(v.object({rowFilter: v.string().nullable()})),
 });
 
-export type LiteTableSpec = DeepReadonly<v.Infer<typeof liteTableSpec>>;
+export type LiteTableSpec = Readonly<v.Infer<typeof liteTableSpec>>;
 
-export type TableSpec = DeepReadonly<v.Infer<typeof tableSpec>>;
+export type TableSpec = Readonly<v.Infer<typeof tableSpec>>;
 
-export type FilteredTableSpec = DeepReadonly<v.Infer<typeof filteredTableSpec>>;
+export type FilteredTableSpec = Readonly<v.Infer<typeof filteredTableSpec>>;
 
 export const directionSchema = v.union(v.literal('ASC'), v.literal('DESC'));
 

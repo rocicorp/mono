@@ -7,7 +7,11 @@ import {Database} from '../../../../zqlite/src/db.js';
 import {DbFile} from '../../test/lite.js';
 import {initChangeLog} from '../replicator/schema/change-log.js';
 import {initReplicationState} from '../replicator/schema/replication-state.js';
-import {fakeReplicator, ReplicationMessages} from '../replicator/test-utils.js';
+import {
+  fakeReplicator,
+  ReplicationMessages,
+  type FakeReplicator,
+} from '../replicator/test-utils.js';
 import {CREATE_STORAGE_TABLE, DatabaseStorage} from './database-storage.js';
 import {PipelineDriver} from './pipeline-driver.js';
 import {Snapshotter} from './snapshotter.js';
@@ -17,6 +21,7 @@ describe('view-syncer/pipeline-driver', () => {
   let db: DB;
   let lc: LogContext;
   let pipelines: PipelineDriver;
+  let replicator: FakeReplicator;
 
   beforeEach(() => {
     lc = createSilentLogContext();
@@ -65,6 +70,7 @@ describe('view-syncer/pipeline-driver', () => {
       INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('21', '2', 10000, '00');
       INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('22', '2', 20000, '00');
       `);
+    replicator = fakeReplicator(lc, db);
   });
 
   const ISSUES_AND_COMMENTS: AST = {
@@ -197,7 +203,6 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines.init();
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
-    const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
       '134',
       messages.insert('comments', {id: '31', issueID: '3', upvotes: BigInt(0)}),
@@ -260,7 +265,6 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines.init();
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
-    const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
       '134',
       messages.delete('issues', {id: '1'}),
@@ -304,7 +308,6 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines.init();
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
-    const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
       '134',
       messages.update('comments', {id: '22', issueID: '3'}),
@@ -368,7 +371,11 @@ describe('view-syncer/pipeline-driver', () => {
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
     expect(pipelines.addedQueries()).toEqual(new Set(['hash1']));
 
-    db.exec(`ALTER TABLE issues ADD COLUMN newColumn TEXT`);
+    replicator.processTransaction(
+      '134',
+      messages.addColumn('issues', 'newColumn', {dataType: 'TEXT', pos: 0}),
+    );
+
     pipelines.advanceWithoutDiff();
     pipelines.reset();
 
@@ -381,7 +388,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "00",
+            "_0_version": "123",
             "closed": false,
             "id": "3",
             "newColumn": null,
@@ -395,7 +402,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "00",
+            "_0_version": "123",
             "closed": true,
             "id": "2",
             "newColumn": null,
@@ -451,7 +458,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "00",
+            "_0_version": "123",
             "closed": false,
             "id": "1",
             "newColumn": null,
@@ -499,7 +506,6 @@ describe('view-syncer/pipeline-driver', () => {
       ['_0_version']: '00',
     });
 
-    const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
       '134',
       messages.update('comments', {id: '22', issueID: '3', upvotes: 20000}),
@@ -519,7 +525,6 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines.init();
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
-    const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
       '134',
       messages.insert('issues', {id: '4', closed: 0}),
@@ -563,7 +568,6 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines.init();
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
-    const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
       '134',
       messages.insert('issues', {id: '4', closed: 0}),
@@ -645,7 +649,6 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines.removeQuery('hash1');
     expect([...pipelines.addedQueries()]).toEqual([]);
 
-    const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
       '134',
       messages.insert('comments', {id: '31', issueID: '3', upvotes: 0}),
@@ -662,7 +665,6 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines.init();
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
-    const replicator = fakeReplicator(lc, db);
     replicator.processTransaction(
       '134',
       messages.insert('comments', {
