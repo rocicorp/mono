@@ -37,10 +37,10 @@ export default function IssuePage() {
   const [editing, setEditing] = useState<typeof issue | null>(null);
   const [edits, setEdits] = useState<Partial<typeof issue>>({});
   useEffect(() => {
-    if (match && issue?.shortID !== undefined && idField !== 'shortID') {
-      window.location.replace(`/issue/${issue.shortID}`);
+    if (issue?.shortID !== undefined && idField !== 'shortID') {
+      history.replaceState(null, '', `/issue/${issue.shortID}`);
     }
-  }, [issue?.shortID, idField, match]);
+  }, [issue?.shortID, idField]);
 
   const save = () => {
     if (!editing) {
