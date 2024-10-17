@@ -80,11 +80,9 @@ export class ZQLiteZero<S extends Schema> {
       }
     };
 
-    const assertNotInBatch = (entityType: string, op: CRUDOpKind) => {
+    const assertNotInBatch = (tableName: string, op: CRUDOpKind) => {
       if (inBatch) {
-        throw new Error(
-          `Cannot call mutate.${entityType}.${op} inside a batch`,
-        );
+        throw new Error(`Cannot call mutate.${tableName}.${op} inside a batch`);
       }
     };
 
@@ -97,55 +95,55 @@ export class ZQLiteZero<S extends Schema> {
   }
 
   makeEntityCRUDMutate<R extends Row, PK extends PrimaryKey>(
-    entityType: string,
+    tableName: string,
     db: Database,
-    assertNotInBatch: (entityType: string, op: CRUDOpKind) => void,
+    assertNotInBatch: (tableName: string, op: CRUDOpKind) => void,
   ): RowCRUDMutate<R, PK> {
     return {
       create: async (value: CreateValue<R, PK>) => {
-        assertNotInBatch(entityType, 'create');
+        assertNotInBatch(tableName, 'create');
         const existingEntity = await db
-          .prepare(`SELECT * FROM ${entityType} WHERE id = ?`)
+          .prepare(`SELECT * FROM ${tableName} WHERE id = ?`)
           .get(value.id);
         if (existingEntity) return;
         //console.log('Adding', value);
-        await must(this.zeroContext.getSource(entityType)).push({
+        await must(this.zeroContext.getSource(tableName)).push({
           type: 'add',
           row: value,
         });
       },
       set: async (value: SetValue<R, PK>) => {
-        assertNotInBatch(entityType, 'set');
-        await must(this.zeroContext.getSource(entityType)).push({
+        assertNotInBatch(tableName, 'set');
+        await must(this.zeroContext.getSource(tableName)).push({
           type: 'add',
           row: value,
         });
       },
       update: async (value: UpdateValue<R, PK>) => {
-        assertNotInBatch(entityType, 'update');
+        assertNotInBatch(tableName, 'update');
         const existingEntity = await db
-          .prepare(`SELECT * FROM ${entityType} WHERE id = ?`)
+          .prepare(`SELECT * FROM ${tableName} WHERE id = ?`)
           .get<Row>(value.id);
         if (!existingEntity)
           throw new Error(`Entity with id ${value.id} not found`);
         const mergedValue = {...existingEntity, ...value};
-        await must(this.zeroContext.getSource(entityType)).push({
+        await must(this.zeroContext.getSource(tableName)).push({
           type: 'remove',
           row: existingEntity,
         });
-        await must(this.zeroContext.getSource(entityType)).push({
+        await must(this.zeroContext.getSource(tableName)).push({
           type: 'add',
           row: mergedValue,
         });
       },
       delete: async (id: DeleteID<R, PK>) => {
-        assertNotInBatch(entityType, 'delete');
+        assertNotInBatch(tableName, 'delete');
         // TODO: Remove the useless awaits here and elsewhere.
         const existingEntity = await db
-          .prepare(`SELECT * FROM ${entityType} WHERE id = ?`)
+          .prepare(`SELECT * FROM ${tableName} WHERE id = ?`)
           .get<Row>(id);
         if (!existingEntity) throw new Error(`Entity with id ${id} not found`);
-        await must(this.zeroContext.getSource(entityType)).push({
+        await must(this.zeroContext.getSource(tableName)).push({
           type: 'remove',
           row: existingEntity,
         });

@@ -7,11 +7,11 @@ import type {
 import type {ClientID, PatchOperation} from '../../../replicache/src/mod.js';
 import type {
   ClientsPatchOp,
-  EntitiesPatchOp,
   PokeEndBody,
   PokePartBody,
   PokeStartBody,
   QueriesPatchOp,
+  RowPatchOp,
 } from '../../../zero-protocol/src/mod.js';
 import {
   toClientsKey,
@@ -236,10 +236,10 @@ export function mergePokes(
           ),
         );
       }
-      if (pokePart.entitiesPatch) {
+      if (pokePart.rowsPatch) {
         mergedPatch.push(
-          ...pokePart.entitiesPatch.map(p =>
-            entitiesPatchOpToReplicachePatchOp(p, schema),
+          ...pokePart.rowsPatch.map(p =>
+            rowsPatchOpToReplicachePatchOp(p, schema),
           ),
         );
       }
@@ -296,8 +296,8 @@ function queryPatchOpToReplicachePatchOp(
   }
 }
 
-function entitiesPatchOpToReplicachePatchOp(
-  op: EntitiesPatchOp,
+function rowsPatchOpToReplicachePatchOp(
+  op: RowPatchOp,
   schema: NormalizedSchema,
 ): PatchOperationInternal {
   switch (op.op) {
@@ -307,18 +307,18 @@ function entitiesPatchOpToReplicachePatchOp(
       return {
         op: 'del',
         key: toPrimaryKeyString(
-          op.entityType,
-          schema.tables[op.entityType].primaryKey,
-          op.entityID,
+          op.tableName,
+          schema.tables[op.tableName].primaryKey,
+          op.id,
         ),
       };
     case 'put':
       return {
         op: 'put',
         key: toPrimaryKeyString(
-          op.entityType,
-          schema.tables[op.entityType].primaryKey,
-          op.entityID,
+          op.tableName,
+          schema.tables[op.tableName].primaryKey,
+          op.value,
         ),
         value: op.value,
       };
@@ -326,9 +326,9 @@ function entitiesPatchOpToReplicachePatchOp(
       return {
         op: 'update',
         key: toPrimaryKeyString(
-          op.entityType,
-          schema.tables[op.entityType].primaryKey,
-          op.entityID,
+          op.tableName,
+          schema.tables[op.tableName].primaryKey,
+          op.id,
         ),
         merge: op.merge,
         constrain: op.constrain,

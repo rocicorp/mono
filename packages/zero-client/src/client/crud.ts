@@ -104,9 +104,9 @@ export function makeCRUDMutate<const S extends Schema>(
     }
   };
 
-  const assertNotInBatch = (entityType: string, op: CRUDOpKind) => {
+  const assertNotInBatch = (tableName: string, op: CRUDOpKind) => {
     if (inBatch) {
-      throw new Error(`Cannot call mutate.${entityType}.${op} inside a batch`);
+      throw new Error(`Cannot call mutate.${tableName}.${op} inside a batch`);
     }
   };
 
@@ -127,47 +127,47 @@ export function makeCRUDMutate<const S extends Schema>(
  * Creates the `{create, set, update, delete}` object for use outside a batch.
  */
 function makeEntityCRUDMutate<R extends Row, PK extends NormalizedPrimaryKey>(
-  entityType: string,
+  tableName: string,
   primaryKey: PK,
   zeroCRUD: CRUDMutate,
-  assertNotInBatch: (entityType: string, op: CRUDOpKind) => void,
+  assertNotInBatch: (tableName: string, op: CRUDOpKind) => void,
 ): RowCRUDMutate<R, PK> {
   return {
     create: (value: CreateValue<R, PK>) => {
-      assertNotInBatch(entityType, 'create');
+      assertNotInBatch(tableName, 'create');
       const op: CreateOp = {
         op: 'create',
-        tableName: entityType,
+        tableName,
         primaryKey,
         value,
       };
       return zeroCRUD({ops: [op]});
     },
     set: (value: SetValue<R, PK>) => {
-      assertNotInBatch(entityType, 'set');
+      assertNotInBatch(tableName, 'set');
       const op: SetOp = {
         op: 'set',
-        tableName: entityType,
+        tableName,
         primaryKey,
         value,
       };
       return zeroCRUD({ops: [op]});
     },
     update: (value: UpdateValue<R, PK>) => {
-      assertNotInBatch(entityType, 'update');
+      assertNotInBatch(tableName, 'update');
       const op: UpdateOp = {
         op: 'update',
-        tableName: entityType,
+        tableName,
         primaryKey,
         value,
       };
       return zeroCRUD({ops: [op]});
     },
     delete: (id: DeleteID<R, PK>) => {
-      assertNotInBatch(entityType, 'delete');
+      assertNotInBatch(tableName, 'delete');
       const op: DeleteOp = {
         op: 'delete',
-        tableName: entityType,
+        tableName,
         primaryKey,
         value: id,
       };
