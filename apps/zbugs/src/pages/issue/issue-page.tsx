@@ -1,7 +1,7 @@
 import {useQuery} from '@rocicorp/zero/react';
 import {useEffect, useMemo, useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
-import {useRoute} from 'wouter';
+import {useRoute, useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
@@ -11,18 +11,16 @@ import Selector from '../../components/selector.js';
 import UserPicker from '../../components/user-picker.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useZero} from '../../hooks/use-zero.js';
-import {isNumeric} from '../../util.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
+import {must} from '../../../../../packages/shared/src/must.js';
 
 export default function IssuePage() {
   const z = useZero();
-  const [match, params] = useRoute('/issue/:id');
-  let idField: 'id' | 'shortID' = 'id';
-  const id = params?.id ?? '';
-  if (isNumeric(id)) {
-    idField = 'shortID';
-  }
+  const [match, params] = useRoute('/issue/:id?');
+  const qs = new URLSearchParams(useSearch());
+  const idField: 'id' | 'shortID' = params?.id ? 'shortID' : 'id';
+  const id = params?.id ?? must(qs.get('longID'));
 
   // todo: one should be in the schema
   const q = z.query.issue
@@ -63,7 +61,11 @@ export default function IssuePage() {
   );
   useKeypress('j', () => {
     if (next) {
-      navigate(`/issue/${next.shortID ?? next.id}`);
+      if (!next.shortID) {
+        navigate(`/issue/?longID=${next.id}`);
+      } else {
+        navigate(`/issue/${next.shortID}`);
+      }
     }
   });
 

@@ -26,7 +26,7 @@ export default function Root() {
         <div className="primary-content">
           <Switch>
             <Route path="/" component={ListPage} />
-            <Route path="/issue/:id" component={IssuePage} />
+            <Route path="/issue/:id?" component={IssuePage} />
             <Route component={ErrorPage} />
           </Switch>
         </div>
