@@ -161,7 +161,7 @@ test('canceled poke is not applied', async () => {
   );
   expect(rafStub).toHaveBeenCalledTimes(0);
 
-  const pokeStartAndParts = pokeID => {
+  const pokeStartAndParts = (pokeID: string) => {
     pokeHandler.handlePokeStart({
       pokeID,
       baseCookie: '1',
