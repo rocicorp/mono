@@ -530,7 +530,7 @@ describe('replicator/initial-sync', () => {
             intArray: '[1,2]',
             json: null,
             jsonb: null,
-            date: '2003-04-22',
+            date: '2003-04-23',
             time: '09:10:11.123457', // PG rounds to microseconds
             ['_0_version']: '00',
           },
