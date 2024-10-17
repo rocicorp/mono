@@ -7,12 +7,16 @@ import type {
   Smash,
   TableSchema,
   TypedView,
+  ResultType,
 } from '../../zero-client/src/mod.js';
 
 export function useQuery<
   TSchema extends TableSchema,
   TReturn extends QueryType,
->(q: Query<TSchema, TReturn>, enable: boolean = true): Smash<TReturn> {
+>(
+  q: Query<TSchema, TReturn>,
+  enable: boolean = true,
+): [Smash<TReturn>, ResultType] {
   // TODO: Consider exposing singular on Query? The motivation is that we do not
   // want to export QueryImpl.
   const queryImpl = q as QueryImpl<TSchema, TReturn>;
@@ -23,16 +27,18 @@ export function useQuery<
   const [, setView] = useState<TypedView<Smash<TReturn>> | undefined>(
     undefined,
   );
+  const [resultType, setResultType] = useState<ResultType>('partial');
 
   useLayoutEffect(() => {
     if (enable) {
       const view = q.materialize();
       setView(view);
-      const unsubscribe = view.addListener(snap => {
+      const unsubscribe = view.addListener((snap, {resultType}) => {
         // snapshot can contain `undefined`
         setSnapshot(
           (snap === undefined ? snap : deepClone(snap)) as Smash<TReturn>,
         );
+        setResultType(resultType);
       });
       view.hydrate();
       return () => {
@@ -53,5 +59,5 @@ export function useQuery<
     ),
   ]);
 
-  return snapshot;
+  return [snapshot, resultType];
 }

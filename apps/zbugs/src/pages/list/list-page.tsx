@@ -1,6 +1,6 @@
 import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
-import {type CSSProperties, useRef} from 'react';
+import {type CSSProperties, useEffect, useRef} from 'react';
 import {FixedSizeList as List, type ListOnScrollProps} from 'react-window';
 import {useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
@@ -10,6 +10,7 @@ import {useElementSize} from '../../hooks/use-element-size.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {mark} from '../../perf-log.js';
 import IssueLink from '../../components/issue-link.js';
+import {preload} from '../../zero-setup.js';
 
 let firstRowRendered = false;
 export default function ListPage() {
@@ -17,21 +18,21 @@ export default function ListPage() {
 
   const qs = new URLSearchParams(useSearch());
   const status = qs.get('status')?.toLowerCase() ?? 'open';
-  const creator = qs.get('creator');
-  const assignee = qs.get('assignee');
+  const creatorLogin = qs.get('creator');
+  const assigneeLogin = qs.get('assignee');
   const labels = qs.getAll('label');
 
   // TODO: this can go away once we have filter-by-subquery, you should be able
   // to filter by label.name directly.
-  const creatorID = useQuery(
-    z.query.user.where('login', creator ?? '').one(),
-    creator !== null,
-  )?.id;
-  const assigneeID = useQuery(
-    z.query.user.where('login', assignee ?? '').one(),
-    assignee !== null,
-  )?.id;
-  const labelIDs = useQuery(z.query.label.where('name', 'IN', labels));
+  const [creator] = useQuery(
+    z.query.user.where('login', creatorLogin ?? '').one(),
+    creatorLogin !== null,
+  );
+  const [assignee] = useQuery(
+    z.query.user.where('login', assigneeLogin ?? '').one(),
+    assigneeLogin !== null,
+  );
+  const [labelIDs] = useQuery(z.query.label.where('name', 'IN', labels));
 
   let q = z.query.issue.orderBy('modified', 'desc').related('labels');
 
@@ -41,19 +42,27 @@ export default function ListPage() {
     q = q.where('open', false);
   }
 
-  if (creatorID) {
-    q = q.where('creatorID', creatorID);
+  if (creator) {
+    q = q.where('creatorID', creator.id);
   }
 
-  if (assigneeID) {
-    q = q.where('assigneeID', assigneeID);
+  if (assignee) {
+    q = q.where('assigneeID', assignee.id);
   }
 
   for (const labelID of labelIDs) {
     q = q.where('labelIDs', 'LIKE', `%${labelID.id}%`);
   }
 
-  const issues = useQuery(q);
+  const [issues, resultType] = useQuery(q);
+
+  // TODO: There needs to be more official support for preloading and
+  // priorities.
+  useEffect(() => {
+    if (resultType === 'complete') {
+      preload(z);
+    }
+  }, [z, resultType]);
 
   const addFilter = (
     key: string,

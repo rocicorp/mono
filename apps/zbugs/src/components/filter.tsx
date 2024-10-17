@@ -19,7 +19,7 @@ export default function Filter({onSelect}: Props) {
   const z = useZero();
   const [isOpen, setIsOpen] = useState(false);
 
-  const labels = useQuery(z.query.label);
+  const [labels] = useQuery(z.query.label);
   // TODO: Support case-insensitive sorting in ZQL.
   labels.sort((a, b) => a.name.localeCompare(b.name));
 

@@ -12,7 +12,7 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
     .where('id', id)
     .related('creator', creator => creator.one())
     .one();
-  const comment = useQuery(q);
+  const [comment] = useQuery(q);
   const [editing, setEditing] = useState(false);
   const login = useLogin();
 

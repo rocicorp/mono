@@ -15,6 +15,7 @@ const zeroRef = new Ref<Zero<Schema>>();
 const authRef = new Ref<LoginState>();
 const jwt = getJwt();
 const encodedJwt = getRawJwt();
+let didPreload = false;
 
 authRef.value =
   encodedJwt && jwt
@@ -33,11 +34,24 @@ authRef.onChange(auth => {
     userID: auth?.decoded?.sub ?? 'anon',
     auth: auth?.encoded,
     schema,
+    kvStore: 'mem',
   });
   zeroRef.value = z;
+  didPreload = false;
 
   // To enable accessing zero in the devtools easily.
   (window as {z?: Zero<Schema>}).z = z;
+});
+
+export function preload(z: Zero<Schema>) {
+  if (didPreload) {
+    return;
+  }
+
+  didPreload = true;
+
+  z.query.user.preload();
+  z.query.label.preload();
 
   const baseIssueQuery = z.query.issue.related('creator').related('labels');
 
@@ -47,9 +61,6 @@ authRef.onChange(auth => {
     cleanup();
     baseIssueQuery.related('comments', q => q.limit(10)).preload();
   });
-
-  z.query.user.preload();
-  z.query.label.preload();
-});
+}
 
 export {zeroRef, authRef};

@@ -14,6 +14,7 @@ import {useZero} from '../../hooks/use-zero.js';
 import {isNumeric} from '../../util.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
+import {preload} from '../../zero-setup.js';
 
 export default function IssuePage() {
   const z = useZero();
@@ -32,7 +33,12 @@ export default function IssuePage() {
     .related('labels')
     .related('comments', q => q.orderBy('created', 'asc'))
     .one();
-  const issue = useQuery(q, match);
+  const [issue, resultType] = useQuery(q, match);
+  useEffect(() => {
+    if (resultType === 'complete') {
+      preload(z);
+    }
+  }, [z, resultType]);
 
   const [editing, setEditing] = useState<typeof issue | null>(null);
   const [edits, setEdits] = useState<Partial<typeof issue>>({});
@@ -56,7 +62,7 @@ export default function IssuePage() {
     setEdits({});
   };
 
-  const next = useQuery(
+  const [next] = useQuery(
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     z.query.issue.orderBy('modified', 'desc').start(issue!).one(),
     issue !== undefined,
@@ -72,11 +78,8 @@ export default function IssuePage() {
     [issue?.labels],
   );
 
-  // TODO: We need the notion of the 'partial' result type to correctly render
-  // a 404 here. We can't put the 404 here now because it would flash until we
-  // get data.
   if (!issue) {
-    return null;
+    return resultType === 'complete' ? 'Unknown issue' : null;
   }
 
   const remove = () => {

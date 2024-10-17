@@ -18,7 +18,16 @@ import type {TableSchema} from './schema.js';
  * immutable. Caller must not modify it. Passed data is valid until next
  * time listener is called.
  */
-export type Listener = (entries: Immutable<View>) => void;
+export type Listener = (
+  entries: Immutable<View>,
+  details: {resultType: ResultType},
+) => void;
+
+/**
+ * 'partial' means that we do not know if there may still be more results that
+ * haven't synced yet. 'complete' means that we know these are all the results.
+ */
+export type ResultType = 'partial' | 'complete';
 
 export type Format = {
   singular: boolean;
@@ -50,6 +59,7 @@ export class ArrayView implements Output {
 
   #hydrated = false;
   #dirty = false;
+  #complete = false;
 
   constructor(
     input: Input,
@@ -67,11 +77,16 @@ export class ArrayView implements Output {
     return this.#root[''] as View;
   }
 
+  setComplete() {
+    this.#complete = true;
+    this.#fireListeners();
+  }
+
   addListener(listener: Listener) {
     assert(!this.#listeners.has(listener), 'Listener already registered');
     this.#listeners.add(listener);
     if (this.#hydrated) {
-      listener(this.data);
+      this.#fireListener(listener);
     }
 
     return () => {
@@ -80,9 +95,16 @@ export class ArrayView implements Output {
   }
 
   #fireListeners() {
+    this.#dirty = false;
     for (const listener of this.#listeners) {
-      listener(this.data);
+      this.#fireListener(listener);
     }
+  }
+
+  #fireListener(l: Listener) {
+    l(this.data, {
+      resultType: this.#complete ? 'complete' : 'partial',
+    });
   }
 
   destroy() {
@@ -117,7 +139,6 @@ export class ArrayView implements Output {
     if (!this.#dirty) {
       return;
     }
-    this.#dirty = false;
     this.#fireListeners();
   }
 }

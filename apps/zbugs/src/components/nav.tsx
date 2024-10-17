@@ -16,7 +16,7 @@ export function Nav() {
   const login = useLogin();
 
   const zero = useZero();
-  const user = useQuery(
+  const [user] = useQuery(
     zero.query.user.where('id', login.loginState?.decoded.sub ?? '').one(),
   );
 

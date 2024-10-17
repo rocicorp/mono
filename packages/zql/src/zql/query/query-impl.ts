@@ -399,11 +399,15 @@ export class QueryImpl<
 
   materialize(): TypedView<Smash<TReturn>> {
     const ast = this._completeAst();
-    const removeServerQuery = this.#delegate.addServerQuery(ast);
     const view = new ArrayView(
       buildPipeline(ast, this.#delegate, undefined),
       this.#format,
     );
+    const removeServerQuery = this.#delegate.addServerQuery(ast, got => {
+      if (got) {
+        view.setComplete();
+      }
+    });
     const removeCommitObserver = this.#delegate.onTransactionCommit(() => {
       view.flush();
     });
