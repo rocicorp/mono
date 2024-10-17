@@ -49,14 +49,19 @@ export function difference<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): Set<T> {
   return result;
 }
 
-export function symmetricDifference<T>(a: Set<T>, b: Set<T>): Set<T> {
-  const result = new Set<T>(a);
+export function symmetricDifference<T>(
+  a: Set<T>,
+  b: Set<T>,
+): [onlyA: Set<T>, onlyB: Set<T>] {
+  const onlyA = new Set<T>(a);
+  const onlyB = new Set<T>();
   for (const value of b) {
     if (a.has(value)) {
-      result.delete(value);
+      onlyA.delete(value);
+      onlyB.delete(value);
     } else {
-      result.add(value);
+      onlyB.add(value);
     }
   }
-  return result;
+  return [onlyA, onlyB];
 }

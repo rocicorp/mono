@@ -82,24 +82,30 @@ test('difference', () => {
 });
 
 test('symmetricDifference', () => {
-  const t = <T>(a: Iterable<T>, b: Iterable<T>, expected: Iterable<T>) => {
-    expect(symmetricDifference(new Set(a), new Set(b))).toEqual(
-      new Set(expected),
-    );
-    expect(symmetricDifference(new Set(b), new Set(a))).toEqual(
-      new Set(expected),
-    );
+  const t = <T>(
+    a: Iterable<T>,
+    b: Iterable<T>,
+    expected: [Iterable<T>, Iterable<T>],
+  ) => {
+    expect(symmetricDifference(new Set(a), new Set(b))).toEqual([
+      new Set(expected[0]),
+      new Set(expected[1]),
+    ]);
+    expect(symmetricDifference(new Set(b), new Set(a))).toEqual([
+      new Set(expected[1]),
+      new Set(expected[0]),
+    ]);
   };
 
-  t('', '', '');
-  t('', 'a', 'a');
-  t('abc', '', 'abc');
-  t('abc', 'a', 'bc');
-  t('abc', 'b', 'ac');
-  t('abc', 'c', 'ab');
-  t('abc', 'ab', 'c');
-  t('abc', 'bc', 'a');
-  t('abc', 'ac', 'b');
-  t('abc', 'abc', '');
-  t('abc', 'abcd', 'd');
+  t('', '', ['', '']);
+  t('', 'a', ['', 'a']);
+  t('abc', '', ['abc', '']);
+  t('abc', 'a', ['bc', '']);
+  t('abc', 'b', ['ac', '']);
+  t('abc', 'c', ['ab', '']);
+  t('abc', 'ab', ['c', '']);
+  t('abc', 'bc', ['a', '']);
+  t('abc', 'ac', ['b', '']);
+  t('abc', 'abc', ['', '']);
+  t('abc', 'abcd', ['', 'd']);
 });
