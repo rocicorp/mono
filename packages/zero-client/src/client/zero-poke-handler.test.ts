@@ -207,10 +207,11 @@ test('canceled poke is not applied', async () => {
 
   pokeHandler.handlePokeEnd({pokeID: 'poke1', cancel: true});
 
-  // raf is not scheduled because poke was cancelled;
+  // raf is not scheduled because poke was canceled;
   expect(rafStub).toHaveBeenCalledTimes(0);
   expect(replicachePokeStub).toHaveBeenCalledTimes(0);
 
+  // now test receiving a poke after the canceled poke
   pokeStartAndParts('poke2');
 
   expect(rafStub).toHaveBeenCalledTimes(0);
@@ -413,7 +414,7 @@ test('multiple pokes received before raf callback are merged', async () => {
   expect(rafStub).toHaveBeenCalledTimes(2);
 });
 
-test('multiple pokes received before raf callback are merged, cancelled pokes are not merged', async () => {
+test('multiple pokes received before raf callback are merged, canceled pokes are not merged', async () => {
   const onPokeErrorStub = vi.fn();
   const replicachePokeStub = vi.fn();
   const clientID = 'c1';
@@ -549,7 +550,7 @@ test('multiple pokes received before raf callback are merged, cancelled pokes ar
       lastMutationIDChanges: {
         c1: 3,
         c2: 2,
-        // Not included because corresponding poke was cancelled
+        // Not included because corresponding poke was canceled
         // c3: 1,
       },
       patch: [
@@ -579,7 +580,7 @@ test('multiple pokes received before raf callback are merged, cancelled pokes ar
         //   key: 'e/issues/issue2',
         //   value: {id: 'issue2', title: 'bar2'},
         // },
-        // non-cancelled poke after cancelled poke is merged
+        // non-canceled poke after canceled poke is merged
         {
           op: 'put',
           key: 'e/issues/issue4',
