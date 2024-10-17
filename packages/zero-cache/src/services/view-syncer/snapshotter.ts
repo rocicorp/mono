@@ -4,7 +4,7 @@ import {assert} from '../../../../shared/src/asserts.js';
 import {must} from '../../../../shared/src/must.js';
 import * as v from '../../../../shared/src/valita.js';
 import {Database} from '../../../../zqlite/src/db.js';
-import type {TableSpec} from '../../db/specs.js';
+import type {LiteTableSpec} from '../../db/specs.js';
 import {StatementRunner} from '../../db/statements.js';
 import {jsonObjectSchema, type JSONValue} from '../../types/bigint-json.js';
 import {
@@ -153,7 +153,7 @@ export class Snapshotter {
    * on `prev` before each iteration, and (2) rollback to the save point after
    * the iteration.
    */
-  advance(tables: Map<string, TableSpec>): SnapshotDiff {
+  advance(tables: Map<string, LiteTableSpec>): SnapshotDiff {
     const {prev, curr} = this.advanceWithoutDiff();
     return new Diff(tables, prev, curr);
   }
@@ -281,7 +281,7 @@ class Snapshot {
     };
   }
 
-  getRow(table: TableSpec, rowKey: JSONValue) {
+  getRow(table: LiteTableSpec, rowKey: JSONValue) {
     const key = normalizedKeyOrder(rowKey as RowKey);
     const conds = Object.keys(key).map(c => `${ident(c)}=?`);
     const cols = Object.keys(table.columns);
@@ -299,7 +299,7 @@ class Snapshot {
     }
   }
 
-  getRows(table: TableSpec) {
+  getRows(table: LiteTableSpec) {
     const cols = Object.keys(table.columns);
     const cached = this.db.statementCache.get(
       `SELECT ${cols.map(c => ident(c)).join(',')} FROM ${ident(table.name)}`,
@@ -321,12 +321,16 @@ class Snapshot {
 }
 
 class Diff implements SnapshotDiff {
-  readonly tables: Map<string, TableSpec>;
+  readonly tables: Map<string, LiteTableSpec>;
   readonly prev: Snapshot;
   readonly curr: Snapshot;
   readonly changes: number;
 
-  constructor(tables: Map<string, TableSpec>, prev: Snapshot, curr: Snapshot) {
+  constructor(
+    tables: Map<string, LiteTableSpec>,
+    prev: Snapshot,
+    curr: Snapshot,
+  ) {
     this.tables = tables;
     this.prev = prev;
     this.curr = curr;
@@ -457,7 +461,7 @@ class TruncateTracker {
     this.#prev = prev;
   }
 
-  startTruncate(table: TableSpec) {
+  startTruncate(table: LiteTableSpec) {
     assert(this.#truncating === null);
     const {rows, cleanup} = this.#prev.getRows(table);
     this.#truncating = {table: table.name, rows, cleanup};
@@ -489,7 +493,7 @@ class TruncateTracker {
     return {value: {table, prevValue, nextValue: null} satisfies Change};
   }
 
-  getRowIfNotTruncated(table: TableSpec, rowKey: RowKey) {
+  getRowIfNotTruncated(table: LiteTableSpec, rowKey: RowKey) {
     // If the row has been returned in a TRUNCATE iteration, its prevValue is henceforth null.
     return this.#truncated.has(table.name)
       ? null

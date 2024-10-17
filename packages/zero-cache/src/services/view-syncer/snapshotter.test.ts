@@ -2,7 +2,7 @@ import {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {listTables} from '../../db/lite-tables.js';
-import type {TableSpec} from '../../db/specs.js';
+import type {LiteTableSpec} from '../../db/specs.js';
 import {StatementRunner} from '../../db/statements.js';
 import {DbFile, expectTables} from '../../test/lite.js';
 import {MessageProcessor} from '../replicator/incremental-sync.js';
@@ -25,7 +25,7 @@ describe('view-syncer/snapshotter', () => {
   let lc: LogContext;
   let dbFile: DbFile;
   let replicator: MessageProcessor;
-  let tableSpecs: Map<string, TableSpec>;
+  let tableSpecs: Map<string, LiteTableSpec>;
   let s: Snapshotter;
 
   beforeEach(() => {
