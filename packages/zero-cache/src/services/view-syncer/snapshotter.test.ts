@@ -3,13 +3,9 @@ import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {listTables} from '../../db/lite-tables.js';
 import type {LiteTableSpec} from '../../db/specs.js';
-import {StatementRunner} from '../../db/statements.js';
 import {DbFile, expectTables} from '../../test/lite.js';
 import {initChangeLog} from '../replicator/schema/change-log.js';
-import {
-  initReplicationState,
-  updateReplicationWatermark,
-} from '../replicator/schema/replication-state.js';
+import {initReplicationState} from '../replicator/schema/replication-state.js';
 import {
   fakeReplicator,
   ReplicationMessages,
@@ -676,14 +672,10 @@ describe('view-syncer/snapshotter', () => {
 
     expect(version).toBe('00');
 
-    // TODO: Replace this with the replicator processing a schema change
-    // after some row changes.
-    const db = dbFile.connect(lc);
-    db.prepare(
-      `INSERT INTO "_zero.ChangeLog" (stateVersion, "table", rowKey, op)
-        VALUES ('07', 'comments', null, 'r')`,
-    ).run();
-    updateReplicationWatermark(new StatementRunner(db), '07');
+    replicator.processTransaction(
+      '07',
+      messages.addColumn('comments', 'likes', {dataType: 'INT4', pos: 0}),
+    );
 
     const diff = s.advance(tableSpecs);
     expect(diff.prev.version).toBe('00');

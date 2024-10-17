@@ -11,6 +11,8 @@ import {
 } from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {Database} from '../../../../zqlite/src/db.js';
+import {listIndexes, listTables} from '../../db/lite-tables.js';
+import type {LiteIndexSpec, LiteTableSpec} from '../../db/specs.js';
 import {dropReplicationSlot, testDBs} from '../../test/db.js';
 import {expectTables, initDB} from '../../test/lite.js';
 import type {JSONObject} from '../../types/bigint-json.js';
@@ -63,6 +65,8 @@ describe('replicator/incremental-sync', () => {
     setup: string;
     downstream: Downstream[];
     data: Record<string, Record<string, unknown>[]>;
+    tableSpecs?: LiteTableSpec[];
+    indexSpecs?: LiteIndexSpec[];
   };
 
   const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
@@ -554,6 +558,620 @@ describe('replicator/incremental-sync', () => {
         ],
       },
     },
+    {
+      name: 'create table',
+      setup: ``,
+      downstream: [
+        ['begin', fooBarBaz.begin()],
+        [
+          'data',
+          fooBarBaz.createTable({
+            schema: 'public',
+            name: 'foo',
+            columns: {
+              id: {pos: 0, dataType: 'varchar'},
+              count: {pos: 1, dataType: 'int8'},
+              bool: {pos: 3, dataType: 'bool'},
+            },
+            primaryKey: ['id'],
+          }),
+        ],
+        ['data', fooBarBaz.insert('foo', {id: 'bar', count: 2, bool: true})],
+        ['data', fooBarBaz.insert('foo', {id: 'baz', count: 3, bool: false})],
+        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
+      ],
+      data: {
+        foo: [
+          {id: 'bar', count: 2n, bool: 1n, ['_0_version']: '02'},
+          {id: 'baz', count: 3n, bool: 0n, ['_0_version']: '02'},
+        ],
+        ['_zero.ChangeLog']: [
+          {
+            stateVersion: '02',
+            table: 'foo',
+            op: 'r',
+            rowKey: null,
+          },
+          {
+            stateVersion: '02',
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":"bar"}',
+          },
+          {
+            stateVersion: '02',
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":"baz"}',
+          },
+        ],
+      },
+      tableSpecs: [
+        {
+          name: 'foo',
+          columns: {
+            id: {
+              characterMaximumLength: null,
+              dataType: 'varchar',
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            count: {
+              characterMaximumLength: null,
+              dataType: 'int8',
+              dflt: null,
+              notNull: false,
+              pos: 2,
+            },
+            bool: {
+              characterMaximumLength: null,
+              dataType: 'bool',
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: true,
+              pos: 4,
+            },
+          },
+          primaryKey: ['id'],
+        },
+      ],
+      indexSpecs: [],
+    },
+    {
+      name: 'rename table',
+      setup: `
+        CREATE TABLE foo(id INT8 PRIMARY KEY, _0_version TEXT NOT NULL);
+        INSERT INTO foo(id, _0_version) VALUES (1, '00');
+        INSERT INTO foo(id, _0_version) VALUES (2, '00');
+        INSERT INTO foo(id, _0_version) VALUES (3, '00');
+      `,
+      downstream: [
+        ['begin', fooBarBaz.begin()],
+        ['data', fooBarBaz.renameTable('foo', 'bar')],
+        ['data', fooBarBaz.insert('bar', {id: 4})],
+        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
+      ],
+      data: {
+        bar: [
+          {id: 1n, ['_0_version']: '02'},
+          {id: 2n, ['_0_version']: '02'},
+          {id: 3n, ['_0_version']: '02'},
+          {id: 4n, ['_0_version']: '02'},
+        ],
+        ['_zero.ChangeLog']: [
+          {
+            stateVersion: '02',
+            table: 'bar',
+            op: 'r',
+            rowKey: null,
+          },
+          {
+            stateVersion: '02',
+            table: 'foo',
+            op: 'r',
+            rowKey: null,
+          },
+          {
+            stateVersion: '02',
+            table: 'bar',
+            op: 's',
+            rowKey: '{"id":4}',
+          },
+        ],
+      },
+      tableSpecs: [
+        {
+          name: 'bar',
+          columns: {
+            id: {
+              characterMaximumLength: null,
+              dataType: 'INT8',
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: true,
+              pos: 2,
+            },
+          },
+          primaryKey: ['id'],
+        },
+      ],
+      indexSpecs: [],
+    },
+    {
+      name: 'add column',
+      setup: `
+        CREATE TABLE foo(id INT8 PRIMARY KEY, _0_version TEXT NOT NULL);
+        INSERT INTO foo(id, _0_version) VALUES (1, '00');
+        INSERT INTO foo(id, _0_version) VALUES (2, '00');
+        INSERT INTO foo(id, _0_version) VALUES (3, '00');
+      `,
+      downstream: [
+        ['begin', fooBarBaz.begin()],
+        [
+          'data',
+          fooBarBaz.addColumn('foo', 'newInt', {
+            pos: 9,
+            dataType: 'int8',
+            dflt: '123', // DEFAULT should applied for ADD COLUMN
+          }),
+        ],
+        [
+          'data',
+          fooBarBaz.addColumn('foo', 'newBool', {
+            pos: 10,
+            dataType: 'bool',
+            dflt: 'true', // DEFAULT should applied for ADD COLUMN
+          }),
+        ],
+        ['data', fooBarBaz.insert('foo', {id: 4, newInt: 321, newBool: false})],
+        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
+      ],
+      data: {
+        foo: [
+          {id: 1n, newInt: 123n, newBool: 1n, ['_0_version']: '02'},
+          {id: 2n, newInt: 123n, newBool: 1n, ['_0_version']: '02'},
+          {id: 3n, newInt: 123n, newBool: 1n, ['_0_version']: '02'},
+          {id: 4n, newInt: 321n, newBool: 0n, ['_0_version']: '02'},
+        ],
+        ['_zero.ChangeLog']: [
+          {
+            stateVersion: '02',
+            table: 'foo',
+            op: 'r',
+            rowKey: null,
+          },
+          {
+            stateVersion: '02',
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":4}',
+          },
+        ],
+      },
+      tableSpecs: [
+        {
+          name: 'foo',
+          columns: {
+            id: {
+              characterMaximumLength: null,
+              dataType: 'INT8',
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: true,
+              pos: 2,
+            },
+            newInt: {
+              characterMaximumLength: null,
+              dataType: 'int8',
+              dflt: '123',
+              notNull: false,
+              pos: 3,
+            },
+            newBool: {
+              characterMaximumLength: null,
+              dataType: 'bool',
+              dflt: '1',
+              notNull: false,
+              pos: 4,
+            },
+          },
+          primaryKey: ['id'],
+        },
+      ],
+      indexSpecs: [],
+    },
+    {
+      name: 'drop column',
+      setup: `
+        CREATE TABLE foo(id INT8 PRIMARY KEY, dropMe TEXT, _0_version TEXT NOT NULL);
+        INSERT INTO foo(id, dropMe, _0_version) VALUES (1, 'bye', '00');
+        INSERT INTO foo(id, dropMe, _0_version) VALUES (2, 'bye', '00');
+        INSERT INTO foo(id, dropMe, _0_version) VALUES (3, 'bye', '00');
+      `,
+      downstream: [
+        ['begin', fooBarBaz.begin()],
+        ['data', fooBarBaz.update('foo', {id: 3, dropMe: 'stillDropped'})],
+        ['data', fooBarBaz.dropColumn('foo', 'dropMe')],
+        ['data', fooBarBaz.insert('foo', {id: 4})],
+        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
+      ],
+      data: {
+        foo: [
+          {id: 1n, ['_0_version']: '02'},
+          {id: 2n, ['_0_version']: '02'},
+          {id: 3n, ['_0_version']: '02'},
+          {id: 4n, ['_0_version']: '02'},
+        ],
+        ['_zero.ChangeLog']: [
+          {
+            stateVersion: '02',
+            table: 'foo',
+            op: 'r',
+            rowKey: null,
+          },
+          {
+            stateVersion: '02',
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":4}',
+          },
+        ],
+      },
+      tableSpecs: [
+        {
+          name: 'foo',
+          columns: {
+            id: {
+              characterMaximumLength: null,
+              dataType: 'INT8',
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: true,
+              pos: 2,
+            },
+          },
+          primaryKey: ['id'],
+        },
+      ],
+      indexSpecs: [],
+    },
+    {
+      name: 'rename column',
+      setup: `
+        CREATE TABLE foo(id INT8 PRIMARY KEY, renameMe TEXT, _0_version TEXT NOT NULL);
+        INSERT INTO foo(id, renameMe, _0_version) VALUES (1, 'hel', '00');
+        INSERT INTO foo(id, renameMe, _0_version) VALUES (2, 'low', '00');
+        INSERT INTO foo(id, renameMe, _0_version) VALUES (3, 'orl', '00');
+      `,
+      downstream: [
+        ['begin', fooBarBaz.begin()],
+        ['data', fooBarBaz.update('foo', {id: 3, renameMe: 'olrd'})],
+        [
+          'data',
+          fooBarBaz.updateColumn(
+            'foo',
+            {name: 'renameMe', spec: {pos: 1, dataType: 'TEXT'}},
+            {name: 'newName', spec: {pos: 1, dataType: 'TEXT'}},
+          ),
+        ],
+        ['data', fooBarBaz.insert('foo', {id: 4, newName: 'yay'})],
+        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
+      ],
+      data: {
+        foo: [
+          {id: 1n, newName: 'hel', ['_0_version']: '02'},
+          {id: 2n, newName: 'low', ['_0_version']: '02'},
+          {id: 3n, newName: 'olrd', ['_0_version']: '02'},
+          {id: 4n, newName: 'yay', ['_0_version']: '02'},
+        ],
+        ['_zero.ChangeLog']: [
+          {
+            stateVersion: '02',
+            table: 'foo',
+            op: 'r',
+            rowKey: null,
+          },
+          {
+            stateVersion: '02',
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":4}',
+          },
+        ],
+      },
+      tableSpecs: [
+        {
+          name: 'foo',
+          columns: {
+            id: {
+              characterMaximumLength: null,
+              dataType: 'INT8',
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            newName: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: false,
+              pos: 2,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: true,
+              pos: 3,
+            },
+          },
+          primaryKey: ['id'],
+        },
+      ],
+      indexSpecs: [],
+    },
+    {
+      name: 'retype column',
+      setup: `
+        CREATE TABLE foo(id INT8 PRIMARY KEY, num TEXT, _0_version TEXT NOT NULL);
+        INSERT INTO foo(id, num, _0_version) VALUES (1, '3', '00');
+        INSERT INTO foo(id, num, _0_version) VALUES (2, '2', '00');
+        INSERT INTO foo(id, num, _0_version) VALUES (3, '3', '00');
+      `,
+      downstream: [
+        ['begin', fooBarBaz.begin()],
+        ['data', fooBarBaz.update('foo', {id: 3, num: '1'})],
+        [
+          'data',
+          fooBarBaz.updateColumn(
+            'foo',
+            {name: 'num', spec: {pos: 1, dataType: 'TEXT'}},
+            {name: 'num', spec: {pos: 1, dataType: 'INT8'}},
+          ),
+        ],
+        ['data', fooBarBaz.insert('foo', {id: 4, num: 23})],
+        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
+      ],
+      data: {
+        foo: [
+          {id: 1n, num: 3n, ['_0_version']: '02'},
+          {id: 2n, num: 2n, ['_0_version']: '02'},
+          {id: 3n, num: 1n, ['_0_version']: '02'},
+          {id: 4n, num: 23n, ['_0_version']: '02'},
+        ],
+        ['_zero.ChangeLog']: [
+          {
+            stateVersion: '02',
+            table: 'foo',
+            op: 'r',
+            rowKey: null,
+          },
+          {
+            stateVersion: '02',
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":4}',
+          },
+        ],
+      },
+      tableSpecs: [
+        {
+          name: 'foo',
+          columns: {
+            id: {
+              characterMaximumLength: null,
+              dataType: 'INT8',
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            num: {
+              characterMaximumLength: null,
+              dataType: 'INT8',
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: true,
+              pos: 2,
+            },
+          },
+          primaryKey: ['id'],
+        },
+      ],
+      indexSpecs: [],
+    },
+    {
+      name: 'rename and retype column',
+      setup: `
+        CREATE TABLE foo(id INT8 PRIMARY KEY, numburr TEXT, _0_version TEXT NOT NULL);
+        INSERT INTO foo(id, numburr, _0_version) VALUES (1, '3', '00');
+        INSERT INTO foo(id, numburr, _0_version) VALUES (2, '2', '00');
+        INSERT INTO foo(id, numburr, _0_version) VALUES (3, '3', '00');
+      `,
+      downstream: [
+        ['begin', fooBarBaz.begin()],
+        ['data', fooBarBaz.update('foo', {id: 3, numburr: '1'})],
+        [
+          'data',
+          fooBarBaz.updateColumn(
+            'foo',
+            {name: 'numburr', spec: {pos: 1, dataType: 'TEXT'}},
+            {name: 'number', spec: {pos: 1, dataType: 'INT8'}},
+          ),
+        ],
+        ['data', fooBarBaz.insert('foo', {id: 4, number: 23})],
+        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
+      ],
+      data: {
+        foo: [
+          {id: 1n, number: 3n, ['_0_version']: '02'},
+          {id: 2n, number: 2n, ['_0_version']: '02'},
+          {id: 3n, number: 1n, ['_0_version']: '02'},
+          {id: 4n, number: 23n, ['_0_version']: '02'},
+        ],
+        ['_zero.ChangeLog']: [
+          {
+            stateVersion: '02',
+            table: 'foo',
+            op: 'r',
+            rowKey: null,
+          },
+          {
+            stateVersion: '02',
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":4}',
+          },
+        ],
+      },
+      tableSpecs: [
+        {
+          name: 'foo',
+          columns: {
+            id: {
+              characterMaximumLength: null,
+              dataType: 'INT8',
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            number: {
+              characterMaximumLength: null,
+              dataType: 'INT8',
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: true,
+              pos: 2,
+            },
+          },
+          primaryKey: ['id'],
+        },
+      ],
+      indexSpecs: [],
+    },
+    {
+      name: 'drop table',
+      setup: `
+        CREATE TABLE foo(id INT8 PRIMARY KEY, _0_version TEXT NOT NULL);
+        INSERT INTO foo(id, _0_version) VALUES (1, '00');
+        INSERT INTO foo(id, _0_version) VALUES (2, '00');
+        INSERT INTO foo(id, _0_version) VALUES (3, '00');
+      `,
+      downstream: [
+        ['begin', fooBarBaz.begin()],
+        ['data', fooBarBaz.insert('foo', {id: 4})],
+        ['data', fooBarBaz.dropTable('foo')],
+        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
+      ],
+      data: {
+        ['_zero.ChangeLog']: [
+          {
+            stateVersion: '02',
+            table: 'foo',
+            op: 'r',
+            rowKey: null,
+          },
+        ],
+      },
+      tableSpecs: [],
+      indexSpecs: [],
+    },
+    {
+      name: 'create index',
+      setup: `
+        CREATE TABLE foo(id INT8 PRIMARY KEY, handle TEXT, _0_version TEXT NOT NULL);
+      `,
+      downstream: [
+        ['begin', fooBarBaz.begin()],
+        [
+          'data',
+          fooBarBaz.createIndex({
+            schemaName: 'public',
+            tableName: 'foo',
+            name: 'foo_handle_index',
+            columns: {
+              handle: 'DESC',
+            },
+            unique: true,
+          }),
+        ],
+        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
+      ],
+      data: {
+        ['_zero.ChangeLog']: [],
+      },
+      indexSpecs: [
+        {
+          name: 'foo_handle_index',
+          tableName: 'foo',
+          columns: {handle: 'DESC'},
+          unique: true,
+        },
+      ],
+    },
+    {
+      name: 'drop index',
+      setup: `
+        CREATE TABLE foo(id INT8 PRIMARY KEY, handle TEXT, _0_version TEXT NOT NULL);
+        CREATE INDEX keep_me ON foo (id DESC, handle ASC);
+        CREATE INDEX drop_me ON foo (handle DESC);
+      `,
+      downstream: [
+        ['begin', fooBarBaz.begin()],
+        ['data', fooBarBaz.dropIndex('drop_me')],
+        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
+      ],
+      data: {
+        ['_zero.ChangeLog']: [],
+      },
+      indexSpecs: [
+        {
+          name: 'keep_me',
+          tableName: 'foo',
+          columns: {
+            id: 'DESC',
+            handle: 'ASC',
+          },
+          unique: false,
+        },
+      ],
+    },
   ];
 
   for (const c of cases) {
@@ -582,6 +1200,15 @@ describe('replicator/incremental-sync', () => {
       }
 
       expectTables(replica, c.data, 'bigint');
+
+      if (c.tableSpecs) {
+        expect(
+          listTables(replica).filter(t => !t.name.startsWith('_zero.')),
+        ).toEqual(c.tableSpecs);
+      }
+      if (c.indexSpecs) {
+        expect(listIndexes(replica)).toEqual(c.indexSpecs);
+      }
     });
   }
 
