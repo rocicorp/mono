@@ -1122,7 +1122,7 @@ describe('replicator/incremental-sync', () => {
         [
           'data',
           fooBarBaz.createIndex({
-            schemaName: 'public',
+            schema: 'public',
             tableName: 'foo',
             name: 'foo_handle_index',
             columns: {
