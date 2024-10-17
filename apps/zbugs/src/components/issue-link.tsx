@@ -10,7 +10,9 @@ export default function IssueLink({
 } & Omit<LinkProps, 'href'>) {
   return (
     <Link
-      href={`/issue/${issue.shortID ?? issue.id}`}
+      href={
+        issue.shortID ? `/issue/${issue.shortID}` : `/issue/?longID=${issue.id}`
+      }
       title={title}
       className={className}
     >
