@@ -1,15 +1,16 @@
+import {FPSMeter} from '@schickling/fps-meter';
+import classNames from 'classnames';
+import {useState} from 'react';
+import {useSearch} from 'wouter';
+import {navigate} from 'wouter/use-browser-location';
+import {useQuery} from 'zero-react/src/use-query.js';
 import logoURL from '../assets/images/logo.svg';
 import markURL from '../assets/images/mark.svg';
-import {Link} from './link.js';
-import classNames from 'classnames';
-import {FPSMeter} from '@schickling/fps-meter';
-import {useSearch} from 'wouter';
 import {useLogin} from '../hooks/use-login.js';
-import IssueComposer from '../pages/issue/issue-composer.js';
-import {useState} from 'react';
 import {useZero} from '../hooks/use-zero.js';
-import {useQuery} from 'zero-react/src/use-query.js';
-import {navigate} from 'wouter/use-browser-location';
+import IssueComposer from '../pages/issue/issue-composer.js';
+import {Link} from './link.js';
+import {NotLoggedInModal} from './not-logged-in-modal.js';
 
 export function Nav() {
   const qs = new URLSearchParams(useSearch());
@@ -21,6 +22,7 @@ export function Nav() {
   );
 
   const [showIssueModal, setShowIssueModal] = useState(false);
+  const [showNotLoggedInModal, setShowNotLoggedInModal] = useState(false);
 
   const addStatusParam = (status: 'closed' | 'all' | undefined) => {
     const newParams = new URLSearchParams(qs);
@@ -32,6 +34,16 @@ export function Nav() {
     return '/?' + newParams.toString();
   };
 
+  const loginHref = '/api/login/github';
+
+  const newIssue = () => {
+    if (login.loginState === undefined) {
+      setShowNotLoggedInModal(true);
+    } else {
+      setShowIssueModal(true);
+    }
+  };
+
   return (
     <>
       <div className="nav-container flex flex-col">
@@ -40,10 +52,7 @@ export function Nav() {
           <img src={markURL} className="zero-mark" />
         </Link>
         {/* could not figure out how to add this color to tailwind.config.js */}
-        <button
-          className="primary-cta"
-          onMouseDown={() => setShowIssueModal(true)}
-        >
+        <button className="primary-cta" onMouseDown={newIssue}>
           <span className="primary-cta-text">New Issue</span>
         </button>
 
@@ -77,7 +86,7 @@ export function Nav() {
         <FPSMeter className="fps-meter" width={192} height={38} />
         <div className="user-login">
           {login.loginState === undefined ? (
-            <a href="/api/login/github">Login</a>
+            <a href={loginHref}>Login</a>
           ) : (
             <div className="logged-in-user-container">
               <div className="logged-in-user">
@@ -108,6 +117,11 @@ export function Nav() {
             navigate(`/issue/${id}`);
           }
         }}
+      />
+      <NotLoggedInModal
+        isOpen={showNotLoggedInModal}
+        onDismiss={() => setShowNotLoggedInModal(false)}
+        href={loginHref}
       />
     </>
   );

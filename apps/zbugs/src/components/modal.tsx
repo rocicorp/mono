@@ -1,16 +1,15 @@
+import {Transition} from '@headlessui/react';
+import classnames from 'classnames';
 import React, {
-  type RefObject,
   useCallback,
   useRef,
   type MouseEvent,
+  type RefObject,
 } from 'react';
 import ReactDOM from 'react-dom';
-import classnames from 'classnames';
-
 import CloseIcon from '../assets/icons/close.svg?react';
-import useLockBodyScroll from '../hooks/use-lock-body-scroll.js';
-import {Transition} from '@headlessui/react';
 import {useKeypress} from '../hooks/use-keypress.js';
+import useLockBodyScroll from '../hooks/use-lock-body-scroll.js';
 
 interface Props {
   title?: string;
