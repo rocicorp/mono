@@ -61,7 +61,7 @@ export const pokePartBodySchema = v.object({
 
 export const pokeEndBodySchema = v.object({
   pokeID: v.string(),
-  // If `true`, the poke with for `pokeID` should be discarded without
+  // If `true`, the poke with id `pokeID` should be discarded without
   // applying it.
   cancel: v.boolean().optional(),
 });
