@@ -16,12 +16,29 @@
   scrollbar-color: var(--color-nav-selected) rgba(0, 0, 0, 0);
 }
 
+.labelFilter {
+  background-color: transparent;
+  width: 100%;
+  margin-bottom: 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-modal-outline);
+  padding: 0.25rem 0.5rem;
+}
+
+.newLabel {
+  font-size: var(--typo-label-size);
+  font-weight: var(--typo-label-weight);
+  text-align: center;
+  padding: 0.5rem 0.5rem;
+}
+
 .label:hover {
   background-color: var(--color-row-hover);
 }
 
 .label {
   cursor: pointer;
+  width: 100%;
 }
 
 .selected {
