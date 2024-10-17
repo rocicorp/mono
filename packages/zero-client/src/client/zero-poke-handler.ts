@@ -100,6 +100,10 @@ export class PokeHandler {
       );
       return;
     }
+    if (pokeEnd.cancel) {
+      this.#receivingPoke = undefined;
+      return;
+    }
     this.#pokeBuffer.push(this.#receivingPoke);
     this.#receivingPoke = undefined;
     if (!this.#pokePlaybackLoopRunning) {
