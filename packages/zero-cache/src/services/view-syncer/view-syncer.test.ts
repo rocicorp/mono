@@ -884,13 +884,11 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "entitiesPatch": [
+            "pokeID": "01",
+            "rowsPatch": [
               {
-                "entityID": {
-                  "id": "1",
-                },
-                "entityType": "issues",
                 "op": "put",
+                "tableName": "issues",
                 "value": {
                   "big": 9007199254740991,
                   "id": "1",
@@ -901,11 +899,8 @@ describe('view-syncer/service', () => {
                 },
               },
               {
-                "entityID": {
-                  "id": "2",
-                },
-                "entityType": "issues",
                 "op": "put",
+                "tableName": "issues",
                 "value": {
                   "big": -9007199254740991,
                   "id": "2",
@@ -916,11 +911,8 @@ describe('view-syncer/service', () => {
                 },
               },
               {
-                "entityID": {
-                  "id": "3",
-                },
-                "entityType": "issues",
                 "op": "put",
+                "tableName": "issues",
                 "value": {
                   "big": 123,
                   "id": "3",
@@ -931,11 +923,8 @@ describe('view-syncer/service', () => {
                 },
               },
               {
-                "entityID": {
-                  "id": "4",
-                },
-                "entityType": "issues",
                 "op": "put",
+                "tableName": "issues",
                 "value": {
                   "big": 100,
                   "id": "4",
@@ -946,7 +935,6 @@ describe('view-syncer/service', () => {
                 },
               },
             ],
-            "pokeID": "01",
           },
         ],
         [
