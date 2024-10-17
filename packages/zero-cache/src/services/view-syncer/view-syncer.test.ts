@@ -851,8 +851,7 @@ describe('view-syncer/service', () => {
 
     stateChanges.push({state: 'version-ready'});
 
-    // The "newColumn" should be arrive in the nextPoke.
-    // TODO: The first pokeStart should be followed by a pokeCancel.
+    // The poke that encountered the schema change should be canceled.
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
       [
         [
@@ -867,6 +866,19 @@ describe('view-syncer/service', () => {
             },
           },
         ],
+        [
+          "pokeEnd",
+          {
+            "cancel": true,
+            "pokeID": "01",
+          },
+        ],
+      ]
+    `);
+
+    // The "newColumn" should be arrive in the nextPoke.
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
         [
           "pokeStart",
           {
