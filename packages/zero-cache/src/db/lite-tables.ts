@@ -1,7 +1,11 @@
 import {assert} from '../../../shared/src/asserts.js';
 import {must} from '../../../shared/src/must.js';
 import type {Database} from '../../../zqlite/src/db.js';
-import type {LiteIndexSpec, MutableLiteIndexSpec, TableSpec} from './specs.js';
+import type {
+  LiteIndexSpec,
+  LiteTableSpec,
+  MutableLiteIndexSpec,
+} from './specs.js';
 
 type ColumnInfo = {
   table: string;
@@ -12,7 +16,7 @@ type ColumnInfo = {
   keyPos: number;
 };
 
-export function listTables(db: Database): TableSpec[] {
+export function listTables(db: Database): LiteTableSpec[] {
   const columns = db
     .prepare(
       `
@@ -30,17 +34,13 @@ export function listTables(db: Database): TableSpec[] {
     )
     .all() as ColumnInfo[];
 
-  // For convenience when building the table spec. The returned TableSpec type is readonly.
-  type Writeable<T> = {-readonly [P in keyof T]: Writeable<T[P]>};
-
-  const tables: Writeable<TableSpec>[] = [];
-  let table: Writeable<TableSpec> | undefined;
+  const tables: LiteTableSpec[] = [];
+  let table: LiteTableSpec | undefined;
 
   columns.forEach(col => {
     if (col.table !== table?.name) {
       // New table
       table = {
-        schema: '',
         name: col.table,
         columns: {},
         primaryKey: [],

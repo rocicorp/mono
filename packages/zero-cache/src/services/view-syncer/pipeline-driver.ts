@@ -10,7 +10,7 @@ import type {TableSchema} from '../../../../zql/src/zql/ivm/schema.js';
 import type {Source, SourceChange} from '../../../../zql/src/zql/ivm/source.js';
 import {TableSource} from '../../../../zqlite/src/table-source.js';
 import {listTables} from '../../db/lite-tables.js';
-import type {TableSpec} from '../../db/specs.js';
+import type {LiteTableSpec} from '../../db/specs.js';
 import {
   dataTypeToZqlValueType,
   mapLiteDataTypeToZqlSchemaValue,
@@ -47,9 +47,9 @@ export type RowEdit = {
 export type RowChange = RowAdd | RowRemove | RowEdit;
 
 /** Normalized TableSpec filters out columns with unsupported data types. */
-export type NormalizedTableSpec = TableSpec;
+export type NormalizedTableSpec = LiteTableSpec;
 
-export function normalize(tableSpec: TableSpec): NormalizedTableSpec {
+export function normalize(tableSpec: LiteTableSpec): NormalizedTableSpec {
   const {primaryKey, columns} = tableSpec;
   const normalized = {
     ...tableSpec,
