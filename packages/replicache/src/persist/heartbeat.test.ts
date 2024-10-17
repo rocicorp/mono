@@ -1,8 +1,8 @@
 import {LogContext, type LogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {expect} from 'chai';
 import * as sinon from 'sinon';
 import {type SinonFakeTimers, useFakeTimers} from 'sinon';
+import {afterEach, beforeEach, expect, test} from 'vitest';
 import {assert, assertNotUndefined} from '../../../shared/src/asserts.js';
 import {StoreImpl} from '../dag/store-impl.js';
 import type {Read} from '../dag/store.js';

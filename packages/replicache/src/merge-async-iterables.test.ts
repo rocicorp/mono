@@ -1,7 +1,7 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
+import {stringCompare} from '../../shared/src/string-compare.js';
 import {asyncIterableToArray} from './async-iterable-to-array.js';
 import {mergeAsyncIterables} from './merge-async-iterables.js';
-import {stringCompare} from '../../shared/src/string-compare.js';
 
 export async function* makeAsyncIterable<V>(
   values: Iterable<V>,

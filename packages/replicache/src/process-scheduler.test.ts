@@ -1,11 +1,11 @@
 import {resolver, type Resolver} from '@rocicorp/resolver';
-import {expect} from 'chai';
 import sinon, {type SinonFakeTimers, useFakeTimers} from 'sinon';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {AbortError} from '../../shared/src/abort-error.js';
 import {ProcessScheduler} from './process-scheduler.js';
 import {expectPromiseToReject} from './test-util.js';
 
-suite('ProcessScheduler', () => {
+describe('ProcessScheduler', () => {
   let clock: SinonFakeTimers;
   beforeEach(() => {
     clock = useFakeTimers();

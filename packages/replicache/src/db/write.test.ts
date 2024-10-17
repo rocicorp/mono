@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
+import {describe, expect, test} from 'vitest';
 import {assertNotUndefined} from '../../../shared/src/asserts.js';
 import {asyncIterableToArray} from '../async-iterable-to-array.js';
 import {BTreeRead} from '../btree/read.js';
@@ -12,7 +12,7 @@ import {readIndexesForRead} from './read.js';
 import {initDB} from './test-helpers.js';
 import {newWriteLocal} from './write.js';
 
-suite('basics w/ commit', () => {
+describe('basics w/ commit', () => {
   const t = async (formatVersion: FormatVersion.Type) => {
     const clientID = 'client-id';
     const ds = new TestStore();
@@ -101,7 +101,7 @@ suite('basics w/ commit', () => {
   test('sdd', () => t(FormatVersion.SDD));
 });
 
-suite('basics w/ putCommit', () => {
+describe('basics w/ putCommit', () => {
   const t = async (formatVersion: FormatVersion.Type) => {
     const clientID = 'client-id';
     const ds = new TestStore();

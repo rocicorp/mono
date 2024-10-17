@@ -1,5 +1,5 @@
 import {resolver} from '@rocicorp/resolver';
-import {expect} from 'chai';
+import {beforeEach, expect, test} from 'vitest';
 import {withRead, withWrite} from '../with-transactions.js';
 import {MemStore, clearAllNamedMemStoresForTesting} from './mem-store.js';
 import {runAll} from './store-test-util.js';

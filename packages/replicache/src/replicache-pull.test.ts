@@ -1,6 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
-import {expect} from 'chai';
 import * as sinon from 'sinon';
+import {expect, test} from 'vitest';
 import type {VersionNotSupportedResponse} from './error-responses.js';
 import {getDefaultPuller} from './get-default-puller.js';
 import {type Hash, emptyHash} from './hash.js';

@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
 import sinon from 'sinon';
+import {afterEach, describe, expect, test} from 'vitest';
 import {BTreeRead} from '../btree/read.js';
 import type {Read} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
@@ -212,7 +212,7 @@ async function commitAndBTree(
   return [commit, btreeRead];
 }
 
-suite('rebaseMutationAndCommit', () => {
+describe('rebaseMutationAndCommit', () => {
   test('with sequence of mutations', async () => {
     const fixture = await createMutationSequenceFixture();
     const hashOfRebasedLocalCommit1 = await withWriteNoImplicitCommit(
@@ -316,7 +316,7 @@ suite('rebaseMutationAndCommit', () => {
   });
 });
 
-suite('rebaseMutationAndPutCommit', () => {
+describe('rebaseMutationAndPutCommit', () => {
   test('with sequence of mutations', async () => {
     const TEST_HEAD_NAME = 'test-head';
     const fixture = await createMutationSequenceFixture();

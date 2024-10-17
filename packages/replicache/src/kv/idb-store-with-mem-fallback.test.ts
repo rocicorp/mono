@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
 import * as sinon from 'sinon';
+import {afterEach, expect, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.js';
 import {
   withRead,

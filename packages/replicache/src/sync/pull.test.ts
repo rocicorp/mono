@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
+import {describe, expect, test} from 'vitest';
 import {assertObject, assertString} from '../../../shared/src/asserts.js';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 import {stringCompare} from '../../../shared/src/string-compare.js';
@@ -1087,7 +1087,7 @@ test('begin try pull DD31', async () => {
   }
 });
 
-suite('maybe end try pull', () => {
+describe('maybe end try pull', () => {
   const t = async (formatVersion: FormatVersion.Type) => {
     const clientID = 'client-id';
     type Case = {
@@ -1344,7 +1344,7 @@ function makeFakePuller(options: FakePullerArgs): Puller {
   };
 }
 
-suite('changed keys', () => {
+describe('changed keys', () => {
   const t = async (formatVersion: FormatVersion.Type) => {
     type IndexDef = {
       name: string;
@@ -1755,7 +1755,7 @@ test('pull for client group with multiple client local changes', async () => {
   });
 });
 
-suite('beginPull DD31', () => {
+describe('beginPull DD31', () => {
   const formatVersion = FormatVersion.Latest;
   const profileID = 'test-profile-id';
   const clientID1 = 'test-client-id-1';
@@ -1806,7 +1806,7 @@ suite('beginPull DD31', () => {
   });
 });
 
-suite('handlePullResponseDD31', () => {
+describe('handlePullResponseDD31', () => {
   const formatVersion = FormatVersion.Latest;
   const clientID1 = 'test-client-id-1';
   const clientID2 = 'test-client-id-2';

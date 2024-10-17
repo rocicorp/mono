@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import {sleep} from '../../shared/src/sleep.js';
 import {
   clock,

@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import {TestStore} from '../dag/test-store.js';
 import {DEFAULT_HEAD_NAME} from '../db/commit.js';
 import {readFromDefaultHead} from '../db/read.js';

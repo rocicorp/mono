@@ -1,5 +1,5 @@
-import {expect} from 'chai';
 import * as sinon from 'sinon';
+import {afterEach, expect, test} from 'vitest';
 import {TestMemStore} from '../kv/test-mem-store.js';
 import {
   IDBDatabasesStore,

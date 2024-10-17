@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import type {Read, Store, Write} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
 import {type Hash, assertHash, fakeHash} from '../hash.js';

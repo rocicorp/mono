@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import {BTreeWrite} from '../btree/write.js';
 import type {Write} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';

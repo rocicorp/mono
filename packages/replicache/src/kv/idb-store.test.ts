@@ -1,5 +1,5 @@
-import {expect} from 'chai';
 import * as sinon from 'sinon';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {withRead, withWrite} from '../with-transactions.js';
 import {dropIDBStoreWithMemFallback} from './idb-store-with-mem-fallback.js';
 import {IDBNotFoundError, IDBStore} from './idb-store.js';
@@ -39,7 +39,7 @@ test('dropStore', async () => {
   });
 });
 
-suite('reopening IDB', () => {
+describe('reopening IDB', () => {
   let name: string;
   let idb: Promise<IDBDatabase>;
   let store: IDBStore;

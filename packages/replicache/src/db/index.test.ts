@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import type {JSONValue} from '../../../shared/src/json.js';
 import {stringCompare} from '../../../shared/src/string-compare.js';
 import {asyncIterableToArray} from '../async-iterable-to-array.js';

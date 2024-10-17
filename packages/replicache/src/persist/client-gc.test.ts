@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
 import {type SinonFakeTimers, useFakeTimers} from 'sinon';
+import {afterEach, beforeEach, expect, test} from 'vitest';
 import {assertNotUndefined} from '../../../shared/src/asserts.js';
 import type {Read} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';

@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import {getSizeOfEntry, getSizeOfValue} from './size-of-value.js';
 
 test('getSizeOfValue', () => {

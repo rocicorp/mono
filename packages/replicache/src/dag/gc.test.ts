@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import {fakeHash, type Hash} from '../hash.js';
 import {computeRefCountUpdates, type RefCountUpdatesDelegate} from './gc.js';
 

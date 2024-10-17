@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
+import {describe, expect, test} from 'vitest';
 import {assert, assertNotUndefined} from '../../../shared/src/asserts.js';
 import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.js';
 import type {Entry} from '../btree/node.js';
@@ -170,7 +170,7 @@ function assertRefreshHashes(
   });
 }
 
-suite('refresh', () => {
+describe('refresh', () => {
   const formatVersion = FormatVersion.Latest;
   test('identical dags', async () => {
     // If the dags are the same then refresh is a no op.

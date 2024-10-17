@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import {asyncIterableToArray} from './async-iterable-to-array.js';
 import {filterAsyncIterable} from './filter-async-iterable.js';
 import {makeAsyncIterable} from './merge-async-iterables.test.js';

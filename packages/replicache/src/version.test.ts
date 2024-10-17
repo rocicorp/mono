@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import {version} from './version.js';
 
 test('version', async () => {

@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
 import {type SinonFakeTimers, useFakeTimers} from 'sinon';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {assertNotUndefined} from '../../../shared/src/asserts.js';
 import type {Store} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
@@ -29,7 +29,7 @@ import {
   type IndexedDBName,
 } from './idb-databases-store.js';
 
-suite('collectIDBDatabases', () => {
+describe('collectIDBDatabases', () => {
   let clock: SinonFakeTimers;
 
   beforeEach(() => {

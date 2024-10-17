@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {describe, expect, test} from 'vitest';
 import {
   initReplicacheTesting,
   replicacheForTesting,
@@ -7,7 +7,7 @@ import {
 
 initReplicacheTesting();
 
-suite('onUpdateNeeded', () => {
+describe('onUpdateNeeded', () => {
   test('Called if there is a new client group in same idb', async () => {
     const rep1 = await replicacheForTesting(
       'called-when-new-branch',

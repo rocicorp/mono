@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import {newRequestID} from './request-id.js';
 
 test('newRequestID()', () => {

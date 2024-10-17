@@ -1,7 +1,7 @@
-import {expect} from 'chai';
+import * as sinon from 'sinon';
+import {describe, expect, test} from 'vitest';
 import type {JSONValue} from '../../shared/src/json.js';
 import {Queue} from '../../shared/src/queue.js';
-import * as sinon from 'sinon';
 import {
   disableAllBackgroundProcesses,
   initReplicacheTesting,
@@ -521,7 +521,7 @@ test('watch with index and prefix and initial callback and data', async () => {
   unwatch();
 });
 
-suite('watch with initial values', () => {
+describe('watch with initial values', () => {
   const cases = [
     {name: 'with no prefix', prefix: undefined, key: 'a'},
     {name: 'with prefix', prefix: 'ns/', key: 'ns/a'},

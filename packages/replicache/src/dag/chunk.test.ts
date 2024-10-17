@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 import {deepFreeze} from '../frozen-json.js';
 import {fakeHash, type Hash, makeNewFakeHashFunction} from '../hash.js';

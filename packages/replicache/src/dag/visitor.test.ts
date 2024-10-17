@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.js';
 import {type Hash, fakeHash} from '../hash.js';
 import {Chunk, toRefs} from './chunk.js';

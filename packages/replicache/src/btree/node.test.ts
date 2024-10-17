@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {beforeEach, describe, expect, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.js';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 import {toRefs} from '../dag/chunk.js';
@@ -31,7 +31,7 @@ import {
 import {BTreeRead, NODE_HEADER_SIZE} from './read.js';
 import {BTreeWrite} from './write.js';
 
-suite('btree node', () => {
+describe('btree node', () => {
   function createSizedEntry<K, V>(
     key: K,
     value: V,
@@ -1641,7 +1641,7 @@ suite('btree node', () => {
   });
 });
 
-suite('Write nodes using ChainBuilder', () => {
+describe('Write nodes using ChainBuilder', () => {
   // This test ensures that we write the correct data chunks for btree nodes
   // depending in the replicache format version.
 

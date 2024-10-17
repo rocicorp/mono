@@ -1,5 +1,5 @@
 import {resolver} from '@rocicorp/resolver';
-import {expect} from 'chai';
+import {describe, expect, test} from 'vitest';
 import {sleep} from '../../shared/src/sleep.js';
 import {BroadcastChannel} from './broadcast-channel.js';
 import {TestStore} from './dag/test-store.js';
@@ -24,7 +24,7 @@ function getChannelMessagePromise(
   return messageResolver.promise;
 }
 
-suite('initNewClientChannel', () => {
+describe('initNewClientChannel', () => {
   test('sends client group ID to channel v0 and client group ID and idb name to channel v1', async () => {
     const replicacheName = 'test-name';
     const idbName = 'test-idb-name';

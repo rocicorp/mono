@@ -1,4 +1,4 @@
-import {expect} from 'chai';
+import {expect, test} from 'vitest';
 import {fakeHash} from '../hash.js';
 import * as KeyType from './key-type-enum.js';
 import {

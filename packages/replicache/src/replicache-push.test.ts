@@ -1,5 +1,5 @@
-import {expect} from 'chai';
 import * as sinon from 'sinon';
+import {expect, test} from 'vitest';
 import type {VersionNotSupportedResponse} from './error-responses.js';
 import type {Pusher} from './pusher.js';
 import {

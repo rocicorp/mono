@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
-import {expect} from 'chai';
 import sinon from 'sinon';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {
   assert,
   assertNotNull,
@@ -54,7 +54,7 @@ import * as PersistedExpectation from './persisted-expectation-enum.js';
 
 const PERDAG_TEST_SETUP_HEAD_NAME = 'test-setup-head';
 
-suite('persistDD31', () => {
+describe('persistDD31', () => {
   let memdag: LazyStore,
     perdag: TestStore,
     memdagChainBuilder: ChainBuilder,
