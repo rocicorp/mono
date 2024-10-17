@@ -2,7 +2,6 @@
 /* eslint-env node, es2022 */
 
 import {readFileSync} from 'node:fs';
-import {fileURLToPath} from 'node:url';
 
 const external = [
   'node:*',
@@ -45,7 +44,7 @@ export function sharedOptions(minify = true, metafile = false) {
 
 function getVersion(name) {
   const url = new URL(`../../${name}/package.json`, import.meta.url);
-  const s = readFileSync(fileURLToPath(url), 'utf-8');
+  const s = readFileSync(url, 'utf-8');
   return JSON.parse(s).version;
 }
 
