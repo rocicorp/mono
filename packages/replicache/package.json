@@ -30,7 +30,6 @@
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
-    "@types/chai": "^4.3.5",
     "@types/command-line-usage": "^5.0.2",
     "@types/sinon": "^10.0.11",
     "command-line-args": "^5.2.1",

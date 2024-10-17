@@ -1,8 +1,8 @@
 import type {Context, LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {assert as chaiAssert, expect} from 'chai';
 import * as sinon from 'sinon';
-import {assert} from '../../shared/src/asserts.js';
+import {describe, expect, test} from 'vitest';
+import {assert, unreachable} from '../../shared/src/asserts.js';
 import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.js';
 import {promiseVoid} from '../../shared/src/resolved-promises.js';
 import {sleep} from '../../shared/src/sleep.js';
@@ -41,9 +41,6 @@ import {withRead} from './with-transactions.js';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import {describe, test} from 'vitest';
-
-const {fail} = chaiAssert;
 
 initReplicacheTesting();
 
@@ -328,7 +325,7 @@ test('register with error', async () => {
 
   try {
     await doErr(42);
-    fail('Should have thrown');
+    unreachable();
   } catch (ex) {
     expect(ex).to.equal(42);
   }
