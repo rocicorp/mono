@@ -144,7 +144,7 @@ suite('btree node', () => {
   let getEntrySize: <K, V>(k: K, v: V) => number;
   let chunkHeaderSize: number;
 
-  setup(() => {
+  beforeEach(() => {
     minSize = 2;
     maxSize = 4;
     getEntrySize = () => 1;

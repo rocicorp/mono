@@ -6,7 +6,7 @@ import {runAll} from './store-test-util.js';
 
 runAll('NamedMemStore', () => new MemStore('test'));
 
-setup(() => {
+beforeEach(() => {
   clearAllNamedMemStoresForTesting();
 });
 

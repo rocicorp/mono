@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
-import {assert, assertNotUndefined} from '../../../shared/src/asserts.js';
 import {type SinonFakeTimers, useFakeTimers} from 'sinon';
+import {assert, assertNotUndefined} from '../../../shared/src/asserts.js';
 import {BTreeRead} from '../btree/read.js';
 import type {Read, Write} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
@@ -45,11 +45,11 @@ import {
 import {makeClientID} from './make-client-id.js';
 
 let clock: SinonFakeTimers;
-setup(() => {
+beforeEach(() => {
   clock = useFakeTimers(0);
 });
 
-teardown(() => {
+afterEach(() => {
   clock.restore();
 });
 

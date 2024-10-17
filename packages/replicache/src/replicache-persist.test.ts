@@ -41,7 +41,7 @@ import {withRead, withWriteNoImplicitCommit} from './with-transactions.js';
 initReplicacheTesting();
 
 let perdag: Store | undefined;
-teardown(async () => {
+afterEach(async () => {
   await perdag?.close();
 });
 

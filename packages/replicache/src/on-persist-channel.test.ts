@@ -6,7 +6,7 @@ import {initOnPersistChannel, type PersistInfo} from './on-persist-channel.js';
 suite('initOnPersistChannel', () => {
   let channel: BroadcastChannel | undefined;
 
-  teardown(() => {
+  afterEach(() => {
     if (channel) {
       channel.close();
     }

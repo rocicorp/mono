@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
-import {assertNotUndefined} from '../../../shared/src/asserts.js';
 import {type SinonFakeTimers, useFakeTimers} from 'sinon';
+import {assertNotUndefined} from '../../../shared/src/asserts.js';
 import type {Store} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
 import * as FormatVersion from '../format-version-enum.js';
@@ -32,11 +32,11 @@ import {
 suite('collectIDBDatabases', () => {
   let clock: SinonFakeTimers;
 
-  setup(() => {
+  beforeEach(() => {
     clock = useFakeTimers(0);
   });
 
-  teardown(() => {
+  afterEach(() => {
     clock.restore();
   });
 

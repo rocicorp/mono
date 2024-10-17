@@ -25,7 +25,7 @@ import {
 import {rebaseMutationAndCommit, rebaseMutationAndPutCommit} from './rebase.js';
 import {ChainBuilder} from './test-helpers.js';
 
-teardown(() => {
+afterEach(() => {
   sinon.restore();
 });
 

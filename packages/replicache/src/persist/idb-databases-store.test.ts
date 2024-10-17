@@ -6,7 +6,7 @@ import {
   type IndexedDBDatabase,
 } from './idb-databases-store.js';
 
-teardown(() => {
+afterEach(() => {
   sinon.restore();
 });
 

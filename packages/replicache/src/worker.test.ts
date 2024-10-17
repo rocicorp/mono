@@ -2,7 +2,7 @@ import {expect} from 'chai';
 import {sleep} from '../../shared/src/sleep.js';
 import {closeAllReps, dbsToDrop, deleteAllDatabases} from './test-util.js';
 
-teardown(async () => {
+afterEach(async () => {
   await closeAllReps();
   await deleteAllDatabases();
 });

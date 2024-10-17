@@ -23,6 +23,17 @@ function findBrowserName() {
   return undefined;
 }
 
+const logSilenceMessages = [
+  'Skipping license check for TEST_LICENSE_KEY.',
+  'REPLICACHE LICENSE NOT VALID',
+  'enableAnalytics false',
+  'no such entity',
+  'Zero starting up with no server URL',
+  'PokeHandler clearing due to unexpected poke error',
+  'Not indexing value',
+  'Zero starting up with no server URL',
+];
+
 export const config = {
   // https://github.com/vitest-dev/vitest/issues/5332#issuecomment-1977785593
   optimizeDeps: {
@@ -37,15 +48,10 @@ export const config = {
   test: {
     name: findBrowserName(),
     onConsoleLog(log: string) {
-      if (
-        log.includes('Skipping license check for TEST_LICENSE_KEY.') ||
-        log.includes('REPLICACHE LICENSE NOT VALID') ||
-        log.includes('enableAnalytics false') ||
-        log.includes('no such entity') ||
-        log.includes(`Zero starting up with no server URL`) ||
-        log.includes(`PokeHandler clearing due to unexpected poke error`)
-      ) {
-        return false;
+      for (const message of logSilenceMessages) {
+        if (log.includes(message)) {
+          return false;
+        }
       }
       return undefined;
     },

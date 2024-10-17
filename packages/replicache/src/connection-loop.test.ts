@@ -1,9 +1,9 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'chai';
+import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import {getDocumentVisibilityWatcher} from '../../shared/src/document-visible.js';
 import {promiseTrue} from '../../shared/src/resolved-promises.js';
 import {sleep} from '../../shared/src/sleep.js';
-import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import {
   ConnectionLoop,
   type ConnectionLoopDelegate,
@@ -13,7 +13,7 @@ import {
 } from './connection-loop.js';
 
 let clock: SinonFakeTimers;
-setup(() => {
+beforeEach(() => {
   clock = useFakeTimers(0);
 });
 
@@ -23,7 +23,7 @@ async function tickUntilTimeIs(t: number) {
   }
 }
 
-teardown(() => {
+afterEach(() => {
   clock.restore();
   loop?.close();
   loop = undefined;
