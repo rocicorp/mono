@@ -68,7 +68,7 @@ function mapPostgresToLiteDefault(
 }
 
 export function mapPostgresToLite(t: TableSpec): LiteTableSpec {
-  const {schema, ...liteSpec} = t;
+  const {schema: _, ...liteSpec} = t;
   const name = liteTableName(t);
   return {
     ...liteSpec,
