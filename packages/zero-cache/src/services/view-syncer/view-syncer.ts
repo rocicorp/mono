@@ -708,7 +708,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       await this.#processChanges(lc, changes, updater, pokers);
     } catch (e) {
       if (e instanceof SchemaChangeError) {
-        // TODO: cancel pokes before returning.
+        pokers.forEach(poker => poker.cancel());
         return e;
       }
       throw e;

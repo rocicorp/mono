@@ -60,11 +60,13 @@ export type PatchToVersion = {
 
 export interface PokeHandler {
   addPatch(patch: PatchToVersion): void;
+  cancel(): void;
   end(): void;
 }
 
 const NOOP: PokeHandler = {
   addPatch: () => {},
+  cancel: () => {},
   end: () => {},
 };
 
@@ -203,6 +205,10 @@ export class ClientHandler {
         } catch (e) {
           this.#pokes.fail(e instanceof Error ? e : new Error(String(e)));
         }
+      },
+
+      cancel: () => {
+        this.#pokes.push(['pokeEnd', {pokeID, cancel: true}]);
       },
 
       end: () => {
