@@ -2,11 +2,11 @@ import type postgres from 'postgres';
 import {afterAll, afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {Database} from '../../../zqlite/src/db.js';
-import {mapPostgresToLite} from '../services/change-streamer/pg/schema/lite.js';
 import {getPublicationInfo} from '../services/change-streamer/pg/schema/published.js';
 import {testDBs} from '../test/db.js';
 import {createTableStatement} from './create.js';
 import {listTables} from './lite-tables.js';
+import {mapPostgresToLite} from './pg-to-lite.js';
 import {stripCommentsAndWhitespace} from './query-test-util.js';
 import type {TableSpec} from './specs.js';
 

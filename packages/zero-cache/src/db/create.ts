@@ -1,10 +1,15 @@
 import {id, idList} from '../types/sql.js';
-import type {ColumnSpec, LiteIndexSpec, TableSpec} from './specs.js';
+import type {
+  ColumnSpec,
+  LiteIndexSpec,
+  LiteTableSpec,
+  TableSpec,
+} from './specs.js';
 
 /**
  * Constructs a `CREATE TABLE` statement for a {@link TableSpec}.
  */
-export function createTableStatement(spec: TableSpec): string {
+export function createTableStatement(spec: TableSpec | LiteTableSpec): string {
   function colDef(name: string, colSpec: ColumnSpec): string {
     const parts = [`${id(name)} ${colSpec.dataType}`];
     if (colSpec.characterMaximumLength) {
@@ -25,9 +30,10 @@ export function createTableStatement(spec: TableSpec): string {
     defs.push(`PRIMARY KEY (${idList(spec.primaryKey)})`);
   }
 
-  const createStmt = spec.schema.length
-    ? `CREATE TABLE ${id(spec.schema)}.${id(spec.name)} (`
-    : `CREATE TABLE ${id(spec.name)} (`;
+  const createStmt =
+    'schema' in spec
+      ? `CREATE TABLE ${id(spec.schema)}.${id(spec.name)} (`
+      : `CREATE TABLE ${id(spec.name)} (`;
   return [createStmt, defs.join(',\n'), ');'].join('\n');
 }
 

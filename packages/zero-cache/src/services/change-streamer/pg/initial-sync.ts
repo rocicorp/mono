@@ -6,6 +6,11 @@ import {
   createIndexStatement,
   createTableStatement,
 } from '../../../db/create.js';
+import {
+  mapPostgresToLite,
+  mapPostgresToLiteIndex,
+  warnIfDataTypeSupported,
+} from '../../../db/pg-to-lite.js';
 import type {FilteredTableSpec, IndexSpec} from '../../../db/specs.js';
 import {
   importSnapshot,
@@ -21,7 +26,6 @@ import {
   ZERO_VERSION_COLUMN_NAME,
 } from '../../replicator/schema/replication-state.js';
 import {toLexiVersion} from './lsn.js';
-import {mapPostgresToLite, warnIfDataTypeSupported} from './schema/lite.js';
 import {type PublicationInfo} from './schema/published.js';
 import {setupTablesAndReplication} from './schema/zero.js';
 import type {ShardConfig} from './shard-config.js';
@@ -239,20 +243,13 @@ function startTableCopyWorkers(
 
 function createLiteTables(tx: Database, tables: FilteredTableSpec[]) {
   for (const t of tables) {
-    const liteTable = mapPostgresToLite(t);
-    tx.exec(createTableStatement(liteTable));
+    tx.exec(createTableStatement(mapPostgresToLite(t)));
   }
 }
 
 function createLiteIndices(tx: Database, indices: IndexSpec[]) {
   for (const index of indices) {
-    const {schemaName: schema, tableName: name, ...liteIndex} = index;
-    tx.exec(
-      createIndexStatement({
-        tableName: liteTableName({schema, name}),
-        ...liteIndex,
-      }),
-    );
+    tx.exec(createIndexStatement(mapPostgresToLiteIndex(index)));
   }
 }
 

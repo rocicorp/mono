@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {mapPostgresToLite} from './lite.js';
+import {mapPostgresToLite} from './pg-to-lite.js';
 
 test('postgres to lite table spec', () => {
   expect(
@@ -60,7 +60,6 @@ test('postgres to lite table spec', () => {
       primaryKey: ['b', 'a'],
     }),
   ).toEqual({
-    schema: '',
     name: 'issue',
     columns: {
       ['_0_version']: {
@@ -140,7 +139,6 @@ test('postgres to lite table spec', () => {
       primaryKey: ['a'],
     }),
   ).toEqual({
-    schema: '',
     name: 'zero.foo',
     columns: {
       ['_0_version']: {
