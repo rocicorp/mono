@@ -1,9 +1,9 @@
-import { useCallback, useRef, useState } from 'react';
+import {useCallback, useRef, useState} from 'react';
 import Plus from '../assets/icons/plus.svg?react';
 import style from './label-picker.module.css';
-import { useClickOutside } from '../hooks/use-click-outside.js';
-import { useQuery } from '@rocicorp/zero/react';
-import { useZero } from '../hooks/use-zero.js';
+import {useClickOutside} from '../hooks/use-click-outside.js';
+import {useQuery} from '@rocicorp/zero/react';
+import {useZero} from '../hooks/use-zero.js';
 import classNames from 'classnames';
 
 export default function LabelPicker({
@@ -21,10 +21,10 @@ export default function LabelPicker({
   const z = useZero();
   const labels = useQuery(z.query.label.orderBy('name', 'asc'));
   const ref = useRef<HTMLDivElement>(null);
-  
+
   useClickOutside(
     ref,
-    useCallback(() => setIsOpen(false), [])
+    useCallback(() => setIsOpen(false), []),
   );
 
   return (
@@ -62,15 +62,20 @@ function LabelPopover({
   onDisassociateLabel: (id: string) => void;
   onAssociateLabel: (id: string) => void;
   onCreateNewLabel: (name: string) => void;
-  labels: readonly { id: string; name: string }[];
+  labels: readonly {id: string; name: string}[];
 }) {
   const [input, setInput] = useState('');
   const filteredLabels = labels.filter(label =>
-    label.name.toLowerCase().includes(input.toLowerCase())
+    label.name.toLowerCase().includes(input.toLowerCase()),
   );
 
   const handleCreateNewLabel = () => {
-    if (input && !filteredLabels.find(label => label.name.toLowerCase() === input.toLowerCase())) {
+    if (
+      input &&
+      !filteredLabels.find(
+        label => label.name.toLowerCase() === input.toLowerCase(),
+      )
+    ) {
       onCreateNewLabel(input); // Call the function to create a new label
       setInput(''); // Clear the input field after creating
     }
@@ -111,8 +116,8 @@ function LabelPopover({
         placeholder="Filter or add label..."
         className={style.labelFilter}
         value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={(e) => {
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={e => {
           if (e.key === 'Enter') {
             handleCreateNewLabel(); // Create new label on Enter
           }
