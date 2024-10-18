@@ -9,12 +9,18 @@ import type {
   TypedView,
 } from '../../zero-client/src/mod.js';
 import type {Immutable} from '../../shared/src/immutable.js';
+import {useZero} from './use-zero.js';
 
 export function useQuery<
   TSchema extends TableSchema,
   TReturn extends QueryType,
 >(q: Query<TSchema, TReturn>, enable: boolean = true): Smash<TReturn> {
-  const view = viewStore.getView(q as QueryImpl<TSchema, TReturn>, enable);
+  const z = useZero();
+  const view = viewStore.getView(
+    z.clientID,
+    q as QueryImpl<TSchema, TReturn>,
+    enable,
+  );
   // https://react.dev/reference/react/useSyncExternalStore
   return useSyncExternalStore(view.subscribeReactInternals, view.getSnapshot);
 }
@@ -75,6 +81,7 @@ class ViewStore {
   #views = new Map<string, ViewWrapper<any, any>>();
 
   getView<TSchema extends TableSchema, TReturn extends QueryType>(
+    clientID: string,
     query: QueryImpl<TSchema, TReturn>,
     enabled: boolean,
   ): {
@@ -89,7 +96,7 @@ class ViewStore {
       };
     }
 
-    const hash = JSON.stringify(query.ast);
+    const hash = JSON.stringify(query.ast) + clientID;
     let existing = this.#views.get(hash);
     if (!existing) {
       existing = new ViewWrapper(
