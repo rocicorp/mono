@@ -15,6 +15,7 @@ import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
 import {must} from '../../../../../packages/shared/src/must.js';
 import {links} from '../../routes.js';
+import {nanoid} from 'nanoid';
 
 export default function IssuePage() {
   const z = useZero();
@@ -227,6 +228,13 @@ export default function IssuePage() {
               onDisassociateLabel={labelID =>
                 z.mutate.issueLabel.delete({issueID: issue.id, labelID})
               }
+              onCreateNewLabel={labelName => {
+                const labelID = nanoid();
+                z.mutate(tx => {
+                  tx.label.create({id: labelID, name: labelName});
+                  tx.issueLabel.create({issueID: issue.id, labelID});
+                });
+              }}
             />
           </div>
         </div>
