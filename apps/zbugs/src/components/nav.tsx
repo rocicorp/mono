@@ -35,7 +35,10 @@ export function Nav() {
     return '/?' + newParams.toString();
   };
 
-  const loginHref = '/api/login/github';
+  const loginHref = links.login(
+    window.location.pathname,
+    window.location.search,
+  );
 
   const newIssue = () => {
     if (login.loginState === undefined) {

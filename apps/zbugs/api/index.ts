@@ -15,6 +15,7 @@ declare module 'fastify' {
 }
 
 const sql = postgres(process.env.UPSTREAM_URI as string);
+type QueryParams = {redirect: string};
 
 export const fastify = Fastify({
   logger: true,
@@ -37,10 +38,14 @@ fastify.register(oauthPlugin, {
   callbackUri: req =>
     `${req.protocol}://${req.hostname}${
       req.port != null ? ':' + req.port : ''
-    }/api/login/github/callback`,
+    }/api/login/github/callback?redirect=${
+      (req.query as QueryParams).redirect
+    }`,
 });
 
-fastify.get('/api/login/github/callback', async function (request, reply) {
+fastify.get<{
+  Querystring: QueryParams;
+}>('/api/login/github/callback', async function (request, reply) {
   const {token} =
     await this.githubOAuth2.getAccessTokenFromAuthorizationCodeFlow(request);
 
@@ -85,7 +90,9 @@ fastify.get('/api/login/github/callback', async function (request, reply) {
     .cookie('jwt', jwt, {
       path: '/',
     })
-    .redirect('/');
+    .redirect(
+      request.query.redirect ? decodeURIComponent(request.query.redirect) : '/',
+    );
 });
 
 export default async function handler(
