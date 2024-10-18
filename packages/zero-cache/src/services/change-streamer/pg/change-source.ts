@@ -6,12 +6,20 @@ import {
   Pgoutput,
   PgoutputPlugin,
 } from 'pg-logical-replication';
+import type {MessageMessage} from 'pg-logical-replication/dist/output-plugins/pgoutput/pgoutput.types.js';
 import {DatabaseError} from 'pg-protocol';
 import {AbortError} from '../../../../../shared/src/abort-error.js';
 import {assert} from '../../../../../shared/src/asserts.js';
 import {deepEqual} from '../../../../../shared/src/json.js';
+import {must} from '../../../../../shared/src/must.js';
+import {
+  intersection,
+  symmetricDifference,
+} from '../../../../../shared/src/set-utils.js';
 import {sleep} from '../../../../../shared/src/sleep.js';
+import * as v from '../../../../../shared/src/valita.js';
 import {Database} from '../../../../../zqlite/src/db.js';
+import type {TableSpec} from '../../../db/specs.js';
 import {StatementRunner} from '../../../db/statements.js';
 import {stringify} from '../../../types/bigint-json.js';
 import {max, oneAfter} from '../../../types/lexi-version.js';
@@ -23,11 +31,17 @@ import {
 import {Subscription} from '../../../types/subscription.js';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
 import type {ChangeSource, ChangeStream} from '../change-streamer-service.js';
-import type {Commit, DownstreamChange} from '../change-streamer.js';
-import type {MessageDelete} from '../schema/change.js';
+import type {Commit, Data, DownstreamChange} from '../change-streamer.js';
+import type {DataChange, Identifier, MessageDelete} from '../schema/change.js';
 import type {ReplicationConfig} from '../schema/tables.js';
 import {replicationSlot} from './initial-sync.js';
 import {fromLexiVersion, toLexiVersion} from './lsn.js';
+import {
+  createEventTriggerStatements,
+  replicationEventSchema,
+  type DdlUpdateEvent,
+  type PublishedSchema,
+} from './schema/ddl.js';
 import {INTERNAL_PUBLICATION_PREFIX} from './schema/zero.js';
 import type {ShardConfig} from './shard-config.js';
 import {initSyncSchema} from './sync-schema.js';
@@ -110,6 +124,15 @@ class PostgresChangeSource implements ChangeSource {
 
     try {
       await this.#stopExistingReplicationSlotSubscriber(db, slot);
+
+      // TODO: Move this into a schema-versioned upgrade.
+      await db.unsafe(
+        createEventTriggerStatements(
+          this.#shardID,
+          this.#replicationConfig.publications,
+        ),
+      );
+
       this.#lc.info?.(`starting replication stream @${slot}`);
 
       // Unlike the postgres.js client, the pg client does not have an option to
@@ -170,6 +193,7 @@ class PostgresChangeSource implements ChangeSource {
       }
     };
 
+    const changeMaker = new ChangeMaker(this.#lc, this.#shardID);
     const service = new LogicalReplicationService(
       {connectionString: this.#upstreamUri, ssl},
       {acknowledge: {auto: false, timeoutSeconds: 0}},
@@ -184,8 +208,7 @@ class PostgresChangeSource implements ChangeSource {
         respond && ack();
       })
       .on('data', (lsn, msg) => {
-        const change = messageToDownstream(lsn, msg);
-        if (change) {
+        for (const change of changeMaker.makeChanges(lsn, msg)) {
           changes.push(change);
         }
       })
@@ -196,6 +219,7 @@ class PostgresChangeSource implements ChangeSource {
         new PgoutputPlugin({
           protoVersion: 1,
           publicationNames: this.#replicationConfig.publications,
+          messages: true,
         }),
         slot,
         fromLexiVersion(clientStart),
@@ -274,45 +298,273 @@ class PostgresChangeSource implements ChangeSource {
   }
 }
 
-function messageToDownstream(
-  lsn: string,
-  msg: Pgoutput.Message,
-): DownstreamChange | undefined {
-  switch (msg.tag) {
-    case 'begin':
-      return ['begin', msg];
-    case 'delete':
-      assert(msg.key);
-      return ['data', msg as MessageDelete];
-    case 'insert':
-    case 'update':
-    case 'truncate':
-      return ['data', msg];
-    case 'commit': {
-      const watermark = toLexiVersion(lsn);
-      return ['commit', msg, {watermark}];
+class ChangeMaker {
+  readonly #lc: LogContext;
+  readonly #shardPrefix: string;
+
+  constructor(lc: LogContext, shardID: string) {
+    this.#lc = lc;
+    // Note: This matches the prefix used in pg_logical_emit_message() in pg/schema/ddl.ts.
+    this.#shardPrefix = `zero/${shardID}`;
+  }
+
+  makeChanges(lsn: string, msg: Pgoutput.Message): DownstreamChange[] {
+    switch (msg.tag) {
+      case 'begin':
+        return [['begin', msg]];
+
+      case 'delete':
+        assert(msg.key);
+        return [['data', msg as MessageDelete]];
+
+      case 'insert':
+      case 'update':
+      case 'truncate':
+        return [['data', msg]];
+
+      case 'message':
+        if (msg.prefix !== this.#shardPrefix) {
+          this.#lc.debug?.('ignoring message for different shard', msg.prefix);
+          return [];
+        }
+        return this.#handleCustomMessage(msg);
+
+      case 'commit': {
+        const watermark = toLexiVersion(lsn);
+        return [['commit', msg, {watermark}]];
+      }
+
+      case 'relation':
+        return []; // Explicitly ignored. Schema handling is TODO.
+      case 'type':
+        throw new Error(
+          `Custom types are not supported (received "${msg.typeName}")`,
+        );
+      case 'origin':
+        // We do not set the `origin` option in the pgoutput parameters:
+        // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
+        throw new Error(`Unexpected ORIGIN message ${stringify(msg)}`);
+      default:
+        msg satisfies never;
+        throw new Error(`Unexpected message type ${stringify(msg)}`);
+    }
+  }
+
+  #preSchema: PublishedSchema | undefined;
+
+  #handleCustomMessage(msg: MessageMessage) {
+    const event = this.#parseReplicationEvent(msg.content);
+    if (event.type === 'ddlStart') {
+      // Store the schema in order to diff it with a potential ddlUpdate.
+      this.#preSchema = event.schema;
+      return [];
+    }
+    // ddlUpdate
+    const changes = this.#makeSchemaChanges(
+      must(this.#preSchema, `ddlUpdate received without a ddlStart`),
+      event,
+    ).map(change => ['data', change] satisfies Data);
+
+    this.#lc.info?.(
+      `${changes.length} schema change(s) for ${event.context.query}`,
+      changes,
+    );
+
+    return changes;
+  }
+
+  /**
+   *  A note on operation order:
+   *
+   * Postgres will drop related indexes when columns are dropped,
+   * but SQLite will error instead (https://sqlite.org/forum/forumpost/2e62dba69f?t=c&hist).
+   * The current workaround is to drop indexes first.
+   *
+   * More generally, the order of replicating DDL updates is:
+   * - drop indexes
+   * - alter tables
+   * - drop tables
+   * - create tables
+   * - create indexes
+   *
+   * In the future the replication logic should be improved to handle this
+   * behavior in SQLite by dropping dependent indexes manually before dropping
+   * columns. This, for example, would be needed to properly support changing
+   * the type of a column that's indexed.
+   */
+  #makeSchemaChanges(
+    preSchema: PublishedSchema,
+    update: DdlUpdateEvent,
+  ): DataChange[] {
+    const [prevTables, prevIndexes] = specsByName(preSchema);
+    const [nextTables, nextIndexes] = specsByName(update.schema);
+    const {tag} = update.event;
+    const changes: DataChange[] = [];
+
+    const [dropped, created] = symmetricDifference(
+      new Set(prevIndexes.keys()),
+      new Set(nextIndexes.keys()),
+    );
+
+    // Drop indexes first so that allow dropping dependent objects.
+    for (const id of dropped) {
+      const {schema, name} = must(prevIndexes.get(id));
+      changes.push({tag: 'drop-index', id: {schema, name}});
     }
 
-    case 'relation':
-      return undefined; // Explicitly ignored. Schema handling is TODO.
-
-    case 'type':
-      throw new Error(
-        `Custom types are not supported (received "${msg.typeName}")`,
+    if (tag === 'ALTER PUBLICATION') {
+      const tables = intersection(
+        new Set(prevTables.keys()),
+        new Set(nextTables.keys()),
       );
-    case 'origin':
-      // We do not set the `origin` option in the pgoutput parameters:
-      // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
-      throw new Error(`Unexpected ORIGIN message ${stringify(msg)}`);
-    case 'message':
-      // We do not set the `messages` option in the pgoutput parameters:
-      // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
-      //
-      // TODO: Handle DDL events and convert them to schema Change messages here.
-      throw new Error(`Unexpected MESSAGE message ${stringify(msg)}`);
-    default:
-      msg satisfies never;
-      throw new Error(`Unexpected message type ${stringify(msg)}`);
+      for (const id of tables) {
+        changes.push(
+          ...this.#getAddedOrDroppedColumnChanges(
+            must(prevTables.get(id)),
+            must(nextTables.get(id)),
+          ),
+        );
+      }
+    } else if (tag === 'ALTER TABLE') {
+      const altered = idString(update.event.table);
+      const table = must(nextTables.get(altered));
+      const prevTable = prevTables.get(altered);
+      if (!prevTable) {
+        // table rename. Find the old name.
+        let old: Identifier | undefined;
+        for (const [id, {schema, name}] of prevTables.entries()) {
+          if (!nextTables.has(id)) {
+            old = {schema, name};
+            break;
+          }
+        }
+        if (!old) {
+          throw new Error(`can't find previous table: ${stringify(update)}`);
+        }
+        changes.push({tag: 'rename-table', old, new: table});
+      } else {
+        changes.push(...this.#getSingleColumnChange(prevTable, table));
+      }
+    }
+
+    // Added/dropped tables are handled in the same way for most DDL updates, with
+    // the exception being `ALTER TABLE`, for which a table rename should not be
+    // confused as a drop + add.
+    if (tag !== 'ALTER TABLE') {
+      const [dropped, created] = symmetricDifference(
+        new Set(prevTables.keys()),
+        new Set(nextTables.keys()),
+      );
+      for (const id of dropped) {
+        const {schema, name} = must(prevTables.get(id));
+        changes.push({tag: 'drop-table', id: {schema, name}});
+      }
+      for (const id of created) {
+        const spec = must(nextTables.get(id));
+        changes.push({tag: 'create-table', spec});
+      }
+    }
+
+    // Add indexes last since they may reference tables / columns that need
+    // to be created first.
+    for (const id of created) {
+      const spec = must(nextIndexes.get(id));
+      changes.push({tag: 'create-index', spec});
+    }
+    return changes;
+  }
+
+  // ALTER PUBLICATION can only add and drop columns, but never change them.
+  #getAddedOrDroppedColumnChanges(
+    oldTable: TableSpec,
+    newTable: TableSpec,
+  ): DataChange[] {
+    const table = {schema: newTable.schema, name: newTable.name};
+    const [dropped, added] = symmetricDifference(
+      new Set(Object.keys(oldTable.columns)),
+      new Set(Object.keys(newTable.columns)),
+    );
+
+    const changes: DataChange[] = [];
+    for (const column of dropped) {
+      changes.push({tag: 'drop-column', table, column});
+    }
+    for (const name of added) {
+      changes.push({
+        tag: 'add-column',
+        table,
+        column: {name, spec: newTable.columns[name]},
+      });
+    }
+
+    return changes;
+  }
+
+  // ALTER TABLE can add, drop, or change/rename a single column.
+  #getSingleColumnChange(
+    oldTable: TableSpec,
+    newTable: TableSpec,
+  ): DataChange[] {
+    const table = {schema: newTable.schema, name: newTable.name};
+    const [d, a] = symmetricDifference(
+      new Set(Object.keys(oldTable.columns)),
+      new Set(Object.keys(newTable.columns)),
+    );
+    const dropped = [...d];
+    const added = [...a];
+    assert(
+      dropped.length <= 1 && added.length <= 1,
+      `too many dropped [${[dropped]}] or added [${[added]}] columns`,
+    );
+    if (dropped.length === 1 && added.length === 1) {
+      const oldName = dropped[0];
+      const newName = added[0];
+      return [
+        {
+          tag: 'update-column',
+          table,
+          old: {name: oldName, spec: oldTable.columns[oldName]},
+          new: {name: newName, spec: newTable.columns[newName]},
+        },
+      ];
+    } else if (added.length) {
+      const name = added[0];
+      return [
+        {
+          tag: 'add-column',
+          table,
+          column: {name, spec: newTable.columns[name]},
+        },
+      ];
+    } else if (dropped.length) {
+      return [{tag: 'drop-column', table, column: dropped[0]}];
+    }
+    // Not a rename, add, or drop. Find the column with a relevant update.
+    for (const [name, oldSpec] of Object.entries(oldTable.columns)) {
+      const newSpec = newTable.columns[name];
+      // Besides the name, we only care about the data type.
+      // Default values and constraints are not relevant.
+      if (oldSpec.dataType !== newSpec.dataType) {
+        return [
+          {
+            tag: 'update-column',
+            table,
+            old: {name, spec: oldSpec},
+            new: {name, spec: newSpec},
+          },
+        ];
+      }
+    }
+    return [];
+  }
+
+  #parseReplicationEvent(content: Uint8Array) {
+    const str =
+      content instanceof Buffer
+        ? content.toString('utf-8')
+        : new TextDecoder().decode(content);
+    const json = JSON.parse(str);
+    return v.parse(json, replicationEventSchema, 'passthrough');
   }
 }
 
@@ -324,6 +576,16 @@ function translateError(e: unknown): Error {
     return new AbortError(e.message, {cause: e});
   }
   return e;
+}
+const idString = (id: Identifier) => `${id.schema}.${id.name}`;
+
+function specsByName(published: PublishedSchema) {
+  return [
+    // It would have been nice to use a CustomKeyMap here, but we rely on set-utils
+    // operations which use plain Sets.
+    new Map(published.tables.map(t => [idString(t), t])),
+    new Map(published.indexes.map(i => [idString(i), i])),
+  ] as const;
 }
 
 class SSLUnsupportedError extends Error {}

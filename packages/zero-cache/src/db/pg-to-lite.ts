@@ -100,6 +100,10 @@ export function mapPostgresToLite(t: TableSpec): LiteTableSpec {
 }
 
 export function mapPostgresToLiteIndex(index: IndexSpec): LiteIndexSpec {
-  const {schema, tableName: name, ...liteIndex} = index;
-  return {tableName: liteTableName({schema, name}), ...liteIndex};
+  const {schema, tableName, name, ...liteIndex} = index;
+  return {
+    tableName: liteTableName({schema, name: tableName}),
+    name: liteTableName({schema, name}),
+    ...liteIndex,
+  };
 }
