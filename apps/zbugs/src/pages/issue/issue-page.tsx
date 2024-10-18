@@ -20,11 +20,8 @@ export default function IssuePage() {
   const z = useZero();
   const params = useParams();
   const qs = new URLSearchParams(useSearch());
-  const idField: 'id' | 'shortID' = params?.id ? 'shortID' : 'id';
-  // You'd think that one of these _must_ always be set.
-  // Wouter, however, will call the `IssuePage` even if the current route doesn't match.
-  // E.g., when pressing `back` from the `issue-page` to go to the `list-page`
-  const id = params?.id ?? must(qs.get('longID'));
+  const idField: 'id' | 'shortID' = params.id ? 'shortID' : 'id';
+  const id = params.id ?? must(qs.get('longID'));
 
   // todo: one should be in the schema
   const q = z.query.issue
