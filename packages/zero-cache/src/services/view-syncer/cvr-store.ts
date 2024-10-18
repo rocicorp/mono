@@ -370,7 +370,11 @@ export class CVRStore {
     };
     this.#writes.add({
       stats: {desires: 1},
-      write: tx => tx`INSERT INTO cvr.desires ${tx(change)}`,
+      write: tx => tx`
+      INSERT INTO cvr.desires ${tx(change)}
+        ON CONFLICT ("clientGroupID", "clientID", "queryHash")
+        DO UPDATE SET ${tx(change)}
+      `,
     });
   }
 
@@ -513,19 +517,23 @@ export class CVRStore {
     );
     stats.rows = rowRecordsToFlush.length;
     await this.#db.begin(tx => {
+      const pipelined: Promise<unknown>[] = [];
+
       if (this.#pendingRowRecordPuts.size > 0) {
         const rowRecordRows = rowRecordsToFlush.map(r =>
           rowRecordToRowsRow(this.#id, r),
         );
         let i = 0;
         while (i < rowRecordRows.length) {
-          void tx`INSERT INTO cvr.rows ${tx(
-            rowRecordRows.slice(i, i + ROW_RECORD_UPSERT_BATCH_SIZE),
-          )} 
+          pipelined.push(
+            tx`INSERT INTO cvr.rows ${tx(
+              rowRecordRows.slice(i, i + ROW_RECORD_UPSERT_BATCH_SIZE),
+            )} 
             ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
             DO UPDATE SET "rowVersion" = excluded."rowVersion",
               "patchVersion" = excluded."patchVersion",
-              "refCounts" = excluded."refCounts"`.execute();
+              "refCounts" = excluded."refCounts"`.execute(),
+          );
           i += ROW_RECORD_UPSERT_BATCH_SIZE;
           stats.statements++;
         }
@@ -536,9 +544,13 @@ export class CVRStore {
         stats.desires += write.stats.desires ?? 0;
         stats.clients += write.stats.clients ?? 0;
 
-        void write.write(tx).execute();
+        pipelined.push(write.write(tx).execute());
         stats.statements++;
       }
+
+      // Make sure Errors thrown by pipelined statements
+      // are propagated up the stack.
+      return Promise.all(pipelined);
     });
     await this.#rowCache.flush(rowRecordsToFlush);
 

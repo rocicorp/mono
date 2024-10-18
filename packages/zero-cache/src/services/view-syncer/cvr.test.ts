@@ -691,6 +691,21 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(lc, db, 'abc123');
     const reloaded = await cvrStore2.load();
     expect(reloaded).toEqual(updated);
+
+    // Add the deleted desired query back. This ensures that the
+    // desired query update statement is an UPSERT.
+    const updater2 = new CVRConfigDrivenUpdater(cvrStore2, reloaded);
+    expect(
+      updater2.putDesiredQueries('fooClient', {
+        oneHash: {table: 'issues'},
+      }),
+    ).toEqual([{id: 'oneHash', ast: {table: 'issues'}}]);
+
+    const {cvr: updated2} = await updater2.flush(
+      lc,
+      new Date(Date.UTC(2024, 3, 24, 1)),
+    );
+    expect(updated2.clients.fooClient.desiredQueryIDs).toContain('oneHash');
   });
 
   test('no-op change to desired query set', async () => {
