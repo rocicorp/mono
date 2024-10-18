@@ -97,6 +97,10 @@ class RowRecordCache {
       }
     }
   }
+
+  clear() {
+    this.#cache = undefined;
+  }
 }
 
 type QueryRow = {
@@ -493,7 +497,24 @@ export class CVRStore {
     return patches;
   }
 
-  async flush(): Promise<CVRFlushStats> {
+  async #abortIfNotVersion(
+    tx: PostgresTransaction,
+    expectedCurrentVersion: CVRVersion,
+  ): Promise<void> {
+    const expected = versionString(expectedCurrentVersion);
+    const result = await tx<
+      {version: string}[]
+    >`SELECT version FROM cvr.instances WHERE "clientGroupID" = ${
+      this.#id
+    }`.execute(); // Note: execute() immediately to send the query before others.
+    const currVersion =
+      result.length === 0 ? versionToLexi(0) : result[0].version;
+    if (currVersion !== expected) {
+      throw new ConcurrentModificationException(expected, currVersion);
+    }
+  }
+
+  async #flush(expectedCurrentVersion: CVRVersion): Promise<CVRFlushStats> {
     const stats: CVRFlushStats = {
       instances: 0,
       queries: 0,
@@ -517,7 +538,11 @@ export class CVRStore {
     );
     stats.rows = rowRecordsToFlush.length;
     await this.#db.begin(tx => {
-      const pipelined: Promise<unknown>[] = [];
+      const pipelined: Promise<unknown>[] = [
+        // Test-and-set the version to guard against concurrent writes.
+        // TODO: Add homing logic.
+        this.#abortIfNotVersion(tx, expectedCurrentVersion),
+      ];
 
       if (this.#pendingRowRecordPuts.size > 0) {
         const rowRecordRows = rowRecordsToFlush.map(r =>
@@ -553,10 +578,20 @@ export class CVRStore {
       return Promise.all(pipelined);
     });
     await this.#rowCache.flush(rowRecordsToFlush);
-
-    this.#writes.clear();
-    this.#pendingRowRecordPuts.clear();
     return stats;
+  }
+
+  async flush(expectedCurrentVersion: CVRVersion): Promise<CVRFlushStats> {
+    try {
+      return await this.#flush(expectedCurrentVersion);
+    } catch (e) {
+      // Clear cached state if an error (e.g. ConcurrentModificationException) is encountered.
+      this.#rowCache.clear();
+      throw e;
+    } finally {
+      this.#writes.clear();
+      this.#pendingRowRecordPuts.clear();
+    }
   }
 }
 
@@ -564,3 +599,13 @@ export class CVRStore {
 // Each row record has 7 parameters (1 per column).
 // 65534 / 7 = 9362
 const ROW_RECORD_UPSERT_BATCH_SIZE = 9_360;
+
+export class ConcurrentModificationException extends Error {
+  readonly name = 'ConcurrentModificationException';
+
+  constructor(expectedVersion: string, actualVersion: string) {
+    super(
+      `CVR has been concurrently modified. Expected ${expectedVersion}, got ${actualVersion}`,
+    );
+  }
+}
