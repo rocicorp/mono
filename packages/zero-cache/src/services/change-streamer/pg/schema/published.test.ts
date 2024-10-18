@@ -722,14 +722,14 @@ describe('tables/published', () => {
         ],
         indices: [
           {
-            schemaName: 'test',
+            schema: 'test',
             tableName: 'issues',
             name: 'issues_component_id',
             columns: {['component_id']: 'ASC'},
             unique: false,
           },
           {
-            schemaName: 'test',
+            schema: 'test',
             tableName: 'issues',
             name: 'issues_org_id',
             columns: {['org_id']: 'ASC'},
@@ -794,14 +794,14 @@ describe('tables/published', () => {
         ],
         indices: [
           {
-            schemaName: 'test',
+            schema: 'test',
             tableName: 'issues',
             name: 'issues_component_id',
             columns: {['component_id']: 'ASC'},
             unique: true,
           },
           {
-            schemaName: 'test',
+            schema: 'test',
             tableName: 'issues',
             name: 'issues_org_id',
             columns: {['org_id']: 'ASC'},
@@ -877,7 +877,7 @@ describe('tables/published', () => {
         ],
         indices: [
           {
-            schemaName: 'test',
+            schema: 'test',
             tableName: 'foo',
             name: 'foo_a_b',
             columns: {
@@ -887,7 +887,7 @@ describe('tables/published', () => {
             unique: false,
           },
           {
-            schemaName: 'test',
+            schema: 'test',
             tableName: 'foo',
             name: 'foo_b_a',
             columns: {
@@ -958,7 +958,7 @@ describe('tables/published', () => {
         ],
         indices: [
           {
-            schemaName: 'test',
+            schema: 'test',
             tableName: 'foo',
             name: 'foo_a_b',
             columns: {
@@ -968,7 +968,7 @@ describe('tables/published', () => {
             unique: false,
           },
           {
-            schemaName: 'test',
+            schema: 'test',
             tableName: 'foo',
             name: 'foo_b_a',
             columns: {

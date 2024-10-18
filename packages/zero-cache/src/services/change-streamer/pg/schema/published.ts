@@ -93,7 +93,7 @@ export function indexDefinitionsQuery(publications: string[]) {
   // https://github.com/postgres/postgres/blob/4e1fad37872e49a711adad5d9870516e5c71a375/src/include/catalog/pg_index.h#L89
   return `
   WITH indexed_columns AS (SELECT
-      pg_indexes.schemaname as "schemaName",
+      pg_indexes.schemaname as "schema",
       pg_indexes.tablename as "tableName",
       pg_indexes.indexname as "name",
       index_column.name as "col",
@@ -124,13 +124,13 @@ export function indexDefinitionsQuery(publications: string[]) {
       index_column.pos ASC),
   
     indexes AS (SELECT json_build_object(
-      'schemaName', "schemaName",
+      'schema', "schema",
       'tableName', "tableName",
       'name', "name",
       'unique', "unique",
       'columns', json_object_agg(DISTINCT "col", "dir")
     ) AS index FROM indexed_columns 
-      GROUP BY "schemaName", "tableName", "name", "unique")
+      GROUP BY "schema", "tableName", "name", "unique")
 
     SELECT COALESCE(json_agg("index"), '[]'::json) as "indexes" FROM indexes
   `;
