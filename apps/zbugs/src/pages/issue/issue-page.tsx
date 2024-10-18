@@ -1,7 +1,7 @@
 import {useQuery} from '@rocicorp/zero/react';
 import {useEffect, useMemo, useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
-import {useRoute, useSearch} from 'wouter';
+import {useParams, useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
@@ -14,17 +14,17 @@ import {useZero} from '../../hooks/use-zero.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
 import {must} from '../../../../../packages/shared/src/must.js';
-import {links, routes} from '../../routes.js';
+import {links} from '../../routes.js';
 
 export default function IssuePage() {
   const z = useZero();
-  const [match, params] = useRoute(routes.issue);
+  const params = useParams();
   const qs = new URLSearchParams(useSearch());
   const idField: 'id' | 'shortID' = params?.id ? 'shortID' : 'id';
   // You'd think that one of these _must_ always be set.
   // Wouter, however, will call the `IssuePage` even if the current route doesn't match.
   // E.g., when pressing `back` from the `issue-page` to go to the `list-page`
-  const id = match ? params?.id ?? must(qs.get('longID')) : '';
+  const id = params?.id ?? must(qs.get('longID'));
 
   // todo: one should be in the schema
   const q = z.query.issue
@@ -34,7 +34,7 @@ export default function IssuePage() {
     .related('labels')
     .related('comments', q => q.orderBy('created', 'asc'))
     .one();
-  const issue = useQuery(q, match);
+  const issue = useQuery(q);
 
   const [editing, setEditing] = useState<typeof issue | null>(null);
   const [edits, setEdits] = useState<Partial<typeof issue>>({});
