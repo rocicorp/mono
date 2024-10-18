@@ -230,12 +230,11 @@ export default function IssuePage() {
               }
               onCreateNewLabel={labelName => {
                 const labelID = nanoid();
-                z.mutate((tx) => {
+                z.mutate(tx => {
                   tx.label.create({id: labelID, name: labelName});
                   tx.issueLabel.create({issueID: issue.id, labelID});
                 });
-              }
-            }
+              }}
             />
           </div>
         </div>
