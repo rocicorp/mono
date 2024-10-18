@@ -2011,7 +2011,7 @@ test('kvStore option', async () => {
     allDataView.hydrate();
 
     // TODO: we need a way to await hydration...
-    await tickAFewTimes(clock);
+    await tickAFewTimes(clock, 2000);
 
     expect(allDataView.data).deep.equal(expectedValue);
     await r.mutate.e.create({id: 'a', value: 1});
