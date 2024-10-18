@@ -56,6 +56,8 @@ const identifierSchema = v.object({
   name: v.string(),
 });
 
+export type Identifier = v.Infer<typeof identifierSchema>;
+
 export const createTableSchema = v.object({
   tag: v.literal('create-table'),
   spec: tableSpec,
