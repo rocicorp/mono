@@ -22,6 +22,8 @@ const publishedSchema = v.object({
   indexes: v.array(indexSpec),
 });
 
+export type PublishedSchema = v.Infer<typeof publishedSchema>;
+
 // All DDL events contain a snapshot of the current tables and indexes that
 // are published / relevant to the shard.
 export const ddlEventSchema = triggerEvent.extend({
@@ -36,11 +38,11 @@ export const ddlEventSchema = triggerEvent.extend({
 // `ddlUpdate` message may not follow, as updates determined to be irrelevant
 // to the shard will not result in a message. However, all `ddlUpdate` messages
 // are guaranteed to be preceded by a `ddlStart` message.
-export const ddlStartSchema = ddlEventSchema.extend({
+export const ddlStartEventSchema = ddlEventSchema.extend({
   type: v.literal('ddlStart'),
 });
 
-export type DdlStartEvent = v.Infer<typeof ddlStartSchema>;
+export type DdlStartEvent = v.Infer<typeof ddlStartEventSchema>;
 
 /**
  * An tableEvent indicates the table that was created or altered. Note that
@@ -109,21 +111,19 @@ const publicationEvent = v.object({
  * schema (e.g. column constraints) are not relevant to downstream
  * replication.
  */
-export const ddlUpdateSchema = ddlEventSchema.extend({
+export const ddlUpdateEventSchema = ddlEventSchema.extend({
   type: v.literal('ddlUpdate'),
   event: v.union(tableEvent, indexEvent, dropEvent, publicationEvent),
 });
 
-export type DdlUpdateEvent = v.Infer<typeof ddlUpdateSchema>;
+export type DdlUpdateEvent = v.Infer<typeof ddlUpdateEventSchema>;
 
-export const errorEventSchema = triggerEvent
-  .extend({
-    type: v.literal('error'),
-    message: v.string(),
-  })
-  .rest(v.string());
+export const replicationEventSchema = v.union(
+  ddlStartEventSchema,
+  ddlUpdateEventSchema,
+);
 
-export type ErrorEvent = v.Infer<typeof errorEventSchema>;
+export type ReplicationEvent = v.Infer<typeof replicationEventSchema>;
 
 // Creates a function that appends `_SHARD_ID` to the input.
 function append(shardID: string) {
