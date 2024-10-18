@@ -230,6 +230,12 @@ export default function IssuePage() {
               onDisassociateLabel={labelID =>
                 z.mutate.issueLabel.delete({issueID: issue.id, labelID})
               }
+              onCreateNewLabel={labelID =>
+                z.mutate.issueLabel.create({
+                  issueID: issue.id,
+                  labelID,
+                })
+              }
             />
           </div>
         </div>
