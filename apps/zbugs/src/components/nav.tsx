@@ -11,6 +11,7 @@ import {useZero} from '../hooks/use-zero.js';
 import IssueComposer from '../pages/issue/issue-composer.js';
 import {Link} from './link.js';
 import {NotLoggedInModal} from './not-logged-in-modal.js';
+import {links} from '../routes.js';
 
 export function Nav() {
   const qs = new URLSearchParams(useSearch());
@@ -114,7 +115,7 @@ export function Nav() {
         onDismiss={id => {
           setShowIssueModal(false);
           if (id) {
-            navigate(`/issue/${id}`);
+            navigate(links.issue({id}));
           }
         }}
       />

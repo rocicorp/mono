@@ -8,6 +8,7 @@ import ErrorPage from './pages/error/error-page.js';
 import IssuePage from './pages/issue/issue-page.js';
 import ListPage from './pages/list/list-page.js';
 import {zeroRef} from './zero-setup.js';
+import {routes} from './routes.js';
 
 export default function Root() {
   const [z, setZ] = useState<Zero<Schema> | undefined>();
@@ -25,8 +26,8 @@ export default function Root() {
         </div>
         <div className="primary-content">
           <Switch>
-            <Route path="/" component={ListPage} />
-            <Route path="/issue/:id?" component={IssuePage} />
+            <Route path={routes.home} component={ListPage} />
+            <Route path={routes.issue} component={IssuePage} />
             <Route component={ErrorPage} />
           </Switch>
         </div>

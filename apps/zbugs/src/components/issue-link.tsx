@@ -1,3 +1,4 @@
+import {links} from '../routes.js';
 import {Link, type Props as LinkProps} from './link.js';
 
 export default function IssueLink({
@@ -9,13 +10,7 @@ export default function IssueLink({
   issue: {id: string; shortID?: number | undefined};
 } & Omit<LinkProps, 'href'>) {
   return (
-    <Link
-      href={
-        issue.shortID ? `/issue/${issue.shortID}` : `/issue/?longID=${issue.id}`
-      }
-      title={title}
-      className={className}
-    >
+    <Link href={links.issue(issue)} title={title} className={className}>
       {children}
     </Link>
   );
