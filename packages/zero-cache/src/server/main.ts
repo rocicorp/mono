@@ -51,10 +51,11 @@ const changeStreamer = config.changeStreamerConnStr
   ? resolve()
   : loadWorker('./change-streamer.ts', 'supporting').once('message', resolve);
 
-const numSyncers = config.numSyncWorkers
-  ? Number(config.numSyncWorkers)
-  : // Reserve 1 core for the replicator. The change-streamer is not CPU heavy.
-    Math.max(1, availableParallelism() - 1);
+const numSyncers =
+  config.numSyncWorkers !== undefined
+    ? config.numSyncWorkers
+    : // Reserve 1 core for the replicator. The change-streamer is not CPU heavy.
+      Math.max(1, availableParallelism() - 1);
 
 if (numSyncers) {
   // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
