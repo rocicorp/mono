@@ -1,9 +1,9 @@
 import {expect, test} from 'vitest';
+import type {AST} from '../../../../zero-protocol/src/ast.js';
 import {Catch} from '../ivm/catch.js';
 import {MemorySource} from '../ivm/memory-source.js';
 import {MemoryStorage} from '../ivm/memory-storage.js';
 import {bindStaticParameters, buildPipeline} from './builder.js';
-import type {AST} from '../ast/ast.js';
 
 export function testSources() {
   const users = new MemorySource(

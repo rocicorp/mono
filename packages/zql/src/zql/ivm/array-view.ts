@@ -7,9 +7,10 @@ import {
 } from '../../../../shared/src/asserts.js';
 import type {Immutable} from '../../../../shared/src/immutable.js';
 import {must} from '../../../../shared/src/must.js';
+import type {Row, Value} from '../../../../zero-protocol/src/data.js';
 import {assertOrderingIncludesPK} from '../builder/builder.js';
 import type {Change} from './change.js';
-import type {Comparator, Row, Value} from './data.js';
+import type {Comparator} from './data.js';
 import type {Input, Output} from './operator.js';
 import type {TableSchema} from './schema.js';
 

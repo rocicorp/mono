@@ -1,7 +1,7 @@
 import type {ExperimentalNoIndexDiff} from '../../../replicache/src/mod.js';
 import {assert, unreachable} from '../../../shared/src/asserts.js';
-import type {AST} from '../../../zql/src/zql/ast/ast.js';
-import type {Row} from '../../../zql/src/zql/ivm/data.js';
+import type {AST} from '../../../zero-protocol/src/ast.js';
+import type {Row} from '../../../zero-protocol/src/data.js';
 import {MemorySource} from '../../../zql/src/zql/ivm/memory-source.js';
 import {MemoryStorage} from '../../../zql/src/zql/ivm/memory-storage.js';
 import type {Storage} from '../../../zql/src/zql/ivm/operator.js';

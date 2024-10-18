@@ -1,6 +1,7 @@
 import {expect, test} from 'vitest';
+import type {Row, Value} from '../../../../../zero-protocol/src/data.js';
 import {Catch, expandNode} from '../catch.js';
-import type {Node, Row, Value} from '../data.js';
+import type {Node} from '../data.js';
 import type {FetchRequest, Input, Output, Start} from '../operator.js';
 import type {SchemaValue} from '../schema.js';
 import type {Source, SourceChange} from '../source.js';

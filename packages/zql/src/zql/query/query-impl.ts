@@ -2,10 +2,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../../shared/src/asserts.js';
-import type {AST, Ordering} from '../ast/ast.js';
+import type {AST, Ordering} from '../../../../zero-protocol/src/ast.js';
+import type {Row} from '../../../../zero-protocol/src/data.js';
 import {buildPipeline, type BuilderDelegate} from '../builder/builder.js';
 import {ArrayView, type Format} from '../ivm/array-view.js';
-import type {Row} from '../ivm/data.js';
 import {
   normalizeTableSchema,
   type NormalizedTableSchema,

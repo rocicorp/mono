@@ -1,18 +1,18 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import type {Row} from 'postgres';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.js';
 import {must} from '../../../../shared/src/must.js';
 import {difference} from '../../../../shared/src/set-utils.js';
+import type {AST} from '../../../../zero-protocol/src/ast.js';
 import type {
   ChangeDesiredQueriesBody,
   ChangeDesiredQueriesMessage,
   Downstream,
   InitConnectionMessage,
 } from '../../../../zero-protocol/src/mod.js';
-import type {AST} from '../../../../zql/src/zql/ast/ast.js';
-import type {Row} from '../../../../zql/src/zql/ivm/data.js';
 import {stringify} from '../../types/bigint-json.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {rowIDHash, type RowKey} from '../../types/row-key.js';

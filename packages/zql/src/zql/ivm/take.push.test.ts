@@ -1,12 +1,13 @@
-import type {JSONValue} from '../../../../shared/src/json.js';
 import {describe, expect, suite, test} from 'vitest';
-import type {Ordering} from '../ast/ast.js';
+import type {JSONValue} from '../../../../shared/src/json.js';
+import type {Ordering} from '../../../../zero-protocol/src/ast.js';
+import type {Row, Value} from '../../../../zero-protocol/src/data.js';
+import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.js';
 import {Catch} from './catch.js';
 import type {Change} from './change.js';
-import type {Row, Value} from './data.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
-import type {PrimaryKey, SchemaValue} from './schema.js';
+import type {SchemaValue} from './schema.js';
 import {Snitch, type SnitchMessage} from './snitch.js';
 import type {SourceChange} from './source.js';
 import {Take} from './take.js';

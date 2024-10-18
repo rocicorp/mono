@@ -1,8 +1,10 @@
-import {assert} from '../../../../shared/src/asserts.js';
 import {expect, suite, test} from 'vitest';
-import type {Ordering} from '../ast/ast.js';
+import {assert} from '../../../../shared/src/asserts.js';
+import type {Ordering} from '../../../../zero-protocol/src/ast.js';
+import type {Row} from '../../../../zero-protocol/src/data.js';
+import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.js';
 import {Catch} from './catch.js';
-import type {Node, NormalizedValue, Row} from './data.js';
+import type {Node, NormalizedValue} from './data.js';
 import {
   Join,
   createPrimaryKeySetStorageKey,
@@ -10,7 +12,7 @@ import {
 } from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
-import type {PrimaryKey, TableSchema, SchemaValue} from './schema.js';
+import type {SchemaValue, TableSchema} from './schema.js';
 import {type PushMessage, Snitch, type SnitchMessage} from './snitch.js';
 
 suite('fetch one:many', () => {

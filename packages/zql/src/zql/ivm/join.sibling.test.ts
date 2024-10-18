@@ -1,14 +1,16 @@
-import {assert} from '../../../../shared/src/asserts.js';
 import {expect, suite, test} from 'vitest';
-import type {Ordering} from '../ast/ast.js';
+import {assert} from '../../../../shared/src/asserts.js';
+import type {Ordering} from '../../../../zero-protocol/src/ast.js';
+import type {Row} from '../../../../zero-protocol/src/data.js';
+import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.js';
 import {Catch} from './catch.js';
 import type {Change} from './change.js';
-import type {NormalizedValue, Row} from './data.js';
+import type {NormalizedValue} from './data.js';
 import {Join, createPrimaryKeySetStorageKey} from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
 import type {Input} from './operator.js';
-import type {PrimaryKey, SchemaValue} from './schema.js';
+import type {SchemaValue} from './schema.js';
 import {Snitch, type SnitchMessage} from './snitch.js';
 import type {SourceChange} from './source.js';
 

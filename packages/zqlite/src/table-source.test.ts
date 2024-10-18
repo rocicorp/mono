@@ -1,12 +1,9 @@
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.js';
+import type {Row, Value} from '../../zero-protocol/src/data.js';
 import {Catch} from '../../zql/src/zql/ivm/catch.js';
 import type {Change} from '../../zql/src/zql/ivm/change.js';
-import {
-  makeComparator,
-  type Row,
-  type Value,
-} from '../../zql/src/zql/ivm/data.js';
+import {makeComparator} from '../../zql/src/zql/ivm/data.js';
 import type {SchemaValue} from '../../zql/src/zql/ivm/schema.js';
 import {runCases} from '../../zql/src/zql/ivm/test/source-cases.js';
 import {Database} from './db.js';

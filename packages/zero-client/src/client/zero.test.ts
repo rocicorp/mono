@@ -6,9 +6,11 @@ import type {
   PullRequestV1,
   PushRequestV1,
 } from '../../../replicache/src/mod.js';
+import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.js';
 import {assert} from '../../../shared/src/asserts.js';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.js';
 import * as valita from '../../../shared/src/valita.js';
+import type {AST} from '../../../zero-protocol/src/ast.js';
 import {
   changeDesiredQueriesMessageSchema,
   decodeSecProtocols,
@@ -22,9 +24,9 @@ import {
   pushMessageSchema,
 } from '../../../zero-protocol/src/push.js';
 import type {NullableVersion} from '../../../zero-protocol/src/version.js';
-import type {AST} from '../../../zql/src/zql/ast/ast.js';
 import type {WSString} from './http-string.js';
 import type {ZeroOptions} from './options.js';
+import type {QueryManager} from './query-manager.js';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.js';
 import {ServerError} from './server-error.js';
 import {
@@ -37,6 +39,7 @@ import {
 import {
   CONNECT_TIMEOUT_MS,
   ConnectionState,
+  createSocket,
   DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
   PING_INTERVAL_MS,
   PING_TIMEOUT_MS,
@@ -44,10 +47,7 @@ import {
   RUN_LOOP_INTERVAL_MS,
   type Schema,
   type UpdateNeededReason,
-  createSocket,
 } from './zero.js';
-import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.js';
-import type {QueryManager} from './query-manager.js';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
