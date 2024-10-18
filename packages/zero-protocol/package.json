@@ -13,7 +13,7 @@
     "test:watch": "vitest watch"
   },
   "dependencies": {
-    "@badrap/valita": "^0.3.9"
+    "@badrap/valita": "^0.3.11"
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.5.1",
