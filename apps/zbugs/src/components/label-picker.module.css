@@ -41,8 +41,9 @@
   left: -17rem;
 }
 
-.popoverWrapper::before, .popoverWrapper::after {
-  content: "";
+.popoverWrapper::before,
+.popoverWrapper::after {
+  content: '';
   position: absolute;
   top: 2.65rem; /* Center vertically */
   transform: translateY(-50%);

@@ -1,8 +1,8 @@
-import { useCallback, useRef, useState, useEffect } from 'react';
+import {useCallback, useRef, useState, useEffect} from 'react';
 import style from './label-picker.module.css';
-import { useClickOutside } from '../hooks/use-click-outside.js';
-import { useQuery } from '@rocicorp/zero/react';
-import { useZero } from '../hooks/use-zero.js';
+import {useClickOutside} from '../hooks/use-click-outside.js';
+import {useQuery} from '@rocicorp/zero/react';
+import {useZero} from '../hooks/use-zero.js';
 import classNames from 'classnames';
 
 export default function LabelPicker({
@@ -37,7 +37,11 @@ export default function LabelPicker({
 
   return (
     <div className={style.root} ref={ref}>
-      <button title="Add label" className={style.addLabel} onMouseDown={() => setIsOpen(!isOpen)}>
+      <button
+        title="Add label"
+        className={style.addLabel}
+        onMouseDown={() => setIsOpen(!isOpen)}
+      >
         + Label
       </button>
       {isOpen && (
@@ -66,7 +70,7 @@ function LabelPopover({
   onDisassociateLabel: (id: string) => void;
   onAssociateLabel: (id: string) => void;
   onCreateNewLabel: (name: string) => void;
-  labels: readonly { id: string; name: string }[];
+  labels: readonly {id: string; name: string}[];
   inputRef: React.RefObject<HTMLInputElement>;
 }) {
   const [input, setInput] = useState('');
