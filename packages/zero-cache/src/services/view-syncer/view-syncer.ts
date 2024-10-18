@@ -111,7 +111,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       if (!this.#cvr) {
         this.#cvr = await this.#cvrStore.load();
       }
-      return fn(this.#cvr);
+      try {
+        return await fn(this.#cvr);
+      } catch (e) {
+        // Clear cached state if an error is encountered.
+        this.#cvr = undefined;
+        throw e;
+      }
     });
   }
 
