@@ -13,18 +13,20 @@ import {useKeypress} from '../../hooks/use-keypress.js';
 import {useZero} from '../../hooks/use-zero.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
-import {must} from '../../../../../packages/shared/src/must.js';
 
 export default function IssuePage() {
   const z = useZero();
   const [match, params] = useRoute('/issue/:id?');
   const qs = new URLSearchParams(useSearch());
   const idField: 'id' | 'shortID' = params?.id ? 'shortID' : 'id';
-  const id = params?.id ?? must(qs.get('longID'));
+  // You'd think that one of these _must_ always be set.
+  // Wouter, however, will call the `IssuePage` even if the current route doesn't match.
+  // E.g., when pressing `back` from the `issue-page` to go to the `list-page`
+  const id = params?.id ?? qs.get('longID');
 
   // todo: one should be in the schema
   const q = z.query.issue
-    .where(idField, idField === 'shortID' ? parseInt(id) : id)
+    .where(idField, (idField === 'shortID' ? id && parseInt(id) : id) ?? '')
     .related('creator', creator => creator.one())
     .related('assignee', assignee => assignee.one())
     .related('labels')
