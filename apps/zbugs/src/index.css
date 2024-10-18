@@ -534,8 +534,7 @@ h1 {
 }
 
 .pill:hover {
-  background-color: var(--color-nav-selected);
-  cursor: pointer;
+  cursor: default;
 }
 
 .issue-topbar {
