@@ -6,11 +6,9 @@ import type {PrimaryKey} from '../../zql/src/zql/ivm/schema.js';
 // (or into a different package that both depend on).
 export type {PrimaryKey};
 
-export const primaryKeySchema = v
-  .array(v.string())
-  .assert(arr => arr.length > 0) as v.Type<
-  readonly string[]
-> as v.Type<PrimaryKey>;
+export const primaryKeySchema: v.Type<PrimaryKey> = v.readonly(
+  v.tuple([v.string()]).concat(v.array(v.string())),
+);
 
 export const primaryKeyValueSchema = v.union(
   v.string(),

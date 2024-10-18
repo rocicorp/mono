@@ -15,7 +15,7 @@ export type SchemaValue = {
 // TODO: It would be cleaner to not have zero-protocol depend on zql. This means
 // that we would need to move the ast types out of zql and into zero-protocol
 // (or into a different package that both depend on).
-export type PrimaryKey = readonly [string] | readonly [string, ...string[]];
+export type PrimaryKey = readonly [string, ...string[]];
 
 export type TableSchemaBase = {
   readonly tableName: string;
