@@ -1,15 +1,15 @@
 import type {SQLQuery} from '@databases/sql';
 import {assert, unreachable} from '../../shared/src/asserts.js';
 import {must} from '../../shared/src/must.js';
-import type {Ordering, SimpleCondition} from '../../zql/src/zql/ast/ast.js';
+import type {Ordering, SimpleCondition} from '../../zero-protocol/src/ast.js';
+import type {Row, Value} from '../../zero-protocol/src/data.js';
+import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
 import {assertOrderingIncludesPK} from '../../zql/src/zql/builder/builder.js';
 import type {Change} from '../../zql/src/zql/ivm/change.js';
 import {
   makeComparator,
   type Comparator,
   type Node,
-  type Row,
-  type Value,
 } from '../../zql/src/zql/ivm/data.js';
 import {
   generateWithOverlay,
@@ -23,7 +23,6 @@ import type {
   Output,
 } from '../../zql/src/zql/ivm/operator.js';
 import type {
-  PrimaryKey,
   SchemaValue,
   TableSchema,
   ValueType,

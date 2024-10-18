@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/ban-types */
-import type {Row} from '../ivm/data.js';
+
+import type {Row} from '../../../../zero-protocol/src/data.js';
 import type {SchemaValue} from '../ivm/schema.js';
 import type {Source} from '../ivm/source.js';
 import type {PullSchemaForRelationship, TableSchema} from './schema.js';

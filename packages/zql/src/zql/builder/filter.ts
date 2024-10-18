@@ -1,6 +1,10 @@
 import {assert} from '../../../../shared/src/asserts.js';
-import type {Condition, LiteralValue, SimpleOperator} from '../ast/ast.js';
-import type {Row, Value} from '../ivm/data.js';
+import type {
+  Condition,
+  LiteralValue,
+  SimpleOperator,
+} from '../../../../zero-protocol/src/ast.js';
+import type {Row, Value} from '../../../../zero-protocol/src/data.js';
 import {getLikePredicate} from './like.js';
 
 export type NonNullValue = Exclude<Value, null | undefined>;

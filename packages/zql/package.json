@@ -26,6 +26,7 @@
     "shared": "0.0.0",
     "typescript": "^5.6.3",
     "wa-sqlite": "github:rhashimoto/wa-sqlite#ca2084cdd188c56532ba3e272696d0b9e21a23bf",
+    "zero-protocol": "0.0.0",
     "zod": "^3.21.4"
   },
   "eslintConfig": {

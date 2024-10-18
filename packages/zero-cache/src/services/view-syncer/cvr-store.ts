@@ -8,7 +8,7 @@ import {
   type ReadonlyJSONValue,
 } from '../../../../shared/src/json.js';
 import {must} from '../../../../shared/src/must.js';
-import {astSchema} from '../../../../zero-protocol/src/mod.js';
+import {astSchema} from '../../../../zero-protocol/src/ast.js';
 import type {JSONValue} from '../../types/bigint-json.js';
 import {versionToLexi} from '../../types/lexi-version.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';

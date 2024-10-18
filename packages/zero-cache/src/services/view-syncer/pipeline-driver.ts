@@ -1,10 +1,11 @@
 import {LogContext} from '@rocicorp/logger';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
 import {must} from '../../../../shared/src/must.js';
-import type {AST} from '../../../../zql/src/zql/ast/ast.js';
+import type {AST} from '../../../../zero-protocol/src/ast.js';
+import type {Row} from '../../../../zero-protocol/src/data.js';
 import {buildPipeline} from '../../../../zql/src/zql/builder/builder.js';
 import type {Change} from '../../../../zql/src/zql/ivm/change.js';
-import type {Node, Row} from '../../../../zql/src/zql/ivm/data.js';
+import type {Node} from '../../../../zql/src/zql/ivm/data.js';
 import type {Input, Storage} from '../../../../zql/src/zql/ivm/operator.js';
 import type {TableSchema} from '../../../../zql/src/zql/ivm/schema.js';
 import type {Source, SourceChange} from '../../../../zql/src/zql/ivm/source.js';

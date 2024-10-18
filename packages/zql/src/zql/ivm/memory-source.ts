@@ -1,6 +1,12 @@
 import {BTree} from '../../../../btree/src/mod.js';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
-import type {Ordering, OrderPart, SimpleCondition} from '../ast/ast.js';
+import type {
+  Ordering,
+  OrderPart,
+  SimpleCondition,
+} from '../../../../zero-protocol/src/ast.js';
+import type {Row, Value} from '../../../../zero-protocol/src/data.js';
+import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.js';
 import {assertOrderingIncludesPK} from '../builder/builder.js';
 import {createPredicate} from '../builder/filter.js';
 import type {Change} from './change.js';
@@ -9,13 +15,11 @@ import {
   compareValues,
   makeComparator,
   type Node,
-  type Row,
-  type Value,
   valuesEqual,
 } from './data.js';
 import {LookaheadIterator} from './lookahead-iterator.js';
 import type {Constraint, FetchRequest, Input, Output} from './operator.js';
-import type {PrimaryKey, SchemaValue, TableSchema} from './schema.js';
+import type {SchemaValue, TableSchema} from './schema.js';
 import type {
   Source,
   SourceChange,

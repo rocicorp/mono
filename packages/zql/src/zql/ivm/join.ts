@@ -1,14 +1,11 @@
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
 import {must} from '../../../../shared/src/must.js';
+import type {Row} from '../../../../zero-protocol/src/data.js';
+import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.js';
 import type {Change, ChildChange} from './change.js';
-import {
-  normalizeUndefined,
-  type Node,
-  type NormalizedValue,
-  type Row,
-} from './data.js';
+import {normalizeUndefined, type Node, type NormalizedValue} from './data.js';
 import type {FetchRequest, Input, Output, Storage} from './operator.js';
-import type {PrimaryKey, TableSchema} from './schema.js';
+import type {TableSchema} from './schema.js';
 import {first, take, type Stream} from './stream.js';
 
 type Args = {

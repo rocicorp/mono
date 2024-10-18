@@ -1,5 +1,6 @@
-import type {Ordering} from '../ast/ast.js';
-import type {Row} from './data.js';
+import type {Ordering} from '../../../../zero-protocol/src/ast.js';
+import type {Row} from '../../../../zero-protocol/src/data.js';
+import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.js';
 
 export type ValueType = 'string' | 'number' | 'boolean' | 'null';
 
@@ -11,11 +12,6 @@ export type SchemaValue = {
   type: ValueType;
   optional?: boolean;
 };
-
-// TODO: It would be cleaner to not have zero-protocol depend on zql. This means
-// that we would need to move the ast types out of zql and into zero-protocol
-// (or into a different package that both depend on).
-export type PrimaryKey = readonly [string, ...string[]];
 
 export type TableSchemaBase = {
   readonly tableName: string;

@@ -5,6 +5,7 @@ import {
   type JSONObject as SafeJSONObject,
 } from '../../../../shared/src/json.js';
 import * as v from '../../../../shared/src/valita.js';
+import type {AST} from '../../../../zero-protocol/src/ast.js';
 import {rowSchema} from '../../../../zero-protocol/src/data.js';
 import type {
   Downstream,
@@ -12,7 +13,6 @@ import type {
   RowPatchOp,
 } from '../../../../zero-protocol/src/mod.js';
 import {primaryKeyValueRecordSchema} from '../../../../zero-protocol/src/primary-key.js';
-import type {AST} from '../../../../zql/src/zql/ast/ast.js';
 import type {JSONObject} from '../../types/bigint-json.js';
 import {
   getErrorForClientIfSchemaVersionNotSupported,

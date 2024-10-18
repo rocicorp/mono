@@ -1,5 +1,5 @@
+import type {Row} from '../../../../zero-protocol/src/data.js';
 import type {EditChange} from './change.js';
-import type {Row} from './data.js';
 import type {Output} from './operator.js';
 
 /**

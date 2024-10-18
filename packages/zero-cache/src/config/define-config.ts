@@ -4,7 +4,7 @@
  * so we can compile it to a JSON ZeroConfig.
  */
 import {normalizeSchema} from '../../../zero-client/src/client/normalized-schema.js';
-import type {AST} from '../../../zql/src/zql/ast/ast.js';
+import type {AST} from '../../../zero-protocol/src/ast.js';
 import type {Query, SchemaToRow} from '../../../zql/src/zql/query/query.js';
 import type {TableSchema} from '../../../zql/src/zql/query/schema.js';
 import {ConfigQuery} from './config-query.js';

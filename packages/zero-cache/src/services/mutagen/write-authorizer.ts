@@ -8,6 +8,7 @@ import {assert} from '../../../../shared/src/asserts.js';
 import type {JSONValue} from '../../../../shared/src/json.js';
 import {randInt} from '../../../../shared/src/rand.js';
 import * as v from '../../../../shared/src/valita.js';
+import type {Row} from '../../../../zero-protocol/src/data.js';
 import type {
   CreateOp,
   DeleteOp,
@@ -21,7 +22,6 @@ import {
 import type {BuilderDelegate} from '../../../../zql/src/zql/builder/builder.js';
 import {buildPipeline} from '../../../../zql/src/zql/builder/builder.js';
 import {MissingParameterError} from '../../../../zql/src/zql/builder/error.js';
-import type {Row} from '../../../../zql/src/zql/ivm/data.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {compile, sql} from '../../../../zqlite/src/internal/sql.js';
 import {StatementCache} from '../../../../zqlite/src/internal/statement-cache.js';

@@ -1,4 +1,4 @@
-export * from './ast.js';
+// TODO: Remove this file
 export * from './change-desired-queries.js';
 export * from './clients-patch.js';
 export * from './connect.js';

@@ -1,4 +1,5 @@
-import type {Node, Row} from './data.js';
+import type {Row} from '../../../../zero-protocol/src/data.js';
+import type {Node} from './data.js';
 
 export type Change = AddChange | RemoveChange | ChildChange | EditChange;
 export type ChangeType = Change['type'];

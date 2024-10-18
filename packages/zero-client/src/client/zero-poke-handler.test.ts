@@ -9,7 +9,7 @@ import {
   test,
   vi,
 } from 'vitest';
-import type {AST} from '../../../zql/src/zql/ast/ast.js';
+import type {AST} from '../../../zero-protocol/src/ast.js';
 import {normalizeSchema} from './normalized-schema.js';
 import {PokeHandler, mergePokes} from './zero-poke-handler.js';
 
