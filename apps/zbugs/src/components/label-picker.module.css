@@ -81,11 +81,13 @@
   border: 1px solid var(--color-text-primary-active);
 }
 
-.newLabel {
+.root .newLabel {
   font-size: var(--typo-label-size);
   font-weight: var(--typo-label-weight);
   text-align: center;
   padding: 0.5rem 0.5rem;
+  border-color: var(--color-text-dimmed-label);
+  cursor: pointer;
 }
 
 .label:hover {
@@ -93,7 +95,7 @@
   border-color: var(--color-text-dimmed-label);
 }
 
-.label {
+.root .label {
   cursor: pointer;
   width: fit-content;
   transition: all 0.3s ease-in-out;
