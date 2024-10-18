@@ -1,9 +1,7 @@
-import {Zero} from '@rocicorp/zero';
 import {ZeroProvider} from '@rocicorp/zero/react';
-import {useEffect, useState} from 'react';
+import {useSyncExternalStore} from 'react';
 import {Route, Switch} from 'wouter';
 import {Nav} from './components/nav.js';
-import {type Schema} from './domain/schema.js';
 import ErrorPage from './pages/error/error-page.js';
 import IssuePage from './pages/issue/issue-page.js';
 import ListPage from './pages/list/list-page.js';
@@ -11,8 +9,7 @@ import {zeroRef} from './zero-setup.js';
 import {routes} from './routes.js';
 
 export default function Root() {
-  const [z, setZ] = useState<Zero<Schema> | undefined>();
-  useEffect(() => zeroRef.onChange(z => setZ(z)), []);
+  const z = useSyncExternalStore(zeroRef.onChange, zeroRef.getSnapshot);
 
   if (!z) {
     return null;

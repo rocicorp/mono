@@ -1,4 +1,4 @@
-import {createContext, useContext, useEffect, useState} from 'react';
+import {createContext, useContext, useSyncExternalStore} from 'react';
 import {clearJwt} from '../jwt.js';
 import {type LoginState, authRef} from '../zero-setup.js';
 
@@ -19,11 +19,10 @@ export function useLogin() {
 }
 
 export function LoginProvider({children}: {children: React.ReactNode}) {
-  const [loginState, setLoginState] = useState<LoginState | undefined>(
-    authRef.value,
+  const loginState = useSyncExternalStore(
+    authRef.onChange,
+    authRef.getSnapshot,
   );
-
-  useEffect(() => authRef.onChange(setLoginState), []);
 
   return (
     <loginContext.Provider
