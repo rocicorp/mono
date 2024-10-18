@@ -1,6 +1,9 @@
 import fc from 'fast-check';
 import {expect, test} from 'vitest';
-import type {SimpleCondition, SimpleOperator} from '../ast/ast.js';
+import type {
+  SimpleCondition,
+  SimpleOperator,
+} from '../../../../zero-protocol/src/ast.js';
 import {createPredicate} from './filter.js';
 import {cases} from './like.test.js';
 

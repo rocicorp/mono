@@ -7,8 +7,8 @@ import {
   intersection,
   union,
 } from '../../../../shared/src/set-utils.js';
+import type {AST} from '../../../../zero-protocol/src/ast.js';
 import type {JSONObject} from '../../types/bigint-json.js';
-import type {AST} from '../../../../zql/src/zql/ast/ast.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {rowIDHash} from '../../types/row-key.js';
 import type {Patch, PatchToVersion} from './client-handler.js';

@@ -1,7 +1,7 @@
 import {h64WithReverse} from '../../../shared/src/h64-with-reverse.js';
 import * as v from '../../../shared/src/valita.js';
+import type {Row} from '../../../zero-protocol/src/data.js';
 import {primaryKeyValueSchema} from '../../../zero-protocol/src/primary-key.js';
-import type {Row} from '../../../zql/src/zql/ivm/data.js';
 import type {NormalizedPrimaryKey} from '../../../zql/src/zql/query/normalize-table-schema.js';
 
 export const CLIENTS_KEY_PREFIX = 'c/';

@@ -1,7 +1,8 @@
 import {describe, expect, test} from 'vitest';
-import type {Ordering} from '../ast/ast.js';
+import type {Ordering} from '../../../../zero-protocol/src/ast.js';
+import type {Row} from '../../../../zero-protocol/src/data.js';
+import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.js';
 import {Catch} from './catch.js';
-import type {Row} from './data.js';
 import {compareRowsTest} from './data.test.js';
 import {
   generateWithOverlayInner,
@@ -10,7 +11,7 @@ import {
   overlayForConstraintForTest,
   overlayForStartAtForTest,
 } from './memory-source.js';
-import type {PrimaryKey, SchemaValue} from './schema.js';
+import type {SchemaValue} from './schema.js';
 import {runCases} from './test/source-cases.js';
 
 runCases(

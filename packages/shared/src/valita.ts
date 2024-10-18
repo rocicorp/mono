@@ -180,9 +180,7 @@ export function readonlyObject<T extends Record<string, v.Type | v.Optional>>(
 
 export function readonlyArray<T extends v.Type>(
   t: T,
-): v.Type<
-  readonly [...Readonly<T extends v.Type<unknown> ? v.Infer<T>[] : []>]
-> {
+): v.Type<readonly v.Infer<T>[]> {
   return v.array(t);
 }
 

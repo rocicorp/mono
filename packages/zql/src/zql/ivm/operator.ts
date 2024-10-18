@@ -1,6 +1,7 @@
 import type {JSONValue} from '../../../../shared/src/json.js';
+import type {Row, Value} from '../../../../zero-protocol/src/data.js';
 import type {Change} from './change.js';
-import type {Node, Row, Value} from './data.js';
+import type {Node} from './data.js';
 import type {TableSchema} from './schema.js';
 import type {Stream} from './stream.js';
 

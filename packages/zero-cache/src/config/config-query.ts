@@ -1,4 +1,4 @@
-import type {AST} from '../../../zql/src/zql/ast/ast.js';
+import type {AST} from '../../../zero-protocol/src/ast.js';
 import type {Format} from '../../../zql/src/zql/ivm/array-view.js';
 import type {NormalizedTableSchema} from '../../../zql/src/zql/query/normalize-table-schema.js';
 import {AbstractQuery} from '../../../zql/src/zql/query/query-impl.js';

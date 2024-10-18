@@ -6,7 +6,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {tsImport} from 'tsx/esm/api';
 import * as v from '../../../shared/src/valita.js';
-import {astSchema} from '../../../zero-protocol/src/mod.js';
+import {astSchema} from '../../../zero-protocol/src/ast.js';
 
 export type Action = 'select' | 'insert' | 'update' | 'delete';
 

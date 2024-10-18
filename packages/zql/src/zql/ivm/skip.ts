@@ -1,6 +1,7 @@
 import {assert} from '../../../../shared/src/asserts.js';
+import type {Row} from '../../../../zero-protocol/src/data.js';
 import type {AddChange, Change, ChildChange, RemoveChange} from './change.js';
-import type {Comparator, Node, Row} from './data.js';
+import type {Comparator, Node} from './data.js';
 import {maybeSplitAndPushEditChange} from './maybe-split-and-push-edit-change.js';
 import type {FetchRequest, Input, Operator, Output, Start} from './operator.js';
 import type {TableSchema} from './schema.js';

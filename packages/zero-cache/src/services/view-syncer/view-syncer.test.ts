@@ -2,13 +2,13 @@ import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {Queue} from '../../../../shared/src/queue.js';
 import {sleep} from '../../../../shared/src/sleep.js';
+import type {AST} from '../../../../zero-protocol/src/ast.js';
 import type {
   Downstream,
   PokePartBody,
   PokeStartBody,
   QueriesPatch,
 } from '../../../../zero-protocol/src/mod.js';
-import type {AST} from '../../../../zql/src/zql/ast/ast.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {StatementRunner} from '../../db/statements.js';
 import {testDBs} from '../../test/db.js';

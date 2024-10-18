@@ -1,3 +1,4 @@
+import {describe, expect, test, vi} from 'vitest';
 import {
   makeScanResult,
   type DeepReadonly,
@@ -9,11 +10,10 @@ import {
   type ScanOptions,
   type ScanResult,
 } from '../../../replicache/src/mod.js';
-import {describe, expect, test, vi} from 'vitest';
+import type {AST} from '../../../zero-protocol/src/ast.js';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/mod.js';
-import type {AST} from '../../../zql/src/zql/ast/ast.js';
-import {QueryManager} from './query-manager.js';
 import {toGotQueriesKey} from './keys.js';
+import {QueryManager} from './query-manager.js';
 
 function createExperimentalWatchMock() {
   return vi.fn();

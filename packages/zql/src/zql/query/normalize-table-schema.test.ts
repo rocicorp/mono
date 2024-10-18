@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import type {PrimaryKey} from '../ivm/schema.js';
+import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.js';
 import {
   normalizePrimaryKey,
   normalizeTableSchema,

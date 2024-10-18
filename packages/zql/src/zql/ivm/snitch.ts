@@ -1,6 +1,7 @@
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
+import type {Row} from '../../../../zero-protocol/src/data.js';
 import type {Change} from './change.js';
-import type {Node, Row} from './data.js';
+import type {Node} from './data.js';
 import type {FetchRequest, Input, Operator, Output} from './operator.js';
 import type {TableSchema} from './schema.js';
 import type {Stream} from './stream.js';

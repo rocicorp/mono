@@ -1,7 +1,7 @@
 import {describe, expect, test} from 'vitest';
+import type {Row} from '../../../../zero-protocol/src/data.js';
 import {Catch} from './catch.js';
 import type {Change} from './change.js';
-import type {Row} from './data.js';
 import {MemorySource} from './memory-source.js';
 import type {Start} from './operator.js';
 import {type Bound, Skip} from './skip.js';

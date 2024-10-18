@@ -8,8 +8,6 @@ import type {
   OrderOps,
   Ordering,
   SimpleOperator,
-} from '../../zql/src/zql/ast/ast.js';
-import type {
   astSchema,
   conditionSchema,
   correlatedSubquerySchema,

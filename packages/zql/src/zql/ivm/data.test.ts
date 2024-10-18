@@ -1,9 +1,9 @@
 import {compareUTF8} from 'compare-utf8';
 import fc from 'fast-check';
 import {expect, test} from 'vitest';
-import type {Ordering} from '../ast/ast.js';
+import type {Ordering} from '../../../../zero-protocol/src/ast.js';
+import type {Row} from '../../../../zero-protocol/src/data.js';
 import {
-  type Row,
   compareValues,
   makeComparator,
   normalizeUndefined,
