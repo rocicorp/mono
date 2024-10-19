@@ -2,7 +2,7 @@ import {useQuery} from '@rocicorp/zero/react';
 import {nanoid} from 'nanoid';
 import {useEffect, useMemo, useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
-import {useParams, useSearch} from 'wouter';
+import {useParams} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.js';
 import statusClosed from '../../assets/icons/issue-closed.svg';
@@ -20,13 +20,13 @@ import Comment from './comment.js';
 export default function IssuePage() {
   const z = useZero();
   const params = useParams();
-  const qs = new URLSearchParams(useSearch());
-  const idField: 'id' | 'shortID' = params.id ? 'shortID' : 'id';
-  const id = params.id ?? must(qs.get('longID'));
+
+  const idField = params.shortID ? 'shortID' : 'id';
+  const id = params.shortID ? parseInt(params.shortID) : must(params.id);
 
   // todo: one should be in the schema
   const q = z.query.issue
-    .where(idField, idField === 'shortID' ? parseInt(id) : id)
+    .where(idField, id)
     .related('creator', creator => creator.one())
     .related('assignee', assignee => assignee.one())
     .related('labels')
