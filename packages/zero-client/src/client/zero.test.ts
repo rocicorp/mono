@@ -24,7 +24,6 @@ import {
   pushMessageSchema,
 } from '../../../zero-protocol/src/push.js';
 import type {NullableVersion} from '../../../zero-protocol/src/version.js';
-import type {TypedView} from '../mod.js';
 import type {WSString} from './http-string.js';
 import type {ZeroOptions} from './options.js';
 import type {QueryManager} from './query-manager.js';
@@ -1970,6 +1969,21 @@ suite('Invalid Downstream message', () => {
   }
 });
 
+async function waitUntil(f: () => void, iterations = 10, time = 10) {
+  for (;;) {
+    try {
+      f();
+      return;
+    } catch (ex) {
+      if (iterations === 0) {
+        throw ex;
+      }
+      iterations--;
+      await clock.tickAsync(time);
+    }
+  }
+}
+
 test('kvStore option', async () => {
   const spy = sinon.spy(IDBFactory.prototype, 'open');
 
@@ -2011,24 +2025,18 @@ test('kvStore option', async () => {
     const allDataView = r.query.e.select('id', 'value').materialize();
     allDataView.hydrate();
 
-    const waitForNextUpdate = (view: TypedView<unknown>) => {
-      const {promise, resolve} = resolver();
-      const unsubscribe = view.addListener(() => {
-        resolve();
-      });
-      void promise.then(() => unsubscribe());
-      return promise;
-    };
-    // TODO: we need a way to await hydration...
-    await tickAFewTimes(clock);
-    await waitForNextUpdate(allDataView);
+    // Firefox is flaky... it takes longer time than Chromium and WebKit.
+    // We therefore give it a few times to pass the expectation.
 
-    expect(allDataView.data).deep.equal(expectedValue);
+    await waitUntil(() => {
+      expect(allDataView.data).deep.equal(expectedValue);
+    });
+
     await r.mutate.e.create({id: 'a', value: 1});
-    await tickAFewTimes(clock);
-    await waitForNextUpdate(idIsAView);
 
-    expect(idIsAView.data).deep.equal([{id: 'a', value: 1}]);
+    await waitUntil(() => {
+      expect(idIsAView.data).deep.equal([{id: 'a', value: 1}]);
+    });
     // Wait for persist to finish
     await tickAFewTimes(clock, 2000);
     await r.close();
