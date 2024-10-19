@@ -30,8 +30,6 @@ export function toPrimaryKeyString(
   primaryKey: NormalizedPrimaryKey,
   value: Row,
 ): string {
-  // TODO: The type system should have enforced that the value has valid primary keys.
-  // We should maybe tag the row with the primary key so we can enforce this.
   if (primaryKey.length === 1) {
     return (
       ENTITIES_KEY_PREFIX +

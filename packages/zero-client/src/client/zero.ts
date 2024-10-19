@@ -92,7 +92,6 @@ import {getServer} from './server-option.js';
 import {version} from './version.js';
 import {PokeHandler} from './zero-poke-handler.js';
 
-// TODO: We should enforce the columns matches primaryKey
 export type Schema = {
   readonly version: number;
   readonly tables: {readonly [table: string]: TableSchema};
@@ -455,7 +454,6 @@ export class Zero<const S extends Schema> {
     });
     const logOptions = this.#logOptions;
 
-    // TODO: Normalize schemas once and for all!
     const normalizedSchema = normalizeSchema(schema);
 
     const replicacheMutators = {
