@@ -3,7 +3,7 @@ export const links = {
     return '/';
   },
   issue({id, shortID}: {id: string; shortID?: number | undefined}) {
-    return shortID ? `/issue/${shortID}` : `/issue/?longID=${id}`;
+    return shortID ? `/issue/${shortID}` : `/issue/pending/${id}`;
   },
   login(pathname: string, search: string | undefined) {
     return (
@@ -15,5 +15,6 @@ export const links = {
 
 export const routes = {
   home: '/',
-  issue: '/issue/:id?',
+  issue: '/issue/:shortID?',
+  pendingIssue: '/issue/pending/:id?',
 } as const;
