@@ -223,6 +223,11 @@ describe('view-syncer/service', () => {
     orderBy: [['id', 'asc']],
   };
 
+  const ISSUES_QUERY2: AST = {
+    table: 'issues',
+    orderBy: [['id', 'asc']],
+  };
+
   const USERS_QUERY: AST = {
     table: 'users',
   };
@@ -574,6 +579,7 @@ describe('view-syncer/service', () => {
   test('process advancement', async () => {
     const client = await connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+      {op: 'put', hash: 'query-hash2', ast: ISSUES_QUERY2},
     ]);
 
     stateChanges.push({state: 'version-ready'});
@@ -671,6 +677,7 @@ describe('view-syncer/service', () => {
           "patchVersion": "00:02",
           "refCounts": {
             "query-hash1": 1,
+            "query-hash2": 1,
           },
           "rowKey": {
             "id": "3",
@@ -684,6 +691,7 @@ describe('view-syncer/service', () => {
           "patchVersion": "00:02",
           "refCounts": {
             "query-hash1": 1,
+            "query-hash2": 1,
           },
           "rowKey": {
             "id": "4",
@@ -694,9 +702,23 @@ describe('view-syncer/service', () => {
         },
         {
           "clientGroupID": "9876",
+          "patchVersion": "00:02",
+          "refCounts": {
+            "query-hash2": 1,
+          },
+          "rowKey": {
+            "id": "5",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "9876",
           "patchVersion": "01",
           "refCounts": {
             "query-hash1": 1,
+            "query-hash2": 1,
           },
           "rowKey": {
             "id": "1",

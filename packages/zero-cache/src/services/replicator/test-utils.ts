@@ -50,7 +50,9 @@ export function fakeReplicator(lc: LogContext, db: Database): FakeReplicator {
 export function createMessageProcessor(
   db: Database,
   ack: (lsn: string) => void = NOOP,
-  failures: (lc: LogContext, err: unknown) => void = NOOP,
+  failures: (lc: LogContext, err: unknown) => void = (_, err) => {
+    throw err;
+  },
 ): MessageProcessor {
   return new MessageProcessor(
     new StatementRunner(db),

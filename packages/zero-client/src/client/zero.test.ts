@@ -24,6 +24,7 @@ import {
   pushMessageSchema,
 } from '../../../zero-protocol/src/push.js';
 import type {NullableVersion} from '../../../zero-protocol/src/version.js';
+import type {TypedView} from '../mod.js';
 import type {WSString} from './http-string.js';
 import type {ZeroOptions} from './options.js';
 import type {QueryManager} from './query-manager.js';
@@ -2010,11 +2011,23 @@ test('kvStore option', async () => {
     const allDataView = r.query.e.select('id', 'value').materialize();
     allDataView.hydrate();
 
+    const waitForNextUpdate = (view: TypedView<unknown>) => {
+      const {promise, resolve} = resolver();
+      const unsubscribe = view.addListener(() => {
+        resolve();
+      });
+      void promise.then(() => unsubscribe());
+      return promise;
+    };
     // TODO: we need a way to await hydration...
-    await tickAFewTimes(clock, 1);
+    await tickAFewTimes(clock);
+    await waitForNextUpdate(allDataView);
 
     expect(allDataView.data).deep.equal(expectedValue);
     await r.mutate.e.create({id: 'a', value: 1});
+    await tickAFewTimes(clock);
+    await waitForNextUpdate(idIsAView);
+
     expect(idIsAView.data).deep.equal([{id: 'a', value: 1}]);
     // Wait for persist to finish
     await tickAFewTimes(clock, 2000);

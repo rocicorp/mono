@@ -111,7 +111,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       if (!this.#cvr) {
         this.#cvr = await this.#cvrStore.load();
       }
-      return fn(this.#cvr);
+      try {
+        return await fn(this.#cvr);
+      } catch (e) {
+        // Clear cached state if an error is encountered.
+        this.#cvr = undefined;
+        throw e;
+      }
     });
   }
 
@@ -619,7 +625,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     const rows = new CustomKeyMap<RowID, RowUpdate>(rowIDHash);
     let total = 0;
 
-    // eslint-disable-next-line require-await
     const processBatch = async () => {
       const elapsed = Date.now() - start;
       total += rows.size;
@@ -640,7 +645,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         rows.set(rowID, parsedRow);
         rc = 0;
       } else {
-        rc = parsedRow.refCounts[queryHash];
+        rc = parsedRow.refCounts[queryHash] ?? 0;
       }
 
       const updateVersion = (row: Row) => {

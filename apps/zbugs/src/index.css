@@ -381,6 +381,7 @@ h1 {
   display: flex;
   flex-direction: column;
   width: 12rem;
+  z-index: 999;
 }
 
 .sidebar-item {
@@ -533,8 +534,7 @@ h1 {
 }
 
 .pill:hover {
-  background-color: var(--color-nav-selected);
-  cursor: pointer;
+  cursor: default;
 }
 
 .issue-topbar {

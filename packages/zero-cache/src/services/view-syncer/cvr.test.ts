@@ -4,7 +4,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {PatchToVersion} from './client-handler.js';
-import {CVRStore} from './cvr-store.js';
+import {ConcurrentModificationException, CVRStore} from './cvr-store.js';
 import {
   CVRConfigDrivenUpdater,
   CVRQueryDrivenUpdater,
@@ -339,6 +339,43 @@ describe('view-syncer/cvr', () => {
     const updatedState = structuredClone(initialState);
     updatedState.instances[0].lastActive = new Date(Date.UTC(2024, 3, 24));
     await expectState(db, updatedState);
+  });
+
+  test('detects concurrent modification', async () => {
+    const initialState: DBState = {
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          version: '1a9:02',
+          lastActive: new Date(Date.UTC(2024, 3, 23)),
+        },
+      ],
+      clients: [],
+      queries: [],
+      desires: [],
+      rows: [],
+    };
+    await setInitialState(db, initialState);
+
+    const cvrStore = new CVRStore(lc, db, 'abc123');
+    const cvr = await cvrStore.load();
+    const updater = new CVRUpdater(cvrStore, cvr);
+
+    // Simulate an external modification, incrementing the patch version.
+    await db`UPDATE cvr.instances SET version = '1a9:03' WHERE "clientGroupID" = 'abc123'`;
+
+    let err;
+    try {
+      await updater.flush(lc, new Date(Date.UTC(2024, 4, 19)));
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(ConcurrentModificationException);
+
+    // The last active time should not have been modified.
+    expect(
+      await db`SELECT "lastActive" FROM cvr.instances WHERE "clientGroupID" = 'abc123'`,
+    ).toEqual([{lastActive: new Date(Date.UTC(2024, 3, 23))}]);
   });
 
   test('update desired query set', async () => {
@@ -691,6 +728,21 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(lc, db, 'abc123');
     const reloaded = await cvrStore2.load();
     expect(reloaded).toEqual(updated);
+
+    // Add the deleted desired query back. This ensures that the
+    // desired query update statement is an UPSERT.
+    const updater2 = new CVRConfigDrivenUpdater(cvrStore2, reloaded);
+    expect(
+      updater2.putDesiredQueries('fooClient', {
+        oneHash: {table: 'issues'},
+      }),
+    ).toEqual([{id: 'oneHash', ast: {table: 'issues'}}]);
+
+    const {cvr: updated2} = await updater2.flush(
+      lc,
+      new Date(Date.UTC(2024, 3, 24, 1)),
+    );
+    expect(updated2.clients.fooClient.desiredQueryIDs).toContain('oneHash');
   });
 
   test('no-op change to desired query set', async () => {

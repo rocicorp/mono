@@ -22,11 +22,13 @@ export class Ref<T> {
     return this.#current;
   }
 
-  onChange(listener: Listener<T>) {
+  getSnapshot = () => this.#current;
+
+  onChange = (listener: Listener<T>) => {
     this.#listeners.add(listener);
     listener(this.#current);
     return () => {
       this.#listeners.delete(listener);
     };
-  }
+  };
 }

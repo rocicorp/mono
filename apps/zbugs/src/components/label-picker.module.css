@@ -1,39 +1,124 @@
 .root {
-  display: inline-block;
+  display: block;
+  position: relative;
+}
+
+.addLabel {
+  color: var(--color-primary-cta);
+  background-color: var(--color-background);
+  border: 1px solid var(--color-primary-cta-dimmed);
+  padding: 0.25rem 0.5rem 0.25rem;
+  border-radius: 2rem;
+  margin: 0 0.5rem 0 0;
+  line-height: 1;
+  transition: background-color 0.3s ease;
+  position: relative;
+}
+
+.addLabel:hover {
+  background-color: var(--color-primary-cta-dimmed);
 }
 
 .popover {
-  position: absolute;
-  left: -80px;
+  position: relative;
   display: block;
   padding: 1.5rem;
   background-color: var(--color-modal-background);
   backdrop-filter: var(--filter-backdrop-blur);
   border-radius: 0.5rem;
   border: 1px solid var(--color-modal-outline);
-  height: 50vh;
+  max-height: 30vh;
+  min-width: 16rem;
   overflow-y: scroll;
+  overflow-x: hidden;
+  z-index: 9996;
   scrollbar-color: var(--color-nav-selected) rgba(0, 0, 0, 0);
 }
 
-.label:hover {
-  background-color: var(--color-row-hover);
+.popoverWrapper {
+  position: absolute;
+  top: -1.8rem;
+  left: -17rem;
 }
 
-.label {
+.popoverWrapper::before,
+.popoverWrapper::after {
+  content: '';
+  position: absolute;
+  top: 2.65rem; /* Center vertically */
+  transform: translateY(-50%);
+  border-style: solid;
+  z-index: 9998;
+}
+
+.popoverWrapper::before {
+  /* Outer triangle to mimic the outline */
+  right: -16px; /* Adjust to position correctly outside */
+  border-width: 8px;
+  border-color: transparent transparent transparent var(--color-modal-outline); /* Matches the outline */
+}
+
+.popoverWrapper::after {
+  /* Inner triangle */
+  right: -13px; /* Position just inside the "outline" triangle */
+  border-width: 7px;
+  border-color: transparent transparent transparent rgba(12, 12, 12, 1);
+}
+
+.labelFilter {
+  background-color: transparent;
+  width: 100%;
+  margin-bottom: 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-modal-outline);
+  padding: 0.25rem 0.5rem;
+  outline: none;
+  transition: all 0.3s ease-in-out;
+}
+
+.labelFilter:focus {
+  outline: none;
+  border: 1px solid var(--color-text-primary-active);
+}
+
+.root .newLabel {
+  font-size: var(--typo-label-size);
+  font-weight: var(--typo-label-weight);
+  text-align: center;
+  padding: 0.5rem 0.5rem;
+  border-color: var(--color-text-dimmed-label);
   cursor: pointer;
 }
 
-.selected {
+.label:hover {
   background-color: var(--color-nav-selected);
+  border-color: var(--color-text-dimmed-label);
 }
 
-@media (max-width: 650px) {
+.root .label {
+  cursor: pointer;
+  width: fit-content;
+  transition: all 0.3s ease-in-out;
+}
+
+.selected {
+  border-color: var(--color-primary-cta);
+  background-image: url(/src/assets/icons/check.svg) !important;
+  opacity: 0.7;
+  transition: all 0.3s ease-in-out;
+}
+
+.selected:hover {
+  border-color: var(--color-primary-cta);
+  opacity: 1;
+}
+
+@media (max-width: 900px) {
   .popover {
     position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    height: 60vh;
+    height: 40vh;
   }
 }
