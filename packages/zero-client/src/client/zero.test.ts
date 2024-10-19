@@ -9,6 +9,7 @@ import type {
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.js';
 import {assert} from '../../../shared/src/asserts.js';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.js';
+import {sleep} from '../../../shared/src/sleep.js';
 import * as valita from '../../../shared/src/valita.js';
 import type {AST} from '../../../zero-protocol/src/ast.js';
 import {
@@ -1969,22 +1970,23 @@ suite('Invalid Downstream message', () => {
   }
 });
 
-async function waitUntil(f: () => void, iterations = 10, time = 10) {
-  for (;;) {
-    try {
-      f();
-      return;
-    } catch (ex) {
-      if (iterations === 0) {
-        throw ex;
-      }
-      iterations--;
-      await clock.tickAsync(time);
-    }
-  }
-}
-
 test('kvStore option', async () => {
+  // use real timers
+  clock.restore();
+  async function waitUntil(f: () => void, iterations = 20, time = 10) {
+    let ex;
+    for (let i = 0; i < iterations; i++) {
+      try {
+        f();
+        return;
+      } catch (e) {
+        ex = e;
+        await sleep(time);
+      }
+    }
+    throw ex;
+  }
+
   const spy = sinon.spy(IDBFactory.prototype, 'open');
 
   type E = {
@@ -2038,7 +2040,7 @@ test('kvStore option', async () => {
       expect(idIsAView.data).deep.equal([{id: 'a', value: 1}]);
     });
     // Wait for persist to finish
-    await tickAFewTimes(clock, 2000);
+    await sleep(2000);
     await r.close();
     expect(spy.called).equal(expectedIDBOpenCalled, 'IDB existed!');
 
