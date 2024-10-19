@@ -9,7 +9,6 @@ import type {
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.js';
 import {assert} from '../../../shared/src/asserts.js';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.js';
-import {sleep} from '../../../shared/src/sleep.js';
 import * as valita from '../../../shared/src/valita.js';
 import type {AST} from '../../../zero-protocol/src/ast.js';
 import {
@@ -50,6 +49,7 @@ import {
   type UpdateNeededReason,
 } from './zero.js';
 
+let realSetTimeout: typeof setTimeout;
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
 
@@ -59,6 +59,7 @@ let fetchStub: sinon.SinonStub<
 >;
 
 beforeEach(() => {
+  realSetTimeout = setTimeout;
   clock = sinon.useFakeTimers();
   clock.setSystemTime(startTime);
   sinon.replace(
@@ -1971,22 +1972,6 @@ suite('Invalid Downstream message', () => {
 });
 
 test('kvStore option', async () => {
-  // use real timers
-  clock.restore();
-  async function waitUntil(f: () => void, iterations = 20, time = 10) {
-    let ex;
-    for (let i = 0; i < iterations; i++) {
-      try {
-        f();
-        return;
-      } catch (e) {
-        ex = e;
-        await sleep(time);
-      }
-    }
-    throw ex;
-  }
-
   const spy = sinon.spy(IDBFactory.prototype, 'open');
 
   type E = {
@@ -2030,17 +2015,15 @@ test('kvStore option', async () => {
     // Firefox is flaky... it takes longer time than Chromium and WebKit.
     // We therefore give it a few times to pass the expectation.
 
-    await waitUntil(() => {
-      expect(allDataView.data).deep.equal(expectedValue);
-    });
-
+    await tickAFewTimes(clock);
+    await new Promise(resolve => realSetTimeout(resolve, 100));
+    expect(allDataView.data).deep.equal(expectedValue);
     await r.mutate.e.create({id: 'a', value: 1});
+    await tickAFewTimes(clock);
 
-    await waitUntil(() => {
-      expect(idIsAView.data).deep.equal([{id: 'a', value: 1}]);
-    });
+    expect(idIsAView.data).deep.equal([{id: 'a', value: 1}]);
     // Wait for persist to finish
-    await sleep(2000);
+    await tickAFewTimes(clock, 2000);
     await r.close();
     expect(spy.called).equal(expectedIDBOpenCalled, 'IDB existed!');
 
