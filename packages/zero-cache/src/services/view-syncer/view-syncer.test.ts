@@ -718,7 +718,7 @@ describe('view-syncer/service', () => {
           "patchVersion": "01",
           "refCounts": {
             "query-hash1": 1,
-            "query-hash2": null,
+            "query-hash2": 1,
           },
           "rowKey": {
             "id": "1",
