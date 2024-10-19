@@ -1,12 +1,12 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
 import {stringCompare} from '../../../../../shared/src/string-compare.js';
-import {normalizedKeyOrder, type RowKey} from '../../../types/row-key.js';
 import {
   type JSONObject,
   type JSONValue,
   stringify,
 } from '../../../types/bigint-json.js';
+import {normalizedKeyOrder, type RowKey} from '../../../types/row-key.js';
 import {
   type RowID,
   type RowRecord,
@@ -28,7 +28,7 @@ const CREATE_CVR_INSTANCES_TABLE = `
 CREATE TABLE cvr.instances (
   "clientGroupID" TEXT PRIMARY KEY,
   version         TEXT NOT NULL,        -- Sortable representation of CVRVersion, e.g. "5nbqa2w:09"
-  "lastActive"    TIMESTAMPTZ NOT NULL -- For garbage collection
+  "lastActive"    TIMESTAMPTZ NOT NULL  -- For garbage collection
 );
 `;
 
