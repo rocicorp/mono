@@ -41,6 +41,7 @@ import {
   replicationEventSchema,
   type DdlUpdateEvent,
   type PublishedSchema,
+  type ReplicationEvent,
 } from './schema/ddl.js';
 import {INTERNAL_PUBLICATION_PREFIX} from './schema/zero.js';
 import type {ShardConfig} from './shard-config.js';
@@ -353,7 +354,14 @@ class ChangeMaker {
   #preSchema: PublishedSchema | undefined;
 
   #handleCustomMessage(msg: MessageMessage) {
-    const event = this.#parseReplicationEvent(msg.content);
+    let event: ReplicationEvent;
+    try {
+      event = this.#parseReplicationEvent(msg.content);
+    } catch (e) {
+      // TODO: Properly handle malformed messages.
+      this.#lc.warn?.('Ignoring malformed message', e);
+      return [];
+    }
     if (event.type === 'ddlStart') {
       // Store the schema in order to diff it with a potential ddlUpdate.
       this.#preSchema = event.schema;
