@@ -53,6 +53,21 @@ CREATE TABLE comment (
     "creatorID" VARCHAR REFERENCES "user"(id)
 );
 
+CREATE OR REPLACE FUNCTION update_issue_modified_time()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE issue
+    SET modified = EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000
+    WHERE id = NEW."issueID";
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_issue_modified_time_on_comment
+AFTER INSERT ON comment
+FOR EACH ROW
+EXECUTE FUNCTION update_issue_modified_time();
+
 CREATE TABLE label (
     "id" VARCHAR PRIMARY KEY,
     "name" VARCHAR NOT NULL
