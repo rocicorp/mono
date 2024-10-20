@@ -586,6 +586,7 @@ textarea.autoResize {
   line-height: 1;
   transition: background-color 0.3s ease;
   margin: 0 0.5rem 0.5rem 0;
+  cursor: pointer;
 }
 
 .pill.label {
@@ -598,10 +599,6 @@ textarea.autoResize {
 
 .pill:last-child {
   margin-right: 0;
-}
-
-.pill:hover {
-  cursor: default;
 }
 
 .issue-topbar {
