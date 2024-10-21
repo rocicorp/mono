@@ -3,7 +3,7 @@ import type postgres from 'postgres';
 import {
   runSchemaMigrations,
   type VersionMigrationMap,
-} from '../../../db/migration.js';
+} from '../../../db/old-migration.js';
 import {PG_SCHEMA, setupCVRTables} from './cvr.js';
 
 export async function initViewSyncerSchema(
