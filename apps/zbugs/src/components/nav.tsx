@@ -10,6 +10,7 @@ import {useLogin} from '../hooks/use-login.js';
 import {useZero} from '../hooks/use-zero.js';
 import IssueComposer from '../pages/issue/issue-composer.js';
 import {links} from '../routes.js';
+import {Button} from './button.js';
 import {Link} from './link.js';
 import {NotLoggedInModal} from './not-logged-in-modal.js';
 
@@ -56,9 +57,9 @@ export function Nav() {
           <img src={markURL} className="zero-mark" />
         </Link>
         {/* could not figure out how to add this color to tailwind.config.js */}
-        <button className="primary-cta" onMouseDown={newIssue}>
+        <Button className="primary-cta" onAction={newIssue}>
           <span className="primary-cta-text">New Issue</span>
-        </button>
+        </Button>
 
         <div className="section-tabs">
           <Link
@@ -106,11 +107,11 @@ export function Nav() {
                   {login.loginState?.decoded.name}
                 </span>
               </div>
-              <button
+              <Button
                 className="logout-button"
-                onMouseDown={login.logout}
+                onAction={login.logout}
                 title="Log out"
-              ></button>
+              ></Button>
             </div>
           )}
         </div>

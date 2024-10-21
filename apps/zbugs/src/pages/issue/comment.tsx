@@ -1,11 +1,12 @@
 import {useQuery} from '@rocicorp/zero/react';
 import {useState} from 'react';
+import {Button} from '../../components/button.js';
 import Markdown from '../../components/markdown.js';
+import RelativeTime from '../../components/relative-time.js';
 import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
 import CommentComposer from './comment-composer.js';
 import style from './comment.module.css';
-import RelativeTime from '../../components/relative-time.js';
 
 export default function Comment({id, issueID}: {id: string; issueID: string}) {
   const z = useZero();
@@ -63,8 +64,8 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
       )}
       {editing || comment.creatorID !== login.loginState?.decoded.sub ? null : (
         <div className={style.commentActions}>
-          <button onMouseDown={edit}>Edit</button>
-          <button onMouseDown={remove}>Delete</button>
+          <Button onAction={edit}>Edit</Button>
+          <Button onAction={remove}>Delete</Button>
         </div>
       )}
     </div>

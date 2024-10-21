@@ -1,5 +1,6 @@
 import classNames from 'classnames';
 import {useEffect, useState} from 'react';
+import {Button} from './button.js';
 
 type Item<T> = {
   text: string;
@@ -54,8 +55,8 @@ export function Selector<T>({
 
   return (
     <div className="selector">
-      <button
-        onMouseDown={toggleDropdown}
+      <Button
+        onAction={toggleDropdown}
         className={classNames('sidebar-button', 'button-dropdown', 'item')}
       >
         {closedItem ? (
@@ -70,18 +71,18 @@ export function Selector<T>({
         ) : (
           ''
         )}
-      </button>
+      </Button>
       {isOpen && (
         <div className="dropdown">
           {openItems.map((item, index) => (
-            <button
+            <Button
               key={index}
               className="item"
-              onMouseDown={() => handleSelect(item.value)}
+              onAction={() => handleSelect(item.value)}
             >
               <img src={item.icon} className="item-avatar" alt={item.text} />
               {item.text}
-            </button>
+            </Button>
           ))}
         </div>
       )}

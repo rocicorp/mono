@@ -1,5 +1,6 @@
 import {nanoid} from 'nanoid';
 import {useState} from 'react';
+import {Button} from '../../components/button.js';
 import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
 
@@ -50,17 +51,17 @@ export default function CommentComposer({
         onChange={textAreaChange}
         className="comment-input"
       />
-      <button
+      <Button
         className="secondary-button"
-        onMouseDown={save}
+        onAction={save}
         disabled={currentBody.trim().length === 0}
       >
         {id ? 'Save' : 'Add comment'}
-      </button>{' '}
+      </Button>{' '}
       {id ? (
-        <button className="edit-comment-cancel" onMouseDown={onDone}>
+        <Button className="edit-comment-cancel" onAction={onDone}>
           Cancel
-        </button>
+        </Button>
       ) : null}
     </>
   );

@@ -1,3 +1,4 @@
+import type {Zero} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {nanoid} from 'nanoid';
 import {useEffect, useMemo, useState} from 'react';
@@ -7,18 +8,18 @@ import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.js';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
+import {Button} from '../../components/button.js';
 import LabelPicker from '../../components/label-picker.js';
+import {Link} from '../../components/link.js';
 import Markdown from '../../components/markdown.js';
 import Selector from '../../components/selector.js';
 import UserPicker from '../../components/user-picker.js';
+import type {Schema} from '../../domain/schema.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {links, type ListContext} from '../../routes.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
-import {Link} from '../../components/link.js';
-import type {Schema} from '../../domain/schema.js';
-import type {Zero} from '@rocicorp/zero';
 
 export default function IssuePage() {
   const z = useZero();
@@ -166,30 +167,30 @@ export default function IssuePage() {
           <div className="edit-buttons">
             {!editing ? (
               <>
-                <button
+                <Button
                   className="edit-button"
-                  onMouseDown={() => setEditing(issue)}
+                  onAction={() => setEditing(issue)}
                 >
                   Edit
-                </button>
-                <button className="delete-button" onMouseDown={() => remove()}>
+                </Button>
+                <Button className="delete-button" onAction={() => remove()}>
                   Delete
-                </button>
+                </Button>
               </>
             ) : (
               <>
-                <button
+                <Button
                   className="save-button"
-                  onMouseDown={save}
+                  onAction={save}
                   disabled={
                     !edits || edits.title === '' || edits.description === ''
                   }
                 >
                   Save
-                </button>
-                <button className="cancel-button" onMouseDown={cancel}>
+                </Button>
+                <Button className="cancel-button" onAction={cancel}>
                   Cancel
-                </button>
+                </Button>
               </>
             )}
           </div>
@@ -252,14 +253,14 @@ export default function IssuePage() {
 
           <div className="sidebar-item">
             <p className="issue-detail-label">Creator</p>
-            <button className="sidebar-button issue-creator">
+            <Button className="sidebar-button issue-creator">
               <img
                 src={issue.creator?.avatar}
                 className="issue-creator-avatar"
                 alt={issue.creator?.name}
               />
               {issue.creator.login}
-            </button>
+            </Button>
           </div>
 
           <div className="sidebar-item">
