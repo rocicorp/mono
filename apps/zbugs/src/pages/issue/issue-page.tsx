@@ -82,12 +82,20 @@ export default function IssuePage() {
     setEdits({});
   };
 
+  // A snapshot before any edits/comments added to the issue in this view is
+  // used for finding the next/prev items so that a user can open an item
+  // modify it and then navigate to the next/prev item in the list as it was
+  // when they were viewing it.
+  const [issueSnapshot, setIssueSnapshot] = useState(issue);
+  if (issueSnapshot === undefined && issue !== undefined) {
+    setIssueSnapshot(issue);
+  }
   const next = useQuery(
     buildListQuery(z, 'desc', listContext?.params)
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      .start(issue!)
+      .start(issueSnapshot!)
       .one(),
-    listContext !== undefined && issue !== undefined,
+    listContext !== undefined && issueSnapshot !== undefined,
   );
   useKeypress('j', () => {
     if (next) {
@@ -98,9 +106,9 @@ export default function IssuePage() {
   const prev = useQuery(
     buildListQuery(z, 'asc', listContext?.params)
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      .start(issue!)
+      .start(issueSnapshot!)
       .one(),
-    listContext !== undefined && issue !== undefined,
+    listContext !== undefined && issueSnapshot !== undefined,
   );
   useKeypress('k', () => {
     if (prev) {
@@ -125,7 +133,7 @@ export default function IssuePage() {
     if (confirm('Really delete?')) {
       z.mutate.issue.delete({id: issue.id});
     }
-    navigate('/');
+    navigate(listContext?.href ?? links.home());
   };
 
   // TODO: This check goes away once Zero's consistency model is implemented.
