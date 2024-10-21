@@ -64,15 +64,22 @@ describe('db/migration', () => {
     },
     {
       name: 'initial setup',
-      setup: {migrateSchema: logMigrationHistory('initial-setup')},
+      setup: {
+        migrateSchema: logMigrationHistory('initial-schema'),
+        migrateData: logMigrationHistory('initial-data'),
+        minSafeVersion: 1,
+      },
       migrations: {
         3: {migrateSchema: () => Promise.reject('should not be called')},
       },
-      expectedMigrationHistory: [{event: 'initial-setup-at(0)'}],
+      expectedMigrationHistory: [
+        {event: 'initial-schema-at(0)'},
+        {event: 'initial-data-at(0)'},
+      ],
       postSchema: {
         dataVersion: 3,
         schemaVersion: 3,
-        minSafeVersion: 0,
+        minSafeVersion: 1,
       },
     },
     {
