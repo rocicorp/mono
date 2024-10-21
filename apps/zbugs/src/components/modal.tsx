@@ -16,9 +16,10 @@ interface Props {
   isOpen: boolean;
   center: boolean;
   className?: string;
-  onDismiss?: (() => void) | undefined;
+  onDismiss: () => void;
   children?: React.ReactNode;
   size: keyof typeof sizeClasses;
+  isDirty?: (() => boolean) | undefined;
 }
 const sizeClasses = {
   large: 'max-w-2xl w-1/2',
@@ -33,6 +34,7 @@ export default function Modal({
   className,
   onDismiss,
   children,
+  isDirty,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null) as RefObject<HTMLDivElement>;
   const outerRef = useRef(null);
@@ -51,16 +53,26 @@ export default function Modal({
     sizeClasses[size],
     className,
   );
+
+  const close = useCallback(() => {
+    if (
+      isDirty?.() &&
+      !confirm('You have unsaved changes. Are you sure you want to close?')
+    ) {
+      return;
+    }
+    onDismiss();
+  }, [isDirty, onDismiss]);
+
   const handleMouseDown = useCallback(
     (event: MouseEvent) => {
-      if (!onDismiss) return;
       if (ref.current && !ref.current.contains(event.target as Element)) {
         event.stopPropagation();
         event.preventDefault();
-        onDismiss();
+        close();
       }
     },
-    [onDismiss],
+    [close],
   );
 
   useKeypress('Escape', () => onDismiss?.(), 'keydown');
@@ -75,7 +87,7 @@ export default function Modal({
             {title && (
               <div className="flex items-center justify-between w-full pl-8 pr-4 border-b border-gray-200">
                 <div className="text-sm font-semibold text-white">{title}</div>
-                <div className="p-4" onMouseDown={onDismiss}>
+                <div className="p-4" onMouseDown={close}>
                   <CloseIcon className="w-4 text-gray-500 hover:text-gray-700" />
                 </div>
               </div>

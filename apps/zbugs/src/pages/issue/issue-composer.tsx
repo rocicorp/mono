@@ -1,12 +1,11 @@
 import {nanoid} from 'nanoid';
-import {useRef, useState} from 'react';
-import CloseIcon from '../../assets/icons/close.svg?react';
+import {useCallback, useRef, useState} from 'react';
 import Modal from '../../components/modal.js';
 import {useZero} from '../../hooks/use-zero.js';
 
 interface Props {
   /** If id is defined the issue created by the composer. */
-  onDismiss?: (id?: string | undefined) => void;
+  onDismiss: (id?: string | undefined) => void;
   isOpen: boolean;
 }
 
@@ -32,7 +31,7 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
       labelIDs: '',
     });
     reset();
-    onDismiss?.(id);
+    onDismiss(id);
   };
 
   const reset = () => {
@@ -40,26 +39,16 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
     setDescription('');
   };
 
-  const handleCloseMouseDown = () => {
-    reset();
-    onDismiss?.();
-  };
+  const canSave = () =>
+    title.trim().length > 0 && description.trim().length > 0;
+
+  const isDirty = useCallback(
+    () => title.trim().length > 0 || description.trim().length > 0,
+    [title, description],
+  );
 
   const body = (
     <div className="flex flex-col w-full py-4 overflow-hidden modal-container">
-      <div className="flex items-center justify-between flex-shrink-0 px-4 issue-composer-header">
-        <div className="flex items-center">
-          <span className="issue-detail-label">New Issue</span>
-        </div>
-        <div className="flex items-center">
-          <button
-            className="inline-flex rounded items-center justify-center text-gray-500 h-7 w-7 rouned hover:text-gray-700"
-            onMouseDown={handleCloseMouseDown}
-          >
-            <CloseIcon className="w-4" />
-          </button>
-        </div>
-      </div>
       <div className="flex flex-col flex-1 pb-3.5 overflow-y-auto">
         <div className="flex items-center w-full mt-1.5 px-4">
           <input
@@ -83,9 +72,7 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
         <button
           className="px-3 ml-auto text-black bg-primary rounded save-issue"
           onMouseDown={handleSubmit}
-          disabled={
-            description.trim().length === 0 || title.trim().length === 0
-          }
+          disabled={!canSave()}
         >
           Save Issue
         </button>
@@ -95,13 +82,15 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
 
   return (
     <Modal
+      title="New Issue"
       isOpen={isOpen}
       center={false}
       size="large"
       onDismiss={() => {
         reset();
-        onDismiss?.();
+        onDismiss();
       }}
+      isDirty={isDirty}
     >
       {body}
     </Modal>

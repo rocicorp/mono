@@ -1,7 +1,7 @@
 import Modal from './modal.js';
 
 export interface Props {
-  onDismiss?: () => void | undefined;
+  onDismiss: () => void;
   isOpen: boolean;
   href?: string;
 }
