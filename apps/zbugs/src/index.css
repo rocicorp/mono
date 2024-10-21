@@ -564,6 +564,11 @@ textarea.autoResize {
   flex-wrap: wrap;
 }
 
+/* Label pills in issue detail side bar are not interactive. */
+.issue-detail-label-container .pill {
+  cursor: default;
+}
+
 .issue-detail p {
   word-wrap: break-word;
   overflow: hidden;
