@@ -17,8 +17,26 @@
 
 .commentActions {
   position: absolute;
+  display: none;
   top: 1rem;
   right: 1rem;
+}
+
+.commentTimestamp {
+  position: absolute;
+  top: 1.3125rem;
+  right: 1.3125rem;
+  font-size: var(--typo-label-size);
+  font-weight: var(--typo-label-weight);
+  opacity: 0.6;
+}
+
+.authorComment:hover .commentActions {
+  display: block;
+}
+
+.authorComment:hover .commentTimestamp {
+  display: none;
 }
 
 .commentActions button {
