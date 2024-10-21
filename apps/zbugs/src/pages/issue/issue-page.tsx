@@ -102,7 +102,7 @@ export default function IssuePage() {
   );
   useKeypress('j', () => {
     if (next) {
-      navigate(links.issue(next));
+      navigate(links.issue(next), {state: listContext});
     }
   });
 
@@ -115,7 +115,7 @@ export default function IssuePage() {
   );
   useKeypress('k', () => {
     if (prev) {
-      navigate(links.issue(prev));
+      navigate(links.issue(prev), {state: listContext});
     }
   });
 
