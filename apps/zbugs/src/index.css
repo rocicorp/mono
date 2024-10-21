@@ -146,12 +146,16 @@ h1 {
   background-color: var(--color-nav-selected);
 }
 
+.nav-container .spacer {
+  display: flex;
+  flex: 1;
+}
+
 .fps-meter {
   display: block;
   border-radius: 0.5rem;
   opacity: 0.3;
   width: 100%;
-  margin-top: auto;
 }
 
 .user-login a {
