@@ -9,9 +9,9 @@ import markURL from '../assets/images/mark.svg';
 import {useLogin} from '../hooks/use-login.js';
 import {useZero} from '../hooks/use-zero.js';
 import IssueComposer from '../pages/issue/issue-composer.js';
+import {links} from '../routes.js';
 import {Link} from './link.js';
 import {NotLoggedInModal} from './not-logged-in-modal.js';
-import {links} from '../routes.js';
 
 export function Nav() {
   const qs = new URLSearchParams(useSearch());
@@ -86,8 +86,10 @@ export function Nav() {
             All
           </Link>
         </div>
-
-        <FPSMeter className="fps-meter" width={192} height={38} />
+        <div className="spacer"></div>
+        {import.meta.env.DEV && (
+          <FPSMeter className="fps-meter" width={192} height={38} />
+        )}
         <div className="user-login">
           {login.loginState === undefined ? (
             <a href={loginHref}>Login</a>
