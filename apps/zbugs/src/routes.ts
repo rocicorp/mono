@@ -13,6 +13,16 @@ export const links = {
   },
 };
 
+export type ZbugsHistoryState = {
+  listContext: ListContext;
+};
+
+export type ListContext = {
+  readonly href: string;
+  readonly title: string;
+  readonly shortIDs: readonly number[];
+};
+
 export const routes = {
   home: '/',
   issue: '/issue/:shortID?',

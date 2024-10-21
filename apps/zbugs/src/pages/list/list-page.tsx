@@ -2,7 +2,7 @@ import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {type CSSProperties, useRef} from 'react';
 import {FixedSizeList as List, type ListOnScrollProps} from 'react-window';
-import {useSearch} from 'wouter';
+import {useLocation, useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
 import Filter, {type Selection} from '../../components/filter.js';
 import {Link} from '../../components/link.js';
@@ -15,6 +15,7 @@ let firstRowRendered = false;
 export default function ListPage() {
   const z = useZero();
 
+  const [location] = useLocation();
   const qs = new URLSearchParams(useSearch());
   const status = qs.get('status')?.toLowerCase() ?? 'open';
   const creator = qs.get('creator');
@@ -57,6 +58,12 @@ export default function ListPage() {
   }
 
   const issues = useQuery(q);
+  const title = `${status.charAt(0).toUpperCase() + status.slice(1)} Issues`;
+  const listContext = {
+    href: window.location.href,
+    title,
+    shortIDs: issues.map(i => i.shortID),
+  };
 
   const addFilter = (
     key: string,
@@ -113,6 +120,7 @@ export default function ListPage() {
           })}
           issue={issue}
           title={issue.title}
+          listContext={listContext}
         >
           {issue.title}
         </IssueLink>
@@ -138,7 +146,7 @@ export default function ListPage() {
     <>
       <div className="list-view-header-container">
         <h1 className="list-view-header">
-          {status.charAt(0).toUpperCase() + status.slice(1)} Issues
+          {title}
           <span className="issue-count">{issues.length}</span>
         </h1>
       </div>

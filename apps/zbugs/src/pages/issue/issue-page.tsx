@@ -2,8 +2,8 @@ import {useQuery} from '@rocicorp/zero/react';
 import {nanoid} from 'nanoid';
 import {useEffect, useMemo, useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
-import {useParams} from 'wouter';
-import {navigate} from 'wouter/use-browser-location';
+import {useParams, useSearch} from 'wouter';
+import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.js';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
@@ -13,9 +13,10 @@ import Selector from '../../components/selector.js';
 import UserPicker from '../../components/user-picker.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useZero} from '../../hooks/use-zero.js';
-import {links} from '../../routes.js';
+import {links, type ListContext} from '../../routes.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
+import {Link} from '../../components/link.js';
 
 export default function IssuePage() {
   const z = useZero();
@@ -23,6 +24,8 @@ export default function IssuePage() {
 
   const idField = params.shortID ? 'shortID' : 'id';
   const id = params.shortID ? parseInt(params.shortID) : must(params.id);
+
+  const listContext = useHistoryState<ListContext | undefined>();
 
   // todo: one should be in the schema
   const q = z.query.issue
@@ -59,9 +62,9 @@ export default function IssuePage() {
   const [edits, setEdits] = useState<Partial<typeof issue>>({});
   useEffect(() => {
     if (issue?.shortID !== undefined && idField !== 'shortID') {
-      history.replaceState(null, '', links.issue(issue));
+      navigate(links.issue(issue), {replace: true, state: listContext});
     }
-  }, [issue, idField]);
+  }, [issue, idField, listContext]);
 
   const save = () => {
     if (!editing) {
@@ -77,14 +80,26 @@ export default function IssuePage() {
     setEdits({});
   };
 
-  const next = useQuery(
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    z.query.issue.orderBy('modified', 'desc').start(issue!).one(),
-    issue !== undefined,
-  );
+  useKeypress('k', () => {
+    if (listContext && issue?.shortID !== undefined) {
+      const index = listContext.shortIDs.indexOf(issue.shortID);
+      if (index !== -1) {
+        const prevShortID = listContext.shortIDs[index - 1];
+        if (prevShortID !== undefined) {
+          navigate(links.issue({shortID: prevShortID}), {state: listContext});
+        }
+      }
+    }
+  });
   useKeypress('j', () => {
-    if (next) {
-      navigate(links.issue(next));
+    if (listContext && issue?.shortID !== undefined) {
+      const index = listContext.shortIDs.indexOf(issue.shortID);
+      if (index !== -1) {
+        const nextShortID = listContext.shortIDs[index + 1];
+        if (nextShortID !== undefined) {
+          navigate(links.issue({shortID: nextShortID}), {state: listContext});
+        }
+      }
     }
   });
 
@@ -122,9 +137,15 @@ export default function IssuePage() {
       <div className="issue-detail">
         <div className="issue-topbar">
           <div className="issue-breadcrumb">
-            <span className="breadcrumb-item">Open issues</span>
-            <span className="breadcrumb-item">&rarr;</span>
-            <span className="breadcrumb-item">ZB-15</span>
+            {listContext ? (
+              <>
+                <Link className="breadcrumb-item" href={listContext.href}>
+                  {listContext.title}
+                </Link>
+                <span className="breadcrumb-item">&rarr;</span>
+              </>
+            ) : null}
+            <span className="breadcrumb-item">ZB-{issue.shortID}</span>
           </div>
           <div className="edit-buttons">
             {!editing ? (
