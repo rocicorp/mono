@@ -601,6 +601,7 @@ h1 {
   border-radius: 0.5rem;
   padding: 0.25rem 0.5rem;
   display: inline-block;
+  margin-top: 1rem;
 }
 
 .login-to-comment:hover {
@@ -738,6 +739,10 @@ h1 {
   border-left: 0.4rem solid var(--color-nav-selected);
   font-style: italic;
   color: rgba(255, 255, 255, 0.6);
+}
+
+.comments-container .markdown-container blockquote {
+  border-left-color: var(--color-button-outline);
 }
 
 /* Markdown: Horizontal rule */
