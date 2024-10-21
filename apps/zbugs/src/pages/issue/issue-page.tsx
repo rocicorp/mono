@@ -17,6 +17,8 @@ import {links, type ListContext} from '../../routes.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
 import {Link} from '../../components/link.js';
+import type {Schema} from '../../domain/schema.js';
+import type {Zero} from '@rocicorp/zero';
 
 export default function IssuePage() {
   const z = useZero();
@@ -80,22 +82,30 @@ export default function IssuePage() {
     setEdits({});
   };
 
-  const navigateToOffset = (offset: number) => {
-    if (listContext && issue) {
-      const index = listContext.ids.findIndex(i => i.id === issue.id);
-      if (index !== -1) {
-        const ids = listContext.ids[index + offset];
-        if (ids !== undefined) {
-          navigate(links.issue(ids), {state: listContext});
-        }
-      }
-    }
-  };
-  useKeypress('k', () => {
-    navigateToOffset(-1);
-  });
+  const next = useQuery(
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    buildListQuery(z, 'desc', listContext?.params)
+      .start(issue!)
+      .one(),
+    listContext !== undefined && issue !== undefined,
+  );
   useKeypress('j', () => {
-    navigateToOffset(1);
+    if (next) {
+      navigate(links.issue(next));
+    }
+  });
+
+  const prev = useQuery(
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    buildListQuery(z, 'asc', listContext?.params)
+      .start(issue!)
+      .one(),
+    listContext !== undefined && issue !== undefined,
+  );
+  useKeypress('k', () => {
+    if (prev) {
+      navigate(links.issue(prev));
+    }
   });
 
   const labelSet = useMemo(
@@ -300,4 +310,30 @@ export default function IssuePage() {
       </div>
     </div>
   );
+}
+
+function buildListQuery(
+  z: Zero<Schema>,
+  dir: 'asc' | 'desc',
+  params: ListContext['params'] = {},
+) {
+  const {open, creatorID, assigneeID, labelIDs} = params;
+  let q = z.query.issue.orderBy('modified', dir).orderBy('id', dir);
+  if (open) {
+    q = q.where('open', open);
+  }
+
+  if (creatorID) {
+    q = q.where('creatorID', creatorID);
+  }
+
+  if (assigneeID) {
+    q = q.where('assigneeID', assigneeID);
+  }
+  if (labelIDs) {
+    for (const labelID of labelIDs) {
+      q = q.where('labelIDs', 'LIKE', `%${labelID}%`);
+    }
+  }
+  return q;
 }

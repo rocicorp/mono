@@ -10,6 +10,7 @@ import {useElementSize} from '../../hooks/use-element-size.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {mark} from '../../perf-log.js';
 import IssueLink from '../../components/issue-link.js';
+import type {ListContext} from '../../routes.js';
 
 let firstRowRendered = false;
 export default function ListPage() {
@@ -35,13 +36,15 @@ export default function ListPage() {
 
   let q = z.query.issue
     .orderBy('modified', 'desc')
+    .orderBy('id', 'desc')
     .related('labels')
     .related('viewState', q => q.where('userID', z.userID).one());
 
-  if (status === 'open') {
-    q = q.where('open', true);
-  } else if (status === 'closed') {
-    q = q.where('open', false);
+  const open =
+    status === 'open' ? true : status === 'closed' ? false : undefined;
+
+  if (open) {
+    q = q.where('open', open);
   }
 
   if (creatorID) {
@@ -58,10 +61,15 @@ export default function ListPage() {
 
   const issues = useQuery(q);
   const title = `${status.charAt(0).toUpperCase() + status.slice(1)} Issues`;
-  const listContext = {
+  const listContext: ListContext = {
     href: window.location.href,
     title,
-    ids: issues.map(i => ({id: i.id, shortID: i.shortID})),
+    params: {
+      open,
+      assigneeID,
+      creatorID,
+      labelIDs: labelIDs.map(l => l.id),
+    },
   };
 
   const addFilter = (

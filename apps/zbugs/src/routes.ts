@@ -16,10 +16,12 @@ export const links = {
 export type ListContext = {
   readonly href: string;
   readonly title: string;
-  readonly ids: readonly {
-    readonly id: string;
-    readonly shortID?: number | undefined;
-  }[];
+  readonly params: {
+    readonly open?: boolean | undefined;
+    readonly assigneeID?: string | undefined;
+    readonly creatorID?: string | undefined;
+    readonly labelIDs?: string[] | undefined;
+  };
 };
 
 export const routes = {
