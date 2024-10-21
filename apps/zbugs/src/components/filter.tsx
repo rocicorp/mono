@@ -3,6 +3,7 @@ import classNames from 'classnames';
 import {useState} from 'react';
 import labelIcon from '../assets/icons/label.svg';
 import {useZero} from '../hooks/use-zero.js';
+import {Button} from './button.js';
 import Selector from './selector.js';
 import UserPicker from './user-picker.js';
 
@@ -30,15 +31,15 @@ export default function Filter({onSelect}: Props) {
 
   return (
     <div className="add-filter-container">
-      <button
+      <Button
         className={classNames('add-filter', {active: isOpen})}
-        onMouseDown={() => setIsOpen(!isOpen)}
+        onAction={() => setIsOpen(!isOpen)}
         style={{
           zIndex: isOpen ? 1 : 0,
         }}
       >
         <span className="plus">+</span> Filter
-      </button>
+      </Button>
 
       {isOpen && (
         <>

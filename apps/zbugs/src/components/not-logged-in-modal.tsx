@@ -1,7 +1,7 @@
 import Modal from './modal.js';
 
 export interface Props {
-  onDismiss?: () => void | undefined;
+  onDismiss: () => void;
   isOpen: boolean;
   href?: string;
 }
@@ -16,10 +16,7 @@ export function NotLoggedInModal({onDismiss, isOpen, href}: Props) {
           </div>
         </div>
         <div className="flex items-center flex-shrink-0 px-4 pt-3">
-          <a
-            className="px-3 ml-auto text-black bg-primary rounded save-issue"
-            href={href}
-          >
+          <a className="modal-confirm save-issue" href={href}>
             Login
           </a>
         </div>
