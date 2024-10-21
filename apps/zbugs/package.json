@@ -36,6 +36,7 @@
     "rehype-raw": "^7.0.0",
     "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.0",
+    "use-debounce": "^10.0.4",
     "wouter": "^3.3.5"
   },
   "devDependencies": {
