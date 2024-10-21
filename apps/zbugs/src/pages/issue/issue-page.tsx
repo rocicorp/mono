@@ -83,8 +83,8 @@ export default function IssuePage() {
   };
 
   const next = useQuery(
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     buildListQuery(z, 'desc', listContext?.params)
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       .start(issue!)
       .one(),
     listContext !== undefined && issue !== undefined,
@@ -96,8 +96,8 @@ export default function IssuePage() {
   });
 
   const prev = useQuery(
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     buildListQuery(z, 'asc', listContext?.params)
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       .start(issue!)
       .one(),
     listContext !== undefined && issue !== undefined,
