@@ -20,7 +20,10 @@ export type ZbugsHistoryState = {
 export type ListContext = {
   readonly href: string;
   readonly title: string;
-  readonly shortIDs: readonly number[];
+  readonly ids: readonly {
+    readonly id: string;
+    readonly shortID?: number | undefined;
+  }[];
 };
 
 export const routes = {

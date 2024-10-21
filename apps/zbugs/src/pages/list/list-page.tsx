@@ -62,7 +62,7 @@ export default function ListPage() {
   const listContext = {
     href: window.location.href,
     title,
-    shortIDs: issues.map(i => i.shortID),
+    ids: issues.map(i => ({id: i.id, shortID: i.shortID})),
   };
 
   const addFilter = (

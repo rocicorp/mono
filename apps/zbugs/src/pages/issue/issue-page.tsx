@@ -80,27 +80,22 @@ export default function IssuePage() {
     setEdits({});
   };
 
-  useKeypress('k', () => {
-    if (listContext && issue?.shortID !== undefined) {
-      const index = listContext.shortIDs.indexOf(issue.shortID);
+  const navigateToOffset = (offset: number) => {
+    if (listContext && issue) {
+      const index = listContext.ids.findIndex(i => i.id === issue.id);
       if (index !== -1) {
-        const prevShortID = listContext.shortIDs[index - 1];
-        if (prevShortID !== undefined) {
-          navigate(links.issue({shortID: prevShortID}), {state: listContext});
+        const ids = listContext.ids[index + offset];
+        if (ids !== undefined) {
+          navigate(links.issue(ids), {state: listContext});
         }
       }
     }
+  };
+  useKeypress('k', () => {
+    navigateToOffset(-1);
   });
   useKeypress('j', () => {
-    if (listContext && issue?.shortID !== undefined) {
-      const index = listContext.shortIDs.indexOf(issue.shortID);
-      if (index !== -1) {
-        const nextShortID = listContext.shortIDs[index + 1];
-        if (nextShortID !== undefined) {
-          navigate(links.issue({shortID: nextShortID}), {state: listContext});
-        }
-      }
-    }
+    navigateToOffset(1);
   });
 
   const labelSet = useMemo(
