@@ -58,11 +58,7 @@ export default function CommentComposer({
         {id ? 'Save' : 'Add comment'}
       </button>{' '}
       {id ? (
-        <button
-          className="edit-comment-cancel"
-          onMouseDown={onDone}
-          disabled={currentBody.trim().length === 0}
-        >
+        <button className="edit-comment-cancel" onMouseDown={onDone}>
           Cancel
         </button>
       ) : null}
