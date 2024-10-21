@@ -38,8 +38,8 @@ export type Migration = {
 };
 
 /**
- * Mapping of incremental migrations to move from an old code version
- * to a new one. Versions must be non-zero.
+ * Mapping of incremental migrations to move from the previous old code
+ * version to next one. Versions must be non-zero.
  *
  * The schema resulting from performing incremental migrations should be
  * equivalent to that of the `setupMigration` on a blank database.
@@ -72,10 +72,10 @@ export async function runSchemaMigrations(
 
   try {
     const versionMigrations = sorted(incrementalMigrationMap);
-    if (versionMigrations.length === 0) {
-      log.info?.(`No versions/migrations to manage.`);
-      return;
-    }
+    assert(
+      versionMigrations.length,
+      `Must specify a at least one version migration`,
+    );
     assert(
       versionMigrations[0][0] > 0,
       `Versions must be non-zero positive numbers`,
