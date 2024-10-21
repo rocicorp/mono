@@ -330,7 +330,7 @@ function buildListQuery(
 ) {
   const {open, creatorID, assigneeID, labelIDs} = params;
   let q = z.query.issue.orderBy('modified', dir).orderBy('id', dir);
-  if (open) {
+  if (open !== undefined) {
     q = q.where('open', open);
   }
 
