@@ -32,5 +32,8 @@
   "eslintConfig": {
     "extends": "./eslint-config.json"
   },
-  "prettier": "@rocicorp/prettier-config"
+  "prettier": "@rocicorp/prettier-config",
+  "dependencies": {
+    "@vitest/coverage-v8": "^2.1.3"
+  }
 }
