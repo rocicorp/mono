@@ -1,4 +1,4 @@
-import {type CompiledZeroConfig, defineConfig} from '@rocicorp/zero/config';
+import {defineConfig} from '@rocicorp/zero/config';
 import {schema, type Schema} from './src/domain/schema.js';
 
 /** The contents of the zbugs JWT */
@@ -87,7 +87,7 @@ export default defineConfig<AuthData, Schema>(schema, queries => {
       },
     },
   };
-}) as CompiledZeroConfig;
+}) as ReturnType<typeof defineConfig>;
 
 function must<T>(v: T | undefined | null): T {
   // eslint-disable-next-line eqeqeq

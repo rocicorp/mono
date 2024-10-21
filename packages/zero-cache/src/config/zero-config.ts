@@ -163,7 +163,7 @@ export function getZeroConfig(): Promise<ZeroConfig> {
   );
 
   loadedConfig = tsImport(relativePath, import.meta.url)
-    .then(module => module.default as ZeroConfig)
+    .then(async module => (await module.default) as ZeroConfig)
     .catch(e => {
       console.error(
         `Failed to load zero config from ${absoluteConfigPath}: ${e}`,
