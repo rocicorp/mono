@@ -1,5 +1,6 @@
 import {nanoid} from 'nanoid';
 import {useCallback, useRef, useState} from 'react';
+import {Button} from '../../components/button.js';
 import Modal from '../../components/modal.js';
 import {useZero} from '../../hooks/use-zero.js';
 
@@ -69,13 +70,13 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
         </div>
       </div>
       <div className="flex items-center flex-shrink-0 px-4 pt-3">
-        <button
+        <Button
           className="px-3 ml-auto text-black bg-primary rounded save-issue"
-          onMouseDown={handleSubmit}
+          onAction={handleSubmit}
           disabled={!canSave()}
         >
           Save Issue
-        </button>
+        </Button>
       </div>
     </div>
   );
