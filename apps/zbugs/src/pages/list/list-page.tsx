@@ -2,7 +2,7 @@ import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {type CSSProperties, useRef} from 'react';
 import {FixedSizeList as List, type ListOnScrollProps} from 'react-window';
-import {useLocation, useSearch} from 'wouter';
+import {useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
 import Filter, {type Selection} from '../../components/filter.js';
 import {Link} from '../../components/link.js';
@@ -15,7 +15,6 @@ let firstRowRendered = false;
 export default function ListPage() {
   const z = useZero();
 
-  const [location] = useLocation();
   const qs = new URLSearchParams(useSearch());
   const status = qs.get('status')?.toLowerCase() ?? 'open';
   const creator = qs.get('creator');
