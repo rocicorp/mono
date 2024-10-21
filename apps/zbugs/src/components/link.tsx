@@ -30,12 +30,23 @@ export function Link<S>({children, href, className, title, state}: Props<S>) {
     }
   };
 
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    // In html links are not activated by space key, but we want to it to be
+    // more consistent with buttons, especially since it is hard to determine
+    // what is a link vs a button in our UI.
+    if (e.key === 'Enter' || e.key === ' ') {
+      navigate(href, {state});
+      e.preventDefault();
+    }
+  };
+
   return (
     <a
       href={href}
       title={title}
       onMouseDown={onMouseDown}
       onClick={onClick}
+      onKeyDown={onKeyDown}
       className={className}
     >
       {children}
