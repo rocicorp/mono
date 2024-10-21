@@ -16,7 +16,7 @@ export function NotLoggedInModal({onDismiss, isOpen, href}: Props) {
           </div>
         </div>
         <div className="flex items-center flex-shrink-0 px-4 pt-3">
-          <a className="primary-cta save-issue" href={href}>
+          <a className="modal-confirm save-issue" href={href}>
             Login
           </a>
         </div>

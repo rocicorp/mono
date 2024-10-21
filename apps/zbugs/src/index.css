@@ -684,15 +684,13 @@ textarea.autoResize {
 
 .modal {
   border: 1px solid var(--color-modal-outline);
+  background-color: var(--color-modal-background);
+  backdrop-filter: var(--filter-backdrop-blur);
+  padding: 1rem;
 }
 
 .save-issue:disabled {
   --tw-bg-opacity: 0.4;
-}
-
-.modal-container {
-  background-color: var(--color-modal-background);
-  backdrop-filter: var(--filter-backdrop-blur);
 }
 
 .modal-container .issue-detail-label {
