@@ -627,6 +627,10 @@ h1 {
   --tw-bg-opacity: 0.4;
 }
 
+.save-issue:disabled {
+  --tw-bg-opacity: 0.4;
+}
+
 .modal-container .issue-detail-label {
   margin-bottom: 0;
 }

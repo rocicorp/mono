@@ -145,7 +145,7 @@ export default function IssuePage() {
                   className="save-button"
                   onMouseDown={save}
                   disabled={
-                    edits === undefined || Object.keys(edits).length === 0
+                    !edits || edits.title === '' || edits.description === ''
                   }
                 >
                   Save
