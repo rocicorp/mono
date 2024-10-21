@@ -3,7 +3,7 @@ import {nanoid} from 'nanoid';
 import {useEffect, useMemo, useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {useParams} from 'wouter';
-import {navigate} from 'wouter/use-browser-location';
+import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.js';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
@@ -13,9 +13,12 @@ import Selector from '../../components/selector.js';
 import UserPicker from '../../components/user-picker.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useZero} from '../../hooks/use-zero.js';
-import {links} from '../../routes.js';
+import {links, type ListContext} from '../../routes.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
+import {Link} from '../../components/link.js';
+import type {Schema} from '../../domain/schema.js';
+import type {Zero} from '@rocicorp/zero';
 
 export default function IssuePage() {
   const z = useZero();
@@ -23,6 +26,8 @@ export default function IssuePage() {
 
   const idField = params.shortID ? 'shortID' : 'id';
   const id = params.shortID ? parseInt(params.shortID) : must(params.id);
+
+  const listContext = useHistoryState<ListContext | undefined>();
 
   // todo: one should be in the schema
   const q = z.query.issue
@@ -59,9 +64,9 @@ export default function IssuePage() {
   const [edits, setEdits] = useState<Partial<typeof issue>>({});
   useEffect(() => {
     if (issue?.shortID !== undefined && idField !== 'shortID') {
-      history.replaceState(null, '', links.issue(issue));
+      navigate(links.issue(issue), {replace: true, state: listContext});
     }
-  }, [issue, idField]);
+  }, [issue, idField, listContext]);
 
   const save = () => {
     if (!editing) {
@@ -77,14 +82,40 @@ export default function IssuePage() {
     setEdits({});
   };
 
+  // A snapshot before any edits/comments added to the issue in this view is
+  // used for finding the next/prev items so that a user can open an item
+  // modify it and then navigate to the next/prev item in the list as it was
+  // when they were viewing it.
+  const [issueSnapshot, setIssueSnapshot] = useState(issue);
+  if (
+    issue !== undefined &&
+    (issueSnapshot === undefined || issueSnapshot.id !== issue.id)
+  ) {
+    setIssueSnapshot(issue);
+  }
   const next = useQuery(
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    z.query.issue.orderBy('modified', 'desc').start(issue!).one(),
-    issue !== undefined,
+    buildListQuery(z, 'desc', listContext?.params)
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      .start(issueSnapshot!)
+      .one(),
+    listContext !== undefined && issueSnapshot !== undefined,
   );
   useKeypress('j', () => {
     if (next) {
       navigate(links.issue(next));
+    }
+  });
+
+  const prev = useQuery(
+    buildListQuery(z, 'asc', listContext?.params)
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      .start(issueSnapshot!)
+      .one(),
+    listContext !== undefined && issueSnapshot !== undefined,
+  );
+  useKeypress('k', () => {
+    if (prev) {
+      navigate(links.issue(prev));
     }
   });
 
@@ -105,7 +136,7 @@ export default function IssuePage() {
     if (confirm('Really delete?')) {
       z.mutate.issue.delete({id: issue.id});
     }
-    navigate('/');
+    navigate(listContext?.href ?? links.home());
   };
 
   // TODO: This check goes away once Zero's consistency model is implemented.
@@ -122,9 +153,15 @@ export default function IssuePage() {
       <div className="issue-detail">
         <div className="issue-topbar">
           <div className="issue-breadcrumb">
-            <span className="breadcrumb-item">Open issues</span>
-            <span className="breadcrumb-item">&rarr;</span>
-            <span className="breadcrumb-item">ZB-15</span>
+            {listContext ? (
+              <>
+                <Link className="breadcrumb-item" href={listContext.href}>
+                  {listContext.title}
+                </Link>
+                <span className="breadcrumb-item">&rarr;</span>
+              </>
+            ) : null}
+            <span className="breadcrumb-item">ZB-{issue.shortID}</span>
           </div>
           <div className="edit-buttons">
             {!editing ? (
@@ -284,4 +321,30 @@ export default function IssuePage() {
       </div>
     </div>
   );
+}
+
+function buildListQuery(
+  z: Zero<Schema>,
+  dir: 'asc' | 'desc',
+  params: ListContext['params'] = {},
+) {
+  const {open, creatorID, assigneeID, labelIDs} = params;
+  let q = z.query.issue.orderBy('modified', dir).orderBy('id', dir);
+  if (open) {
+    q = q.where('open', open);
+  }
+
+  if (creatorID) {
+    q = q.where('creatorID', creatorID);
+  }
+
+  if (assigneeID) {
+    q = q.where('assigneeID', assigneeID);
+  }
+  if (labelIDs) {
+    for (const labelID of labelIDs) {
+      q = q.where('labelIDs', 'LIKE', `%${labelID}%`);
+    }
+  }
+  return q;
 }
