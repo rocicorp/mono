@@ -76,7 +76,7 @@ export type ZeroConfig<
 export async function defineConfig<TAuthDataShape, TSchema extends Schema>(
   schema: TSchema,
   definer: (
-    queries: Queries<TSchema>,
+    query: Queries<TSchema>,
   ) =>
     | Promise<ZeroConfig<TAuthDataShape, TSchema>>
     | ZeroConfig<TAuthDataShape, TSchema>,
