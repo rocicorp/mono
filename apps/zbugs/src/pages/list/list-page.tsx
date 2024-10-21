@@ -11,6 +11,7 @@ import {useZero} from '../../hooks/use-zero.js';
 import {mark} from '../../perf-log.js';
 import IssueLink from '../../components/issue-link.js';
 import type {ListContext} from '../../routes.js';
+import {useThrottledCallback} from 'use-debounce';
 
 let firstRowRendered = false;
 const itemSize = 56;
@@ -104,9 +105,9 @@ export default function ListPage() {
     initialScrollOffset = 0;
   }
 
-  const onScroll = ({scrollOffset}: ListOnScrollProps) => {
+  const onScroll = useThrottledCallback(({scrollOffset}: ListOnScrollProps) => {
     history.replaceState({...history.state, '-zbugs-list': scrollOffset}, '');
-  };
+  }, 250);
 
   const Row = ({index, style}: {index: number; style: CSSProperties}) => {
     const issue = issues[index];
