@@ -43,7 +43,7 @@ export default function ListPage() {
   const open =
     status === 'open' ? true : status === 'closed' ? false : undefined;
 
-  if (open) {
+  if (open !== undefined) {
     q = q.where('open', open);
   }
 
