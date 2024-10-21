@@ -24,7 +24,9 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
 
   // Use the useEffect hook to handle the auto-resize logic
   useEffect(() => {
-    const textareas = document.querySelectorAll('.autoResize') as NodeListOf<HTMLTextAreaElement>;
+    const textareas = document.querySelectorAll(
+      '.autoResize',
+    ) as NodeListOf<HTMLTextAreaElement>;
 
     // Add the input event listener to all textareas
     textareas.forEach(textarea => {
@@ -32,7 +34,7 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
       textarea.addEventListener('input', handleInput);
       // Perform initial resize
       autoResizeTextarea(textarea);
-      
+
       // Clean up the event listener when the component unmounts
       return () => {
         textarea.removeEventListener('input', handleInput);

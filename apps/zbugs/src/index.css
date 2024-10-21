@@ -522,8 +522,7 @@ textarea.autoResize {
 .edit-title,
 .edit-description,
 .new-issue-title,
-.new-issue-description
- {
+.new-issue-description {
   background-color: var(--color-background);
   border: 1px solid var(--color-nav-selected);
   display: block;
