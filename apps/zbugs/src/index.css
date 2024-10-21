@@ -146,12 +146,11 @@ h1 {
   background-color: var(--color-nav-selected);
 }
 
-.fps-meter {
-  display: block;
-  border-radius: 0.5rem;
-  opacity: 0.3;
-  width: 100%;
-  margin-top: auto;
+.user-login {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  justify-content: end;
 }
 
 .user-login a {
@@ -788,9 +787,6 @@ h1 {
     align-items: center;
   }
 
-  .fps-meter {
-    display: none;
-  }
 
   .primary-content {
     padding: 5rem 0 0 0;

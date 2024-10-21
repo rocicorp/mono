@@ -20,7 +20,6 @@
     "@headlessui/react": "^2.1.8",
     "@octokit/core": "^6.1.2",
     "@rocicorp/zero": "0.2.2024101101+147cdf",
-    "@schickling/fps-meter": "^0.1.2",
     "classnames": "^2.5.1",
     "dotenv": "^16.4.5",
     "fastify": "^5.0.0",
