@@ -87,7 +87,10 @@ export default function IssuePage() {
   // modify it and then navigate to the next/prev item in the list as it was
   // when they were viewing it.
   const [issueSnapshot, setIssueSnapshot] = useState(issue);
-  if (issueSnapshot === undefined && issue !== undefined) {
+  if (
+    issue !== undefined &&
+    (issueSnapshot === undefined || issueSnapshot.id !== issue.id)
+  ) {
     setIssueSnapshot(issue);
   }
   const next = useQuery(
