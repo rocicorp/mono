@@ -50,15 +50,15 @@ export default function CommentComposer({
         onChange={textAreaChange}
         className="comment-input"
       />
-      <button className="secondary-button" onMouseDown={save}>
+      <button
+        className="secondary-button"
+        onMouseDown={save}
+        disabled={currentBody.trim().length === 0}
+      >
         {id ? 'Save' : 'Add comment'}
       </button>{' '}
       {id ? (
-        <button
-          className="edit-comment-cancel"
-          onMouseDown={onDone}
-          disabled={currentBody.trim().length === 0}
-        >
+        <button className="edit-comment-cancel" onMouseDown={onDone}>
           Cancel
         </button>
       ) : null}
