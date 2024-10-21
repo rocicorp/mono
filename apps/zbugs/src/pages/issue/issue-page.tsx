@@ -1,8 +1,10 @@
 import {useQuery} from '@rocicorp/zero/react';
+import {nanoid} from 'nanoid';
 import {useEffect, useMemo, useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {useParams, useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
+import {must} from '../../../../../packages/shared/src/must.js';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
 import LabelPicker from '../../components/label-picker.js';
@@ -11,11 +13,9 @@ import Selector from '../../components/selector.js';
 import UserPicker from '../../components/user-picker.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useZero} from '../../hooks/use-zero.js';
+import {links} from '../../routes.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
-import {must} from '../../../../../packages/shared/src/must.js';
-import {links} from '../../routes.js';
-import {nanoid} from 'nanoid';
 
 export default function IssuePage() {
   const z = useZero();
@@ -215,7 +215,7 @@ export default function IssuePage() {
                 className="issue-creator-avatar"
                 alt={issue.creator?.name}
               />
-              <span className="issue-creator-name">{issue.creator.login}</span>
+              {issue.creator.login}
             </button>
           </div>
 
