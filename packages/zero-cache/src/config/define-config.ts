@@ -73,17 +73,21 @@ export type ZeroConfig<
   log?: LogConfig;
 };
 
-export function defineConfig<TAuthDataShape, TSchema extends Schema>(
+export async function defineConfig<TAuthDataShape, TSchema extends Schema>(
   schema: TSchema,
-  definer: (queries: Queries<TSchema>) => ZeroConfig<TAuthDataShape, TSchema>,
-): CompiledZeroConfig {
+  definer: (
+    queries: Queries<TSchema>,
+  ) =>
+    | Promise<ZeroConfig<TAuthDataShape, TSchema>>
+    | ZeroConfig<TAuthDataShape, TSchema>,
+): Promise<CompiledZeroConfig> {
   const normalizedSchema = normalizeSchema(schema);
   const queries = {} as Record<string, Query<TableSchema>>;
   for (const [name, tableSchema] of Object.entries(normalizedSchema.tables)) {
     queries[name] = new ConfigQuery(tableSchema);
   }
 
-  const config = definer(queries as Queries<TSchema>);
+  const config = await definer(queries as Queries<TSchema>);
   return compileConfig(config);
 }
 
