@@ -25,7 +25,13 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
   const remove = () => z.mutate.comment.delete({id});
 
   return (
-    <div className={`${style.commentItem} ${comment.creatorID == login.loginState?.decoded.sub ? style.authorComment : ''}`}>
+    <div
+      className={`${style.commentItem} ${
+        comment.creatorID == login.loginState?.decoded.sub
+          ? style.authorComment
+          : ''
+      }`}
+    >
       <p className={style.commentAuthor}>
         <img
           src={comment.creator?.avatar}

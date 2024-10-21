@@ -1,25 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, {useState, useEffect} from 'react';
 
 interface RelativeTimeProps {
   created: string | number | Date;
 }
 
-const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+const rtf = new Intl.RelativeTimeFormat('en', {numeric: 'auto'});
 
-const RelativeTime: React.FC<RelativeTimeProps> = ({ created }) => {
+const RelativeTime: React.FC<RelativeTimeProps> = ({created}) => {
   const [displayTime, setDisplayTime] = useState<string>('');
 
   useEffect(() => {
     const getRelativeTime = (createdDate: string | number | Date) => {
       const now = new Date();
       const created = new Date(createdDate);
-      const diffInSeconds = Math.floor((now.getTime() - created.getTime()) / 1000);
+      const diffInSeconds = Math.floor(
+        (now.getTime() - created.getTime()) / 1000,
+      );
       const diffInDays = diffInSeconds / 86400;
 
       const createdYear = created.getFullYear();
       const currentYear = now.getFullYear();
-
-      
 
       // If the timestamp is older than 2 days, return a date and time string
       if (diffInDays > 2) {
@@ -50,15 +50,13 @@ const RelativeTime: React.FC<RelativeTimeProps> = ({ created }) => {
         value = Math.floor(diffInSeconds / 86400);
       }
 
-      
       return rtf.format(-value, unit);
     };
 
-    
     const interval = setInterval(() => {
       setDisplayTime(getRelativeTime(created));
     }, 60000);
-    
+
     setDisplayTime(getRelativeTime(created));
 
     return () => clearInterval(interval);
