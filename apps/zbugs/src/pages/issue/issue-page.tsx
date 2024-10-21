@@ -141,7 +141,13 @@ export default function IssuePage() {
               </>
             ) : (
               <>
-                <button className="save-button" onMouseDown={save}>
+                <button
+                  className="save-button"
+                  onMouseDown={save}
+                  disabled={
+                    edits === undefined || Object.keys(edits).length === 0
+                  }
+                >
                   Save
                 </button>
                 <button className="cancel-button" onMouseDown={cancel}>

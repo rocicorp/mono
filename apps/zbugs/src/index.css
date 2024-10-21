@@ -84,7 +84,7 @@ h1 {
   padding: 0.25rem 0.5rem;
 }
 
-.secondary-button:hover {
+.secondary-button:enabled:hover {
   opacity: 1;
 }
 
@@ -458,7 +458,7 @@ h1 {
   border: 1px solid var(--color-background);
 }
 
-.edit-buttons button:hover {
+.edit-buttons button:enabled:hover {
   opacity: 1;
 }
 
@@ -621,6 +621,10 @@ h1 {
 .save-issue {
   font-weight: 800;
   padding: 0.4rem 1.2rem;
+}
+
+.save-issue:disabled {
+  --tw-bg-opacity: 0.4;
 }
 
 .modal-container .issue-detail-label {
