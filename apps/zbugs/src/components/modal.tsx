@@ -44,7 +44,7 @@ export default function Modal({
     },
   );
   const modalClasses = classnames(
-    'flex flex-col items-center overflow-hidden transform bg-modal modal shadow-large-modal rounded-lg border border-modalOutline',
+    'flex flex-col items-center overflow-hidden transform modal shadow-large-modal rounded-lg',
     {
       'mt-20 mb-2 ': !center,
     },
