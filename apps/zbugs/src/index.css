@@ -607,6 +607,7 @@ h1 {
   opacity: 1;
 }
 
+.item-avatar,
 .issue-creator-avatar {
   width: 1.4rem;
   height: 1.4rem;

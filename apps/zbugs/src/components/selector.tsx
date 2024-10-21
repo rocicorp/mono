@@ -1,5 +1,5 @@
-import {useEffect, useState} from 'react';
 import classNames from 'classnames';
+import {useEffect, useState} from 'react';
 
 type Item<T> = {
   text: string;
@@ -56,28 +56,30 @@ export function Selector<T>({
     <div className="selector">
       <button
         onMouseDown={toggleDropdown}
-        className={classNames('sidebar-button', 'button-dropdown', 'item', {
-          icon: closedItem?.icon,
-        })}
-        style={{
-          backgroundImage: closedItem?.icon && `url("${closedItem?.icon}")`,
-        }}
+        className={classNames('sidebar-button', 'button-dropdown', 'item')}
       >
-        {closedItem?.text ?? ''}
+        {closedItem ? (
+          <>
+            <img
+              src={closedItem.icon}
+              className="item-avatar"
+              alt={closedItem.text}
+            />
+            {closedItem.text}
+          </>
+        ) : (
+          ''
+        )}
       </button>
       {isOpen && (
         <div className="dropdown">
           {openItems.map((item, index) => (
             <button
               key={index}
-              className={classNames('item', {
-                icon: item.icon,
-              })}
-              style={{
-                backgroundImage: item.icon && `url("${item.icon}")`,
-              }}
+              className="item"
               onMouseDown={() => handleSelect(item.value)}
             >
+              <img src={item.icon} className="item-avatar" alt={item.text} />
               {item.text}
             </button>
           ))}
