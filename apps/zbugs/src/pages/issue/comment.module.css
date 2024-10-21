@@ -16,10 +16,9 @@
 }
 
 .commentActions {
-  position: absolute;
-  display: none;
-  top: 1rem;
-  right: 1rem;
+  margin-top: 2rem;
+  display: flex;
+  gap: 0.5rem;
 }
 
 .commentTimestamp {
@@ -31,20 +30,21 @@
   opacity: 0.6;
 }
 
-.authorComment:hover .commentActions {
-  display: block;
-}
-
-.authorComment:hover .commentTimestamp {
-  display: none;
-}
-
 .commentActions button {
-  margin-right: 0.5rem;
+  color: var(--color-text-primary-active);
   opacity: 0.6;
+  font-size: var(--typo-label-size);
+  font-weight: var(--typo-label-weight);
   transition: opacity 0.3s ease-in-out;
+  border: 1px solid var(--color-text-dimmed-label);
+  border-radius: 0.5rem;
+  padding: 0.25rem 0.5rem;
 }
 
-.commentActions button:hover {
+.commentActions button.edit-comment-cancel {
+  border: 1px solid var(--color-background);
+}
+
+.commentActions button:enabled:hover {
   opacity: 1;
 }

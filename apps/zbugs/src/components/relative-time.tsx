@@ -55,7 +55,7 @@ const RelativeTime: React.FC<RelativeTimeProps> = ({created}) => {
 
     const interval = setInterval(() => {
       setDisplayTime(getRelativeTime(created));
-    }, 60000);
+    }, 1000);
 
     setDisplayTime(getRelativeTime(created));
 
