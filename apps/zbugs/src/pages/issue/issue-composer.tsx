@@ -13,7 +13,7 @@ interface Props {
 export default function IssueComposer({isOpen, onDismiss}: Props) {
   const ref = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState('');
-  const [description, setDescription] = useState<string>();
+  const [description, setDescription] = useState<string>('');
   const z = useZero();
 
   const handleSubmit = () => {
@@ -83,6 +83,9 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
         <button
           className="px-3 ml-auto text-black bg-primary rounded save-issue"
           onMouseDown={handleSubmit}
+          disabled={
+            description.trim().length === 0 || title.trim().length === 0
+          }
         >
           Save Issue
         </button>
