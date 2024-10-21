@@ -3,7 +3,7 @@ import type postgres from 'postgres';
 import {
   runSchemaMigrations,
   type VersionMigrationMap,
-} from '../../../db/migration.js';
+} from '../../../db/old-migration.js';
 import {PG_SCHEMA, setupCDCTables} from './tables.js';
 
 export async function initChangeStreamerSchema(

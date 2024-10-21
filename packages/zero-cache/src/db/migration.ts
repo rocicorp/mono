@@ -4,29 +4,53 @@ import {assert} from '../../../shared/src/asserts.js';
 import {randInt} from '../../../shared/src/rand.js';
 import * as v from '../../../shared/src/valita.js';
 
-/**
- * A PreMigrationFn executes logic outside of a database transaction, and is
- * suitable for potentially long running polling operations.
- */
-type PreMigrationFn = (log: LogContext, db: postgres.Sql) => Promise<void>;
-
-type MigrationFn = (
+type Operations = (
   log: LogContext,
   tx: postgres.TransactionSql,
 ) => Promise<void>;
 
 /**
- * Encapsulates the logic for upgrading to a new schema. After the
+ * Encapsulates the logic for setting up or upgrading to a new schema. After the
  * Migration code successfully completes, {@link runSchemaMigrations}
  * will update the schema version and commit the transaction.
  */
-export type Migration =
-  | {pre?: PreMigrationFn; run: MigrationFn}
-  // A special Migration type that pushes the rollback limit forward.
-  | {minSafeRollbackVersion: number};
+export type Migration = {
+  /**
+   * Perform database operations that create or alter table structure. This is
+   * called at most once during lifetime of the application. If a `migrateData()`
+   * operation is defined, that will be performed after `migrateSchema()` succeeds.
+   */
+  migrateSchema?: Operations;
 
-/** Mapping from schema version to their respective migrations. */
-export type VersionMigrationMap = {
+  /**
+   * Perform database operations to migrate data to the new schema. This is
+   * called after `migrateSchema()` (if defined), and may be called again
+   * to re-migrate data after the server was rolled back to an earlier version,
+   * and rolled forward again.
+   *
+   * Consequently, the logic in `migrateData()` must be idempotent.
+   */
+  migrateData?: Operations;
+
+  /**
+   * Sets the `minSafeVersion` to the specified value, prohibiting running
+   * any earlier code versions.
+   */
+  minSafeVersion?: number;
+};
+
+/**
+ * Mapping of incremental migrations to move from the previous old code
+ * version to next one. Versions must be non-zero.
+ *
+ * The schema resulting from performing incremental migrations should be
+ * equivalent to that of the `setupMigration` on a blank database.
+ *
+ * The highest destinationVersion of this map denotes the current
+ * "code version", and is also used as the destination version when
+ * running the initial setup migration on a blank database.
+ */
+export type IncrementalMigrationMap = {
   [destinationVersion: number]: Migration;
 };
 
@@ -39,74 +63,81 @@ export async function runSchemaMigrations(
   debugName: string,
   schemaName: string,
   db: postgres.Sql,
-  versionMigrationMap: VersionMigrationMap,
+  setupMigration: Migration,
+  incrementalMigrationMap: IncrementalMigrationMap,
 ): Promise<void> {
   log = log.withContext(
     'initSchema',
     randInt(0, Number.MAX_SAFE_INTEGER).toString(36),
   );
   try {
-    const versionMigrations = sorted(versionMigrationMap);
-    if (versionMigrations.length === 0) {
-      log.info?.(`No versions/migrations to manage.`);
-      return;
-    }
-    const codeSchemaVersion =
-      versionMigrations[versionMigrations.length - 1][0];
+    const versionMigrations = sorted(incrementalMigrationMap);
+    assert(
+      versionMigrations.length,
+      `Must specify at least one version migration`,
+    );
+    assert(
+      versionMigrations[0][0] > 0,
+      `Versions must be non-zero positive numbers`,
+    );
+    const codeVersion = versionMigrations[versionMigrations.length - 1][0];
     log.info?.(
-      `Checking schema for compatibility with ${debugName} at schema v${codeSchemaVersion}`,
+      `Checking schema for compatibility with ${debugName} at schema v${codeVersion}`,
     );
 
-    let meta = await db.begin(async tx => {
-      const meta = await getSchemaVersions(tx, schemaName);
-      if (codeSchemaVersion < meta.minSafeRollbackVersion) {
+    let versions = await db.begin(async tx => {
+      const versions = await getVersionHistory(tx, schemaName);
+      if (codeVersion < versions.minSafeVersion) {
         throw new Error(
-          `Cannot run ${debugName} at schema v${codeSchemaVersion} because rollback limit is v${meta.minSafeRollbackVersion}`,
+          `Cannot run ${debugName} at schema v${codeVersion} because rollback limit is v${versions.minSafeVersion}`,
         );
       }
 
-      if (meta.version > codeSchemaVersion) {
+      if (versions.dataVersion > codeVersion) {
         log.info?.(
-          `Schema is at v${meta.version}. Resetting to v${codeSchemaVersion}`,
+          `Data is at v${versions.dataVersion}. Resetting to v${codeVersion}`,
         );
-        return setSchemaVersion(tx, schemaName, meta, codeSchemaVersion);
+        return updateVersionHistory(log, tx, schemaName, versions, codeVersion);
       }
-      return meta;
+      return versions;
     });
 
-    if (meta.version < codeSchemaVersion) {
-      for (const [dest, migration] of versionMigrations) {
-        if (meta.version < dest) {
-          log.info?.(`Migrating schema from v${meta.version} to v${dest}`);
+    if (versions.dataVersion < codeVersion) {
+      const migrations =
+        versions.dataVersion === 0
+          ? // For the empty database v0, only run the setup migration.
+            ([[codeVersion, setupMigration]] as const)
+          : versionMigrations;
+
+      for (const [dest, migration] of migrations) {
+        if (versions.dataVersion < dest) {
+          log.info?.(
+            `Migrating schema from v${versions.dataVersion} to v${dest}`,
+          );
           void log.flush(); // Flush logs before each migration to help debug crash-y migrations.
 
-          // Run the optional PreMigration step before starting the transaction.
-          if ('pre' in migration) {
-            await migration.pre(log, db);
-          }
-
-          meta = await db.begin(async tx => {
+          versions = await db.begin(async tx => {
             // Fetch meta from within the transaction to make the migration atomic.
-            let meta = await getSchemaVersions(tx, schemaName);
-            if (meta.version < dest) {
-              meta = await migrateSchemaVersion(
+            let versions = await getVersionHistory(tx, schemaName);
+            if (versions.dataVersion < dest) {
+              versions = await runMigration(
                 log,
                 schemaName,
                 tx,
-                meta,
+                versions,
                 dest,
                 migration,
               );
-              assert(meta.version === dest);
+              assert(versions.dataVersion === dest);
             }
-            return meta;
+            return versions;
           });
         }
       }
     }
 
-    assert(meta.version === codeSchemaVersion);
-    log.info?.(`Running ${debugName} at schema v${codeSchemaVersion}`);
+    assert(versions.dataVersion === codeVersion);
+    log.info?.(`Running ${debugName} at schema v${codeVersion}`);
   } catch (e) {
     log.error?.('Error in ensureSchemaMigrated', e);
     throw e;
@@ -116,115 +147,147 @@ export async function runSchemaMigrations(
 }
 
 function sorted(
-  versionMigrationMap: VersionMigrationMap,
+  incrementalMigrationMap: IncrementalMigrationMap,
 ): [number, Migration][] {
   const versionMigrations: [number, Migration][] = [];
-  for (const [v, m] of Object.entries(versionMigrationMap)) {
+  for (const [v, m] of Object.entries(incrementalMigrationMap)) {
     versionMigrations.push([Number(v), m]);
   }
   return versionMigrations.sort(([a], [b]) => a - b);
 }
 
 // Exposed for tests.
-export const schemaVersions = v.object({
-  version: v.number(),
-  maxVersion: v.number(),
-  minSafeRollbackVersion: v.number(),
+export const versionHistory = v.object({
+  /**
+   * The `schemaVersion` is highest code version that has ever been run
+   * on the database, and is used to delineate the structure of the tables
+   * in the database. A schemaVersion only moves forward; rolling back to
+   * an earlier (safe) code version does not revert schema changes that
+   * have already been applied.
+   */
+  schemaVersion: v.number(),
+
+  /**
+   * The data version is the code version of the latest server that ran.
+   * Note that this may be less than the schemaVersion in the case that
+   * a server is rolled back to an earlier version after a schema change.
+   * In such a case, data (but not schema), may need to be re-migrated
+   * when rolling forward again.
+   */
+  dataVersion: v.number(),
+
+  /**
+   * The minimum code version that is safe to run. This is used when
+   * a schema migration is not backwards compatible with an older version
+   * of the code.
+   */
+  minSafeVersion: v.number(),
 });
 
 // Exposed for tests.
-export type SchemaVersions = v.Infer<typeof schemaVersions>;
+export type VersionHistory = v.Infer<typeof versionHistory>;
 
 // Exposed for tests
-export async function getSchemaVersions(
+export async function getVersionHistory(
   sql: postgres.Sql,
   schemaName: string,
-): Promise<SchemaVersions> {
-  // Note: The `schema_meta.lock` column transparently ensures that at most one row exists.
+): Promise<VersionHistory> {
+  // Note: The `lock` column transparently ensures that at most one row exists.
   const results = await sql`
     CREATE SCHEMA IF NOT EXISTS ${sql(schemaName)};
-    CREATE TABLE IF NOT EXISTS ${sql(schemaName)}."SchemaVersions" (
-      version int NOT NULL,
-      "maxVersion" int NOT NULL,
-      "minSafeRollbackVersion" int NOT NULL,
+    CREATE TABLE IF NOT EXISTS ${sql(schemaName)}."versionHistory" (
+      "dataVersion" int NOT NULL,
+      "schemaVersion" int NOT NULL,
+      "minSafeVersion" int NOT NULL,
 
       lock char(1) NOT NULL CONSTRAINT DF_schema_meta_lock DEFAULT 'v',
       CONSTRAINT PK_schema_meta_lock PRIMARY KEY (lock),
       CONSTRAINT CK_schema_meta_lock CHECK (lock='v')
     );
-    SELECT version, "maxVersion", "minSafeRollbackVersion" FROM ${sql(
+    SELECT "dataVersion", "schemaVersion", "minSafeVersion" FROM ${sql(
       schemaName,
-    )}."SchemaVersions";
+    )}."versionHistory";
   `.simple();
   const rows = results[1];
   if (rows.length === 0) {
-    return {version: 0, maxVersion: 0, minSafeRollbackVersion: 0};
+    return {schemaVersion: 0, dataVersion: 0, minSafeVersion: 0};
   }
-  return v.parse(rows[0], schemaVersions);
+  return v.parse(rows[0], versionHistory);
 }
 
-async function setSchemaVersion(
+async function updateVersionHistory(
+  log: LogContext,
   sql: postgres.Sql,
   schemaName: string,
-  prev: SchemaVersions,
+  prev: VersionHistory,
   newVersion: number,
-): Promise<SchemaVersions> {
+  minSafeVersion?: number,
+): Promise<VersionHistory> {
   assert(newVersion > 0);
-  const meta = {
-    ...prev,
-    version: newVersion,
-    maxVersion: Math.max(newVersion, prev.maxVersion),
-  };
+  const versions = {
+    dataVersion: newVersion,
+    // The schemaVersion never moves backwards.
+    schemaVersion: Math.max(newVersion, prev.schemaVersion),
+    minSafeVersion: getMinSafeVersion(log, prev, minSafeVersion),
+  } satisfies VersionHistory;
 
-  if (prev.version === 0) {
-    await sql`INSERT INTO ${sql(schemaName)}."SchemaVersions" ${sql(meta)}`;
-  } else {
-    await sql`UPDATE ${sql(schemaName)}."SchemaVersions" set ${sql(meta)}`;
-  }
-  return meta;
+  await sql`
+    INSERT INTO ${sql(schemaName)}."versionHistory" ${sql(versions)}
+      ON CONFLICT (lock) DO UPDATE SET ${sql(versions)}
+  `;
+  return versions;
 }
 
-async function migrateSchemaVersion(
+async function runMigration(
   log: LogContext,
   schemaName: string,
   tx: postgres.TransactionSql,
-  meta: SchemaVersions,
+  versions: VersionHistory,
   destinationVersion: number,
   migration: Migration,
-): Promise<SchemaVersions> {
-  if ('run' in migration) {
-    await migration.run(log, tx);
-  } else {
-    meta = ensureRollbackLimit(migration.minSafeRollbackVersion, log, meta);
+): Promise<VersionHistory> {
+  if (versions.schemaVersion < destinationVersion) {
+    await migration.migrateSchema?.(log, tx);
   }
-  return setSchemaVersion(tx, schemaName, meta, destinationVersion);
+  if (versions.dataVersion < destinationVersion) {
+    await migration.migrateData?.(log, tx);
+  }
+  return updateVersionHistory(
+    log,
+    tx,
+    schemaName,
+    versions,
+    destinationVersion,
+    migration.minSafeVersion,
+  );
 }
 
 /**
  * Bumps the rollback limit [[toAtLeast]] the specified version.
  * Leaves the rollback limit unchanged if it is equal or greater.
  */
-function ensureRollbackLimit(
-  toAtLeast: number,
+function getMinSafeVersion(
   log: LogContext,
-  meta: SchemaVersions,
-): SchemaVersions {
+  current: VersionHistory,
+  proposedSafeVersion?: number,
+): number {
+  if (proposedSafeVersion === undefined) {
+    return current.minSafeVersion;
+  }
   // Sanity check to maintain the invariant that running code is never
   // earlier than the rollback limit.
-  assert(toAtLeast <= meta.version + 1);
+  assert(proposedSafeVersion <= current.dataVersion + 1);
 
-  if (meta.minSafeRollbackVersion >= toAtLeast) {
+  if (current.minSafeVersion >= proposedSafeVersion) {
     // The rollback limit must never move backwards.
     log.debug?.(
-      `rollback limit is already at ${meta.minSafeRollbackVersion}, don't need to bump to ${toAtLeast}`,
+      `rollback limit is already at ${current.minSafeVersion}, ` +
+        `don't need to bump to ${proposedSafeVersion}`,
     );
-    return meta;
+    return current.minSafeVersion;
   }
   log.info?.(
-    `bumping rollback limit from ${meta.minSafeRollbackVersion} to ${toAtLeast}`,
+    `bumping rollback limit from ${current.minSafeVersion} to ${proposedSafeVersion}`,
   );
-  return {
-    ...meta,
-    minSafeRollbackVersion: toAtLeast,
-  };
+  return proposedSafeVersion;
 }
