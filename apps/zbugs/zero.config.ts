@@ -7,27 +7,27 @@ type AuthData = {
   sub: string;
 };
 
-export default defineConfig<AuthData, Schema>(schema, queries => {
+export default defineConfig<AuthData, Schema>(schema, query => {
   // TODO: We need `querify` so we can just check the authData without having to
   // read the DB E.g., `queries.querify(authData).where('sub', 'IS NOT', null)`
   const allowIfLoggedIn = (authData: AuthData) =>
-    queries.user.where('id', '=', authData.sub);
+    query.user.where('id', '=', authData.sub);
 
   const allowIfIssueCreator = (authData: AuthData, row: {id: string}) => {
-    return queries.issue
+    return query.issue
       .where('id', row.id)
       .where('creatorID', '=', authData.sub);
   };
 
   // TODO: It would be nice to share code with above.
   const allowIfCommentCreator = (authData: AuthData, row: {id: string}) => {
-    return queries.comment
+    return query.comment
       .where('id', row.id)
       .where('creatorID', '=', authData.sub);
   };
 
   const allowIfAdmin = (authData: AuthData) =>
-    queries.user.where('id', '=', authData.sub).where('role', '=', 'crew');
+    query.user.where('id', '=', authData.sub).where('role', '=', 'crew');
 
   return {
     upstreamDBConnStr: must(process.env['UPSTREAM_URI']),
