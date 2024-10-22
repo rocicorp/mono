@@ -804,6 +804,47 @@ textarea.autoResize {
   list-style-position: inside;
 }
 
+.markdown-container ul.contains-task-list {
+  list-style-type: none;
+  padding-left: 1.1rem;
+}
+
+.markdown-container ul.contains-task-list input[type='checkbox'] {
+  margin-right: 0.5rem;
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.markdown-container ul.contains-task-list li.task-list-item {
+  display: flex;
+  align-items: center;
+}
+
+.markdown-container ul.contains-task-list li.task-list-item::before {
+  content: '';
+  display: inline-block;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-right: 1rem;
+  border: 1px solid var(--color-button-outline);
+  border-radius: 4px;
+  background-color: transparent;
+  border-radius: 0.25rem;
+}
+
+/* Add the checkmark when checked */
+.markdown-container
+  ul.contains-task-list
+  li.task-list-item:has(> input:disabled:checked)::before {
+  content: '';
+  border-color: var(--color-primary-cta);
+  color: var(--color-primary-cta);
+  width: 1.25rem;
+  height: 1.25rem;
+  background: url(/src/assets/icons/check.svg) no-repeat center center;
+}
+
 .markdown-container ol {
   counter-reset: list-counter;
   list-style: none;
