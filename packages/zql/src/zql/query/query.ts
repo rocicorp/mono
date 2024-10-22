@@ -208,6 +208,11 @@ export interface Query<
     ) => TSub,
   ): Query<TSchema, AddSubselect<TSub, TReturn, TRelationship & string>>;
 
+  when<T>(
+    value: T | null | undefined,
+    cb: (query: Query<TSchema, TReturn>, value: T) => Query<TSchema, TReturn>,
+  ): Query<TSchema, TReturn>;
+
   where<TSelector extends Selector<TSchema>, TOperator extends Operator>(
     field: TSelector,
     op: TOperator,

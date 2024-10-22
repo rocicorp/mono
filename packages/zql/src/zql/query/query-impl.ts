@@ -248,6 +248,16 @@ export abstract class AbstractQuery<
     throw new Error(`Invalid relationship ${relationship as string}`);
   }
 
+  when<T>(
+    value: T | null | undefined,
+    cb: (query: Query<TSchema, TReturn>, value: T) => Query<TSchema, TReturn>,
+  ): Query<TSchema, TReturn> {
+    if (value !== null && value !== undefined) {
+      return cb(this, value);
+    }
+    return this;
+  }
+
   where(
     field: any,
     opOrValue:

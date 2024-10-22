@@ -36,26 +36,17 @@ export default function ListPage() {
   )?.id;
   const labelIDs = useQuery(z.query.label.where('name', 'IN', labels));
 
+  const open =
+    status === 'open' ? true : status === 'closed' ? false : undefined;
+
   let q = z.query.issue
     .orderBy('modified', 'desc')
     .orderBy('id', 'desc')
     .related('labels')
-    .related('viewState', q => q.where('userID', z.userID).one());
-
-  const open =
-    status === 'open' ? true : status === 'closed' ? false : undefined;
-
-  if (open !== undefined) {
-    q = q.where('open', open);
-  }
-
-  if (creatorID) {
-    q = q.where('creatorID', creatorID);
-  }
-
-  if (assigneeID) {
-    q = q.where('assigneeID', assigneeID);
-  }
+    .related('viewState', q => q.where('userID', z.userID).one())
+    .when(open, (q, open) => q.where('open', open))
+    .when(creatorID, (q, creatorID) => q.where('creatorID', creatorID))
+    .when(assigneeID, (q, assigneeID) => q.where('assigneeID', assigneeID));
 
   for (const labelID of labelIDs) {
     q = q.where('labelIDs', 'LIKE', `%${labelID.id}%`);
