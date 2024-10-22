@@ -1,5 +1,5 @@
 import {nanoid} from 'nanoid';
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useState} from 'react';
 import {Button} from '../../components/button.js';
 import Modal from '../../components/modal.js';
 import {useZero} from '../../hooks/use-zero.js';
@@ -10,27 +10,22 @@ interface Props {
   isOpen: boolean;
 }
 
+const focusInput = (input: HTMLInputElement | null) => {
+  if (input) {
+    input.focus();
+  }
+};
+
 export default function IssueComposer({isOpen, onDismiss}: Props) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState<string>('');
   const z = useZero();
-
-  const inputRef = useRef<HTMLInputElement>(null); // Separate input ref for focusing
 
   // Function to handle textarea resizing
   function autoResizeTextarea(textarea: HTMLTextAreaElement) {
     textarea.style.height = 'auto';
     textarea.style.height = textarea.scrollHeight + 'px';
   }
-
-  // UseEffect to focus the input field when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => {
-        inputRef.current?.focus(); // Focus the input field when modal opens
-      }, 0);
-    }
-  }, [isOpen]);
 
   // Use the useEffect hook to handle the auto-resize logic for textarea
   useEffect(() => {
@@ -88,7 +83,7 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
             className="new-issue-title"
             placeholder="Issue title"
             value={title}
-            ref={inputRef} // Attach the inputRef to this input field
+            ref={focusInput} // Attach the inputRef to this input field
             onChange={e => setTitle(e.target.value)}
           />
         </div>
