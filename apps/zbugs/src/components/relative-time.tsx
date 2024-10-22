@@ -18,7 +18,7 @@ const RelativeTime: React.FC<RelativeTimeProps> = ({
   format,
 }) => {
   const [displayTime, setDisplayTime] = useState<string>('');
-  const [fullTimestamp, setFullTimestamp] = useState<string>(''); // For the title tag
+  const [fullTimestamp, setFullTimestamp] = useState<string>('');
 
   useEffect(() => {
     const getRelativeTime = (timestampDate: string | number | Date) => {
@@ -45,6 +45,20 @@ const RelativeTime: React.FC<RelativeTimeProps> = ({
         }),
       );
 
+      if (timestampYear < currentYear) {
+        return `${timestampYear}/${String(timestamp.getMonth() + 1).padStart(
+          2,
+          '0',
+        )}/${String(timestamp.getDate()).padStart(
+          2,
+          '0',
+        )}, ${timestamp.toLocaleString('en-US', {
+          hour: 'numeric',
+          minute: 'numeric',
+          hour12: true,
+        })}`;
+      }
+
       // If 'absolute' is true or timestamp is older than 2 days, show the full date and time
       if (absolute || diffInDays > 2) {
         return timestamp.toLocaleString('en-US', {
@@ -55,10 +69,11 @@ const RelativeTime: React.FC<RelativeTimeProps> = ({
           day: format?.day ?? 'numeric',
           hour: format?.hour ?? 'numeric',
           minute: format?.minute ?? 'numeric',
+          hour12: true,
         });
       }
 
-      // Short format
+      // Short relative format
       if (diffInSeconds < 60) {
         return `${diffInSeconds}s ago`;
       } else if (diffInMinutes < 60) {

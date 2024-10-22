@@ -1,9 +1,9 @@
+import {useState, useRef, type CSSProperties} from 'react';
 import {useQuery} from '@rocicorp/zero/react';
-import classNames from 'classnames';
-import {type CSSProperties, useRef} from 'react';
 import {FixedSizeList as List, type ListOnScrollProps} from 'react-window';
 import {useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
+import classNames from 'classnames';
 import Filter, {type Selection} from '../../components/filter.js';
 import {Link} from '../../components/link.js';
 import {useElementSize} from '../../hooks/use-element-size.js';
@@ -16,29 +16,37 @@ import RelativeTime from '../../components/relative-time.js';
 
 let firstRowRendered = false;
 const itemSize = 56;
+
 export default function ListPage() {
   const z = useZero();
-
   const qs = new URLSearchParams(useSearch());
+
+  const [sortField, setSortField] = useState<'modified' | 'created'>(
+    'modified',
+  );
+  const [sortDirection, setSortDirection] = useState<
+    'ascending' | 'descending'
+  >('ascending');
+
   const status = qs.get('status')?.toLowerCase() ?? 'open';
   const creator = qs.get('creator');
   const assignee = qs.get('assignee');
   const labels = qs.getAll('label');
 
-  // TODO: this can go away once we have filter-by-subquery, you should be able
-  // to filter by label.name directly.
   const creatorID = useQuery(
     z.query.user.where('login', creator ?? '').one(),
     creator !== null,
   )?.id;
+
   const assigneeID = useQuery(
     z.query.user.where('login', assignee ?? '').one(),
     assignee !== null,
   )?.id;
+
   const labelIDs = useQuery(z.query.label.where('name', 'IN', labels));
 
   let q = z.query.issue
-    .orderBy('modified', 'desc')
+    .orderBy(sortField, sortDirection === 'ascending' ? 'asc' : 'desc')
     .orderBy('id', 'desc')
     .related('labels')
     .related('viewState', q => q.where('userID', z.userID).one());
@@ -122,6 +130,9 @@ export default function ListPage() {
       mark('first issue row rendered');
       firstRowRendered = true;
     }
+
+    const timestamp = sortField === 'modified' ? issue.modified : issue.created;
+
     return (
       <div
         key={issue.id}
@@ -134,9 +145,7 @@ export default function ListPage() {
         }}
       >
         <IssueLink
-          className={classNames('issue-title', {
-            'issue-closed': !issue.open,
-          })}
+          className={classNames('issue-title', {'issue-closed': !issue.open})}
           issue={issue}
           title={issue.title}
           listContext={listContext}
@@ -155,7 +164,7 @@ export default function ListPage() {
           ))}
         </div>
         <div className="issue-timestamp">
-          <RelativeTime timestamp={issue.modified} />
+          <RelativeTime timestamp={timestamp} />
         </div>
       </div>
     );
@@ -193,7 +202,22 @@ export default function ListPage() {
         })}
         <Filter onSelect={onFilter} />
         <div className="sort-control-container">
-          <button className="sort-control ascending">Modified</button>
+          <button
+            className="sort-control"
+            onClick={() =>
+              setSortField(sortField === 'modified' ? 'created' : 'modified')
+            }
+          >
+            {sortField === 'modified' ? 'Modified' : 'Created'}
+          </button>
+          <button
+            className={classNames('sort-direction', sortDirection)}
+            onClick={() =>
+              setSortDirection(
+                sortDirection === 'ascending' ? 'descending' : 'ascending',
+              )
+            }
+          ></button>
         </div>
       </div>
 
