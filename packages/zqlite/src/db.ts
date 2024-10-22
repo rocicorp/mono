@@ -2,7 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import SQLite3Database, {
   type RunResult,
   type Statement as SQLite3Statement,
-} from 'better-sqlite3';
+} from 'better-sqlite3-bedrock';
 
 export class Database {
   readonly #db: SQLite3Database.Database;
@@ -94,7 +94,7 @@ export class Statement {
       this.#lc.withContext('method', 'get'),
       this.#threshold,
     );
-    return ret;
+    return ret as T;
   }
 
   all<T>(...params: unknown[]): T[] {
@@ -105,7 +105,7 @@ export class Statement {
       this.#lc.withContext('method', 'all'),
       this.#threshold,
     );
-    return ret;
+    return ret as T[];
   }
 
   iterate<T>(...params: unknown[]): IterableIterator<T> {
@@ -113,7 +113,7 @@ export class Statement {
       this.#lc.withContext('method', 'iterate'),
       this.#stmt.iterate(...params),
       this.#threshold,
-    );
+    ) as IterableIterator<T>;
   }
 }
 
