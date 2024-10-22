@@ -1,5 +1,8 @@
+import type {LogContext} from '@rocicorp/logger';
 import {ident, literal} from 'pg-format';
+import {warnIfDataTypeSupported} from '../../../../db/pg-to-lite.js';
 import type {PostgresTransaction} from '../../../../types/pg.js';
+import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/replication-state.js';
 import type {ShardConfig} from '../shard-config.js';
 import {createEventTriggerStatements} from './ddl.js';
 import {getPublicationInfo, type PublicationInfo} from './published.js';
@@ -45,13 +48,14 @@ const GLOBAL_SETUP = `
  * the given shard.
  */
 export async function setupTablesAndReplication(
+  lc: LogContext,
   tx: PostgresTransaction,
   {id, publications}: ShardConfig,
 ): Promise<PublicationInfo> {
   // Validate requested publications.
   for (const pub of publications) {
     // TODO: We can consider relaxing this now that we use per-shard
-    // triggers rather than global prefix-basd triggers. We should
+    // triggers rather than global prefix-based triggers. We should
     // probably still disallow the INTERNAL_PUBLICATION_PREFIX though.
     if (!pub.startsWith(APP_PUBLICATION_PREFIX)) {
       throw new Error(
@@ -109,5 +113,55 @@ export async function setupTablesAndReplication(
   // Setup DDL trigger events.
   await tx.unsafe(createEventTriggerStatements(id, allPublications));
 
-  return getPublicationInfo(tx, allPublications);
+  const pubInfo = await getPublicationInfo(tx, allPublications);
+  validatePublications(lc, pubInfo);
+  return pubInfo;
+}
+
+const ALLOWED_IDENTIFIER_CHARS = /^[A-Za-z_-]+$/;
+
+function validatePublications(lc: LogContext, published: PublicationInfo) {
+  // Verify that all publications export the proper events.
+  published.publications.forEach(pub => {
+    if (
+      !pub.pubinsert ||
+      !pub.pubtruncate ||
+      !pub.pubdelete ||
+      !pub.pubtruncate
+    ) {
+      // TODO: Make APIError?
+      throw new Error(
+        `PUBLICATION ${pub.pubname} must publish insert, update, delete, and truncate`,
+      );
+    }
+  });
+
+  published.tables.forEach(table => {
+    if (!['public', 'zero'].includes(table.schema)) {
+      // This may be relaxed in the future. We would need a plan for support in the AST first.
+      throw new Error('Only the default "public" schema is supported.');
+    }
+    if (ZERO_VERSION_COLUMN_NAME in table.columns) {
+      throw new Error(
+        `Table "${table.name}" uses reserved column name "${ZERO_VERSION_COLUMN_NAME}"`,
+      );
+    }
+    if (table.primaryKey.length === 0) {
+      throw new Error(`Table "${table.name}" does not have a PRIMARY KEY`);
+    }
+    if (!ALLOWED_IDENTIFIER_CHARS.test(table.schema)) {
+      throw new Error(`Schema "${table.schema}" has invalid characters.`);
+    }
+    if (!ALLOWED_IDENTIFIER_CHARS.test(table.name)) {
+      throw new Error(`Table "${table.name}" has invalid characters.`);
+    }
+    for (const [col, spec] of Object.entries(table.columns)) {
+      if (!ALLOWED_IDENTIFIER_CHARS.test(col)) {
+        throw new Error(
+          `Column "${col}" in table "${table.name}" has invalid characters.`,
+        );
+      }
+      warnIfDataTypeSupported(lc, spec.dataType, table.name, col);
+    }
+  });
 }
