@@ -21,6 +21,7 @@ export type ListContext = {
     readonly assigneeID?: string | undefined;
     readonly creatorID?: string | undefined;
     readonly labelIDs?: string[] | undefined;
+    readonly textFilter?: string | undefined;
     readonly sortField: 'modified' | 'created';
     readonly sortDirection: 'asc' | 'desc';
   };

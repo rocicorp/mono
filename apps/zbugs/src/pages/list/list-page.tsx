@@ -1,9 +1,14 @@
-import {useCallback, useRef, type CSSProperties} from 'react';
 import {useQuery} from '@rocicorp/zero/react';
+import classNames from 'classnames';
+import React, {
+  type CSSProperties,
+  type KeyboardEvent,
+  useRef,
+  useState,
+} from 'react';
 import {FixedSizeList as List, type ListOnScrollProps} from 'react-window';
 import {useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
-import classNames from 'classnames';
 import Filter, {type Selection} from '../../components/filter.js';
 import {Link} from '../../components/link.js';
 import {useElementSize} from '../../hooks/use-element-size.js';
@@ -13,6 +18,8 @@ import IssueLink from '../../components/issue-link.js';
 import type {ListContext} from '../../routes.js';
 import {useThrottledCallback} from 'use-debounce';
 import RelativeTime from '../../components/relative-time.js';
+import {useClickOutside} from '../../hooks/use-click-outside.js';
+import {useKeypress} from '../../hooks/use-keypress.js';
 
 let firstRowRendered = false;
 const itemSize = 56;
@@ -25,6 +32,8 @@ export default function ListPage() {
   const creator = qs.get('creator');
   const assignee = qs.get('assignee');
   const labels = qs.getAll('label');
+  const textFilter = qs.get('q');
+
   const sortField =
     qs.get('sort')?.toLowerCase() === 'created' ? 'created' : 'modified';
   const sortDirection =
@@ -63,13 +72,18 @@ export default function ListPage() {
     q = q.where('assigneeID', assigneeID);
   }
 
+  if (textFilter) {
+    q = q.where('title', 'ILIKE', `%${textFilter}%`);
+  }
+
   for (const labelID of labelIDs) {
     q = q.where('labelIDs', 'LIKE', `%${labelID.id}%`);
   }
 
   const issues = useQuery(q);
+
   let title;
-  if (creatorID || assigneeID || labelIDs.length > 0) {
+  if (creator || assignee || labels.length > 0 || textFilter) {
     title = 'Filtered Issues';
   } else {
     title = status.slice(0, 1).toUpperCase() + status.slice(1) + ' Issues';
@@ -83,40 +97,35 @@ export default function ListPage() {
       assigneeID,
       creatorID,
       labelIDs: labelIDs.map(l => l.id),
+      textFilter: textFilter ?? undefined,
       sortField,
       sortDirection,
     },
   };
 
-  const onDeleteFilter = useCallback(
-    (e: React.MouseEvent) => {
-      const target = e.currentTarget;
-      const key = target.getAttribute('data-key');
-      const value = target.getAttribute('data-value');
-      const entries = [...new URLSearchParams(qs).entries()];
-      const index = entries.findIndex(([k, v]) => k === key && v === value);
-      if (index !== -1) {
-        entries.splice(index, 1);
-      }
-      navigate('?' + new URLSearchParams(entries).toString());
-    },
-    [qs],
-  );
+  const onDeleteFilter = (e: React.MouseEvent) => {
+    const target = e.currentTarget;
+    const key = target.getAttribute('data-key');
+    const value = target.getAttribute('data-value');
+    const entries = [...new URLSearchParams(qs).entries()];
+    const index = entries.findIndex(([k, v]) => k === key && v === value);
+    if (index !== -1) {
+      entries.splice(index, 1);
+    }
+    navigate('?' + new URLSearchParams(entries).toString());
+  };
 
-  const onFilter = useCallback(
-    (selection: Selection) => {
-      if ('creator' in selection) {
-        navigate(addParam(qs, 'creator', selection.creator, 'exclusive'));
-      } else if ('assignee' in selection) {
-        navigate(addParam(qs, 'assignee', selection.assignee, 'exclusive'));
-      } else {
-        navigate(addParam(qs, 'label', selection.label));
-      }
-    },
-    [qs],
-  );
+  const onFilter = (selection: Selection) => {
+    if ('creator' in selection) {
+      navigate(addParam(qs, 'creator', selection.creator, 'exclusive'));
+    } else if ('assignee' in selection) {
+      navigate(addParam(qs, 'assignee', selection.assignee, 'exclusive'));
+    } else {
+      navigate(addParam(qs, 'label', selection.label));
+    }
+  };
 
-  const toggleSortField = useCallback(() => {
+  const toggleSortField = () => {
     navigate(
       addParam(
         qs,
@@ -125,9 +134,9 @@ export default function ListPage() {
         'exclusive',
       ),
     );
-  }, [sortField, qs]);
+  };
 
-  const toggleSortDirection = useCallback(() => {
+  const toggleSortDirection = () => {
     navigate(
       addParam(
         qs,
@@ -136,7 +145,7 @@ export default function ListPage() {
         'exclusive',
       ),
     );
-  }, [sortDirection, qs]);
+  };
 
   let initialScrollOffset = (history.state?.['-zbugs-list'] as number) ?? 0;
   if (initialScrollOffset > itemSize * issues.length) {
@@ -147,60 +156,103 @@ export default function ListPage() {
     history.replaceState({...history.state, '-zbugs-list': scrollOffset}, '');
   }, 250);
 
-  const Row = ({index, style}: {index: number; style: CSSProperties}) => {
-    const issue = issues[index];
-    if (firstRowRendered === false) {
-      mark('first issue row rendered');
-      firstRowRendered = true;
-    }
+  const Row = React.memo(
+    ({index, style}: {index: number; style: CSSProperties}) => {
+      const issue = issues[index];
+      if (firstRowRendered === false) {
+        mark('first issue row rendered');
+        firstRowRendered = true;
+      }
 
-    const timestamp = sortField === 'modified' ? issue.modified : issue.created;
+      const timestamp =
+        sortField === 'modified' ? issue.modified : issue.created;
 
-    return (
-      <div
-        key={issue.id}
-        className={classNames(
-          'row',
-          issue.modified > (issue.viewState?.viewed ?? 0) ? 'unread' : null,
-        )}
-        style={{
-          ...style,
-        }}
-      >
-        <IssueLink
-          className={classNames('issue-title', {'issue-closed': !issue.open})}
-          issue={issue}
-          title={issue.title}
-          listContext={listContext}
+      return (
+        <div
+          key={issue.id}
+          className={classNames(
+            'row',
+            issue.modified > (issue.viewState?.viewed ?? 0) ? 'unread' : null,
+          )}
+          style={{
+            ...style,
+          }}
         >
-          {issue.title}
-        </IssueLink>
-        <div className="issue-taglist">
-          {issue.labels.map(label => (
-            <Link
-              key={label.id}
-              className="pill label"
-              href={`/?label=${label.name}`}
-            >
-              {label.name}
-            </Link>
-          ))}
+          <IssueLink
+            className={classNames('issue-title', {'issue-closed': !issue.open})}
+            issue={issue}
+            title={issue.title}
+            listContext={listContext}
+          >
+            {issue.title}
+          </IssueLink>
+          <div className="issue-taglist">
+            {issue.labels.map(label => (
+              <Link
+                key={label.id}
+                className="pill label"
+                href={`/?label=${label.name}`}
+              >
+                {label.name}
+              </Link>
+            ))}
+          </div>
+          <div className="issue-timestamp">
+            <RelativeTime timestamp={timestamp} />
+          </div>
         </div>
-        <div className="issue-timestamp">
-          <RelativeTime timestamp={timestamp} />
-        </div>
-      </div>
-    );
-  };
+      );
+    },
+  );
 
   const tableWrapperRef = useRef<HTMLDivElement>(null);
   const size = useElementSize(tableWrapperRef.current);
 
+  const [forceSearchMode, setForceSearchMode] = useState(false);
+  const searchMode = forceSearchMode || Boolean(textFilter);
+  const searchBox = useRef<HTMLHeadingElement>(null);
+  useKeypress('/', () => startSearch());
+  useClickOutside(searchBox, () => setForceSearchMode(false));
+  const startSearch = () => {
+    setForceSearchMode(true);
+    setTimeout(() => searchBox.current?.querySelector('input')?.focus(), 0);
+  };
+  const handleSearchKeyUp = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      searchBox.current?.querySelector('input')?.blur();
+    }
+  };
+
   return (
     <>
       <div className="list-view-header-container">
-        <h1 className="list-view-header">
-          {title}
+        <h1
+          className={classNames('list-view-header', {
+            'search-mode': searchMode,
+          })}
+          ref={searchBox}
+        >
+          {searchMode ? (
+            <input
+              type="text"
+              value={textFilter ?? ''}
+              onChange={e =>
+                navigate(addParam(qs, 'q', e.target.value, 'exclusive'))
+              }
+              onBlur={() => setForceSearchMode(false)}
+              onKeyUp={handleSearchKeyUp}
+              placeholder="Search…"
+            />
+          ) : (
+            <span
+              onMouseDown={e => {
+                startSearch();
+                e.stopPropagation();
+              }}
+            >
+              {title}
+            </span>
+          )}
           <span className="issue-count">{issues.length}</span>
         </h1>
       </div>
