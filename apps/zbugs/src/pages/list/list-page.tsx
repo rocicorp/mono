@@ -12,6 +12,7 @@ import {mark} from '../../perf-log.js';
 import IssueLink from '../../components/issue-link.js';
 import type {ListContext} from '../../routes.js';
 import {useThrottledCallback} from 'use-debounce';
+import RelativeTime from '../../components/relative-time.js';
 
 let firstRowRendered = false;
 const itemSize = 56;
@@ -152,6 +153,9 @@ export default function ListPage() {
               {label.name}
             </Link>
           ))}
+        </div>
+        <div className="issue-timestamp">
+          <RelativeTime timestamp={issue.modified} />
         </div>
       </div>
     );

@@ -267,6 +267,11 @@ textarea.autoResize {
   margin: 0;
 }
 
+.issue-timestamp {
+  cursor: help;
+  margin-right: 1rem;
+}
+
 .issue-count {
   font-size: 1rem;
   font-weight: 700;
