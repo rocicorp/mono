@@ -14,8 +14,8 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState<string>('');
   const z = useZero();
-  
-  const inputRef = useRef<HTMLInputElement>(null);  // Separate input ref for focusing
+
+  const inputRef = useRef<HTMLInputElement>(null); // Separate input ref for focusing
 
   // Function to handle textarea resizing
   function autoResizeTextarea(textarea: HTMLTextAreaElement) {
@@ -34,7 +34,9 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
 
   // Use the useEffect hook to handle the auto-resize logic for textarea
   useEffect(() => {
-    const textareas = document.querySelectorAll('.autoResize') as NodeListOf<HTMLTextAreaElement>;
+    const textareas = document.querySelectorAll(
+      '.autoResize',
+    ) as NodeListOf<HTMLTextAreaElement>;
 
     textareas.forEach(textarea => {
       const handleInput = () => autoResizeTextarea(textarea);
@@ -70,9 +72,13 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
     setDescription('');
   };
 
-  const canSave = () => title.trim().length > 0 && description.trim().length > 0;
+  const canSave = () =>
+    title.trim().length > 0 && description.trim().length > 0;
 
-  const isDirty = useCallback(() => title.trim().length > 0 || description.trim().length > 0, [title, description]);
+  const isDirty = useCallback(
+    () => title.trim().length > 0 || description.trim().length > 0,
+    [title, description],
+  );
 
   const body = (
     <div className="flex flex-col w-full py-4 overflow-hidden modal-container">
@@ -82,7 +88,7 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
             className="new-issue-title"
             placeholder="Issue title"
             value={title}
-            ref={inputRef}  // Attach the inputRef to this input field
+            ref={inputRef} // Attach the inputRef to this input field
             onChange={e => setTitle(e.target.value)}
           />
         </div>
