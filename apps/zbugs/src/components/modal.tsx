@@ -13,7 +13,7 @@ import {useKeypress} from '../hooks/use-keypress.js';
 import useLockBodyScroll from '../hooks/use-lock-body-scroll.js';
 import {Confirm} from './confirm.js';
 
-interface ModalRawProps {
+interface Props {
   title?: string | undefined;
   isOpen: boolean;
   center: boolean;
@@ -37,7 +37,7 @@ export function Modal({
   onDismiss,
   children,
   isDirty,
-}: ModalRawProps) {
+}: Props) {
   const ref = useRef<HTMLDivElement>(null) as RefObject<HTMLDivElement>;
   const outerRef = useRef(null);
 
