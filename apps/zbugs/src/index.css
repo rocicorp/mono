@@ -809,7 +809,7 @@ textarea.autoResize {
   padding-left: 1.1rem;
 }
 
-.markdown-container ul.contains-task-list input[type="checkbox"] {
+.markdown-container ul.contains-task-list input[type='checkbox'] {
   margin-right: 0.5rem;
   position: absolute;
   opacity: 0;
@@ -834,7 +834,9 @@ textarea.autoResize {
 }
 
 /* Add the checkmark when checked */
-.markdown-container ul.contains-task-list li.task-list-item:has(> input:disabled:checked)::before {
+.markdown-container
+  ul.contains-task-list
+  li.task-list-item:has(> input:disabled:checked)::before {
   content: '';
   border-color: var(--color-primary-cta);
   color: var(--color-primary-cta);
