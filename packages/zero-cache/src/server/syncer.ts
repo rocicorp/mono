@@ -7,6 +7,7 @@ import {getZeroConfig} from '../config/zero-config.js';
 import {MutagenService} from '../services/mutagen/mutagen.js';
 import type {ReplicaState} from '../services/replicator/replicator.js';
 import {DatabaseStorage} from '../services/view-syncer/database-storage.js';
+import {DrainCoordinator} from '../services/view-syncer/drain-coordinator.js';
 import {PipelineDriver} from '../services/view-syncer/pipeline-driver.js';
 import {Snapshotter} from '../services/view-syncer/snapshotter.js';
 import {ViewSyncerService} from '../services/view-syncer/view-syncer.js';
@@ -53,7 +54,11 @@ export default async function runWorker(parent: Worker): Promise<void> {
     path.join(tmpDir, `sync-worker-${pid}-${randInt(1000000, 9999999)}`),
   );
 
-  const viewSyncerFactory = (id: string, sub: Subscription<ReplicaState>) =>
+  const viewSyncerFactory = (
+    id: string,
+    sub: Subscription<ReplicaState>,
+    drainCoordinator: DrainCoordinator,
+  ) =>
     new ViewSyncerService(
       lc,
       id,
@@ -64,6 +69,7 @@ export default async function runWorker(parent: Worker): Promise<void> {
         operatorStorage.createClientGroupStorage(id),
       ),
       sub,
+      drainCoordinator,
     );
 
   const mutagenFactory = (id: string) =>
