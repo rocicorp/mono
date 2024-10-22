@@ -33,6 +33,7 @@ import {
   type CVRSnapshot,
   type RowUpdate,
 } from './cvr.js';
+import type {DrainCoordinator} from './drain-coordinator.js';
 import {PipelineDriver, type RowChange} from './pipeline-driver.js';
 import {
   cmpVersions,
@@ -75,6 +76,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #lc: LogContext;
   readonly #pipelines: PipelineDriver;
   readonly #stateChanges: Subscription<ReplicaState>;
+  readonly #drainCoordinator: DrainCoordinator;
   readonly #keepaliveMs: number;
 
   // Serialize on this lock for:
@@ -94,6 +96,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     db: PostgresDB,
     pipelineDriver: PipelineDriver,
     versionChanges: Subscription<ReplicaState>,
+    drainCoordinator: DrainCoordinator,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
   ) {
     this.id = clientGroupID;
@@ -102,6 +105,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       .withContext('serviceID', this.id);
     this.#pipelines = pipelineDriver;
     this.#stateChanges = versionChanges;
+    this.#drainCoordinator = drainCoordinator;
     this.#keepaliveMs = keepaliveMs;
     this.#cvrStore = new CVRStore(lc, db, clientGroupID);
   }
@@ -124,6 +128,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   async run(): Promise<void> {
     try {
       for await (const {state} of this.#stateChanges) {
+        if (this.#drainCoordinator.shouldDrain()) {
+          this.#lc.debug?.(`draining view-syncer ${this.id} (elective)`);
+          break;
+        }
         assert(state === 'version-ready'); // This is the only state change used.
         if (!this.#pipelines.initialized()) {
           // On the first version-ready signal, connect to the replica.
@@ -156,6 +164,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         });
       }
 
+      // If this view-syncer exited due to an elective or forced drain,
+      // set the next drain timeout.
+      if (this.#drainCoordinator.shouldDrain()) {
+        this.#drainCoordinator.drainNextIn(this.totalHydrationTimeMs());
+      }
       this.#cleanup();
     } catch (e) {
       this.#lc.error?.(e);
