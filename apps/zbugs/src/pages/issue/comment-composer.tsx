@@ -1,5 +1,5 @@
 import {nanoid} from 'nanoid';
-import {useState} from 'react';
+import {useState, useEffect} from 'react';
 import {Button} from '../../components/button.js';
 import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
@@ -36,6 +36,30 @@ export default function CommentComposer({
     onDone?.();
   };
 
+  // Handle textarea resizing
+  function autoResizeTextarea(textarea: HTMLTextAreaElement) {
+    textarea.style.height = 'auto';
+    textarea.style.height = textarea.scrollHeight + 'px';
+  }
+
+  useEffect(() => {
+    const textareas = document.querySelectorAll(
+      '.autoResize',
+    ) as NodeListOf<HTMLTextAreaElement>;
+
+    const handleResize = (textarea: HTMLTextAreaElement) => {
+      autoResizeTextarea(textarea);
+      const handleInput = () => autoResizeTextarea(textarea);
+      textarea.addEventListener('input', handleInput);
+
+      return () => textarea.removeEventListener('input', handleInput);
+    };
+
+    const cleanupFns = Array.from(textareas).map(handleResize);
+
+    return () => cleanupFns.forEach(fn => fn());
+  }, [currentBody]);
+
   const textAreaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setCurrentBody(e.target.value);
   };
@@ -49,7 +73,7 @@ export default function CommentComposer({
       <textarea
         value={currentBody}
         onChange={textAreaChange}
-        className="comment-input"
+        className="comment-input autoResize"
       />
       <Button
         className="secondary-button"
