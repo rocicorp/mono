@@ -273,6 +273,43 @@ textarea.autoResize {
   margin: 0;
 }
 
+.sort-control-container {
+  margin-left: auto;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.sort-control,
+.sort-direction {
+  opacity: 0.6;
+  transition: all 0.3s ease-in-out;
+}
+
+.sort-control:hover,
+.sort-direction:hover {
+  opacity: 1;
+}
+
+.sort-direction {
+  display: block;
+  height: 0.875rem;
+  width: 0.875rem;
+}
+
+.sort-direction.descending {
+  background: transparent url(assets/icons/sort-descending.svg) no-repeat;
+}
+
+.sort-direction.ascending {
+  background: transparent url(assets/icons/sort-ascending.svg) no-repeat;
+}
+
+.issue-timestamp {
+  cursor: help;
+  margin-right: 1rem;
+}
+
 .issue-count {
   font-size: 1rem;
   font-weight: 700;

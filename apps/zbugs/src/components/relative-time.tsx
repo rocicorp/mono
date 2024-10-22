@@ -1,68 +1,100 @@
 import React, {useState, useEffect} from 'react';
 
 interface RelativeTimeProps {
-  created: string | number | Date;
+  timestamp: string | number | Date;
+  absolute?: boolean;
+  format?: {
+    year?: 'numeric' | '2-digit';
+    month?: 'numeric' | '2-digit' | 'long' | 'short' | 'narrow';
+    day?: 'numeric' | '2-digit';
+    hour?: 'numeric' | '2-digit';
+    minute?: 'numeric' | '2-digit';
+  };
 }
 
-const rtf = new Intl.RelativeTimeFormat('en', {numeric: 'auto'});
-
-const RelativeTime: React.FC<RelativeTimeProps> = ({created}) => {
+const RelativeTime: React.FC<RelativeTimeProps> = ({
+  timestamp,
+  absolute = false,
+  format,
+}) => {
   const [displayTime, setDisplayTime] = useState<string>('');
+  const [fullTimestamp, setFullTimestamp] = useState<string>('');
 
   useEffect(() => {
-    const getRelativeTime = (createdDate: string | number | Date) => {
+    const getRelativeTime = (timestampDate: string | number | Date) => {
       const now = new Date();
-      const created = new Date(createdDate);
+      const timestamp = new Date(timestampDate);
       const diffInSeconds = Math.floor(
-        (now.getTime() - created.getTime()) / 1000,
+        (now.getTime() - timestamp.getTime()) / 1000,
       );
-      const diffInDays = diffInSeconds / 86400;
+      const diffInMinutes = Math.floor(diffInSeconds / 60);
+      const diffInHours = Math.floor(diffInMinutes / 60);
+      const diffInDays = Math.floor(diffInHours / 24);
 
-      const createdYear = created.getFullYear();
+      const timestampYear = timestamp.getFullYear();
       const currentYear = now.getFullYear();
 
-      // If the timestamp is older than 2 days, return a date and time string
-      if (diffInDays > 2) {
-        return created.toLocaleString('en-US', {
-          year: createdYear < currentYear ? 'numeric' : undefined,
+      // Full absolute timestamp for the title tag
+      setFullTimestamp(
+        timestamp.toLocaleString('en-US', {
+          year: 'numeric',
           month: 'short',
           day: 'numeric',
           hour: 'numeric',
           minute: 'numeric',
+        }),
+      );
+
+      if (timestampYear < currentYear) {
+        return `${timestampYear}/${String(timestamp.getMonth() + 1).padStart(
+          2,
+          '0',
+        )}/${String(timestamp.getDate()).padStart(
+          2,
+          '0',
+        )}, ${timestamp.toLocaleString('en-US', {
+          hour: 'numeric',
+          minute: 'numeric',
+          hour12: true,
+        })}`;
+      }
+
+      // If 'absolute' is true or timestamp is older than 2 days, show the full date and time
+      if (absolute || diffInDays > 2) {
+        return timestamp.toLocaleString('en-US', {
+          year:
+            format?.year ??
+            (timestampYear < currentYear ? 'numeric' : undefined),
+          month: format?.month ?? 'short',
+          day: format?.day ?? 'numeric',
+          hour: format?.hour ?? 'numeric',
+          minute: format?.minute ?? 'numeric',
+          hour12: true,
         });
       }
 
-      // Otherwise, calculate relative time
-      let unit: Intl.RelativeTimeFormatUnit;
-      let value: number;
-
+      // Short relative format
       if (diffInSeconds < 60) {
-        unit = 'second';
-        value = diffInSeconds;
-      } else if (diffInSeconds < 3600) {
-        unit = 'minute';
-        value = Math.floor(diffInSeconds / 60);
-      } else if (diffInSeconds < 86400) {
-        unit = 'hour';
-        value = Math.floor(diffInSeconds / 3600);
+        return `${diffInSeconds}s ago`;
+      } else if (diffInMinutes < 60) {
+        return `${diffInMinutes}m ago`;
+      } else if (diffInHours < 24) {
+        return `${diffInHours}h ago`;
       } else {
-        unit = 'day';
-        value = Math.floor(diffInSeconds / 86400);
+        return `${diffInDays}d ago`;
       }
-
-      return rtf.format(-value, unit);
     };
 
     const interval = setInterval(() => {
-      setDisplayTime(getRelativeTime(created));
+      setDisplayTime(getRelativeTime(timestamp));
     }, 1000);
 
-    setDisplayTime(getRelativeTime(created));
+    setDisplayTime(getRelativeTime(timestamp));
 
     return () => clearInterval(interval);
-  }, [created]);
+  }, [timestamp, absolute, format]);
 
-  return <span>{displayTime}</span>;
+  return <span title={fullTimestamp}>{displayTime}</span>;
 };
 
 export default RelativeTime;
