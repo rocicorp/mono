@@ -93,24 +93,22 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
       isDirty={isDirty}
     >
       <ModalBody>
-        <div className="flex flex-col flex-1 pb-3.5 overflow-y-auto">
-          <div className="flex items-center w-full mt-1.5 px-4">
-            <input
-              className="new-issue-title"
-              placeholder="Issue title"
-              value={title}
-              ref={inputRef} // Attach the inputRef to this input field
-              onChange={e => setTitle(e.target.value)}
-            />
-          </div>
-          <div className="w-full px-4">
-            <textarea
-              className="new-issue-description autoResize"
-              value={description || ''}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="Add description..."
-            ></textarea>
-          </div>
+        <div className="flex items-center w-full mt-1.5 px-4">
+          <input
+            className="new-issue-title"
+            placeholder="Issue title"
+            value={title}
+            ref={inputRef} // Attach the inputRef to this input field
+            onChange={e => setTitle(e.target.value)}
+          />
+        </div>
+        <div className="w-full px-4">
+          <textarea
+            className="new-issue-description autoResize"
+            value={description || ''}
+            onChange={e => setDescription(e.target.value)}
+            placeholder="Add description..."
+          ></textarea>
         </div>
       </ModalBody>
       <ModalActions>
