@@ -26,7 +26,7 @@ export default function ListPage() {
   );
   const [sortDirection, setSortDirection] = useState<
     'ascending' | 'descending'
-  >('ascending');
+  >('descending');
 
   const status = qs.get('status')?.toLowerCase() ?? 'open';
   const creator = qs.get('creator');
