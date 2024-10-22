@@ -25,8 +25,9 @@ export default function IssuePage() {
   const z = useZero();
   const params = useParams();
 
-  const idField = params.shortID ? 'shortID' : 'id';
-  const id = params.shortID ? parseInt(params.shortID) : must(params.id);
+  const idStr = must(params.id);
+  const idField = isNaN(parseInt(idStr)) ? 'id' : 'shortID';
+  const id = idField === 'shortID' ? parseInt(idStr) : idStr;
 
   const listContext = useHistoryState<ListContext | undefined>();
 
@@ -162,7 +163,7 @@ export default function IssuePage() {
                 <span className="breadcrumb-item">&rarr;</span>
               </>
             ) : null}
-            <span className="breadcrumb-item">ZB-{issue.shortID}</span>
+            <span className="breadcrumb-item">Issue {issue.shortID}</span>
           </div>
           <div className="edit-buttons">
             {!editing ? (
