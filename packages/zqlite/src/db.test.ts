@@ -12,7 +12,7 @@ test('slow queries are logged', () => {
   const db = new Database(lc, ':memory:', undefined, 0);
 
   db.exec('CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT)');
-  db.exec('INSERT INTO foo (name) VALUES ("Alice"), ("Bob")');
+  db.exec(/*sql*/ `INSERT INTO foo (name) VALUES ('Alice'), ('Bob')`);
 
   const stmt = db.prepare('SELECT * FROM foo WHERE name = ?');
 

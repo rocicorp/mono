@@ -2,8 +2,6 @@
   "name": "@rocicorp/zero",
   "version": "0.2.2024101101+147cdf",
   "scripts": {
-    "prepack": "rm -rf deps && mkdir -p deps/sqlite3 && cp -r ../../deps/sqlite3/* deps/sqlite3/",
-    "preinstall": "node tool/install-sqlite3.js",
     "build": "rm -rf out && npm run build-server && npm run build-client",
     "build-client": "tsc -p tsconfig.client.json && tsc-alias -p tsconfig.client.json && node tool/build.js",
     "build-server": "tsc -p tsconfig.server.json && tsc-alias -p tsconfig.server.json && chmod +x out/zero/src/cli.js",
@@ -25,6 +23,7 @@
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.3.0",
     "@rocicorp/resolver": "^1.0.2",
+    "better-sqlite3-bedrock": "^1.0.3",
     "compare-utf8": "^0.1.1",
     "dotenv": "^16.4.5",
     "eventemitter3": "^5.0.1",
@@ -79,9 +78,7 @@
   },
   "files": [
     "out",
-    "!*.tsbuildinfo",
-    "deps/sqlite3",
-    "tool/install-sqlite3.js"
+    "!*.tsbuildinfo"
   ],
   "eslintConfig": {
     "extends": "../../eslint-config.json"
