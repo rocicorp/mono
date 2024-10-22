@@ -1,4 +1,4 @@
-import {useState, useRef, type CSSProperties} from 'react';
+import {useCallback, useRef, type CSSProperties} from 'react';
 import {useQuery} from '@rocicorp/zero/react';
 import {FixedSizeList as List, type ListOnScrollProps} from 'react-window';
 import {useSearch} from 'wouter';
@@ -21,17 +21,14 @@ export default function ListPage() {
   const z = useZero();
   const qs = new URLSearchParams(useSearch());
 
-  const [sortField, setSortField] = useState<'modified' | 'created'>(
-    'modified',
-  );
-  const [sortDirection, setSortDirection] = useState<
-    'ascending' | 'descending'
-  >('descending');
-
   const status = qs.get('status')?.toLowerCase() ?? 'open';
   const creator = qs.get('creator');
   const assignee = qs.get('assignee');
   const labels = qs.getAll('label');
+  const sortField =
+    qs.get('sort')?.toLowerCase() === 'created' ? 'created' : 'modified';
+  const sortDirection =
+    qs.get('sortDir')?.toLowerCase() === 'asc' ? 'asc' : 'desc';
 
   const creatorID = useQuery(
     z.query.user.where('login', creator ?? '').one(),
@@ -46,8 +43,8 @@ export default function ListPage() {
   const labelIDs = useQuery(z.query.label.where('name', 'IN', labels));
 
   let q = z.query.issue
-    .orderBy(sortField, sortDirection === 'ascending' ? 'asc' : 'desc')
-    .orderBy('id', 'desc')
+    .orderBy(sortField, sortDirection)
+    .orderBy('id', sortDirection)
     .related('labels')
     .related('viewState', q => q.where('userID', z.userID).one());
 
@@ -86,34 +83,60 @@ export default function ListPage() {
       assigneeID,
       creatorID,
       labelIDs: labelIDs.map(l => l.id),
+      sortField,
+      sortDirection,
     },
   };
 
-  const addFilter = (
-    key: string,
-    value: string,
-    mode?: 'exclusive' | undefined,
-  ) => {
-    const newParams = new URLSearchParams(qs);
-    newParams[mode === 'exclusive' ? 'set' : 'append'](key, value);
-    return '?' + newParams.toString();
-  };
+  const onDeleteFilter = useCallback(
+    (e: React.MouseEvent) => {
+      const target = e.currentTarget;
+      const key = target.getAttribute('data-key');
+      const value = target.getAttribute('data-value');
+      const entries = [...new URLSearchParams(qs).entries()];
+      const index = entries.findIndex(([k, v]) => k === key && v === value);
+      if (index !== -1) {
+        entries.splice(index, 1);
+      }
+      navigate('?' + new URLSearchParams(entries).toString());
+    },
+    [qs],
+  );
 
-  const onDeleteFilter = (index: number) => {
-    const entries = [...new URLSearchParams(qs).entries()];
-    entries.splice(index, 1);
-    navigate('?' + new URLSearchParams(entries).toString());
-  };
+  const onFilter = useCallback(
+    (selection: Selection) => {
+      if ('creator' in selection) {
+        navigate(addParam(qs, 'creator', selection.creator, 'exclusive'));
+      } else if ('assignee' in selection) {
+        navigate(addParam(qs, 'assignee', selection.assignee, 'exclusive'));
+      } else {
+        navigate(addParam(qs, 'label', selection.label));
+      }
+    },
+    [qs],
+  );
 
-  const onFilter = (selection: Selection) => {
-    if ('creator' in selection) {
-      navigate(addFilter('creator', selection.creator, 'exclusive'));
-    } else if ('assignee' in selection) {
-      navigate(addFilter('assignee', selection.assignee, 'exclusive'));
-    } else {
-      navigate(addFilter('label', selection.label));
-    }
-  };
+  const toggleSortField = useCallback(() => {
+    navigate(
+      addParam(
+        qs,
+        'sort',
+        sortField === 'created' ? 'modified' : 'created',
+        'exclusive',
+      ),
+    );
+  }, [sortField, qs]);
+
+  const toggleSortDirection = useCallback(() => {
+    navigate(
+      addParam(
+        qs,
+        'sortDir',
+        sortDirection === 'asc' ? 'desc' : 'asc',
+        'exclusive',
+      ),
+    );
+  }, [sortDirection, qs]);
 
   let initialScrollOffset = (history.state?.['-zbugs-list'] as number) ?? 0;
   if (initialScrollOffset > itemSize * issues.length) {
@@ -183,7 +206,7 @@ export default function ListPage() {
       </div>
       <div className="list-view-filter-container">
         <span className="filter-label">Filtered by:</span>
-        {[...qs.entries()].map(([key, val], idx) => {
+        {[...qs.entries()].map(([key, val]) => {
           if (key === 'label' || key === 'creator' || key === 'assignee') {
             return (
               <span
@@ -191,8 +214,10 @@ export default function ListPage() {
                   label: key === 'label',
                   user: key === 'creator' || key === 'assignee',
                 })}
-                onMouseDown={() => onDeleteFilter(idx)}
-                key={idx}
+                onMouseDown={onDeleteFilter}
+                data-key={key}
+                data-value={val}
+                key={key + '-' + val}
               >
                 {key}: {val}
               </span>
@@ -202,21 +227,12 @@ export default function ListPage() {
         })}
         <Filter onSelect={onFilter} />
         <div className="sort-control-container">
-          <button
-            className="sort-control"
-            onClick={() =>
-              setSortField(sortField === 'modified' ? 'created' : 'modified')
-            }
-          >
+          <button className="sort-control" onClick={toggleSortField}>
             {sortField === 'modified' ? 'Modified' : 'Created'}
           </button>
           <button
             className={classNames('sort-direction', sortDirection)}
-            onClick={() =>
-              setSortDirection(
-                sortDirection === 'ascending' ? 'descending' : 'ascending',
-              )
-            }
+            onClick={toggleSortDirection}
           ></button>
         </div>
       </div>
@@ -239,3 +255,14 @@ export default function ListPage() {
     </>
   );
 }
+
+const addParam = (
+  qs: URLSearchParams,
+  key: string,
+  value: string,
+  mode?: 'exclusive' | undefined,
+) => {
+  const newParams = new URLSearchParams(qs);
+  newParams[mode === 'exclusive' ? 'set' : 'append'](key, value);
+  return '?' + newParams.toString();
+};

@@ -1,4 +1,4 @@
-import type {Zero} from '@rocicorp/zero';
+import type {SchemaToRow, Zero} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {nanoid} from 'nanoid';
 import {useEffect, useMemo, useState} from 'react';
@@ -98,10 +98,7 @@ export default function IssuePage() {
     setIssueSnapshot(issue);
   }
   const next = useQuery(
-    buildListQuery(z, 'desc', listContext?.params)
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      .start(issueSnapshot!)
-      .one(),
+    buildListQuery(z, listContext, issue, 'next'),
     listContext !== undefined && issueSnapshot !== undefined,
   );
   useKeypress('j', () => {
@@ -111,10 +108,7 @@ export default function IssuePage() {
   });
 
   const prev = useQuery(
-    buildListQuery(z, 'asc', listContext?.params)
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      .start(issueSnapshot!)
-      .one(),
+    buildListQuery(z, listContext, issue, 'prev'),
     listContext !== undefined && issueSnapshot !== undefined,
   );
   useKeypress('k', () => {
@@ -351,11 +345,22 @@ export default function IssuePage() {
 
 function buildListQuery(
   z: Zero<Schema>,
-  dir: 'asc' | 'desc',
-  params: ListContext['params'] = {},
+  listContext: ListContext | undefined,
+  issue: SchemaToRow<Schema['tables']['issue']> | undefined,
+  dir: 'next' | 'prev',
 ) {
-  const {open, creatorID, assigneeID, labelIDs} = params;
-  let q = z.query.issue.orderBy('modified', dir).orderBy('id', dir);
+  if (!listContext || !issue) {
+    return z.query.issue.one();
+  }
+  const {open, creatorID, assigneeID, labelIDs, sortField, sortDirection} =
+    listContext.params;
+  const orderByDir =
+    dir === 'next' ? sortDirection : sortDirection === 'asc' ? 'desc' : 'asc';
+  let q = z.query.issue
+    .orderBy(sortField, orderByDir)
+    .orderBy('id', orderByDir)
+    .start(issue)
+    .one();
   if (open !== undefined) {
     q = q.where('open', open);
   }
