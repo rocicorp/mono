@@ -4,6 +4,17 @@ export type TableSchema = TableSchemaBase & {
   readonly relationships: {readonly [name: string]: Relationship};
 };
 
+export type Supertype<TSchemas extends TableSchema[]> = {
+  tableName: TSchemas[number]['tableName'];
+  primaryKey: TSchemas[number]['primaryKey'];
+  columns: {
+    [K in keyof TSchemas[number]['columns']]: TSchemas[number]['columns'][K];
+  };
+  relationships: {
+    [K in keyof TSchemas[number]['relationships']]: TSchemas[number]['relationships'][K];
+  };
+};
+
 /**
  * A schema might have a relationship to itself.
  * Given we cannot reference a variable in the same statement we initialize
