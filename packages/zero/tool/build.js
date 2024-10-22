@@ -65,12 +65,7 @@ async function getExternal(includePeerDeps) {
   return [...externalSet].sort();
 }
 
-const extraExternals = [
-  'node:*',
-  ...builtinModules,
-  // better-sqlite3 is installed using a preinstall script.
-  'better-sqlite3',
-];
+const extraExternals = ['node:*', ...builtinModules];
 
 await verifyDependencies(await getExternal(false));
 

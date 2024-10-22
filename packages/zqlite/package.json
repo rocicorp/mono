@@ -21,7 +21,6 @@
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/logger": "^5.3.0",
     "@rocicorp/prettier-config": "^0.2.0",
-    "@types/better-sqlite3": "^7.6.0",
     "fast-check": "^3.18.0",
     "nanoid": "^4.0.2",
     "playwright": "^1.43.1",
@@ -36,6 +35,7 @@
     "@databases/escape-identifier": "^1.0.3",
     "@databases/sql": "^3.3.0",
     "@rocicorp/logger": "^5.3.0",
+    "better-sqlite3-bedrock": "^1.0.3",
     "pg-logical-replication": "^2.0.7",
     "zql": "0.0.0"
   }
