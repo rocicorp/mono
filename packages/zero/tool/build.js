@@ -99,6 +99,7 @@ async function buildZeroClient() {
   const entryPoints = {
     zero: basePath('src/zero.ts'),
     react: basePath('src/react.ts'),
+    internal: basePath('src/internal.ts'),
   };
   await esbuild.build({
     ...sharedOptions(false, false),
