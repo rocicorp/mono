@@ -11,10 +11,11 @@ interface Props {
 }
 
 export default function IssueComposer({isOpen, onDismiss}: Props) {
-  const ref = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState<string>('');
   const z = useZero();
+
+  const inputRef = useRef<HTMLInputElement>(null); // Separate input ref for focusing
 
   // Function to handle textarea resizing
   function autoResizeTextarea(textarea: HTMLTextAreaElement) {
@@ -22,25 +23,31 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
     textarea.style.height = textarea.scrollHeight + 'px';
   }
 
-  // Use the useEffect hook to handle the auto-resize logic
+  // UseEffect to focus the input field when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => {
+        inputRef.current?.focus(); // Focus the input field when modal opens
+      }, 0);
+    }
+  }, [isOpen]);
+
+  // Use the useEffect hook to handle the auto-resize logic for textarea
   useEffect(() => {
     const textareas = document.querySelectorAll(
       '.autoResize',
     ) as NodeListOf<HTMLTextAreaElement>;
 
-    // Add the input event listener to all textareas
     textareas.forEach(textarea => {
       const handleInput = () => autoResizeTextarea(textarea);
       textarea.addEventListener('input', handleInput);
-      // Perform initial resize
       autoResizeTextarea(textarea);
 
-      // Clean up the event listener when the component unmounts
       return () => {
         textarea.removeEventListener('input', handleInput);
       };
     });
-  }, [description]); // Add the description state to the dependency array
+  }, [description]);
 
   const handleSubmit = () => {
     const id = nanoid();
@@ -81,7 +88,7 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
             className="new-issue-title"
             placeholder="Issue title"
             value={title}
-            ref={ref}
+            ref={inputRef} // Attach the inputRef to this input field
             onChange={e => setTitle(e.target.value)}
           />
         </div>
