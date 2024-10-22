@@ -9,6 +9,7 @@ import {must} from '../../../../../packages/shared/src/must.js';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
 import {Button} from '../../components/button.js';
+import {Confirm} from '../../components/confirm.js';
 import LabelPicker from '../../components/label-picker.js';
 import {Link} from '../../components/link.js';
 import Markdown from '../../components/markdown.js';
@@ -126,6 +127,8 @@ export default function IssuePage() {
     [issue?.labels],
   );
 
+  const [deleteConfirmationShown, setDeleteConfirmationShown] = useState(false);
+
   // TODO: We need the notion of the 'partial' result type to correctly render
   // a 404 here. We can't put the 404 here now because it would flash until we
   // get data.
@@ -135,9 +138,7 @@ export default function IssuePage() {
 
   const remove = () => {
     // TODO: Implement undo - https://github.com/rocicorp/undo
-    if (confirm('Really delete?')) {
-      z.mutate.issue.delete({id: issue.id});
-    }
+    z.mutate.issue.delete({id: issue.id});
     navigate(listContext?.href ?? links.home());
   };
 
@@ -174,7 +175,10 @@ export default function IssuePage() {
                 >
                   Edit
                 </Button>
-                <Button className="delete-button" onAction={() => remove()}>
+                <Button
+                  className="delete-button"
+                  onAction={() => setDeleteConfirmationShown(true)}
+                >
                   Delete
                 </Button>
               </>
@@ -321,6 +325,18 @@ export default function IssuePage() {
           <CommentComposer issueID={issue.id} />
         )}
       </div>
+      <Confirm
+        isOpen={deleteConfirmationShown}
+        title="Delete Issue"
+        text="Really delete?"
+        okButtonLabel="Delete"
+        onClose={b => {
+          if (b) {
+            remove();
+          }
+          setDeleteConfirmationShown(false);
+        }}
+      />
     </div>
   );
 }
