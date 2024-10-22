@@ -62,7 +62,13 @@ export default function ListPage() {
   }
 
   const issues = useQuery(q);
-  const title = `${status.charAt(0).toUpperCase() + status.slice(1)} Issues`;
+  let title;
+  if (creatorID || assigneeID || labelIDs.length > 0) {
+    title = 'Filtered Issues';
+  } else {
+    title = status.slice(0, 1).toUpperCase() + status.slice(1) + ' Issues';
+  }
+
   const listContext: ListContext = {
     href: window.location.href,
     title,
