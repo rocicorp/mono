@@ -78,7 +78,7 @@ export function Modal({
     [close],
   );
 
-  useKeypress('Escape', () => onDismiss?.(), 'keydown');
+  useKeypress('Escape', close, 'keydown', true);
 
   useLockBodyScroll();
 
