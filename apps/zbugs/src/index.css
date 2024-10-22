@@ -798,6 +798,7 @@ textarea.autoResize {
 
 .markdown-container ul.contains-task-list {
   list-style-type: none;
+  padding-left: 1.1rem;
 }
 
 .markdown-container ul.contains-task-list input[type="checkbox"] {
