@@ -89,6 +89,7 @@ fastify.get<{
   reply
     .cookie('jwt', jwt, {
       path: '/',
+      expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
     })
     .redirect(
       request.query.redirect ? decodeURIComponent(request.query.redirect) : '/',
