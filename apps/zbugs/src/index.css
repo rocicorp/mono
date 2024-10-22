@@ -297,11 +297,11 @@ textarea.autoResize {
   width: 0.875rem;
 }
 
-.sort-direction.descending {
+.sort-direction.desc {
   background: transparent url(assets/icons/sort-descending.svg) no-repeat;
 }
 
-.sort-direction.ascending {
+.sort-direction.asc {
   background: transparent url(assets/icons/sort-ascending.svg) no-repeat;
 }
 
