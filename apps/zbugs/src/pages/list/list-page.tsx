@@ -191,7 +191,7 @@ export default function ListPage() {
       </div>
 
       <div className="issue-list" ref={tableWrapperRef}>
-        {size && issues.length && (
+        {size && issues.length ? (
           <List
             className="virtual-list"
             width={size.width}
@@ -203,7 +203,7 @@ export default function ListPage() {
           >
             {Row}
           </List>
-        )}
+        ) : null}
       </div>
     </>
   );
