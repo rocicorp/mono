@@ -496,6 +496,10 @@ textarea.autoResize {
   margin-bottom: 2rem;
 }
 
+.sidebar-item .timestamp-container span {
+  cursor: help;
+}
+
 .sidebar-button,
 .filter-modal-button {
   position: relative;
@@ -912,6 +916,10 @@ textarea.autoResize {
 .markdown-container hr {
   margin: 1rem 0;
   border-color: var(--color-nav-selected);
+}
+
+.comments-container .markdown-container hr {
+  border-color: var(--color-text-dimmed-label);
 }
 
 /* Markdown: Headers */
