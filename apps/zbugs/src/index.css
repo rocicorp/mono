@@ -408,7 +408,7 @@ textarea.autoResize {
 }
 
 .row.unread::after {
-  content: "";
+  content: '';
   height: 0.4rem;
   width: 0.4rem;
   background-color: var(--color-primary-cta);
