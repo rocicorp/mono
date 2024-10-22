@@ -352,8 +352,15 @@ function buildListQuery(
   if (!listContext || !issue) {
     return z.query.issue.one();
   }
-  const {open, creatorID, assigneeID, labelIDs, sortField, sortDirection} =
-    listContext.params;
+  const {
+    open,
+    creatorID,
+    assigneeID,
+    labelIDs,
+    textFilter,
+    sortField,
+    sortDirection,
+  } = listContext.params;
   const orderByDir =
     dir === 'next' ? sortDirection : sortDirection === 'asc' ? 'desc' : 'asc';
   let q = z.query.issue
@@ -376,6 +383,9 @@ function buildListQuery(
     for (const labelID of labelIDs) {
       q = q.where('labelIDs', 'LIKE', `%${labelID}%`);
     }
+  }
+  if (textFilter) {
+    q = q.where('title', 'ILIKE', `%${textFilter}%`);
   }
   return q;
 }

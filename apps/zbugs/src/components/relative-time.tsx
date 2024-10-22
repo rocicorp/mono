@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useLayoutEffect} from 'react';
 
 interface RelativeTimeProps {
   timestamp: string | number | Date;
@@ -20,7 +20,7 @@ const RelativeTime: React.FC<RelativeTimeProps> = ({
   const [displayTime, setDisplayTime] = useState<string>('');
   const [fullTimestamp, setFullTimestamp] = useState<string>('');
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const getRelativeTime = (timestampDate: string | number | Date) => {
       const now = new Date();
       const timestamp = new Date(timestampDate);
