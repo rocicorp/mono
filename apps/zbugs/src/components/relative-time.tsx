@@ -25,15 +25,15 @@ const RelativeTime: React.FC<RelativeTimeProps> = ({
       const now = new Date();
       const timestamp = new Date(timestampDate);
       const diffInSeconds = Math.floor(
-        (now.getTime() - timestamp.getTime()) / 1000,
+        (now.getTime() - timestamp.getTime()) / 1000
       );
       const diffInMinutes = Math.floor(diffInSeconds / 60);
       const diffInHours = Math.floor(diffInMinutes / 60);
       const diffInDays = Math.floor(diffInHours / 24);
-
+    
       const timestampYear = timestamp.getFullYear();
       const currentYear = now.getFullYear();
-
+    
       // Full absolute timestamp for the title tag
       setFullTimestamp(
         timestamp.toLocaleString('en-US', {
@@ -42,23 +42,23 @@ const RelativeTime: React.FC<RelativeTimeProps> = ({
           day: 'numeric',
           hour: 'numeric',
           minute: 'numeric',
-        }),
+        })
       );
-
+    
       if (timestampYear < currentYear) {
         return `${timestampYear}/${String(timestamp.getMonth() + 1).padStart(
           2,
-          '0',
+          '0'
         )}/${String(timestamp.getDate()).padStart(
           2,
-          '0',
+          '0'
         )}, ${timestamp.toLocaleString('en-US', {
           hour: 'numeric',
           minute: 'numeric',
           hour12: true,
         })}`;
       }
-
+    
       // If 'absolute' is true or timestamp is older than 2 days, show the full date and time
       if (absolute || diffInDays > 2) {
         return timestamp.toLocaleString('en-US', {
@@ -72,16 +72,23 @@ const RelativeTime: React.FC<RelativeTimeProps> = ({
           hour12: true,
         });
       }
-
-      // Short relative format
+    
       if (diffInSeconds < 60) {
-        return `${diffInSeconds}s ago`;
+        return diffInSeconds === 1
+          ? '1 second ago'
+          : `${diffInSeconds} seconds ago`;
       } else if (diffInMinutes < 60) {
-        return `${diffInMinutes}m ago`;
+        return diffInMinutes === 1
+          ? '1 minute ago'
+          : `${diffInMinutes} minutes ago`;
       } else if (diffInHours < 24) {
-        return `${diffInHours}h ago`;
+        return diffInHours === 1
+          ? '1 hour ago'
+          : `${diffInHours} hours ago`;
       } else {
-        return `${diffInDays}d ago`;
+        return diffInDays === 1
+          ? '1 day ago'
+          : `${diffInDays} days ago`;
       }
     };
 
