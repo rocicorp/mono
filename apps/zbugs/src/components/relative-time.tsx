@@ -58,7 +58,6 @@ const RelativeTime: React.FC<RelativeTimeProps> = ({
           hour12: true,
         })}`;
       }
-
       // If 'absolute' is true or timestamp is older than 2 days, show the full date and time
       if (absolute || diffInDays > 2) {
         return timestamp.toLocaleString('en-US', {
@@ -73,15 +72,18 @@ const RelativeTime: React.FC<RelativeTimeProps> = ({
         });
       }
 
-      // Short relative format
       if (diffInSeconds < 60) {
-        return `${diffInSeconds}s ago`;
+        return diffInSeconds === 1
+          ? '1 second ago'
+          : `${diffInSeconds} seconds ago`;
       } else if (diffInMinutes < 60) {
-        return `${diffInMinutes}m ago`;
+        return diffInMinutes === 1
+          ? '1 minute ago'
+          : `${diffInMinutes} minutes ago`;
       } else if (diffInHours < 24) {
-        return `${diffInHours}h ago`;
+        return diffInHours === 1 ? '1 hour ago' : `${diffInHours} hours ago`;
       } else {
-        return `${diffInDays}d ago`;
+        return diffInDays === 1 ? '1 day ago' : `${diffInDays} days ago`;
       }
     };
 
