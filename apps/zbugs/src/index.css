@@ -169,7 +169,6 @@ textarea.autoResize {
   border: 1px solid var(--color-primary-cta-outline);
 }
 
-
 .modal-confirm:disabled {
   color: var(--color-primary-cta-outline);
   background-color: var(--color-modal-background);
@@ -698,7 +697,6 @@ textarea.autoResize {
   backdrop-filter: var(--filter-backdrop-blur);
   padding: 1rem;
 }
-
 
 .modal-container .issue-detail-label {
   margin-bottom: 0;
