@@ -7,6 +7,7 @@ import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
 import CommentComposer from './comment-composer.js';
 import style from './comment.module.css';
+import {DeleteConfirmationModal} from './delete-confirmation-modal.js';
 
 export default function Comment({id, issueID}: {id: string; issueID: string}) {
   const z = useZero();
@@ -18,6 +19,8 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
   const [editing, setEditing] = useState(false);
   const login = useLogin();
 
+  const [deleteConfirmationShown, setDeleteConfirmationShown] = useState(false);
+
   if (!comment) {
     return null;
   }
@@ -26,48 +29,58 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
   const remove = () => z.mutate.comment.delete({id});
 
   return (
-    <div
-      className={`${style.commentItem} ${
-        comment.creatorID == login.loginState?.decoded.sub
-          ? style.authorComment
-          : ''
-      }`}
-    >
-      <p className={style.commentAuthor}>
-        <img
-          src={comment.creator?.avatar}
-          style={{
-            width: '2rem',
-            height: '2rem',
-            borderRadius: '50%',
-            display: 'inline-block',
-            marginRight: '0.3rem',
-          }}
-          alt={comment.creator?.name}
-        />{' '}
-        {comment.creator?.login}
-      </p>
-      <span className={style.commentTimestamp}>
-        <RelativeTime created={comment.created} />
-      </span>
-      {editing ? (
-        <CommentComposer
-          id={id}
-          body={comment.body}
-          issueID={issueID}
-          onDone={() => setEditing(false)}
-        />
-      ) : (
-        <div className="markdown-container">
-          <Markdown>{comment.body}</Markdown>
-        </div>
-      )}
-      {editing || comment.creatorID !== login.loginState?.decoded.sub ? null : (
-        <div className={style.commentActions}>
-          <Button onAction={edit}>Edit</Button>
-          <Button onAction={remove}>Delete</Button>
-        </div>
-      )}
-    </div>
+    <>
+      <div
+        className={`${style.commentItem} ${
+          comment.creatorID == login.loginState?.decoded.sub
+            ? style.authorComment
+            : ''
+        }`}
+      >
+        <p className={style.commentAuthor}>
+          <img
+            src={comment.creator?.avatar}
+            style={{
+              width: '2rem',
+              height: '2rem',
+              borderRadius: '50%',
+              display: 'inline-block',
+              marginRight: '0.3rem',
+            }}
+            alt={comment.creator?.name}
+          />{' '}
+          {comment.creator?.login}
+        </p>
+        <span className={style.commentTimestamp}>
+          <RelativeTime created={comment.created} />
+        </span>
+        {editing ? (
+          <CommentComposer
+            id={id}
+            body={comment.body}
+            issueID={issueID}
+            onDone={() => setEditing(false)}
+          />
+        ) : (
+          <div className="markdown-container">
+            <Markdown>{comment.body}</Markdown>
+          </div>
+        )}
+        {editing ||
+        comment.creatorID !== login.loginState?.decoded.sub ? null : (
+          <div className={style.commentActions}>
+            <Button onAction={edit}>Edit</Button>
+            <Button onAction={() => setDeleteConfirmationShown(true)}>
+              Delete
+            </Button>
+          </div>
+        )}
+      </div>
+      <DeleteConfirmationModal
+        isOpen={deleteConfirmationShown}
+        onDelete={remove}
+        onDismiss={() => setDeleteConfirmationShown(false)}
+      />
+    </>
   );
 }
