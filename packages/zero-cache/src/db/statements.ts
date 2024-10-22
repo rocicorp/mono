@@ -1,4 +1,4 @@
-import type {RunResult} from 'better-sqlite3';
+import type {RunResult} from 'better-sqlite3-bedrock';
 import {Database} from '../../../zqlite/src/db.js';
 import {StatementCache} from '../../../zqlite/src/internal/statement-cache.js';
 

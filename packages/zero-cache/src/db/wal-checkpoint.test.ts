@@ -51,7 +51,7 @@ describe('db/wal-checkpoint', () => {
       const worker = new Worker(
         `
       const {parentPort} = require('worker_threads');
-      const Database = require('better-sqlite3');
+      const Database = require('better-sqlite3-bedrock');
 
       // Acquire a read lock.
       const reader = new Database('${dbFile.path}');
