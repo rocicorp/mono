@@ -61,8 +61,6 @@ export interface ViewSyncer {
     ctx: SyncContext,
     msg: ChangeDesiredQueriesMessage,
   ): Promise<void>;
-
-  totalHydrationTimeMs(): number;
 }
 
 type IdleToken = {
@@ -167,7 +165,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // If this view-syncer exited due to an elective or forced drain,
       // set the next drain timeout.
       if (this.#drainCoordinator.shouldDrain()) {
-        this.#drainCoordinator.drainNextIn(this.totalHydrationTimeMs());
+        this.#drainCoordinator.drainNextIn(this.#totalHydrationTimeMs());
       }
       this.#cleanup();
     } catch (e) {
@@ -179,7 +177,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
   }
 
-  totalHydrationTimeMs(): number {
+  #totalHydrationTimeMs(): number {
     return this.#pipelines.totalHydrationTimeMs();
   }
 
