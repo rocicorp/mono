@@ -22,7 +22,7 @@ import {Database} from '../../../../../zqlite/src/db.js';
 import type {TableSpec} from '../../../db/specs.js';
 import {StatementRunner} from '../../../db/statements.js';
 import {stringify} from '../../../types/bigint-json.js';
-import {max, oneAfter} from '../../../types/lexi-version.js';
+import {max, oneAfter, versionFromLexi} from '../../../types/lexi-version.js';
 import {
   pgClient,
   registerPostgresTypeParsers,
@@ -286,13 +286,21 @@ class PostgresChangeSource implements ChangeSource {
     const confirmedWatermark = toLexiVersion(confirmed);
     const restartWatermark = toLexiVersion(restart);
 
+    // Postgres sometimes stores the `confirmed_flush_lsn` as is (making it an even number),
+    // and sometimes it stores the lsn + 1.
+    // Normalize this behavior to produce consistent starting points.
+    const confirmedWatermarkIsEven =
+      versionFromLexi(confirmedWatermark) % 2n === 0n;
+
     this.#lc.info?.(
       `confirmed_flush_lsn:${confirmed}, restart_lsn:${restart}, clientWatermark:${fromLexiVersion(
         clientStart,
       )}`,
     );
     return max(
-      oneAfter(confirmedWatermark),
+      confirmedWatermarkIsEven
+        ? oneAfter(confirmedWatermark)
+        : confirmedWatermark,
       oneAfter(restartWatermark),
       clientStart,
     );
