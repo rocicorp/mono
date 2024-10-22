@@ -267,6 +267,30 @@ textarea.autoResize {
   margin: 0;
 }
 
+.sort-control-container {
+  margin-left: auto;
+}
+
+.sort-control {
+  opacity: 0.6;
+  transition: all 0.3s ease-in-out;
+  padding-right: 1.5rem;
+}
+
+.sort-control:hover {
+  opacity: 1;
+}
+
+.sort-control.descending {
+  background: transparent url(assets/icons/sort-descending.svg) no-repeat center
+    right;
+}
+
+.sort-control.ascending {
+  background: transparent url(assets/icons/sort-ascending.svg) no-repeat center
+    right;
+}
+
 .issue-timestamp {
   cursor: help;
   margin-right: 1rem;

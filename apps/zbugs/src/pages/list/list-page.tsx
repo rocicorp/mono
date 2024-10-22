@@ -192,6 +192,9 @@ export default function ListPage() {
           return null;
         })}
         <Filter onSelect={onFilter} />
+        <div className="sort-control-container">
+          <button className="sort-control ascending">Modified</button>
+        </div>
       </div>
 
       <div className="issue-list" ref={tableWrapperRef}>
