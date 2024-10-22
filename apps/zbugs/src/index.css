@@ -943,10 +943,6 @@ textarea.autoResize {
     max-height: 25vh;
   }
 
-.selector .dropdown {
-    max-height: 25vh;
-  }
-
   .modal {
     margin-top: 10rem;
     width: 85vw;
