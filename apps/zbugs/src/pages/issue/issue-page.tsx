@@ -21,6 +21,7 @@ import {useZero} from '../../hooks/use-zero.js';
 import {links, type ListContext} from '../../routes.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
+import RelativeTime from '../../components/relative-time.js';
 
 export default function IssuePage() {
   const z = useZero();
@@ -306,6 +307,13 @@ export default function IssuePage() {
                 });
               }}
             />
+          </div>
+
+          <div className="sidebar-item">
+            <p className="issue-detail-label">Last updated</p>
+            <div className="timestamp-container">
+              <RelativeTime timestamp={issue.modified} />
+            </div>
           </div>
         </div>
 
