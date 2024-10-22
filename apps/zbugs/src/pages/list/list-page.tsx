@@ -13,6 +13,7 @@ import IssueLink from '../../components/issue-link.js';
 import type {ListContext} from '../../routes.js';
 
 let firstRowRendered = false;
+const itemSize = 56;
 export default function ListPage() {
   const z = useZero();
 
@@ -98,7 +99,10 @@ export default function ListPage() {
     }
   };
 
-  const initialScrollOffset = (history.state?.['-zbugs-list'] as number) ?? 0;
+  let initialScrollOffset = (history.state?.['-zbugs-list'] as number) ?? 0;
+  if (initialScrollOffset > itemSize * issues.length) {
+    initialScrollOffset = 0;
+  }
 
   const onScroll = ({scrollOffset}: ListOnScrollProps) => {
     history.replaceState({...history.state, '-zbugs-list': scrollOffset}, '');
@@ -180,12 +184,12 @@ export default function ListPage() {
       </div>
 
       <div className="issue-list" ref={tableWrapperRef}>
-        {size && (
+        {size && issues.length && (
           <List
             className="virtual-list"
             width={size.width}
             height={size.height}
-            itemSize={56}
+            itemSize={itemSize}
             itemCount={issues.length}
             onScroll={onScroll}
             initialScrollOffset={initialScrollOffset}
