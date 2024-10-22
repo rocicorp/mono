@@ -1,7 +1,8 @@
-import {Ref, Zero} from '@rocicorp/zero';
+import {Zero} from '@rocicorp/zero';
 import {type Schema, schema} from './domain/schema.js';
 import {getJwt, getRawJwt} from './jwt.js';
 import {mark} from './perf-log.js';
+import {Atom} from './atom.js';
 
 export type LoginState = {
   encoded: string;
@@ -11,8 +12,8 @@ export type LoginState = {
   };
 };
 
-const zeroRef = new Ref<Zero<Schema>>();
-const authRef = new Ref<LoginState>();
+const zeroRef = new Atom<Zero<Schema>>();
+const authRef = new Atom<LoginState>();
 const jwt = getJwt();
 const encodedJwt = getRawJwt();
 
