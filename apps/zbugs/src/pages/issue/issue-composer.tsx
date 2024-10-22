@@ -1,5 +1,5 @@
 import {nanoid} from 'nanoid';
-import {useCallback, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {Button} from '../../components/button.js';
 import Modal from '../../components/modal.js';
 import {useZero} from '../../hooks/use-zero.js';
@@ -16,6 +16,32 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
   const [description, setDescription] = useState<string>('');
   const z = useZero();
 
+  // Function to handle textarea resizing
+  function autoResizeTextarea(textarea: HTMLTextAreaElement) {
+    textarea.style.height = 'auto';
+    textarea.style.height = textarea.scrollHeight + 'px';
+  }
+
+  // Use the useEffect hook to handle the auto-resize logic
+  useEffect(() => {
+    const textareas = document.querySelectorAll(
+      '.autoResize',
+    ) as NodeListOf<HTMLTextAreaElement>;
+
+    // Add the input event listener to all textareas
+    textareas.forEach(textarea => {
+      const handleInput = () => autoResizeTextarea(textarea);
+      textarea.addEventListener('input', handleInput);
+      // Perform initial resize
+      autoResizeTextarea(textarea);
+
+      // Clean up the event listener when the component unmounts
+      return () => {
+        textarea.removeEventListener('input', handleInput);
+      };
+    });
+  }, [description]); // Add the description state to the dependency array
+
   const handleSubmit = () => {
     const id = nanoid();
     z.mutate.issue.create({
@@ -25,7 +51,6 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
       description: description ?? '',
       created: Date.now(),
       creatorID: z.userID,
-      // TODO: Should be able to skip passing optional fields.
       assigneeID: undefined,
       modified: Date.now(),
       open: true,
@@ -53,7 +78,7 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
       <div className="flex flex-col flex-1 pb-3.5 overflow-y-auto">
         <div className="flex items-center w-full mt-1.5 px-4">
           <input
-            className="bg-modal w-full text-lg font-semibold placeholder-gray-400 border-none h-7 focus:border-none focus:outline-none focus:ring-0"
+            className="new-issue-title"
             placeholder="Issue title"
             value={title}
             ref={ref}
@@ -62,7 +87,7 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
         </div>
         <div className="w-full px-4">
           <textarea
-            className="bg-modal prose w-full max-w-full mt-2 font-normal appearance-none min-h-12 text-md editor border border-transparent focus:outline-none focus:ring-0"
+            className="new-issue-description autoResize"
             value={description || ''}
             onChange={e => setDescription(e.target.value)}
             placeholder="Add description..."
@@ -71,7 +96,7 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
       </div>
       <div className="flex items-center flex-shrink-0 px-4 pt-3">
         <Button
-          className="px-3 ml-auto text-black bg-primary rounded save-issue"
+          className="modal-confirm save-issue"
           onAction={handleSubmit}
           disabled={!canSave()}
         >
