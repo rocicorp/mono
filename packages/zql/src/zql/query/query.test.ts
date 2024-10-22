@@ -2,7 +2,7 @@
 import {describe, expectTypeOf, test} from 'vitest';
 import {staticParam} from './query-impl.js';
 import type {Query} from './query.js';
-import type {TableSchema} from './schema.js';
+import type {Supertype, TableSchema} from './schema.js';
 
 const mockQuery = {
   select() {
@@ -498,6 +498,64 @@ describe('schema structure', () => {
 
     takeSchema(issueSchema);
   });
+});
+
+test('supertype query', () => {
+  const commentSchema = {
+    tableName: 'comment',
+    primaryKey: ['id'],
+    columns: {
+      id: {type: 'string'},
+      creatorID: {type: 'string'},
+      body: {type: 'string'},
+    },
+    relationships: {},
+  } as const;
+  const issueSchema = {
+    tableName: 'issue',
+    primaryKey: ['id'],
+    columns: {
+      id: {type: 'string'},
+      creatorID: {type: 'string'},
+      title: {type: 'string'},
+    },
+    relationships: {},
+  } as const;
+  const draftSchema = {
+    tableName: 'draft',
+    primaryKey: ['id'],
+    columns: {
+      id: {type: 'string'},
+      creatorID: {type: 'string'},
+      title: {type: 'string'},
+    },
+    relationships: {},
+  } as const;
+
+  const commentQuery = mockQuery as unknown as Query<typeof commentSchema>;
+  const issueQuery = mockQuery as unknown as Query<typeof issueSchema>;
+  const draftQuery = mockQuery as unknown as Query<typeof draftSchema>;
+
+  function checkCreator(
+    q: Query<
+      Supertype<[typeof commentSchema, typeof issueSchema, typeof draftSchema]>
+    >,
+  ) {
+    return q.where('creatorID', '=', 'foo');
+  }
+
+  function checkCreatorExpectError(
+    q: Query<Supertype<[typeof commentSchema, typeof issueSchema]>>,
+  ) {
+    // @ts-expect-error - title is not shared by both types
+    return q.where('title', 'title is not shared by both types');
+  }
+
+  checkCreator(commentQuery);
+  checkCreator(issueQuery);
+  checkCreator(draftQuery);
+  checkCreatorExpectError(commentQuery);
+  checkCreatorExpectError(issueQuery);
 });
 
 function takeSchema(x: TableSchema) {
