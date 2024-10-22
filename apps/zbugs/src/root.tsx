@@ -1,5 +1,5 @@
 import {ZeroProvider} from '@rocicorp/zero/react';
-import {useSyncExternalStore} from 'react';
+import {useCallback, useSyncExternalStore} from 'react';
 import {Route, Switch} from 'wouter';
 import {Nav} from './components/nav.js';
 import ErrorPage from './pages/error/error-page.js';
@@ -9,7 +9,10 @@ import {zeroRef} from './zero-setup.js';
 import {routes} from './routes.js';
 
 export default function Root() {
-  const z = useSyncExternalStore(zeroRef.onChange, zeroRef.getSnapshot);
+  const z = useSyncExternalStore(
+    zeroRef.onChange,
+    useCallback(() => zeroRef.value, []),
+  );
 
   if (!z) {
     return null;
