@@ -258,6 +258,16 @@ export abstract class AbstractQuery<
     return this;
   }
 
+  must<T>(
+    value: T | null | undefined,
+    cb: (query: Query<TSchema, TReturn>, value: T) => Query<TSchema, TReturn>,
+  ): Query<TSchema, TReturn> {
+    if (value !== null && value !== undefined) {
+      return cb(this, value);
+    }
+    return new DisabledQuery(this.#schema, this.#ast, this.#format);
+  }
+
   where(
     field: any,
     opOrValue:
@@ -469,4 +479,42 @@ function addPrimaryKeysToAst(schema: NormalizedTableSchema, ast: AST): AST {
     ...ast,
     orderBy: addPrimaryKeys(schema, ast.orderBy),
   };
+}
+
+export class DisabledQuery<
+  TSchema extends TableSchema,
+  TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
+> extends AbstractQuery<TSchema, TReturn> {
+  readonly #format: Format;
+  constructor(
+    schema: NormalizedTableSchema,
+    ast?: AST | undefined,
+    format?: Format | undefined,
+  ) {
+    super(schema, ast, format);
+    this.#format = format ?? {singular: false, relationships: {}};
+  }
+
+  protected _newQuery<TSchema extends TableSchema, TReturn extends QueryType>(
+    schema: NormalizedTableSchema,
+    ast: AST,
+    format: Format | undefined,
+  ): Query<TSchema, TReturn> {
+    return new DisabledQuery(schema, ast, format);
+  }
+
+  materialize(): TypedView<Smash<TReturn>> {
+    throw new Error('DisabledQuery cannot be materialized');
+  }
+
+  preload(): {
+    cleanup: () => void;
+    complete: Promise<void>;
+  } {
+    throw new Error('DisabledQuery cannot be preloaded');
+  }
+
+  get singular(): TReturn['singular'] {
+    return this.#format.singular;
+  }
 }

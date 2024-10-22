@@ -27,12 +27,12 @@ export default function ListPage() {
   // TODO: this can go away once we have filter-by-subquery, you should be able
   // to filter by label.name directly.
   const creatorID = useQuery(
-    z.query.user.where('login', creator ?? '').one(),
-    creator !== null,
+    z.query.user.must(creator, (q, creator) => q.where('login', creator)).one(),
   )?.id;
   const assigneeID = useQuery(
-    z.query.user.where('login', assignee ?? '').one(),
-    assignee !== null,
+    z.query.user
+      .must(assignee, (q, assignee) => q.where('login', assignee))
+      .one(),
   )?.id;
   const labelIDs = useQuery(z.query.label.where('name', 'IN', labels));
 

@@ -213,6 +213,11 @@ export interface Query<
     cb: (query: Query<TSchema, TReturn>, value: T) => Query<TSchema, TReturn>,
   ): Query<TSchema, TReturn>;
 
+  must<T>(
+    value: T | null | undefined,
+    cb: (query: Query<TSchema, TReturn>, value: T) => Query<TSchema, TReturn>,
+  ): Query<TSchema, TReturn>;
+
   where<TSelector extends Selector<TSchema>, TOperator extends Operator>(
     field: TSelector,
     op: TOperator,

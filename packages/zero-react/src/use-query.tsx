@@ -10,12 +10,16 @@ import type {
 } from '../../zero-client/src/mod.js';
 import type {Immutable} from '../../shared/src/immutable.js';
 import {useZero} from './use-zero.js';
+import {DisabledQuery} from '../../zql/src/zql/query/query-impl.js';
 
 export function useQuery<
   TSchema extends TableSchema,
   TReturn extends QueryType,
 >(q: Query<TSchema, TReturn>, enable: boolean = true): Smash<TReturn> {
   const z = useZero();
+  if (q instanceof DisabledQuery) {
+    enable = false;
+  }
   const view = viewStore.getView(
     z.clientID,
     q as QueryImpl<TSchema, TReturn>,
