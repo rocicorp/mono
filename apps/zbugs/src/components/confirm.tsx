@@ -26,7 +26,7 @@ export function Confirm({
     <Modal title={title} isOpen={isOpen} onDismiss={onCancel}>
       <ModalText>{text}</ModalText>
       <ModalActions>
-        <Button className="modal-confirm" onAction={onOK}>
+        <Button className="modal-confirm" onAction={onOK} autoFocus>
           {okButtonLabel || 'OK'}
         </Button>
         <Button onAction={onCancel}>{cancelButtonLabel || 'Cancel'}</Button>

@@ -7,6 +7,8 @@ interface Props {
   onAction?: (() => void) | undefined;
   style?: CSSProperties | undefined;
   title?: string | undefined;
+  autoFocus?: boolean | undefined;
+
   // add more as needed
 }
 
