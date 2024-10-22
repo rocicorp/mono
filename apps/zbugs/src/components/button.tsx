@@ -29,5 +29,5 @@ export function Button(props: Props) {
       }
     : {};
 
-  return <button {...rest} {...actionProps} />;
+  return <button {...actionProps} {...rest} />;
 }

@@ -643,6 +643,7 @@ textarea.autoResize {
   width: 100%;
   padding: 0.8175rem;
   border-radius: 0.5rem;
+  cursor: default;
 }
 
 .selector .item.icon {
@@ -652,7 +653,7 @@ textarea.autoResize {
   background-size: 14px;
 }
 
-.selector .dropdown .item:hover {
+.selector .dropdown .item.selected {
   background-color: var(--color-row-hover);
 }
 
