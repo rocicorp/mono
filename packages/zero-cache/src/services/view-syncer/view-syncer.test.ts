@@ -34,6 +34,7 @@ import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,
 } from './database-storage.js';
+import {DrainCoordinator} from './drain-coordinator.js';
 import {PipelineDriver} from './pipeline-driver.js';
 import {initViewSyncerSchema} from './schema/pg-migrations.js';
 import {Snapshotter} from './snapshotter.js';
@@ -64,6 +65,7 @@ describe('view-syncer/service', () => {
   let cvrDB: PostgresDB;
   const lc = createSilentLogContext();
   let stateChanges: Subscription<ReplicaState>;
+  let drainCoordinator: DrainCoordinator;
 
   let operatorStorage: ClientGroupStorage;
   let vs: ViewSyncerService;
@@ -146,6 +148,7 @@ describe('view-syncer/service', () => {
 
     replicator = fakeReplicator(lc, replica);
     stateChanges = Subscription.create();
+    drainCoordinator = new DrainCoordinator();
     operatorStorage = new DatabaseStorage(storageDB).createClientGroupStorage(
       serviceID,
     );
@@ -159,6 +162,7 @@ describe('view-syncer/service', () => {
         operatorStorage,
       ),
       stateChanges,
+      drainCoordinator,
     );
     viewSyncerDone = vs.run();
   });
@@ -230,6 +234,7 @@ describe('view-syncer/service', () => {
 
   const USERS_QUERY: AST = {
     table: 'users',
+    orderBy: [['id', 'asc']],
   };
 
   test('adds desired queries from initConnectionMessage', async () => {
@@ -1370,5 +1375,31 @@ describe('view-syncer/service', () => {
     expect(vs.keepalive()).toBe(true);
     void vs.stop();
     expect(vs.keepalive()).toBe(false);
+  });
+
+  test('elective drain', async () => {
+    const client = await connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+      {op: 'put', hash: 'query-hash2', ast: ISSUES_QUERY2},
+      {op: 'put', hash: 'query-hash3', ast: USERS_QUERY},
+    ]);
+
+    stateChanges.push({state: 'version-ready'});
+    // This should result in computing a non-zero hydration time.
+    await nextPoke(client);
+
+    drainCoordinator.drainNextIn(0);
+    expect(drainCoordinator.shouldDrain()).toBe(true);
+    const now = Date.now();
+    await sleep(3); // Bump time forward to verify that the timeout is reset later.
+
+    // Enqueue a dummy task so that the view-syncer can elect to drain.
+    stateChanges.push({state: 'version-ready'});
+
+    // Upon completion, the view-syncer should have called drainNextIn()
+    // with its hydration time so that the next drain is not triggered
+    // until that interval elapses.
+    await viewSyncerDone;
+    expect(drainCoordinator.nextDrainTime).toBeGreaterThan(now);
   });
 });
