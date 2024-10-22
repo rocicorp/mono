@@ -1,7 +1,7 @@
 import {nanoid} from 'nanoid';
 import {useCallback, useEffect, useState} from 'react';
 import {Button} from '../../components/button.js';
-import Modal from '../../components/modal.js';
+import {Modal, ModalActions, ModalBody} from '../../components/modal.js';
 import {useZero} from '../../hooks/use-zero.js';
 
 interface Props {
@@ -75,9 +75,19 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
     [title, description],
   );
 
-  const body = (
-    <div className="flex flex-col w-full py-4 overflow-hidden modal-container">
-      <div className="flex flex-col flex-1 pb-3.5 overflow-y-auto">
+  return (
+    <Modal
+      title="New Issue"
+      isOpen={isOpen}
+      center={false}
+      size="large"
+      onDismiss={() => {
+        reset();
+        onDismiss();
+      }}
+      isDirty={isDirty}
+    >
+      <ModalBody>
         <div className="flex items-center w-full mt-1.5 px-4">
           <input
             className="new-issue-title"
@@ -95,32 +105,16 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
             placeholder="Add description..."
           ></textarea>
         </div>
-      </div>
-      <div className="flex items-center flex-shrink-0 px-4 pt-3">
+      </ModalBody>
+      <ModalActions>
         <Button
-          className="modal-confirm save-issue"
+          className="modal-confirm"
           onAction={handleSubmit}
           disabled={!canSave()}
         >
           Save Issue
         </Button>
-      </div>
-    </div>
-  );
-
-  return (
-    <Modal
-      title="New Issue"
-      isOpen={isOpen}
-      center={false}
-      size="large"
-      onDismiss={() => {
-        reset();
-        onDismiss();
-      }}
-      isDirty={isDirty}
-    >
-      {body}
+      </ModalActions>
     </Modal>
   );
 }

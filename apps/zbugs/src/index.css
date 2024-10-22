@@ -169,6 +169,12 @@ textarea.autoResize {
   border: 1px solid var(--color-primary-cta-outline);
 }
 
+.modal-confirm:disabled {
+  color: var(--color-primary-cta-outline);
+  background-color: var(--color-modal-background);
+  cursor: default;
+}
+
 .primary-nav {
   position: fixed;
   height: calc(100vh - 4rem);
@@ -690,10 +696,6 @@ textarea.autoResize {
   background-color: var(--color-modal-background);
   backdrop-filter: var(--filter-backdrop-blur);
   padding: 1rem;
-}
-
-.save-issue:disabled {
-  --tw-bg-opacity: 0.4;
 }
 
 .modal-container .issue-detail-label {

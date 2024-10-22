@@ -3,6 +3,7 @@ import classnames from 'classnames';
 import React, {
   useCallback,
   useRef,
+  useState,
   type MouseEvent,
   type RefObject,
 } from 'react';
@@ -10,12 +11,13 @@ import ReactDOM from 'react-dom';
 import CloseIcon from '../assets/icons/close.svg?react';
 import {useKeypress} from '../hooks/use-keypress.js';
 import useLockBodyScroll from '../hooks/use-lock-body-scroll.js';
+import {Confirm} from './confirm.js';
 
 interface Props {
-  title?: string;
+  title?: string | undefined;
   isOpen: boolean;
   center: boolean;
-  className?: string;
+  className?: string | undefined;
   onDismiss: () => void;
   children?: React.ReactNode;
   size: keyof typeof sizeClasses;
@@ -26,7 +28,7 @@ const sizeClasses = {
   normal: 'max-w-md w-1/3',
 };
 
-export default function Modal({
+export function Modal({
   title,
   isOpen,
   center,
@@ -54,20 +56,21 @@ export default function Modal({
     className,
   );
 
+  const [confirmDirtyVisible, setConfirmDirtyVisible] = useState(false);
+
   const close = useCallback(() => {
-    if (
-      isDirty?.() &&
-      !confirm('You have unsaved changes. Are you sure you want to close?')
-    ) {
-      return;
+    if (isDirty?.()) {
+      setConfirmDirtyVisible(true);
+    } else {
+      onDismiss();
     }
-    onDismiss();
   }, [isDirty, onDismiss]);
 
   const handleMouseDown = useCallback(
     (event: MouseEvent) => {
+      // Stop propagation to other modals.
+      event.stopPropagation();
       if (ref.current && !ref.current.contains(event.target as Element)) {
-        event.stopPropagation();
         event.preventDefault();
         close();
       }
@@ -92,10 +95,29 @@ export default function Modal({
                 </div>
               </div>
             )}
-            {children}
+            <div className="flex flex-col w-full py-4 overflow-hidden modal-container">
+              {children}
+            </div>
           </div>
         </div>
       </Transition>
+      {
+        // This needs x && y because we cant recursively render the Confirm
+        // modal when we're already rendering the Confirm modal.
+        confirmDirtyVisible && (
+          <Confirm
+            text="You have unsaved changes. Are you sure you want to close?"
+            isOpen={confirmDirtyVisible}
+            okButtonLabel="Close"
+            onClose={b => {
+              setConfirmDirtyVisible(false);
+              if (b) {
+                onDismiss();
+              }
+            }}
+          />
+        )
+      }
     </div>
   );
 
@@ -109,3 +131,27 @@ Modal.defaultProps = {
   size: 'normal',
   center: true,
 };
+
+export function ModalBody({children}: {children: React.ReactNode}) {
+  return (
+    <div className="flex flex-col flex-1 pb-3.5 overflow-y-auto">
+      {children}
+    </div>
+  );
+}
+
+export function ModalText({children}: {children: React.ReactNode}) {
+  return (
+    <ModalBody>
+      <div className="flex items-center w-full mt-1.5 px-4">{children}</div>
+    </ModalBody>
+  );
+}
+
+export function ModalActions({children}: {children: React.ReactNode}) {
+  return (
+    <div className="flex items-center flex-shrink-0 px-4 pt-3 gap-4">
+      {children}
+    </div>
+  );
+}
