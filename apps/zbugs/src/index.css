@@ -54,7 +54,7 @@ body {
   place-items: top;
   min-width: 320px;
   min-height: 100vh;
-  scrollbar-color: var(--color-nav-selected) var(--color-background);
+  scrollbar-color: var(--color-nav-selected) transparent;
 }
 
 ::-webkit-scrollbar-track {
@@ -307,7 +307,7 @@ textarea.autoResize {
 
 .issue-timestamp {
   cursor: help;
-  margin-right: 1rem;
+  margin-right: 2rem;
 }
 
 .issue-count {
@@ -329,7 +329,7 @@ textarea.autoResize {
   flex-wrap: wrap;
   gap: 0.5rem;
   box-shadow: 0px 1px 0px 0px var(--color-light-outline) inset;
-  padding: 1rem 0.5rem 1rem 2rem;
+  padding: 1rem 2rem 1rem 2rem;
   background: transparent url(assets/icons/filter.svg) no-repeat 0.5rem center;
 }
 
@@ -407,8 +407,16 @@ textarea.autoResize {
   padding-left: 2.5rem;
 }
 
-.row.unread {
-  border-right: 1px solid var(--color-primary-cta);
+.row.unread::after {
+  content: '';
+  height: 0.4rem;
+  width: 0.4rem;
+  background-color: var(--color-primary-cta);
+  position: absolute;
+  right: 0.8rem;
+  top: 50%;
+  border-radius: 1rem;
+  transform: translateY(-50%);
 }
 
 .primary-content .row {
