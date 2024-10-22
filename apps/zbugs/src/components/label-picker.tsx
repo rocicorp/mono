@@ -1,10 +1,16 @@
 import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useRef, useState} from 'react';
 import {useClickOutside} from '../hooks/use-click-outside.js';
 import {useZero} from '../hooks/use-zero.js';
 import {Button} from './button.js';
 import style from './label-picker.module.css';
+
+const focusInput = (input: HTMLInputElement | null) => {
+  if (input) {
+    input.focus();
+  }
+};
 
 export default function LabelPicker({
   selected,
@@ -21,20 +27,11 @@ export default function LabelPicker({
   const z = useZero();
   const labels = useQuery(z.query.label.orderBy('name', 'asc'));
   const ref = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   useClickOutside(
     ref,
     useCallback(() => setIsOpen(false), []),
   );
-
-  useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 0);
-    }
-  }, [isOpen]);
 
   return (
     <div className={style.root} ref={ref}>
@@ -52,7 +49,7 @@ export default function LabelPicker({
           onCreateNewLabel={onCreateNewLabel}
           labels={labels}
           selected={selected}
-          inputRef={inputRef}
+          inputRef={focusInput}
         />
       )}
     </div>
@@ -72,7 +69,7 @@ function LabelPopover({
   onAssociateLabel: (id: string) => void;
   onCreateNewLabel: (name: string) => void;
   labels: readonly {id: string; name: string}[];
-  inputRef: React.RefObject<HTMLInputElement>;
+  inputRef: React.Ref<HTMLInputElement>;
 }) {
   const [input, setInput] = useState('');
   const filteredLabels = labels.filter(label =>
