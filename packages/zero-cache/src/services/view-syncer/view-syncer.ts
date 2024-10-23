@@ -67,7 +67,10 @@ type IdleToken = {
   timeoutID?: ReturnType<typeof setTimeout>;
 };
 
-const DEFAULT_KEEPALIVE_MS = 30_000;
+// TODO: make keepalive more intelligent when browser-level client
+//       management can provide signals of whether a client is likely to
+//       reconnect.
+const DEFAULT_KEEPALIVE_MS = 1_000;
 
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
@@ -81,6 +84,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   // Serialize on this lock for:
   // (1) storage or database-dependent operations
   // (2) updating member variables.
+  // (3) initializing a new client, to ensure that it only gets pokes after
+  //     we have processed its initConnectionMessage.
+  //
+  // Note that it is okay to remove/delete clients without acquiring the lock.
   readonly #lock = new Lock();
   readonly #clients = new Map<string, ClientHandler>();
   readonly #cvrStore: CVRStore;
@@ -232,18 +239,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return true;
   }
 
-  #deleteClient(clientID: string, client: ClientHandler): Promise<void> {
-    // Note: The CVR is not needed here so there's no need to call runInLockWithCVR().
-    return this.#lock.withLock(() => {
-      const c = this.#clients.get(clientID);
-      if (c === client) {
-        this.#clients.delete(clientID);
+  #deleteClient(clientID: string, client: ClientHandler) {
+    // Note: It is okay to delete / cleanup clients without acquiring the lock.
+    // In fact, it is important to do so in order to guarantee that idle cleanup
+    // is performed in a timely manner, regardless of the amount of work
+    // queued on the lock.
+    const c = this.#clients.get(clientID);
+    if (c === client) {
+      this.#clients.delete(clientID);
 
-        if (this.#clients.size === 0) {
-          this.#startIdleTimer('no more clients');
-        }
+      if (this.#clients.size === 0) {
+        this.#startIdleTimer('no more clients');
       }
-    });
+    }
   }
 
   async initConnection(
@@ -261,7 +269,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         err
           ? lc.error?.(`client closed with error`, err)
           : lc.info?.('client closed');
-        void this.#deleteClient(clientID, newClient);
+        this.#deleteClient(clientID, newClient);
       },
     });
 
