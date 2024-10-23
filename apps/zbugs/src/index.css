@@ -290,7 +290,7 @@ textarea.autoResize {
 .sort-control,
 .sort-direction {
   opacity: 0.6;
-  transition: all 0.3s ease-in-out;
+  transition: opacity 0.3s ease-in-out;
 }
 
 .sort-control:hover,
