@@ -63,11 +63,17 @@ export interface ViewSyncer {
   ): Promise<void>;
 }
 
-type IdleToken = {
+type ShutdownToken = {
   timeoutID?: ReturnType<typeof setTimeout>;
 };
 
-const DEFAULT_KEEPALIVE_MS = 30_000;
+type ShutdownTimerReason = 'keepalive' | 'no more clients';
+
+const DEFAULT_KEEPALIVE_MS = 5_000;
+// TODO: make idle timeout more intelligent when browser-level client
+//       management can provide signals of whether a client is likely to
+//       reconnect.
+const DEFAULT_IDLE_TIMEOUT_MS = 0;
 
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
@@ -77,10 +83,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #stateChanges: Subscription<ReplicaState>;
   readonly #drainCoordinator: DrainCoordinator;
   readonly #keepaliveMs: number;
+  readonly #idleTimeoutMs: number;
 
   // Serialize on this lock for:
   // (1) storage or database-dependent operations
   // (2) updating member variables.
+  // (3) initializing a new client, to ensure that it only gets pokes after
+  //     we have processed its initConnectionMessage.
+  //
+  // Note that it is okay to remove/delete clients without acquiring the lock.
   readonly #lock = new Lock();
   readonly #clients = new Map<string, ClientHandler>();
   readonly #cvrStore: CVRStore;
@@ -98,6 +109,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     versionChanges: Subscription<ReplicaState>,
     drainCoordinator: DrainCoordinator,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
+    idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS,
   ) {
     this.id = clientGroupID;
     this.#shardID = shardID;
@@ -108,6 +120,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#stateChanges = versionChanges;
     this.#drainCoordinator = drainCoordinator;
     this.#keepaliveMs = keepaliveMs;
+    this.#idleTimeoutMs = idleTimeoutMs;
     this.#cvrStore = new CVRStore(lc, db, clientGroupID);
   }
 
@@ -184,32 +197,35 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return this.#pipelines.totalHydrationTimeMs();
   }
 
-  // The idleToken is an object associated with an idle timeout function,
+  // The shutdownToken is an object associated with an shutdown timeout function,
   // the latter of which checks the token with identity equality before
-  // executing. Setting the #idleToken to a new object or to `null`
+  // executing. Setting the #shutdownToken to a new object or to `null`
   // effectively cancels the previous timeout.
-  #idleToken: IdleToken | null = null;
+  #shutdownToken: ShutdownToken | null = null;
 
-  #startIdleTimer(reason: string) {
-    if (this.#idleToken) {
+  #startShutdownTimer(reason: ShutdownTimerReason) {
+    if (this.#shutdownToken) {
       // Previous timeout is canceled for efficiency
       // (but not necessary for correctness).
-      clearTimeout(this.#idleToken?.timeoutID);
+      clearTimeout(this.#shutdownToken?.timeoutID);
       this.#lc.debug?.(`${reason}. resetting idle timer`);
     } else {
       this.#lc.debug?.(`${reason}. starting idle timer`);
     }
 
-    const idleToken: IdleToken = {};
-    this.#idleToken = idleToken;
+    const shutdownToken: ShutdownToken = {};
+    this.#shutdownToken = shutdownToken;
 
-    idleToken.timeoutID = setTimeout(() => {
-      // If #idleToken has changed, this timeout is effectively canceled.
-      if (this.#idleToken === idleToken) {
-        this.#lc.info?.('shutting down after idle timeout');
-        this.#stateChanges.cancel(); // Note: #versionChanges.active becomes false.
-      }
-    }, this.#keepaliveMs);
+    shutdownToken.timeoutID = setTimeout(
+      () => {
+        // If #idleToken has changed, this timeout is effectively canceled.
+        if (this.#shutdownToken === shutdownToken) {
+          this.#lc.info?.('shutting down after idle timeout');
+          this.#stateChanges.cancel(); // Note: #versionChanges.active becomes false.
+        }
+      },
+      reason === 'keepalive' ? this.#keepaliveMs : this.#idleTimeoutMs,
+    );
   }
 
   /**
@@ -225,25 +241,26 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     if (!this.#stateChanges.active) {
       return false;
     }
-    if (this.#idleToken) {
-      // Resets the idle timer for another `keepaliveMs`.
-      this.#startIdleTimer('received keepalive');
+    if (this.#shutdownToken) {
+      // Resets the idle timer for another `#keepaliveMs`.
+      this.#startShutdownTimer('keepalive');
     }
     return true;
   }
 
-  #deleteClient(clientID: string, client: ClientHandler): Promise<void> {
-    // Note: The CVR is not needed here so there's no need to call runInLockWithCVR().
-    return this.#lock.withLock(() => {
-      const c = this.#clients.get(clientID);
-      if (c === client) {
-        this.#clients.delete(clientID);
+  #deleteClient(clientID: string, client: ClientHandler) {
+    // Note: It is okay to delete / cleanup clients without acquiring the lock.
+    // In fact, it is important to do so in order to guarantee that idle cleanup
+    // is performed in a timely manner, regardless of the amount of work
+    // queued on the lock.
+    const c = this.#clients.get(clientID);
+    if (c === client) {
+      this.#clients.delete(clientID);
 
-        if (this.#clients.size === 0) {
-          this.#startIdleTimer('no more clients');
-        }
+      if (this.#clients.size === 0) {
+        this.#startShutdownTimer('no more clients');
       }
-    });
+    }
   }
 
   async initConnection(
@@ -261,7 +278,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         err
           ? lc.error?.(`client closed with error`, err)
           : lc.info?.('client closed');
-        void this.#deleteClient(clientID, newClient);
+        this.#deleteClient(clientID, newClient);
       },
     });
 
@@ -315,6 +332,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       .withContext('wsID', wsID)
       .withContext('cmd', cmd);
 
+    // Clear and cancel any shutdown timeout.
+    if (this.#shutdownToken) {
+      clearTimeout(this.#shutdownToken.timeoutID);
+      this.#shutdownToken = null;
+    }
+
     let client: ClientHandler | undefined;
     try {
       await this.#runInLockWithCVR(cvr => {
@@ -346,12 +369,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // unless the exception happened before the client could be looked up.
         throw e;
       }
-    }
-
-    // Clear and cancel any idle timeout.
-    if (this.#idleToken) {
-      clearTimeout(this.#idleToken.timeoutID);
-      this.#idleToken = null;
     }
   }
 

@@ -21,12 +21,14 @@ import RelativeTime from '../../components/relative-time.js';
 import {useClickOutside} from '../../hooks/use-click-outside.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {Button} from '../../components/button.js';
+import {useLogin} from '../../hooks/use-login.js';
 
 let firstRowRendered = false;
 const itemSize = 56;
 
 export default function ListPage() {
   const z = useZero();
+  const login = useLogin();
   const qs = new URLSearchParams(useSearch());
 
   const status = qs.get('status')?.toLowerCase() ?? 'open';
@@ -180,7 +182,10 @@ export default function ListPage() {
         key={issue.id}
         className={classNames(
           'row',
-          issue.modified > (issue.viewState?.viewed ?? 0) ? 'unread' : null,
+          issue.modified > (issue.viewState?.viewed ?? 0) &&
+            login.loginState != undefined
+            ? 'unread'
+            : null,
         )}
         style={{
           ...style,
@@ -266,25 +271,27 @@ export default function ListPage() {
       </div>
       <div className="list-view-filter-container">
         <span className="filter-label">Filtered by:</span>
-        {[...qs.entries()].map(([key, val]) => {
-          if (key === 'label' || key === 'creator' || key === 'assignee') {
-            return (
-              <span
-                className={classNames('pill', {
-                  label: key === 'label',
-                  user: key === 'creator' || key === 'assignee',
-                })}
-                onMouseDown={onDeleteFilter}
-                data-key={key}
-                data-value={val}
-                key={key + '-' + val}
-              >
-                {key}: {val}
-              </span>
-            );
-          }
-          return null;
-        })}
+        <div className="set-filter-container">
+          {[...qs.entries()].map(([key, val]) => {
+            if (key === 'label' || key === 'creator' || key === 'assignee') {
+              return (
+                <span
+                  className={classNames('pill', {
+                    label: key === 'label',
+                    user: key === 'creator' || key === 'assignee',
+                  })}
+                  onMouseDown={onDeleteFilter}
+                  data-key={key}
+                  data-value={val}
+                  key={key + '-' + val}
+                >
+                  {key}: {val}
+                </span>
+              );
+            }
+            return null;
+          })}
+        </div>
         <Filter onSelect={onFilter} />
         <div className="sort-control-container">
           <Button className="sort-control" onAction={toggleSortField}>
