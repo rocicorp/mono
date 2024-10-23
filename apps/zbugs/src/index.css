@@ -101,6 +101,10 @@ textarea.autoResize {
   gap: 2.45rem;
 }
 
+.logo-link-container {
+  flex: 0 0 auto;
+}
+
 .zero-logo {
   width: 100%;
   height: auto;
@@ -212,6 +216,11 @@ textarea.autoResize {
   border-radius: 0.5rem;
   opacity: 0.3;
   width: 100%;
+  margin-bottom: 2rem;
+}
+
+.user-login {
+  margin-top: auto;
 }
 
 .user-login a {
@@ -233,6 +242,10 @@ textarea.autoResize {
 .logged-in-user-container {
   display: flex;
   justify-content: space-between;
+}
+
+.logged-in-user {
+  flex: 0 0 auto;
 }
 
 .logged-in-user-name {
@@ -983,6 +996,7 @@ textarea.autoResize {
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
+    gap: 0;
   }
 
   .fps-meter {
@@ -1065,12 +1079,52 @@ textarea.autoResize {
     width: 85vw;
   }
 
+  .nav-item {
+    padding: 0.375rem 0.75rem;
+  }
+
+  .user-login {
+    margin-top: unset;
+  }
+
   .logged-in-user .issue-creator-avatar {
     margin-right: 0;
   }
 
   .logout-button {
     display: none;
+  }
+
+  .user-login a {
+    font-size: var(--typo-label-size);
+    font-weight: var(--typo-label-weight);
+    padding: 0.375rem 0.75rem;
+  }
+
+  .mobile-login-container {
+    position: relative;
+  }
+
+  .user-panel-mobile {
+    position: absolute;
+    z-index: 9999;
+    flex-direction: column;
+    top: 2rem;
+    right: 0;
+    padding: 1.5rem;
+    background-color: var(--color-modal-background);
+    -webkit-backdrop-filter: var(--filter-backdrop-blur);
+    backdrop-filter: var(--filter-backdrop-blur);
+    border-radius: 0.5rem;
+    border: 1px solid var(--color-modal-outline);
+  }
+
+  .logout-button-mobile {
+    background: transparent url(/src/assets/icons/logout.svg) no-repeat center
+      left;
+    padding-left: 1.5rem;
+    background-size: 1rem;
+    width: max-content;
   }
 }
 
@@ -1081,6 +1135,23 @@ textarea.autoResize {
 
   .zero-mark {
     display: block;
+  }
+
+  .app-container {
+    padding: 1.5rem;
+  }
+
+  .primary-nav {
+    padding: 1.5rem;
+    height: 5rem;
+  }
+
+  .primary-content .issue-taglist {
+    display: none;
+  }
+
+  .filter-label {
+    display: none;
   }
 
   .add-filter-modal {

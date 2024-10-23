@@ -1,6 +1,6 @@
+import {useState, useEffect} from 'react';
 import {FPSMeter} from '@schickling/fps-meter';
 import classNames from 'classnames';
-import {useState} from 'react';
 import {useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
 import {useQuery} from 'zero-react/src/use-query.js';
@@ -17,7 +17,8 @@ import {NotLoggedInModal} from './not-logged-in-modal.js';
 export function Nav() {
   const qs = new URLSearchParams(useSearch());
   const login = useLogin();
-
+  const [isMobile, setIsMobile] = useState(false);
+  const [showUserPanel, setShowUserPanel] = useState(false); // State to control visibility of user-panel-mobile
   const zero = useZero();
   const user = useQuery(
     zero.query.user.where('id', login.loginState?.decoded.sub ?? '').one(),
@@ -49,14 +50,30 @@ export function Nav() {
     }
   };
 
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 900);
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+
+    return () => {
+      window.removeEventListener('resize', checkMobile);
+    };
+  }, []);
+
+  const handleClick = () => {
+    setShowUserPanel(!showUserPanel); // Toggle the user panel visibility
+  };
+
   return (
     <>
       <div className="nav-container flex flex-col">
-        <Link href="/">
+        <Link className="logo-link-container" href="/">
           <img src={logoURL} className="zero-logo" />
           <img src={markURL} className="zero-mark" />
         </Link>
-        {/* could not figure out how to add this color to tailwind.config.js */}
         <Button className="primary-cta" onAction={newIssue}>
           <span className="primary-cta-text">New Issue</span>
         </Button>
@@ -87,22 +104,48 @@ export function Nav() {
             All
           </Link>
         </div>
-        <div className="spacer"></div>
-        {import.meta.env.DEV && (
-          <FPSMeter className="fps-meter" width={192} height={38} />
-        )}
+
         <div className="user-login">
+          {import.meta.env.DEV && (
+            <FPSMeter className="fps-meter" width={192} height={38} />
+          )}
           {login.loginState === undefined ? (
             <a href={loginHref}>Login</a>
           ) : (
             <div className="logged-in-user-container">
               <div className="logged-in-user">
-                <img
-                  src={user?.avatar}
-                  className="issue-creator-avatar"
-                  alt={user?.name}
-                  title={user?.login}
-                />
+                {isMobile ? (
+                  <div className="mobile-login-container">
+                    <Button onAction={handleClick}>
+                      <img
+                        src={user?.avatar}
+                        className="issue-creator-avatar"
+                        alt={user?.name}
+                        title={user?.login}
+                      />
+                    </Button>
+                    <div
+                      className={classNames('user-panel-mobile', {
+                        hidden: !showUserPanel, // Conditionally hide/show the panel
+                      })}
+                    >
+                      <Button
+                        className="logout-button-mobile"
+                        onAction={login.logout}
+                        title="Log out"
+                      >
+                        Log out
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <img
+                    src={user?.avatar}
+                    className="issue-creator-avatar"
+                    alt={user?.name}
+                    title={user?.login}
+                  />
+                )}
                 <span className="logged-in-user-name">
                   {login.loginState?.decoded.name}
                 </span>
