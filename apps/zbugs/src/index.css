@@ -1168,6 +1168,13 @@ textarea.autoResize {
   .list-view-filter-container > .set-filter-container {
     flex-basis: 100%;
     margin-bottom: 1rem;
+    display: none;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .list-view-filter-container > .set-filter-container:not(:empty) {
+    display: flex;
   }
 
   .filter-label {

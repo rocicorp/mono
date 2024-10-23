@@ -266,10 +266,10 @@ export default function ListPage() {
       </div>
       <div className="list-view-filter-container">
         <span className="filter-label">Filtered by:</span>
-        {[...qs.entries()].map(([key, val]) => {
-          if (key === 'label' || key === 'creator' || key === 'assignee') {
-            return (
-              <div className="set-filter-container">
+        <div className="set-filter-container">
+          {[...qs.entries()].map(([key, val]) => {
+            if (key === 'label' || key === 'creator' || key === 'assignee') {
+              return (
                 <span
                   className={classNames('pill', {
                     label: key === 'label',
@@ -282,11 +282,11 @@ export default function ListPage() {
                 >
                   {key}: {val}
                 </span>
-              </div>
-            );
-          }
-          return null;
-        })}
+              );
+            }
+            return null;
+          })}
+        </div>
         <Filter onSelect={onFilter} />
         <div className="sort-control-container">
           <Button className="sort-control" onAction={toggleSortField}>
