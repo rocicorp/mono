@@ -3,11 +3,9 @@ import type postgres from 'postgres';
 import {assert} from '../../../shared/src/asserts.js';
 import {randInt} from '../../../shared/src/rand.js';
 import * as v from '../../../shared/src/valita.js';
+import type {PostgresDB, PostgresTransaction} from '../types/pg.js';
 
-type Operations = (
-  log: LogContext,
-  tx: postgres.TransactionSql,
-) => Promise<void>;
+type Operations = (log: LogContext, tx: PostgresTransaction) => Promise<void>;
 
 /**
  * Encapsulates the logic for setting up or upgrading to a new schema. After the
@@ -62,7 +60,7 @@ export async function runSchemaMigrations(
   log: LogContext,
   debugName: string,
   schemaName: string,
-  db: postgres.Sql,
+  db: PostgresDB,
   setupMigration: Migration,
   incrementalMigrationMap: IncrementalMigrationMap,
 ): Promise<void> {
@@ -241,7 +239,7 @@ async function updateVersionHistory(
 async function runMigration(
   log: LogContext,
   schemaName: string,
-  tx: postgres.TransactionSql,
+  tx: PostgresTransaction,
   versions: VersionHistory,
   destinationVersion: number,
   migration: Migration,

@@ -33,6 +33,7 @@ import {
   type CVRSnapshot,
   type RowUpdate,
 } from './cvr.js';
+import type {DrainCoordinator} from './drain-coordinator.js';
 import {PipelineDriver, type RowChange} from './pipeline-driver.js';
 import {
   cmpVersions,
@@ -60,8 +61,6 @@ export interface ViewSyncer {
     ctx: SyncContext,
     msg: ChangeDesiredQueriesMessage,
   ): Promise<void>;
-
-  totalHydrationTimeMs(): number;
 }
 
 type IdleToken = {
@@ -72,9 +71,11 @@ const DEFAULT_KEEPALIVE_MS = 30_000;
 
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
+  readonly #shardID: string;
   readonly #lc: LogContext;
   readonly #pipelines: PipelineDriver;
   readonly #stateChanges: Subscription<ReplicaState>;
+  readonly #drainCoordinator: DrainCoordinator;
   readonly #keepaliveMs: number;
 
   // Serialize on this lock for:
@@ -91,17 +92,21 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   constructor(
     lc: LogContext,
     clientGroupID: string,
+    shardID: string,
     db: PostgresDB,
     pipelineDriver: PipelineDriver,
     versionChanges: Subscription<ReplicaState>,
+    drainCoordinator: DrainCoordinator,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
   ) {
     this.id = clientGroupID;
+    this.#shardID = shardID;
     this.#lc = lc
       .withContext('component', 'view-syncer')
       .withContext('serviceID', this.id);
     this.#pipelines = pipelineDriver;
     this.#stateChanges = versionChanges;
+    this.#drainCoordinator = drainCoordinator;
     this.#keepaliveMs = keepaliveMs;
     this.#cvrStore = new CVRStore(lc, db, clientGroupID);
   }
@@ -124,6 +129,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   async run(): Promise<void> {
     try {
       for await (const {state} of this.#stateChanges) {
+        if (this.#drainCoordinator.shouldDrain()) {
+          this.#lc.debug?.(`draining view-syncer ${this.id} (elective)`);
+          break;
+        }
         assert(state === 'version-ready'); // This is the only state change used.
         if (!this.#pipelines.initialized()) {
           // On the first version-ready signal, connect to the replica.
@@ -156,6 +165,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         });
       }
 
+      // If this view-syncer exited due to an elective or forced drain,
+      // set the next drain timeout.
+      if (this.#drainCoordinator.shouldDrain()) {
+        this.#drainCoordinator.drainNextIn(this.#totalHydrationTimeMs());
+      }
       this.#cleanup();
     } catch (e) {
       this.#lc.error?.(e);
@@ -166,7 +180,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
   }
 
-  totalHydrationTimeMs(): number {
+  #totalHydrationTimeMs(): number {
     return this.#pipelines.totalHydrationTimeMs();
   }
 
@@ -256,6 +270,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.id,
       clientID,
       wsID,
+      this.#shardID,
       baseCookie,
       schemaVersion,
       downstream,
@@ -350,7 +365,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     // Apply requested patches.
     if (desiredQueriesPatch.length) {
       lc.debug?.(`applying ${desiredQueriesPatch.length} query patches`);
-      const updater = new CVRConfigDrivenUpdater(this.#cvrStore, cvr);
+      const updater = new CVRConfigDrivenUpdater(
+        this.#cvrStore,
+        cvr,
+        this.#shardID,
+      );
 
       const added: {id: string; ast: AST}[] = [];
       for (const patch of desiredQueriesPatch) {

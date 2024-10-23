@@ -1,8 +1,8 @@
-import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, test} from 'vitest';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
+import {Database} from '../../../../../zqlite/src/db.js';
 import {expectTables, testDBs} from '../../../test/db.js';
 import type {PostgresDB} from '../../../types/pg.js';
-import {Database} from '../../../../../zqlite/src/db.js';
 import {initReplicationState} from '../../replicator/schema/replication-state.js';
 import {ensureReplicationConfig, setupCDCTables} from './tables.js';
 
@@ -29,18 +29,18 @@ describe('change-streamer/schema/tables', () => {
     });
 
     await expectTables(db, {
-      ['cdc.ReplicationConfig']: [
+      ['cdc.replicationConfig']: [
         {
           replicaVersion: '183',
           publications: ['zero_data', 'zero_metadata'],
           lock: 1,
         },
       ],
-      ['cdc.ChangeLog']: [],
+      ['cdc.changeLog']: [],
     });
 
     await db`
-    INSERT INTO cdc."ChangeLog" (watermark, pos, change)
+    INSERT INTO cdc."changeLog" (watermark, pos, change)
         values ('184', 1, JSONB('{"foo":"bar"}'));
     `;
 
@@ -51,14 +51,14 @@ describe('change-streamer/schema/tables', () => {
     });
 
     await expectTables(db, {
-      ['cdc.ReplicationConfig']: [
+      ['cdc.replicationConfig']: [
         {
           replicaVersion: '183',
           publications: ['zero_data', 'zero_metadata'],
           lock: 1,
         },
       ],
-      ['cdc.ChangeLog']: [
+      ['cdc.changeLog']: [
         {
           watermark: '184',
           pos: 1n,
@@ -75,14 +75,14 @@ describe('change-streamer/schema/tables', () => {
     });
 
     await expectTables(db, {
-      ['cdc.ReplicationConfig']: [
+      ['cdc.replicationConfig']: [
         {
           replicaVersion: '1g8',
           publications: ['zero_data', 'zero_metadata'],
           lock: 1,
         },
       ],
-      ['cdc.ChangeLog']: [],
+      ['cdc.changeLog']: [],
     });
   });
 });

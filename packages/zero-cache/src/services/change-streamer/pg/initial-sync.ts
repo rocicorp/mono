@@ -9,7 +9,6 @@ import {
 import {
   mapPostgresToLite,
   mapPostgresToLiteIndex,
-  warnIfDataTypeSupported,
 } from '../../../db/pg-to-lite.js';
 import type {FilteredTableSpec, IndexSpec} from '../../../db/specs.js';
 import {
@@ -26,15 +25,14 @@ import {
   ZERO_VERSION_COLUMN_NAME,
 } from '../../replicator/schema/replication-state.js';
 import {toLexiVersion} from './lsn.js';
-import {type PublicationInfo} from './schema/published.js';
-import {setupTablesAndReplication} from './schema/zero.js';
+import {initShardSchema} from './schema/init.js';
+import {getPublicationInfo, type PublicationInfo} from './schema/published.js';
+import {getShardConfig} from './schema/shard.js';
 import type {ShardConfig} from './shard-config.js';
 
 export function replicationSlot(shardID: string): string {
   return `zero_${shardID}`;
 }
-
-const ALLOWED_IDENTIFIER_CHARS = /^[A-Za-z_-]+$/;
 
 export async function initialSync(
   lc: LogContext,
@@ -114,7 +112,7 @@ async function checkUpstreamConfig(upstreamDB: PostgresDB) {
   }
 }
 
-function ensurePublishedTables(
+async function ensurePublishedTables(
   lc: LogContext,
   upstreamDB: PostgresDB,
   shard: ShardConfig,
@@ -122,54 +120,11 @@ function ensurePublishedTables(
   const {database, host} = upstreamDB.options;
   lc.info?.(`Ensuring upstream PUBLICATION on ${database}@${host}`);
 
-  return upstreamDB.begin(async tx => {
-    const published = await setupTablesAndReplication(tx, shard);
-    // Verify that all publications export the proper events.
-    published.publications.forEach(pub => {
-      if (
-        !pub.pubinsert ||
-        !pub.pubtruncate ||
-        !pub.pubdelete ||
-        !pub.pubtruncate
-      ) {
-        // TODO: Make APIError?
-        throw new Error(
-          `PUBLICATION ${pub.pubname} must publish insert, update, delete, and truncate`,
-        );
-      }
-    });
+  await initShardSchema(lc, upstreamDB, shard);
 
-    published.tables.forEach(table => {
-      if (!['public', 'zero'].includes(table.schema)) {
-        // This may be relaxed in the future. We would need a plan for support in the AST first.
-        throw new Error('Only the default "public" schema is supported.');
-      }
-      if (ZERO_VERSION_COLUMN_NAME in table.columns) {
-        throw new Error(
-          `Table "${table.name}" uses reserved column name "${ZERO_VERSION_COLUMN_NAME}"`,
-        );
-      }
-      if (table.primaryKey.length === 0) {
-        throw new Error(`Table "${table.name}" does not have a PRIMARY KEY`);
-      }
-      if (!ALLOWED_IDENTIFIER_CHARS.test(table.schema)) {
-        throw new Error(`Schema "${table.schema}" has invalid characters.`);
-      }
-      if (!ALLOWED_IDENTIFIER_CHARS.test(table.name)) {
-        throw new Error(`Table "${table.name}" has invalid characters.`);
-      }
-      for (const [col, spec] of Object.entries(table.columns)) {
-        if (!ALLOWED_IDENTIFIER_CHARS.test(col)) {
-          throw new Error(
-            `Column "${col}" in table "${table.name}" has invalid characters.`,
-          );
-        }
-        warnIfDataTypeSupported(lc, spec.dataType, table.name, col);
-      }
-    });
+  const {publications} = await getShardConfig(upstreamDB, shard.id);
 
-    return published;
-  });
+  return getPublicationInfo(upstreamDB, publications);
 }
 
 /* eslint-disable @typescript-eslint/naming-convention */

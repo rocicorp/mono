@@ -19,6 +19,7 @@ import {
   type SchemaVersions,
 } from '../../types/schema-versions.js';
 import type {Subscription} from '../../types/subscription.js';
+import {unescapedSchema as schema} from '../change-streamer/pg/schema/shard.js';
 import {
   type ClientPatch,
   cmpVersions,
@@ -81,6 +82,7 @@ export class ClientHandler {
   readonly #clientGroupID: string;
   readonly clientID: string;
   readonly wsID: string;
+  readonly #zeroClientsTable: string;
   readonly #lc: LogContext;
   readonly #pokes: Subscription<Downstream>;
   #baseVersion: NullableCVRVersion;
@@ -91,6 +93,7 @@ export class ClientHandler {
     clientGroupID: string,
     clientID: string,
     wsID: string,
+    shardID: string,
     baseCookie: string | null,
     schemaVersion: number,
     pokes: Subscription<Downstream>,
@@ -98,6 +101,7 @@ export class ClientHandler {
     this.#clientGroupID = clientGroupID;
     this.clientID = clientID;
     this.wsID = wsID;
+    this.#zeroClientsTable = `${schema(shardID)}.clients`;
     this.#lc = lc.withContext('clientID', clientID);
     this.#pokes = pokes;
     this.#baseVersion = cookieToVersion(baseCookie);
@@ -183,7 +187,7 @@ export class ClientHandler {
           break;
         }
         case 'row':
-          if (patch.id.table === 'zero.clients') {
+          if (patch.id.table === this.#zeroClientsTable) {
             this.#updateLMIDs((body.lastMutationIDChanges ??= {}), patch);
           } else {
             (body.rowsPatch ??= []).push(makeRowPatch(patch));
@@ -242,7 +246,7 @@ export class ClientHandler {
   }
 }
 
-// Note: The zero.clients table is set up in replicator/initial-sync.ts.
+// Note: The zero_{SHARD_ID}.clients table is set up in replicator/initial-sync.ts.
 const lmidRowSchema = v.object({
   clientGroupID: v.string(),
   clientID: v.string(),

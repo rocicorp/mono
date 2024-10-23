@@ -47,42 +47,35 @@ const ZERO_SCHEMA_VERSIONS_SPEC: FilteredTableSpec = {
   },
   name: 'schemaVersions',
   primaryKey: ['lock'],
-  publications: {['_zero_schema_versions']: {rowFilter: null}},
+  publications: {[`_zero_metadata_${SHARD_ID}`]: {rowFilter: null}},
   schema: 'zero',
 } as const;
 
 const ZERO_CLIENTS_SPEC: FilteredTableSpec = {
   columns: {
-    shardID: {
+    clientGroupID: {
       pos: 1,
       characterMaximumLength: null,
       dataType: 'text',
       notNull: true,
       dflt: null,
     },
-    clientGroupID: {
+    clientID: {
       pos: 2,
       characterMaximumLength: null,
       dataType: 'text',
       notNull: true,
       dflt: null,
     },
-    clientID: {
-      pos: 3,
-      characterMaximumLength: null,
-      dataType: 'text',
-      notNull: true,
-      dflt: null,
-    },
     lastMutationID: {
-      pos: 4,
+      pos: 3,
       characterMaximumLength: null,
       dataType: 'int8',
       notNull: true,
       dflt: null,
     },
     userID: {
-      pos: 5,
+      pos: 4,
       characterMaximumLength: null,
       dataType: 'text',
       notNull: false,
@@ -90,13 +83,9 @@ const ZERO_CLIENTS_SPEC: FilteredTableSpec = {
     },
   },
   name: 'clients',
-  primaryKey: ['shardID', 'clientGroupID', 'clientID'],
-  schema: 'zero',
-  publications: {
-    ['_zero_initial_sync_test_id_clients']: {
-      rowFilter: `("shardID" = 'initial_sync_test_id'::text)`,
-    },
-  },
+  primaryKey: ['clientGroupID', 'clientID'],
+  schema: `zero_${SHARD_ID}`,
+  publications: {[`_zero_metadata_${SHARD_ID}`]: {rowFilter: null}},
 } as const;
 
 const REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC: LiteTableSpec = {
@@ -129,44 +118,37 @@ const REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC: LiteTableSpec = {
 
 const REPLICATED_ZERO_CLIENTS_SPEC: LiteTableSpec = {
   columns: {
-    shardID: {
+    clientGroupID: {
       pos: 1,
       characterMaximumLength: null,
       dataType: 'TEXT',
       notNull: true,
       dflt: null,
     },
-    clientGroupID: {
+    clientID: {
       pos: 2,
       characterMaximumLength: null,
       dataType: 'TEXT',
       notNull: true,
       dflt: null,
     },
-    clientID: {
-      pos: 3,
-      characterMaximumLength: null,
-      dataType: 'TEXT',
-      notNull: true,
-      dflt: null,
-    },
     lastMutationID: {
-      pos: 4,
+      pos: 3,
       characterMaximumLength: null,
       dataType: 'int8',
       notNull: true,
       dflt: null,
     },
     userID: {
-      pos: 5,
+      pos: 4,
       characterMaximumLength: null,
       dataType: 'TEXT',
       notNull: false,
       dflt: null,
     },
   },
-  name: 'zero.clients',
-  primaryKey: ['shardID', 'clientGroupID', 'clientID'],
+  name: `zero_${SHARD_ID}.clients`,
+  primaryKey: ['clientGroupID', 'clientID'],
 } as const;
 
 describe('replicator/initial-sync', () => {
@@ -187,15 +169,15 @@ describe('replicator/initial-sync', () => {
     {
       name: 'empty DB',
       published: {
-        ['zero.clients']: ZERO_CLIENTS_SPEC,
+        [`zero_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
         ['zero.schemaVersions']: ZERO_SCHEMA_VERSIONS_SPEC,
       },
       replicatedSchema: {
-        ['zero.clients']: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`zero_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         ['zero.schemaVersions']: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
       },
       replicatedData: {
-        ['zero.clients']: [],
+        [`zero_${SHARD_ID}.clients`]: [],
         ['zero.schemaVersions']: [
           {
             lock: 1n,
@@ -205,11 +187,7 @@ describe('replicator/initial-sync', () => {
           },
         ],
       },
-      resultingPublications: [
-        '_zero_initial_sync_test_id_clients',
-        '_zero_schema_versions',
-        'zero_public',
-      ],
+      resultingPublications: [`_zero_metadata_${SHARD_ID}`, 'zero_public'],
     },
     {
       name: 'replication slot already exists',
@@ -219,15 +197,15 @@ describe('replicator/initial-sync', () => {
         )}', 'pgoutput');
       `,
       published: {
-        ['zero.clients']: ZERO_CLIENTS_SPEC,
+        [`zero_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
         ['zero.schemaVersions']: ZERO_SCHEMA_VERSIONS_SPEC,
       },
       replicatedSchema: {
-        ['zero.clients']: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`zero_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         ['zero.schemaVersions']: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
       },
       replicatedData: {
-        ['zero.clients']: [],
+        [`zero_${SHARD_ID}.clients`]: [],
         ['zero.schemaVersions']: [
           {
             lock: 1n,
@@ -237,11 +215,7 @@ describe('replicator/initial-sync', () => {
           },
         ],
       },
-      resultingPublications: [
-        '_zero_initial_sync_test_id_clients',
-        '_zero_schema_versions',
-        'zero_public',
-      ],
+      resultingPublications: [`_zero_metadata_${SHARD_ID}`, 'zero_public'],
     },
     {
       name: 'existing table, default publication',
@@ -262,7 +236,7 @@ describe('replicator/initial-sync', () => {
         );
       `,
       published: {
-        ['zero.clients']: ZERO_CLIENTS_SPEC,
+        [`zero_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
         ['zero.schemaVersions']: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.issues']: {
           columns: {
@@ -351,7 +325,7 @@ describe('replicator/initial-sync', () => {
         },
       },
       replicatedSchema: {
-        ['zero.clients']: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`zero_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         ['issues']: {
           columns: {
             issueID: {
@@ -487,7 +461,7 @@ describe('replicator/initial-sync', () => {
         ],
       },
       replicatedData: {
-        ['zero.clients']: [],
+        [`zero_${SHARD_ID}.clients`]: [],
         issues: [
           {
             issueID: 123n,
@@ -541,11 +515,7 @@ describe('replicator/initial-sync', () => {
           },
         ],
       },
-      resultingPublications: [
-        '_zero_initial_sync_test_id_clients',
-        '_zero_schema_versions',
-        'zero_public',
-      ],
+      resultingPublications: [`_zero_metadata_${SHARD_ID}`, 'zero_public'],
     },
     {
       name: 'existing partial publication',
@@ -556,7 +526,7 @@ describe('replicator/initial-sync', () => {
       `,
       requestedPublications: ['zero_custom'],
       published: {
-        ['zero.clients']: ZERO_CLIENTS_SPEC,
+        [`zero_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
         ['zero.schemaVersions']: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.users']: {
           columns: {
@@ -583,7 +553,7 @@ describe('replicator/initial-sync', () => {
         },
       },
       replicatedSchema: {
-        ['zero.clients']: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`zero_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         ['zero.schemaVersions']: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
         ['users']: {
           columns: {
@@ -621,7 +591,7 @@ describe('replicator/initial-sync', () => {
         ],
       },
       replicatedData: {
-        ['zero.clients']: [],
+        [`zero_${SHARD_ID}.clients`]: [],
         users: [
           {userID: 123n, handle: '@zoot', ['_0_version']: '00'},
           {userID: 456n, handle: '@bonk', ['_0_version']: '00'},
@@ -635,11 +605,7 @@ describe('replicator/initial-sync', () => {
           },
         ],
       },
-      resultingPublications: [
-        '_zero_initial_sync_test_id_clients',
-        '_zero_schema_versions',
-        'zero_custom',
-      ],
+      resultingPublications: [`_zero_metadata_${SHARD_ID}`, 'zero_custom'],
     },
     {
       name: 'existing partial filtered publication',
@@ -651,7 +617,7 @@ describe('replicator/initial-sync', () => {
       `,
       requestedPublications: ['zero_custom', 'zero_custom2'],
       published: {
-        ['zero.clients']: ZERO_CLIENTS_SPEC,
+        [`zero_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
         ['zero.schemaVersions']: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.users']: {
           columns: {
@@ -681,7 +647,7 @@ describe('replicator/initial-sync', () => {
         },
       },
       replicatedSchema: {
-        ['zero.clients']: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`zero_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         ['zero.schemaVersions']: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
         ['users']: {
           columns: {
@@ -720,7 +686,7 @@ describe('replicator/initial-sync', () => {
         ],
       },
       replicatedData: {
-        ['zero.clients']: [],
+        [`zero_${SHARD_ID}.clients`]: [],
         users: [
           {userID: 456n, handle: '@bonk', ['_0_version']: '00'},
           {userID: 1001n, handle: '@boom', ['_0_version']: '00'},
@@ -735,14 +701,13 @@ describe('replicator/initial-sync', () => {
         ],
       },
       resultingPublications: [
-        '_zero_initial_sync_test_id_clients',
-        '_zero_schema_versions',
+        `_zero_metadata_${SHARD_ID}`,
         'zero_custom',
         'zero_custom2',
       ],
     },
     {
-      name: 'replicates indices',
+      name: 'replicates indexes',
       setupUpstreamQuery: `
         CREATE TABLE issues(
           "issueID" INTEGER,
@@ -754,7 +719,7 @@ describe('replicator/initial-sync', () => {
         CREATE INDEX ON issues ("orgID" DESC, "other");
       `,
       published: {
-        ['zero.clients']: ZERO_CLIENTS_SPEC,
+        [`zero_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
         ['zero.schemaVersions']: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.issues']: {
           columns: {
@@ -794,7 +759,7 @@ describe('replicator/initial-sync', () => {
         },
       },
       replicatedSchema: {
-        ['zero.clients']: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`zero_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         ['zero.schemaVersions']: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
         ['issues']: {
           columns: {
@@ -840,7 +805,7 @@ describe('replicator/initial-sync', () => {
       },
       upstream: {},
       replicatedData: {
-        ['zero.clients']: [],
+        [`zero_${SHARD_ID}.clients`]: [],
         issues: [],
         ['zero.schemaVersions']: [
           {
@@ -862,11 +827,7 @@ describe('replicator/initial-sync', () => {
           unique: false,
         },
       ],
-      resultingPublications: [
-        '_zero_initial_sync_test_id_clients',
-        '_zero_schema_versions',
-        'zero_public',
-      ],
+      resultingPublications: [`_zero_metadata_${SHARD_ID}`, 'zero_public'],
     },
   ];
 
@@ -896,6 +857,11 @@ describe('replicator/initial-sync', () => {
         getConnectionURI(upstream),
       );
 
+      const result = await upstream.unsafe<{publications: string[]}[]>(
+        `SELECT publications FROM zero_${SHARD_ID}."shardConfig"`,
+      );
+      expect(result[0].publications).toEqual(c.resultingPublications);
+
       const {publications, tables} = await getPublicationInfo(
         upstream,
         c.resultingPublications,
@@ -914,7 +880,7 @@ describe('replicator/initial-sync', () => {
         Object.fromEntries(synced.map(table => [table.name, table])),
       ).toMatchObject(c.replicatedSchema);
       const {pubs} = replica
-        .prepare(`SELECT publications as pubs FROM "_zero.ReplicationConfig"`)
+        .prepare(`SELECT publications as pubs FROM "_zero.replicationConfig"`)
         .get<{pubs: string}>();
       expect(new Set(JSON.parse(pubs))).toEqual(
         new Set(c.resultingPublications),
@@ -926,7 +892,7 @@ describe('replicator/initial-sync', () => {
       expectTables(replica, c.replicatedData, 'bigint');
 
       const replicaState = replica
-        .prepare('SELECT * FROM "_zero.ReplicationState"')
+        .prepare('SELECT * FROM "_zero.replicationState"')
         .get<{
           watermark: string;
           stateVersion: string;
@@ -937,7 +903,7 @@ describe('replicator/initial-sync', () => {
         watermark: /[0-9a-f]{2,}/,
         stateVersion: '00',
       });
-      expectTables(replica, {['_zero.ChangeLog']: []});
+      expectTables(replica, {['_zero.changeLog']: []});
 
       // Check replica state against the upstream slot.
       const slots = await upstream`

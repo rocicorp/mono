@@ -3,11 +3,10 @@ import {resolver} from '@rocicorp/resolver';
 import assert from 'assert';
 import {jwtVerify, type JWTPayload} from 'jose';
 import {pid} from 'process';
-import {must} from '../../../shared/src/must.js';
-import {promiseVoid} from '../../../shared/src/resolved-promises.js';
-import {sleep} from '../../../shared/src/sleep.js';
 import {MessagePort} from 'worker_threads';
 import {WebSocketServer, type WebSocket} from 'ws';
+import {must} from '../../../shared/src/must.js';
+import {promiseVoid} from '../../../shared/src/resolved-promises.js';
 import {type ZeroConfig} from '../config/zero-config.js';
 import type {ConnectParams} from '../services/dispatcher/connect-params.js';
 import {installWebSocketReceiver} from '../services/dispatcher/websocket-handoff.js';
@@ -19,6 +18,7 @@ import type {
   Service,
   SingletonService,
 } from '../services/service.js';
+import {DrainCoordinator} from '../services/view-syncer/drain-coordinator.js';
 import type {ViewSyncer} from '../services/view-syncer/view-syncer.js';
 import type {Worker} from '../types/processes.js';
 import {Subscription} from '../types/subscription.js';
@@ -42,6 +42,7 @@ export class Syncer implements SingletonService {
   readonly #viewSyncers: ServiceRunner<ViewSyncer & ActivityBasedService>;
   readonly #mutagens: ServiceRunner<Mutagen & Service>;
   readonly #connections = new Map<string, Connection>();
+  readonly #drainCoordinator = new DrainCoordinator();
   readonly #parent: Worker;
   readonly #wss: WebSocketServer;
   readonly #stopped = resolver();
@@ -54,6 +55,7 @@ export class Syncer implements SingletonService {
     viewSyncerFactory: (
       id: string,
       sub: Subscription<ReplicaState>,
+      drainCoordinator: DrainCoordinator,
     ) => ViewSyncer & ActivityBasedService,
     mutagenFactory: (id: string) => Mutagen & Service,
     parent: Worker,
@@ -67,7 +69,7 @@ export class Syncer implements SingletonService {
     this.#lc = lc;
     this.#viewSyncers = new ServiceRunner(
       lc,
-      id => viewSyncerFactory(id, notifier.subscribe()),
+      id => viewSyncerFactory(id, notifier.subscribe(), this.#drainCoordinator),
       v => v.keepalive(),
     );
     this.#mutagens = new ServiceRunner(lc, mutagenFactory);
@@ -133,10 +135,20 @@ export class Syncer implements SingletonService {
   async drain() {
     const start = Date.now();
     this.#lc.info?.(`draining ${this.#viewSyncers.size} view-syncers`);
-    for (const viewSyncer of this.#viewSyncers.getServices()) {
-      const hydrationTimeMs = viewSyncer.totalHydrationTimeMs();
-      await viewSyncer.stop();
-      await sleep(hydrationTimeMs);
+
+    this.#drainCoordinator.drainNextIn(0);
+
+    while (this.#viewSyncers.size) {
+      await this.#drainCoordinator.forceDrainTimeout;
+
+      // Pick an arbitrary view syncer to force drain.
+      for (const vs of this.#viewSyncers.getServices()) {
+        this.#lc.debug?.(`draining view-syncer ${vs.id} (forced)`);
+        // When this drain or an elective drain completes, the forceDrainTimeout will
+        // resolve after the next drain interval.
+        void vs.stop();
+        break;
+      }
     }
     this.#lc.info?.(`finished draining (${Date.now() - start} ms)`);
   }

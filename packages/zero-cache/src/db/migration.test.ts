@@ -3,6 +3,7 @@ import type postgres from 'postgres';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {testDBs} from '../test/db.js';
+import type {PostgresDB} from '../types/pg.js';
 import {
   type IncrementalMigrationMap,
   type Migration,
@@ -188,7 +189,7 @@ describe('db/migration', () => {
     },
   ];
 
-  let db: postgres.Sql;
+  let db: PostgresDB;
 
   beforeEach(async () => {
     db = await testDBs.create('migration_test');

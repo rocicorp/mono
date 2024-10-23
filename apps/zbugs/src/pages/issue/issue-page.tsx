@@ -1,4 +1,4 @@
-import type {Zero} from '@rocicorp/zero';
+import type {SchemaToRow, Zero} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {nanoid} from 'nanoid';
 import {useEffect, useMemo, useState} from 'react';
@@ -19,9 +19,10 @@ import UserPicker from '../../components/user-picker.js';
 import type {Schema} from '../../domain/schema.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useZero} from '../../hooks/use-zero.js';
-import {links, type ListContext} from '../../routes.js';
+import {links, type ListContext, type ZbugsHistoryState} from '../../routes.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
+import RelativeTime from '../../components/relative-time.js';
 
 export default function IssuePage() {
   const z = useZero();
@@ -31,8 +32,8 @@ export default function IssuePage() {
   const idField = isNaN(parseInt(idStr)) ? 'id' : 'shortID';
   const id = idField === 'shortID' ? parseInt(idStr) : idStr;
 
-  const listContext = useHistoryState<ListContext | undefined>();
-
+  const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
+  const listContext = zbugsHistoryState?.zbugsListContext;
   // todo: one should be in the schema
   const q = z.query.issue
     .where(idField, id)
@@ -68,9 +69,12 @@ export default function IssuePage() {
   const [edits, setEdits] = useState<Partial<typeof issue>>({});
   useEffect(() => {
     if (issue?.shortID !== undefined && idField !== 'shortID') {
-      navigate(links.issue(issue), {replace: true, state: listContext});
+      navigate(links.issue(issue), {
+        replace: true,
+        state: zbugsHistoryState,
+      });
     }
-  }, [issue, idField, listContext]);
+  }, [issue, idField, zbugsHistoryState]);
 
   const save = () => {
     if (!editing) {
@@ -98,28 +102,22 @@ export default function IssuePage() {
     setIssueSnapshot(issue);
   }
   const next = useQuery(
-    buildListQuery(z, 'desc', listContext?.params)
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      .start(issueSnapshot!)
-      .one(),
+    buildListQuery(z, listContext, issue, 'next'),
     listContext !== undefined && issueSnapshot !== undefined,
   );
   useKeypress('j', () => {
     if (next) {
-      navigate(links.issue(next), {state: listContext});
+      navigate(links.issue(next), {state: zbugsHistoryState});
     }
   });
 
   const prev = useQuery(
-    buildListQuery(z, 'asc', listContext?.params)
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      .start(issueSnapshot!)
-      .one(),
+    buildListQuery(z, listContext, issue, 'prev'),
     listContext !== undefined && issueSnapshot !== undefined,
   );
   useKeypress('k', () => {
     if (prev) {
-      navigate(links.issue(prev), {state: listContext});
+      navigate(links.issue(prev), {state: zbugsHistoryState});
     }
   });
 
@@ -159,7 +157,14 @@ export default function IssuePage() {
           <div className="issue-breadcrumb">
             {listContext ? (
               <>
-                <Link className="breadcrumb-item" href={listContext.href}>
+                <Link
+                  className="breadcrumb-item"
+                  href={listContext.href}
+                  state={{
+                    zbugsListScrollOffset:
+                      zbugsHistoryState?.zbugsListScrollOffset,
+                  }}
+                >
                   {listContext.title}
                 </Link>
                 <span className="breadcrumb-item">&rarr;</span>
@@ -309,6 +314,13 @@ export default function IssuePage() {
               }}
             />
           </div>
+
+          <div className="sidebar-item">
+            <p className="issue-detail-label">Last updated</p>
+            <div className="timestamp-container">
+              <RelativeTime timestamp={issue.modified} />
+            </div>
+          </div>
         </div>
 
         <h2 className="issue-detail-label">Comments</h2>
@@ -345,11 +357,29 @@ export default function IssuePage() {
 
 function buildListQuery(
   z: Zero<Schema>,
-  dir: 'asc' | 'desc',
-  params: ListContext['params'] = {},
+  listContext: ListContext | undefined,
+  issue: SchemaToRow<Schema['tables']['issue']> | undefined,
+  dir: 'next' | 'prev',
 ) {
-  const {open, creatorID, assigneeID, labelIDs} = params;
-  let q = z.query.issue.orderBy('modified', dir).orderBy('id', dir);
+  if (!listContext || !issue) {
+    return z.query.issue.one();
+  }
+  const {
+    open,
+    creatorID,
+    assigneeID,
+    labelIDs,
+    textFilter,
+    sortField,
+    sortDirection,
+  } = listContext.params;
+  const orderByDir =
+    dir === 'next' ? sortDirection : sortDirection === 'asc' ? 'desc' : 'asc';
+  let q = z.query.issue
+    .orderBy(sortField, orderByDir)
+    .orderBy('id', orderByDir)
+    .start(issue)
+    .one();
   if (open !== undefined) {
     q = q.where('open', open);
   }
@@ -365,6 +395,9 @@ function buildListQuery(
     for (const labelID of labelIDs) {
       q = q.where('labelIDs', 'LIKE', `%${labelID}%`);
     }
+  }
+  if (textFilter) {
+    q = q.where('title', 'ILIKE', `%${textFilter}%`);
   }
   return q;
 }

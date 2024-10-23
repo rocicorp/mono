@@ -52,7 +52,7 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
         {comment.creator?.login}
       </p>
       <span className={style.commentTimestamp}>
-        <RelativeTime created={comment.created} />
+        <RelativeTime timestamp={comment.created} />
       </span>
       {editing ? (
         <CommentComposer

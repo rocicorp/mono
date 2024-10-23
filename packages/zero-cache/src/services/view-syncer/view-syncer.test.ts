@@ -34,14 +34,17 @@ import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,
 } from './database-storage.js';
+import {DrainCoordinator} from './drain-coordinator.js';
 import {PipelineDriver} from './pipeline-driver.js';
-import {initViewSyncerSchema} from './schema/pg-migrations.js';
+import {initViewSyncerSchema} from './schema/init.js';
 import {Snapshotter} from './snapshotter.js';
 import {type SyncContext, ViewSyncerService} from './view-syncer.js';
 
+const SHARD_ID = 'ABC';
+
 const EXPECTED_LMIDS_AST: AST = {
   schema: '',
-  table: 'zero.clients',
+  table: 'zero_ABC.clients',
   where: [
     {
       type: 'simple',
@@ -51,7 +54,6 @@ const EXPECTED_LMIDS_AST: AST = {
     },
   ],
   orderBy: [
-    ['shardID', 'asc'],
     ['clientGroupID', 'asc'],
     ['clientID', 'asc'],
   ],
@@ -64,6 +66,7 @@ describe('view-syncer/service', () => {
   let cvrDB: PostgresDB;
   const lc = createSilentLogContext();
   let stateChanges: Subscription<ReplicaState>;
+  let drainCoordinator: DrainCoordinator;
 
   let operatorStorage: ClientGroupStorage;
   let vs: ViewSyncerService;
@@ -95,14 +98,13 @@ describe('view-syncer/service', () => {
     replica.pragma('journal_mode = WAL');
     replica.pragma('busy_timeout = 1');
     replica.exec(`
-    CREATE TABLE "zero.clients" (
-      "shardID"        TEXT,
+    CREATE TABLE "zero_ABC.clients" (
       "clientGroupID"  TEXT,
       "clientID"       TEXT,
       "lastMutationID" INTEGER,
       "userID"         TEXT,
       _0_version       TEXT NOT NULL,
-      PRIMARY KEY ("shardID", "clientGroupID", "clientID")
+      PRIMARY KEY ("clientGroupID", "clientID")
     );
     CREATE TABLE "zero.schemaVersions" (
       "lock"                INTEGER PRIMARY KEY,
@@ -124,8 +126,8 @@ describe('view-syncer/service', () => {
       _0_version TEXT NOT NULL
     );
 
-    INSERT INTO "zero.clients" ("shardID", "clientGroupID", "clientID", "lastMutationID", _0_version)
-      VALUES ('0', '9876', 'foo', 42, '00');
+    INSERT INTO "zero_ABC.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
+      VALUES ('9876', 'foo', 42, '00');
     INSERT INTO "zero.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
       VALUES (1, 2, 3, '00');  
 
@@ -146,12 +148,14 @@ describe('view-syncer/service', () => {
 
     replicator = fakeReplicator(lc, replica);
     stateChanges = Subscription.create();
+    drainCoordinator = new DrainCoordinator();
     operatorStorage = new DatabaseStorage(storageDB).createClientGroupStorage(
       serviceID,
     );
     vs = new ViewSyncerService(
       lc,
       serviceID,
+      SHARD_ID,
       cvrDB,
       new PipelineDriver(
         lc.withContext('component', 'pipeline-driver'),
@@ -159,6 +163,7 @@ describe('view-syncer/service', () => {
         operatorStorage,
       ),
       stateChanges,
+      drainCoordinator,
     );
     viewSyncerDone = vs.run();
   });
@@ -230,6 +235,7 @@ describe('view-syncer/service', () => {
 
   const USERS_QUERY: AST = {
     table: 'users',
+    orderBy: [['id', 'asc']],
   };
 
   test('adds desired queries from initConnectionMessage', async () => {
@@ -471,11 +477,10 @@ describe('view-syncer/service', () => {
           "rowKey": {
             "clientGroupID": "9876",
             "clientID": "foo",
-            "shardID": "0",
           },
           "rowVersion": "00",
           "schema": "",
-          "table": "zero.clients",
+          "table": "zero_ABC.clients",
         },
         {
           "clientGroupID": "9876",
@@ -666,11 +671,10 @@ describe('view-syncer/service', () => {
           "rowKey": {
             "clientGroupID": "9876",
             "clientID": "foo",
-            "shardID": "0",
           },
           "rowVersion": "00",
           "schema": "",
-          "table": "zero.clients",
+          "table": "zero_ABC.clients",
         },
         {
           "clientGroupID": "9876",
@@ -1370,5 +1374,31 @@ describe('view-syncer/service', () => {
     expect(vs.keepalive()).toBe(true);
     void vs.stop();
     expect(vs.keepalive()).toBe(false);
+  });
+
+  test('elective drain', async () => {
+    const client = await connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+      {op: 'put', hash: 'query-hash2', ast: ISSUES_QUERY2},
+      {op: 'put', hash: 'query-hash3', ast: USERS_QUERY},
+    ]);
+
+    stateChanges.push({state: 'version-ready'});
+    // This should result in computing a non-zero hydration time.
+    await nextPoke(client);
+
+    drainCoordinator.drainNextIn(0);
+    expect(drainCoordinator.shouldDrain()).toBe(true);
+    const now = Date.now();
+    await sleep(3); // Bump time forward to verify that the timeout is reset later.
+
+    // Enqueue a dummy task so that the view-syncer can elect to drain.
+    stateChanges.push({state: 'version-ready'});
+
+    // Upon completion, the view-syncer should have called drainNextIn()
+    // with its hydration time so that the next drain is not triggered
+    // until that interval elapses.
+    await viewSyncerDone;
+    expect(drainCoordinator.nextDrainTime).toBeGreaterThan(now);
   });
 });

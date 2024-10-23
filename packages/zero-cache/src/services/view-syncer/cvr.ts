@@ -11,6 +11,7 @@ import type {AST} from '../../../../zero-protocol/src/ast.js';
 import type {JSONObject} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {rowIDHash} from '../../types/row-key.js';
+import {unescapedSchema as schema} from '../change-streamer/pg/schema/shard.js';
 import type {Patch, PatchToVersion} from './client-handler.js';
 import type {CVRFlushStats, CVRStore} from './cvr-store.js';
 import {
@@ -140,6 +141,13 @@ export class CVRUpdater {
  * but the `stateVersion` of the CVR does not change.
  */
 export class CVRConfigDrivenUpdater extends CVRUpdater {
+  readonly #shardID;
+
+  constructor(cvrStore: CVRStore, cvr: CVRSnapshot, shardID: string) {
+    super(cvrStore, cvr);
+    this.#shardID = shardID;
+  }
+
   #ensureClient(id: string): ClientRecord {
     let client = this._cvr.clients[id];
     if (client) {
@@ -157,7 +165,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         id: CLIENT_LMID_QUERY_ID,
         ast: {
           schema: '',
-          table: 'zero.clients',
+          table: `${schema(this.#shardID)}.clients`,
           where: [
             {
               type: 'simple',
@@ -167,7 +175,6 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
             },
           ],
           orderBy: [
-            ['shardID', 'asc'],
             ['clientGroupID', 'asc'],
             ['clientID', 'asc'],
           ],

@@ -11,6 +11,8 @@ import type {PostgresDB} from '../../types/pg.js';
 import {processMutation} from './mutagen.js';
 import type {WriteAuthorizer} from './write-authorizer.js';
 
+const SHARD_ID = '0';
+
 class MockWriteAuthorizer implements WriteAuthorizer {
   canInsert() {
     return true;
@@ -50,15 +52,15 @@ async function createTables(db: PostgresDB) {
         PRIMARY KEY(id),
         FOREIGN KEY(ref) REFERENCES idonly(id)
       );
-      CREATE SCHEMA zero;
-      CREATE TABLE zero.clients (
-        "shardID"        TEXT NOT NULL,
+      CREATE SCHEMA zero_${SHARD_ID};
+      CREATE TABLE zero_${SHARD_ID}.clients (
         "clientGroupID"  TEXT NOT NULL,
         "clientID"       TEXT NOT NULL,
         "lastMutationID" BIGINT,
         "userID"         TEXT,
-        PRIMARY KEY ("shardID", "clientGroupID", "clientID")
+        PRIMARY KEY ("clientGroupID", "clientID")
       );
+      CREATE SCHEMA zero;
       CREATE TABLE zero."schemaVersions" (
         "minSupportedVersion" INT4,
         "maxSupportedVersion" INT4,
@@ -90,14 +92,14 @@ describe('processMutation', () => {
     async () => {
       await expectTables(db, {
         idonly: [],
-        ['zero.clients']: [],
+        [`zero_${SHARD_ID}.clients`]: [],
       });
 
       const error = await processMutation(
         undefined,
         {},
         db,
-        '0',
+        SHARD_ID,
         'abc',
         {
           type: MutationType.CRUD,
@@ -126,9 +128,8 @@ describe('processMutation', () => {
 
       await expectTables(db, {
         idonly: [{id: '1'}],
-        ['zero.clients']: [
+        [`zero_${SHARD_ID}.clients`]: [
           {
-            shardID: '0',
             clientGroupID: 'abc',
             clientID: '123',
             lastMutationID: 1n,
@@ -142,14 +143,16 @@ describe('processMutation', () => {
 
   test('next sequential mutation for previously seen client', async () => {
     await db`
-      INSERT INTO zero.clients ("shardID", "clientGroupID", "clientID", "lastMutationID") 
-         VALUES ('0', 'abc', '123', 2)`;
+      INSERT INTO ${db(
+        `zero_${SHARD_ID}`,
+      )}.clients ("clientGroupID", "clientID", "lastMutationID") 
+         VALUES ('abc', '123', 2)`;
 
     const error = await processMutation(
       undefined,
       {},
       db,
-      '0',
+      SHARD_ID,
       'abc',
       {
         type: MutationType.CRUD,
@@ -178,9 +181,8 @@ describe('processMutation', () => {
 
     await expectTables(db, {
       idonly: [{id: '1'}],
-      ['zero.clients']: [
+      [`zero_${SHARD_ID}.clients`]: [
         {
-          shardID: '0',
           clientGroupID: 'abc',
           clientID: '123',
           lastMutationID: 3n,
@@ -192,14 +194,16 @@ describe('processMutation', () => {
 
   test('old mutations are skipped', async () => {
     await db`
-      INSERT INTO zero.clients ("shardID", "clientGroupID", "clientID", "lastMutationID") 
-        VALUES ('0', 'abc', '123', 2)`;
+      INSERT INTO ${db(
+        `zero_${SHARD_ID}`,
+      )}.clients ("clientGroupID", "clientID", "lastMutationID") 
+        VALUES ('abc', '123', 2)`;
 
     const error = await processMutation(
       undefined,
       {},
       db,
-      '0',
+      SHARD_ID,
       'abc',
       {
         type: MutationType.CRUD,
@@ -228,9 +232,8 @@ describe('processMutation', () => {
 
     await expectTables(db, {
       idonly: [],
-      ['zero.clients']: [
+      [`zero_${SHARD_ID}.clients`]: [
         {
-          shardID: '0',
           clientGroupID: 'abc',
           clientID: '123',
           lastMutationID: 2n,
@@ -242,16 +245,17 @@ describe('processMutation', () => {
 
   test('old mutations that would have errored are skipped', async () => {
     await db`
-      INSERT INTO zero.clients ("shardID", "clientGroupID", "clientID", "lastMutationID")
-        VALUES ('0', 'abc', '123', 2);
-      INSERT INTO idonly (id) VALUES ('1');
-      `.simple();
+      INSERT INTO ${db(
+        `zero_${SHARD_ID}`,
+      )}.clients ("clientGroupID", "clientID", "lastMutationID")
+        VALUES ('abc', '123', 2);`;
+    await db`INSERT INTO idonly (id) VALUES ('1');`;
 
     const error = await processMutation(
       undefined,
       {},
       db,
-      '0',
+      SHARD_ID,
       'abc',
       {
         type: MutationType.CRUD,
@@ -280,9 +284,8 @@ describe('processMutation', () => {
 
     await expectTables(db, {
       idonly: [{id: '1'}],
-      ['zero.clients']: [
+      [`zero_${SHARD_ID}.clients`]: [
         {
-          shardID: '0',
           clientGroupID: 'abc',
           clientID: '123',
           lastMutationID: 2n,
@@ -294,15 +297,17 @@ describe('processMutation', () => {
 
   test('mutation id too far in the future throws', async () => {
     await db`
-      INSERT INTO zero.clients ("shardID", "clientGroupID", "clientID", "lastMutationID") 
-        VALUES ('0', 'abc', '123', 1)`;
+      INSERT INTO ${db(
+        `zero_${SHARD_ID}`,
+      )}.clients ("clientGroupID", "clientID", "lastMutationID") 
+        VALUES ('abc', '123', 1)`;
 
     await expect(
       processMutation(
         undefined,
         {},
         db,
-        '0',
+        SHARD_ID,
         'abc',
         {
           type: MutationType.CRUD,
@@ -332,9 +337,8 @@ describe('processMutation', () => {
 
     await expectTables(db, {
       idonly: [],
-      ['zero.clients']: [
+      [`zero_${SHARD_ID}.clients`]: [
         {
-          shardID: '0',
           clientGroupID: 'abc',
           clientID: '123',
           lastMutationID: 1n,
@@ -346,8 +350,10 @@ describe('processMutation', () => {
 
   test('schema version below supported range throws', async () => {
     await db`
-      INSERT INTO zero.clients ("shardID", "clientGroupID", "clientID", "lastMutationID") 
-        VALUES ('0', 'abc', '123', 1)`;
+      INSERT INTO ${db(
+        `zero_${SHARD_ID}`,
+      )}.clients ("clientGroupID", "clientID", "lastMutationID") 
+        VALUES ('abc', '123', 1)`;
 
     await db`UPDATE zero."schemaVersions" SET "minSupportedVersion"=2, "maxSupportedVersion"=3`;
 
@@ -356,7 +362,7 @@ describe('processMutation', () => {
         undefined,
         {},
         db,
-        '0',
+        SHARD_ID,
         'abc',
         {
           type: MutationType.CRUD,
@@ -386,9 +392,8 @@ describe('processMutation', () => {
 
     await expectTables(db, {
       idonly: [],
-      ['zero.clients']: [
+      [`zero_${SHARD_ID}.clients`]: [
         {
-          shardID: '0',
           clientGroupID: 'abc',
           clientID: '123',
           lastMutationID: 1n,
@@ -400,8 +405,10 @@ describe('processMutation', () => {
 
   test('schema version above supported range throws', async () => {
     await db`
-      INSERT INTO zero.clients ("shardID", "clientGroupID", "clientID", "lastMutationID") 
-        VALUES ('0', 'abc', '123', 1)`;
+      INSERT INTO ${db(
+        `zero_${SHARD_ID}`,
+      )}.clients ("clientGroupID", "clientID", "lastMutationID") 
+        VALUES ('abc', '123', 1)`;
 
     await db`UPDATE zero."schemaVersions" SET "minSupportedVersion"=2, "maxSupportedVersion"=3`;
 
@@ -410,7 +417,7 @@ describe('processMutation', () => {
         undefined,
         {},
         db,
-        '0',
+        SHARD_ID,
         'abc',
         {
           type: MutationType.CRUD,
@@ -440,9 +447,8 @@ describe('processMutation', () => {
 
     await expectTables(db, {
       idonly: [],
-      ['zero.clients']: [
+      [`zero_${SHARD_ID}.clients`]: [
         {
-          shardID: '0',
           clientGroupID: 'abc',
           clientID: '123',
           lastMutationID: 1n,
@@ -457,7 +463,7 @@ describe('processMutation', () => {
       undefined,
       {},
       db,
-      '0',
+      SHARD_ID,
       'abc',
       {
         type: MutationType.CRUD,
@@ -530,9 +536,8 @@ describe('processMutation', () => {
           col2: 'set',
         },
       ],
-      ['zero.clients']: [
+      [`zero_${SHARD_ID}.clients`]: [
         {
-          shardID: '0',
           clientGroupID: 'abc',
           clientID: '123',
           lastMutationID: 1n,
@@ -547,7 +552,7 @@ describe('processMutation', () => {
       undefined,
       {},
       db,
-      '0',
+      SHARD_ID,
       'abc',
       {
         type: MutationType.CRUD,
@@ -582,9 +587,8 @@ describe('processMutation', () => {
 
     await expectTables(db, {
       ['fk_ref']: [],
-      ['zero.clients']: [
+      [`zero_${SHARD_ID}.clients`]: [
         {
-          shardID: '0',
           clientGroupID: 'abc',
           clientID: '123',
           lastMutationID: 1n,
@@ -597,26 +601,32 @@ describe('processMutation', () => {
   test('retries on serialization error', async () => {
     const {promise, resolve} = resolver();
     await db`
-      INSERT INTO zero.clients ("shardID", "clientGroupID", "clientID", "lastMutationID") 
-         VALUES ('0', 'abc', '123', 2)`;
+      INSERT INTO ${db(
+        `zero_${SHARD_ID}`,
+      )}.clients ("clientGroupID", "clientID", "lastMutationID") 
+         VALUES ('abc', '123', 2)`;
 
     // Start a concurrent mutation that bumps the lmid from 2 => 3.
     void db.begin(Mode.SERIALIZABLE, async tx => {
       // Simulate holding a lock on the row.
-      tx`SELECT * FROM zero.clients WHERE "clientGroupID" = 'abc' AND "clientID" = '123'`;
+      tx`SELECT * FROM ${db(
+        `zero_${SHARD_ID}`,
+      )}.clients WHERE "clientGroupID" = 'abc' AND "clientID" = '123'`;
 
       await promise;
 
       // Update the row on signal.
       return tx`
-      UPDATE zero.clients SET "lastMutationID" = 3 WHERE "clientGroupID" = 'abc'`;
+      UPDATE ${db(
+        `zero_${SHARD_ID}`,
+      )}.clients SET "lastMutationID" = 3 WHERE "clientGroupID" = 'abc'`;
     });
 
     const error = await processMutation(
       undefined,
       {},
       db,
-      '0',
+      SHARD_ID,
       'abc',
       {
         type: MutationType.CRUD,
@@ -649,9 +659,8 @@ describe('processMutation', () => {
     // 3 => 4 should succeed after internally retrying.
     await expectTables(db, {
       idonly: [{id: '1'}],
-      ['zero.clients']: [
+      [`zero_${SHARD_ID}.clients`]: [
         {
-          shardID: '0',
           clientGroupID: 'abc',
           clientID: '123',
           lastMutationID: 4n,

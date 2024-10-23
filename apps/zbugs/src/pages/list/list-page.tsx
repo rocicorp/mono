@@ -1,44 +1,60 @@
 import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
-import {type CSSProperties, useRef} from 'react';
+import React, {
+  type CSSProperties,
+  type KeyboardEvent,
+  useRef,
+  useState,
+} from 'react';
 import {FixedSizeList as List, type ListOnScrollProps} from 'react-window';
 import {useSearch} from 'wouter';
-import {navigate} from 'wouter/use-browser-location';
+import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import Filter, {type Selection} from '../../components/filter.js';
 import {Link} from '../../components/link.js';
 import {useElementSize} from '../../hooks/use-element-size.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {mark} from '../../perf-log.js';
 import IssueLink from '../../components/issue-link.js';
-import type {ListContext} from '../../routes.js';
+import type {ListContext, ZbugsHistoryState} from '../../routes.js';
 import {useThrottledCallback} from 'use-debounce';
+import RelativeTime from '../../components/relative-time.js';
+import {useClickOutside} from '../../hooks/use-click-outside.js';
+import {useKeypress} from '../../hooks/use-keypress.js';
+import {Button} from '../../components/button.js';
 
 let firstRowRendered = false;
 const itemSize = 56;
+
 export default function ListPage() {
   const z = useZero();
-
   const qs = new URLSearchParams(useSearch());
+
   const status = qs.get('status')?.toLowerCase() ?? 'open';
   const creator = qs.get('creator');
   const assignee = qs.get('assignee');
   const labels = qs.getAll('label');
+  const textFilter = qs.get('q');
 
-  // TODO: this can go away once we have filter-by-subquery, you should be able
-  // to filter by label.name directly.
+  const sortField =
+    qs.get('sort')?.toLowerCase() === 'created' ? 'created' : 'modified';
+  const sortDirection =
+    qs.get('sortDir')?.toLowerCase() === 'asc' ? 'asc' : 'desc';
+
   const creatorID = useQuery(
     z.query.user.where('login', creator ?? '').one(),
     creator !== null,
   )?.id;
+
   const assigneeID = useQuery(
     z.query.user.where('login', assignee ?? '').one(),
     assignee !== null,
   )?.id;
+
   const labelIDs = useQuery(z.query.label.where('name', 'IN', labels));
 
   let q = z.query.issue
-    .orderBy('modified', 'desc')
-    .orderBy('id', 'desc')
+    .orderBy(sortField, sortDirection)
+    .orderBy('id', sortDirection)
     .related('labels')
     .related('viewState', q => q.where('userID', z.userID).one());
 
@@ -57,13 +73,18 @@ export default function ListPage() {
     q = q.where('assigneeID', assigneeID);
   }
 
+  if (textFilter) {
+    q = q.where('title', 'ILIKE', `%${textFilter}%`);
+  }
+
   for (const labelID of labelIDs) {
     q = q.where('labelIDs', 'LIKE', `%${labelID.id}%`);
   }
 
   const issues = useQuery(q);
+
   let title;
-  if (creatorID || assigneeID || labelIDs.length > 0) {
+  if (creator || assignee || labels.length > 0 || textFilter) {
     title = 'Filtered Issues';
   } else {
     title = status.slice(0, 1).toUpperCase() + status.slice(1) + ' Issues';
@@ -77,42 +98,72 @@ export default function ListPage() {
       assigneeID,
       creatorID,
       labelIDs: labelIDs.map(l => l.id),
+      textFilter: textFilter ?? undefined,
+      sortField,
+      sortDirection,
     },
   };
 
-  const addFilter = (
-    key: string,
-    value: string,
-    mode?: 'exclusive' | undefined,
-  ) => {
-    const newParams = new URLSearchParams(qs);
-    newParams[mode === 'exclusive' ? 'set' : 'append'](key, value);
-    return '?' + newParams.toString();
-  };
-
-  const onDeleteFilter = (index: number) => {
+  const onDeleteFilter = (e: React.MouseEvent) => {
+    const target = e.currentTarget;
+    const key = target.getAttribute('data-key');
+    const value = target.getAttribute('data-value');
     const entries = [...new URLSearchParams(qs).entries()];
-    entries.splice(index, 1);
+    const index = entries.findIndex(([k, v]) => k === key && v === value);
+    if (index !== -1) {
+      entries.splice(index, 1);
+    }
     navigate('?' + new URLSearchParams(entries).toString());
   };
 
   const onFilter = (selection: Selection) => {
     if ('creator' in selection) {
-      navigate(addFilter('creator', selection.creator, 'exclusive'));
+      navigate(addParam(qs, 'creator', selection.creator, 'exclusive'));
     } else if ('assignee' in selection) {
-      navigate(addFilter('assignee', selection.assignee, 'exclusive'));
+      navigate(addParam(qs, 'assignee', selection.assignee, 'exclusive'));
     } else {
-      navigate(addFilter('label', selection.label));
+      navigate(addParam(qs, 'label', selection.label));
     }
   };
 
-  let initialScrollOffset = (history.state?.['-zbugs-list'] as number) ?? 0;
+  const toggleSortField = () => {
+    navigate(
+      addParam(
+        qs,
+        'sort',
+        sortField === 'created' ? 'modified' : 'created',
+        'exclusive',
+      ),
+    );
+  };
+
+  const toggleSortDirection = () => {
+    navigate(
+      addParam(
+        qs,
+        'sortDir',
+        sortDirection === 'asc' ? 'desc' : 'asc',
+        'exclusive',
+      ),
+    );
+  };
+
+  const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
+  let initialScrollOffset = zbugsHistoryState?.zbugsListScrollOffset ?? 0;
   if (initialScrollOffset > itemSize * issues.length) {
     initialScrollOffset = 0;
   }
+  const [scrollOffset, setScrollOffset] = useState(initialScrollOffset);
 
   const onScroll = useThrottledCallback(({scrollOffset}: ListOnScrollProps) => {
-    history.replaceState({...history.state, '-zbugs-list': scrollOffset}, '');
+    history.replaceState(
+      {
+        ...zbugsHistoryState,
+        zbugsListScrollOffset: scrollOffset,
+      } satisfies ZbugsHistoryState,
+      '',
+    );
+    setScrollOffset(scrollOffset);
   }, 250);
 
   const Row = ({index, style}: {index: number; style: CSSProperties}) => {
@@ -121,6 +172,9 @@ export default function ListPage() {
       mark('first issue row rendered');
       firstRowRendered = true;
     }
+
+    const timestamp = sortField === 'modified' ? issue.modified : issue.created;
+
     return (
       <div
         key={issue.id}
@@ -133,12 +187,11 @@ export default function ListPage() {
         }}
       >
         <IssueLink
-          className={classNames('issue-title', {
-            'issue-closed': !issue.open,
-          })}
+          className={classNames('issue-title', {'issue-closed': !issue.open})}
           issue={issue}
           title={issue.title}
           listContext={listContext}
+          scrollOffset={scrollOffset}
         >
           {issue.title}
         </IssueLink>
@@ -153,6 +206,9 @@ export default function ListPage() {
             </Link>
           ))}
         </div>
+        <div className="issue-timestamp">
+          <RelativeTime timestamp={timestamp} />
+        </div>
       </div>
     );
   };
@@ -160,17 +216,57 @@ export default function ListPage() {
   const tableWrapperRef = useRef<HTMLDivElement>(null);
   const size = useElementSize(tableWrapperRef.current);
 
+  const [forceSearchMode, setForceSearchMode] = useState(false);
+  const searchMode = forceSearchMode || Boolean(textFilter);
+  const searchBox = useRef<HTMLHeadingElement>(null);
+  useKeypress('/', () => startSearch());
+  useClickOutside(searchBox, () => setForceSearchMode(false));
+  const startSearch = () => {
+    setForceSearchMode(true);
+    setTimeout(() => searchBox.current?.querySelector('input')?.focus(), 0);
+  };
+  const handleSearchKeyUp = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      searchBox.current?.querySelector('input')?.blur();
+    }
+  };
+
   return (
     <>
       <div className="list-view-header-container">
-        <h1 className="list-view-header">
-          {title}
+        <h1
+          className={classNames('list-view-header', {
+            'search-mode': searchMode,
+          })}
+          ref={searchBox}
+        >
+          {searchMode ? (
+            <input
+              type="text"
+              value={textFilter ?? ''}
+              onChange={e =>
+                navigate(addParam(qs, 'q', e.target.value, 'exclusive'))
+              }
+              onBlur={() => setForceSearchMode(false)}
+              onKeyUp={handleSearchKeyUp}
+              placeholder="Search…"
+            />
+          ) : (
+            <span
+              onMouseDown={e => {
+                startSearch();
+                e.stopPropagation();
+              }}
+            >
+              {title}
+            </span>
+          )}
           <span className="issue-count">{issues.length}</span>
         </h1>
       </div>
       <div className="list-view-filter-container">
         <span className="filter-label">Filtered by:</span>
-        {[...qs.entries()].map(([key, val], idx) => {
+        {[...qs.entries()].map(([key, val]) => {
           if (key === 'label' || key === 'creator' || key === 'assignee') {
             return (
               <span
@@ -178,8 +274,10 @@ export default function ListPage() {
                   label: key === 'label',
                   user: key === 'creator' || key === 'assignee',
                 })}
-                onMouseDown={() => onDeleteFilter(idx)}
-                key={idx}
+                onMouseDown={onDeleteFilter}
+                data-key={key}
+                data-value={val}
+                key={key + '-' + val}
               >
                 {key}: {val}
               </span>
@@ -188,6 +286,15 @@ export default function ListPage() {
           return null;
         })}
         <Filter onSelect={onFilter} />
+        <div className="sort-control-container">
+          <Button className="sort-control" onAction={toggleSortField}>
+            {sortField === 'modified' ? 'Modified' : 'Created'}
+          </Button>
+          <Button
+            className={classNames('sort-direction', sortDirection)}
+            onAction={toggleSortDirection}
+          ></Button>
+        </div>
       </div>
 
       <div className="issue-list" ref={tableWrapperRef}>
@@ -208,3 +315,14 @@ export default function ListPage() {
     </>
   );
 }
+
+const addParam = (
+  qs: URLSearchParams,
+  key: string,
+  value: string,
+  mode?: 'exclusive' | undefined,
+) => {
+  const newParams = new URLSearchParams(qs);
+  newParams[mode === 'exclusive' ? 'set' : 'append'](key, value);
+  return '?' + newParams.toString();
+};

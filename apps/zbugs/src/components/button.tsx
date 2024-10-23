@@ -10,6 +10,8 @@ export interface Props {
   disabled?: boolean | undefined;
   style?: CSSProperties | undefined;
   title?: string | undefined;
+  autoFocus?: boolean | undefined;
+
   // add more as needed
 }
 

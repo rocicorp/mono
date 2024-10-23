@@ -75,7 +75,9 @@ export class Terminator {
     this.#all.add(worker);
 
     worker.on('error', err => this.logErrorAndExit(err));
-    worker.on('close', code => this.#onExit(code, worker, type));
+    worker.on('close', (code, signal) =>
+      this.#onExit(code, signal, worker, type),
+    );
     return worker;
   }
 
@@ -84,9 +86,13 @@ export class Terminator {
     this.#exit(-1);
   }
 
-  #onExit(code: number, worker: Worker, type: WorkerType) {
+  #onExit(code: number, sig: NodeJS.Signals, worker: Worker, type: WorkerType) {
+    if (sig) {
+      this.#lc.error?.(`shutting down because ${type} worker killed (${sig})`);
+      return this.#exit(-1);
+    }
     if (code !== 0) {
-      this.#lc.error?.(`shutting down because worker exited with code ${code}`);
+      this.#lc.error?.(`shutting down because ${type} worker exited (${code})`);
       return this.#exit(code);
     }
     if (type === 'supporting') {
@@ -143,10 +149,10 @@ export async function runUntilKilled(
 
       services.forEach(async svc => {
         if (GRACEFUL_SIGNALS.includes(signal) && svc.drain) {
-          lc.info?.(`draining ${svc.constructor.name} (${svc.id})`);
+          lc.info?.(`draining ${svc.constructor.name} ${svc.id} (${signal})`);
           await svc.drain();
         }
-        lc.info?.(`stopping ${svc.constructor.name} (${svc.id}) for ${signal}`);
+        lc.info?.(`stopping ${svc.constructor.name} ${svc.id} (${signal})`);
         await svc.stop();
       });
     });
