@@ -52,10 +52,6 @@ export default function ListPage() {
     assignee !== null,
   )?.id;
 
-  const user = useQuery(
-    z.query.user.where('id', login.loginState?.decoded.sub ?? '').one(),
-  );
-
   const labelIDs = useQuery(z.query.label.where('name', 'IN', labels));
 
   let q = z.query.issue
