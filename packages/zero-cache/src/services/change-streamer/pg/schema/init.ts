@@ -1,38 +1,37 @@
 import type {LogContext} from '@rocicorp/logger';
-
 import {
   runSchemaMigrations,
   type IncrementalMigrationMap,
   type Migration,
-} from '../../../db/migration-lite.js';
-import {initialSync} from './initial-sync.js';
-import type {ShardConfig} from './shard-config.js';
+} from '../../../../db/migration.js';
+import type {PostgresDB} from '../../../../types/pg.js';
+import type {ShardConfig} from '../shard-config.js';
+import {setupTablesAndReplication, unescapedSchema} from './shard.js';
 
-export async function initSyncSchema(
-  log: LogContext,
-  debugName: string,
-  shard: ShardConfig,
-  dbPath: string,
-  upstreamURI: string,
+export async function initShardSchema(
+  lc: LogContext,
+  db: PostgresDB,
+  shardConfig: ShardConfig,
 ): Promise<void> {
   const setupMigration: Migration = {
-    migrateSchema: (log, tx) => initialSync(log, shard, tx, upstreamURI),
+    migrateSchema: (lc, tx) => setupTablesAndReplication(lc, tx, shardConfig),
     minSafeVersion: 1,
   };
 
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     1: setupMigration,
     // There are no incremental migrations yet, but if we were to, say introduce
-    // another column, initialSync would be updated to create the table with
+    // another column, setupTablesAndReplication would be updated the table with
     // the new column, and then there would be an incremental migration here at
     // version `2` that adds the column for databases that were initialized to
     // version `1`.
   };
 
   await runSchemaMigrations(
-    log,
-    debugName,
-    dbPath,
+    lc,
+    'upstream-shard',
+    unescapedSchema(shardConfig.id),
+    db,
     setupMigration,
     schemaVersionMigrationMap,
   );

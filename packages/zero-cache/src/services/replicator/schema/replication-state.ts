@@ -6,8 +6,8 @@
  */
 
 import * as v from '../../../../../shared/src/valita.js';
-import {StatementRunner} from '../../../db/statements.js';
 import {Database} from '../../../../../zqlite/src/db.js';
+import {StatementRunner} from '../../../db/statements.js';
 
 export const ZERO_VERSION_COLUMN_NAME = '_0_version';
 
@@ -21,7 +21,7 @@ const CREATE_REPLICATION_STATE_SCHEMA =
   // publications     : JSON stringified array of publication names
   // lock             : Auto-magic column for enforcing single-row semantics.
   `
-  CREATE TABLE "_zero.ReplicationConfig" (
+  CREATE TABLE "_zero.replicationConfig" (
     replicaVersion TEXT NOT NULL,
     publications TEXT NOT NULL,
     lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
@@ -33,7 +33,7 @@ const CREATE_REPLICATION_STATE_SCHEMA =
   //                    modified in the **next** transaction.
   // stateVersion     : The value of the _0_version column for the newest rows in the database.
   `
-  CREATE TABLE "_zero.ReplicationState" (
+  CREATE TABLE "_zero.replicationState" (
     watermark TEXT NOT NULL,
     stateVersion TEXT NOT NULL,
     lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
@@ -68,13 +68,13 @@ export function initReplicationState(
   db.exec(CREATE_REPLICATION_STATE_SCHEMA);
   db.prepare(
     `
-    INSERT INTO "_zero.ReplicationConfig" 
+    INSERT INTO "_zero.replicationConfig" 
        (replicaVersion, publications) VALUES (?, ?)
     `,
   ).run(watermark, JSON.stringify(publications.sort()));
   db.prepare(
     `
-    INSERT INTO "_zero.ReplicationState" 
+    INSERT INTO "_zero.replicationState" 
        (watermark, stateVersion) VALUES (?,'00')
     `,
   ).run(watermark);
@@ -84,8 +84,8 @@ export function getSubscriptionState(db: StatementRunner) {
   const result = db.get(
     `
       SELECT c.replicaVersion, c.publications, s.watermark 
-        FROM "_zero.ReplicationConfig" as c
-        JOIN "_zero.ReplicationState" as s
+        FROM "_zero.replicationConfig" as c
+        JOIN "_zero.replicationState" as s
         ON c.lock = s.lock
     `,
   );
@@ -102,7 +102,7 @@ export function updateReplicationWatermark(
   // from the original row can be used to set the new `stateVersion`.
   db.run(
     `
-      INSERT INTO "_zero.ReplicationState" 
+      INSERT INTO "_zero.replicationState" 
         (lock, watermark, stateVersion) VALUES (1,'','')
         ON CONFLICT (lock)
         DO UPDATE SET watermark=?, stateVersion=watermark
@@ -115,7 +115,7 @@ export function getReplicationVersions(
   db: StatementRunner,
 ): ReplicationVersions {
   const result = db.get(
-    `SELECT stateVersion, watermark as nextStateVersion FROM "_zero.ReplicationState"`,
+    `SELECT stateVersion, watermark as nextStateVersion FROM "_zero.replicationState"`,
   );
   return v.parse(result, versionsSchema);
 }

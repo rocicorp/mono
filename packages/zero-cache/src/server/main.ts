@@ -4,7 +4,7 @@ import {availableParallelism} from 'node:os';
 import path from 'node:path';
 import {getZeroConfig} from '../config/zero-config.js';
 import {Dispatcher, type Workers} from '../services/dispatcher/dispatcher.js';
-import {initViewSyncerSchema} from '../services/view-syncer/schema/pg-migrations.js';
+import {initViewSyncerSchema} from '../services/view-syncer/schema/init.js';
 import {pgClient} from '../types/pg.js';
 import {childWorker, type Worker} from '../types/processes.js';
 import {orTimeout} from '../types/timeout.js';
