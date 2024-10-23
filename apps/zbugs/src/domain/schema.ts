@@ -67,18 +67,6 @@ const issueSchema = {
         schema: () => viewStateSchema,
       },
     },
-    emojis: {
-      source: 'id',
-      junction: {
-        schema: () => issueEmojiSchema,
-        sourceField: 'issueID',
-        destField: 'emojiID',
-      },
-      dest: {
-        field: 'id',
-        schema: () => emojiSchema,
-      },
-    },
   },
 } as const;
 
@@ -109,18 +97,6 @@ const commentSchema = {
       dest: {
         field: 'id',
         schema: () => userSchema,
-      },
-    },
-    emojis: {
-      source: 'id',
-      junction: {
-        schema: () => commentEmojiSchema,
-        sourceField: 'commentID',
-        destField: 'emojiID',
-      },
-      dest: {
-        field: 'id',
-        schema: () => emojiSchema,
       },
     },
   },
@@ -173,7 +149,15 @@ const issueEmojiSchema = {
     issueID: {type: 'string'},
   },
   primaryKey: ['emojiID', 'issueID'],
-  relationships: {},
+  relationships: {
+    emoji: {
+      source: 'emojiID',
+      dest: {
+        field: 'id',
+        schema: () => emojiSchema,
+      },
+    },
+  },
 } as const;
 
 const commentEmojiSchema = {
@@ -183,7 +167,15 @@ const commentEmojiSchema = {
     emojiID: {type: 'string'},
   },
   primaryKey: ['commentID', 'emojiID'],
-  relationships: {},
+  relationships: {
+    emoji: {
+      source: 'emojiID',
+      dest: {
+        field: 'id',
+        schema: () => emojiSchema,
+      },
+    },
+  },
 } as const;
 
 export const schema = {

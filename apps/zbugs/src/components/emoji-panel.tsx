@@ -4,31 +4,42 @@ import {
   PopoverPanel,
   useClose,
 } from '@headlessui/react';
+import type {Query, SchemaToRow} from '@rocicorp/zero';
 import {nanoid} from 'nanoid';
 import {useCallback} from 'react';
+import {useQuery} from 'zero-react/src/use-query.js';
+import {assert} from '../../../../packages/shared/src/asserts.js';
 import addEmojiIcon from '../assets/icons/add-emoji.svg';
+import type {Schema} from '../domain/schema.js';
 import {useZero} from '../hooks/use-zero.js';
 import {Button} from './button.js';
 import {EmojiPicker} from './emoji-picker.js';
 
-type Emoji = {
-  id: string;
-  value: string;
-  creatorID: string;
-  created: number;
-  creator: {
-    login: string;
-  };
+type Emoji = SchemaToRow<Schema['tables']['emoji']> & {
+  creator: SchemaToRow<Schema['tables']['user']> | undefined;
 };
 
+type Emojis = {
+  emojiID: string;
+  emoji: Emoji | undefined;
+}[];
+
 type Props = {
-  emojis: Emoji[];
   issueID: string;
   commentID?: string | undefined;
 };
 
-export function EmojiPanel({emojis, issueID, commentID}: Props) {
+export function EmojiPanel({issueID, commentID}: Props) {
   const z = useZero();
+  const q = (
+    commentID
+      ? z.query.commentEmoji.where('commentID', commentID)
+      : z.query.issueEmoji.where('issueID', issueID)
+  ) as Query<Schema['tables']['commentEmoji'] | Schema['tables']['issueEmoji']>;
+
+  const emojis: Emojis = useQuery(
+    q.related('emoji', q => q.related('creator', q => q.one()).one()),
+  );
 
   const addEmoji = useCallback(
     (emoji: string) => {
@@ -145,11 +156,23 @@ function normalizeEmoji(emoji: string): string {
   return emoji.replace(/[\u{1F3FB}-\u{1F3FF}]/gu, '');
 }
 
-function groupEmojis(emojis: Emoji[]): Record<string, Emoji[]> {
-  return Object.groupBy(emojis, emoji => normalizeEmoji(emoji.value)) as Record<
-    string,
-    Emoji[]
-  >;
+function groupEmojis(emojis: Emojis): Record<string, Emoji[]> {
+  const rv: Record<string, Emoji[]> = {};
+  for (const {emoji} of emojis) {
+    assert(emoji);
+    const normalizedEmoji = normalizeEmoji(emoji.value);
+    if (!rv[normalizedEmoji]) {
+      rv[normalizedEmoji] = [];
+    }
+    rv[normalizedEmoji].push(emoji);
+  }
+  return rv;
+  //   cos
+  //   e.emoji?.value
+  // return Object.groupBy(emojis, emoji => normalizeEmoji(emoji.value)) as Record<
+  //   string,
+  //   Emoji[]
+  // >;
 }
 
 function findEmojiForCreator(
