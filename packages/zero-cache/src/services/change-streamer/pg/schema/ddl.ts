@@ -357,8 +357,6 @@ CREATE EVENT TRIGGER ${sharded(`zero_${tagID}`)}
     triggers.push(`DROP FUNCTION IF EXISTS zero.${fn};`);
     triggers.push(`DROP FUNCTION IF EXISTS zero.${sharded(fn)};`);
   }
-  triggers.push('DROP FUNCTION IF EXISTS emit_error(text);');
-  triggers.push('DROP FUNCTION IF EXISTS emit_error(text, text);');
   return triggers.join('');
 }
 
