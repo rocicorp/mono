@@ -1,11 +1,9 @@
-import {lazy, Suspense} from 'react';
+import MarkdownBase from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
-const MarkdownInternal = lazy(() => import('./markdown-internal.js'));
-
+/**
+ * Do not import this component directly. Use `Markdown` instead.
+ */
 export default function Markdown({children}: {children: string}) {
-  return (
-    <Suspense fallback={<div>{children}</div>}>
-      <MarkdownInternal>{children}</MarkdownInternal>
-    </Suspense>
-  );
+  return <MarkdownBase rehypePlugins={[remarkGfm]}>{children}</MarkdownBase>;
 }
