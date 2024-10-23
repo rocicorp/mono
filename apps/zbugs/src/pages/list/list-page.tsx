@@ -269,18 +269,20 @@ export default function ListPage() {
         {[...qs.entries()].map(([key, val]) => {
           if (key === 'label' || key === 'creator' || key === 'assignee') {
             return (
-              <span
-                className={classNames('pill', {
-                  label: key === 'label',
-                  user: key === 'creator' || key === 'assignee',
-                })}
-                onMouseDown={onDeleteFilter}
-                data-key={key}
-                data-value={val}
-                key={key + '-' + val}
-              >
-                {key}: {val}
-              </span>
+              <div className="set-filter-container">
+                <span
+                  className={classNames('pill', {
+                    label: key === 'label',
+                    user: key === 'creator' || key === 'assignee',
+                  })}
+                  onMouseDown={onDeleteFilter}
+                  data-key={key}
+                  data-value={val}
+                  key={key + '-' + val}
+                >
+                  {key}: {val}
+                </span>
+              </div>
             );
           }
           return null;
