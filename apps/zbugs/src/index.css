@@ -1094,6 +1094,12 @@ textarea.autoResize {
   .logout-button {
     display: none;
   }
+
+  .user-login a {
+    font-size: var(--typo-label-size);
+    font-weight: var(--typo-label-weight);
+    padding: 0.375rem 0.75rem;
+  }
 }
 
 @media (max-width: 650px) {
@@ -1120,12 +1126,6 @@ textarea.autoResize {
 
   .filter-label {
     display: none;
-  }
-
-  .user-login a {
-    font-size: var(--typo-label-size);
-    font-weight: var(--typo-label-weight);
-    padding: 0.375rem 0.75rem;
   }
 
   .add-filter-modal {
