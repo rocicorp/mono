@@ -25,6 +25,7 @@ export const APP_PUBLICATION_PREFIX = 'zero_';
 export const INTERNAL_PUBLICATION_PREFIX = '_zero_';
 
 const DEFAULT_APP_PUBLICATION = APP_PUBLICATION_PREFIX + 'public';
+const METADATA_PUBLICATION_PREFIX = INTERNAL_PUBLICATION_PREFIX + 'metadata_';
 
 // The GLOBAL_SETUP must be idempotent as it can be run multiple times for different shards.
 const GLOBAL_SETUP = `
@@ -49,8 +50,7 @@ function shardSetup(shardID: string, publications: string[]): string {
   const sharded = append(shardID);
   const schema = schemaFor(shardID);
 
-  const metadataPublication =
-    INTERNAL_PUBLICATION_PREFIX + 'metadata_' + shardID;
+  const metadataPublication = METADATA_PUBLICATION_PREFIX + shardID;
 
   publications.push(metadataPublication);
   publications.sort();
