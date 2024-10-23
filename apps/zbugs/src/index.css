@@ -1122,6 +1122,12 @@ textarea.autoResize {
     display: none;
   }
 
+  .user-login a {
+    font-size: var(--typo-label-size);
+    font-weight: var(--typo-label-weight);
+    padding: 0.375rem 0.75rem;
+  }
+
   .add-filter-modal {
     position: fixed;
     top: 50%;
