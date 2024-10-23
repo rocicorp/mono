@@ -1,9 +1,11 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
-import {unreachable} from '../../../shared/src/asserts.js';
-import * as valita from '../../../shared/src/valita.js';
+import type {JWTPayload} from 'jose';
 import type {CloseEvent, Data, ErrorEvent} from 'ws';
 import WebSocket from 'ws';
+import {unreachable} from '../../../shared/src/asserts.js';
+import {randomCharacters} from '../../../shared/src/random-values.js';
+import * as valita from '../../../shared/src/valita.js';
 import {
   type ConnectedMessage,
   type Downstream,
@@ -12,6 +14,7 @@ import {
   type PongMessage,
   upstreamSchema,
 } from '../../../zero-protocol/src/mod.js';
+import type {ZeroConfig} from '../config/zero-config.js';
 import type {ConnectParams} from '../services/dispatcher/connect-params.js';
 import type {Mutagen} from '../services/mutagen/mutagen.js';
 import type {
@@ -20,9 +23,6 @@ import type {
 } from '../services/view-syncer/view-syncer.js';
 import {findErrorForClient} from '../types/error-for-client.js';
 import type {Source} from '../types/streams.js';
-import type {JWTPayload} from 'jose';
-import {randomCharacters} from '../../../shared/src/random-values.js';
-import type {ZeroConfig} from '../config/zero-config.js';
 
 /**
  * Represents a connection between the client and server.
@@ -137,6 +137,7 @@ export class Connection {
       const value = JSON.parse(data);
       msg = valita.parse(value, upstreamSchema);
     } catch (e) {
+      this.#lc.warn?.(`failed to parse upstream message: ${data}`, e);
       this.#closeWithError(['error', ErrorKind.InvalidMessage, String(e)], e);
       return;
     }
