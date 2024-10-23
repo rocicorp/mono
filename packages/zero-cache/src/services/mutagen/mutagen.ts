@@ -25,6 +25,7 @@ import {Mode} from '../../db/transaction-pool.js';
 import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import {throwErrorForClientIfSchemaVersionNotSupported} from '../../types/schema-versions.js';
+import {unescapedSchema as schema} from '../change-streamer/pg/schema/shard.js';
 import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.js';
 import type {Service} from '../service.js';
 import {WriteAuthorizerImpl, type WriteAuthorizer} from './write-authorizer.js';
@@ -366,7 +367,7 @@ async function checkSchemaVersionAndIncrementLastMutationID(
 ) {
   const lastMutationIdPromise = tx<{lastMutationID: bigint}[]>`
     INSERT INTO ${tx(
-      `zero_${shardID}`,
+      schema(shardID),
     )}.clients as current ("clientGroupID", "clientID", "lastMutationID")
     VALUES (${clientGroupID}, ${clientID}, ${1})
     ON CONFLICT ("clientGroupID", "clientID")
