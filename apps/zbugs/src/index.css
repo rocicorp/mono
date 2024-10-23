@@ -851,6 +851,10 @@ textarea.autoResize {
   border-radius: 4px;
   background-color: transparent;
   border-radius: 0.25rem;
+  flex: 0 0 auto;
+  align-self: start;
+  top: 7px;
+  position: relative;
 }
 
 /* Add the checkmark when checked */
