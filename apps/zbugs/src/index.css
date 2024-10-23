@@ -104,6 +104,7 @@ textarea.autoResize {
 .zero-logo {
   width: 100%;
   height: auto;
+  aspect-ratio: 5.915 / 1;
 }
 
 .zero-mark {
