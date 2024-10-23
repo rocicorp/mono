@@ -187,10 +187,7 @@ describe('replicator/initial-sync', () => {
           },
         ],
       },
-      resultingPublications: [
-        '_zero_metadata_initial_sync_test_id',
-        'zero_public',
-      ],
+      resultingPublications: [`_zero_metadata_${SHARD_ID}`, 'zero_public'],
     },
     {
       name: 'replication slot already exists',
@@ -218,10 +215,7 @@ describe('replicator/initial-sync', () => {
           },
         ],
       },
-      resultingPublications: [
-        '_zero_metadata_initial_sync_test_id',
-        'zero_public',
-      ],
+      resultingPublications: [`_zero_metadata_${SHARD_ID}`, 'zero_public'],
     },
     {
       name: 'existing table, default publication',
@@ -521,10 +515,7 @@ describe('replicator/initial-sync', () => {
           },
         ],
       },
-      resultingPublications: [
-        '_zero_metadata_initial_sync_test_id',
-        'zero_public',
-      ],
+      resultingPublications: [`_zero_metadata_${SHARD_ID}`, 'zero_public'],
     },
     {
       name: 'existing partial publication',
@@ -614,10 +605,7 @@ describe('replicator/initial-sync', () => {
           },
         ],
       },
-      resultingPublications: [
-        '_zero_metadata_initial_sync_test_id',
-        'zero_custom',
-      ],
+      resultingPublications: [`_zero_metadata_${SHARD_ID}`, 'zero_custom'],
     },
     {
       name: 'existing partial filtered publication',
@@ -713,7 +701,7 @@ describe('replicator/initial-sync', () => {
         ],
       },
       resultingPublications: [
-        '_zero_metadata_initial_sync_test_id',
+        `_zero_metadata_${SHARD_ID}`,
         'zero_custom',
         'zero_custom2',
       ],
@@ -839,10 +827,7 @@ describe('replicator/initial-sync', () => {
           unique: false,
         },
       ],
-      resultingPublications: [
-        '_zero_metadata_initial_sync_test_id',
-        'zero_public',
-      ],
+      resultingPublications: [`_zero_metadata_${SHARD_ID}`, 'zero_public'],
     },
   ];
 
