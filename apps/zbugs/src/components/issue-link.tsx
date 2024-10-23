@@ -7,16 +7,21 @@ export default function IssueLink({
   children,
   className,
   listContext,
+  scrollOffset,
 }: {
   issue: {id: string; shortID?: number | undefined};
   listContext: ListContext;
-} & Omit<LinkProps<ListContext>, 'href' | 'state'>) {
+  scrollOffset: number;
+} & Omit<LinkProps, 'href' | 'state'>) {
   return (
     <Link
       href={links.issue(issue)}
       title={title}
       className={className}
-      state={listContext}
+      state={{
+        zbugsListContext: listContext,
+        zbugsListScrollOffset: scrollOffset,
+      }}
     >
       {children}
     </Link>

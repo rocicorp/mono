@@ -8,14 +8,14 @@ import React, {
 } from 'react';
 import {FixedSizeList as List, type ListOnScrollProps} from 'react-window';
 import {useSearch} from 'wouter';
-import {navigate} from 'wouter/use-browser-location';
+import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import Filter, {type Selection} from '../../components/filter.js';
 import {Link} from '../../components/link.js';
 import {useElementSize} from '../../hooks/use-element-size.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {mark} from '../../perf-log.js';
 import IssueLink from '../../components/issue-link.js';
-import type {ListContext} from '../../routes.js';
+import type {ListContext, ZbugsHistoryState} from '../../routes.js';
 import {useThrottledCallback} from 'use-debounce';
 import RelativeTime from '../../components/relative-time.js';
 import {useClickOutside} from '../../hooks/use-click-outside.js';
@@ -147,13 +147,22 @@ export default function ListPage() {
     );
   };
 
-  let initialScrollOffset = (history.state?.['-zbugs-list'] as number) ?? 0;
+  const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
+  let initialScrollOffset = zbugsHistoryState?.zbugsListScrollOffset ?? 0;
   if (initialScrollOffset > itemSize * issues.length) {
     initialScrollOffset = 0;
   }
+  const [scrollOffset, setScrollOffset] = useState(initialScrollOffset);
 
   const onScroll = useThrottledCallback(({scrollOffset}: ListOnScrollProps) => {
-    history.replaceState({...history.state, '-zbugs-list': scrollOffset}, '');
+    history.replaceState(
+      {
+        ...zbugsHistoryState,
+        zbugsListScrollOffset: scrollOffset,
+      } satisfies ZbugsHistoryState,
+      '',
+    );
+    setScrollOffset(scrollOffset);
   }, 250);
 
   const Row = ({index, style}: {index: number; style: CSSProperties}) => {
@@ -181,6 +190,7 @@ export default function ListPage() {
           issue={issue}
           title={issue.title}
           listContext={listContext}
+          scrollOffset={scrollOffset}
         >
           {issue.title}
         </IssueLink>

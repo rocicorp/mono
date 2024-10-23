@@ -18,7 +18,7 @@ import UserPicker from '../../components/user-picker.js';
 import type {Schema} from '../../domain/schema.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useZero} from '../../hooks/use-zero.js';
-import {links, type ListContext} from '../../routes.js';
+import {links, type ListContext, type ZbugsHistoryState} from '../../routes.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
 import RelativeTime from '../../components/relative-time.js';
@@ -31,8 +31,8 @@ export default function IssuePage() {
   const idField = isNaN(parseInt(idStr)) ? 'id' : 'shortID';
   const id = idField === 'shortID' ? parseInt(idStr) : idStr;
 
-  const listContext = useHistoryState<ListContext | undefined>();
-
+  const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
+  const listContext = zbugsHistoryState?.zbugsListContext;
   // todo: one should be in the schema
   const q = z.query.issue
     .where(idField, id)
@@ -68,9 +68,12 @@ export default function IssuePage() {
   const [edits, setEdits] = useState<Partial<typeof issue>>({});
   useEffect(() => {
     if (issue?.shortID !== undefined && idField !== 'shortID') {
-      navigate(links.issue(issue), {replace: true, state: listContext});
+      navigate(links.issue(issue), {
+        replace: true,
+        state: zbugsHistoryState,
+      });
     }
-  }, [issue, idField, listContext]);
+  }, [issue, idField, zbugsHistoryState]);
 
   const save = () => {
     if (!editing) {
@@ -103,7 +106,7 @@ export default function IssuePage() {
   );
   useKeypress('j', () => {
     if (next) {
-      navigate(links.issue(next), {state: listContext});
+      navigate(links.issue(next), {state: zbugsHistoryState});
     }
   });
 
@@ -113,7 +116,7 @@ export default function IssuePage() {
   );
   useKeypress('k', () => {
     if (prev) {
-      navigate(links.issue(prev), {state: listContext});
+      navigate(links.issue(prev), {state: zbugsHistoryState});
     }
   });
 
@@ -153,7 +156,14 @@ export default function IssuePage() {
           <div className="issue-breadcrumb">
             {listContext ? (
               <>
-                <Link className="breadcrumb-item" href={listContext.href}>
+                <Link
+                  className="breadcrumb-item"
+                  href={listContext.href}
+                  state={{
+                    zbugsListScrollOffset:
+                      zbugsHistoryState?.zbugsListScrollOffset,
+                  }}
+                >
                   {listContext.title}
                 </Link>
                 <span className="breadcrumb-item">&rarr;</span>

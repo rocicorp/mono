@@ -1,18 +1,19 @@
 import type {ReactNode} from 'react';
 import {navigate} from 'wouter/use-browser-location';
+import type {ZbugsHistoryState} from '../routes.js';
 
-export type Props<S> = {
+export type Props = {
   children: ReactNode;
   href: string;
   className?: string | undefined;
   title?: string | undefined;
-  state?: S | undefined;
+  state?: ZbugsHistoryState | undefined;
 };
 /**
  * The Link from wouter uses onClick and there's no way to change it.
  * We like mousedown here at Rocicorp.
  */
-export function Link<S>({children, href, className, title, state}: Props<S>) {
+export function Link({children, href, className, title, state}: Props) {
   const isPrimary = (e: React.MouseEvent) => {
     if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.button !== 0) {
       return false;
