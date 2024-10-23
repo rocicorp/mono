@@ -19,7 +19,7 @@ import {
   type SchemaVersions,
 } from '../../types/schema-versions.js';
 import type {Subscription} from '../../types/subscription.js';
-import {unescapedSchema} from '../change-streamer/pg/schema/shard.js';
+import {unescapedSchema as schema} from '../change-streamer/pg/schema/shard.js';
 import {
   type ClientPatch,
   cmpVersions,
@@ -101,7 +101,7 @@ export class ClientHandler {
     this.#clientGroupID = clientGroupID;
     this.clientID = clientID;
     this.wsID = wsID;
-    this.#zeroClientsTable = `${unescapedSchema(shardID)}.clients`;
+    this.#zeroClientsTable = `${schema(shardID)}.clients`;
     this.#lc = lc.withContext('clientID', clientID);
     this.#pokes = pokes;
     this.#baseVersion = cookieToVersion(baseCookie);

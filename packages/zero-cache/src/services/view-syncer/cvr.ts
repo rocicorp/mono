@@ -11,7 +11,7 @@ import type {AST} from '../../../../zero-protocol/src/ast.js';
 import type {JSONObject} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {rowIDHash} from '../../types/row-key.js';
-import {unescapedSchema} from '../change-streamer/pg/schema/shard.js';
+import {unescapedSchema as schema} from '../change-streamer/pg/schema/shard.js';
 import type {Patch, PatchToVersion} from './client-handler.js';
 import type {CVRFlushStats, CVRStore} from './cvr-store.js';
 import {
@@ -165,7 +165,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         id: CLIENT_LMID_QUERY_ID,
         ast: {
           schema: '',
-          table: `${unescapedSchema(this.#shardID)}.clients`,
+          table: `${schema(this.#shardID)}.clients`,
           where: [
             {
               type: 'simple',
