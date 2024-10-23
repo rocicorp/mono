@@ -363,6 +363,16 @@ textarea.autoResize {
   background: transparent url(assets/icons/filter.svg) no-repeat 0.5rem center;
 }
 
+.list-view-filter-container > .set-filter-container {
+  display: none;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.list-view-filter-container > .set-filter-container:not(:empty) {
+  display: flex;
+}
+
 .filter-label {
   color: var(--color-text-dimmed-label);
   line-height: 1.8125rem;
@@ -1171,10 +1181,6 @@ textarea.autoResize {
     display: none;
     gap: 0.5rem;
     flex-wrap: wrap;
-  }
-
-  .list-view-filter-container > .set-filter-container:not(:empty) {
-    display: flex;
   }
 
   .filter-label {
