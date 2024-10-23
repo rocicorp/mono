@@ -52,7 +52,7 @@ export function Nav() {
   return (
     <>
       <div className="nav-container flex flex-col">
-        <Link href="/">
+        <Link className="logo-link-container" href="/">
           <img src={logoURL} className="zero-logo" />
           <img src={markURL} className="zero-mark" />
         </Link>
@@ -87,11 +87,11 @@ export function Nav() {
             All
           </Link>
         </div>
-        <div className="spacer"></div>
-        {import.meta.env.DEV && (
-          <FPSMeter className="fps-meter" width={192} height={38} />
-        )}
+
         <div className="user-login">
+          {import.meta.env.DEV && (
+            <FPSMeter className="fps-meter" width={192} height={38} />
+          )}
           {login.loginState === undefined ? (
             <a href={loginHref}>Login</a>
           ) : (
