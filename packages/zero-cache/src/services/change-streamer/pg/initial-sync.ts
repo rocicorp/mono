@@ -25,8 +25,9 @@ import {
   ZERO_VERSION_COLUMN_NAME,
 } from '../../replicator/schema/replication-state.js';
 import {toLexiVersion} from './lsn.js';
-import {type PublicationInfo} from './schema/published.js';
-import {setupTablesAndReplication} from './schema/zero.js';
+import {initShardSchema} from './schema/init.js';
+import {getPublicationInfo, type PublicationInfo} from './schema/published.js';
+import {getShardConfig} from './schema/shard.js';
 import type {ShardConfig} from './shard-config.js';
 
 export function replicationSlot(shardID: string): string {
@@ -111,7 +112,7 @@ async function checkUpstreamConfig(upstreamDB: PostgresDB) {
   }
 }
 
-function ensurePublishedTables(
+async function ensurePublishedTables(
   lc: LogContext,
   upstreamDB: PostgresDB,
   shard: ShardConfig,
@@ -119,7 +120,11 @@ function ensurePublishedTables(
   const {database, host} = upstreamDB.options;
   lc.info?.(`Ensuring upstream PUBLICATION on ${database}@${host}`);
 
-  return upstreamDB.begin(tx => setupTablesAndReplication(lc, tx, shard));
+  await initShardSchema(lc, upstreamDB, shard);
+
+  const {publications} = await getShardConfig(upstreamDB, shard.id);
+
+  return getPublicationInfo(upstreamDB, publications);
 }
 
 /* eslint-disable @typescript-eslint/naming-convention */

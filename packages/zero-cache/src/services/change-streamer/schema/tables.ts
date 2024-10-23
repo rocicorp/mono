@@ -16,7 +16,7 @@ export type ChangeLogEntry = {
 };
 
 const CREATE_CHANGE_LOG_TABLE = `
-  CREATE TABLE cdc."ChangeLog" (
+  CREATE TABLE cdc."changeLog" (
     watermark  TEXT,
     pos        INT8,
     change     JSONB NOT NULL,
@@ -37,7 +37,7 @@ export type ReplicationConfig = {
 };
 
 const CREATE_REPLICATION_CONFIG_TABLE = `
-  CREATE TABLE cdc."ReplicationConfig" (
+  CREATE TABLE cdc."replicationConfig" (
     "replicaVersion" TEXT NOT NULL,
     "publications" TEXT[] NOT NULL,
     "lock" INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
@@ -70,10 +70,10 @@ export async function ensureReplicationConfig(
         replicaVersion: string;
         publications: string[];
       }[]
-    >`SELECT "replicaVersion", "publications" FROM cdc."ReplicationConfig"`;
+    >`SELECT "replicaVersion", "publications" FROM cdc."replicationConfig"`;
 
     if (results.length === 0) {
-      return tx`INSERT INTO cdc."ReplicationConfig" ${tx(replicaConfig)}`;
+      return tx`INSERT INTO cdc."replicationConfig" ${tx(replicaConfig)}`;
     }
 
     const {replicaVersion, publications} = results[0];
@@ -86,8 +86,8 @@ export async function ensureReplicationConfig(
           `with replica @${replicaConfig.replicaVersion}. Clearing tables.`,
       );
       return [
-        tx`TRUNCATE TABLE cdc."ChangeLog"`,
-        tx`UPDATE cdc."ReplicationConfig" SET ${tx(replicaConfig)}`,
+        tx`TRUNCATE TABLE cdc."changeLog"`,
+        tx`UPDATE cdc."replicationConfig" SET ${tx(replicaConfig)}`,
       ].map(stmt => stmt.execute());
     }
     return [];

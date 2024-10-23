@@ -169,12 +169,11 @@ describe('change-source/pg', () => {
       // Should be excluded by zero_all.
       await tx`INSERT INTO foo(id) VALUES ('exclude-me')`;
       await tx`INSERT INTO foo(id) VALUES ('include-me')`;
-      // zero.clients change that should not be included in _zero_{SHARD_ID}_client.
-      await tx`INSERT INTO zero.clients("shardID", "clientGroupID", "clientID", "lastMutationID")
-                  VALUES ('different-shard', 'boo', 'far', 12)`;
       // zero.clients change that should be included in _zero_{SHARD_ID}_client.
-      await tx`INSERT INTO zero.clients("shardID", "clientGroupID", "clientID", "lastMutationID")
-                  VALUES (${SHARD_ID}, 'foo', 'bar', 23)`;
+      await tx.unsafe(
+        `INSERT INTO zero_${SHARD_ID}.clients("clientGroupID", "clientID", "lastMutationID")
+            VALUES ('foo', 'bar', 23)`,
+      );
     });
 
     expect(await downstream.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
@@ -211,7 +210,6 @@ describe('change-source/pg', () => {
       {
         tag: 'insert',
         new: {
-          shardID: SHARD_ID,
           clientGroupID: 'foo',
           clientID: 'bar',
           lastMutationID: 23n,

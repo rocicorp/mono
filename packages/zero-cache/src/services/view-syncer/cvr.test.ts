@@ -26,6 +26,8 @@ import {
 } from './schema/cvr.js';
 import type {CVRVersion, RowID} from './schema/types.js';
 
+const SHARD_ID = 'jkl';
+
 describe('view-syncer/cvr', () => {
   type DBState = {
     instances: InstancesRow[];
@@ -466,7 +468,7 @@ describe('view-syncer/cvr', () => {
       },
     } satisfies CVRSnapshot);
 
-    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr);
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
 
     // This removes and adds desired queries to the existing fooClient.
     updater.deleteDesiredQueries('fooClient', ['oneHash', 'twoHash']);
@@ -537,7 +539,7 @@ describe('view-syncer/cvr', () => {
           id: 'lmids',
           internal: true,
           ast: {
-            table: 'zero.clients',
+            table: `zero_${SHARD_ID}.clients`,
             schema: '',
             where: [
               {
@@ -548,7 +550,6 @@ describe('view-syncer/cvr', () => {
               },
             ],
             orderBy: [
-              ['shardID', 'asc'],
               ['clientGroupID', 'asc'],
               ['clientID', 'asc'],
             ],
@@ -628,7 +629,7 @@ describe('view-syncer/cvr', () => {
         {
           clientAST: {
             schema: '',
-            table: 'zero.clients',
+            table: `zero_${SHARD_ID}.clients`,
             where: [
               {
                 field: 'clientGroupID',
@@ -638,7 +639,6 @@ describe('view-syncer/cvr', () => {
               },
             ],
             orderBy: [
-              ['shardID', 'asc'],
               ['clientGroupID', 'asc'],
               ['clientID', 'asc'],
             ],
@@ -731,7 +731,7 @@ describe('view-syncer/cvr', () => {
 
     // Add the deleted desired query back. This ensures that the
     // desired query update statement is an UPSERT.
-    const updater2 = new CVRConfigDrivenUpdater(cvrStore2, reloaded);
+    const updater2 = new CVRConfigDrivenUpdater(cvrStore2, reloaded, SHARD_ID);
     expect(
       updater2.putDesiredQueries('fooClient', {
         oneHash: {table: 'issues'},
@@ -789,7 +789,7 @@ describe('view-syncer/cvr', () => {
 
     const cvrStore = new CVRStore(lc, db, 'abc123');
     const cvr = await cvrStore.load();
-    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr);
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
 
     // Same desired query set. Nothing should change except last active time.
     expect(

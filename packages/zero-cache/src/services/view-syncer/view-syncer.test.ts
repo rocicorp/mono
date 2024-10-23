@@ -36,13 +36,15 @@ import {
 } from './database-storage.js';
 import {DrainCoordinator} from './drain-coordinator.js';
 import {PipelineDriver} from './pipeline-driver.js';
-import {initViewSyncerSchema} from './schema/pg-migrations.js';
+import {initViewSyncerSchema} from './schema/init.js';
 import {Snapshotter} from './snapshotter.js';
 import {type SyncContext, ViewSyncerService} from './view-syncer.js';
 
+const SHARD_ID = 'ABC';
+
 const EXPECTED_LMIDS_AST: AST = {
   schema: '',
-  table: 'zero.clients',
+  table: 'zero_ABC.clients',
   where: [
     {
       type: 'simple',
@@ -52,7 +54,6 @@ const EXPECTED_LMIDS_AST: AST = {
     },
   ],
   orderBy: [
-    ['shardID', 'asc'],
     ['clientGroupID', 'asc'],
     ['clientID', 'asc'],
   ],
@@ -97,14 +98,13 @@ describe('view-syncer/service', () => {
     replica.pragma('journal_mode = WAL');
     replica.pragma('busy_timeout = 1');
     replica.exec(`
-    CREATE TABLE "zero.clients" (
-      "shardID"        TEXT,
+    CREATE TABLE "zero_ABC.clients" (
       "clientGroupID"  TEXT,
       "clientID"       TEXT,
       "lastMutationID" INTEGER,
       "userID"         TEXT,
       _0_version       TEXT NOT NULL,
-      PRIMARY KEY ("shardID", "clientGroupID", "clientID")
+      PRIMARY KEY ("clientGroupID", "clientID")
     );
     CREATE TABLE "zero.schemaVersions" (
       "lock"                INTEGER PRIMARY KEY,
@@ -126,8 +126,8 @@ describe('view-syncer/service', () => {
       _0_version TEXT NOT NULL
     );
 
-    INSERT INTO "zero.clients" ("shardID", "clientGroupID", "clientID", "lastMutationID", _0_version)
-      VALUES ('0', '9876', 'foo', 42, '00');
+    INSERT INTO "zero_ABC.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
+      VALUES ('9876', 'foo', 42, '00');
     INSERT INTO "zero.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
       VALUES (1, 2, 3, '00');  
 
@@ -155,6 +155,7 @@ describe('view-syncer/service', () => {
     vs = new ViewSyncerService(
       lc,
       serviceID,
+      SHARD_ID,
       cvrDB,
       new PipelineDriver(
         lc.withContext('component', 'pipeline-driver'),
@@ -476,11 +477,10 @@ describe('view-syncer/service', () => {
           "rowKey": {
             "clientGroupID": "9876",
             "clientID": "foo",
-            "shardID": "0",
           },
           "rowVersion": "00",
           "schema": "",
-          "table": "zero.clients",
+          "table": "zero_ABC.clients",
         },
         {
           "clientGroupID": "9876",
@@ -671,11 +671,10 @@ describe('view-syncer/service', () => {
           "rowKey": {
             "clientGroupID": "9876",
             "clientID": "foo",
-            "shardID": "0",
           },
           "rowVersion": "00",
           "schema": "",
-          "table": "zero.clients",
+          "table": "zero_ABC.clients",
         },
         {
           "clientGroupID": "9876",

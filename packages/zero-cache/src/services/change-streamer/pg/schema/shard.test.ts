@@ -1,8 +1,8 @@
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../../../shared/src/logging-test-utils.js';
-import {initDB, testDBs} from '../../../../test/db.js';
+import {expectTables, initDB, testDBs} from '../../../../test/db.js';
 import type {PostgresDB} from '../../../../types/pg.js';
-import {setupTablesAndReplication} from './zero.js';
+import {setupTablesAndReplication} from './shard.js';
 
 describe('change-source/pg', () => {
   const lc = createSilentLogContext();
@@ -18,28 +18,31 @@ describe('change-source/pg', () => {
 
   function publications() {
     return db<{pubname: string; rowfilter: string | null}[]>`
-    SELECT p.pubname, rowfilter FROM pg_publication p
+    SELECT p.pubname, t.schemaname, t.tablename, rowfilter FROM pg_publication p
       LEFT JOIN pg_publication_tables t ON p.pubname = t.pubname 
       WHERE p.pubname LIKE '%zero_%' ORDER BY p.pubname`.values();
   }
 
   test('default publication, schema version setup', async () => {
-    // Run twice. Repeat should be a no-op.
-    for (let i = 0; i < 2; i++) {
-      await db.begin(tx =>
-        setupTablesAndReplication(lc, tx, {id: '0', publications: []}),
-      );
+    await db.begin(tx =>
+      setupTablesAndReplication(lc, tx, {id: '0', publications: []}),
+    );
 
-      expect(await publications()).toEqual([
-        ['_zero_0_clients', `("shardID" = '0'::text)`],
-        ['_zero_schema_versions', null],
-        ['zero_public', null],
-      ]);
+    expect(await publications()).toEqual([
+      [`_zero_metadata_0`, 'zero', 'schemaVersions', null],
+      [`_zero_metadata_0`, `zero_0`, 'clients', null],
+      ['zero_public', null, null, null],
+    ]);
 
-      expect(
-        await db`SELECT "minSupportedVersion", "maxSupportedVersion" FROM zero."schemaVersions"`.values(),
-      ).toEqual([[1, 1]]);
-    }
+    await expectTables(db, {
+      ['zero.schemaVersions']: [
+        {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
+      ],
+      ['zero_0.shardConfig']: [
+        {lock: true, publications: ['_zero_metadata_0', 'zero_public']},
+      ],
+      ['zero_0.clients']: [],
+    });
   });
 
   test('weird shard IDs', async () => {
@@ -48,10 +51,23 @@ describe('change-source/pg', () => {
     );
 
     expect(await publications()).toEqual([
-      [`_zero_'has quotes'_clients`, `("shardID" = '''has quotes'''::text)`],
-      ['_zero_schema_versions', null],
-      ['zero_public', null],
+      [`_zero_metadata_'has quotes'`, 'zero', 'schemaVersions', null],
+      [`_zero_metadata_'has quotes'`, `zero_'has quotes'`, 'clients', null],
+      ['zero_public', null, null, null],
     ]);
+
+    await expectTables(db, {
+      ['zero.schemaVersions']: [
+        {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
+      ],
+      [`zero_'has quotes'.shardConfig`]: [
+        {
+          lock: true,
+          publications: [`_zero_metadata_'has quotes'`, 'zero_public'],
+        },
+      ],
+      [`zero_'has quotes'.clients`]: [],
+    });
   });
 
   test('multiple shards', async () => {
@@ -63,11 +79,26 @@ describe('change-source/pg', () => {
     );
 
     expect(await publications()).toEqual([
-      ['_zero_0_clients', `("shardID" = '0'::text)`],
-      ['_zero_1_clients', `("shardID" = '1'::text)`],
-      ['_zero_schema_versions', null],
-      ['zero_public', null],
+      [`_zero_metadata_0`, 'zero', 'schemaVersions', null],
+      [`_zero_metadata_0`, `zero_0`, 'clients', null],
+      [`_zero_metadata_1`, 'zero', 'schemaVersions', null],
+      [`_zero_metadata_1`, `zero_1`, 'clients', null],
+      ['zero_public', null, null, null],
     ]);
+
+    await expectTables(db, {
+      ['zero.schemaVersions']: [
+        {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
+      ],
+      ['zero_0.shardConfig']: [
+        {lock: true, publications: ['_zero_metadata_0', 'zero_public']},
+      ],
+      ['zero_0.clients']: [],
+      ['zero_1.shardConfig']: [
+        {lock: true, publications: ['_zero_metadata_1', 'zero_public']},
+      ],
+      ['zero_1.clients']: [],
+    });
   });
 
   test('unknown publications', async () => {
@@ -104,11 +135,24 @@ describe('change-source/pg', () => {
     );
 
     expect(await publications()).toEqual([
-      ['_zero_A_clients', `("shardID" = 'A'::text)`],
-      ['_zero_schema_versions', null],
-      ['zero_bar', null],
-      ['zero_foo', '(id > 1000)'],
+      [`_zero_metadata_A`, 'zero', 'schemaVersions', null],
+      [`_zero_metadata_A`, `zero_A`, 'clients', null],
+      ['zero_bar', 'public', 'bar', null],
+      ['zero_foo', 'public', 'foo', '(id > 1000)'],
     ]);
+
+    await expectTables(db, {
+      ['zero.schemaVersions']: [
+        {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
+      ],
+      ['zero_A.shardConfig']: [
+        {
+          lock: true,
+          publications: ['_zero_metadata_A', 'zero_bar', 'zero_foo'],
+        },
+      ],
+      ['zero_A.clients']: [],
+    });
   });
 
   type InvalidUpstreamCase = {

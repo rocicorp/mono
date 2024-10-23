@@ -58,7 +58,7 @@ const CREATE_CHANGELOG_SCHEMA =
   //                's' for set (insert/update)
   //                'd' for delete
   `
-  CREATE TABLE "_zero.ChangeLog" (
+  CREATE TABLE "_zero.changeLog" (
     "stateVersion" TEXT NOT NULL,
     "table"        TEXT NOT NULL,
     "rowKey"       TEXT,
@@ -120,7 +120,7 @@ function logRowOp(
   const rowKey = stringify(normalizedKeyOrder(row));
   db.run(
     `
-    INSERT INTO "_zero.ChangeLog" (stateVersion, "table", rowKey, op)
+    INSERT INTO "_zero.changeLog" (stateVersion, "table", rowKey, op)
       VALUES (@version, @table, JSON(@rowKey), @op)
       ON CONFLICT ("table", rowKey) DO UPDATE
       SET stateVersion = @version, op = @op
@@ -154,7 +154,7 @@ function logTableWideOp(
     // Delete all row ops for the table (`rowKey > ''`),
     // and any previous instance of the same (table-wide) op (`op = ?`).
     `
-    DELETE FROM "_zero.ChangeLog" WHERE "table" = ? AND (rowKey > '' OR op = ?)
+    DELETE FROM "_zero.changeLog" WHERE "table" = ? AND (rowKey > '' OR op = ?)
     `,
     table,
     op,
@@ -162,7 +162,7 @@ function logTableWideOp(
 
   db.run(
     `
-    INSERT INTO "_zero.ChangeLog" (stateVersion, "table", rowKey, op) 
+    INSERT INTO "_zero.changeLog" (stateVersion, "table", rowKey, op) 
       VALUES (@version, @table, @rowKey, @op)
     `,
     // See file JSDoc for explanation of the rowKey w.r.t. ordering of table-wide ops.

@@ -1,32 +1,36 @@
 import type {LogContext} from '@rocicorp/logger';
 import {ident, literal} from 'pg-format';
+import {assert} from '../../../../../../shared/src/asserts.js';
 import {warnIfDataTypeSupported} from '../../../../db/pg-to-lite.js';
-import type {PostgresTransaction} from '../../../../types/pg.js';
+import type {PostgresDB, PostgresTransaction} from '../../../../types/pg.js';
 import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/replication-state.js';
 import type {ShardConfig} from '../shard-config.js';
 import {createEventTriggerStatements} from './ddl.js';
 import {getPublicationInfo, type PublicationInfo} from './published.js';
 
+// Creates a function that appends `_SHARD_ID` to the input.
+export function append(shardID: string) {
+  return (name: string) => ident(name + '_' + shardID);
+}
+
+export function schemaFor(shardID: string) {
+  return append(shardID)('zero');
+}
+
+export function unescapedSchema(shardID: string) {
+  return `zero_${shardID}`;
+}
+
 export const APP_PUBLICATION_PREFIX = 'zero_';
 export const INTERNAL_PUBLICATION_PREFIX = '_zero_';
 
 const DEFAULT_APP_PUBLICATION = APP_PUBLICATION_PREFIX + 'public';
-const SCHEMA_VERSIONS_PUBLICATION =
-  INTERNAL_PUBLICATION_PREFIX + 'schema_versions';
+const METADATA_PUBLICATION_PREFIX = INTERNAL_PUBLICATION_PREFIX + 'metadata_';
 
+// The GLOBAL_SETUP must be idempotent as it can be run multiple times for different shards.
 const GLOBAL_SETUP = `
   CREATE SCHEMA IF NOT EXISTS zero;
 
-  CREATE TABLE zero.clients (
-    "shardID"        TEXT NOT NULL,
-    "clientGroupID"  TEXT NOT NULL,
-    "clientID"       TEXT NOT NULL,
-    "lastMutationID" BIGINT NOT NULL,
-    "userID"         TEXT,
-    PRIMARY KEY("shardID", "clientGroupID", "clientID")
-  );
-
-  -- Note: this must be kept in sync with init.sql in zbugs.
   CREATE TABLE IF NOT EXISTS zero."schemaVersions" (
     "minSupportedVersion" INT4,
     "maxSupportedVersion" INT4,
@@ -37,11 +41,59 @@ const GLOBAL_SETUP = `
     "lock" BOOL PRIMARY KEY DEFAULT true,
     CONSTRAINT zero_schema_versions_single_row_constraint CHECK (lock)
   );
+
   INSERT INTO zero."schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion")
     VALUES (true, 1, 1) ON CONFLICT DO NOTHING;
-
-  CREATE PUBLICATION ${SCHEMA_VERSIONS_PUBLICATION} FOR TABLE zero."schemaVersions";
 `;
+
+function shardSetup(shardID: string, publications: string[]): string {
+  const sharded = append(shardID);
+  const schema = schemaFor(shardID);
+
+  const metadataPublication = METADATA_PUBLICATION_PREFIX + shardID;
+
+  publications.push(metadataPublication);
+  publications.sort();
+
+  return (
+    `
+  CREATE SCHEMA IF NOT EXISTS ${schema};
+
+  CREATE TABLE ${schema}."clients" (
+    "clientGroupID"  TEXT NOT NULL,
+    "clientID"       TEXT NOT NULL,
+    "lastMutationID" BIGINT NOT NULL,
+    "userID"         TEXT,
+    PRIMARY KEY("clientGroupID", "clientID")
+  );
+
+  CREATE PUBLICATION ${ident(metadataPublication)}
+    FOR TABLE zero."schemaVersions", TABLE ${schema}."clients";
+
+  CREATE TABLE ${schema}."shardConfig" (
+    "publications"  TEXT[] NOT NULL,
+
+    -- Ensure that there is only a single row in the table.
+    "lock" BOOL PRIMARY KEY DEFAULT true,
+    CONSTRAINT ${sharded('single_row_shard_config')} CHECK (lock)
+  );
+
+  INSERT INTO ${schema}."shardConfig" (lock, publications)
+    VALUES (true, ARRAY[${literal(publications)}]);
+  ` + createEventTriggerStatements(shardID, publications)
+  );
+}
+
+export async function getShardConfig(
+  db: PostgresDB,
+  shardID: string,
+): Promise<{publications: string[]}> {
+  const result = await db<{publications: string[]}[]>`
+    SELECT publications FROM ${db(unescapedSchema(shardID))}."shardConfig";
+  `;
+  assert(result.length === 1);
+  return result[0];
+}
 
 /**
  * Sets up and returns all publications (including internal ones) for
@@ -51,7 +103,7 @@ export async function setupTablesAndReplication(
   lc: LogContext,
   tx: PostgresTransaction,
   {id, publications}: ShardConfig,
-): Promise<PublicationInfo> {
+) {
   // Validate requested publications.
   for (const pub of publications) {
     // TODO: We can consider relaxing this now that we use per-shard
@@ -65,25 +117,6 @@ export async function setupTablesAndReplication(
   }
 
   const allPublications = [];
-
-  // Setup the global tables and publication if not present.
-  const globalPub = await tx`
-  SELECT 1 FROM pg_publication WHERE pubname = ${SCHEMA_VERSIONS_PUBLICATION}`;
-  if (globalPub.length === 0) {
-    await tx.unsafe(GLOBAL_SETUP);
-  }
-  allPublications.push(SCHEMA_VERSIONS_PUBLICATION);
-
-  // Setup the zero.clients publication for rows for this shardID.
-  const clientsPublication = INTERNAL_PUBLICATION_PREFIX + id + '_clients';
-  const shardPub = await tx`
-    SELECT 1 FROM pg_publication WHERE pubname = ${clientsPublication}`;
-  if (shardPub.length === 0) {
-    await tx.unsafe(`
-      CREATE PUBLICATION ${ident(clientsPublication)}
-        FOR TABLE zero.clients WHERE ("shardID" = ${literal(id)})`);
-  }
-  allPublications.push(clientsPublication);
 
   // Setup application publications.
   if (publications.length) {
@@ -110,17 +143,20 @@ export async function setupTablesAndReplication(
     allPublications.push(DEFAULT_APP_PUBLICATION);
   }
 
-  // Setup DDL trigger events.
-  await tx.unsafe(createEventTriggerStatements(id, allPublications));
+  // Setup the global tables and shard tables / publications.
+  await tx.unsafe(GLOBAL_SETUP + shardSetup(id, allPublications));
 
   const pubInfo = await getPublicationInfo(tx, allPublications);
-  validatePublications(lc, pubInfo);
-  return pubInfo;
+  validatePublications(lc, unescapedSchema(id), pubInfo);
 }
 
-const ALLOWED_IDENTIFIER_CHARS = /^[A-Za-z_-]+$/;
+const ALLOWED_IDENTIFIER_CHARS = /^[A-Za-z_]+[A-Za-z0-9_-]*$/;
 
-function validatePublications(lc: LogContext, published: PublicationInfo) {
+function validatePublications(
+  lc: LogContext,
+  shardSchema: string,
+  published: PublicationInfo,
+) {
   // Verify that all publications export the proper events.
   published.publications.forEach(pub => {
     if (
@@ -137,7 +173,7 @@ function validatePublications(lc: LogContext, published: PublicationInfo) {
   });
 
   published.tables.forEach(table => {
-    if (!['public', 'zero'].includes(table.schema)) {
+    if (!['public', 'zero', shardSchema].includes(table.schema)) {
       // This may be relaxed in the future. We would need a plan for support in the AST first.
       throw new Error('Only the default "public" schema is supported.');
     }
@@ -148,9 +184,6 @@ function validatePublications(lc: LogContext, published: PublicationInfo) {
     }
     if (table.primaryKey.length === 0) {
       throw new Error(`Table "${table.name}" does not have a PRIMARY KEY`);
-    }
-    if (!ALLOWED_IDENTIFIER_CHARS.test(table.schema)) {
-      throw new Error(`Schema "${table.schema}" has invalid characters.`);
     }
     if (!ALLOWED_IDENTIFIER_CHARS.test(table.name)) {
       throw new Error(`Table "${table.name}" has invalid characters.`);

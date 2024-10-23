@@ -43,7 +43,7 @@ import {
   type PublishedSchema,
   type ReplicationEvent,
 } from './schema/ddl.js';
-import {INTERNAL_PUBLICATION_PREFIX} from './schema/zero.js';
+import {INTERNAL_PUBLICATION_PREFIX} from './schema/shard.js';
 import type {ShardConfig} from './shard-config.js';
 import {initSyncSchema} from './sync-schema.js';
 
@@ -63,7 +63,7 @@ export async function initializeChangeSource(
 ): Promise<{replicationConfig: ReplicationConfig; changeSource: ChangeSource}> {
   await initSyncSchema(
     lc,
-    'change-streamer',
+    `replica-${shard.id}`,
     shard,
     replicaDbFile,
     upstreamURI,
