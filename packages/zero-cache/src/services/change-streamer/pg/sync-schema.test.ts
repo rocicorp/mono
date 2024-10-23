@@ -1,5 +1,5 @@
-import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
 import {
   dropReplicationSlot,
   expectTables,
@@ -20,9 +20,9 @@ const SHARD_ID = 'sync_schema_test_id';
 
 // Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
-  version: 2,
-  maxVersion: 2,
-  minSafeRollbackVersion: 1,
+  dataVersion: 1,
+  schemaVersion: 1,
+  minSafeVersion: 1,
   lock: 1, // Internal column, always 1
 };
 
@@ -44,11 +44,22 @@ describe('change-streamer/pg/sync-schema', () => {
     {
       name: 'initial tables',
       upstreamPostState: {
-        ['zero.clients']: [],
+        [`zero_${SHARD_ID}.clients`]: [],
+        ['zero.schemaVersions']: [
+          {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
+        ],
       },
       replicaPostState: {
-        ['zero.clients']: [],
-        ['_zero.SchemaVersions']: [CURRENT_SCHEMA_VERSIONS],
+        [`zero_${SHARD_ID}.clients`]: [],
+        ['zero.schemaVersions']: [
+          {
+            lock: 1,
+            minSupportedVersion: 1,
+            maxSupportedVersion: 1,
+            ['_0_version']: '00',
+          },
+        ],
+        ['_zero.versionHistory']: [CURRENT_SCHEMA_VERSIONS],
       },
     },
     {
@@ -66,11 +77,22 @@ describe('change-streamer/pg/sync-schema', () => {
         ],
       },
       upstreamPostState: {
-        ['zero.clients']: [],
+        [`zero_${SHARD_ID}.clients`]: [],
+        ['zero.schemaVersions']: [
+          {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
+        ],
       },
       replicaPostState: {
-        ['_zero.SchemaVersions']: [CURRENT_SCHEMA_VERSIONS],
-        ['zero.clients']: [],
+        [`zero_${SHARD_ID}.clients`]: [],
+        ['zero.schemaVersions']: [
+          {
+            lock: 1,
+            minSupportedVersion: 1,
+            maxSupportedVersion: 1,
+            ['_0_version']: '00',
+          },
+        ],
+        ['_zero.versionHistory']: [CURRENT_SCHEMA_VERSIONS],
         users: [
           {userID: 123, handle: '@zoot', ['_0_version']: '00'},
           {userID: 456, handle: '@bonk', ['_0_version']: '00'},
@@ -114,7 +136,7 @@ describe('change-streamer/pg/sync-schema', () => {
         expectLiteTables(replica, c.replicaPostState);
 
         expectLiteTables(replica, {
-          ['_zero.ChangeLog']: [],
+          ['_zero.changeLog']: [],
         });
 
         // Slot should still exist.

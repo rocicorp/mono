@@ -62,6 +62,7 @@ export default async function runWorker(parent: Worker): Promise<void> {
     new ViewSyncerService(
       lc,
       id,
+      config.shard.id,
       cvrDB,
       new PipelineDriver(
         lc,

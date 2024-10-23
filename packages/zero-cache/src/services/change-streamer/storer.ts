@@ -40,7 +40,7 @@ export class Storer implements Service {
   async getLastStoredWatermark(): Promise<string | null> {
     const result = await this.#db<
       {max: string | null}[]
-    >`SELECT MAX(watermark) as max FROM cdc."ChangeLog"`;
+    >`SELECT MAX(watermark) as max FROM cdc."changeLog"`;
     return result[0].max;
   }
 
@@ -98,7 +98,7 @@ export class Storer implements Service {
       tx.pool.process(tx => [
         // Ignore conflicts to take into account transaction replay when an
         // acknowledgement doesn't reach upstream.
-        tx`INSERT INTO cdc."ChangeLog" ${tx(entry)} ON CONFLICT DO NOTHING`,
+        tx`INSERT INTO cdc."changeLog" ${tx(entry)} ON CONFLICT DO NOTHING`,
       ]);
 
       if (tag === 'commit') {
@@ -107,7 +107,7 @@ export class Storer implements Service {
         const {count} = await tx.pool.processReadTask(async db => {
           assert(tx);
           const results = await db<{count: number}[]>`
-          SELECT COUNT(*) as count FROM cdc."ChangeLog"
+          SELECT COUNT(*) as count FROM cdc."changeLog"
               WHERE watermark > ${tx.preCommitWatermark} AND
                     watermark < ${entry.watermark}
           `;
@@ -162,7 +162,7 @@ export class Storer implements Service {
         const start = Date.now();
         let count = 0;
         for await (const entries of tx<ChangeEntry[]>`
-          SELECT watermark, change FROM cdc."ChangeLog"
+          SELECT watermark, change FROM cdc."changeLog"
            WHERE watermark > ${sub.watermark}
            ORDER BY watermark, pos`.cursor(10000)) {
           for (const entry of entries) {

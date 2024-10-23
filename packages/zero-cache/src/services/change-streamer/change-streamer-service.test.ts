@@ -122,7 +122,7 @@ describe('change-streamer/service', () => {
 
     const logEntries = await changeDB<
       ChangeLogEntry[]
-    >`SELECT * FROM cdc."ChangeLog"`;
+    >`SELECT * FROM cdc."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
       'begin',
       'insert',
@@ -190,7 +190,7 @@ describe('change-streamer/service', () => {
 
     const logEntries = await changeDB<
       ChangeLogEntry[]
-    >`SELECT * FROM cdc."ChangeLog"`;
+    >`SELECT * FROM cdc."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
       'begin',
       'insert',
@@ -248,7 +248,7 @@ describe('change-streamer/service', () => {
 
     const logEntries = await changeDB<
       ChangeLogEntry[]
-    >`SELECT * FROM cdc."ChangeLog"`;
+    >`SELECT * FROM cdc."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
       'begin',
       'insert',
@@ -332,8 +332,8 @@ describe('change-streamer/service', () => {
     expect(await requests.dequeue()).toBe(REPLICA_VERSION);
 
     await changeDB`
-      INSERT INTO cdc."ChangeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
-      INSERT INTO cdc."ChangeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"commit"}'::json);
+      INSERT INTO cdc."changeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
+      INSERT INTO cdc."changeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"commit"}'::json);
     `.simple();
 
     streamer = await initializeStreamer(lc, changeDB, source, config);
@@ -389,7 +389,7 @@ describe('change-streamer/service', () => {
     });
 
     // Insert unexpected data simulating that the stream and store are not in the expected state.
-    await changeDB`INSERT INTO cdc."ChangeLog" (watermark, pos, change)
+    await changeDB`INSERT INTO cdc."changeLog" (watermark, pos, change)
       VALUES ('03', 0, ${{intervening: 'entry'}})`;
 
     changes.push(['begin', messages.begin()]);
@@ -398,7 +398,7 @@ describe('change-streamer/service', () => {
     changes.push(['commit', messages.commit(), {watermark: '05'}]);
 
     // Commit should not have succeeded
-    expect(await changeDB`SELECT watermark FROM cdc."ChangeLog"`).toEqual([
+    expect(await changeDB`SELECT watermark FROM cdc."changeLog"`).toEqual([
       {watermark: '03'},
     ]);
 

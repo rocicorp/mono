@@ -71,6 +71,7 @@ const DEFAULT_KEEPALIVE_MS = 30_000;
 
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
+  readonly #shardID: string;
   readonly #lc: LogContext;
   readonly #pipelines: PipelineDriver;
   readonly #stateChanges: Subscription<ReplicaState>;
@@ -91,6 +92,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   constructor(
     lc: LogContext,
     clientGroupID: string,
+    shardID: string,
     db: PostgresDB,
     pipelineDriver: PipelineDriver,
     versionChanges: Subscription<ReplicaState>,
@@ -98,6 +100,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
   ) {
     this.id = clientGroupID;
+    this.#shardID = shardID;
     this.#lc = lc
       .withContext('component', 'view-syncer')
       .withContext('serviceID', this.id);
@@ -267,6 +270,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.id,
       clientID,
       wsID,
+      this.#shardID,
       baseCookie,
       schemaVersion,
       downstream,
@@ -361,7 +365,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     // Apply requested patches.
     if (desiredQueriesPatch.length) {
       lc.debug?.(`applying ${desiredQueriesPatch.length} query patches`);
-      const updater = new CVRConfigDrivenUpdater(this.#cvrStore, cvr);
+      const updater = new CVRConfigDrivenUpdater(
+        this.#cvrStore,
+        cvr,
+        this.#shardID,
+      );
 
       const added: {id: string; ast: AST}[] = [];
       for (const patch of desiredQueriesPatch) {

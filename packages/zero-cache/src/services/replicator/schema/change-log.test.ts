@@ -27,7 +27,7 @@ describe('replicator/schema/change-log', () => {
     logSetOp(db, '01', 'bar', {a: 2, b: 3});
 
     expectTables(db.db, {
-      ['_zero.ChangeLog']: [
+      ['_zero.changeLog']: [
         {stateVersion: '01', table: 'bar', rowKey: '{"a":1,"b":2}', op: 's'},
         {stateVersion: '01', table: 'bar', rowKey: '{"a":2,"b":3}', op: 's'},
         {stateVersion: '01', table: 'foo', rowKey: '{"a":1,"b":2}', op: 's'},
@@ -38,7 +38,7 @@ describe('replicator/schema/change-log', () => {
     logDeleteOp(db, '02', 'bar', {a: 2, b: 3});
 
     expectTables(db.db, {
-      ['_zero.ChangeLog']: [
+      ['_zero.changeLog']: [
         {stateVersion: '01', table: 'bar', rowKey: '{"a":1,"b":2}', op: 's'},
         {stateVersion: '01', table: 'foo', rowKey: '{"a":1,"b":2}', op: 's'},
         {stateVersion: '01', table: 'foo', rowKey: '{"a":2,"b":3}', op: 's'},
@@ -52,7 +52,7 @@ describe('replicator/schema/change-log', () => {
     logSetOp(db, '03', 'foo', {b: 9, a: 8});
 
     expectTables(db.db, {
-      ['_zero.ChangeLog']: [
+      ['_zero.changeLog']: [
         {stateVersion: '01', table: 'bar', rowKey: '{"a":1,"b":2}', op: 's'},
         {stateVersion: '02', table: 'bar', rowKey: '{"a":2,"b":3}', op: 'd'},
         {stateVersion: '03', table: 'foo', rowKey: '', op: 't'},
@@ -66,7 +66,7 @@ describe('replicator/schema/change-log', () => {
     logSetOp(db, '04', 'bar', {b: 9, a: 7});
 
     expectTables(db.db, {
-      ['_zero.ChangeLog']: [
+      ['_zero.changeLog']: [
         {stateVersion: '03', table: 'foo', rowKey: '', op: 't'},
         {stateVersion: '03', table: 'foo', rowKey: '{"a":8,"b":9}', op: 's'},
         {stateVersion: '04', table: 'bar', rowKey: null, op: 'r'},
@@ -81,7 +81,7 @@ describe('replicator/schema/change-log', () => {
     logResetOp(db, '05', 'baz');
 
     expectTables(db.db, {
-      ['_zero.ChangeLog']: [
+      ['_zero.changeLog']: [
         {stateVersion: '03', table: 'foo', rowKey: '', op: 't'},
         {stateVersion: '03', table: 'foo', rowKey: '{"a":8,"b":9}', op: 's'},
         {stateVersion: '04', table: 'bar', rowKey: null, op: 'r'},
@@ -97,7 +97,7 @@ describe('replicator/schema/change-log', () => {
     logTruncateOp(db, '06', 'baz');
 
     expectTables(db.db, {
-      ['_zero.ChangeLog']: [
+      ['_zero.changeLog']: [
         {stateVersion: '03', table: 'foo', rowKey: '', op: 't'},
         {stateVersion: '03', table: 'foo', rowKey: '{"a":8,"b":9}', op: 's'},
         {stateVersion: '04', table: 'bar', rowKey: null, op: 'r'},

@@ -1,25 +1,36 @@
 import type {LogContext} from '@rocicorp/logger';
-import type postgres from 'postgres';
 import {
   runSchemaMigrations,
-  type VersionMigrationMap,
-} from '../../../db/old-migration.js';
+  type IncrementalMigrationMap,
+  type Migration,
+} from '../../../db/migration.js';
+import type {PostgresDB} from '../../../types/pg.js';
 import {PG_SCHEMA, setupCDCTables} from './tables.js';
+
+const setupMigration: Migration = {
+  migrateSchema: setupCDCTables,
+  minSafeVersion: 1,
+};
+
+const schemaVersionMigrationMap: IncrementalMigrationMap = {
+  1: setupMigration,
+  // There are no incremental migrations yet, but if we were to, say introduce
+  // another column, setupCDCTables would be updated to create the table with
+  // the new column, and then there would be an incremental migration here at
+  // version `2` that adds the column for databases that were initialized to
+  // version `1`.
+};
 
 export async function initChangeStreamerSchema(
   log: LogContext,
-  db: postgres.Sql,
+  db: PostgresDB,
 ): Promise<void> {
-  const schemaVersionMigrationMap: VersionMigrationMap = {
-    1: {minSafeRollbackVersion: 1}, // The inaugural v1 understands the rollback limit.
-    2: {run: setupCDCTables},
-  };
-
   await runSchemaMigrations(
     log,
     'change-streamer',
     PG_SCHEMA,
     db,
+    setupMigration,
     schemaVersionMigrationMap,
   );
 }

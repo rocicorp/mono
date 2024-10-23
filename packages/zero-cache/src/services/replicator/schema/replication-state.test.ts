@@ -1,8 +1,8 @@
-import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
 import {beforeEach, describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
+import {Database} from '../../../../../zqlite/src/db.js';
 import {StatementRunner} from '../../../db/statements.js';
 import {expectTables} from '../../../test/lite.js';
-import {Database} from '../../../../../zqlite/src/db.js';
 import {
   getReplicationVersions,
   getSubscriptionState,
@@ -22,14 +22,14 @@ describe('replicator/schema/replication-state', () => {
 
   test('initial replication state', () => {
     expectTables(db.db, {
-      ['_zero.ReplicationConfig']: [
+      ['_zero.replicationConfig']: [
         {
           lock: 1,
           replicaVersion: '0a',
           publications: '["zero_data","zero_metadata"]',
         },
       ],
-      ['_zero.ReplicationState']: [
+      ['_zero.replicationState']: [
         {
           lock: 1,
           watermark: '0a',
@@ -57,7 +57,7 @@ describe('replicator/schema/replication-state', () => {
   test('update watermark state', () => {
     updateReplicationWatermark(db, '0f');
     expectTables(db.db, {
-      ['_zero.ReplicationState']: [
+      ['_zero.replicationState']: [
         {
           lock: 1,
           watermark: '0f',
@@ -77,7 +77,7 @@ describe('replicator/schema/replication-state', () => {
 
     updateReplicationWatermark(db, '0r');
     expectTables(db.db, {
-      ['_zero.ReplicationState']: [
+      ['_zero.replicationState']: [
         {
           lock: 1,
           watermark: '0r',

@@ -29,7 +29,7 @@ describe('change-streamer/storer', () => {
           {watermark: '04', pos: 0, change: {tag: 'begin', boo: 'dar'}},
           {watermark: '04', pos: 1, change: {tag: 'update'}},
           {watermark: '06', pos: 2, change: {tag: 'commit', boo: 'far'}},
-        ].map(row => tx`INSERT INTO cdc."ChangeLog" ${tx(row)}`),
+        ].map(row => tx`INSERT INTO cdc."changeLog" ${tx(row)}`),
       );
     });
     commits = new Queue();
@@ -62,7 +62,7 @@ describe('change-streamer/storer', () => {
   test('last stored watermark', async () => {
     expect(await storer.getLastStoredWatermark()).toBe('06');
 
-    await db`TRUNCATE TABLE cdc."ChangeLog"`;
+    await db`TRUNCATE TABLE cdc."changeLog"`;
 
     expect(await storer.getLastStoredWatermark()).toBe(null);
   });
@@ -272,7 +272,7 @@ describe('change-streamer/storer', () => {
       ]
     `);
 
-    expect(await db`SELECT * FROM cdc."ChangeLog" ORDER BY watermark, pos`)
+    expect(await db`SELECT * FROM cdc."changeLog" ORDER BY watermark, pos`)
       .toMatchInlineSnapshot(`
       Result [
         {
@@ -480,7 +480,7 @@ describe('change-streamer/storer', () => {
     ]);
 
     expect(
-      await db`SELECT * FROM cdc."ChangeLog" WHERE watermark >= '07' ORDER BY watermark, pos`,
+      await db`SELECT * FROM cdc."changeLog" WHERE watermark >= '07' ORDER BY watermark, pos`,
     ).toMatchInlineSnapshot(`
       Result [
         {

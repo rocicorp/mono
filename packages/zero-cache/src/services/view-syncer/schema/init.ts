@@ -1,29 +1,25 @@
 import type {LogContext} from '@rocicorp/logger';
-
 import {
   runSchemaMigrations,
   type IncrementalMigrationMap,
   type Migration,
-} from '../../../db/migration-lite.js';
-import {initialSync} from './initial-sync.js';
-import type {ShardConfig} from './shard-config.js';
+} from '../../../db/migration.js';
+import type {PostgresDB} from '../../../types/pg.js';
+import {PG_SCHEMA, setupCVRTables} from './cvr.js';
 
-export async function initSyncSchema(
+const setupMigration: Migration = {
+  migrateSchema: setupCVRTables,
+  minSafeVersion: 1,
+};
+
+export async function initViewSyncerSchema(
   log: LogContext,
-  debugName: string,
-  shard: ShardConfig,
-  dbPath: string,
-  upstreamURI: string,
+  db: PostgresDB,
 ): Promise<void> {
-  const setupMigration: Migration = {
-    migrateSchema: (log, tx) => initialSync(log, shard, tx, upstreamURI),
-    minSafeVersion: 1,
-  };
-
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     1: setupMigration,
     // There are no incremental migrations yet, but if we were to, say introduce
-    // another column, initialSync would be updated to create the table with
+    // another column, setupCDCTables would be updated to create the table with
     // the new column, and then there would be an incremental migration here at
     // version `2` that adds the column for databases that were initialized to
     // version `1`.
@@ -31,8 +27,9 @@ export async function initSyncSchema(
 
   await runSchemaMigrations(
     log,
-    debugName,
-    dbPath,
+    'view-syncer',
+    PG_SCHEMA,
+    db,
     setupMigration,
     schemaVersionMigrationMap,
   );

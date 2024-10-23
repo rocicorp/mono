@@ -11,6 +11,8 @@ import {ErrorForClient} from '../../types/error-for-client.js';
 import {Subscription} from '../../types/subscription.js';
 import {ClientHandler, type Patch, ensureSafeJSON} from './client-handler.js';
 
+const SHARD_ID = 'xyz';
+
 describe('view-syncer/client-handler', () => {
   test('poke handler', () => {
     const poke1Version = {stateVersion: '121'};
@@ -34,6 +36,7 @@ describe('view-syncer/client-handler', () => {
         'g1',
         'id1',
         'ws1',
+        SHARD_ID,
         '121',
         schemaVersion,
         subscriptions[0],
@@ -44,6 +47,7 @@ describe('view-syncer/client-handler', () => {
         'g1',
         'id2',
         'ws2',
+        SHARD_ID,
         '120:01',
         schemaVersion,
         subscriptions[1],
@@ -54,6 +58,7 @@ describe('view-syncer/client-handler', () => {
         'g1',
         'id3',
         'ws3',
+        SHARD_ID,
         '11z',
         schemaVersion,
         subscriptions[2],
@@ -94,11 +99,10 @@ describe('view-syncer/client-handler', () => {
           op: 'put',
           id: {
             schema: '',
-            table: 'zero.clients',
+            table: 'zero_xyz.clients',
             rowKey: {clientID: 'bar'},
           },
           contents: {
-            shardID: '0',
             clientGroupID: 'g1',
             clientID: 'bar',
             lastMutationID: 321n,
@@ -136,7 +140,7 @@ describe('view-syncer/client-handler', () => {
           op: 'put',
           id: {
             schema: '',
-            table: 'zero.clients',
+            table: 'zero_xyz.clients',
             rowKey: {clientID: 'foo'},
           },
           contents: {
@@ -170,7 +174,7 @@ describe('view-syncer/client-handler', () => {
           op: 'put',
           id: {
             schema: '',
-            table: 'zero.clients',
+            table: 'zero_xyz.clients',
             rowKey: {clientID: 'foo'},
           },
           contents: {
@@ -318,6 +322,7 @@ describe('view-syncer/client-handler', () => {
       'g1',
       'id1',
       'ws1',
+      SHARD_ID,
       '120',
       schemaVersion,
       subscription,
@@ -361,7 +366,7 @@ describe('view-syncer/client-handler', () => {
       {
         type: 'row',
         op: 'put',
-        id: {schema: '', table: 'zero.clients', rowKey: {clientID: 'boo'}},
+        id: {schema: '', table: 'zero_xyz.clients', rowKey: {clientID: 'boo'}},
         contents: {
           clientGroupID: 'g1',
           clientID: 'boo',
@@ -383,6 +388,7 @@ describe('view-syncer/client-handler', () => {
         'g1',
         'id1',
         'ws1',
+        SHARD_ID,
         '121',
         schemaVersion,
         downstream,

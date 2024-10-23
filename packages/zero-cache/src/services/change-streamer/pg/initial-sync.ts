@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {ident} from 'pg-format';
 import postgres from 'postgres';
+import {assert} from '../../../../../shared/src/asserts.js';
 import {Database} from '../../../../../zqlite/src/db.js';
 import {
   createIndexStatement,
@@ -25,8 +26,9 @@ import {
   ZERO_VERSION_COLUMN_NAME,
 } from '../../replicator/schema/replication-state.js';
 import {toLexiVersion} from './lsn.js';
-import {type PublicationInfo} from './schema/published.js';
-import {setupTablesAndReplication} from './schema/zero.js';
+import {initShardSchema} from './schema/init.js';
+import {getPublicationInfo, type PublicationInfo} from './schema/published.js';
+import {schemaFor} from './schema/shard.js';
 import type {ShardConfig} from './shard-config.js';
 
 export function replicationSlot(shardID: string): string {
@@ -111,7 +113,7 @@ async function checkUpstreamConfig(upstreamDB: PostgresDB) {
   }
 }
 
-function ensurePublishedTables(
+async function ensurePublishedTables(
   lc: LogContext,
   upstreamDB: PostgresDB,
   shard: ShardConfig,
@@ -119,7 +121,13 @@ function ensurePublishedTables(
   const {database, host} = upstreamDB.options;
   lc.info?.(`Ensuring upstream PUBLICATION on ${database}@${host}`);
 
-  return upstreamDB.begin(tx => setupTablesAndReplication(lc, tx, shard));
+  await initShardSchema(lc, upstreamDB, shard);
+
+  const result = await upstreamDB.unsafe<{publications: string[]}[]>(`
+    SELECT publications FROM ${schemaFor(shard.id)}."shardConfig";
+  `);
+  assert(result.length === 1);
+  return getPublicationInfo(upstreamDB, result[0].publications);
 }
 
 /* eslint-disable @typescript-eslint/naming-convention */

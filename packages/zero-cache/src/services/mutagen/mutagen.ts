@@ -365,9 +365,11 @@ async function checkSchemaVersionAndIncrementLastMutationID(
   receivedMutationID: number,
 ) {
   const lastMutationIdPromise = tx<{lastMutationID: bigint}[]>`
-    INSERT INTO zero.clients as current ("shardID", "clientGroupID", "clientID", "lastMutationID")
-    VALUES (${shardID}, ${clientGroupID}, ${clientID}, ${1})
-    ON CONFLICT ("shardID", "clientGroupID", "clientID")
+    INSERT INTO ${tx(
+      `zero_${shardID}`,
+    )}.clients as current ("clientGroupID", "clientID", "lastMutationID")
+    VALUES (${clientGroupID}, ${clientID}, ${1})
+    ON CONFLICT ("clientGroupID", "clientID")
     DO UPDATE SET "lastMutationID" = current."lastMutationID" + 1
     RETURNING "lastMutationID"
   `.execute();
