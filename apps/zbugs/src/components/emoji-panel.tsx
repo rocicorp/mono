@@ -11,9 +11,10 @@ import {useQuery} from 'zero-react/src/use-query.js';
 import {assert} from '../../../../packages/shared/src/asserts.js';
 import addEmojiIcon from '../assets/icons/add-emoji.svg';
 import type {Schema} from '../domain/schema.js';
+import {useLogin} from '../hooks/use-login.js';
 import {useNumericPref} from '../hooks/use-user-pref.js';
 import {useZero} from '../hooks/use-zero.js';
-import {Button} from './button.js';
+import {ButtonWithLoginCheck} from './button-with-login-check.js';
 import {EmojiPicker, SKIN_TONE_PREF} from './emoji-picker.js';
 
 type Emoji = SchemaToRow<Schema['tables']['emoji']> & {
@@ -111,13 +112,26 @@ export function EmojiPanel({issueID, commentID}: Props) {
     [addEmoji, groups, removeEmoji, z.userID],
   );
 
+  const login = useLogin();
+  const loginMessage = 'You need to be logged in to modify emoji reactions.';
+
+  const button = (
+    <ButtonWithLoginCheck
+      className="add-emoji-button"
+      loginMessage={loginMessage}
+    >
+      <img src={addEmojiIcon} />
+    </ButtonWithLoginCheck>
+  );
+
   return (
     <div className="flex gap-2 items-center">
       {Object.entries(groups).map(([normalizedEmoji, emojis]) => (
-        <Button
+        <ButtonWithLoginCheck
           className="emoji-pill"
           key={normalizedEmoji}
           title={'TODO: Who reacted with this emoji'}
+          loginMessage={loginMessage}
           onAction={() =>
             addOrRemoveEmoji({
               unicode: setSkinTone(normalizedEmoji, skinTone),
@@ -129,22 +143,23 @@ export function EmojiPanel({issueID, commentID}: Props) {
             <span key={value}>{value}</span>
           ))}
           {emojis.length > 1 ? ' ' + emojis.length : ''}
-        </Button>
+        </ButtonWithLoginCheck>
       ))}
-      <Popover>
-        <PopoverButton as="div">
-          <Button className="add-emoji-button">
-            <img src={addEmojiIcon} />
-          </Button>
-        </PopoverButton>
-        <PopoverPanel anchor="bottom start">
-          <PopoverContent
-            onChange={details => {
-              addOrRemoveEmoji(details);
-            }}
-          />
-        </PopoverPanel>
-      </Popover>
+
+      {login.loginState !== undefined ? (
+        <Popover>
+          <PopoverButton as="div">{button}</PopoverButton>
+          <PopoverPanel anchor="bottom start">
+            <PopoverContent
+              onChange={details => {
+                addOrRemoveEmoji(details);
+              }}
+            />
+          </PopoverPanel>
+        </Popover>
+      ) : (
+        button
+      )}
     </div>
   );
 }

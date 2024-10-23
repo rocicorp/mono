@@ -10,9 +10,9 @@ import {useLogin} from '../hooks/use-login.js';
 import {useZero} from '../hooks/use-zero.js';
 import IssueComposer from '../pages/issue/issue-composer.js';
 import {links} from '../routes.js';
+import {ButtonWithLoginCheck} from './button-with-login-check.js';
 import {Button} from './button.js';
 import {Link} from './link.js';
-import {NotLoggedInModal} from './not-logged-in-modal.js';
 
 export function Nav() {
   const qs = new URLSearchParams(useSearch());
@@ -24,7 +24,6 @@ export function Nav() {
   );
 
   const [showIssueModal, setShowIssueModal] = useState(false);
-  const [showNotLoggedInModal, setShowNotLoggedInModal] = useState(false);
 
   const addStatusParam = (status: 'closed' | 'all' | undefined) => {
     const newParams = new URLSearchParams(qs);
@@ -42,11 +41,7 @@ export function Nav() {
   );
 
   const newIssue = () => {
-    if (login.loginState === undefined) {
-      setShowNotLoggedInModal(true);
-    } else {
-      setShowIssueModal(true);
-    }
+    setShowIssueModal(true);
   };
 
   return (
@@ -57,9 +52,13 @@ export function Nav() {
           <img src={markURL} className="zero-mark" />
         </Link>
         {/* could not figure out how to add this color to tailwind.config.js */}
-        <Button className="primary-cta" onAction={newIssue}>
+        <ButtonWithLoginCheck
+          className="primary-cta"
+          onAction={newIssue}
+          loginMessage="You need to be logged in to create a new issue."
+        >
           <span className="primary-cta-text">New Issue</span>
-        </Button>
+        </ButtonWithLoginCheck>
 
         <div className="section-tabs">
           <Link
@@ -124,11 +123,6 @@ export function Nav() {
             navigate(links.issue({id}));
           }
         }}
-      />
-      <NotLoggedInModal
-        isOpen={showNotLoggedInModal}
-        onDismiss={() => setShowNotLoggedInModal(false)}
-        href={loginHref}
       />
     </>
   );
