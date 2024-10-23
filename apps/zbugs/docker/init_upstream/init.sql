@@ -6,6 +6,7 @@ DROP TABLE IF EXISTS "user",
 "emoji",
 "issueEmoji",
 "commentEmoji",
+"userPref",
 "zero.schemaVersions" CASCADE;
 
 CREATE TABLE "user" (
@@ -86,6 +87,7 @@ CREATE TABLE "issueLabel" (
 CREATE TABLE emoji (
     "id" VARCHAR PRIMARY KEY,
     "value" VARCHAR NOT NULL,
+    "annotation" VARCHAR,
     "creatorID" VARCHAR REFERENCES "user"(id) NOT NULL,
     "created" double precision DEFAULT (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)
 );
@@ -102,6 +104,14 @@ CREATE TABLE "commentEmoji" (
     "commentID" VARCHAR REFERENCES comment(id) ON DELETE CASCADE,
     "emojiID" VARCHAR REFERENCES emoji(id) ON DELETE CASCADE,
     PRIMARY KEY ("commentID", "emojiID")
+);
+
+CREATE TABLE "userPref" (
+    "key" VARCHAR NOT NULL,
+    "value" VARCHAR NOT NULL,
+    "userID" VARCHAR REFERENCES "user"(id) ON DELETE CASCADE,
+
+    PRIMARY KEY ("key", "userID")
 );
 
 CREATE SCHEMA IF NOT EXISTS zero;

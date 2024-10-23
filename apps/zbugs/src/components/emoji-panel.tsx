@@ -11,9 +11,10 @@ import {useQuery} from 'zero-react/src/use-query.js';
 import {assert} from '../../../../packages/shared/src/asserts.js';
 import addEmojiIcon from '../assets/icons/add-emoji.svg';
 import type {Schema} from '../domain/schema.js';
+import {useNumericPref} from '../hooks/use-user-pref.js';
 import {useZero} from '../hooks/use-zero.js';
 import {Button} from './button.js';
-import {EmojiPicker} from './emoji-picker.js';
+import {EmojiPicker, SKIN_TONE_PREF} from './emoji-picker.js';
 
 type Emoji = SchemaToRow<Schema['tables']['emoji']> & {
   creator: SchemaToRow<Schema['tables']['user']> | undefined;
@@ -41,13 +42,16 @@ export function EmojiPanel({issueID, commentID}: Props) {
     q.related('emoji', q => q.related('creator', q => q.one()).one()),
   );
 
+  const skinTone = useNumericPref(SKIN_TONE_PREF, 0);
+
   const addEmoji = useCallback(
-    (emoji: string) => {
+    (unicode: string, annotation: string) => {
       const id = nanoid();
       z.mutate(m => {
         m.emoji.create({
           id,
-          value: emoji,
+          value: unicode,
+          annotation,
           creatorID: z.userID,
           created: Date.now(),
         });
@@ -90,17 +94,18 @@ export function EmojiPanel({issueID, commentID}: Props) {
   );
 
   // The emojis is an array. We want to group them by value and count them.
-  const groups = groupEmojis(emojis);
+  const groups = groupAndSortEmojis(emojis);
 
   const addOrRemoveEmoji = useCallback(
-    (emoji: string) => {
-      const normalizedEmoji = normalizeEmoji(emoji);
+    (details: {unicode: string; annotation: string}) => {
+      const {unicode, annotation} = details;
+      const normalizedEmoji = normalizeEmoji(unicode);
       const emojis = groups[normalizedEmoji] ?? [];
       const existingEmojiID = findEmojiForCreator(emojis, z.userID);
       if (existingEmojiID) {
         removeEmoji(existingEmojiID);
       } else {
-        addEmoji(normalizedEmoji);
+        addEmoji(unicode, annotation);
       }
     },
     [addEmoji, groups, removeEmoji, z.userID],
@@ -113,7 +118,12 @@ export function EmojiPanel({issueID, commentID}: Props) {
           className="emoji-pill"
           key={normalizedEmoji}
           title={'TODO: Who reacted with this emoji'}
-          onAction={() => addOrRemoveEmoji(normalizedEmoji)}
+          onAction={() =>
+            addOrRemoveEmoji({
+              unicode: setSkinTone(normalizedEmoji, skinTone),
+              annotation: emojis[0].annotation ?? '',
+            })
+          }
         >
           {unique(emojis).map(value => (
             <span key={value}>{value}</span>
@@ -129,8 +139,8 @@ export function EmojiPanel({issueID, commentID}: Props) {
         </PopoverButton>
         <PopoverPanel anchor="bottom start">
           <PopoverContent
-            onChange={emoji => {
-              addOrRemoveEmoji(emoji);
+            onChange={details => {
+              addOrRemoveEmoji(details);
             }}
           />
         </PopoverPanel>
@@ -139,12 +149,16 @@ export function EmojiPanel({issueID, commentID}: Props) {
   );
 }
 
-function PopoverContent({onChange}: {onChange: (emoji: string) => void}) {
+function PopoverContent({
+  onChange,
+}: {
+  onChange: (emoji: {unicode: string; annotation: string}) => void;
+}) {
   const close = useClose();
   return (
     <EmojiPicker
-      onChange={x => {
-        onChange(x);
+      onEmojiChange={details => {
+        onChange(details);
         close();
       }}
     />
@@ -156,7 +170,7 @@ function normalizeEmoji(emoji: string): string {
   return emoji.replace(/[\u{1F3FB}-\u{1F3FF}]/gu, '');
 }
 
-function groupEmojis(emojis: Emojis): Record<string, Emoji[]> {
+function groupAndSortEmojis(emojis: Emojis): Record<string, Emoji[]> {
   const rv: Record<string, Emoji[]> = {};
   for (const {emoji} of emojis) {
     assert(emoji);
@@ -166,13 +180,13 @@ function groupEmojis(emojis: Emojis): Record<string, Emoji[]> {
     }
     rv[normalizedEmoji].push(emoji);
   }
+
+  // Sort the emojis by creation time. Not sure how to sort this with ZQL.
+  for (const key in rv) {
+    rv[key] = rv[key].sort((a, b) => a.created - b.created);
+  }
+
   return rv;
-  //   cos
-  //   e.emoji?.value
-  // return Object.groupBy(emojis, emoji => normalizeEmoji(emoji.value)) as Record<
-  //   string,
-  //   Emoji[]
-  // >;
 }
 
 function findEmojiForCreator(
@@ -189,4 +203,14 @@ function findEmojiForCreator(
 
 function unique(emojis: Emoji[]): string[] {
   return [...new Set(emojis.map(emoji => emoji.value))];
+}
+
+function setSkinTone(emoji: string, skinTone: number): string {
+  const normalizedEmoji = normalizeEmoji(emoji);
+  if (skinTone === 0) {
+    return normalizedEmoji;
+  }
+
+  // Skin tone modifiers range from U+1F3FB to U+1F3FF
+  return normalizedEmoji + String.fromCodePoint(0x1f3fa + skinTone);
 }
