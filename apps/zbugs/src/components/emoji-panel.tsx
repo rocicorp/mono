@@ -4,11 +4,10 @@ import {
   PopoverPanel,
   useClose,
 } from '@headlessui/react';
-import type {Query, SchemaToRow} from '@rocicorp/zero';
+import type {SchemaToRow} from '@rocicorp/zero';
 import {nanoid} from 'nanoid';
 import {useCallback} from 'react';
 import {useQuery} from 'zero-react/src/use-query.js';
-import {assert} from '../../../../packages/shared/src/asserts.js';
 import addEmojiIcon from '../assets/icons/add-emoji.svg';
 import type {Schema} from '../domain/schema.js';
 import {useLogin} from '../hooks/use-login.js';
@@ -21,77 +20,42 @@ type Emoji = SchemaToRow<Schema['tables']['emoji']> & {
   creator: SchemaToRow<Schema['tables']['user']> | undefined;
 };
 
-type Emojis = {
-  emojiID: string;
-  emoji: Emoji | undefined;
-}[];
-
 type Props = {
   issueID: string;
   commentID?: string | undefined;
 };
 
 export function EmojiPanel({issueID, commentID}: Props) {
+  const subjectID = commentID ?? issueID;
   const z = useZero();
-  const q = (
-    commentID
-      ? z.query.commentEmoji.where('commentID', commentID)
-      : z.query.issueEmoji.where('issueID', issueID)
-  ) as Query<Schema['tables']['commentEmoji'] | Schema['tables']['issueEmoji']>;
+  const q = z.query.emoji
+    .where('subjectID', subjectID)
+    .related('creator', creator => creator.one());
 
-  const emojis: Emojis = useQuery(
-    q.related('emoji', q => q.related('creator', q => q.one()).one()),
-  );
+  const emojis: Emoji[] = useQuery(q);
 
   const skinTone = useNumericPref(SKIN_TONE_PREF, 0);
 
   const addEmoji = useCallback(
     (unicode: string, annotation: string) => {
       const id = nanoid();
-      z.mutate(m => {
-        m.emoji.create({
-          id,
-          value: unicode,
-          annotation,
-          creatorID: z.userID,
-          created: Date.now(),
-        });
-
-        if (commentID) {
-          m.commentEmoji.create({
-            commentID,
-            emojiID: id,
-          });
-        } else {
-          m.issueEmoji.create({
-            issueID,
-            emojiID: id,
-          });
-        }
-
-        // also update the modified time of the issue
-        m.issue.update({id: issueID, modified: Date.now()});
+      z.mutate.emoji.create({
+        id,
+        value: unicode,
+        annotation,
+        subjectID,
+        creatorID: z.userID,
+        created: Date.now(),
       });
     },
-    [commentID, issueID, z],
+    [subjectID, z],
   );
 
   const removeEmoji = useCallback(
     (id: string) => {
-      z.mutate(m => {
-        m.emoji.delete({id});
-
-        if (commentID) {
-          m.commentEmoji.delete({commentID, emojiID: id});
-        } else {
-          m.issueEmoji.delete({issueID, emojiID: id});
-        }
-
-        // also update the modified time of the issue
-        m.issue.update({id: issueID, modified: Date.now()});
-      });
+      z.mutate.emoji.delete({id});
     },
-    [commentID, issueID, z],
+    [z],
   );
 
   // The emojis is an array. We want to group them by value and count them.
@@ -150,11 +114,7 @@ export function EmojiPanel({issueID, commentID}: Props) {
         <Popover>
           <PopoverButton as="div">{button}</PopoverButton>
           <PopoverPanel anchor="bottom start">
-            <PopoverContent
-              onChange={details => {
-                addOrRemoveEmoji(details);
-              }}
-            />
+            <PopoverContent onChange={addOrRemoveEmoji} />
           </PopoverPanel>
         </Popover>
       ) : (
@@ -170,14 +130,16 @@ function PopoverContent({
   onChange: (emoji: {unicode: string; annotation: string}) => void;
 }) {
   const close = useClose();
-  return (
-    <EmojiPicker
-      onEmojiChange={details => {
-        onChange(details);
-        close();
-      }}
-    />
+
+  const onEmojiChange = useCallback(
+    (details: {unicode: string; annotation: string}) => {
+      onChange(details);
+      close();
+    },
+    [close, onChange],
   );
+
+  return <EmojiPicker onEmojiChange={onEmojiChange} />;
 }
 
 function normalizeEmoji(emoji: string): string {
@@ -185,10 +147,9 @@ function normalizeEmoji(emoji: string): string {
   return emoji.replace(/[\u{1F3FB}-\u{1F3FF}]/gu, '');
 }
 
-function groupAndSortEmojis(emojis: Emojis): Record<string, Emoji[]> {
+function groupAndSortEmojis(emojis: Emoji[]): Record<string, Emoji[]> {
   const rv: Record<string, Emoji[]> = {};
-  for (const {emoji} of emojis) {
-    assert(emoji);
+  for (const emoji of emojis) {
     const normalizedEmoji = normalizeEmoji(emoji.value);
     if (!rv[normalizedEmoji]) {
       rv[normalizedEmoji] = [];

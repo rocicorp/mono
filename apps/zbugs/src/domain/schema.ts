@@ -127,7 +127,8 @@ const emojiSchema = {
   columns: {
     id: {type: 'string'},
     value: {type: 'string'},
-    annotation: {type: 'string', optional: true},
+    annotation: {type: 'string'},
+    subjectID: {type: 'string'},
     creatorID: {type: 'string'},
     created: {type: 'number'},
   },
@@ -138,42 +139,6 @@ const emojiSchema = {
       dest: {
         field: 'id',
         schema: () => userSchema,
-      },
-    },
-  },
-} as const;
-
-const issueEmojiSchema = {
-  tableName: 'issueEmoji',
-  columns: {
-    emojiID: {type: 'string'},
-    issueID: {type: 'string'},
-  },
-  primaryKey: ['emojiID', 'issueID'],
-  relationships: {
-    emoji: {
-      source: 'emojiID',
-      dest: {
-        field: 'id',
-        schema: () => emojiSchema,
-      },
-    },
-  },
-} as const;
-
-const commentEmojiSchema = {
-  tableName: 'commentEmoji',
-  columns: {
-    commentID: {type: 'string'},
-    emojiID: {type: 'string'},
-  },
-  primaryKey: ['commentID', 'emojiID'],
-  relationships: {
-    emoji: {
-      source: 'emojiID',
-      dest: {
-        field: 'id',
-        schema: () => emojiSchema,
       },
     },
   },
@@ -200,8 +165,6 @@ export const schema = {
     issueLabel: issueLabelSchema,
     viewState: viewStateSchema,
     emoji: emojiSchema,
-    issueEmoji: issueEmojiSchema,
-    commentEmoji: commentEmojiSchema,
     userPref: userPrefSchema,
   },
 } as const;
