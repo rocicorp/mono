@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import {useState, useEffect} from 'react';
 import {FPSMeter} from '@schickling/fps-meter';
 import classNames from 'classnames';
 import {useSearch} from 'wouter';
