@@ -354,6 +354,7 @@ CREATE EVENT TRIGGER ${sharded(`zero_${tagID}`)}
     triggers.push(`DROP EVENT TRIGGER IF EXISTS ${sharded(trigger)};`);
   }
   for (const fn of LEGACY_FUNCTION_NAMES) {
+    triggers.push(`DROP FUNCTION IF EXISTS zero.${fn};`);
     triggers.push(`DROP FUNCTION IF EXISTS zero.${sharded(fn)};`);
   }
   return triggers.join('');
@@ -373,8 +374,10 @@ const LEGACY_FUNCTION_NAMES = [
   'replicate_create_index',
   'replicate_alter_publication',
   'replicate_alter_publication_drop',
+  'replicate_drop_event',
   'replicate_drop_table',
   'replicate_drop_index',
   'get_trigger_context',
+  'emit_all_publications',
   'emit_error',
 ];
