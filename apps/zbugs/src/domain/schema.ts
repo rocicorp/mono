@@ -67,6 +67,18 @@ const issueSchema = {
         schema: () => viewStateSchema,
       },
     },
+    emojis: {
+      source: 'id',
+      junction: {
+        schema: () => issueEmojiSchema,
+        sourceField: 'issueID',
+        destField: 'emojiID',
+      },
+      dest: {
+        field: 'id',
+        schema: () => emojiSchema,
+      },
+    },
   },
 } as const;
 
@@ -99,6 +111,18 @@ const commentSchema = {
         schema: () => userSchema,
       },
     },
+    emojis: {
+      source: 'id',
+      junction: {
+        schema: () => commentEmojiSchema,
+        sourceField: 'commentID',
+        destField: 'emojiID',
+      },
+      dest: {
+        field: 'id',
+        schema: () => emojiSchema,
+      },
+    },
   },
 } as const;
 
@@ -122,6 +146,46 @@ const issueLabelSchema = {
   relationships: {},
 } as const;
 
+const emojiSchema = {
+  tableName: 'emoji',
+  columns: {
+    id: {type: 'string'},
+    value: {type: 'string'},
+    creatorID: {type: 'string'},
+    created: {type: 'number'},
+  },
+  primaryKey: ['id'],
+  relationships: {
+    creator: {
+      source: 'creatorID',
+      dest: {
+        field: 'id',
+        schema: () => userSchema,
+      },
+    },
+  },
+} as const;
+
+const issueEmojiSchema = {
+  tableName: 'issueEmoji',
+  columns: {
+    emojiID: {type: 'string'},
+    issueID: {type: 'string'},
+  },
+  primaryKey: ['emojiID', 'issueID'],
+  relationships: {},
+} as const;
+
+const commentEmojiSchema = {
+  tableName: 'commentEmoji',
+  columns: {
+    commentID: {type: 'string'},
+    emojiID: {type: 'string'},
+  },
+  primaryKey: ['commentID', 'emojiID'],
+  relationships: {},
+} as const;
+
 export const schema = {
   version: 3,
   tables: {
@@ -131,6 +195,9 @@ export const schema = {
     label: labelSchema,
     issueLabel: issueLabelSchema,
     viewState: viewStateSchema,
+    emoji: emojiSchema,
+    issueEmoji: issueEmojiSchema,
+    commentEmoji: commentEmojiSchema,
   },
 } as const;
 

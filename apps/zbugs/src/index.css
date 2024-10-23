@@ -975,3 +975,26 @@ textarea.autoResize {
     transform: translate(-50%, -50%);
   }
 }
+
+.emoji-pill {
+  padding: 0.25rem 0.5rem;
+  border-color: var(--color-light-outline);
+  border-width: 1px;
+  border-radius: 2rem;
+}
+
+.emoji-pill:hover {
+  background-color: var(--color-nav-selected);
+  border-color: var(--color-text-dimmed-label);
+  cursor: pointer;
+}
+
+.add-emoji-button {
+  padding: 0.25rem 0.5rem;
+  opacity: 0.6;
+}
+
+[data-open] > .add-emoji-button,
+.add-emoji-button:hover {
+  opacity: 1;
+}

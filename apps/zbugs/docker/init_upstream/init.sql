@@ -3,6 +3,9 @@ DROP TABLE IF EXISTS "user",
 "comment",
 "label",
 "issueLabel",
+"emoji",
+"issueEmoji",
+"commentEmoji",
 "zero.schemaVersions" CASCADE;
 
 CREATE TABLE "user" (
@@ -35,7 +38,8 @@ CREATE TABLE issue (
     --
     -- NULL here represents no labels. Empty string represents a single label
     -- with value "".
-    "labelIDs" TEXT
+    "labelIDs" TEXT,
+
 );
 
 CREATE TABLE "viewState" (
@@ -77,6 +81,27 @@ CREATE TABLE "issueLabel" (
     "labelID" VARCHAR REFERENCES label(id),
     "issueID" VARCHAR REFERENCES issue(id) ON DELETE CASCADE,
     PRIMARY KEY ("labelID", "issueID")
+    );
+
+CREATE TABLE emoji (
+    "id" VARCHAR PRIMARY KEY,
+    "value" VARCHAR NOT NULL,
+    "creatorID" VARCHAR REFERENCES "user"(id) NOT NULL,
+    "created" double precision DEFAULT (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)
+);
+
+CREATE INDEX emoji_value_idx ON emoji (value);
+
+CREATE TABLE "issueEmoji" (
+    "emojiID" VARCHAR REFERENCES emoji(id) ON DELETE CASCADE,
+    "issueID" VARCHAR REFERENCES issue(id) ON DELETE CASCADE,
+    PRIMARY KEY ("emojiID", "issueID")
+);
+
+CREATE TABLE "commentEmoji" (
+    "commentID" VARCHAR REFERENCES comment(id) ON DELETE CASCADE,
+    "emojiID" VARCHAR REFERENCES emoji(id) ON DELETE CASCADE,
+    PRIMARY KEY ("commentID", "emojiID")
 );
 
 CREATE SCHEMA IF NOT EXISTS zero;

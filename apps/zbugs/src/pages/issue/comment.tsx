@@ -2,6 +2,7 @@ import {useQuery} from '@rocicorp/zero/react';
 import {useState} from 'react';
 import {Button} from '../../components/button.js';
 import {Confirm} from '../../components/confirm.js';
+import {EmojiPanel} from '../../components/emoji-panel.js';
 import Markdown from '../../components/markdown.js';
 import RelativeTime from '../../components/relative-time.js';
 import {useLogin} from '../../hooks/use-login.js';
@@ -14,6 +15,7 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
   const q = z.query.comment
     .where('id', id)
     .related('creator', creator => creator.one())
+    .related('emojis', q => q.related('creator', q => q.one()))
     .one();
   const comment = useQuery(q);
   const [editing, setEditing] = useState(false);
@@ -24,6 +26,10 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
   if (!comment) {
     return null;
   }
+
+  // TODO: Figure out this type
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const emojis = comment.emojis as any;
 
   const edit = () => setEditing(true);
   const remove = () => z.mutate.comment.delete({id});
@@ -63,6 +69,11 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
       ) : (
         <div className="markdown-container">
           <Markdown>{comment.body}</Markdown>
+          <EmojiPanel
+            emojis={emojis}
+            issueID={issueID}
+            commentID={comment.id}
+          />
         </div>
       )}
       {editing || comment.creatorID !== login.loginState?.decoded.sub ? null : (

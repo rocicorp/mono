@@ -10,6 +10,7 @@ import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
 import {Button} from '../../components/button.js';
 import {Confirm} from '../../components/confirm.js';
+import {EmojiPanel} from '../../components/emoji-panel.js';
 import LabelPicker from '../../components/label-picker.js';
 import {Link} from '../../components/link.js';
 import Markdown from '../../components/markdown.js';
@@ -40,6 +41,7 @@ export default function IssuePage() {
     .related('labels')
     .related('viewState', q => q.where('userID', z.userID).one())
     .related('comments', q => q.orderBy('created', 'asc'))
+    .related('emojis', q => q.related('creator', q => q.one()))
     .one();
   const issue = useQuery(q);
 
@@ -150,6 +152,10 @@ export default function IssuePage() {
 
   const rendering = editing ? {...editing, ...edits} : issue;
 
+  // TODO: Figure out this type!
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const emojis = issue.emojis as any;
+
   return (
     <div className="issue-detail-container">
       {/* Center column of info */}
@@ -220,6 +226,7 @@ export default function IssuePage() {
         {!editing ? (
           <div className="description-container markdown-container">
             <Markdown>{rendering.description}</Markdown>
+            <EmojiPanel emojis={emojis} issueID={issue.id} />
           </div>
         ) : (
           <div className="edit-description-container">
