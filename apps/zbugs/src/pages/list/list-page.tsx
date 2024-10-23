@@ -20,6 +20,7 @@ import {useThrottledCallback} from 'use-debounce';
 import RelativeTime from '../../components/relative-time.js';
 import {useClickOutside} from '../../hooks/use-click-outside.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
+import {Button} from '../../components/button.js';
 
 let firstRowRendered = false;
 const itemSize = 56;
@@ -286,13 +287,13 @@ export default function ListPage() {
         })}
         <Filter onSelect={onFilter} />
         <div className="sort-control-container">
-          <button className="sort-control" onClick={toggleSortField}>
+          <Button className="sort-control" onAction={toggleSortField}>
             {sortField === 'modified' ? 'Modified' : 'Created'}
-          </button>
-          <button
+          </Button>
+          <Button
             className={classNames('sort-direction', sortDirection)}
-            onClick={toggleSortDirection}
-          ></button>
+            onAction={toggleSortDirection}
+          ></Button>
         </div>
       </div>
 
