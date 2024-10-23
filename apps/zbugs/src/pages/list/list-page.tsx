@@ -21,12 +21,14 @@ import RelativeTime from '../../components/relative-time.js';
 import {useClickOutside} from '../../hooks/use-click-outside.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {Button} from '../../components/button.js';
+import {useLogin} from '../../hooks/use-login.js';
 
 let firstRowRendered = false;
 const itemSize = 56;
 
 export default function ListPage() {
   const z = useZero();
+  const login = useLogin();
   const qs = new URLSearchParams(useSearch());
 
   const status = qs.get('status')?.toLowerCase() ?? 'open';
@@ -49,6 +51,10 @@ export default function ListPage() {
     z.query.user.where('login', assignee ?? '').one(),
     assignee !== null,
   )?.id;
+
+  const user = useQuery(
+    z.query.user.where('id', login.loginState?.decoded.sub ?? '').one(),
+  );
 
   const labelIDs = useQuery(z.query.label.where('name', 'IN', labels));
 
@@ -180,7 +186,10 @@ export default function ListPage() {
         key={issue.id}
         className={classNames(
           'row',
-          issue.modified > (issue.viewState?.viewed ?? 0) ? 'unread' : null,
+          issue.modified > (issue.viewState?.viewed ?? 0) &&
+            login.loginState != undefined
+            ? 'unread'
+            : null,
         )}
         style={{
           ...style,
