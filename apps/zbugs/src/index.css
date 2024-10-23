@@ -363,16 +363,28 @@ textarea.autoResize {
   background: transparent url(assets/icons/filter.svg) no-repeat 0.5rem center;
 }
 
+.list-view-filter-container > .set-filter-container {
+  display: none;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.list-view-filter-container > .set-filter-container:not(:empty) {
+  display: flex;
+}
+
 .filter-label {
   color: var(--color-text-dimmed-label);
-  padding: 0.25rem 0;
-  line-height: 1;
+  line-height: 1.8125rem;
 }
 
 .list-view-filter-container .pill {
   margin: 0;
   color: var(--color-text-primary-active);
   background-color: var(--color-nav-selected);
+  vertical-align: middle;
+  position: relative;
+  top: 1px;
 }
 
 .add-filter-container {
@@ -408,6 +420,7 @@ textarea.autoResize {
   line-height: 1;
   transition: background-color 0.3s ease;
   position: relative;
+  height: 1.8125rem;
 }
 
 .add-filter:hover,
@@ -1148,6 +1161,26 @@ textarea.autoResize {
 
   .primary-content .issue-taglist {
     display: none;
+  }
+
+  .list-view-filter-container {
+    flex-wrap: wrap;
+  }
+
+  .list-view-filter-container > * {
+    flex: 1 1 auto;
+  }
+
+  .list-view-filter-container > .sort-control-container {
+    flex: unset;
+  }
+
+  .list-view-filter-container > .set-filter-container {
+    flex-basis: 100%;
+    margin-bottom: 1rem;
+    display: none;
+    gap: 0.5rem;
+    flex-wrap: wrap;
   }
 
   .filter-label {
