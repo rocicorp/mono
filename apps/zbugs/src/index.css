@@ -1100,6 +1100,32 @@ textarea.autoResize {
     font-weight: var(--typo-label-weight);
     padding: 0.375rem 0.75rem;
   }
+
+  .mobile-login-container {
+    position: relative;
+  }
+
+  .user-panel-mobile {
+    position: absolute;
+    z-index: 9999;
+    flex-direction: column;
+    top: 2rem;
+    right: 0;
+    padding: 1.5rem;
+    background-color: var(--color-modal-background);
+    -webkit-backdrop-filter: var(--filter-backdrop-blur);
+    backdrop-filter: var(--filter-backdrop-blur);
+    border-radius: 0.5rem;
+    border: 1px solid var(--color-modal-outline);
+  }
+
+  .logout-button-mobile {
+    background: transparent url(/src/assets/icons/logout.svg) no-repeat center
+      left;
+    padding-left: 1.5rem;
+    background-size: 1rem;
+    width: max-content;
+  }
 }
 
 @media (max-width: 650px) {
