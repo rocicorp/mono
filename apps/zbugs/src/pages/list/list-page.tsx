@@ -156,54 +156,51 @@ export default function ListPage() {
     history.replaceState({...history.state, '-zbugs-list': scrollOffset}, '');
   }, 250);
 
-  const Row = React.memo(
-    ({index, style}: {index: number; style: CSSProperties}) => {
-      const issue = issues[index];
-      if (firstRowRendered === false) {
-        mark('first issue row rendered');
-        firstRowRendered = true;
-      }
+  const Row = ({index, style}: {index: number; style: CSSProperties}) => {
+    const issue = issues[index];
+    if (firstRowRendered === false) {
+      mark('first issue row rendered');
+      firstRowRendered = true;
+    }
 
-      const timestamp =
-        sortField === 'modified' ? issue.modified : issue.created;
+    const timestamp = sortField === 'modified' ? issue.modified : issue.created;
 
-      return (
-        <div
-          key={issue.id}
-          className={classNames(
-            'row',
-            issue.modified > (issue.viewState?.viewed ?? 0) ? 'unread' : null,
-          )}
-          style={{
-            ...style,
-          }}
+    return (
+      <div
+        key={issue.id}
+        className={classNames(
+          'row',
+          issue.modified > (issue.viewState?.viewed ?? 0) ? 'unread' : null,
+        )}
+        style={{
+          ...style,
+        }}
+      >
+        <IssueLink
+          className={classNames('issue-title', {'issue-closed': !issue.open})}
+          issue={issue}
+          title={issue.title}
+          listContext={listContext}
         >
-          <IssueLink
-            className={classNames('issue-title', {'issue-closed': !issue.open})}
-            issue={issue}
-            title={issue.title}
-            listContext={listContext}
-          >
-            {issue.title}
-          </IssueLink>
-          <div className="issue-taglist">
-            {issue.labels.map(label => (
-              <Link
-                key={label.id}
-                className="pill label"
-                href={`/?label=${label.name}`}
-              >
-                {label.name}
-              </Link>
-            ))}
-          </div>
-          <div className="issue-timestamp">
-            <RelativeTime timestamp={timestamp} />
-          </div>
+          {issue.title}
+        </IssueLink>
+        <div className="issue-taglist">
+          {issue.labels.map(label => (
+            <Link
+              key={label.id}
+              className="pill label"
+              href={`/?label=${label.name}`}
+            >
+              {label.name}
+            </Link>
+          ))}
         </div>
-      );
-    },
-  );
+        <div className="issue-timestamp">
+          <RelativeTime timestamp={timestamp} />
+        </div>
+      </div>
+    );
+  };
 
   const tableWrapperRef = useRef<HTMLDivElement>(null);
   const size = useElementSize(tableWrapperRef.current);
