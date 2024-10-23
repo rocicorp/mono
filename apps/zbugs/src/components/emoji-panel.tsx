@@ -125,7 +125,7 @@ export function EmojiPanel({issueID, commentID}: Props) {
   );
 
   return (
-    <div className="flex gap-2 items-center">
+    <div className="flex gap-2 items-center emoji-reaction-container">
       {Object.entries(groups).map(([normalizedEmoji, emojis]) => (
         <ButtonWithLoginCheck
           className="emoji-pill"
