@@ -1,7 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {ident} from 'pg-format';
 import postgres from 'postgres';
-import {assert} from '../../../../../shared/src/asserts.js';
 import {Database} from '../../../../../zqlite/src/db.js';
 import {
   createIndexStatement,
@@ -28,7 +27,7 @@ import {
 import {toLexiVersion} from './lsn.js';
 import {initShardSchema} from './schema/init.js';
 import {getPublicationInfo, type PublicationInfo} from './schema/published.js';
-import {schemaFor} from './schema/shard.js';
+import {getShardConfig} from './schema/shard.js';
 import type {ShardConfig} from './shard-config.js';
 
 export function replicationSlot(shardID: string): string {
@@ -123,11 +122,9 @@ async function ensurePublishedTables(
 
   await initShardSchema(lc, upstreamDB, shard);
 
-  const result = await upstreamDB.unsafe<{publications: string[]}[]>(`
-    SELECT publications FROM ${schemaFor(shard.id)}."shardConfig";
-  `);
-  assert(result.length === 1);
-  return getPublicationInfo(upstreamDB, result[0].publications);
+  const {publications} = await getShardConfig(upstreamDB, shard.id);
+
+  return getPublicationInfo(upstreamDB, publications);
 }
 
 /* eslint-disable @typescript-eslint/naming-convention */

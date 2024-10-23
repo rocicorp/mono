@@ -1,7 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
 import {ident, literal} from 'pg-format';
+import {assert} from '../../../../../../shared/src/asserts.js';
 import {warnIfDataTypeSupported} from '../../../../db/pg-to-lite.js';
-import type {PostgresTransaction} from '../../../../types/pg.js';
+import type {PostgresDB, PostgresTransaction} from '../../../../types/pg.js';
 import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/replication-state.js';
 import type {ShardConfig} from '../shard-config.js';
 import {createEventTriggerStatements} from './ddl.js';
@@ -81,6 +82,17 @@ function shardSetup(shardID: string, publications: string[]): string {
     VALUES (true, ARRAY[${literal(publications)}]);
   ` + createEventTriggerStatements(shardID, publications)
   );
+}
+
+export async function getShardConfig(
+  db: PostgresDB,
+  shardID: string,
+): Promise<{publications: string[]}> {
+  const result = await db<{publications: string[]}[]>`
+    SELECT publications FROM ${db(unescapedSchema(shardID))}."shardConfig";
+  `;
+  assert(result.length === 1);
+  return result[0];
 }
 
 /**
