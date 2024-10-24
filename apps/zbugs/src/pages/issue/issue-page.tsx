@@ -14,6 +14,7 @@ import {EmojiPanel} from '../../components/emoji-panel.js';
 import LabelPicker from '../../components/label-picker.js';
 import {Link} from '../../components/link.js';
 import Markdown from '../../components/markdown.js';
+import RelativeTime from '../../components/relative-time.js';
 import Selector from '../../components/selector.js';
 import UserPicker from '../../components/user-picker.js';
 import type {Schema} from '../../domain/schema.js';
@@ -22,7 +23,6 @@ import {useZero} from '../../hooks/use-zero.js';
 import {links, type ListContext, type ZbugsHistoryState} from '../../routes.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
-import RelativeTime from '../../components/relative-time.js';
 
 export default function IssuePage() {
   const z = useZero();
@@ -297,19 +297,26 @@ export default function IssuePage() {
             <LabelPicker
               selected={labelSet}
               onAssociateLabel={labelID =>
-                z.mutate.issueLabel.create({
-                  issueID: issue.id,
-                  labelID,
+                z.mutate(tx => {
+                  tx.issueLabel.create({
+                    issueID: issue.id,
+                    labelID,
+                  });
+                  tx.issue.update({id: issue.id, modified: Date.now()});
                 })
               }
               onDisassociateLabel={labelID =>
-                z.mutate.issueLabel.delete({issueID: issue.id, labelID})
+                z.mutate(tx => {
+                  tx.issueLabel.delete({issueID: issue.id, labelID});
+                  tx.issue.update({id: issue.id, modified: Date.now()});
+                })
               }
               onCreateNewLabel={labelName => {
                 const labelID = nanoid();
                 z.mutate(tx => {
                   tx.label.create({id: labelID, name: labelName});
                   tx.issueLabel.create({issueID: issue.id, labelID});
+                  tx.issue.update({id: issue.id, modified: Date.now()});
                 });
               }}
             />
