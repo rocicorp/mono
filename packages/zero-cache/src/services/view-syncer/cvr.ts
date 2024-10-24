@@ -171,14 +171,12 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         ast: {
           schema: '',
           table: `${schema(this.#shardID)}.clients`,
-          where: [
-            {
-              type: 'simple',
-              field: 'clientGroupID',
-              op: '=',
-              value: this._cvr.id,
-            },
-          ],
+          where: {
+            type: 'simple',
+            field: 'clientGroupID',
+            op: '=',
+            value: this._cvr.id,
+          },
           orderBy: [
             ['clientGroupID', 'asc'],
             ['clientID', 'asc'],

@@ -9,6 +9,7 @@
 import {compareUTF8} from 'compare-utf8';
 import {must} from '../../shared/src/must.js';
 import * as v from '../../shared/src/valita.js';
+import {defined} from '../../shared/src/arrays.js';
 import type {Row} from './data.js';
 
 export const selectorSchema = v.string();
@@ -68,7 +69,21 @@ export const simpleConditionSchema = v.object({
   ),
 });
 
-export const conditionSchema = simpleConditionSchema;
+export const conditionSchema = v.union(
+  simpleConditionSchema,
+  v.lazy(() => conjunctionSchema),
+  v.lazy(() => disjunctionSchema),
+);
+
+const conjunctionSchema: v.Type<Conjunction> = v.readonlyObject({
+  type: v.literal('and'),
+  conditions: v.readonlyArray(conditionSchema),
+});
+
+const disjunctionSchema: v.Type<Disjunction> = v.readonlyObject({
+  type: v.literal('or'),
+  conditions: v.readonlyArray(conditionSchema),
+});
 
 // Split out so that its inferred type can be checked against
 // Omit<CorrelatedSubQuery, 'correlation'> in ast-type-test.ts.
@@ -76,7 +91,7 @@ export const conditionSchema = simpleConditionSchema;
 // is the only thing added in v.lazy.  The v.lazy is necessary due to the
 // mutually-recursive types, but v.lazy prevents inference of the resulting
 // type.
-export const correlatedSubquerySchemaOmitSubquery = v.object({
+export const correlatedSubquerySchemaOmitSubquery = v.readonlyObject({
   correlation: v.object({
     parentField: v.string(),
     childField: v.string(),
@@ -94,7 +109,7 @@ export const astSchema = v.object({
   schema: v.string().optional(),
   table: v.string(),
   alias: v.string().optional(),
-  where: v.readonlyArray(conditionSchema).optional(),
+  where: conditionSchema.optional(),
   related: v.readonlyArray(correlatedSubquerySchema).optional(),
   limit: v.number().optional(),
   orderBy: orderingSchema.optional(),
@@ -146,7 +161,7 @@ export type AST = {
   // where conditions or choose the _first_ `related` entry.
   // Choosing the first `related` entry is almost always the best choice if
   // one exists.
-  readonly where?: readonly Condition[] | undefined;
+  readonly where?: Condition | undefined;
 
   readonly related?: readonly CorrelatedSubQuery[] | undefined;
   readonly start?: Bound | undefined;
@@ -187,7 +202,7 @@ export type LiteralValue =
  * ivm1 supports Conjunctions and Disjunctions.
  * We'll support them in the future.
  */
-export type Condition = SimpleCondition;
+export type Condition = SimpleCondition | Conjunction | Disjunction;
 
 export type SimpleCondition = {
   type: 'simple';
@@ -205,6 +220,16 @@ export type SimpleCondition = {
    * operator defined and `null != null` in SQL.
    */
   value: ValuePosition;
+};
+
+export type Conjunction = {
+  type: 'and';
+  conditions: readonly Condition[];
+};
+
+export type Disjunction = {
+  type: 'or';
+  conditions: readonly Condition[];
 };
 
 /**
@@ -237,17 +262,17 @@ type StaticParameter = {
 };
 
 const normalizeCache = new WeakMap<AST, Required<AST>>();
-
 export function normalizeAST(ast: AST): Required<AST> {
   const cached = normalizeCache.get(ast);
   if (cached) {
     return cached;
   }
+  const where = flattened(ast.where);
   const normalized = {
     schema: ast.schema,
     table: ast.table,
     alias: ast.alias,
-    where: ast.where ? sortedWhere(ast.where) : undefined,
+    where: where ? sortedWhere(where) : undefined,
     related: ast.related
       ? sortedRelated(
           ast.related.map(
@@ -273,8 +298,14 @@ export function normalizeAST(ast: AST): Required<AST> {
   return normalized;
 }
 
-function sortedWhere(where: readonly Condition[]): readonly Condition[] {
-  return [...where].sort(cmpCondition);
+function sortedWhere(where: Condition): Condition {
+  if (where.type === 'simple') {
+    return where;
+  }
+  return {
+    type: where.type,
+    conditions: where.conditions.map(w => sortedWhere(w)).sort(cmpCondition),
+  };
 }
 
 function sortedRelated(
@@ -284,18 +315,81 @@ function sortedRelated(
 }
 
 function cmpCondition(a: Condition, b: Condition): number {
-  return (
-    compareUTF8MaybeNull(a.field, b.field) ||
-    compareUTF8MaybeNull(a.op, b.op) ||
-    // Comparing the same field with the same op more than once doesn't make logical
-    // sense, but is technically possible. Assume the values are of the same type and
-    // sort by their String forms.
-    compareUTF8MaybeNull(String(a.value), String(b.value))
-  );
+  if (a.type === 'simple') {
+    if (b.type !== 'simple') {
+      return -1; // Order SimpleConditions first to simplify logic for invalidation filtering.
+    }
+    return (
+      compareUTF8MaybeNull(a.field, b.field) ||
+      compareUTF8MaybeNull(a.op, b.op) ||
+      // Comparing the same field with the same op more than once doesn't make logical
+      // sense, but is technically possible. Assume the values are of the same type and
+      // sort by their String forms.
+      compareUTF8MaybeNull(String(a.value), String(b.value))
+    );
+  }
+
+  if (b.type === 'simple') {
+    return 1; // Order SimpleConditions first to simplify logic for invalidation filtering.
+  }
+
+  const val = compareUTF8MaybeNull(a.type, b.type);
+  if (val !== 0) {
+    return val;
+  }
+  for (
+    let l = 0, r = 0;
+    l < a.conditions.length && r < b.conditions.length;
+    l++, r++
+  ) {
+    const val = cmpCondition(a.conditions[l], b.conditions[r]);
+    if (val !== 0) {
+      return val;
+    }
+  }
+  // prefixes first
+  return a.conditions.length - b.conditions.length;
 }
 
 function cmpRelated(a: CorrelatedSubQuery, b: CorrelatedSubQuery): number {
   return compareUTF8(must(a.subquery.alias), must(b.subquery.alias));
+}
+
+/**
+ * Returns a flattened version of the Conditions in which nested Conjunctions with
+ * the same operation ('AND' or 'OR') are flattened to the same level. e.g.
+ *
+ * ```
+ * ((a AND b) AND (c AND (d OR (e OR f)))) -> (a AND b AND c AND (d OR e OR f))
+ * ```
+ *
+ * Also flattens singleton Conjunctions regardless of operator, and removes
+ * empty Conjunctions.
+ */
+function flattened<T extends Condition>(cond: T | undefined): T | undefined {
+  if (cond === undefined) {
+    return undefined;
+  }
+  if (cond.type === 'simple') {
+    return cond;
+  }
+  const conditions = defined(
+    cond.conditions.flatMap(c =>
+      c.type === cond.type ? c.conditions.map(c => flattened(c)) : flattened(c),
+    ),
+  );
+
+  switch (conditions.length) {
+    case 0:
+      return undefined;
+    case 1:
+      return conditions[0] as T;
+    default:
+      return {
+        type: cond.type,
+        conditions,
+      } as unknown as T;
+  }
 }
 
 function compareUTF8MaybeNull(a: string | null, b: string | null): number {
