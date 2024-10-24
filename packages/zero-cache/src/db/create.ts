@@ -47,5 +47,5 @@ export function createIndexStatement(index: LiteIndexSpec): string {
   const unique = index.unique ? 'UNIQUE' : '';
   return `CREATE ${unique} INDEX ${id(index.name)} ON ${id(
     index.tableName,
-  )} (${columns})`;
+  )} (${columns});`;
 }
