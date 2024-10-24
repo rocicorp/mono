@@ -30,6 +30,6 @@ export async function initViewSyncerSchema(
   );
 }
 
-async function migrateV1toV2(lc: LogContext, tx: PostgresTransaction) {
+async function migrateV1toV2(_: LogContext, tx: PostgresTransaction) {
   await tx`ALTER TABLE cvr.instances ADD "replicaVersion" TEXT`;
 }
