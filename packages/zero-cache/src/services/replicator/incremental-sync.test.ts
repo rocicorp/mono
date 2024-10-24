@@ -182,7 +182,7 @@ describe('replicator/incremental-sync', () => {
             ['_0_version']: '06',
           },
         ],
-        ['_zero.ChangeLog']: [
+        ['_zero.changeLog']: [
           {
             stateVersion: '02',
             table: 'issues',
@@ -293,7 +293,7 @@ describe('replicator/incremental-sync', () => {
             ['_0_version']: '02',
           },
         ],
-        ['_zero.ChangeLog']: [
+        ['_zero.changeLog']: [
           {
             stateVersion: '02',
             table: 'issues',
@@ -378,7 +378,7 @@ describe('replicator/incremental-sync', () => {
             ['_0_version']: '02',
           },
         ],
-        ['_zero.ChangeLog']: [
+        ['_zero.changeLog']: [
           {
             stateVersion: '02',
             table: 'issues',
@@ -441,7 +441,7 @@ describe('replicator/incremental-sync', () => {
           {id: 6n, ['_0_version']: '02'},
         ],
         baz: [],
-        ['_zero.ChangeLog']: [
+        ['_zero.changeLog']: [
           {
             stateVersion: '02',
             table: 'bar',
@@ -536,7 +536,7 @@ describe('replicator/incremental-sync', () => {
             ['_0_version']: '02',
           },
         ],
-        ['_zero.ChangeLog']: [
+        ['_zero.changeLog']: [
           {
             stateVersion: '02',
             table: 'issues',
@@ -585,7 +585,7 @@ describe('replicator/incremental-sync', () => {
           {id: 'bar', count: 2n, bool: 1n, ['_0_version']: '02'},
           {id: 'baz', count: 3n, bool: 0n, ['_0_version']: '02'},
         ],
-        ['_zero.ChangeLog']: [
+        ['_zero.changeLog']: [
           {
             stateVersion: '02',
             table: 'foo',
@@ -665,7 +665,7 @@ describe('replicator/incremental-sync', () => {
           {id: 3n, ['_0_version']: '02'},
           {id: 4n, ['_0_version']: '02'},
         ],
-        ['_zero.ChangeLog']: [
+        ['_zero.changeLog']: [
           {
             stateVersion: '02',
             table: 'bar',
@@ -746,7 +746,7 @@ describe('replicator/incremental-sync', () => {
           {id: 3n, newInt: 123n, newBool: 1n, ['_0_version']: '02'},
           {id: 4n, newInt: 321n, newBool: 0n, ['_0_version']: '02'},
         ],
-        ['_zero.ChangeLog']: [
+        ['_zero.changeLog']: [
           {
             stateVersion: '02',
             table: 'foo',
@@ -821,7 +821,7 @@ describe('replicator/incremental-sync', () => {
           {id: 3n, ['_0_version']: '02'},
           {id: 4n, ['_0_version']: '02'},
         ],
-        ['_zero.ChangeLog']: [
+        ['_zero.changeLog']: [
           {
             stateVersion: '02',
             table: 'foo',
@@ -889,7 +889,7 @@ describe('replicator/incremental-sync', () => {
           {id: 3n, newName: 'olrd', ['_0_version']: '02'},
           {id: 4n, newName: 'yay', ['_0_version']: '02'},
         ],
-        ['_zero.ChangeLog']: [
+        ['_zero.changeLog']: [
           {
             stateVersion: '02',
             table: 'foo',
@@ -964,7 +964,7 @@ describe('replicator/incremental-sync', () => {
           {id: 3n, num: 1n, ['_0_version']: '02'},
           {id: 4n, num: 23n, ['_0_version']: '02'},
         ],
-        ['_zero.ChangeLog']: [
+        ['_zero.changeLog']: [
           {
             stateVersion: '02',
             table: 'foo',
@@ -1039,7 +1039,7 @@ describe('replicator/incremental-sync', () => {
           {id: 3n, number: 1n, ['_0_version']: '02'},
           {id: 4n, number: 23n, ['_0_version']: '02'},
         ],
-        ['_zero.ChangeLog']: [
+        ['_zero.changeLog']: [
           {
             stateVersion: '02',
             table: 'foo',
@@ -1100,7 +1100,7 @@ describe('replicator/incremental-sync', () => {
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
       data: {
-        ['_zero.ChangeLog']: [
+        ['_zero.changeLog']: [
           {
             stateVersion: '02',
             table: 'foo',
@@ -1134,7 +1134,7 @@ describe('replicator/incremental-sync', () => {
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
       data: {
-        ['_zero.ChangeLog']: [],
+        ['_zero.changeLog']: [],
       },
       indexSpecs: [
         {
@@ -1158,7 +1158,7 @@ describe('replicator/incremental-sync', () => {
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
       data: {
-        ['_zero.ChangeLog']: [],
+        ['_zero.changeLog']: [],
       },
       indexSpecs: [
         {
@@ -1209,6 +1209,7 @@ describe('replicator/incremental-sync', () => {
       if (c.indexSpecs) {
         expect(listIndexes(replica)).toEqual(c.indexSpecs);
       }
+      expectTables(replica, c.data, 'bigint');
     });
   }
 
