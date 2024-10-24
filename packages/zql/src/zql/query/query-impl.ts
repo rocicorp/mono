@@ -400,7 +400,7 @@ export class QueryImpl<
   materialize(): TypedView<Smash<TReturn>> {
     const ast = this._completeAst();
     const removeServerQuery = this.#delegate.addServerQuery(ast);
-    const view = new ArrayView(
+    const view = new ArrayView<Smash<TReturn>>(
       buildPipeline(ast, this.#delegate, undefined),
       this.#format,
     );
@@ -411,7 +411,7 @@ export class QueryImpl<
       removeCommitObserver();
       removeServerQuery();
     };
-    return view as unknown as TypedView<Smash<TReturn>>;
+    return view;
   }
 
   preload(): {

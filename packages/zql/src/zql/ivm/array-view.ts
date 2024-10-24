@@ -9,17 +9,11 @@ import type {Immutable} from '../../../../shared/src/immutable.js';
 import {must} from '../../../../shared/src/must.js';
 import type {Row, Value} from '../../../../zero-protocol/src/data.js';
 import {assertOrderingIncludesPK} from '../builder/builder.js';
+import type {Listener, TypedView} from '../query/typed-view.js';
 import type {Change} from './change.js';
 import type {Comparator} from './data.js';
 import type {Input, Output} from './operator.js';
 import type {TableSchema} from './schema.js';
-
-/**
- * Called when the view changes. The received data should be considered
- * immutable. Caller must not modify it. Passed data is valid until next
- * time listener is called.
- */
-export type Listener = (entries: Immutable<View>) => void;
 
 export type Format = {
   singular: boolean;
@@ -37,9 +31,9 @@ export type Format = {
  * Also the plain array view is more convenient for consumers since you can dump
  * it into console to see what it is, rather than having to iterate it.
  */
-export class ArrayView implements Output {
+export class ArrayView<V extends View> implements Output, TypedView<V> {
   readonly #input: Input;
-  readonly #listeners = new Set<Listener>();
+  readonly #listeners = new Set<Listener<V>>();
   readonly #schema: TableSchema;
   readonly #format: Format;
 
@@ -66,14 +60,14 @@ export class ArrayView implements Output {
   }
 
   get data() {
-    return this.#root[''] as View;
+    return this.#root[''] as V;
   }
 
-  addListener(listener: Listener) {
+  addListener(listener: Listener<V>) {
     assert(!this.#listeners.has(listener), 'Listener already registered');
     this.#listeners.add(listener);
 
-    listener(this.data);
+    listener(this.data as Immutable<V>);
 
     return () => {
       this.#listeners.delete(listener);
@@ -82,7 +76,7 @@ export class ArrayView implements Output {
 
   #fireListeners() {
     for (const listener of this.#listeners) {
-      listener(this.data);
+      listener(this.data as Immutable<V>);
     }
   }
 
