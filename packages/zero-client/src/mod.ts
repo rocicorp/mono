@@ -58,6 +58,7 @@ export type {
   WriteTransaction,
 } from '../../replicache/src/mod.js';
 export {QueryImpl} from '../../zql/src/zql/query/query-impl.js';
+export {like} from '../../zql/src/zql/query/like.js';
 export type {
   DefaultQueryResultRow as EmptyQueryResultRow,
   Query,
