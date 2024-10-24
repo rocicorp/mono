@@ -560,6 +560,10 @@ textarea.autoResize {
   color: var(--color-text-primary-active);
 }
 
+.sidebar-button.issue-creator {
+  cursor: default;
+}
+
 .button-dropdown::before {
   content: '';
   position: absolute;
@@ -741,7 +745,7 @@ textarea.autoResize {
   width: 100%;
   padding: 0.8175rem;
   border-radius: 0.5rem;
-  cursor: default;
+  cursor: pointer;
 }
 
 .selector .item.icon {
