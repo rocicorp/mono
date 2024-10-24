@@ -1063,7 +1063,6 @@ test('smokeTest', async () => {
     const unsubscribe = view.addListener(c => {
       calls.push([...c]);
     });
-    view.hydrate();
 
     await r.mutate.issues.create({id: 'a', value: 1});
     await r.mutate.issues.create({id: 'b', value: 2});
@@ -2008,9 +2007,7 @@ test('kvStore option', async () => {
       .select('id', 'value')
       .where('id', '=', 'a')
       .materialize();
-    idIsAView.hydrate();
     const allDataView = r.query.e.select('id', 'value').materialize();
-    allDataView.hydrate();
 
     // Firefox is flaky... it takes longer time than Chromium and WebKit.
     // We therefore give it a few times to pass the expectation.
@@ -2213,7 +2210,6 @@ suite('CRUD', () => {
 
     const createIssue: (issue: Issue) => Promise<void> = z.mutate.issue.create;
     const view = z.query.issue.select('id', 'title').materialize();
-    view.hydrate();
     await createIssue({id: 'a', title: 'A'});
     expect(view.data).toEqual([{id: 'a', title: 'A'}]);
 
@@ -2336,7 +2332,6 @@ suite('CRUD with compound primary key', () => {
 
     const createIssue: (issue: Issue) => Promise<void> = z.mutate.issue.create;
     const view = z.query.issue.select('ids', 'idn', 'title').materialize();
-    view.hydrate();
     await createIssue({ids: 'a', idn: 1, title: 'A'});
     expect(view.data).toEqual([{ids: 'a', idn: 1, title: 'A'}]);
 
@@ -2488,11 +2483,9 @@ test('mutate is a function for batching', async () => {
     },
   });
   const issueView = z.query.issue.select('id', 'title').materialize();
-  issueView.hydrate();
   const commentView = z.query.comment
     .select('id', 'issueID', 'text')
     .materialize();
-  commentView.hydrate();
 
   const x = await z.mutate(async m => {
     expect(
@@ -2553,9 +2546,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
   const commentView = z.query.comment
     .select('id', 'issueID', 'text')
     .materialize();
-  commentView.hydrate();
   const issueView = z.query.issue.select('id', 'title').materialize();
-  issueView.hydrate();
 
   await expect(
     z.mutate(async m => {

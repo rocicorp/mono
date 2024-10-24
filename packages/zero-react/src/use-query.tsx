@@ -1,5 +1,6 @@
 import {useSyncExternalStore} from 'react';
 import {deepClone} from '../../shared/src/deep-clone.js';
+import type {Immutable} from '../../shared/src/immutable.js';
 import type {
   Query,
   QueryImpl,
@@ -8,7 +9,6 @@ import type {
   TableSchema,
   TypedView,
 } from '../../zero-client/src/mod.js';
-import type {Immutable} from '../../shared/src/immutable.js';
 import {useZero} from './use-zero.js';
 
 export function useQuery<
@@ -188,7 +188,6 @@ class ViewWrapper<TSchema extends TableSchema, TReturn extends QueryType> {
 
     this.#view = this.#query.materialize();
     this.#view.addListener(this.#onData);
-    this.#view.hydrate();
 
     this.#onMaterialized(this);
   };

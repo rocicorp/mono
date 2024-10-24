@@ -1,9 +1,9 @@
 // This test file is loaded by worker.test.ts
 
+import sinon from 'sinon';
 import {assert} from '../../../shared/src/asserts.js';
 import {deepEqual} from '../../../shared/src/json.js';
 import {sleep} from '../../../shared/src/sleep.js';
-import sinon from 'sinon';
 import {MockSocket, zeroForTest} from './test-utils.js';
 import {version} from './version.js';
 
@@ -55,7 +55,6 @@ async function testBasics(userID: string) {
 
   const q = r.query.e.select('id', 'value').limit(1);
   const view = q.materialize();
-  view.hydrate();
   const log: (readonly E[])[] = [];
   const removeListener = view.addListener(rows => {
     log.push([...rows]);
@@ -82,7 +81,6 @@ async function testBasics(userID: string) {
   );
 
   const view2 = q.materialize();
-  view2.hydrate();
   let data: E[] = [];
   view2.addListener(rows => {
     data = [...rows];
