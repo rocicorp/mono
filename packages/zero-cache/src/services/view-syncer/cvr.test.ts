@@ -551,14 +551,12 @@ describe('view-syncer/cvr', () => {
           ast: {
             table: `zero_${SHARD_ID}.clients`,
             schema: '',
-            where: [
-              {
-                type: 'simple',
-                op: '=',
-                field: 'clientGroupID',
-                value: 'abc123',
-              },
-            ],
+            where: {
+              type: 'simple',
+              op: '=',
+              field: 'clientGroupID',
+              value: 'abc123',
+            },
             orderBy: [
               ['clientGroupID', 'asc'],
               ['clientID', 'asc'],
@@ -641,14 +639,12 @@ describe('view-syncer/cvr', () => {
           clientAST: {
             schema: '',
             table: `zero_${SHARD_ID}.clients`,
-            where: [
-              {
-                field: 'clientGroupID',
-                op: '=',
-                type: 'simple',
-                value: 'abc123',
-              },
-            ],
+            where: {
+              field: 'clientGroupID',
+              op: '=',
+              type: 'simple',
+              value: 'abc123',
+            },
             orderBy: [
               ['clientGroupID', 'asc'],
               ['clientID', 'asc'],

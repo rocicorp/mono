@@ -93,14 +93,12 @@ test('filter', () => {
       {
         table: 'users',
         orderBy: [['id', 'desc']],
-        where: [
-          {
-            type: 'simple',
-            field: 'name',
-            op: '>=',
-            value: 'c',
-          },
-        ],
+        where: {
+          type: 'simple',
+          field: 'name',
+          op: '>=',
+          value: 'c',
+        },
       },
       {
         getSource,
@@ -305,14 +303,12 @@ test('multi-join', () => {
       {
         table: 'users',
         orderBy: [['id', 'asc']],
-        where: [
-          {
-            type: 'simple',
-            field: 'id',
-            op: '<=',
-            value: 3,
-          },
-        ],
+        where: {
+          type: 'simple',
+          field: 'id',
+          op: '<=',
+          value: 3,
+        },
         related: [
           {
             correlation: {
@@ -561,14 +557,12 @@ test('bind static parameters', () => {
   const ast: AST = {
     table: 'users',
     orderBy: [['id', 'asc']],
-    where: [
-      {
-        type: 'simple',
-        field: 'id',
-        op: '=',
-        value: {type: 'static', anchor: 'authData', field: 'userID'},
-      },
-    ],
+    where: {
+      type: 'simple',
+      field: 'id',
+      op: '=',
+      value: {type: 'static', anchor: 'authData', field: 'userID'},
+    },
     related: [
       {
         correlation: {
@@ -579,18 +573,16 @@ test('bind static parameters', () => {
         subquery: {
           table: 'userStates',
           alias: 'userStates',
-          where: [
-            {
-              type: 'simple',
+          where: {
+            type: 'simple',
+            field: 'stateCode',
+            op: '=',
+            value: {
+              type: 'static',
+              anchor: 'preMutationRow',
               field: 'stateCode',
-              op: '=',
-              value: {
-                type: 'static',
-                anchor: 'preMutationRow',
-                field: 'stateCode',
-              },
             },
-          ],
+          },
         },
       },
     ],

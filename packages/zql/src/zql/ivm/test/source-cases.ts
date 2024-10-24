@@ -927,6 +927,83 @@ const cases = {
     const it3 = stream[Symbol.iterator]();
     expect(it3.next()).toEqual({done: true, value: undefined});
   },
+
+  // `OR` and nested conditions are not implemented yet so ensure they are not used
+  'throws when passing unsupported filter types to where': (
+    createSource: SourceFactory,
+  ) => {
+    const source = createSource('table', {a: {type: 'number'}}, ['a']);
+    expect(() =>
+      source.connect([['a', 'asc']], {
+        type: 'simple',
+        field: 'a',
+        value: 'a',
+        op: '=',
+      }),
+    ).not.toThrow();
+    expect(() =>
+      source.connect([['a', 'asc']], {
+        type: 'and',
+        conditions: [
+          {
+            type: 'simple',
+            field: 'a',
+            value: 'a',
+            op: '=',
+          },
+        ],
+      }),
+    ).not.toThrow();
+    expect(() =>
+      source.connect([['a', 'asc']], {
+        type: 'or',
+        conditions: [
+          {
+            type: 'simple',
+            field: 'a',
+            value: 'a',
+            op: '=',
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      source.connect([['a', 'asc']], {
+        type: 'and',
+        conditions: [
+          {
+            type: 'and',
+            conditions: [
+              {
+                type: 'simple',
+                field: 'a',
+                value: 'a',
+                op: '=',
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      source.connect([['a', 'asc']], {
+        type: 'and',
+        conditions: [
+          {
+            type: 'or',
+            conditions: [
+              {
+                type: 'simple',
+                field: 'a',
+                value: 'a',
+                op: '=',
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow();
+  },
 };
 
 /**

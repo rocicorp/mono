@@ -1,7 +1,11 @@
 import type {SQLQuery} from '@databases/sql';
 import {assert, unreachable} from '../../shared/src/asserts.js';
 import {must} from '../../shared/src/must.js';
-import type {Ordering, SimpleCondition} from '../../zero-protocol/src/ast.js';
+import type {
+  Condition,
+  Ordering,
+  SimpleCondition,
+} from '../../zero-protocol/src/ast.js';
 import type {Row, Value} from '../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
 import {assertOrderingIncludesPK} from '../../zql/src/zql/builder/builder.js';
@@ -12,6 +16,7 @@ import {
   type Node,
 } from '../../zql/src/zql/ivm/data.js';
 import {
+  filteredOptionalFilters,
   generateWithOverlay,
   generateWithStart,
   type Overlay,
@@ -189,7 +194,7 @@ export class TableSource implements Source {
     };
   }
 
-  connect(sort: Ordering, optionalFilters?: SimpleCondition[] | undefined) {
+  connect(sort: Ordering, optionalFilters?: Condition | undefined) {
     const input: SourceInput = {
       getSchema: () => this.#getSchema(connection),
       fetch: req => this.#fetch(req, connection),
@@ -205,11 +210,12 @@ export class TableSource implements Source {
       appliedFilters: true,
     };
 
+    const filters: SimpleCondition[] = filteredOptionalFilters(optionalFilters);
     const connection: Connection = {
       input,
       output: undefined,
       sort,
-      filters: optionalFilters ?? [],
+      filters,
       compareRows: makeComparator(sort),
     };
     assertOrderingIncludesPK(sort, this.#primaryKey);

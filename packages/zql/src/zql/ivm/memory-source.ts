@@ -1,6 +1,7 @@
 import {BTree} from '../../../../btree/src/mod.js';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
 import type {
+  Condition,
   Ordering,
   OrderPart,
   SimpleCondition,
@@ -105,7 +106,7 @@ export class MemorySource implements Source {
 
   connect(
     sort: Ordering,
-    optionalFilters?: SimpleCondition[] | undefined,
+    optionalFilters?: Condition | undefined,
   ): SourceInput {
     const input: SourceInput = {
       getSchema: () => this.#getSchema(connection),
@@ -120,12 +121,16 @@ export class MemorySource implements Source {
       appliedFilters: false,
     };
 
+    const predicates: ((row: Row) => boolean)[] = filteredOptionalFilters(
+      optionalFilters,
+    ).map(c => createPredicate(c));
+
     const connection: Connection = {
       input,
       output: undefined,
       sort,
       compareRows: makeComparator(sort),
-      optionalFilters: (optionalFilters ?? []).map(f => createPredicate(f)),
+      optionalFilters: predicates,
     };
     assertOrderingIncludesPK(sort, this.#primaryKey);
     this.#connections.push(connection);
@@ -668,4 +673,25 @@ function compareBounds(a: Bound, b: Bound): number {
     return -1;
   }
   return compareValues(a, b);
+}
+
+export function filteredOptionalFilters(
+  optionalFilters: Condition | undefined,
+): SimpleCondition[] {
+  let ret: SimpleCondition[] = [];
+  if (optionalFilters) {
+    if (optionalFilters.type === 'and') {
+      ret = optionalFilters.conditions.filter(c => c.type === 'simple');
+      assert(
+        ret.length === optionalFilters.conditions.length,
+        'Unexpected condition type',
+      );
+    } else if (optionalFilters.type === 'simple') {
+      ret = [optionalFilters];
+    } else {
+      throw new Error('Unexpected filter type');
+    }
+  }
+
+  return ret;
 }

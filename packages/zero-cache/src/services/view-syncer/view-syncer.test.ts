@@ -47,14 +47,12 @@ const SHARD_ID = 'ABC';
 const EXPECTED_LMIDS_AST: AST = {
   schema: '',
   table: 'zero_ABC.clients',
-  where: [
-    {
-      type: 'simple',
-      op: '=',
-      field: 'clientGroupID',
-      value: '9876',
-    },
-  ],
+  where: {
+    type: 'simple',
+    op: '=',
+    field: 'clientGroupID',
+    value: '9876',
+  },
   orderBy: [
     ['clientGroupID', 'asc'],
     ['clientID', 'asc'],
@@ -221,14 +219,12 @@ describe('view-syncer/service', () => {
 
   const ISSUES_QUERY: AST = {
     table: 'issues',
-    where: [
-      {
-        type: 'simple',
-        field: 'id',
-        op: 'IN',
-        value: ['1', '2', '3', '4'],
-      },
-    ],
+    where: {
+      type: 'simple',
+      field: 'id',
+      op: 'IN',
+      value: ['1', '2', '3', '4'],
+    },
     orderBy: [['id', 'asc']],
   };
 
@@ -362,19 +358,17 @@ describe('view-syncer/service', () => {
                       ],
                     ],
                     "table": "issues",
-                    "where": [
-                      {
-                        "field": "id",
-                        "op": "IN",
-                        "type": "simple",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                    ],
+                    "where": {
+                      "field": "id",
+                      "op": "IN",
+                      "type": "simple",
+                      "value": [
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                      ],
+                    },
                   },
                   "hash": "query-hash1",
                   "op": "put",
@@ -391,19 +385,17 @@ describe('view-syncer/service', () => {
                     ],
                   ],
                   "table": "issues",
-                  "where": [
-                    {
-                      "field": "id",
-                      "op": "IN",
-                      "type": "simple",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                  ],
+                  "where": {
+                    "field": "id",
+                    "op": "IN",
+                    "type": "simple",
+                    "value": [
+                      "1",
+                      "2",
+                      "3",
+                      "4",
+                    ],
+                  },
                 },
                 "hash": "query-hash1",
                 "op": "put",
@@ -583,19 +575,17 @@ describe('view-syncer/service', () => {
                       ],
                     ],
                     "table": "issues",
-                    "where": [
-                      {
-                        "field": "id",
-                        "op": "IN",
-                        "type": "simple",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                    ],
+                    "where": {
+                      "field": "id",
+                      "op": "IN",
+                      "type": "simple",
+                      "value": [
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                      ],
+                    },
                   },
                   "hash": "query-hash1",
                   "op": "put",
@@ -625,19 +615,17 @@ describe('view-syncer/service', () => {
                     ],
                   ],
                   "table": "issues",
-                  "where": [
-                    {
-                      "field": "id",
-                      "op": "IN",
-                      "type": "simple",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                  ],
+                  "where": {
+                    "field": "id",
+                    "op": "IN",
+                    "type": "simple",
+                    "value": [
+                      "1",
+                      "2",
+                      "3",
+                      "4",
+                    ],
+                  },
                 },
                 "hash": "query-hash1",
                 "op": "put",
@@ -1365,19 +1353,17 @@ describe('view-syncer/service', () => {
                       ],
                     ],
                     "table": "issues",
-                    "where": [
-                      {
-                        "field": "id",
-                        "op": "IN",
-                        "type": "simple",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                    ],
+                    "where": {
+                      "field": "id",
+                      "op": "IN",
+                      "type": "simple",
+                      "value": [
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                      ],
+                    },
                   },
                   "hash": "query-hash1",
                   "op": "put",
@@ -1452,19 +1438,17 @@ describe('view-syncer/service', () => {
                       ],
                     ],
                     "table": "issues",
-                    "where": [
-                      {
-                        "field": "id",
-                        "op": "IN",
-                        "type": "simple",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                    ],
+                    "where": {
+                      "field": "id",
+                      "op": "IN",
+                      "type": "simple",
+                      "value": [
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                      ],
+                    },
                   },
                   "hash": "query-hash1",
                   "op": "put",
@@ -1562,19 +1546,17 @@ describe('view-syncer/service', () => {
                       ],
                     ],
                     "table": "issues",
-                    "where": [
-                      {
-                        "field": "id",
-                        "op": "IN",
-                        "type": "simple",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                    ],
+                    "where": {
+                      "field": "id",
+                      "op": "IN",
+                      "type": "simple",
+                      "value": [
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                      ],
+                    },
                   },
                   "hash": "query-hash1",
                   "op": "put",
@@ -1591,19 +1573,17 @@ describe('view-syncer/service', () => {
                     ],
                   ],
                   "table": "issues",
-                  "where": [
-                    {
-                      "field": "id",
-                      "op": "IN",
-                      "type": "simple",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                  ],
+                  "where": {
+                    "field": "id",
+                    "op": "IN",
+                    "type": "simple",
+                    "value": [
+                      "1",
+                      "2",
+                      "3",
+                      "4",
+                    ],
+                  },
                 },
                 "hash": "query-hash1",
                 "op": "put",

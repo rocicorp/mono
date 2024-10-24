@@ -3,9 +3,13 @@ import type {JSONValue} from '../../../../shared/src/json.js';
 import {must} from '../../../../shared/src/must.js';
 import type {
   AST,
+  Condition,
+  Conjunction,
+  Disjunction,
   LiteralValue,
   Ordering,
   Parameter,
+  SimpleCondition,
   ValuePosition,
 } from '../../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../../zero-protocol/src/data.js';
@@ -87,10 +91,7 @@ export function bindStaticParameters(
     if (node.where) {
       return {
         ...node,
-        where: node.where.map(condition => ({
-          ...condition,
-          value: bindValue(condition.value),
-        })),
+        where: bindCondition(node.where),
         related: node.related?.map(sq => ({
           ...sq,
           subquery: visit(sq.subquery),
@@ -99,6 +100,18 @@ export function bindStaticParameters(
     }
     return node;
   };
+
+  function bindCondition(condition: Condition): Condition {
+    return condition.type === 'simple'
+      ? {
+          ...condition,
+          value: bindValue(condition.value),
+        }
+      : {
+          ...condition,
+          conditions: condition.conditions.map(bindCondition),
+        };
+  }
 
   const bindValue = (value: ValuePosition): LiteralValue => {
     if (isParameter(value)) {
@@ -134,7 +147,7 @@ function buildPipelineInternal(
   if (!source) {
     throw new Error(`Source not found: ${ast.table}`);
   }
-  const conn = source.connect(must(ast.orderBy), ast.where ?? []);
+  const conn = source.connect(must(ast.orderBy), ast.where);
   let end: Input = conn;
   const {appliedFilters} = conn;
 
@@ -143,13 +156,7 @@ function buildPipelineInternal(
   }
 
   if (ast.where) {
-    for (const condition of ast.where) {
-      end = new Filter(
-        end,
-        appliedFilters ? 'push-only' : 'all',
-        createPredicate(condition),
-      );
-    }
+    end = applyWhere(end, ast.where, appliedFilters);
   }
 
   if (ast.limit) {
@@ -178,6 +185,56 @@ function buildPipelineInternal(
   }
 
   return end;
+}
+
+function applyWhere(
+  input: Input,
+  condition: Condition,
+  // Remove `appliedFilter`
+  // Each branch can `fetch` with different filters from the same source.
+  // Or we do the union of queries approach and retain this `appliedFilters` and `sourceConnect` behavior.
+  // Downside of that being unbounded memory usage.
+  appliedFilters: boolean,
+): Input {
+  switch (condition.type) {
+    case 'and':
+      return applyAnd(input, condition, appliedFilters);
+    case 'or':
+      return applyOr(input, condition, appliedFilters);
+    default:
+      return applySimpleCondition(input, condition, appliedFilters);
+  }
+}
+
+function applyAnd(
+  input: Input,
+  condition: Conjunction,
+  appliedFilters: boolean,
+) {
+  for (const subCondition of condition.conditions) {
+    input = applyWhere(input, subCondition, appliedFilters);
+  }
+  return input;
+}
+
+function applyOr(
+  _input: Input,
+  _condition: Disjunction,
+  _appliedFilters: boolean,
+): Input {
+  throw new Error('OR is not yet implemented');
+}
+
+function applySimpleCondition(
+  input: Input,
+  condition: SimpleCondition,
+  appliedFilters: boolean,
+): Input {
+  return new Filter(
+    input,
+    appliedFilters ? 'push-only' : 'all',
+    createPredicate(condition),
+  );
 }
 
 export function assertOrderingIncludesPK(

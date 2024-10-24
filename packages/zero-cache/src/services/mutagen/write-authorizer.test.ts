@@ -18,14 +18,12 @@ const allowIfSubject = [
   'allow',
   {
     table: 'foo',
-    where: [
-      {
-        type: 'simple',
-        field: 'id',
-        op: '=',
-        value: {anchor: 'authData', field: 'sub', type: 'static'},
-      },
-    ],
+    where: {
+      type: 'simple',
+      field: 'id',
+      op: '=',
+      value: {anchor: 'authData', field: 'sub', type: 'static'},
+    },
     orderBy: [['id', 'asc']],
   },
 ] satisfies Rule;

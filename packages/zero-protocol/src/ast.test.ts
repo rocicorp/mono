@@ -26,7 +26,7 @@ test('fields are placed into correct positions', () => {
       limit: 10,
       orderBy: [],
       related: [],
-      where: [],
+      where: undefined,
       table: 'table',
     }),
   ).toEqual(
@@ -36,7 +36,7 @@ test('fields are placed into correct positions', () => {
       limit: 10,
       table: 'table',
       orderBy: [],
-      where: [],
+      where: undefined,
       alias: 'alias',
     }),
   );
@@ -45,73 +45,106 @@ test('fields are placed into correct positions', () => {
 test('conditions are sorted', () => {
   let ast: AST = {
     table: 'table',
-    where: [
+    where: {
+      type: 'and',
+      conditions: [
+        {
+          type: 'simple',
+          field: 'b',
+          op: '=',
+          value: 'value',
+        },
+        {
+          type: 'simple',
+          field: 'a',
+          op: '=',
+          value: 'value',
+        },
+      ],
+    },
+  };
+
+  expect(normalizeAST(ast).where).toEqual({
+    type: 'and',
+    conditions: [
+      {
+        type: 'simple',
+        field: 'a',
+        op: '=',
+        value: 'value',
+      },
       {
         type: 'simple',
         field: 'b',
         op: '=',
         value: 'value',
       },
-      {
-        type: 'simple',
-        field: 'a',
-        op: '=',
-        value: 'value',
-      },
     ],
-  };
-
-  expect(normalizeAST(ast).where).toEqual([
-    {
-      type: 'simple',
-      field: 'a',
-      op: '=',
-      value: 'value',
-    },
-    {
-      type: 'simple',
-      field: 'b',
-      op: '=',
-      value: 'value',
-    },
-  ]);
+  });
 
   ast = {
     table: 'table',
-    where: [
-      {
-        type: 'simple',
-        field: 'a',
-        op: '=',
-        value: 'y',
-      },
+    where: {
+      type: 'and',
+      conditions: [
+        {
+          type: 'simple',
+          field: 'a',
+          op: '=',
+          value: 'y',
+        },
+        {
+          type: 'simple',
+          field: 'a',
+          op: '=',
+          value: 'x',
+        },
+      ],
+    },
+  };
+
+  expect(normalizeAST(ast).where).toEqual({
+    type: 'and',
+    conditions: [
       {
         type: 'simple',
         field: 'a',
         op: '=',
         value: 'x',
       },
+      {
+        type: 'simple',
+        field: 'a',
+        op: '=',
+        value: 'y',
+      },
     ],
-  };
-
-  expect(normalizeAST(ast).where).toEqual([
-    {
-      type: 'simple',
-      field: 'a',
-      op: '=',
-      value: 'x',
-    },
-    {
-      type: 'simple',
-      field: 'a',
-      op: '=',
-      value: 'y',
-    },
-  ]);
+  });
 
   ast = {
     table: 'table',
-    where: [
+    where: {
+      type: 'and',
+      conditions: [
+        {
+          type: 'simple',
+          field: 'a',
+          op: '<',
+          value: 'x',
+        },
+        {
+          type: 'simple',
+          field: 'a',
+          op: '>',
+          value: 'y',
+        },
+      ],
+    },
+  };
+
+  expect(normalizeAST(ast).where).toEqual({
+    type: 'and',
+    conditions: [
       {
         type: 'simple',
         field: 'a',
@@ -125,22 +158,7 @@ test('conditions are sorted', () => {
         value: 'y',
       },
     ],
-  };
-
-  expect(normalizeAST(ast).where).toEqual([
-    {
-      type: 'simple',
-      field: 'a',
-      op: '<',
-      value: 'x',
-    },
-    {
-      type: 'simple',
-      field: 'a',
-      op: '>',
-      value: 'y',
-    },
-  ]);
+  });
 });
 
 test('related subqueries are sorted', () => {

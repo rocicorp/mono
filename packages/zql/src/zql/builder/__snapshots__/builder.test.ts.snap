@@ -19,25 +19,21 @@ exports[`bind static parameters 1`] = `
         "alias": "userStates",
         "related": undefined,
         "table": "userStates",
-        "where": [
-          {
-            "field": "stateCode",
-            "op": "=",
-            "type": "simple",
-            "value": "HI",
-          },
-        ],
+        "where": {
+          "field": "stateCode",
+          "op": "=",
+          "type": "simple",
+          "value": "HI",
+        },
       },
     },
   ],
   "table": "users",
-  "where": [
-    {
-      "field": "id",
-      "op": "=",
-      "type": "simple",
-      "value": 1,
-    },
-  ],
+  "where": {
+    "field": "id",
+    "op": "=",
+    "type": "simple",
+    "value": 1,
+  },
 }
 `;

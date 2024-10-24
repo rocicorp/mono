@@ -36,16 +36,19 @@ describe('building the AST', () => {
     const where = issueQuery.where('id', '=', '1');
     expect(ast(where)).toEqual({
       table: 'issue',
-      where: [{type: 'simple', field: 'id', op: '=', value: '1'}],
+      where: {type: 'simple', field: 'id', op: '=', value: '1'},
     });
 
     const where2 = where.where('title', '=', 'foo');
     expect(ast(where2)).toEqual({
       table: 'issue',
-      where: [
-        {type: 'simple', field: 'id', op: '=', value: '1'},
-        {type: 'simple', field: 'title', op: '=', value: 'foo'},
-      ],
+      where: {
+        type: 'and',
+        conditions: [
+          {type: 'simple', field: 'id', op: '=', value: '1'},
+          {type: 'simple', field: 'title', op: '=', value: 'foo'},
+        ],
+      },
     });
   });
 
@@ -266,5 +269,24 @@ describe('building the AST', () => {
       ],
       table: 'issue',
     });
+  });
+});
+
+test('where expressions', () => {
+  const issueQuery = newQuery(mockDelegate, issueSchema);
+  expect(ast(issueQuery.where('id', '=', '1')).where).toEqual({
+    type: 'simple',
+    field: 'id',
+    op: '=',
+    value: '1',
+  });
+  expect(
+    ast(issueQuery.where('id', '=', '1').where('closed', true)).where,
+  ).toEqual({
+    type: 'and',
+    conditions: [
+      {type: 'simple', field: 'id', op: '=', value: '1'},
+      {type: 'simple', field: 'closed', op: '=', value: true},
+    ],
   });
 });

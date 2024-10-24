@@ -403,20 +403,23 @@ describe('kitchen sink query', () => {
           },
         },
         table: 'issue',
-        where: [
-          {
-            field: 'ownerId',
-            op: 'IN',
-            type: 'simple',
-            value: ['001', '002', '003'],
-          },
-          {
-            field: 'closed',
-            op: '=',
-            type: 'simple',
-            value: false,
-          },
-        ],
+        where: {
+          type: 'and',
+          conditions: [
+            {
+              field: 'ownerId',
+              op: 'IN',
+              type: 'simple',
+              value: ['001', '002', '003'],
+            },
+            {
+              field: 'closed',
+              op: '=',
+              type: 'simple',
+              value: false,
+            },
+          ],
+        },
       },
     ]);
 
