@@ -22,13 +22,15 @@ export type InstancesRow = {
   clientGroupID: string;
   version: string;
   lastActive: Date;
+  replicaVersion: string | null;
 };
 
 const CREATE_CVR_INSTANCES_TABLE = `
 CREATE TABLE cvr.instances (
-  "clientGroupID" TEXT PRIMARY KEY,
-  version         TEXT NOT NULL,        -- Sortable representation of CVRVersion, e.g. "5nbqa2w:09"
-  "lastActive"    TIMESTAMPTZ NOT NULL  -- For garbage collection
+  "clientGroupID"  TEXT PRIMARY KEY,
+  "version"        TEXT NOT NULL,        -- Sortable representation of CVRVersion, e.g. "5nbqa2w:09"
+  "lastActive"     TIMESTAMPTZ NOT NULL, -- For garbage collection
+  "replicaVersion" TEXT                  -- Identifies the replica (i.e. initial-sync point) from which the CVR data comes.
 );
 `;
 

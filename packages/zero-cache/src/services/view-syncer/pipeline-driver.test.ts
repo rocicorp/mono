@@ -94,6 +94,11 @@ describe('view-syncer/pipeline-driver', () => {
     'zero',
   );
 
+  test('replica version', () => {
+    pipelines.init();
+    expect(pipelines.replicaVersion).toBe('123');
+  });
+
   test('add query', () => {
     pipelines.init();
 

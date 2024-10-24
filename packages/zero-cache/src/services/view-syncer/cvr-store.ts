@@ -162,16 +162,17 @@ export class CVRStore {
     const cvr: CVR = {
       id,
       version: {stateVersion: versionToLexi(0)},
-      lastActive: {epochMillis: 0},
+      lastActive: new Date(0),
+      replicaVersion: null,
       clients: {},
       queries: {},
     };
 
-    const [versionAndLastActive, clientsRows, queryRows, desiresRows] =
+    const [instance, clientsRows, queryRows, desiresRows] =
       await this.#db.begin(tx => [
         tx<
-          Pick<InstancesRow, 'version' | 'lastActive'>[]
-        >`SELECT version, "lastActive" FROM cvr.instances WHERE "clientGroupID" = ${id}`,
+          Pick<InstancesRow, 'version' | 'lastActive' | 'replicaVersion'>[]
+        >`SELECT "version", "lastActive", "replicaVersion" FROM cvr.instances WHERE "clientGroupID" = ${id}`,
         tx<
           Pick<ClientsRow, 'clientID' | 'patchVersion'>[]
         >`SELECT "clientID", "patchVersion" FROM cvr.clients WHERE "clientGroupID" = ${id}`,
@@ -183,17 +184,19 @@ export class CVRStore {
         >`SELECT * FROM cvr.desires WHERE "clientGroupID" = ${id} AND (deleted IS NULL OR deleted = FALSE)`,
       ]);
 
-    if (versionAndLastActive.length !== 0) {
-      assert(versionAndLastActive.length === 1);
-      const {version, lastActive} = versionAndLastActive[0];
+    if (instance.length !== 0) {
+      assert(instance.length === 1);
+      const {version, lastActive, replicaVersion} = instance[0];
       cvr.version = versionFromString(version);
-      cvr.lastActive = {epochMillis: lastActive.getTime()};
+      cvr.lastActive = lastActive;
+      cvr.replicaVersion = replicaVersion;
     } else {
       // This is the first time we see this CVR.
       const change: InstancesRow = {
         clientGroupID: id,
         version: versionString(cvr.version),
         lastActive: new Date(0),
+        replicaVersion: null,
       };
       this.#writes.add({
         stats: {instances: 1},
@@ -244,11 +247,16 @@ export class CVRStore {
     this.#pendingRowRecordPuts.set(row.id, row);
   }
 
-  putInstance(version: CVRVersion, lastActive: {epochMillis: number}): void {
+  putInstance({
+    version,
+    replicaVersion,
+    lastActive,
+  }: Pick<CVRSnapshot, 'version' | 'replicaVersion' | 'lastActive'>): void {
     const change: InstancesRow = {
       clientGroupID: this.#id,
       version: versionString(version),
-      lastActive: new Date(lastActive.epochMillis),
+      lastActive,
+      replicaVersion,
     };
     this.#writes.add({
       stats: {instances: 1},

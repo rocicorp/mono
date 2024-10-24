@@ -7,13 +7,15 @@ import {CustomKeyMap} from '../../../../shared/src/custom-key-map.js';
 import {must} from '../../../../shared/src/must.js';
 import {difference} from '../../../../shared/src/set-utils.js';
 import type {AST} from '../../../../zero-protocol/src/ast.js';
-import type {
-  ChangeDesiredQueriesBody,
-  ChangeDesiredQueriesMessage,
-  Downstream,
-  InitConnectionMessage,
+import {
+  ErrorKind,
+  type ChangeDesiredQueriesBody,
+  type ChangeDesiredQueriesMessage,
+  type Downstream,
+  type InitConnectionMessage,
 } from '../../../../zero-protocol/src/mod.js';
 import {stringify} from '../../types/bigint-json.js';
+import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {rowIDHash, type RowKey} from '../../types/row-key.js';
 import type {Source} from '../../types/streams.js';
@@ -37,10 +39,10 @@ import type {DrainCoordinator} from './drain-coordinator.js';
 import {PipelineDriver, type RowChange} from './pipeline-driver.js';
 import {
   cmpVersions,
-  type RowID,
   versionFromString,
   versionString,
   versionToCookie,
+  type RowID,
 } from './schema/types.js';
 import {SchemaChangeError} from './snapshotter.js';
 
@@ -152,6 +154,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           this.#pipelines.init();
         }
         await this.#runInLockWithCVR(async cvr => {
+          if (
+            cvr.version.stateVersion !== '00' &&
+            cvr.replicaVersion !== this.#pipelines.replicaVersion
+          ) {
+            const msg = `Replica Version mismatch: CVR=${
+              cvr.replicaVersion
+            }, DB=${this.#pipelines.replicaVersion}`;
+            this.#lc.info?.(`resetting CVR: ${msg}`);
+            throw new ErrorForClient(['error', ErrorKind.ClientNotFound, msg]);
+          }
+
           if (this.#pipelinesSynced) {
             const result = await this.#advancePipelines(cvr);
             if (result === 'success') {
@@ -527,6 +540,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#cvrStore,
       cvr,
       stateVersion,
+      this.#pipelines.replicaVersion,
     );
 
     // Note: This kicks of background PG queries for CVR data associated with the
@@ -736,7 +750,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     const lc = this.#lc.withContext('newVersion', version);
 
     // Probably need a new updater type. CVRAdvancementUpdater?
-    const updater = new CVRQueryDrivenUpdater(this.#cvrStore, cvr, version);
+    const updater = new CVRQueryDrivenUpdater(
+      this.#cvrStore,
+      cvr,
+      version,
+      this.#pipelines.replicaVersion,
+    );
     const pokers = [...this.#clients.values()].map(c =>
       c.startPoke(
         updater.updatedVersion(),

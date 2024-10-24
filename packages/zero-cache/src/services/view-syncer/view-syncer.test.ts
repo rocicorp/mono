@@ -3,11 +3,13 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {Queue} from '../../../../shared/src/queue.js';
 import {sleep} from '../../../../shared/src/sleep.js';
 import type {AST} from '../../../../zero-protocol/src/ast.js';
-import type {
-  Downstream,
-  PokePartBody,
-  PokeStartBody,
-  QueriesPatch,
+import {
+  type Downstream,
+  ErrorKind,
+  type ErrorMessage,
+  type PokePartBody,
+  type PokeStartBody,
+  type QueriesPatch,
 } from '../../../../zero-protocol/src/mod.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {StatementRunner} from '../../db/statements.js';
@@ -59,6 +61,8 @@ const EXPECTED_LMIDS_AST: AST = {
   ],
 };
 
+const REPLICA_VERSION = '01';
+
 describe('view-syncer/service', () => {
   let storageDB: Database;
   let replicaDbFile: DbFile;
@@ -93,7 +97,7 @@ describe('view-syncer/service', () => {
     replicaDbFile = new DbFile('view_syncer_service_test');
     replica = replicaDbFile.connect(lc);
     initChangeLog(replica);
-    initReplicationState(replica, ['zero_data'], '01');
+    initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
 
     replica.pragma('journal_mode = WAL');
     replica.pragma('busy_timeout = 1');
@@ -1213,6 +1217,7 @@ describe('view-syncer/service', () => {
       cvrStore,
       await cvrStore.load(),
       '07',
+      REPLICA_VERSION,
     ).flush(lc);
 
     // Connect the client.
@@ -1356,6 +1361,37 @@ describe('view-syncer/service', () => {
         ],
       ]
     `);
+  });
+
+  test('sends reset for CVR from different replica version up', async () => {
+    const cvrStore = new CVRStore(lc, cvrDB, serviceID);
+    await new CVRQueryDrivenUpdater(
+      cvrStore,
+      await cvrStore.load(),
+      '07',
+      '1' + REPLICA_VERSION, // Different replica version.
+    ).flush(lc);
+
+    // Connect the client.
+    const client = await connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+
+    // Signal that the replica is ready.
+    stateChanges.push({state: 'version-ready'});
+
+    let result;
+    try {
+      result = await client.dequeue();
+    } catch (e) {
+      result = e;
+    }
+    expect(result).toBeInstanceOf(ErrorForClient);
+    expect((result as ErrorForClient).errorMessage).toEqual([
+      'error',
+      ErrorKind.ClientNotFound,
+      'Replica Version mismatch: CVR=101, DB=01',
+    ] satisfies ErrorMessage);
   });
 
   test('clean up operator storage on close', async () => {
