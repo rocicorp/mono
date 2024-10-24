@@ -137,7 +137,7 @@ export class Connection {
       const value = JSON.parse(data);
       msg = valita.parse(value, upstreamSchema);
     } catch (e) {
-      this.#lc.warn?.(`failed to parse upstream message: ${data}`, e);
+      this.#lc.warn?.(`failed to parse message "${data}": ${String(e)}`);
       this.#closeWithError(['error', ErrorKind.InvalidMessage, String(e)], e);
       return;
     }
