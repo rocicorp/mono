@@ -162,7 +162,7 @@ export class CVRStore {
     const cvr: CVR = {
       id,
       version: {stateVersion: versionToLexi(0)},
-      lastActive: new Date(0),
+      lastActive: 0,
       replicaVersion: null,
       clients: {},
       queries: {},
@@ -195,7 +195,7 @@ export class CVRStore {
       const change: InstancesRow = {
         clientGroupID: id,
         version: versionString(cvr.version),
-        lastActive: new Date(0),
+        lastActive: 0,
         replicaVersion: null,
       };
       this.#writes.add({

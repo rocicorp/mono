@@ -1,4 +1,3 @@
-import {PreciseDate} from '@google-cloud/precise-date';
 import {assert} from '../../../shared/src/asserts.js';
 import type {SchemaValue, ValueType} from '../../../zql/src/zql/ivm/schema.js';
 import {stringify, type JSONValue} from './bigint-json.js';
@@ -68,15 +67,12 @@ function toLiteValue(val: JSONValue): Exclude<JSONValue, boolean> {
   if (val === null) {
     return val;
   }
-  if (val instanceof PreciseDate) {
-    return val.getFullTime() / 1000n; // nanoseconds to microseconds
-  }
   if (Array.isArray(val)) {
     return val.map(v => toLiteValue(v));
   }
   assert(
     val.constructor?.name === 'Object',
-    `Unexpected object type ${val.constructor?.name}`,
+    `Unhandled object type ${val.constructor?.name}`,
   );
   return val; // JSON
 }
@@ -127,6 +123,14 @@ export function dataTypeToZqlValueType(
     case 'float8':
       return 'number';
 
+    case 'date':
+    case 'timestamp':
+    case 'timestamp with time zone':
+    case 'timestamp without time zone':
+      // Timestamps are represented as epoch milliseconds (at microsecond resolution using floating point),
+      // and DATEs are represented as epoch milliseconds of UTC midnight of the date.
+      return 'number';
+
     case 'character':
     case 'character varying':
     case 'text':
@@ -139,11 +143,7 @@ export function dataTypeToZqlValueType(
 
     // TODO: Add support for these.
     // case 'bytea':
-    // case 'date':
     // case 'time':
-    // case 'timestamp':
-    // case 'timestamp with time zone':
-    // case 'timestamp without time zone':
     // case 'time with time zone':
     // case 'time without time zone':
     default:

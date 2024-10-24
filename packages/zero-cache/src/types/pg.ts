@@ -14,6 +14,8 @@ const TIMESTAMP_TYPES = [builtins.TIMESTAMP, builtins.TIMESTAMPTZ];
 
 const TIMESTAMP_ARRAYS = [1115 /* timestamp[] */, 1185 /* timestamptz[] */];
 
+const builtinsDATEARRAY = 1182;
+
 const builtinsINT8ARRAY = 1016; // No definition in builtins for int8[]
 
 /** Registers types for the 'pg' library used by `pg-logical-replication`. */
@@ -24,46 +26,55 @@ export function registerPostgresTypeParsers() {
   // For pg-logical-replication we convert timestamps directly to microseconds
   // to facilitate serializing them in the Change stream.
   for (const type of TIMESTAMP_TYPES) {
-    setTypeParser(type, parseTimestampToMicroseconds);
+    setTypeParser(type, timestampToFpMillis);
   }
   // Timestamps are converted to epoch microseconds via the PreciseDate object.
   for (const type of TIMESTAMP_ARRAYS) {
-    setTypeParser(type, val => array.parse(val, parseTimestampToMicroseconds));
+    setTypeParser(type, val => array.parse(val, timestampToFpMillis));
   }
-  // Override the conversion of DATE to Javascript Date() objects.
-  // Store the normalized PG string as is.
-  setTypeParser(builtins.DATE, v => v);
+  // Store dates as the epoch milliseconds at UTC midnight of the date.
+  setTypeParser(builtins.DATE, dateToUTCMidnight);
+  setTypeParser(builtinsDATEARRAY, val => array.parse(val, dateToUTCMidnight));
 }
 
-function parseTimestampToMicroseconds(timestamp: string): bigint {
-  return parseTimestamp(timestamp).getFullTime() / 1000n;
-}
-
-function parseTimestamp(timestamp: string): PreciseDate {
+function timestampToFpMillis(timestamp: string): number {
   // Convert from PG's time string, e.g. "1999-01-08 12:05:06+00" to "Z"
   // format expected by PreciseDate.
   timestamp = timestamp.replace(' ', 'T').replace('+00', '') + 'Z';
-  return new PreciseDate(timestamp);
+  const fullTime = new PreciseDate(timestamp).getFullTime();
+  const millis = Number(fullTime / 1_000_000n);
+  const nanos = Number(fullTime % 1_000_000n);
+  return millis + nanos * 1e-6; // floating point milliseconds
 }
 
 function serializeTimestamp(val: unknown): string {
   switch (typeof val) {
     case 'string':
       return val; // Let Postgres parse it
-    case 'number':
-      return new PreciseDate(val).getFullTimeString();
+    case 'number': {
+      if (Number.isInteger(val)) {
+        return new PreciseDate(val).toISOString();
+      }
+      // Convert floating point to bigint nanoseconds.
+      const nanoseconds =
+        1_000_000n * BigInt(Math.trunc(val)) +
+        BigInt(Math.trunc((val % 1) * 1e6));
+      return new PreciseDate(nanoseconds).toISOString();
+    }
     // Note: Don't support bigint inputs until we decide what the semantics are (e.g. micros vs nanos)
     // case 'bigint':
-    // return new PreciseDate(val).getFullTimeString();
+    //   return new PreciseDate(val).toISOString();
     default:
-      if (val instanceof PreciseDate) {
-        return val.getFullTimeString();
-      }
       if (val instanceof Date) {
         return val.toISOString();
       }
   }
   throw new Error(`Unsupported type "${typeof val}" for timestamp: ${val}`);
+}
+
+function dateToUTCMidnight(date: string): number {
+  const d = new Date(date);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 }
 
 /**
@@ -95,7 +106,7 @@ export const postgresTypeConfig = () => ({
       to: builtins.TIMESTAMP as number,
       from: TIMESTAMP_TYPES as number[],
       serialize: serializeTimestamp,
-      parse: parseTimestamp,
+      parse: timestampToFpMillis,
     },
     // The DATE type is stored directly as the PG normalized date string.
     date: {
@@ -103,7 +114,7 @@ export const postgresTypeConfig = () => ({
       from: [builtins.DATE] as number[],
       serialize: (x: string | Date) =>
         (x instanceof Date ? x : new Date(x)).toISOString(),
-      parse: (x: string) => x,
+      parse: dateToUTCMidnight,
     },
   },
 });
