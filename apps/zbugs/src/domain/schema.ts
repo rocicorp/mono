@@ -122,8 +122,41 @@ const issueLabelSchema = {
   relationships: {},
 } as const;
 
+const emojiSchema = {
+  tableName: 'emoji',
+  columns: {
+    id: {type: 'string'},
+    value: {type: 'string'},
+    annotation: {type: 'string'},
+    subjectID: {type: 'string'},
+    creatorID: {type: 'string'},
+    created: {type: 'number'},
+  },
+  primaryKey: ['id'],
+  relationships: {
+    creator: {
+      source: 'creatorID',
+      dest: {
+        field: 'id',
+        schema: () => userSchema,
+      },
+    },
+  },
+} as const;
+
+const userPrefSchema = {
+  tableName: 'userPref',
+  columns: {
+    key: {type: 'string'},
+    userID: {type: 'string'},
+    value: {type: 'string'},
+  },
+  primaryKey: ['key', 'userID'],
+  relationships: {},
+} as const;
+
 export const schema = {
-  version: 3,
+  version: 4,
   tables: {
     user: userSchema,
     issue: issueSchema,
@@ -131,6 +164,8 @@ export const schema = {
     label: labelSchema,
     issueLabel: issueLabelSchema,
     viewState: viewStateSchema,
+    emoji: emojiSchema,
+    userPref: userPrefSchema,
   },
 } as const;
 

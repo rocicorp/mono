@@ -10,6 +10,7 @@ import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
 import {Button} from '../../components/button.js';
 import {Confirm} from '../../components/confirm.js';
+import {EmojiPanel} from '../../components/emoji-panel.js';
 import LabelPicker from '../../components/label-picker.js';
 import {Link} from '../../components/link.js';
 import Markdown from '../../components/markdown.js';
@@ -225,6 +226,7 @@ export default function IssuePage() {
         {!editing ? (
           <div className="description-container markdown-container">
             <Markdown>{rendering.description}</Markdown>
+            <EmojiPanel issueID={issue.id} />
           </div>
         ) : (
           <div className="edit-description-container">

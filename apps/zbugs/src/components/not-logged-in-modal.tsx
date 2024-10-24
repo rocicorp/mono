@@ -1,17 +1,23 @@
+import {links} from '../routes.js';
 import {Modal, ModalActions, ModalText} from './modal.js';
 
 export interface Props {
   onDismiss: () => void;
   isOpen: boolean;
-  href?: string;
+  text: string;
 }
 
-export function NotLoggedInModal({onDismiss, isOpen, href}: Props) {
+export function NotLoggedInModal({onDismiss, isOpen, text}: Props) {
+  const loginHref = links.login(
+    window.location.pathname,
+    window.location.search,
+  );
+
   return (
     <Modal isOpen={isOpen} onDismiss={onDismiss} title="Not Logged In">
-      <ModalText>You need to be logged in to create a new issue.</ModalText>
+      <ModalText>{text}</ModalText>
       <ModalActions>
-        <a className="modal-confirm" href={href}>
+        <a className="modal-confirm" href={loginHref}>
           Login
         </a>
       </ModalActions>

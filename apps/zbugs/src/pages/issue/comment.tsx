@@ -2,6 +2,7 @@ import {useQuery} from '@rocicorp/zero/react';
 import {useState} from 'react';
 import {Button} from '../../components/button.js';
 import {Confirm} from '../../components/confirm.js';
+import {EmojiPanel} from '../../components/emoji-panel.js';
 import Markdown from '../../components/markdown.js';
 import RelativeTime from '../../components/relative-time.js';
 import {useLogin} from '../../hooks/use-login.js';
@@ -63,6 +64,7 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
       ) : (
         <div className="markdown-container">
           <Markdown>{comment.body}</Markdown>
+          <EmojiPanel issueID={issueID} commentID={comment.id} />
         </div>
       )}
       {editing || comment.creatorID !== login.loginState?.decoded.sub ? null : (

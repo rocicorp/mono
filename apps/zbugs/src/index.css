@@ -1194,3 +1194,43 @@ textarea.autoResize {
     transform: translate(-50%, -50%);
   }
 }
+
+/* Emoji Reactions */
+
+.emoji-reaction-container {
+  margin-top: 1rem;
+}
+
+.emoji-pill {
+  padding: 0.25rem 0.5rem;
+  border-color: var(--color-light-outline);
+  border-width: 1px;
+  border-radius: 2rem;
+}
+
+.emoji-pill:hover {
+  background-color: var(--color-nav-selected);
+  border-color: var(--color-text-dimmed-label);
+  cursor: pointer;
+}
+
+.add-emoji-button {
+  padding: 0.5rem 0;
+  border-color: transparent;
+  border-width: 1px;
+  border-radius: 2rem;
+  opacity: 0.6;
+}
+
+[data-open] > .add-emoji-button,
+.add-emoji-button:hover {
+  opacity: 1;
+}
+
+emoji-picker {
+  --background: var(--color-modal-background);
+  backdrop-filter: var(--filter-backdrop-blur);
+  --border-radius: 0.5rem;
+  --border-color: var(--color-modal-outline);
+  --emoji-size: 1.25rem;
+}

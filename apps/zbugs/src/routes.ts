@@ -1,3 +1,4 @@
+// TODO: Use exports instead of a Record
 export const links = {
   home() {
     return '/';
