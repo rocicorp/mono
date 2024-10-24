@@ -1,5 +1,5 @@
 import {nanoid} from 'nanoid';
-import {useState, useEffect} from 'react';
+import {useEffect, useState} from 'react';
 import {Button} from '../../components/button.js';
 import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
@@ -55,7 +55,7 @@ export default function CommentComposer({
       return () => textarea.removeEventListener('input', handleInput);
     };
 
-    const cleanupFns = Array.from(textareas).map(handleResize);
+    const cleanupFns = Array.from(textareas, handleResize);
 
     return () => cleanupFns.forEach(fn => fn());
   }, [currentBody]);

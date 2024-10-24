@@ -30,7 +30,7 @@ export default function IssuePage() {
   const params = useParams();
 
   const idStr = must(params.id);
-  const idField = isNaN(parseInt(idStr)) ? 'id' : 'shortID';
+  const idField = /[^\d]/.test(idStr) ? 'id' : 'shortID';
   const id = idField === 'shortID' ? parseInt(idStr) : idStr;
 
   const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
@@ -300,19 +300,26 @@ export default function IssuePage() {
             <LabelPicker
               selected={labelSet}
               onAssociateLabel={labelID =>
-                z.mutate.issueLabel.create({
-                  issueID: issue.id,
-                  labelID,
+                z.mutate(tx => {
+                  tx.issueLabel.create({
+                    issueID: issue.id,
+                    labelID,
+                  });
+                  tx.issue.update({id: issue.id, modified: Date.now()});
                 })
               }
               onDisassociateLabel={labelID =>
-                z.mutate.issueLabel.delete({issueID: issue.id, labelID})
+                z.mutate(tx => {
+                  tx.issueLabel.delete({issueID: issue.id, labelID});
+                  tx.issue.update({id: issue.id, modified: Date.now()});
+                })
               }
               onCreateNewLabel={labelName => {
                 const labelID = nanoid();
                 z.mutate(tx => {
                   tx.label.create({id: labelID, name: labelName});
                   tx.issueLabel.create({issueID: issue.id, labelID});
+                  tx.issue.update({id: issue.id, modified: Date.now()});
                 });
               }}
             />
