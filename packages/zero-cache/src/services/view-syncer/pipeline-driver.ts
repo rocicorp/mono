@@ -18,6 +18,7 @@ import {
 } from '../../types/lite.js';
 import type {RowKey} from '../../types/row-key.js';
 import type {SchemaVersions} from '../../types/schema-versions.js';
+import {getSubscriptionState} from '../replicator/schema/replication-state.js';
 import type {ClientGroupStorage} from './database-storage.js';
 import {type SnapshotDiff, Snapshotter} from './snapshotter.js';
 
@@ -87,6 +88,7 @@ export class PipelineDriver {
   readonly #storage: ClientGroupStorage;
   #tableSpecs: Map<string, NormalizedTableSpec> | null = null;
   #streamer: Streamer | null = null;
+  #replicaVersion: string | null = null;
 
   constructor(
     lc: LogContext,
@@ -111,6 +113,8 @@ export class PipelineDriver {
     this.#tableSpecs = new Map(
       listTables(db.db).map(spec => [spec.name, normalize(spec)]),
     );
+    const {replicaVersion} = getSubscriptionState(db);
+    this.#replicaVersion = replicaVersion;
   }
 
   /**
@@ -118,6 +122,11 @@ export class PipelineDriver {
    */
   initialized(): boolean {
     return this.#snapshotter.initialized();
+  }
+
+  /** @returns The replica version. The PipelineDriver must have been initialized. */
+  get replicaVersion(): string {
+    return must(this.#replicaVersion, 'Not yet initialized');
   }
 
   /**
@@ -167,6 +176,8 @@ export class PipelineDriver {
     listTables(db.db).forEach(spec =>
       tableSpecs.set(spec.name, normalize(spec)),
     );
+    const {replicaVersion} = getSubscriptionState(db);
+    this.#replicaVersion = replicaVersion;
   }
 
   /**

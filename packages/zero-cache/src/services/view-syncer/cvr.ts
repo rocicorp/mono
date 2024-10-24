@@ -21,7 +21,6 @@ import {
   type ClientQueryRecord,
   type ClientRecord,
   type InternalQueryRecord,
-  type LastActive,
   type QueryRecord,
   type RowID,
   type RowRecord,
@@ -37,7 +36,8 @@ export type RowUpdate = {
 export type CVR = {
   id: string;
   version: CVRVersion;
-  lastActive: LastActive;
+  lastActive: Date;
+  replicaVersion: string | null;
   clients: Record<string, ClientRecord>;
   queries: Record<string, QueryRecord>;
 };
@@ -47,7 +47,8 @@ export type CVR = {
 export type CVRSnapshot = {
   readonly id: string;
   readonly version: CVRVersion;
-  readonly lastActive: LastActive;
+  readonly lastActive: Date;
+  readonly replicaVersion: string | null;
   readonly clients: Readonly<Record<string, ClientRecord>>;
   readonly queries: Readonly<Record<string, QueryRecord>>;
 };
@@ -82,16 +83,21 @@ export class CVRUpdater {
    * @param cvrStore The CVRStore to use for storage
    * @param cvr The current CVR
    */
-  constructor(cvrStore: CVRStore, cvr: CVRSnapshot) {
+  constructor(
+    cvrStore: CVRStore,
+    cvr: CVRSnapshot,
+    replicaVersion: string | null,
+  ) {
     this._cvrStore = cvrStore;
     this._orig = cvr;
     this._cvr = structuredClone(cvr) as CVR; // mutable deep copy
+    this._cvr.replicaVersion = replicaVersion;
   }
 
   protected _setVersion(version: CVRVersion) {
     assert(cmpVersions(this._cvr.version, version) < 0);
     this._cvr.version = version;
-    this._cvrStore.putInstance(this._cvr.version, this._cvr.lastActive);
+    this._cvrStore.putInstance(this._cvr);
     return version;
   }
 
@@ -108,9 +114,8 @@ export class CVRUpdater {
   }
 
   #setLastActive(now = new Date()) {
-    const newMillis = now.getTime();
-    this._cvr.lastActive = {epochMillis: newMillis};
-    this._cvrStore.putInstance(this._cvr.version, this._cvr.lastActive);
+    this._cvr.lastActive = now;
+    this._cvrStore.putInstance(this._cvr);
   }
 
   async flush(
@@ -144,7 +149,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
   readonly #shardID;
 
   constructor(cvrStore: CVRStore, cvr: CVRSnapshot, shardID: string) {
-    super(cvrStore, cvr);
+    super(cvrStore, cvr, cvr.replicaVersion);
     this.#shardID = shardID;
   }
 
@@ -283,9 +288,20 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   /**
    * @param stateVersion The `stateVersion` at which the queries were executed.
    */
-  constructor(cvrStore: CVRStore, cvr: CVRSnapshot, stateVersion: LexiVersion) {
-    super(cvrStore, cvr);
+  constructor(
+    cvrStore: CVRStore,
+    cvr: CVRSnapshot,
+    stateVersion: LexiVersion,
+    replicaVersion: string,
+  ) {
+    super(cvrStore, cvr, replicaVersion);
 
+    assert(
+      // We should either be setting the cvr.replicaVersion for the first time, or it should
+      // be the same as the cvr.replicaVersion.
+      (cvr.replicaVersion ?? replicaVersion) === replicaVersion,
+      `CVR replicaVersion: ${cvr.replicaVersion}, DB replicaVersion: ${replicaVersion}`,
+    );
     assert(stateVersion >= cvr.version.stateVersion);
     if (stateVersion > cvr.version.stateVersion) {
       this._setVersion({stateVersion});

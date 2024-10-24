@@ -76,9 +76,6 @@ export function cookieToVersion(cookie: string | null): NullableCVRVersion {
 
 // Last Active tracking.
 
-export const lastActiveSchema = v.object({epochMillis: v.number()});
-export type LastActive = v.Infer<typeof lastActiveSchema>;
-
 export const cvrIDSchema = v.object({id: v.string()});
 export type CvrID = v.Infer<typeof cvrIDSchema>;
 
@@ -192,16 +189,6 @@ export const rowIDSchema = v.object({
   table: v.string(),
   rowKey: v.record(jsonValueSchema),
 });
-
-export const metaRecordSchema = v.union(
-  cvrVersionSchema,
-  lastActiveSchema,
-  clientRecordSchema,
-  queryRecordSchema,
-);
-
-// Union type of rows under "/meta/..."x" for fetching all rows in a single list() call.
-export type MetaRecord = v.Infer<typeof metaRecordSchema>;
 
 export type RowID = v.Infer<typeof rowIDSchema>;
 
