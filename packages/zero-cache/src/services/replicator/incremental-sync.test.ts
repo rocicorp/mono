@@ -1094,10 +1094,11 @@ describe('replicator/incremental-sync', () => {
       indexSpecs: [],
     },
     {
-      name: 'retype column with index',
+      name: 'retype column with indexes',
       setup: `
         CREATE TABLE foo(id INT8 PRIMARY KEY, num TEXT, _0_version TEXT NOT NULL);
         CREATE UNIQUE INDEX foo_num ON foo (num);
+        CREATE UNIQUE INDEX foo_id_num ON foo (id, num);
         INSERT INTO foo(id, num, _0_version) VALUES (1, '3', '00');
         INSERT INTO foo(id, num, _0_version) VALUES (2, '2', '00');
         INSERT INTO foo(id, num, _0_version) VALUES (3, '0', '00');
@@ -1168,6 +1169,12 @@ describe('replicator/incremental-sync', () => {
         },
       ],
       indexSpecs: [
+        {
+          name: 'foo_id_num',
+          tableName: 'foo',
+          columns: {id: 'ASC', num: 'ASC'},
+          unique: true,
+        },
         {
           name: 'foo_num',
           tableName: 'foo',
