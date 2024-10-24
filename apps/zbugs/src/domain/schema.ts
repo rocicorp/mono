@@ -156,7 +156,7 @@ const userPrefSchema = {
 } as const;
 
 export const schema = {
-  version: 3,
+  version: 4,
   tables: {
     user: userSchema,
     issue: issueSchema,
