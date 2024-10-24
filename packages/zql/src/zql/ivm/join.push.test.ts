@@ -1685,7 +1685,6 @@ function runJoinTest(t: NewPushTest) {
     actualStorage: actualStorage2,
   } = innerTest(j => {
     const view = new ArrayView(j, t.format);
-    view.hydrate();
     data = view.data;
     return view;
   });

@@ -186,7 +186,6 @@ describe('bare select', () => {
     const queryDelegate = new QueryDelegateImpl();
     const issueQuery = newQuery(queryDelegate, issueSchema).select('id');
     const m = issueQuery.materialize();
-    m.hydrate();
 
     let rows: readonly unknown[] = [];
     let called = false;
@@ -209,7 +208,6 @@ describe('bare select', () => {
     const queryDelegate = new QueryDelegateImpl();
     const issueQuery = newQuery(queryDelegate, issueSchema).select('id');
     const m = issueQuery.materialize();
-    m.hydrate();
 
     let rows: unknown[] = [];
     m.addListener(data => {
@@ -266,7 +264,6 @@ describe('bare select', () => {
 
     const issueQuery = newQuery(queryDelegate, issueSchema).select('id');
     const m = issueQuery.materialize();
-    m.hydrate();
 
     let rows: unknown[] = [];
     m.addListener(data => {
@@ -300,7 +297,6 @@ describe('bare select', () => {
 
     const issueQuery = newQuery(queryDelegate, issueSchema).select('id');
     const m = issueQuery.materialize();
-    m.hydrate();
 
     let rows: unknown[] = [];
     m.addListener(data => {
@@ -358,18 +354,15 @@ describe('joins and filters', () => {
       .where('title', '=', 'issue 1');
 
     const singleFilterView = issueQuery.materialize();
-    singleFilterView.hydrate();
     let singleFilterRows: {id: string}[] = [];
     let doubleFilterRows: {id: string}[] = [];
     let doubleFilterWithNoResultsRows: {id: string}[] = [];
     const doubleFilterView = issueQuery
       .where('closed', '=', false)
       .materialize();
-    doubleFilterView.hydrate();
     const doubleFilterViewWithNoResults = issueQuery
       .where('closed', '=', true)
       .materialize();
-    doubleFilterViewWithNoResults.hydrate();
 
     singleFilterView.addListener(data => {
       singleFilterRows = deepClone(data) as {id: string}[];
@@ -435,7 +428,6 @@ describe('joins and filters', () => {
       .related('comments', q => q.select('text'))
       .select('id');
     const view = issueQuery.materialize();
-    view.hydrate();
 
     let rows: unknown[] = [];
     view.addListener(data => {

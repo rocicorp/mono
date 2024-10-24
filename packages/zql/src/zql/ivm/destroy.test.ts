@@ -100,7 +100,6 @@ test('destroy a pipeline from the view', () => {
   view.addListener(d => {
     data = structuredClone(d);
   });
-  view.hydrate();
 
   source1.push({
     type: 'add',

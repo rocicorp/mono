@@ -1,8 +1,8 @@
 import {describe, expect, test} from 'vitest';
+import {must} from '../../../../shared/src/must.js';
 import {newQuery, type QueryDelegate} from './query-impl.js';
 import {QueryDelegateImpl} from './query-impl.query.test.js';
 import {issueSchema} from './test/testSchemas.js';
-import {must} from '../../../../shared/src/must.js';
 
 function addData(queryDelegate: QueryDelegate) {
   const userSource = must(queryDelegate.getSource('user'));
@@ -312,7 +312,6 @@ describe('kitchen sink query', () => {
       .limit(6);
 
     const view = issueQuery.materialize();
-    view.hydrate();
 
     expect(queryDelegate.addedServerQueries).toEqual([
       {

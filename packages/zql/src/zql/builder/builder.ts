@@ -56,7 +56,6 @@ export interface BuilderDelegate {
  *   constructor(input: Input) {
  *     this.#input = input;
  *     this.#input.setOutput(this);
- *     console.log([...this.#input.hydrate()]);
  *   }
  *
  *   push(change: Change, _: Operator) {

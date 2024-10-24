@@ -49,7 +49,6 @@ export class ArrayView implements Output {
 
   onDestroy: (() => void) | undefined;
 
-  #hydrated = false;
   #dirty = false;
 
   constructor(
@@ -62,6 +61,8 @@ export class ArrayView implements Output {
     this.#input.setOutput(this);
     this.#root = {'': format.singular ? undefined : []};
     assertOrderingIncludesPK(this.#schema.sort, this.#schema.primaryKey);
+
+    this.#hydrate();
   }
 
   get data() {
@@ -71,9 +72,8 @@ export class ArrayView implements Output {
   addListener(listener: Listener) {
     assert(!this.#listeners.has(listener), 'Listener already registered');
     this.#listeners.add(listener);
-    if (this.#hydrated) {
-      listener(this.data);
-    }
+
+    listener(this.data);
 
     return () => {
       this.#listeners.delete(listener);
@@ -91,11 +91,7 @@ export class ArrayView implements Output {
     this.onDestroy?.();
   }
 
-  hydrate() {
-    if (this.#hydrated) {
-      throw new Error("Can't hydrate twice");
-    }
-    this.#hydrated = true;
+  #hydrate() {
     this.#dirty = true;
     for (const node of this.#input.fetch({})) {
       applyChange(

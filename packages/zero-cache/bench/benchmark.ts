@@ -63,14 +63,14 @@ export function bench(opts: Options) {
   };
 
   const issueQuery = newQuery(host, schema.issue);
-  const view = issueQuery
+  const q = issueQuery
     .related('labels')
     .orderBy('modified', 'desc')
-    .limit(10_000)
-    .materialize();
+    .limit(10_000);
 
   const start = performance.now();
-  view.hydrate();
+  q.materialize();
+
   const end = performance.now();
-  console.log(`hydrate\ttook ${end - start}ms`);
+  console.log(`materialize\ttook ${end - start}ms`);
 }

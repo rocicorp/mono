@@ -1,10 +1,6 @@
-import {
-  assertArray,
-  notImplemented,
-  unreachable,
-} from '../../../../shared/src/asserts.js';
-import {stringCompare} from '../../../../shared/src/string-compare.js';
 import {expect, test} from 'vitest';
+import {assertArray, unreachable} from '../../../../shared/src/asserts.js';
+import {stringCompare} from '../../../../shared/src/string-compare.js';
 import {ArrayView} from './array-view.js';
 import type {Change} from './change.js';
 import {Join} from './join.js';
@@ -38,14 +34,12 @@ test('basics', () => {
     data = [...entries];
   });
 
-  view.hydrate();
   expect(data).toEqual([
     {a: 1, b: 'a'},
     {a: 2, b: 'b'},
   ]);
 
   expect(callCount).toBe(1);
-  expect(() => view.hydrate()).toThrow("Can't hydrate twice");
 
   ms.push({row: {a: 3, b: 'c'}, type: 'add'});
 
@@ -101,7 +95,6 @@ test('single-format', () => {
     data = structuredClone(d);
   });
 
-  view.hydrate();
   expect(data).toEqual({a: 1, b: 'a'});
   expect(callCount).toBe(1);
 
@@ -146,7 +139,6 @@ test('hydrate-empty', () => {
     data = [...entries];
   });
 
-  view.hydrate();
   expect(data).toEqual([]);
   expect(callCount).toBe(1);
 });
@@ -200,7 +192,6 @@ test('tree', () => {
     data = [...entries];
   });
 
-  view.hydrate();
   expect(data).toEqual([
     {
       id: 1,
@@ -469,7 +460,6 @@ test('tree-single', () => {
     data = structuredClone(d);
   });
 
-  view.hydrate();
   expect(data).toEqual({
     id: 1,
     name: 'foo',
@@ -548,10 +538,10 @@ test('collapse', () => {
 
   const input: Input = {
     cleanup() {
-      notImplemented();
+      return [];
     },
     fetch() {
-      notImplemented();
+      return [];
     },
     destroy() {},
     getSchema() {
@@ -828,10 +818,10 @@ test('collapse-single', () => {
 
   const input = {
     cleanup() {
-      throw new Error('not implemented');
+      return [];
     },
     fetch() {
-      throw new Error('not implemented');
+      return [];
     },
     destroy() {},
     getSchema() {
@@ -919,7 +909,6 @@ test('basic with edit pushes', () => {
     data = [...entries];
   });
 
-  view.hydrate();
   expect(data).toEqual([
     {a: 1, b: 'a'},
     {a: 2, b: 'b'},
@@ -992,7 +981,6 @@ test('tree edit', () => {
     data = [...entries];
   });
 
-  view.hydrate();
   expect(data).toEqual([
     {
       id: 1,
@@ -1111,7 +1099,6 @@ test('edit to change the order', () => {
     assertArray(entries);
     data = [...entries];
   });
-  view.hydrate();
 
   expect(data).toEqual([
     {a: 10, b: 'a'},
@@ -1184,10 +1171,10 @@ test('edit to preserve relationships', () => {
       return schema;
     },
     fetch() {
-      unreachable();
+      return [];
     },
     cleanup() {
-      unreachable();
+      return [];
     },
     setOutput() {},
     destroy() {
