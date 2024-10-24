@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/ban-types */
 import {describe, expectTypeOf, test} from 'vitest';
 import {staticParam} from './query-impl.js';
-import type {Query} from './query.js';
+import {type Query, type QueryType} from './query.js';
 import type {Supertype, TableSchema} from './schema.js';
 
 const mockQuery = {
@@ -561,3 +561,27 @@ test('supertype query', () => {
 function takeSchema(x: TableSchema) {
   return x;
 }
+
+test.skip('custom materialize factory', () => {
+  const query = mockQuery as unknown as Query<TestSchema>;
+  const x = query.materialize();
+  expectTypeOf(x.data).toMatchTypeOf<
+    Array<{s: string; b: boolean; n: number}>
+  >();
+
+  // This is a pretend factory that unlike ArrayView, which has a `data` property that is an array,
+  // has a `dataAsSet` property that is a Set.
+  function factory<TSchema extends TableSchema, TReturn extends QueryType>(
+    _query: Query<TSchema, TReturn>,
+  ): {
+    dataAsSet: Set<TReturn['row']>;
+  } {
+    return {dataAsSet: new Set()};
+  }
+
+  const y = query.materialize(factory);
+  y.dataAsSet;
+  expectTypeOf(y.dataAsSet).toMatchTypeOf<
+    Set<{s: string; b: boolean; n: number}>
+  >();
+});
