@@ -31,7 +31,7 @@
   min-width: 16rem;
   overflow-y: scroll;
   overflow-x: hidden;
-  z-index: 9996;
+  z-index: var(--z-index-popover);
   scrollbar-color: var(--color-nav-selected) rgba(0, 0, 0, 0);
 }
 
@@ -48,7 +48,7 @@
   top: 2.65rem; /* Center vertically */
   transform: translateY(-50%);
   border-style: solid;
-  z-index: 9998;
+  z-index: var(--z-index-popover + 1);
 }
 
 .popoverWrapper::before {
