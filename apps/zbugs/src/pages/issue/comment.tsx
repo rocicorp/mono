@@ -1,6 +1,7 @@
 import {useQuery} from '@rocicorp/zero/react';
 import {useState} from 'react';
 import {Button} from '../../components/button.js';
+import {CanEdit} from '../../components/can-edit.js';
 import {Confirm} from '../../components/confirm.js';
 import {EmojiPanel} from '../../components/emoji-panel.js';
 import Markdown from '../../components/markdown.js';
@@ -67,13 +68,15 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
           <EmojiPanel issueID={issueID} commentID={comment.id} />
         </div>
       )}
-      {editing || comment.creatorID !== login.loginState?.decoded.sub ? null : (
-        <div className={style.commentActions}>
-          <Button onAction={edit}>Edit</Button>
-          <Button onAction={() => setDeleteConfirmationShown(true)}>
-            Delete
-          </Button>
-        </div>
+      {editing ? null : (
+        <CanEdit ownerID={comment.creatorID}>
+          <div className={style.commentActions}>
+            <Button onAction={edit}>Edit</Button>
+            <Button onAction={() => setDeleteConfirmationShown(true)}>
+              Delete
+            </Button>
+          </div>
+        </CanEdit>
       )}
       <Confirm
         title="Delete Comment"
