@@ -89,7 +89,7 @@ CREATE TABLE emoji (
     -- We cannot use a FK to enforce referential integrity. Instead we use a trigger to enforce this.
     -- We wil also need a custom secondary index on this since the FK won't give it to us.
     "subjectID" VARCHAR NOT NULL,
-    "creatorID" VARCHAR REFERENCES "user"(id) NOT NULL ON DELETE CASCADE,
+    "creatorID" VARCHAR REFERENCES "user"(id) ON DELETE CASCADE,
     "created" double precision DEFAULT (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000),
 
     UNIQUE ("subjectID", "creatorID", "value")
