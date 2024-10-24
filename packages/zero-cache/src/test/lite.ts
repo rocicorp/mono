@@ -2,8 +2,8 @@ import {LogContext} from '@rocicorp/logger';
 import {unlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {ident} from 'pg-format';
-import {randInt} from '../../../shared/src/rand.js';
 import {expect} from 'vitest';
+import {randInt} from '../../../shared/src/rand.js';
 import {Database} from '../../../zqlite/src/db.js';
 
 export class DbFile {
@@ -57,5 +57,19 @@ export function expectTables(
       .all();
     expect(actual).toEqual(expect.arrayContaining(expected));
     expect(expected).toEqual(expect.arrayContaining(actual));
+  }
+}
+
+export function expectMatchingObjectsInTables(
+  db: Database,
+  tables?: Record<string, unknown[]>,
+  numberType: 'number' | 'bigint' = 'number',
+) {
+  for (const [table, expected] of Object.entries(tables ?? {})) {
+    const actual = db
+      .prepare(`SELECT * FROM ${ident(table)}`)
+      .safeIntegers(numberType === 'bigint')
+      .all();
+    expect(actual).toMatchObject(expected);
   }
 }

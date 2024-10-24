@@ -142,7 +142,7 @@ describe('view-syncer/cvr', () => {
     expect(cvr).toEqual({
       id: 'abc123',
       version: {stateVersion: '00'},
-      lastActive: new Date(0),
+      lastActive: 0,
       replicaVersion: null,
       clients: {},
       queries: {},
@@ -150,13 +150,13 @@ describe('view-syncer/cvr', () => {
     const flushed = (
       await new CVRUpdater(pgStore, cvr, cvr.replicaVersion).flush(
         lc,
-        new Date(Date.UTC(2024, 3, 20)),
+        Date.UTC(2024, 3, 20),
       )
     ).cvr;
 
     expect(flushed).toEqual({
       ...cvr,
-      lastActive: new Date(1713571200000),
+      lastActive: 1713571200000,
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
@@ -169,7 +169,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           version: '00',
-          lastActive: new Date(Date.UTC(2024, 3, 20)),
+          lastActive: 1713571200000,
           replicaVersion: null,
         },
       ],
@@ -186,7 +186,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1a9:02',
           replicaVersion: '123',
-          lastActive: new Date(Date.UTC(2024, 3, 23)),
+          lastActive: Date.UTC(2024, 3, 23),
         },
       ],
       clients: [
@@ -229,7 +229,7 @@ describe('view-syncer/cvr', () => {
       id: 'abc123',
       version: {stateVersion: '1a9', minorVersion: 2},
       replicaVersion: '123',
-      lastActive: new Date(1713830400000),
+      lastActive: 1713830400000,
       clients: {
         fooClient: {
           id: 'fooClient',
@@ -258,7 +258,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1a9:02',
           replicaVersion: '112',
-          lastActive: new Date(Date.UTC(2024, 3, 23)),
+          lastActive: Date.UTC(2024, 3, 23),
         },
       ],
       clients: [
@@ -300,7 +300,7 @@ describe('view-syncer/cvr', () => {
 
     const {cvr: updated, stats} = await updater.flush(
       lc,
-      new Date(Date.UTC(2024, 3, 24)),
+      Date.UTC(2024, 3, 24),
     );
     expect(stats).toEqual({
       instances: 1,
@@ -315,7 +315,7 @@ describe('view-syncer/cvr', () => {
       id: 'abc123',
       version: {stateVersion: '1a9', minorVersion: 2},
       replicaVersion: '112',
-      lastActive: new Date(1713830400000),
+      lastActive: 1713830400000,
       clients: {
         fooClient: {
           id: 'fooClient',
@@ -336,7 +336,7 @@ describe('view-syncer/cvr', () => {
 
     expect(updated).toEqual({
       ...cvr,
-      lastActive: new Date(1713916800000),
+      lastActive: 1713916800000,
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
@@ -345,7 +345,7 @@ describe('view-syncer/cvr', () => {
     expect(reloaded).toEqual(updated);
 
     const updatedState = structuredClone(initialState);
-    updatedState.instances[0].lastActive = new Date(Date.UTC(2024, 3, 24));
+    updatedState.instances[0].lastActive = Date.UTC(2024, 3, 24);
     await expectState(db, updatedState);
   });
 
@@ -356,7 +356,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1a9:02',
           replicaVersion: '100',
-          lastActive: new Date(Date.UTC(2024, 3, 23)),
+          lastActive: Date.UTC(2024, 3, 23),
         },
       ],
       clients: [],
@@ -375,7 +375,7 @@ describe('view-syncer/cvr', () => {
 
     let err;
     try {
-      await updater.flush(lc, new Date(Date.UTC(2024, 4, 19)));
+      await updater.flush(lc, Date.UTC(2024, 4, 19));
     } catch (e) {
       err = e;
     }
@@ -384,7 +384,7 @@ describe('view-syncer/cvr', () => {
     // The last active time should not have been modified.
     expect(
       await db`SELECT "lastActive" FROM cvr.instances WHERE "clientGroupID" = 'abc123'`,
-    ).toEqual([{lastActive: new Date(Date.UTC(2024, 3, 23))}]);
+    ).toEqual([{lastActive: Date.UTC(2024, 3, 23)}]);
   });
 
   test('update desired query set', async () => {
@@ -394,7 +394,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1aa',
           replicaVersion: '101',
-          lastActive: new Date(Date.UTC(2024, 3, 23)),
+          lastActive: Date.UTC(2024, 3, 23),
         },
       ],
       clients: [
@@ -449,7 +449,7 @@ describe('view-syncer/cvr', () => {
       id: 'abc123',
       version: {stateVersion: '1aa'},
       replicaVersion: '101',
-      lastActive: new Date(1713830400000),
+      lastActive: 1713830400000,
       clients: {
         dooClient: {
           id: 'dooClient',
@@ -506,7 +506,7 @@ describe('view-syncer/cvr', () => {
 
     const {cvr: updated, stats} = await updater.flush(
       lc,
-      new Date(Date.UTC(2024, 3, 24)),
+      Date.UTC(2024, 3, 24),
     );
 
     expect(stats).toEqual({
@@ -521,7 +521,7 @@ describe('view-syncer/cvr', () => {
       id: 'abc123',
       version: {stateVersion: '1aa', minorVersion: 1}, // minorVersion bump
       replicaVersion: '101',
-      lastActive: new Date(1713916800000),
+      lastActive: 1713916800000,
       clients: {
         barClient: {
           id: 'barClient',
@@ -593,7 +593,7 @@ describe('view-syncer/cvr', () => {
       instances: [
         {
           clientGroupID: 'abc123',
-          lastActive: new Date('2024-04-24T00:00:00.000Z'),
+          lastActive: new Date('2024-04-24T00:00:00.000Z').getTime(),
           version: '1aa:01',
           replicaVersion: '101',
         },
@@ -749,10 +749,7 @@ describe('view-syncer/cvr', () => {
       }),
     ).toEqual([{id: 'oneHash', ast: {table: 'issues'}}]);
 
-    const {cvr: updated2} = await updater2.flush(
-      lc,
-      new Date(Date.UTC(2024, 3, 24, 1)),
-    );
+    const {cvr: updated2} = await updater2.flush(lc, Date.UTC(2024, 3, 24, 1));
     expect(updated2.clients.fooClient.desiredQueryIDs).toContain('oneHash');
   });
 
@@ -763,7 +760,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1aa',
           replicaVersion: '03',
-          lastActive: new Date(Date.UTC(2024, 3, 23)),
+          lastActive: Date.UTC(2024, 3, 23),
         },
       ],
       clients: [
@@ -811,7 +808,7 @@ describe('view-syncer/cvr', () => {
     // Same last active day (no index change), but different hour.
     const {cvr: updated, stats} = await updater.flush(
       lc,
-      new Date(Date.UTC(2024, 3, 23, 1)),
+      Date.UTC(2024, 3, 23, 1),
     );
     expect(stats).toEqual({
       instances: 1,
@@ -823,7 +820,7 @@ describe('view-syncer/cvr', () => {
     });
     expect(updated).toEqual({
       ...cvr,
-      lastActive: new Date(1713834000000),
+      lastActive: 1713834000000,
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
@@ -832,7 +829,7 @@ describe('view-syncer/cvr', () => {
     expect(reloaded).toEqual(updated);
 
     const updatedState = structuredClone(initialState);
-    updatedState.instances[0].lastActive = new Date(Date.UTC(2024, 3, 23, 1));
+    updatedState.instances[0].lastActive = Date.UTC(2024, 3, 23, 1);
     await expectState(db, updatedState);
   });
 
@@ -868,7 +865,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1aa',
           replicaVersion: null,
-          lastActive: new Date(Date.UTC(2024, 3, 23)),
+          lastActive: Date.UTC(2024, 3, 23),
         },
       ],
       clients: [
@@ -1099,7 +1096,7 @@ describe('view-syncer/cvr', () => {
     // Same last active day (no index change), but different hour.
     const {cvr: updated, stats} = await updater.flush(
       lc,
-      new Date(Date.UTC(2024, 3, 23, 1)),
+      Date.UTC(2024, 3, 23, 1),
     );
     expect(stats).toEqual({
       instances: 2,
@@ -1183,7 +1180,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: {stateVersion: '1aa', minorVersion: 1},
         },
       },
-      lastActive: new Date(1713834000000),
+      lastActive: 1713834000000,
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
@@ -1195,7 +1192,7 @@ describe('view-syncer/cvr', () => {
       instances: [
         {
           clientGroupID: 'abc123',
-          lastActive: new Date('2024-04-23T01:00:00Z'),
+          lastActive: new Date('2024-04-23T01:00:00Z').getTime(),
           version: '1aa:01',
           replicaVersion: '123',
         },
@@ -1320,7 +1317,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1ba',
           replicaVersion: '123',
-          lastActive: new Date(Date.UTC(2024, 3, 23)),
+          lastActive: Date.UTC(2024, 3, 23),
         },
       ],
       clients: [
@@ -1505,7 +1502,7 @@ describe('view-syncer/cvr', () => {
     // Same last active day (no index change), but different hour.
     const {cvr: updated, stats} = await updater.flush(
       lc,
-      new Date(Date.UTC(2024, 3, 23, 1)),
+      Date.UTC(2024, 3, 23, 1),
     );
     expect(stats).toEqual({
       instances: 2,
@@ -1602,7 +1599,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: {stateVersion: '1aa', minorVersion: 1},
         },
       },
-      lastActive: new Date(1713834000000),
+      lastActive: 1713834000000,
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
@@ -1614,7 +1611,7 @@ describe('view-syncer/cvr', () => {
       instances: [
         {
           clientGroupID: 'abc123',
-          lastActive: new Date('2024-04-23T01:00:00Z'),
+          lastActive: new Date('2024-04-23T01:00:00Z').getTime(),
           version: '1ba:01',
           replicaVersion: '123',
         },
@@ -1730,7 +1727,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1ba',
           replicaVersion: '123',
-          lastActive: new Date(Date.UTC(2024, 3, 23)),
+          lastActive: Date.UTC(2024, 3, 23),
         },
       ],
       clients: [
@@ -1960,7 +1957,7 @@ describe('view-syncer/cvr', () => {
     // Same last active day (no index change), but different hour.
     const {cvr: updated, stats} = await updater.flush(
       lc,
-      new Date(Date.UTC(2024, 3, 23, 1)),
+      Date.UTC(2024, 3, 23, 1),
     );
     expect(stats).toEqual({
       instances: 2,
@@ -2080,7 +2077,7 @@ describe('view-syncer/cvr', () => {
     expect(updated).toEqual({
       ...cvr,
       version: newVersion,
-      lastActive: new Date(1713834000000),
+      lastActive: 1713834000000,
       queries: {
         oneHash: {
           id: 'oneHash',
@@ -2110,7 +2107,7 @@ describe('view-syncer/cvr', () => {
       instances: [
         {
           clientGroupID: 'abc123',
-          lastActive: new Date('2024-04-23T01:00:00Z'),
+          lastActive: new Date('2024-04-23T01:00:00Z').getTime(),
           version: '1ba:01',
           replicaVersion: '123',
         },
@@ -2245,7 +2242,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1ba',
           replicaVersion: '123',
-          lastActive: new Date(Date.UTC(2024, 3, 23)),
+          lastActive: Date.UTC(2024, 3, 23),
         },
       ],
       clients: [],
@@ -2373,7 +2370,7 @@ describe('view-syncer/cvr', () => {
     // Note: Must flush before generating config patches.
     const {cvr: updated, stats} = await updater.flush(
       lc,
-      new Date(Date.UTC(2024, 3, 23, 1)),
+      Date.UTC(2024, 3, 23, 1),
     );
     expect(stats).toEqual({
       instances: 2,
@@ -2447,7 +2444,7 @@ describe('view-syncer/cvr', () => {
       ...cvr,
       version: newVersion,
       queries: {},
-      lastActive: new Date(1713834000000),
+      lastActive: 1713834000000,
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
@@ -2459,7 +2456,7 @@ describe('view-syncer/cvr', () => {
       instances: [
         {
           clientGroupID: 'abc123',
-          lastActive: new Date('2024-04-23T01:00:00Z'),
+          lastActive: new Date('2024-04-23T01:00:00Z').getTime(),
           version: '1ba:01',
           replicaVersion: '123',
         },
@@ -2565,7 +2562,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1ba',
           replicaVersion: '120',
-          lastActive: new Date(Date.UTC(2024, 3, 23)),
+          lastActive: Date.UTC(2024, 3, 23),
         },
       ],
       clients: [
@@ -2706,7 +2703,7 @@ describe('view-syncer/cvr', () => {
           },
         },
         "id": "abc123",
-        "lastActive": 2024-04-23T00:00:00.000Z,
+        "lastActive": 1713830400000,
         "queries": {
           "oneHash": {
             "ast": {
@@ -2854,7 +2851,7 @@ describe('view-syncer/cvr', () => {
     // Only the last active time should change.
     const {cvr: updated, stats} = await updater.flush(
       lc,
-      new Date(Date.UTC(2024, 3, 23, 1)),
+      Date.UTC(2024, 3, 23, 1),
     );
     expect(stats).toEqual({
       instances: 1,
@@ -2973,7 +2970,7 @@ describe('view-syncer/cvr', () => {
 
     expect(updated).toEqual({
       ...cvr,
-      lastActive: new Date(1713834000000),
+      lastActive: 1713834000000,
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
@@ -2996,7 +2993,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1aa',
           replicaVersion: '120',
-          lastActive: new Date(Date.UTC(2024, 3, 23)),
+          lastActive: Date.UTC(2024, 3, 23),
         },
       ],
       clients: [
@@ -3098,7 +3095,7 @@ describe('view-syncer/cvr', () => {
     // Same last active day (no index change), but different hour.
     const {cvr: updated, stats} = await updater.flush(
       lc,
-      new Date(Date.UTC(2024, 3, 23, 1)),
+      Date.UTC(2024, 3, 23, 1),
     );
     expect(stats).toEqual({
       instances: 2,
@@ -3120,7 +3117,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '1ba',
           replicaVersion: '120',
-          lastActive: new Date(Date.UTC(2024, 3, 23, 1)),
+          lastActive: Date.UTC(2024, 3, 23, 1),
         },
       ],
       clients: [

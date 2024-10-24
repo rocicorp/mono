@@ -1,4 +1,3 @@
-import {PreciseDate} from '@google-cloud/precise-date';
 import {describe, expect, test} from 'vitest';
 import {liteRow, liteValue, liteValues} from './lite.js';
 
@@ -58,7 +57,6 @@ describe('types/lite', () => {
 
     // Yet to be supported data types.
     [Buffer.from('hello world'), Buffer.from('hello world')],
-    [new PreciseDate('2024-10-08T00:00:00.123456Z'), 1728345600123456n],
     [{custom: {json: 'object'}}, '{"custom":{"json":"object"}}'],
     [[1, 2], '[1,2]'],
     [['two', 'three'], '["two","three"]'],
@@ -67,13 +65,6 @@ describe('types/lite', () => {
     [[123.456, 987.654], '[123.456,987.654]'],
     [[true, false], '[1,0]'],
     [
-      [
-        new PreciseDate(Date.UTC(2024, 9, 8)),
-        new PreciseDate(Date.UTC(2024, 7, 6)),
-      ],
-      '[1728345600000000,1722902400000000]',
-    ],
-    [
       [{custom: {json: 'object'}}, {another: {json: 'object'}}],
       '[{"custom":{"json":"object"}},{"another":{"json":"object"}}]',
     ],
@@ -81,13 +72,10 @@ describe('types/lite', () => {
     // Multi-dimensional array
     [
       [
-        [new PreciseDate(Date.UTC(2024, 10, 31))],
-        [
-          new PreciseDate(Date.UTC(2024, 9, 21)),
-          new PreciseDate(Date.UTC(2024, 8, 11)),
-        ],
+        [{custom: {json: 'object'}}, {another: {json: 'object'}}],
+        [{custom: {foo: 'bar'}}, {another: {boo: 'far'}}],
       ],
-      '[[1733011200000000],[1729468800000000,1726012800000000]]',
+      '[[{"custom":{"json":"object"}},{"another":{"json":"object"}}],[{"custom":{"foo":"bar"}},{"another":{"boo":"far"}}]]',
     ],
   ])('liteValue: %s', (input, output) => {
     expect(liteValue(input)).toEqual(output);

@@ -10,7 +10,8 @@ import {
   getConnectionURI,
   testDBs,
 } from '../../../test/db.js';
-import {DbFile} from '../../../test/lite.js';
+import {DbFile, expectMatchingObjectsInTables} from '../../../test/lite.js';
+import type {JSONValue} from '../../../types/bigint-json.js';
 import type {PostgresDB} from '../../../types/pg.js';
 import type {Source} from '../../../types/streams.js';
 import type {MessageProcessor} from '../../replicator/incremental-sync.js';
@@ -20,17 +21,17 @@ import type {DataChange} from '../schema/change.js';
 import {initializeChangeSource} from './change-source.js';
 import {replicationSlot} from './initial-sync.js';
 
-const SHARD_ID = 'change_source_schema_change_test_id';
+const SHARD_ID = 'change_source_end_to_mid_test_id';
 
 /**
  * End-to-mid test. This covers:
  *
- * - Executing a DDL statement on upstream postgres.
+ * - Executing a DDL or DML statement on upstream postgres.
  * - Verifying the resulting Change messages in the ChangeStream.
  * - Applying the changes to the replica with a MessageProcessor
- * - Verifying the resulting SQLite schema on the replica.
+ * - Verifying the resulting SQLite schema and/or data on the replica.
  */
-describe('change-source/pg/schema-changes', () => {
+describe('change-source/pg/end-to-mid-test', () => {
   let lc: LogContext;
   let upstream: PostgresDB;
   let replicaDbFile: DbFile;
@@ -41,10 +42,8 @@ describe('change-source/pg/schema-changes', () => {
 
   beforeAll(async () => {
     lc = createSilentLogContext();
-    upstream = await testDBs.create(
-      'change_source_schema_change_test_upstream',
-    );
-    replicaDbFile = new DbFile('change_source_schema_change_test_replica');
+    upstream = await testDBs.create('change_source_end_to_mid_test_upstream');
+    replicaDbFile = new DbFile('change_source_end_to_mid_test_replica');
     replica = replicaDbFile.connect(lc);
 
     const upstreamURI = getConnectionURI(upstream);
@@ -126,6 +125,7 @@ describe('change-source/pg/schema-changes', () => {
       'create table',
       'CREATE TABLE test.bar (id INT8 PRIMARY KEY);',
       [{tag: 'create-table'}],
+      {['test.bar']: []},
       [
         {
           name: 'test.bar',
@@ -154,6 +154,7 @@ describe('change-source/pg/schema-changes', () => {
       'add column',
       'ALTER TABLE test.bar ADD name INT8;',
       [{tag: 'add-column'}],
+      {['test.bar']: []},
       [
         {
           columns: {
@@ -189,6 +190,7 @@ describe('change-source/pg/schema-changes', () => {
       'rename column',
       'ALTER TABLE test.bar RENAME name TO handle;',
       [{tag: 'update-column'}],
+      {['test.bar']: []},
       [
         {
           columns: {
@@ -224,6 +226,7 @@ describe('change-source/pg/schema-changes', () => {
       'change column data type',
       'ALTER TABLE test.bar ALTER handle TYPE TEXT;',
       [{tag: 'update-column'}],
+      {['test.bar']: []},
       [
         {
           columns: {
@@ -259,6 +262,7 @@ describe('change-source/pg/schema-changes', () => {
       'add unique column to automatically generate index',
       'ALTER TABLE test.bar ADD username TEXT UNIQUE;',
       [{tag: 'add-column'}, {tag: 'create-index'}],
+      {['test.bar']: []},
       [
         {
           columns: {
@@ -308,6 +312,7 @@ describe('change-source/pg/schema-changes', () => {
       'rename unique column with associated index',
       'ALTER TABLE test.bar RENAME username TO login;',
       [{tag: 'update-column'}],
+      {['test.bar']: []},
       [
         {
           columns: {
@@ -361,6 +366,7 @@ describe('change-source/pg/schema-changes', () => {
       'DISABLED: retype unique column with associated index',
       'ALTER TABLE test.bar ALTER login TYPE VARCHAR(180);',
       [{tag: 'update-column'}],
+      {['test.bar']: []},
       [
         {
           columns: {
@@ -410,6 +416,7 @@ describe('change-source/pg/schema-changes', () => {
       'drop column with index',
       'ALTER TABLE test.bar DROP login;',
       [{tag: 'drop-index'}, {tag: 'drop-column'}],
+      {['test.bar']: []},
       [
         {
           columns: {
@@ -445,6 +452,7 @@ describe('change-source/pg/schema-changes', () => {
       'add unpublished column',
       'ALTER TABLE foo ADD "newInt" INT4;',
       [], // no DDL event published
+      {},
       [
         // the view of "foo" is unchanged.
         {
@@ -493,6 +501,7 @@ describe('change-source/pg/schema-changes', () => {
           table: {schema: 'public', name: 'foo'},
         },
       ],
+      {foo: []},
       [
         {
           name: 'foo',
@@ -537,6 +546,7 @@ describe('change-source/pg/schema-changes', () => {
           table: {schema: 'public', name: 'foo'},
         },
       ],
+      {foo: []},
       [
         {
           name: 'foo',
@@ -586,6 +596,7 @@ describe('change-source/pg/schema-changes', () => {
       'create unpublished table with indexes',
       'CREATE TABLE public.boo (id INT8 PRIMARY KEY, name TEXT UNIQUE);',
       [],
+      {},
       [],
       [],
     ],
@@ -598,6 +609,7 @@ describe('change-source/pg/schema-changes', () => {
         {tag: 'create-table'},
         {tag: 'create-index'},
       ],
+      {foo: []},
       [
         {
           name: 'foo',
@@ -667,6 +679,7 @@ describe('change-source/pg/schema-changes', () => {
       'create index',
       'CREATE INDEX foo_flt ON foo (flt DESC);',
       [{tag: 'create-index'}],
+      {foo: []},
       [],
       [
         {
@@ -686,6 +699,7 @@ describe('change-source/pg/schema-changes', () => {
           id: {schema: 'public', name: 'foo_flt'},
         },
       ],
+      {foo: []},
       [],
       [],
     ],
@@ -702,6 +716,50 @@ describe('change-source/pg/schema-changes', () => {
           id: {schema: 'public', name: 'boo'},
         },
       ],
+      {},
+      [],
+      [],
+    ],
+    [
+      'data types',
+      `
+      ALTER PUBLICATION zero_some_public SET TABLE foo (id, int, big, flt, bool, timea, date);
+
+      INSERT INTO foo (id, int, big, flt, bool, timea, date)
+         VALUES ('abc', -2, 9007199254740993, 3.45, true, '2019-01-12T00:30:35.381101032Z', 'April 12, 2003');
+      `,
+      [
+        {tag: 'add-column'},
+        {tag: 'add-column'},
+        {tag: 'add-column'},
+        {tag: 'add-column'},
+        {tag: 'add-column'},
+        {
+          tag: 'insert',
+          new: {
+            id: 'abc',
+            int: -2,
+            big: 9007199254740993n,
+            bool: true,
+            timea: 1547253035381.101,
+            date: 1050105600000,
+          },
+        },
+      ],
+      {
+        foo: [
+          {
+            id: 'abc',
+            int: -2n,
+            big: 9007199254740993n,
+            flt: 3.45,
+            bool: 1n,
+            timea: 1547253035381.101,
+            date: 1050105600000n,
+            ['_0_version']: expect.stringMatching(/[a-z0-9]+/),
+          },
+        ],
+      },
       [],
       [],
     ],
@@ -709,28 +767,41 @@ describe('change-source/pg/schema-changes', () => {
     name: string,
     statements: string,
     changes: Partial<DataChange>[],
+    expectedData: Record<string, JSONValue>,
     expectedTables: LiteTableSpec[],
     expectedIndexes: LiteIndexSpec[],
-  ][])('%s', async (name, stmts, changes, expectedTables, expectedIndexes) => {
-    if (name.startsWith('DISABLED: ')) {
-      lc.info?.('skipping test:', name);
-      return;
-    }
-    await upstream.unsafe(stmts);
-    const transaction = await nextTransaction();
-    expect(transaction.length).toBe(changes.length);
+  ][])(
+    '%s',
+    async (
+      name,
+      stmts,
+      changes,
+      expectedData,
+      expectedTables,
+      expectedIndexes,
+    ) => {
+      if (name.startsWith('DISABLED: ')) {
+        lc.info?.('skipping test:', name);
+        return;
+      }
+      await upstream.unsafe(stmts);
+      const transaction = await nextTransaction();
+      expect(transaction.length).toBe(changes.length);
 
-    transaction.forEach((change, i) => {
-      expect(change).toMatchObject(changes[i]);
-    });
+      transaction.forEach((change, i) => {
+        expect(change).toMatchObject(changes[i]);
+      });
 
-    const tables = listTables(replica);
-    for (const table of expectedTables) {
-      expect(tables).toContainEqual(table);
-    }
-    const indexes = listIndexes(replica);
-    for (const index of expectedIndexes) {
-      expect(indexes).toContainEqual(index);
-    }
-  });
+      expectMatchingObjectsInTables(replica, expectedData, 'bigint');
+
+      const tables = listTables(replica);
+      for (const table of expectedTables) {
+        expect(tables).toContainEqual(table);
+      }
+      const indexes = listIndexes(replica);
+      for (const index of expectedIndexes) {
+        expect(indexes).toContainEqual(index);
+      }
+    },
+  );
 });
