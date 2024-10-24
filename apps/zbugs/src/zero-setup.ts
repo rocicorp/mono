@@ -40,7 +40,11 @@ authRef.onChange(auth => {
   // To enable accessing zero in the devtools easily.
   (window as {z?: Zero<Schema>}).z = z;
 
-  const baseIssueQuery = z.query.issue.related('creator').related('labels');
+  const baseIssueQuery = z.query.issue
+    .related('creator')
+    .related('assignee')
+    .related('labels')
+    .related('viewState', q => q.where('userID', z.userID).one());
 
   const {cleanup, complete} = baseIssueQuery.preload();
   complete.then(() => {
