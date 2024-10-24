@@ -252,6 +252,7 @@ export default function ListPage() {
               onChange={e =>
                 navigate(addParam(qs, 'q', e.target.value, 'exclusive'))
               }
+              onFocus={() => setForceSearchMode(true)}
               onBlur={() => setForceSearchMode(false)}
               onKeyUp={handleSearchKeyUp}
               placeholder="Search…"
