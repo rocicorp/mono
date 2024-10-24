@@ -42,7 +42,7 @@ export const liteIndexSpec = v.object({
 
 export type MutableLiteIndexSpec = v.Infer<typeof liteIndexSpec>;
 
-export type LiteIndexSpec = DeepReadonly<MutableLiteIndexSpec>;
+export type LiteIndexSpec = Readonly<MutableLiteIndexSpec>;
 
 export const indexSpec = liteIndexSpec.extend({
   schema: v.string(),
