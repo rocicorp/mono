@@ -29,7 +29,7 @@ export default function IssuePage() {
   const params = useParams();
 
   const idStr = must(params.id);
-  const idField = isNaN(parseInt(idStr)) ? 'id' : 'shortID';
+  const idField = /[^\d]/.test(idStr) ? 'id' : 'shortID';
   const id = idField === 'shortID' ? parseInt(idStr) : idStr;
 
   const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
