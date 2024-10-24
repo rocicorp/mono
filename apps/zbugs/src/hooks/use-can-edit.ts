@@ -15,6 +15,6 @@ export function useCanEdit(ownerUserID: string): boolean {
   return (
     import.meta.env.VITE_PUBLIC_SANDBOX ||
     isCrew ||
-    (login.loginState !== undefined && ownerUserID === currentUserID)
+    ownerUserID === currentUserID
   );
 }
