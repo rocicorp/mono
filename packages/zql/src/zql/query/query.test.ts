@@ -4,6 +4,7 @@ import {staticParam} from './query-impl.js';
 import type {QueryInternal} from './query-internal.js';
 import {type Query, type QueryType} from './query.js';
 import type {Supertype, TableSchema} from './schema.js';
+import {and, cmp, or} from './expression.js';
 
 const mockQuery = {
   select() {
@@ -557,6 +558,26 @@ test('supertype query', () => {
   checkCreator(draftQuery);
   checkCreatorExpectError(commentQuery);
   checkCreatorExpectError(issueQuery);
+});
+
+test('complex expressions', () => {
+  const query = mockQuery as unknown as Query<TestSchema>;
+
+  query.where(or(cmp('b', '!=', true), cmp('s', 'IN', ['foo', 'bar'])));
+  query.where(cmp('b', '!=', true));
+
+  // @ts-expect-error - boolean compared to string
+  query.where(cmp('b', '!=', 's'));
+  // @ts-expect-error - field does not exist
+  query.where(cmp('x', '!=', true));
+  // @ts-expect-error - boolean compared to string
+  query.where(or(cmp('b', '!=', 's')));
+  // @ts-expect-error - field does not exist
+  query.where(or(cmp('x', '!=', true)));
+  // @ts-expect-error - boolean compared to string
+  query.where(and(cmp('b', '!=', 's')));
+  // @ts-expect-error - field does not exist
+  query.where(and(cmp('x', '!=', true)));
 });
 
 function takeSchema(x: TableSchema) {

@@ -8,6 +8,7 @@ import {
 import type {Query, QueryType} from './query.js';
 import type {TableSchema} from './schema.js';
 import {issueSchema} from './test/testSchemas.js';
+import {and, cmp, not, or} from './expression.js';
 
 const mockDelegate = {} as QueryDelegate;
 
@@ -287,6 +288,65 @@ test('where expressions', () => {
     conditions: [
       {type: 'simple', field: 'id', op: '=', value: '1'},
       {type: 'simple', field: 'closed', op: '=', value: true},
+    ],
+  });
+  expect(
+    ast(issueQuery.where(or(cmp('id', '=', '1'), cmp('closed', true)))).where,
+  ).toEqual({
+    type: 'or',
+    conditions: [
+      {type: 'simple', field: 'id', op: '=', value: '1'},
+      {type: 'simple', field: 'closed', op: '=', value: true},
+    ],
+  });
+  expect(
+    ast(
+      issueQuery.where(
+        or(cmp('id', '1'), and(cmp('closed', true), cmp('id', '2'))),
+      ),
+    ).where,
+  ).toEqual({
+    type: 'or',
+    conditions: [
+      {type: 'simple', field: 'id', op: '=', value: '1'},
+      {
+        type: 'and',
+        conditions: [
+          {type: 'simple', field: 'closed', op: '=', value: true},
+          {type: 'simple', field: 'id', op: '=', value: '2'},
+        ],
+      },
+    ],
+  });
+  expect(
+    ast(issueQuery.where(and(cmp('id', '=', '1'), cmp('closed', true)))).where,
+  ).toEqual({
+    type: 'and',
+    conditions: [
+      {type: 'simple', field: 'id', op: '=', value: '1'},
+      {type: 'simple', field: 'closed', op: '=', value: true},
+    ],
+  });
+
+  expect(
+    ast(issueQuery.where(not(and(cmp('id', '=', '1'), cmp('closed', true)))))
+      .where,
+  ).toEqual({
+    type: 'or',
+    conditions: [
+      {type: 'simple', field: 'id', op: '!=', value: '1'},
+      {type: 'simple', field: 'closed', op: '!=', value: true},
+    ],
+  });
+
+  expect(
+    ast(issueQuery.where(not(or(cmp('id', '=', '1'), cmp('closed', true)))))
+      .where,
+  ).toEqual({
+    type: 'and',
+    conditions: [
+      {type: 'simple', field: 'id', op: '!=', value: '1'},
+      {type: 'simple', field: 'closed', op: '!=', value: true},
     ],
   });
 });

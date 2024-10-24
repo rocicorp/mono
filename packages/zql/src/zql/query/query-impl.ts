@@ -39,6 +39,7 @@ import {
   type TableSchema,
 } from './schema.js';
 import type {TypedView} from './typed-view.js';
+import {cmp, type GenericCondition} from './expression.js';
 
 export function newQuery<
   TSchema extends TableSchema,
@@ -265,8 +266,8 @@ export abstract class AbstractQuery<
   }
 
   where(
-    field: any,
-    opOrValue:
+    field: string | GenericCondition<TSchema>,
+    opOrValue?:
       | Operator
       | GetFieldTypeNoNullOrUndefined<any, any, any>
       | Parameter<any, any, any>,
@@ -274,20 +275,13 @@ export abstract class AbstractQuery<
       | GetFieldTypeNoNullOrUndefined<any, any, any>
       | Parameter<any, any, any>,
   ): Query<TSchema, TReturn> {
-    let op: Operator;
-    if (value === undefined) {
-      value = opOrValue;
-      op = '=';
+    let cond: Condition;
+    if (opOrValue === undefined && value === undefined) {
+      assert(typeof field !== 'string', `Invalid condition: ${field}`);
+      cond = field as Condition;
     } else {
-      op = opOrValue as Operator;
+      cond = cmp(field as string, opOrValue!, value) as Condition;
     }
-
-    let cond: Condition = {
-      type: 'simple',
-      op,
-      field: field as string,
-      value,
-    };
 
     const existingWhere = this.#ast.where;
     if (existingWhere) {
