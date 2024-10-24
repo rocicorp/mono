@@ -39,7 +39,7 @@
 
   /* Z-Index */
   /* modal is 50 */
-  --z-index-popover: 100;
+  --z-index-popover: 60;
   --z-index-sidebar: 30;
   --z-index-modal: 50;
   --z-index-primary-nav: 30;
