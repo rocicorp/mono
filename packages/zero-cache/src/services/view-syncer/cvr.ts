@@ -36,7 +36,7 @@ export type RowUpdate = {
 export type CVR = {
   id: string;
   version: CVRVersion;
-  lastActive: Date;
+  lastActive: number;
   replicaVersion: string | null;
   clients: Record<string, ClientRecord>;
   queries: Record<string, QueryRecord>;
@@ -47,7 +47,7 @@ export type CVR = {
 export type CVRSnapshot = {
   readonly id: string;
   readonly version: CVRVersion;
-  readonly lastActive: Date;
+  readonly lastActive: number;
   readonly replicaVersion: string | null;
   readonly clients: Readonly<Record<string, ClientRecord>>;
   readonly queries: Readonly<Record<string, QueryRecord>>;
@@ -113,14 +113,14 @@ export class CVRUpdater {
     return this._cvr.version;
   }
 
-  #setLastActive(now = new Date()) {
+  #setLastActive(now = Date.now()) {
     this._cvr.lastActive = now;
     this._cvrStore.putInstance(this._cvr);
   }
 
   async flush(
     lc: LogContext,
-    lastActive = new Date(),
+    lastActive = Date.now(),
   ): Promise<{
     cvr: CVRSnapshot;
     stats: CVRFlushStats;
@@ -256,7 +256,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     this.deleteDesiredQueries(clientID, client.desiredQueryIDs);
   }
 
-  flush(lc: LogContext, lastActive = new Date()) {
+  flush(lc: LogContext, lastActive = Date.now()) {
     // TODO: Add cleanup of no-longer-desired got queries and constituent rows.
     return super.flush(lc, lastActive);
   }

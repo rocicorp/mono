@@ -21,7 +21,7 @@ const CREATE_CVR_SCHEMA = `CREATE SCHEMA IF NOT EXISTS cvr;`;
 export type InstancesRow = {
   clientGroupID: string;
   version: string;
-  lastActive: Date;
+  lastActive: number;
   replicaVersion: string | null;
 };
 
