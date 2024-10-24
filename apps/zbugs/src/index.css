@@ -38,12 +38,11 @@
   --typo-label-weight: 800;
 
   /* Z-Index */
-  /* modal is 50 */
-  --z-index-popover: 60;
   --z-index-sidebar: 30;
-  --z-index-modal: 50;
   --z-index-primary-nav: 30;
   --z-index-primary-cta: 40;
+  --z-index-modal: 50;
+  --z-index-popover: 60;
 }
 
 #root {
