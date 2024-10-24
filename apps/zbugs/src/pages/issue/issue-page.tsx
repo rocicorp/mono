@@ -9,6 +9,7 @@ import {must} from '../../../../../packages/shared/src/must.js';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
 import {Button} from '../../components/button.js';
+import {CanEdit} from '../../components/can-edit.js';
 import {Confirm} from '../../components/confirm.js';
 import {EmojiPanel} from '../../components/emoji-panel.js';
 import LabelPicker from '../../components/label-picker.js';
@@ -172,39 +173,41 @@ export default function IssuePage() {
             ) : null}
             <span className="breadcrumb-item">Issue {issue.shortID}</span>
           </div>
-          <div className="edit-buttons">
-            {!editing ? (
-              <>
-                <Button
-                  className="edit-button"
-                  onAction={() => setEditing(issue)}
-                >
-                  Edit
-                </Button>
-                <Button
-                  className="delete-button"
-                  onAction={() => setDeleteConfirmationShown(true)}
-                >
-                  Delete
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  className="save-button"
-                  onAction={save}
-                  disabled={
-                    !edits || edits.title === '' || edits.description === ''
-                  }
-                >
-                  Save
-                </Button>
-                <Button className="cancel-button" onAction={cancel}>
-                  Cancel
-                </Button>
-              </>
-            )}
-          </div>
+          <CanEdit ownerID={issue.creatorID}>
+            <div className="edit-buttons">
+              {!editing ? (
+                <>
+                  <Button
+                    className="edit-button"
+                    onAction={() => setEditing(issue)}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    className="delete-button"
+                    onAction={() => setDeleteConfirmationShown(true)}
+                  >
+                    Delete
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    className="save-button"
+                    onAction={save}
+                    disabled={
+                      !edits || edits.title === '' || edits.description === ''
+                    }
+                  >
+                    Save
+                  </Button>
+                  <Button className="cancel-button" onAction={cancel}>
+                    Cancel
+                  </Button>
+                </>
+              )}
+            </div>
+          </CanEdit>
         </div>
 
         {!editing ? (
