@@ -1,10 +1,13 @@
 import {useCallback, type CSSProperties, type ReactNode} from 'react';
 
-interface Props {
+export interface Props {
+  // Button props
+  onAction?: (() => void) | undefined;
+
+  // button props
   children?: ReactNode | undefined;
   className?: string | undefined;
   disabled?: boolean | undefined;
-  onAction?: (() => void) | undefined;
   style?: CSSProperties | undefined;
   title?: string | undefined;
   autoFocus?: boolean | undefined;

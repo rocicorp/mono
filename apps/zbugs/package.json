@@ -23,6 +23,7 @@
     "@schickling/fps-meter": "^0.1.2",
     "classnames": "^2.5.1",
     "dotenv": "^16.4.5",
+    "emoji-picker-element": "^1.22.8",
     "fastify": "^5.0.0",
     "jose": "^5.9.3",
     "js-cookie": "^3.0.5",

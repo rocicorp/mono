@@ -3,6 +3,8 @@ DROP TABLE IF EXISTS "user",
 "comment",
 "label",
 "issueLabel",
+"emoji",
+"userPref",
 "zero.schemaVersions" CASCADE;
 
 CREATE TABLE "user" (
@@ -79,6 +81,84 @@ CREATE TABLE "issueLabel" (
     PRIMARY KEY ("labelID", "issueID")
 );
 
+CREATE TABLE emoji (
+    "id" VARCHAR PRIMARY KEY,
+    "value" VARCHAR NOT NULL,
+    "annotation" VARCHAR,
+    -- The PK of the "subject" (either issue or comment) that the emoji is attached to
+    -- We cannot use a FK to enforce referential integrity. Instead we use a trigger to enforce this.
+    -- We wil also need a custom secondary index on this since the FK won't give it to us.
+    "subjectID" VARCHAR NOT NULL,
+    "creatorID" VARCHAR REFERENCES "user"(id) ON DELETE CASCADE,
+    "created" double precision DEFAULT (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000),
+
+    UNIQUE ("subjectID", "creatorID", "value")
+);
+CREATE INDEX emoji_created_idx ON emoji (created);
+CREATE INDEX emoji_subject_id_idx ON emoji ("subjectID");
+
+CREATE OR REPLACE FUNCTION emoji_check_subject_id()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Check if subjectID exists in the issue table
+    IF EXISTS (SELECT 1 FROM issue WHERE id = NEW."subjectID") THEN
+        NULL; -- Do nothing
+    ELSIF EXISTS (SELECT 1 FROM comment WHERE id = NEW."subjectID") THEN
+        NULL; -- Do nothing
+    ELSE
+        RAISE EXCEPTION 'id ''%'' does not exist in issue or comment', NEW."subjectID";
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER emoji_check_subject_id_update_trigger
+BEFORE UPDATE ON emoji
+FOR EACH ROW
+EXECUTE FUNCTION emoji_check_subject_id();
+
+CREATE TRIGGER emoji_check_subject_id_insert_trigger
+BEFORE INSERT ON emoji
+FOR EACH ROW
+EXECUTE FUNCTION emoji_check_subject_id();
+
+-- Delete emoji when issue is deleted
+CREATE OR REPLACE FUNCTION delete_emoji_on_issue_delete()
+RETURNS TRIGGER AS $$
+BEGIN
+    DELETE FROM emoji WHERE "subjectID" = OLD.id;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER delete_emoji_on_issue_delete_trigger
+AFTER DELETE ON issue
+FOR EACH ROW
+EXECUTE FUNCTION delete_emoji_on_issue_delete();
+
+-- Delete emoji when comment is deleted
+CREATE OR REPLACE FUNCTION delete_emoji_on_comment_delete()
+RETURNS TRIGGER AS $$
+BEGIN
+    DELETE FROM emoji WHERE "subjectID" = OLD.id;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER delete_emoji_on_comment_delete_trigger
+AFTER DELETE ON comment
+FOR EACH ROW
+EXECUTE FUNCTION delete_emoji_on_comment_delete();
+
+CREATE TABLE "userPref" (
+    "key" VARCHAR NOT NULL,
+    "value" VARCHAR NOT NULL,
+    "userID" VARCHAR REFERENCES "user"(id) ON DELETE CASCADE,
+
+    PRIMARY KEY ("key", "userID")
+);
+
 CREATE SCHEMA IF NOT EXISTS zero;
 
 CREATE TABLE IF NOT EXISTS zero."schemaVersions" (
@@ -93,7 +173,7 @@ CREATE TABLE IF NOT EXISTS zero."schemaVersions" (
 );
 
 INSERT INTO zero."schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion")
-VALUES (true, 3, 3) ON CONFLICT DO NOTHING;
+VALUES (true, 3, 4) ON CONFLICT DO NOTHING;
 
 
 -- last modified function and trigger
