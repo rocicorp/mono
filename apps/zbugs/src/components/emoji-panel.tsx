@@ -106,7 +106,7 @@ export function EmojiPanel({issueID, commentID}: Props) {
           {unique(emojis).map(value => (
             <span key={value}>{value}</span>
           ))}
-          {emojis.length > 1 ? ' ' + emojis.length : ''}
+          {' ' + emojis.length}
         </ButtonWithLoginCheck>
       ))}
 
