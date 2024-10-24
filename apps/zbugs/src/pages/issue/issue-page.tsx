@@ -297,32 +297,34 @@ export default function IssuePage() {
                 </span>
               ))}
             </div>
-            <LabelPicker
-              selected={labelSet}
-              onAssociateLabel={labelID =>
-                z.mutate(tx => {
-                  tx.issueLabel.create({
-                    issueID: issue.id,
-                    labelID,
+            <CanEdit ownerID={issue.creatorID}>
+              <LabelPicker
+                selected={labelSet}
+                onAssociateLabel={labelID =>
+                  z.mutate(tx => {
+                    tx.issueLabel.create({
+                      issueID: issue.id,
+                      labelID,
+                    });
+                    tx.issue.update({id: issue.id, modified: Date.now()});
+                  })
+                }
+                onDisassociateLabel={labelID =>
+                  z.mutate(tx => {
+                    tx.issueLabel.delete({issueID: issue.id, labelID});
+                    tx.issue.update({id: issue.id, modified: Date.now()});
+                  })
+                }
+                onCreateNewLabel={labelName => {
+                  const labelID = nanoid();
+                  z.mutate(tx => {
+                    tx.label.create({id: labelID, name: labelName});
+                    tx.issueLabel.create({issueID: issue.id, labelID});
+                    tx.issue.update({id: issue.id, modified: Date.now()});
                   });
-                  tx.issue.update({id: issue.id, modified: Date.now()});
-                })
-              }
-              onDisassociateLabel={labelID =>
-                z.mutate(tx => {
-                  tx.issueLabel.delete({issueID: issue.id, labelID});
-                  tx.issue.update({id: issue.id, modified: Date.now()});
-                })
-              }
-              onCreateNewLabel={labelName => {
-                const labelID = nanoid();
-                z.mutate(tx => {
-                  tx.label.create({id: labelID, name: labelName});
-                  tx.issueLabel.create({issueID: issue.id, labelID});
-                  tx.issue.update({id: issue.id, modified: Date.now()});
-                });
-              }}
-            />
+                }}
+              />
+            </CanEdit>
           </div>
 
           <div className="sidebar-item">
