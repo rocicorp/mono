@@ -36,6 +36,13 @@
   /* Typography */
   --typo-label-size: 0.875rem;
   --typo-label-weight: 800;
+
+  /* Z-Index */
+  --z-index-sidebar: 30;
+  --z-index-primary-nav: 30;
+  --z-index-primary-cta: 40;
+  --z-index-modal: 50;
+  --z-index-popover: 60;
 }
 
 #root {
@@ -393,7 +400,7 @@ textarea.autoResize {
 
 .add-filter-modal {
   position: absolute;
-  z-index: 1;
+  z-index: var(--z-index-modal);
   display: flex;
   gap: 1.5rem;
   flex-direction: column;
@@ -532,7 +539,7 @@ textarea.autoResize {
   display: flex;
   flex-direction: column;
   width: 12rem;
-  z-index: 999;
+  z-index: var(--z-index-sidebar);
 }
 
 .sidebar-item {
@@ -729,7 +736,7 @@ textarea.autoResize {
 
 .selector .dropdown {
   position: absolute;
-  z-index: 1;
+  z-index: var(--z-index-popover);
   top: 0;
   left: 0;
   border-radius: 0.5rem;
@@ -1005,7 +1012,7 @@ textarea.autoResize {
     left: 0;
     width: 100%;
     padding: 2rem;
-    z-index: 9998;
+    z-index: var(--z-index-primary-nav);
     background-color: var(--color-background);
   }
 
@@ -1034,7 +1041,7 @@ textarea.autoResize {
     position: fixed;
     bottom: 2rem;
     right: 2rem;
-    z-index: 9999;
+    z-index: var(--z-index-primary-cta);
     height: 4rem;
     width: 4rem;
     border-radius: 50%;
@@ -1124,7 +1131,7 @@ textarea.autoResize {
 
   .user-panel-mobile {
     position: absolute;
-    z-index: 9999;
+    z-index: var(--z-index-popover);
     flex-direction: column;
     top: 2rem;
     right: 0;
@@ -1237,4 +1244,8 @@ emoji-picker {
   --border-radius: 0.5rem;
   --border-color: var(--color-modal-outline);
   --emoji-size: 1.25rem;
+}
+
+.popover-panel {
+  z-index: var(--z-index-popover);
 }

@@ -113,7 +113,7 @@ export function EmojiPanel({issueID, commentID}: Props) {
       {login.loginState !== undefined ? (
         <Popover>
           <PopoverButton as="div">{button}</PopoverButton>
-          <PopoverPanel anchor="bottom start">
+          <PopoverPanel anchor="bottom start" className="popover-panel">
             <PopoverContent onChange={addOrRemoveEmoji} />
           </PopoverPanel>
         </Popover>
