@@ -10,6 +10,7 @@ import {
   createIndexStatement,
   createTableStatement,
 } from '../../db/create.js';
+import {listIndexes} from '../../db/lite-tables.js';
 import {
   mapPostgresToLite,
   mapPostgresToLiteColumn,
@@ -547,12 +548,24 @@ class TransactionProcessor {
     // If the data type changes, we have to make a new column with the new data type
     // and copy the values over.
     if (oldSpec.dataType !== newSpec.dataType) {
+      // Remember (and drop) the indexes that reference the column.
+      const indexes = listIndexes(this.#db.db).filter(
+        idx => idx.tableName === table && oldName in idx.columns,
+      );
+      const stmts = indexes.map(idx => `DROP INDEX IF EXISTS ${id(idx.name)};`);
       const tmpName = `tmp.${newName}`;
-      this.#db.db.exec(`
+      stmts.push(`
         ALTER TABLE ${id(table)} ADD ${id(tmpName)} ${columnDef(newSpec)};
         UPDATE ${id(table)} SET ${id(tmpName)} = ${id(oldName)};
         ALTER TABLE ${id(table)} DROP ${id(oldName)};
         `);
+      for (const idx of indexes) {
+        // Re-create the indexes to reference the new column.
+        idx.columns[tmpName] = idx.columns[oldName];
+        delete idx.columns[oldName];
+        stmts.push(createIndexStatement(idx));
+      }
+      this.#db.db.exec(stmts.join(''));
       oldName = tmpName;
     }
     if (oldName !== newName) {

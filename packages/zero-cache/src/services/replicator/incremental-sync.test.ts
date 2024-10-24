@@ -936,6 +936,89 @@ describe('replicator/incremental-sync', () => {
       indexSpecs: [],
     },
     {
+      name: 'rename indexed column',
+      setup: `
+        CREATE TABLE foo(id INT8 PRIMARY KEY, renameMe TEXT, _0_version TEXT NOT NULL);
+        CREATE UNIQUE INDEX foo_rename_me ON foo (renameMe);
+        INSERT INTO foo(id, renameMe, _0_version) VALUES (1, 'hel', '00');
+        INSERT INTO foo(id, renameMe, _0_version) VALUES (2, 'low', '00');
+        INSERT INTO foo(id, renameMe, _0_version) VALUES (3, 'orl', '00');
+      `,
+      downstream: [
+        ['begin', fooBarBaz.begin()],
+        ['data', fooBarBaz.update('foo', {id: 3, renameMe: 'olrd'})],
+        [
+          'data',
+          fooBarBaz.updateColumn(
+            'foo',
+            {name: 'renameMe', spec: {pos: 1, dataType: 'TEXT'}},
+            {name: 'newName', spec: {pos: 1, dataType: 'TEXT'}},
+          ),
+        ],
+        ['data', fooBarBaz.insert('foo', {id: 4, newName: 'yay'})],
+        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
+      ],
+      data: {
+        foo: [
+          {id: 1n, newName: 'hel', ['_0_version']: '02'},
+          {id: 2n, newName: 'low', ['_0_version']: '02'},
+          {id: 3n, newName: 'olrd', ['_0_version']: '02'},
+          {id: 4n, newName: 'yay', ['_0_version']: '02'},
+        ],
+        ['_zero.changeLog']: [
+          {
+            stateVersion: '02',
+            table: 'foo',
+            op: 'r',
+            rowKey: null,
+          },
+          {
+            stateVersion: '02',
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":4}',
+          },
+        ],
+      },
+      tableSpecs: [
+        {
+          name: 'foo',
+          columns: {
+            id: {
+              characterMaximumLength: null,
+              dataType: 'INT8',
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            newName: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: false,
+              pos: 2,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: true,
+              pos: 3,
+            },
+          },
+          primaryKey: ['id'],
+        },
+      ],
+      indexSpecs: [
+        {
+          name: 'foo_rename_me',
+          tableName: 'foo',
+          columns: {newName: 'ASC'},
+          unique: true,
+        },
+      ],
+    },
+    {
       name: 'retype column',
       setup: `
         CREATE TABLE foo(id INT8 PRIMARY KEY, num TEXT, _0_version TEXT NOT NULL);
@@ -1009,6 +1092,89 @@ describe('replicator/incremental-sync', () => {
         },
       ],
       indexSpecs: [],
+    },
+    {
+      name: 'retype column with index',
+      setup: `
+        CREATE TABLE foo(id INT8 PRIMARY KEY, num TEXT, _0_version TEXT NOT NULL);
+        CREATE UNIQUE INDEX foo_num ON foo (num);
+        INSERT INTO foo(id, num, _0_version) VALUES (1, '3', '00');
+        INSERT INTO foo(id, num, _0_version) VALUES (2, '2', '00');
+        INSERT INTO foo(id, num, _0_version) VALUES (3, '0', '00');
+      `,
+      downstream: [
+        ['begin', fooBarBaz.begin()],
+        ['data', fooBarBaz.update('foo', {id: 3, num: '1'})],
+        [
+          'data',
+          fooBarBaz.updateColumn(
+            'foo',
+            {name: 'num', spec: {pos: 1, dataType: 'TEXT'}},
+            {name: 'num', spec: {pos: 1, dataType: 'INT8'}},
+          ),
+        ],
+        ['data', fooBarBaz.insert('foo', {id: 4, num: 23})],
+        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
+      ],
+      data: {
+        foo: [
+          {id: 1n, num: 3n, ['_0_version']: '02'},
+          {id: 2n, num: 2n, ['_0_version']: '02'},
+          {id: 3n, num: 1n, ['_0_version']: '02'},
+          {id: 4n, num: 23n, ['_0_version']: '02'},
+        ],
+        ['_zero.changeLog']: [
+          {
+            stateVersion: '02',
+            table: 'foo',
+            op: 'r',
+            rowKey: null,
+          },
+          {
+            stateVersion: '02',
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":4}',
+          },
+        ],
+      },
+      tableSpecs: [
+        {
+          name: 'foo',
+          columns: {
+            id: {
+              characterMaximumLength: null,
+              dataType: 'INT8',
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            num: {
+              characterMaximumLength: null,
+              dataType: 'INT8',
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: true,
+              pos: 2,
+            },
+          },
+          primaryKey: ['id'],
+        },
+      ],
+      indexSpecs: [
+        {
+          name: 'foo_num',
+          tableName: 'foo',
+          columns: {num: 'ASC'},
+          unique: true,
+        },
+      ],
     },
     {
       name: 'rename and retype column',

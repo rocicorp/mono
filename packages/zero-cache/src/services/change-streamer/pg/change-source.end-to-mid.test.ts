@@ -359,11 +359,7 @@ describe('change-source/pg/end-to-mid-test', () => {
       ],
     ],
     [
-      // SqliteError: error in index test.bar_username_key after drop column: no such column: \"login\"
-      // https://sqlite.org/forum/forumpost/2e62dba69f?t=c&hist
-      // TODO: In order to support re-typing columns that are indexed,
-      // we would need to drop and re-create related indexes when doing the copy-rename-column dance.
-      'DISABLED: retype unique column with associated index',
+      'retype unique column with associated index',
       'ALTER TABLE test.bar ALTER login TYPE VARCHAR(180);',
       [{tag: 'update-column'}],
       {['test.bar']: []},
