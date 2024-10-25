@@ -1,5 +1,5 @@
 import {defineConfig} from '@rocicorp/zero/config';
-import {schema, type Schema} from './src/domain/schema.js';
+import {type Schema, schema} from './src/domain/schema.js';
 
 /** The contents of the zbugs JWT */
 type AuthData = {

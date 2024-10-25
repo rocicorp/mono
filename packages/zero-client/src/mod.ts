@@ -68,7 +68,10 @@ export type {
   SchemaToRow,
   Smash,
 } from '../../zql/src/zql/query/query.js';
-export type {TableSchema} from '../../zql/src/zql/query/schema.js';
+export {
+  type TableSchema,
+  createTableSchema,
+} from '../../zql/src/zql/query/schema.js';
 export type {TypedView} from '../../zql/src/zql/query/typed-view.js';
 export type {ZeroOptions} from './client/options.js';
-export {Zero, type Schema} from './client/zero.js';
+export {Zero, type Schema, createSchema} from './client/zero.js';

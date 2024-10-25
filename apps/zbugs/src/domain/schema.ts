@@ -1,4 +1,10 @@
-const userSchema = {
+import {
+  createSchema,
+  createTableSchema,
+  type SchemaToRow,
+} from '@rocicorp/zero';
+
+const userSchema = createTableSchema({
   tableName: 'user',
   columns: {
     id: {type: 'string'},
@@ -9,9 +15,9 @@ const userSchema = {
   },
   primaryKey: ['id'],
   relationships: {},
-} as const;
+} as const);
 
-const issueSchema = {
+const issueSchema = createTableSchema({
   tableName: 'issue',
   columns: {
     id: {type: 'string'},
@@ -68,9 +74,9 @@ const issueSchema = {
       },
     },
   },
-} as const;
+} as const);
 
-const viewStateSchema = {
+const viewStateSchema = createTableSchema({
   tableName: 'viewState',
   columns: {
     issueID: {type: 'string'},
@@ -79,9 +85,9 @@ const viewStateSchema = {
   },
   primaryKey: ['userID', 'issueID'],
   relationships: {},
-} as const;
+} as const);
 
-const commentSchema = {
+const commentSchema = createTableSchema({
   tableName: 'comment',
   columns: {
     id: {type: 'string'},
@@ -100,9 +106,9 @@ const commentSchema = {
       },
     },
   },
-} as const;
+} as const);
 
-const labelSchema = {
+const labelSchema = createTableSchema({
   tableName: 'label',
   columns: {
     id: {type: 'string'},
@@ -110,9 +116,9 @@ const labelSchema = {
   },
   primaryKey: ['id'],
   relationships: {},
-} as const;
+} as const);
 
-const issueLabelSchema = {
+const issueLabelSchema = createTableSchema({
   tableName: 'issueLabel',
   columns: {
     issueID: {type: 'string'},
@@ -120,9 +126,9 @@ const issueLabelSchema = {
   },
   primaryKey: ['issueID', 'labelID'],
   relationships: {},
-} as const;
+} as const);
 
-const emojiSchema = {
+const emojiSchema = createTableSchema({
   tableName: 'emoji',
   columns: {
     id: {type: 'string'},
@@ -142,9 +148,9 @@ const emojiSchema = {
       },
     },
   },
-} as const;
+} as const);
 
-const userPrefSchema = {
+const userPrefSchema = createTableSchema({
   tableName: 'userPref',
   columns: {
     key: {type: 'string'},
@@ -153,9 +159,9 @@ const userPrefSchema = {
   },
   primaryKey: ['key', 'userID'],
   relationships: {},
-} as const;
+} as const);
 
-export const schema = {
+export const schema = createSchema({
   version: 4,
   tables: {
     user: userSchema,
@@ -167,6 +173,8 @@ export const schema = {
     emoji: emojiSchema,
     userPref: userPrefSchema,
   },
-} as const;
+} as const);
 
+export type IssueRow = SchemaToRow<typeof issueSchema>;
+export type CommentRow = SchemaToRow<typeof commentSchema>;
 export type Schema = typeof schema;
