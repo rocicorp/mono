@@ -33,7 +33,7 @@ export class TaskStateWatcher implements Service {
     terminator: Terminator,
     pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
   ) {
-    this.#lc = lc;
+    this.#lc = lc.withContext('component', 'task-state-watcher');
     this.#terminator = terminator;
     this.#pollIntervalMs = pollIntervalMs;
   }
