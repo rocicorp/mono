@@ -15,7 +15,7 @@ const userSchema = createTableSchema({
   },
   primaryKey: ['id'],
   relationships: {},
-} as const);
+});
 
 const issueSchema = createTableSchema({
   tableName: 'issue',
@@ -74,7 +74,7 @@ const issueSchema = createTableSchema({
       },
     },
   },
-} as const);
+});
 
 const viewStateSchema = createTableSchema({
   tableName: 'viewState',
@@ -85,7 +85,7 @@ const viewStateSchema = createTableSchema({
   },
   primaryKey: ['userID', 'issueID'],
   relationships: {},
-} as const);
+});
 
 const commentSchema = createTableSchema({
   tableName: 'comment',
@@ -106,7 +106,7 @@ const commentSchema = createTableSchema({
       },
     },
   },
-} as const);
+});
 
 const labelSchema = createTableSchema({
   tableName: 'label',
@@ -116,7 +116,7 @@ const labelSchema = createTableSchema({
   },
   primaryKey: ['id'],
   relationships: {},
-} as const);
+});
 
 const issueLabelSchema = createTableSchema({
   tableName: 'issueLabel',
@@ -126,7 +126,7 @@ const issueLabelSchema = createTableSchema({
   },
   primaryKey: ['issueID', 'labelID'],
   relationships: {},
-} as const);
+});
 
 const emojiSchema = createTableSchema({
   tableName: 'emoji',
@@ -148,7 +148,7 @@ const emojiSchema = createTableSchema({
       },
     },
   },
-} as const);
+});
 
 const userPrefSchema = createTableSchema({
   tableName: 'userPref',
@@ -159,7 +159,7 @@ const userPrefSchema = createTableSchema({
   },
   primaryKey: ['key', 'userID'],
   relationships: {},
-} as const);
+});
 
 export const schema = createSchema({
   version: 4,
@@ -173,7 +173,7 @@ export const schema = createSchema({
     emoji: emojiSchema,
     userPref: userPrefSchema,
   },
-} as const);
+});
 
 export type IssueRow = SchemaToRow<typeof issueSchema>;
 export type CommentRow = SchemaToRow<typeof commentSchema>;

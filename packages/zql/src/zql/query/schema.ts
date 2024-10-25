@@ -4,7 +4,7 @@ export type TableSchema = TableSchemaBase & {
   readonly relationships: {readonly [name: string]: Relationship};
 };
 
-export function createTableSchema<T extends TableSchema>(schema: T) {
+export function createTableSchema<const T extends TableSchema>(schema: T) {
   return schema as T;
 }
 
