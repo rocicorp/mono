@@ -563,7 +563,7 @@ textarea.autoResize {
   border: 1px solid var(--color-button-outline);
 }
 
-.sidebar-button:hover {
+.sidebar-button:enabled:hover {
   color: var(--color-text-primary-active);
 }
 
@@ -753,6 +753,12 @@ textarea.autoResize {
   padding: 0.8175rem;
   border-radius: 0.5rem;
   cursor: pointer;
+}
+
+.selector .item:disabled:hover,
+.selector .item:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .selector .item.icon {

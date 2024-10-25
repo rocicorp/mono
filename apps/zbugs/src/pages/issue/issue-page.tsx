@@ -19,6 +19,7 @@ import RelativeTime from '../../components/relative-time.js';
 import Selector from '../../components/selector.js';
 import UserPicker from '../../components/user-picker.js';
 import type {Schema} from '../../domain/schema.js';
+import {useCanEdit} from '../../hooks/use-can-edit.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {links, type ListContext, type ZbugsHistoryState} from '../../routes.js';
@@ -128,6 +129,8 @@ export default function IssuePage() {
   );
 
   const [deleteConfirmationShown, setDeleteConfirmationShown] = useState(false);
+
+  const canEdit = useCanEdit(issue?.creatorID);
 
   // TODO: We need the notion of the 'partial' result type to correctly render
   // a 404 here. We can't put the 404 here now because it would flash until we
@@ -247,6 +250,7 @@ export default function IssuePage() {
           <div className="sidebar-item">
             <p className="issue-detail-label">Status</p>
             <Selector
+              disabled={!canEdit}
               items={[
                 {
                   text: 'Open',
@@ -281,6 +285,7 @@ export default function IssuePage() {
           <div className="sidebar-item">
             <p className="issue-detail-label">Assignee</p>
             <UserPicker
+              disabled={!canEdit}
               selected={{login: issue.assignee?.login}}
               onSelect={user => {
                 z.mutate.issue.update({id: issue.id, assigneeID: user.id});
