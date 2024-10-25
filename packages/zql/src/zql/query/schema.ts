@@ -4,6 +4,10 @@ export type TableSchema = TableSchemaBase & {
   readonly relationships: {readonly [name: string]: Relationship};
 };
 
+export function createTableSchema<T extends TableSchema>(schema: T) {
+  return schema as T;
+}
+
 export type Supertype<TSchemas extends TableSchema[]> = {
   tableName: TSchemas[number]['tableName'];
   primaryKey: TSchemas[number]['primaryKey'];
