@@ -342,6 +342,62 @@ describe('bare select', () => {
       },
     ]);
   });
+
+  test('changes after destroy', () => {
+    const queryDelegate = new QueryDelegateImpl();
+    const issueQuery = newQuery(queryDelegate, issueSchema).select('id');
+    const m = issueQuery.materialize();
+
+    let rows: unknown[] = [];
+    m.addListener(data => {
+      rows = deepClone(data) as unknown[];
+    });
+
+    expect(rows).toEqual([]);
+
+    queryDelegate.getSource('issue').push({
+      type: 'add',
+      row: {
+        id: '0001',
+        title: 'title',
+        description: 'description',
+        closed: false,
+        ownerId: '0001',
+      },
+    });
+    queryDelegate.commit();
+
+    expect(rows).toEqual([
+      {
+        id: '0001',
+        title: 'title',
+        description: 'description',
+        closed: false,
+        ownerId: '0001',
+      },
+    ]);
+
+    m.destroy();
+
+    queryDelegate.getSource('issue').push({
+      type: 'remove',
+      row: {
+        id: '0001',
+      },
+    });
+    queryDelegate.commit();
+
+    // rows did not change
+    expect(rows).toEqual([
+      {
+        id: '0001',
+        title: 'title',
+        description: 'description',
+        closed: false,
+        ownerId: '0001',
+      },
+    ]);
+  });
 });
 
 describe('joins and filters', () => {
