@@ -43,14 +43,7 @@ export class Terminator {
     // initiating a graceful shutdown. The terminator process will
     // exit once all user-facing workers have exited ...
     for (const signal of GRACEFUL_SHUTDOWN) {
-      proc.on(signal, () => {
-        this.#drainStart = Date.now();
-        if (this.#userFacing.size) {
-          kill(this.#userFacing, signal);
-        } else {
-          exit(0);
-        }
-      });
+      proc.on(signal, () => this.startDrain(signal));
     }
 
     // ... which will result in sending `SIGTERM` to the remaining workers.
@@ -66,6 +59,15 @@ export class Terminator {
     }
 
     this.#exit = exit;
+  }
+
+  startDrain(signal: 'SIGTERM' | 'SIGINT' = 'SIGTERM') {
+    this.#drainStart = Date.now();
+    if (this.#userFacing.size) {
+      kill(this.#userFacing, signal);
+    } else {
+      kill(this.#all, signal);
+    }
   }
 
   addWorker(worker: Worker, type: WorkerType): Worker {

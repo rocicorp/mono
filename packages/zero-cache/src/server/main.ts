@@ -16,6 +16,7 @@ import {
 } from '../workers/replicator.js';
 import {GRACEFUL_SHUTDOWN, Terminator, type WorkerType} from './life-cycle.js';
 import {createLogContext} from './logging.js';
+import {TaskStateWatcher} from './task-state-watcher.js';
 
 const startMs = Date.now();
 const config = await getZeroConfig();
@@ -106,6 +107,8 @@ if ((await orTimeout(Promise.all(ready), 30_000)) === 'timed-out') {
 } else {
   lc.info?.(`all workers ready (${Date.now() - startMs} ms)`);
 }
+
+void new TaskStateWatcher(lc, terminator).run();
 
 if (numSyncers) {
   const workers: Workers = {syncers};
