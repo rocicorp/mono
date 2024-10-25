@@ -97,7 +97,7 @@ export type Schema = {
   readonly tables: {readonly [table: string]: TableSchema};
 };
 
-export function createSchema<S extends Schema>(schema: S): S {
+export function createSchema<const S extends Schema>(schema: S): S {
   return schema as S & {readonly [K in keyof S]: S[K]};
 }
 
