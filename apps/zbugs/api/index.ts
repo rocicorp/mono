@@ -15,7 +15,7 @@ declare module 'fastify' {
 }
 
 const sql = postgres(process.env.UPSTREAM_URI as string);
-type QueryParams = {redirect: string};
+type QueryParams = {redirect?: string | undefined};
 
 export const fastify = Fastify({
   logger: true,
@@ -38,8 +38,10 @@ fastify.register(oauthPlugin, {
   callbackUri: req =>
     `${req.protocol}://${req.hostname}${
       req.port != null ? ':' + req.port : ''
-    }/api/login/github/callback?redirect=${
+    }/api/login/github/callback${
       (req.query as QueryParams).redirect
+        ? `?redirect=${(req.query as QueryParams).redirect}`
+        : ''
     }`,
 });
 
