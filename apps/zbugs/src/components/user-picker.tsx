@@ -1,19 +1,20 @@
-import {useEffect, useState} from 'react';
-import Selector from './selector.js';
-import {useZero} from '../hooks/use-zero.js';
-import {useQuery} from '@rocicorp/zero/react';
 import {type SchemaToRow} from '@rocicorp/zero';
-import {type Schema} from '../domain/schema.js';
+import {useQuery} from '@rocicorp/zero/react';
+import {useEffect, useState} from 'react';
 import avatarIcon from '../assets/icons/avatar-default.svg';
+import {type Schema} from '../domain/schema.js';
+import {useZero} from '../hooks/use-zero.js';
+import Selector from './selector.js';
 
 type Props = {
   onSelect?: ((user: User) => void) | undefined;
   selected?: {login?: string | undefined} | undefined;
+  disabled?: boolean | undefined;
 };
 
 type User = SchemaToRow<Schema['tables']['user']>;
 
-export default function UserPicker({onSelect, selected}: Props) {
+export default function UserPicker({onSelect, selected, disabled}: Props) {
   const z = useZero();
 
   const users = useQuery(z.query.user);
@@ -46,6 +47,7 @@ export default function UserPicker({onSelect, selected}: Props) {
 
   return (
     <Selector
+      disabled={disabled}
       onChange={c => handleSelect(c)}
       items={users.map(u => ({
         text: u.login,

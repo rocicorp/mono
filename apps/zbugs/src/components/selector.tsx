@@ -12,11 +12,13 @@ export function Selector<T>({
   selectedValue,
   onChange,
   defaultItem,
+  disabled,
 }: {
   items?: Item<T>[] | undefined;
   selectedValue?: T | undefined;
   onChange?: ((selectedValue: T) => void) | undefined;
   defaultItem?: Omit<Item<T>, 'value'> | undefined;
+  disabled?: boolean | undefined;
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -127,12 +129,13 @@ export function Selector<T>({
           break;
       }
     },
-    [selectedIndex, isOpen, openItems, handleSelect],
+    [isOpen, handleSelect, openItems, selectedIndex],
   );
 
   return (
     <div className="selector">
       <button
+        disabled={disabled}
         onMouseDown={toggleDropdown}
         onKeyDown={handleKeyDown}
         className={classNames('sidebar-button', 'button-dropdown', 'item')}

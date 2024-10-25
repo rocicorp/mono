@@ -2,7 +2,7 @@ import {useQuery} from '@rocicorp/zero/react';
 import {useLogin} from './use-login.js';
 import {useZero} from './use-zero.js';
 
-export function useCanEdit(ownerUserID: string): boolean {
+export function useCanEdit(ownerUserID: string | undefined): boolean {
   const login = useLogin();
   const z = useZero();
   const currentUserID = login.loginState?.decoded.sub;
