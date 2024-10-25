@@ -542,6 +542,325 @@ describe('view-syncer/service', () => {
     `);
   });
 
+  test('initial hydration, rows in multiple queries', async () => {
+    const client = await connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+      {op: 'put', hash: 'query-hash2', ast: ISSUES_QUERY2},
+    ]);
+
+    stateChanges.push({state: 'version-ready'});
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": null,
+            "cookie": "00:02",
+            "pokeID": "00:02",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "clientsPatch": [
+              {
+                "clientID": "foo",
+                "op": "put",
+              },
+            ],
+            "desiredQueriesPatches": {
+              "foo": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": [
+                      {
+                        "field": "id",
+                        "op": "IN",
+                        "type": "simple",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                    ],
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                  },
+                  "hash": "query-hash2",
+                  "op": "put",
+                },
+              ],
+            },
+            "gotQueriesPatch": [
+              {
+                "ast": {
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "issues",
+                  "where": [
+                    {
+                      "field": "id",
+                      "op": "IN",
+                      "type": "simple",
+                      "value": [
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                      ],
+                    },
+                  ],
+                },
+                "hash": "query-hash1",
+                "op": "put",
+              },
+              {
+                "ast": {
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "issues",
+                },
+                "hash": "query-hash2",
+                "op": "put",
+              },
+            ],
+            "lastMutationIDChanges": {
+              "foo": 42,
+            },
+            "pokeID": "00:02",
+            "rowsPatch": [
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 9007199254740991,
+                  "id": "1",
+                  "owner": "100",
+                  "parent": null,
+                  "title": "parent issue foo",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": -9007199254740991,
+                  "id": "2",
+                  "owner": "101",
+                  "parent": null,
+                  "title": "parent issue bar",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 123,
+                  "id": "3",
+                  "owner": "102",
+                  "parent": "1",
+                  "title": "foo",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 100,
+                  "id": "4",
+                  "owner": "101",
+                  "parent": "2",
+                  "title": "bar",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 9007199254740991,
+                  "id": "1",
+                  "owner": "100",
+                  "parent": null,
+                  "title": "parent issue foo",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": -9007199254740991,
+                  "id": "2",
+                  "owner": "101",
+                  "parent": null,
+                  "title": "parent issue bar",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 123,
+                  "id": "3",
+                  "owner": "102",
+                  "parent": "1",
+                  "title": "foo",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 100,
+                  "id": "4",
+                  "owner": "101",
+                  "parent": "2",
+                  "title": "bar",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 100,
+                  "id": "5",
+                  "owner": "101",
+                  "parent": "2",
+                  "title": "not matched",
+                },
+              },
+            ],
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "00:02",
+          },
+        ],
+      ]
+    `);
+
+    expect(await cvrDB`SELECT * from cvr.rows`).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "00:02",
+          "refCounts": {
+            "lmids": 1,
+          },
+          "rowKey": {
+            "clientGroupID": "9876",
+            "clientID": "foo",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "zero_ABC.clients",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "00:02",
+          "refCounts": {
+            "query-hash1": 1,
+            "query-hash2": 1,
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "00:02",
+          "refCounts": {
+            "query-hash1": 1,
+            "query-hash2": 1,
+          },
+          "rowKey": {
+            "id": "2",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "00:02",
+          "refCounts": {
+            "query-hash1": 1,
+            "query-hash2": 1,
+          },
+          "rowKey": {
+            "id": "3",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "00:02",
+          "refCounts": {
+            "query-hash1": 1,
+            "query-hash2": 1,
+          },
+          "rowKey": {
+            "id": "4",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "00:02",
+          "refCounts": {
+            "query-hash2": 1,
+          },
+          "rowKey": {
+            "id": "5",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "issues",
+        },
+      ]
+    `);
+  });
+
   test('initial hydration, schemaVersion unsupported', async () => {
     const client = await connect({...SYNC_CONTEXT, schemaVersion: 1}, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
