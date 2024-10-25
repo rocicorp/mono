@@ -4,8 +4,12 @@ import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../../shared/src/asserts.js';
 import type {AST, Ordering} from '../../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../../zero-protocol/src/data.js';
-import {buildPipeline, type BuilderDelegate} from '../builder/builder.js';
-import {ArrayView, type Format} from '../ivm/array-view.js';
+import {
+  assertOrderingIncludesPK,
+  buildPipeline,
+  type BuilderDelegate,
+} from '../builder/builder.js';
+import {ArrayView} from '../ivm/array-view.js';
 import type {Input} from '../ivm/operator.js';
 import {
   normalizeTableSchema,
@@ -32,6 +36,8 @@ import {
   type TableSchema,
 } from './schema.js';
 import type {TypedView} from './typed-view.js';
+import type {Format} from '../ivm/view.js';
+import type {ViewFactory} from '../ivm/view.js';
 
 export function newQuery<
   TSchema extends TableSchema,
@@ -358,7 +364,7 @@ export abstract class AbstractQuery<
   }
 
   abstract materialize(): TypedView<Smash<TReturn>>;
-  abstract materialize<T>(factory: MaterializeFactory<TSchema, TReturn, T>): T;
+  abstract materialize<T>(factory: ViewFactory<TSchema, TReturn, T>): T;
   abstract preload(): {
     cleanup: () => void;
     complete: Promise<void>;
@@ -400,20 +406,25 @@ export class QueryImpl<
   }
 
   materialize(): TypedView<Smash<TReturn>>;
-  materialize<T>(factory: MaterializeFactory<TSchema, TReturn, T>): T;
-  materialize<T>(factory?: MaterializeFactory<TSchema, TReturn, T>): T {
+  materialize<T>(factory: ViewFactory<TSchema, TReturn, T>): T;
+  materialize<T>(factory?: ViewFactory<TSchema, TReturn, T>): T {
     const ast = this._completeAst();
     const removeServerQuery = this.#delegate.addServerQuery(ast);
-    const input = buildPipeline(ast, this.#delegate, undefined);
 
+    const input = buildPipeline(ast, this.#delegate, undefined);
+    const schema = input.getSchema();
+    // TODO: Can this assert be removed this._completeAst above ensures this is
+    // true.
+    assertOrderingIncludesPK(schema.sort, schema.primaryKey);
     let removeCommitObserver: (() => void) | undefined;
 
     const onDestroy = () => {
+      input.destroy();
       removeCommitObserver?.();
       removeServerQuery();
     };
 
-    const view = (factory ?? defaultMaterializeFactory)(
+    const view = (factory ?? arrayViewFactory)(
       this,
       input,
       this.#format,
@@ -473,19 +484,7 @@ function addPrimaryKeysToAst(schema: NormalizedTableSchema, ast: AST): AST {
   };
 }
 
-export type MaterializeFactory<
-  TSchema extends TableSchema,
-  TReturn extends QueryType,
-  T,
-> = (
-  query: Query<TSchema, TReturn>,
-  input: Input,
-  format: Format,
-  onDestroy: () => void,
-  onTransactionCommit: (cb: () => void) => void,
-) => T;
-
-function defaultMaterializeFactory<
+function arrayViewFactory<
   TSchema extends TableSchema,
   TReturn extends QueryType,
 >(

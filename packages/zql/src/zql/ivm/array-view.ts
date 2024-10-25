@@ -7,18 +7,13 @@ import {
 } from '../../../../shared/src/asserts.js';
 import type {Immutable} from '../../../../shared/src/immutable.js';
 import {must} from '../../../../shared/src/must.js';
-import type {Row, Value} from '../../../../zero-protocol/src/data.js';
-import {assertOrderingIncludesPK} from '../builder/builder.js';
+import type {Row} from '../../../../zero-protocol/src/data.js';
 import type {Listener, TypedView} from '../query/typed-view.js';
 import type {Change} from './change.js';
 import type {Comparator} from './data.js';
 import type {Input, Output} from './operator.js';
 import type {TableSchema} from './schema.js';
-
-export type Format = {
-  singular: boolean;
-  relationships: Record<string, Format>;
-};
+import type {Format, Entry, EntryList, View} from './view.js';
 
 /**
  * Implements a materialized view of the output of an operator.
@@ -54,7 +49,6 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
     this.#format = format;
     this.#input.setOutput(this);
     this.#root = {'': format.singular ? undefined : []};
-    assertOrderingIncludesPK(this.#schema.sort, this.#schema.primaryKey);
 
     this.#hydrate();
   }
@@ -81,7 +75,6 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   }
 
   destroy() {
-    this.#input.destroy();
     this.onDestroy?.();
   }
 
@@ -113,11 +106,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   }
 }
 
-export type View = EntryList | Entry | undefined;
-export type EntryList = Entry[];
-export type Entry = {[key: string]: Value | View};
-
-function applyChange(
+export function applyChange(
   parentEntry: Entry,
   change: Change,
   schema: TableSchema,

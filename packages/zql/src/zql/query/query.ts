@@ -3,7 +3,7 @@
 import type {Row} from '../../../../zero-protocol/src/data.js';
 import type {SchemaValue} from '../ivm/schema.js';
 import type {Source} from '../ivm/source.js';
-import type {MaterializeFactory} from './query-impl.js';
+import type {ViewFactory} from '../ivm/view.js';
 import type {PullSchemaForRelationship, TableSchema} from './schema.js';
 import type {TypedView} from './typed-view.js';
 
@@ -265,7 +265,7 @@ export interface Query<
   one(): Query<TSchema, MakeSingular<TReturn>>;
 
   materialize(): TypedView<Smash<TReturn>>;
-  materialize<T>(factory: MaterializeFactory<TSchema, TReturn, T>): T;
+  materialize<T>(factory: ViewFactory<TSchema, TReturn, T>): T;
 
   preload(): {
     cleanup: () => void;
