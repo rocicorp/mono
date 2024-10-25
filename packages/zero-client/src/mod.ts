@@ -58,7 +58,7 @@ export type {
   WriteTransaction,
 } from '../../replicache/src/mod.js';
 export {QueryImpl} from '../../zql/src/zql/query/query-impl.js';
-export {like} from '../../zql/src/zql/query/like.js';
+export {escapeLike} from '../../zql/src/zql/query/escape-like.js';
 export type {
   DefaultQueryResultRow as EmptyQueryResultRow,
   Query,
@@ -68,7 +68,10 @@ export type {
   SchemaToRow,
   Smash,
 } from '../../zql/src/zql/query/query.js';
-export type {TableSchema} from '../../zql/src/zql/query/schema.js';
+export {
+  type TableSchema,
+  createTableSchema,
+} from '../../zql/src/zql/query/schema.js';
 export type {TypedView} from '../../zql/src/zql/query/typed-view.js';
 export type {ZeroOptions} from './client/options.js';
-export {Zero, type Schema} from './client/zero.js';
+export {Zero, type Schema, createSchema} from './client/zero.js';
