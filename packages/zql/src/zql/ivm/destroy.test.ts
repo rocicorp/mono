@@ -1,9 +1,5 @@
 import {expect, test} from 'vitest';
-import {ArrayView} from './array-view.js';
-import {Filter} from './filter.js';
-import {Join} from './join.js';
 import {MemorySource} from './memory-source.js';
-import {MemoryStorage} from './memory-storage.js';
 import {Snitch} from './snitch.js';
 
 test('destroy source connections', () => {
