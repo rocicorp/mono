@@ -10,20 +10,21 @@ import type {Query, QueryType, Smash} from '../../zql/src/zql/query/query.js';
 export class SolidView<V extends View> implements Output {
   readonly #input: Input;
   readonly #format: Format;
+  readonly #onDestroy: () => void;
 
   // Synthetic "root" entry that has a single "" relationship, so that we can
   // treat all changes, including the root change, generically.
   readonly #root: Entry;
   readonly #setRoot: SetStoreFunction<Entry>;
 
-  onDestroy: (() => void) | undefined;
-
   constructor(
     input: Input,
     format: Format = {singular: false, relationships: {}},
+    onDestroy: () => void = () => {},
   ) {
     this.#input = input;
     this.#format = format;
+    this.#onDestroy = onDestroy;
     this.#input.setOutput(this);
     [this.#root, this.#setRoot] = createStore({
       '': format.singular ? undefined : [],
@@ -49,7 +50,7 @@ export class SolidView<V extends View> implements Output {
   }
 
   destroy() {
-    this.onDestroy?.();
+    this.#onDestroy();
   }
 
   push(change: Change): void {
@@ -76,8 +77,7 @@ export function solidViewFactory<
   format: Format,
   onDestroy: () => void,
 ): SolidView<Smash<TReturn>> {
-  const v = new SolidView<Smash<TReturn>>(input, format);
-  v.onDestroy = onDestroy;
+  const v = new SolidView<Smash<TReturn>>(input, format, onDestroy);
 
   return v;
 }
