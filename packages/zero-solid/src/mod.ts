@@ -1,1 +1,1 @@
-export {type SolidView, solidViewFactory} from './solid-view.js';
+export {useQuery} from './use-query.js';
