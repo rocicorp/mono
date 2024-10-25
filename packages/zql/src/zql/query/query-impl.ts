@@ -6,6 +6,7 @@ import type {AST, Ordering} from '../../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../../zero-protocol/src/data.js';
 import {buildPipeline, type BuilderDelegate} from '../builder/builder.js';
 import {ArrayView, type Format} from '../ivm/array-view.js';
+import type {Input} from '../ivm/operator.js';
 import {
   normalizeTableSchema,
   type NormalizedTableSchema,
@@ -357,6 +358,7 @@ export abstract class AbstractQuery<
   }
 
   abstract materialize(): TypedView<Smash<TReturn>>;
+  abstract materialize<T>(factory: MaterializeFactory<TSchema, TReturn, T>): T;
   abstract preload(): {
     cleanup: () => void;
     complete: Promise<void>;
@@ -397,21 +399,31 @@ export class QueryImpl<
     return newQueryWithDetails(this.#delegate, schema, ast, format);
   }
 
-  materialize(): TypedView<Smash<TReturn>> {
+  materialize(): TypedView<Smash<TReturn>>;
+  materialize<T>(factory: MaterializeFactory<TSchema, TReturn, T>): T;
+  materialize<T>(factory?: MaterializeFactory<TSchema, TReturn, T>): T {
     const ast = this._completeAst();
     const removeServerQuery = this.#delegate.addServerQuery(ast);
-    const view = new ArrayView<Smash<TReturn>>(
-      buildPipeline(ast, this.#delegate, undefined),
-      this.#format,
-    );
-    const removeCommitObserver = this.#delegate.onTransactionCommit(() => {
-      view.flush();
-    });
-    view.onDestroy = () => {
-      removeCommitObserver();
+    const input = buildPipeline(ast, this.#delegate, undefined);
+
+    let removeCommitObserver: (() => void) | undefined;
+
+    const onDestroy = () => {
+      removeCommitObserver?.();
       removeServerQuery();
     };
-    return view;
+
+    const view = (factory ?? defaultMaterializeFactory)(
+      this,
+      input,
+      this.#format,
+      onDestroy,
+      cb => {
+        removeCommitObserver = this.#delegate.onTransactionCommit(cb);
+      },
+    );
+
+    return view as T;
   }
 
   preload(): {
@@ -459,4 +471,34 @@ function addPrimaryKeysToAst(schema: NormalizedTableSchema, ast: AST): AST {
     ...ast,
     orderBy: addPrimaryKeys(schema, ast.orderBy),
   };
+}
+
+export type MaterializeFactory<
+  TSchema extends TableSchema,
+  TReturn extends QueryType,
+  T,
+> = (
+  query: Query<TSchema, TReturn>,
+  input: Input,
+  format: Format,
+  onDestroy: () => void,
+  onTransactionCommit: (cb: () => void) => void,
+) => T;
+
+function defaultMaterializeFactory<
+  TSchema extends TableSchema,
+  TReturn extends QueryType,
+>(
+  _query: Query<TSchema, TReturn>,
+  input: Input,
+  format: Format,
+  onDestroy: () => void,
+  onTransactionCommit: (cb: () => void) => void,
+): TypedView<Smash<TReturn>> {
+  const v = new ArrayView<Smash<TReturn>>(input, format);
+  v.onDestroy = onDestroy;
+  onTransactionCommit(() => {
+    v.flush();
+  });
+  return v;
 }
