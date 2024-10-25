@@ -130,7 +130,6 @@ CREATE OR REPLACE FUNCTION delete_emoji_on_issue_delete()
 RETURNS TRIGGER AS $$
 BEGIN
     DELETE FROM emoji WHERE "subjectID" = OLD.id;
-    PERFORM update_issue_modified_on_emoji_change(OLD."subjectID");
     RETURN OLD;
 END;
 $$ LANGUAGE plpgsql;
