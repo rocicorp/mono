@@ -28,9 +28,4 @@ export type TableSchema = TableSchemaBase & {
   readonly sort: Ordering;
 };
 
-export type Format = {
-  singular: boolean;
-  relationships: Record<string, Format>;
-};
-
 // TODO(arv): Make all schemas use same hidden class

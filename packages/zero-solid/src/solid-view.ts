@@ -3,10 +3,9 @@ import type {TableSchema} from '../../zql/src/zql/query/schema.js';
 import {type Entry} from '../../zql/src/zql/ivm/view.js';
 import {createStore, produce, type SetStoreFunction} from 'solid-js/store';
 import type {Change} from '../../zql/src/zql/ivm/change.js';
-import type {View} from '../../zql/src/zql/ivm/view.js';
+import type {View, Format} from '../../zql/src/zql/ivm/view.js';
 import {applyChange} from '../../zql/src/zql/ivm/array-view.js';
 import type {Query, QueryType, Smash} from '../../zql/src/zql/query/query.js';
-import type {Format} from '../../zql/src/zql/ivm/schema.js';
 
 export class SolidView<V extends View> implements Output {
   readonly #input: Input;

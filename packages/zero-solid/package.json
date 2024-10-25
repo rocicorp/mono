@@ -5,6 +5,8 @@
   "type": "module",
   "module": "true",
   "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch"
   },

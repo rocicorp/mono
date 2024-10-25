@@ -36,7 +36,7 @@ import {
   type TableSchema,
 } from './schema.js';
 import type {TypedView} from './typed-view.js';
-import type {Format} from '../ivm/schema.js';
+import type {Format} from '../ivm/view.js';
 import type {ViewFactory} from '../ivm/view.js';
 
 export function newQuery<

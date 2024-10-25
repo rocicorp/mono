@@ -12,8 +12,8 @@ import type {Listener, TypedView} from '../query/typed-view.js';
 import type {Change} from './change.js';
 import type {Comparator} from './data.js';
 import type {Input, Output} from './operator.js';
-import type {Format, TableSchema} from './schema.js';
-import type {Entry, EntryList, View} from './view.js';
+import type {TableSchema} from './schema.js';
+import type {Format, Entry, EntryList, View} from './view.js';
 
 /**
  * Implements a materialized view of the output of an operator.

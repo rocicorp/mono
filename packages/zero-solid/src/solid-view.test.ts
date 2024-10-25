@@ -38,5 +38,5 @@ test('basics', () => {
 
   ms.push({row: {a: 3, b: 'c'}, type: 'remove'});
 
-  expect(view.data).toEqual([{a: 3, b: 'c'}]);
+  expect(view.data).toEqual([]);
 });
