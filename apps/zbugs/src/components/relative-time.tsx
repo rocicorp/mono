@@ -1,4 +1,4 @@
-import React, {useState, useLayoutEffect} from 'react';
+import React, {useLayoutEffect, useState} from 'react';
 
 interface RelativeTimeProps {
   timestamp: string | number | Date;
@@ -24,8 +24,9 @@ const RelativeTime: React.FC<RelativeTimeProps> = ({
     const getRelativeTime = (timestampDate: string | number | Date) => {
       const now = new Date();
       const timestamp = new Date(timestampDate);
-      const diffInSeconds = Math.floor(
-        (now.getTime() - timestamp.getTime()) / 1000,
+      const diffInSeconds = Math.max(
+        0,
+        Math.floor((now.getTime() - timestamp.getTime()) / 1000),
       );
       const diffInMinutes = Math.floor(diffInSeconds / 60);
       const diffInHours = Math.floor(diffInMinutes / 60);
