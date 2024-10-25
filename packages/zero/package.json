@@ -72,6 +72,10 @@
     "./config": {
       "types": "./out/zero/src/config.d.ts",
       "default": "./out/zero/src/config.js"
+    },
+    "./internal": {
+      "types": "./out/zero/src/internal.d.ts",
+      "default": "./out/zero/src/internal.js"
     }
   },
   "bin": {
