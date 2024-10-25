@@ -39,23 +39,29 @@ export function EmojiPanel({issueID, commentID}: Props) {
   const addEmoji = useCallback(
     (unicode: string, annotation: string) => {
       const id = nanoid();
-      z.mutate.emoji.create({
-        id,
-        value: unicode,
-        annotation,
-        subjectID,
-        creatorID: z.userID,
-        created: Date.now(),
+      z.mutate(tx => {
+        tx.emoji.create({
+          id,
+          value: unicode,
+          annotation,
+          subjectID,
+          creatorID: z.userID,
+          created: Date.now(),
+        });
+        tx.issue.update({id: issueID, modified: Date.now()});
       });
     },
-    [subjectID, z],
+    [issueID, subjectID, z],
   );
 
   const removeEmoji = useCallback(
     (id: string) => {
-      z.mutate.emoji.delete({id});
+      z.mutate(tx => {
+        tx.emoji.delete({id});
+        tx.issue.update({id: issueID, modified: Date.now()});
+      });
     },
-    [z],
+    [issueID, z],
   );
 
   // The emojis is an array. We want to group them by value and count them.
