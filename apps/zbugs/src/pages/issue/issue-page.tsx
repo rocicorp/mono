@@ -306,26 +306,19 @@ export default function IssuePage() {
               <LabelPicker
                 selected={labelSet}
                 onAssociateLabel={labelID =>
-                  z.mutate(tx => {
-                    tx.issueLabel.create({
-                      issueID: issue.id,
-                      labelID,
-                    });
-                    tx.issue.update({id: issue.id, modified: Date.now()});
+                  z.mutate.issueLabel.create({
+                    issueID: issue.id,
+                    labelID,
                   })
                 }
                 onDisassociateLabel={labelID =>
-                  z.mutate(tx => {
-                    tx.issueLabel.delete({issueID: issue.id, labelID});
-                    tx.issue.update({id: issue.id, modified: Date.now()});
-                  })
+                  z.mutate.issueLabel.delete({issueID: issue.id, labelID})
                 }
                 onCreateNewLabel={labelName => {
                   const labelID = nanoid();
                   z.mutate(tx => {
                     tx.label.create({id: labelID, name: labelName});
                     tx.issueLabel.create({issueID: issue.id, labelID});
-                    tx.issue.update({id: issue.id, modified: Date.now()});
                   });
                 }}
               />
