@@ -413,6 +413,8 @@ export class QueryImpl<
 
     const input = buildPipeline(ast, this.#delegate, undefined);
     const schema = input.getSchema();
+    // TODO: Can this assert be removed this._completeAst above ensures this is
+    // true.
     assertOrderingIncludesPK(schema.sort, schema.primaryKey);
     let removeCommitObserver: (() => void) | undefined;
 
