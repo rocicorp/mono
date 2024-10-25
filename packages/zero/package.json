@@ -61,6 +61,10 @@
       "types": "./out/zero-react/src/mod.d.ts",
       "default": "./out/react.js"
     },
+    "./solid": {
+      "types": "./out/zero-solid/src/mod.d.ts",
+      "default": "./out/solid.js"
+    },
     "./server": {
       "types": "./out/zero-cache/src/server/main.d.ts",
       "default": "./out/zero-cache/src/server/main.js"
