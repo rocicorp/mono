@@ -1,11 +1,17 @@
-import type {Input, Output} from '../../zql/src/zql/ivm/operator.js';
-import type {TableSchema} from '../../zql/src/zql/query/schema.js';
-import {type Entry} from '../../zql/src/zql/ivm/view.js';
 import {createStore, produce, type SetStoreFunction} from 'solid-js/store';
-import type {Change} from '../../zql/src/zql/ivm/change.js';
-import type {View, Format} from '../../zql/src/zql/ivm/view.js';
-import {applyChange} from '../../zql/src/zql/ivm/array-view.js';
-import type {Query, QueryType, Smash} from '../../zql/src/zql/query/query.js';
+import {
+  applyChange,
+  type Change,
+  type Entry,
+  type Format,
+  type Input,
+  type Output,
+  type Query,
+  type QueryType,
+  type Smash,
+  type TableSchema,
+  type View,
+} from '../../zero-internal/src/mod.js';
 
 export class SolidView<V extends View> implements Output {
   readonly #input: Input;

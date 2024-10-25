@@ -7,10 +7,11 @@
       "outputs": ["out/**", "dist/**", ".next/**", "next-env.d.ts"],
       "inputs": [
         "$TURBO_DEFAULT$",
+        "../zero-cache/src/**/*.ts",
         "../zero-client/src/**/*.ts",
+        "../zero-internal/src/**/*.ts",
         "../zero-react/src/**/*.ts",
-        "../zero-solid/src/**/*.ts",
-        "../zero-cache/src/**/*.ts"
+        "../zero-solid/src/**/*.ts"
       ]
     },
     "lint": {

@@ -1,20 +1,14 @@
 {
-  "name": "zero-solid",
+  "name": "zero-internal",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "module": "true",
   "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch"
   },
-  "peerDependencies": {
-    "solid-js": "^1.0.0"
-  },
   "devDependencies": {
-    "solid-js": "^1.0.0",
-    "zero-internal": "0.0.0"
+    "zql": "0.0.0"
   }
 }
