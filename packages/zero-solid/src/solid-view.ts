@@ -54,7 +54,17 @@ export class SolidView<V extends View> implements Output {
   }
 
   push(change: Change): void {
-    applyChange(this.#root, change, this.#input.getSchema(), '', this.#format);
+    this.#setRoot(
+      produce(draftRoot => {
+        applyChange(
+          draftRoot,
+          change,
+          this.#input.getSchema(),
+          '',
+          this.#format,
+        );
+      }),
+    );
   }
 }
 
