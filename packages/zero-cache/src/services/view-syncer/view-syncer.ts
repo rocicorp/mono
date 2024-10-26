@@ -563,16 +563,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#pipelines.removeQuery(hash);
     }
 
-    for (const hash of addQueries) {
-      const {ast} = cvr.queries[hash];
-      lc.debug?.(`adding pipeline for query ${hash}`, ast);
-      await this.#processChanges(
-        lc,
-        this.#pipelines.addQuery(hash, ast),
-        updater,
-        pokers,
-      );
+    const pipelines = this.#pipelines;
+    function* generateRowChanges() {
+      for (const hash of addQueries) {
+        const {ast} = cvr.queries[hash];
+        lc.debug?.(`adding pipeline for query ${hash}`, ast);
+        yield* pipelines.addQuery(hash, ast);
+      }
     }
+    // #processChanges does batched de-duping of rows. Wrap all pipelines in
+    // a single generator in order to maximize de-duping.
+    await this.#processChanges(lc, generateRowChanges(), updater, pokers);
 
     lc.debug?.(`generating delete patches`);
     for (const patch of await updater.deleteUnreferencedRows()) {
