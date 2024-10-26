@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/ban-types */
 import {describe, expectTypeOf, test} from 'vitest';
 import {staticParam} from './query-impl.js';
+import type {QueryInternal} from './query-internal.js';
 import {type Query, type QueryType} from './query.js';
 import type {Supertype, TableSchema} from './schema.js';
 
@@ -563,7 +564,7 @@ function takeSchema(x: TableSchema) {
 }
 
 test.skip('custom materialize factory', () => {
-  const query = mockQuery as unknown as Query<TestSchema>;
+  const query = mockQuery as unknown as QueryInternal<TestSchema>;
   const x = query.materialize();
   expectTypeOf(x.data).toMatchTypeOf<
     Array<{s: string; b: boolean; n: number}>
@@ -580,8 +581,17 @@ test.skip('custom materialize factory', () => {
   }
 
   const y = query.materialize(factory);
-  y.dataAsSet;
   expectTypeOf(y.dataAsSet).toMatchTypeOf<
     Set<{s: string; b: boolean; n: number}>
   >();
+});
+
+test.skip('Make sure that QueryInternal does not expose the ast', () => {
+  const query = mockQuery as unknown as Query<TestSchema>;
+  // @ts-expect-error - ast is not part of the public API
+  query.ast;
+
+  const internalQuery = mockQuery as unknown as QueryInternal<TestSchema>;
+  // @ts-expect-error - ast is not part of the public API
+  internalQuery.ast;
 });

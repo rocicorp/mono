@@ -1,6 +1,11 @@
 import {type Accessor, createMemo, onCleanup} from 'solid-js';
-import type {TableSchema} from '../../zql/src/zql/query/schema.js';
-import type {Query, QueryType, Smash} from '../../zql/src/zql/query/query.js';
+import type {
+  Query,
+  QueryInternal,
+  QueryType,
+  Smash,
+  TableSchema,
+} from '../../zero-internal/src/mod.js';
 import {solidViewFactory} from './solid-view.js';
 
 export function useQuery<
@@ -9,7 +14,9 @@ export function useQuery<
 >(querySignal: () => Query<TSchema, TReturn>): Accessor<Smash<TReturn>> {
   return createMemo(() => {
     const query = querySignal();
-    const view = query.materialize(solidViewFactory);
+    const view = (query as QueryInternal<TSchema, TReturn>).materialize(
+      solidViewFactory,
+    );
 
     onCleanup(() => {
       view.destroy();
