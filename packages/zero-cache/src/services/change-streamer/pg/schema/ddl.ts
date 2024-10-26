@@ -224,7 +224,15 @@ DECLARE
 BEGIN
   publications := ARRAY[${lit(publications)}];
 
-  SELECT objid, object_type, object_identity FROM pg_event_trigger_ddl_commands() LIMIT 1 INTO cmd;
+  SELECT objid, object_type, object_identity 
+    FROM pg_event_trigger_ddl_commands() 
+    WHERE object_type IN (
+      'table',
+      'table column',
+      'index',
+      'publication relation',
+      'publication namespace')
+    LIMIT 1 INTO cmd;
 
   -- Filter DDL updates that are not relevant to the shard (i.e. publications) when possible.
 
