@@ -3,7 +3,7 @@ import Fastify, {type FastifyInstance} from 'fastify';
 import {IncomingMessage} from 'http';
 import {h32} from '../../../../shared/src/xxhash.js';
 import type {Worker} from '../../types/processes.js';
-import type {Service} from '../service.js';
+import type {SingletonService} from '../service.js';
 import {getConnectParams} from './connect-params.js';
 import {installWebSocketHandoff} from './websocket-handoff.js';
 
@@ -19,7 +19,7 @@ export type Options = {
   port: number;
 };
 
-export class Dispatcher implements Service {
+export class Dispatcher implements SingletonService {
   readonly id = 'dispatcher';
   readonly #lc: LogContext;
   readonly #workersByHostname: (hostname: string) => Workers;
@@ -72,6 +72,7 @@ export class Dispatcher implements Service {
   }
 
   async stop(): Promise<void> {
+    this.#lc.info?.('drain: no longer accepting connections');
     await this.#fastify.close();
   }
 }
