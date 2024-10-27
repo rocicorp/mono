@@ -38,7 +38,7 @@ export class Dispatcher implements Service {
     this.#fastify = Fastify();
     this.#fastify.get('/', (_req, res) => res.send('OK'));
     this.#fastify.get('/health', (req, res) => {
-      this.#lc?.debug?.(`health check`, req.hostname, req.url);
+      this.#lc?.debug?.(`health check:`, req.hostname, req.url);
       return res.send('OK');
     });
     this.#port = port;
