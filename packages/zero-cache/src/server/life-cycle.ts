@@ -1,5 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import type {EventEmitter} from 'stream';
+import {HttpService, type Options} from '../services/http-service.js';
 import type {SingletonService} from '../services/service.js';
 import type {Worker} from '../types/processes.js';
 
@@ -179,5 +180,69 @@ export async function exitAfter(run: () => Promise<void>) {
   } catch (e) {
     console.error(e);
     process.exit(-1);
+  }
+}
+
+const DEFAULT_STOP_INTERVAL_MS = 15_000;
+const DEFAULT_HEARTBEAT_MONITOR_PORT = 4850;
+
+/**
+ * The HeartbeatMonitor listens on a dedicated port to monitor the cadence
+ * of "heartbeat" requests (e.g. health checks) that signal that the server
+ * should continue processing requests. When a configurable `stopInterval`
+ * elapses without receiving these heartbeats, the monitor initiates a
+ * graceful shutdown of the server. This works with common load balancing
+ * frameworks such as AWS Elastic Load Balancing.
+ *
+ * The HeartbeatMonitor is **opt-in** in that it only kicks in after it
+ * starts receiving health checks on that port.
+ */
+export class HeartbeatMonitor extends HttpService {
+  readonly #stopInterval: number;
+
+  #timer: NodeJS.Timeout | undefined;
+  #lastHeartbeat = 0;
+
+  constructor(
+    lc: LogContext,
+    opts: Options = {port: DEFAULT_HEARTBEAT_MONITOR_PORT},
+    stopInterval = DEFAULT_STOP_INTERVAL_MS,
+  ) {
+    super('heartbeat-monitor', lc, opts, fastify => {
+      fastify.get('/', (_req, res) => {
+        this.#onHeartbeat();
+        return res.send('OK');
+      });
+    });
+    this.#stopInterval = stopInterval;
+  }
+
+  #onHeartbeat() {
+    this.#lastHeartbeat = Date.now();
+    if (this.#timer === undefined) {
+      this._lc.info?.(
+        `starting heartbeat monitor at ${
+          this.#stopInterval / 1000
+        } second interval`,
+      );
+      this.#timer = setInterval(this.#onStopInterval, this.#stopInterval);
+    }
+  }
+
+  #onStopInterval = () => {
+    const timeSinceLastHeartbeat = Date.now() - this.#lastHeartbeat;
+    if (timeSinceLastHeartbeat >= this.#stopInterval) {
+      this._lc.info?.(
+        `last heartbeat received ${
+          timeSinceLastHeartbeat / 1000
+        } seconds ago. draining.`,
+      );
+      process.kill(process.pid, GRACEFUL_SHUTDOWN[0]);
+    }
+  };
+
+  async stop() {
+    clearTimeout(this.#timer);
+    await super.stop();
   }
 }
