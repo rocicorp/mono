@@ -4,6 +4,7 @@ import {availableParallelism} from 'node:os';
 import path from 'node:path';
 import {getZeroConfig} from '../config/zero-config.js';
 import {Dispatcher, type Workers} from '../services/dispatcher/dispatcher.js';
+import type {Service} from '../services/service.js';
 import {initViewSyncerSchema} from '../services/view-syncer/schema/init.js';
 import {pgClient} from '../types/pg.js';
 import {childWorker, type Worker} from '../types/processes.js';
@@ -14,7 +15,12 @@ import {
   type ReplicaFileMode,
   subscribeTo,
 } from '../workers/replicator.js';
-import {runUntilKilled, Terminator, type WorkerType} from './life-cycle.js';
+import {
+  HeartbeatMonitor,
+  runUntilKilled,
+  Terminator,
+  type WorkerType,
+} from './life-cycle.js';
 import {createLogContext} from './logging.js';
 
 const startMs = Date.now();
@@ -107,13 +113,15 @@ if ((await orTimeout(Promise.all(ready), 30_000)) === 'timed-out') {
   lc.info?.(`all workers ready (${Date.now() - startMs} ms)`);
 }
 
+const mainServices: Service[] = [new HeartbeatMonitor(lc)];
+
 if (numSyncers) {
   const workers: Workers = {syncers};
+  mainServices.push(new Dispatcher(lc, () => workers));
+}
 
-  const dispatcher = new Dispatcher(lc, () => workers);
-  try {
-    await runUntilKilled(lc, process, dispatcher);
-  } catch (err) {
-    terminator.logErrorAndExit(err);
-  }
+try {
+  await runUntilKilled(lc, process, ...mainServices);
+} catch (err) {
+  terminator.logErrorAndExit(err);
 }
