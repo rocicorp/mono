@@ -57,7 +57,7 @@ export function wrapIterable<T>(iter: Iterable<T>): IterWrapper<T> {
 export function* mergeIterables<T>(
   iterables: Iterable<T>[],
   comparator: (l: T, r: T) => number,
-  distcint = false,
+  distinct = false,
 ): IterableIterator<T> {
   const iterators = iterables.map(i => i[Symbol.iterator]());
   try {
@@ -81,7 +81,7 @@ export function* mergeIterables<T>(
       current[min[1]] = iterators[min[1]].next();
       if (
         lastYielded !== undefined &&
-        distcint &&
+        distinct &&
         comparator(lastYielded, min[0]) === 0
       ) {
         continue;
