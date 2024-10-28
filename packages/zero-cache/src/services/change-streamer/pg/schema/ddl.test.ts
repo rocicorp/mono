@@ -1024,6 +1024,22 @@ describe('change-source/tables/ddl', () => {
       `ALTER PUBLICATION nonzeropub ADD TABLE pub.yoo`,
       'zero(0) ignoring pub.yoo in publication nonzeropub',
     ],
+    [
+      `
+      CREATE SCHEMA IF NOT EXISTS "cvr";
+      CREATE TABLE IF NOT EXISTS "cvr"."versionHistory" (
+        "dataVersion" int NOT NULL,
+        "schemaVersion" int NOT NULL,
+        "minSafeVersion" int NOT NULL,
+
+        lock char(1) NOT NULL CONSTRAINT DF_schema_meta_lock DEFAULT 'v',
+        CONSTRAINT PK_schema_meta_lock PRIMARY KEY (lock),
+        CONSTRAINT CK_schema_meta_lock CHECK (lock='v')
+      );
+      SELECT "dataVersion", "schemaVersion", "minSafeVersion" FROM "cvr"."versionHistory";
+      `,
+      'zero(0) ignoring cvr."versionHistory"',
+    ],
   ] satisfies [string, string][])(
     'ignore unrelated events: %s',
     async (query, expectedNotice) => {
