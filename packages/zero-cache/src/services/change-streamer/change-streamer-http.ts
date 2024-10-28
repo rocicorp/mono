@@ -1,15 +1,10 @@
 import websocket from '@fastify/websocket';
 import {LogContext} from '@rocicorp/logger';
-import Fastify, {
-  type FastifyInstance,
-  type FastifyReply,
-  type FastifyRequest,
-} from 'fastify';
+import {type FastifyReply, type FastifyRequest} from 'fastify';
 import WebSocket from 'ws';
 import {streamIn, streamOut, type Source} from '../../types/streams.js';
 import {URLParams} from '../../types/url-params.js';
-import {RunningState} from '../running-state.js';
-import type {Service} from '../service.js';
+import {HttpService, type Options} from '../http-service.js';
 import {
   downstreamSchema,
   type ChangeStreamer,
@@ -21,47 +16,22 @@ export const CHANGES_URL_PATTERN = '/api/replication/:version/changes';
 
 export const DEFAULT_PORT = 4849;
 
-export type Options = {
-  port: number;
-};
-
-export class ChangeStreamerHttpServer implements Service {
+export class ChangeStreamerHttpServer extends HttpService {
   readonly id = 'change-streamer-http-server';
-  readonly #lc: LogContext;
   readonly #delegate: ChangeStreamer;
-  readonly #fastify: FastifyInstance;
-  readonly #port: number;
-  readonly #state = new RunningState(this.id);
 
   constructor(
     lc: LogContext,
     delegate: ChangeStreamer,
-    opts: Partial<Options> = {},
+    opts: Options = {port: DEFAULT_PORT},
   ) {
-    const {port = DEFAULT_PORT} = opts;
-
-    this.#lc = lc.withContext('component', this.id);
+    super('change-streamer-http-server', lc, opts, async fastify => {
+      await fastify.register(websocket);
+      fastify.get('/', (_req, res) => res.send('OK'));
+      fastify.addHook('preValidation', this.#checkParams);
+      fastify.get(CHANGES_URL_PATTERN, {websocket: true}, this.#subscribe);
+    });
     this.#delegate = delegate;
-
-    this.#fastify = Fastify();
-    this.#port = port;
-  }
-
-  // start() is used in unit tests.
-  // run() is the lifecycle method called by the ServiceRunner.
-  async start(): Promise<void> {
-    await this.#fastify.register(websocket);
-    this.#fastify.get('/', (_req, res) => res.send('OK'));
-    this.#fastify.addHook('preValidation', this.#checkParams);
-    this.#fastify.get(CHANGES_URL_PATTERN, {websocket: true}, this.#subscribe);
-
-    const address = await this.#fastify.listen({host: '::', port: this.#port});
-    this.#lc.info?.(`Server listening at ${address}`);
-  }
-
-  async run(): Promise<void> {
-    await this.start();
-    await this.#state.stopped();
   }
 
   // Avoid upgrading to a websocket if the params are bad.
@@ -72,7 +42,7 @@ export class ChangeStreamerHttpServer implements Service {
     try {
       getSubscriberContext(req);
     } catch (e) {
-      this.#lc.error?.('bad request', String(e));
+      this._lc.error?.('bad request', String(e));
       await reply.code(400).send(e instanceof Error ? e.message : String(e));
     }
   };
@@ -80,13 +50,8 @@ export class ChangeStreamerHttpServer implements Service {
   readonly #subscribe = async (ws: WebSocket, req: FastifyRequest) => {
     const ctx = getSubscriberContext(req); // #checkSubscribe guarantees this.
     const downstream = await this.#delegate.subscribe(ctx);
-    await streamOut(this.#lc, downstream, ws);
+    await streamOut(this._lc, downstream, ws);
   };
-
-  async stop(): Promise<void> {
-    await this.#fastify.close();
-    this.#state.stop(this.#lc);
-  }
 }
 
 export class ChangeStreamerHttpClient implements ChangeStreamer {
