@@ -31,47 +31,35 @@ export function cmp<
   TSchema extends TableSchema,
   TSelector extends Selector<TSchema>,
   TOperator extends Operator,
->(
-  field: TSelector,
-  op: TOperator,
-  value: GetFieldTypeNoNullOrUndefined<TSchema, TSelector, TOperator>,
-): GenericCondition<TSchema>;
-export function cmp<
-  TSchema extends TableSchema,
-  TSelector extends Selector<TSchema>,
->(
-  field: TSelector,
-  value: GetFieldTypeNoNullOrUndefined<TSchema, TSelector, '='>,
-): GenericCondition<TSchema>;
-export function cmp<
-  TSchema extends TableSchema,
-  TSelector extends Selector<TSchema>,
-  TOperator extends Operator,
-  TParamAnchor,
-  TParamField extends keyof TParamAnchor,
+  TParamAnchor = never,
+  TParamField extends keyof TParamAnchor = never,
   TParamTypeBound extends GetFieldTypeNoNullOrUndefined<
     TSchema,
     TSelector,
     TOperator
-  >,
+  > = never,
 >(
   field: TSelector,
   op: TOperator,
-  value: Parameter<TParamAnchor, TParamField, TParamTypeBound>,
+  value:
+    | GetFieldTypeNoNullOrUndefined<TSchema, TSelector, TOperator>
+    | Parameter<TParamAnchor, TParamField, TParamTypeBound>,
 ): GenericCondition<TSchema>;
 export function cmp<
   TSchema extends TableSchema,
   TSelector extends Selector<TSchema>,
-  TParamAnchor,
-  TParamField extends keyof TParamAnchor,
+  TParamAnchor = never,
+  TParamField extends keyof TParamAnchor = never,
   TParamTypeBound extends GetFieldTypeNoNullOrUndefined<
     TSchema,
     TSelector,
     '='
-  >,
+  > = never,
 >(
   field: TSelector,
-  value: Parameter<TParamAnchor, TParamField, TParamTypeBound>,
+  value:
+    | GetFieldTypeNoNullOrUndefined<TSchema, TSelector, '='>
+    | Parameter<TParamAnchor, TParamField, TParamTypeBound>,
 ): GenericCondition<TSchema>;
 export function cmp(
   field: string,
