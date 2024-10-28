@@ -12,20 +12,24 @@ import type {
 import type {TableSchema} from './schema.js';
 
 export type GenericCondition<TSchema extends TableSchema> =
-  | {
-      type: 'and';
-      conditions: GenericCondition<TSchema>[];
-    }
-  | {
-      type: 'or';
-      conditions: GenericCondition<TSchema>[];
-    }
+  | GenericConjunction<TSchema>
+  | GenericDisjunction<TSchema>
   | {
       type: 'simple';
       op: SimpleOperator;
       field: Selector<TSchema>;
       value: ValuePosition;
     };
+
+type GenericConjunction<TSchema extends TableSchema> = {
+  type: 'and';
+  conditions: readonly GenericCondition<TSchema>[];
+};
+
+type GenericDisjunction<TSchema extends TableSchema> = {
+  type: 'or';
+  conditions: readonly GenericCondition<TSchema>[];
+};
 
 export function cmp<
   TSchema extends TableSchema,
@@ -100,7 +104,39 @@ export function cmp(
 export function and<TSchema extends TableSchema>(
   ...conditions: GenericCondition<TSchema>[]
 ): GenericCondition<TSchema> {
-  return flatten('and', conditions);
+  // If any internal conditions are `or` then we distribute `or` over the `and`.
+  // This allows the graph and pipeline builder to remain simple and not have to deal with
+  // nested conditions.
+  // In other words, conditions are in [DNF](https://en.wikipedia.org/wiki/Disjunctive_normal_form).
+  const ands: GenericCondition<TSchema>[] = conditions.flatMap(c => {
+    if (c.type === 'and') {
+      return c.conditions;
+    } else if (c.type === 'simple') {
+      return [c];
+    }
+    return [];
+  });
+  const ors: GenericCondition<TSchema>[] = conditions.filter(
+    c => c.type === 'or',
+  );
+
+  if (ors.length === 0) {
+    return {type: 'and', conditions: ands};
+  }
+
+  const flatOrs = flatten('or', ors);
+  const flatAnds = flatten('and', ands);
+
+  return {
+    type: 'or',
+    conditions: flatOrs.conditions.map(part => ({
+      type: 'and',
+      conditions: [
+        ...(part.type === 'and' ? part.conditions : [part]),
+        ...flatAnds.conditions,
+      ],
+    })),
+  };
 }
 
 export function or<TSchema extends TableSchema>(
@@ -133,10 +169,12 @@ export function not<TSchema extends TableSchema>(
   }
 }
 
-function flatten<TSchema extends TableSchema>(
-  type: 'and' | 'or',
+function flatten<TSchema extends TableSchema, TConnector extends 'and' | 'or'>(
+  type: TConnector,
   conditions: GenericCondition<TSchema>[],
-): GenericCondition<TSchema> {
+): TConnector extends 'and'
+  ? GenericConjunction<TSchema>
+  : GenericDisjunction<TSchema> {
   const flattened: GenericCondition<TSchema>[] = [];
   for (const c of conditions) {
     if (c.type === type) {
@@ -146,7 +184,10 @@ function flatten<TSchema extends TableSchema>(
     }
   }
 
-  return {type, conditions: flattened};
+  return {
+    type,
+    conditions: flattened,
+  } satisfies GenericCondition<TSchema> as any;
 }
 
 function negateOperator(op: SimpleOperator): SimpleOperator {
