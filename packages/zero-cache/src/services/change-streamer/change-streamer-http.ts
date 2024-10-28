@@ -4,7 +4,7 @@ import {type FastifyReply, type FastifyRequest} from 'fastify';
 import WebSocket from 'ws';
 import {streamIn, streamOut, type Source} from '../../types/streams.js';
 import {URLParams} from '../../types/url-params.js';
-import {HttpService} from '../http-service.js';
+import {HttpService, type Options} from '../http-service.js';
 import {
   downstreamSchema,
   type ChangeStreamer,
@@ -15,10 +15,6 @@ import {
 export const CHANGES_URL_PATTERN = '/api/replication/:version/changes';
 
 export const DEFAULT_PORT = 4849;
-
-export type Options = {
-  port: number;
-};
 
 export class ChangeStreamerHttpServer extends HttpService {
   readonly id = 'change-streamer-http-server';
