@@ -3,6 +3,7 @@ import Fastify, {type FastifyInstance} from 'fastify';
 import {IncomingMessage} from 'http';
 import {h32} from '../../../../shared/src/xxhash.js';
 import type {Worker} from '../../types/processes.js';
+import {RunningState} from '../running-state.js';
 import type {Service} from '../service.js';
 import {getConnectParams} from './connect-params.js';
 import {installWebSocketHandoff} from './websocket-handoff.js';
@@ -25,6 +26,7 @@ export class Dispatcher implements Service {
   readonly #workersByHostname: (hostname: string) => Workers;
   readonly #fastify: FastifyInstance;
   readonly #port: number;
+  readonly #state = new RunningState(this.id);
 
   constructor(
     lc: LogContext,
@@ -69,9 +71,12 @@ export class Dispatcher implements Service {
       port: this.#port,
     });
     this.#lc.info?.(`Server listening at ${address}`);
+    await this.#state.stopped();
   }
 
   async stop(): Promise<void> {
+    this.#lc.info?.('drain: no longer accepting connections');
     await this.#fastify.close();
+    this.#state.stop(this.#lc);
   }
 }

@@ -142,7 +142,7 @@ function kill(workers: Iterable<Worker>, signal: NodeJS.Signals) {
 
 export async function runUntilKilled(
   lc: LogContext,
-  parent: Worker,
+  parent: Worker | NodeJS.Process,
   ...services: SingletonService[]
 ): Promise<void> {
   for (const signal of [...GRACEFUL_SHUTDOWN, ...FORCEFUL_SHUTDOWN]) {

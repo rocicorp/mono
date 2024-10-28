@@ -14,7 +14,7 @@ import {
   type ReplicaFileMode,
   subscribeTo,
 } from '../workers/replicator.js';
-import {GRACEFUL_SHUTDOWN, Terminator, type WorkerType} from './life-cycle.js';
+import {runUntilKilled, Terminator, type WorkerType} from './life-cycle.js';
 import {createLogContext} from './logging.js';
 
 const startMs = Date.now();
@@ -112,15 +112,8 @@ if (numSyncers) {
 
   const dispatcher = new Dispatcher(lc, () => workers);
   try {
-    await dispatcher.run();
+    await runUntilKilled(lc, process, dispatcher);
   } catch (err) {
     terminator.logErrorAndExit(err);
-  }
-
-  for (const signal of GRACEFUL_SHUTDOWN) {
-    process.on(signal, () => {
-      lc.info?.('drain mode: no longer accepting connections');
-      return dispatcher.stop();
-    });
   }
 }
