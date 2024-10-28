@@ -382,12 +382,14 @@ export abstract class AbstractQuery<
   };
 }
 
+export const astForTestingSymbol = Symbol();
+
 export class QueryImpl<
   TSchema extends TableSchema,
   TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
 > extends AbstractQuery<TSchema, TReturn> {
   readonly #delegate: QueryDelegate;
-  readonly #astForTesting: AST;
+  readonly #ast: AST;
 
   constructor(
     delegate: QueryDelegate,
@@ -397,12 +399,12 @@ export class QueryImpl<
   ) {
     super(schema, ast, format);
     this.#delegate = delegate;
-    this.#astForTesting = ast;
+    this.#ast = ast;
   }
 
   // Not part of Query or QueryInternal interface
-  get astForTesting(): AST {
-    return this.#astForTesting;
+  get [astForTestingSymbol](): AST {
+    return this.#ast;
   }
 
   protected _newQuery<TSchema extends TableSchema, TReturn extends QueryType>(
