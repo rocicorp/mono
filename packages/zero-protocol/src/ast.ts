@@ -236,8 +236,14 @@ type StaticParameter = {
   field: string;
 };
 
+const normalizeCache = new WeakMap<AST, Required<AST>>();
+
 export function normalizeAST(ast: AST): Required<AST> {
-  return {
+  const cached = normalizeCache.get(ast);
+  if (cached) {
+    return cached;
+  }
+  const normalized = {
     schema: ast.schema,
     table: ast.table,
     alias: ast.alias,
@@ -262,6 +268,9 @@ export function normalizeAST(ast: AST): Required<AST> {
     limit: ast.limit,
     orderBy: ast.orderBy,
   };
+
+  normalizeCache.set(ast, normalized);
+  return normalized;
 }
 
 function sortedWhere(where: readonly Condition[]): readonly Condition[] {

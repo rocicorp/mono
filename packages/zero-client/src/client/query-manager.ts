@@ -1,7 +1,7 @@
 import type {ClientID} from '../../../replicache/src/mod.js';
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.js';
 import {must} from '../../../shared/src/must.js';
-import {h64} from '../../../shared/src/xxhash.js';
+import {hashOfAST} from '../../../zero-protocol/src/ast-hash.js';
 import {normalizeAST, type AST} from '../../../zero-protocol/src/ast.js';
 import type {
   ChangeDesiredQueriesMessage,
@@ -10,6 +10,8 @@ import type {
 import type {GotCallback} from '../../../zql/src/zql/query/query-impl.js';
 import type {ReadTransaction} from '../mod.js';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.js';
+
+type QueryHash = string;
 
 /**
  * Tracks what queries the client is currently subscribed to on the server.
@@ -120,7 +122,7 @@ export class QueryManager {
 
   add(ast: AST, gotCallback?: GotCallback | undefined): () => void {
     const normalized = normalizeAST(ast);
-    const astHash = hash(normalized);
+    const astHash = hashOfAST(normalized);
     let entry = this.#queries.get(astHash);
     if (!entry) {
       entry = {
@@ -173,10 +175,4 @@ export class QueryManager {
     }
     return true;
   }
-}
-
-type QueryHash = string;
-
-function hash(normalized: AST): QueryHash {
-  return h64(JSON.stringify(normalized)).toString(36);
 }

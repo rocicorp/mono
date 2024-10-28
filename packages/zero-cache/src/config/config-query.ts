@@ -17,7 +17,7 @@ export class ConfigQuery<
 > extends AbstractQuery<TTableSchema, TReturn> {
   constructor(
     schema: NormalizedTableSchema,
-    ast?: AST | undefined,
+    ast: AST = {table: schema.tableName},
     format?: Format | undefined,
   ) {
     super(schema, ast, format);

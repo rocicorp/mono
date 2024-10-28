@@ -3,12 +3,12 @@ import {deepClone} from '../../shared/src/deep-clone.js';
 import type {Immutable} from '../../shared/src/immutable.js';
 import type {
   Query,
-  QueryImpl,
   QueryType,
   Smash,
   TableSchema,
   TypedView,
 } from '../../zero-client/src/mod.js';
+import type {QueryInternal} from '../../zql/src/zql/query/query-internal.js';
 import {useZero} from './use-zero.js';
 
 export function useQuery<
@@ -18,7 +18,7 @@ export function useQuery<
   const z = useZero();
   const view = viewStore.getView(
     z.clientID,
-    q as QueryImpl<TSchema, TReturn>,
+    q as QueryInternal<TSchema, TReturn>,
     enable,
   );
   // https://react.dev/reference/react/useSyncExternalStore
@@ -82,7 +82,7 @@ class ViewStore {
 
   getView<TSchema extends TableSchema, TReturn extends QueryType>(
     clientID: string,
-    query: QueryImpl<TSchema, TReturn>,
+    query: QueryInternal<TSchema, TReturn>,
     enabled: boolean,
   ): {
     getSnapshot: () => Smash<TReturn>;
@@ -91,12 +91,12 @@ class ViewStore {
     if (!enabled) {
       return {
         getSnapshot: () =>
-          (query.singular ? undefined : emptyArray) as Smash<TReturn>,
+          (query.format.singular ? undefined : emptyArray) as Smash<TReturn>,
         subscribeReactInternals: disabledSubscriber,
       };
     }
 
-    const hash = JSON.stringify(query.ast) + clientID;
+    const hash = query.hash() + clientID;
     let existing = this.#views.get(hash);
     if (!existing) {
       existing = new ViewWrapper(
@@ -153,16 +153,16 @@ class ViewWrapper<TSchema extends TableSchema, TReturn extends QueryType> {
   readonly #defaultSnapshot: Smash<TReturn>;
   readonly #onDematerialized;
   readonly #onMaterialized;
-  readonly #query: QueryImpl<TSchema, TReturn>;
+  readonly #query: QueryInternal<TSchema, TReturn>;
   #snapshot: Smash<TReturn>;
   #reactInternals: Set<() => void>;
 
   constructor(
-    query: QueryImpl<TSchema, TReturn>,
+    query: QueryInternal<TSchema, TReturn>,
     onMaterialized: (view: ViewWrapper<TSchema, TReturn>) => void,
     onDematerialized: () => void,
   ) {
-    this.#defaultSnapshot = (query.singular
+    this.#defaultSnapshot = (query.format.singular
       ? undefined
       : emptyArray) as unknown as Smash<TReturn>;
     this.#snapshot = this.#defaultSnapshot;
