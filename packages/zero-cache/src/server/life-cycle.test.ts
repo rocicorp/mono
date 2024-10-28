@@ -12,32 +12,11 @@ describe('shutdown', () => {
   let proc: EventEmitter;
   let terminator: Terminator;
   let events: string[];
-  let dispatcher: TestService;
   let changeStreamer: TestWorker;
   let replicator: TestWorker;
   let syncer1: TestWorker;
   let syncer2: TestWorker;
   let all: TestWorker[];
-
-  class TestService implements SingletonService {
-    readonly id = 'test-service';
-    drained = false;
-    stopped = false;
-
-    run() {
-      return promiseVoid;
-    }
-
-    drain(): Promise<void> {
-      this.drained = true;
-      return promiseVoid;
-    }
-
-    stop() {
-      this.stopped = true;
-      return promiseVoid;
-    }
-  }
 
   class TestWorker implements SingletonService {
     readonly id: string;
@@ -91,9 +70,6 @@ describe('shutdown', () => {
       code => proc.emit('exit', code) as never,
     );
     events = [];
-    dispatcher = new TestService();
-    terminator.addFrontlineService(dispatcher);
-
     changeStreamer = startWorker('cs', 'supporting');
     replicator = startWorker('rep', 'supporting');
     syncer1 = startWorker('s1', 'user-facing');
@@ -111,9 +87,6 @@ describe('shutdown', () => {
 
       await syncer1.draining.promise;
       await syncer2.draining.promise;
-
-      expect(dispatcher.drained).toBe(true);
-      expect(dispatcher.stopped).toBe(true);
 
       syncer1.finishDrain.resolve();
       syncer2.finishDrain.resolve();
@@ -149,10 +122,6 @@ describe('shutdown', () => {
     void fn();
 
     await Promise.allSettled(all.map(w => w.stopped.promise));
-
-    // no drain(), just stop().
-    expect(dispatcher.drained).toBe(false);
-    expect(dispatcher.stopped).toBe(true);
 
     // sort() because order doesn't matter.
     expect(events.sort()).toEqual(
