@@ -56,6 +56,8 @@ async function getExternal(includePeerDeps) {
     'zero-integration-test',
     'zero-protocol',
     'zero-react',
+    'zero-solid',
+    'zero-internal',
     'zql',
     'zqlite',
   ]) {
@@ -94,6 +96,8 @@ async function buildZeroClient() {
   const entryPoints = {
     zero: basePath('src/zero.ts'),
     react: basePath('src/react.ts'),
+    solid: basePath('src/solid.ts'),
+    internal: basePath('src/internal.ts'),
   };
   await esbuild.build({
     ...sharedOptions(false, false),

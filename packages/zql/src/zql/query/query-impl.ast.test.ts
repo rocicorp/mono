@@ -1,13 +1,24 @@
 import {describe, expect, test} from 'vitest';
-import {newQuery, type QueryDelegate, QueryImpl} from './query-impl.js';
+import {
+  astForTestingSymbol,
+  newQuery,
+  type QueryDelegate,
+  QueryImpl,
+} from './query-impl.js';
+import type {Query, QueryType} from './query.js';
+import type {TableSchema} from './schema.js';
 import {issueSchema} from './test/testSchemas.js';
 
 const mockDelegate = {} as QueryDelegate;
 
+function ast(q: Query<TableSchema, QueryType>) {
+  return (q as QueryImpl<TableSchema, QueryType>)[astForTestingSymbol];
+}
+
 describe('building the AST', () => {
   test('creates a new query', () => {
     const issueQuery = newQuery(mockDelegate, issueSchema);
-    expect((issueQuery as unknown as QueryImpl<never, never>).ast).toEqual({
+    expect(ast(issueQuery)).toEqual({
       table: 'issue',
     });
   });
@@ -15,7 +26,7 @@ describe('building the AST', () => {
   test('selecting fields does nothing to the ast', () => {
     const issueQuery = newQuery(mockDelegate, issueSchema);
     const selected = issueQuery.select('id', 'title');
-    expect((selected as unknown as QueryImpl<never, never>).ast).toEqual({
+    expect(ast(selected)).toEqual({
       table: 'issue',
     });
   });
@@ -23,13 +34,13 @@ describe('building the AST', () => {
   test('where inserts a condition', () => {
     const issueQuery = newQuery(mockDelegate, issueSchema);
     const where = issueQuery.where('id', '=', '1');
-    expect((where as unknown as QueryImpl<never, never>).ast).toEqual({
+    expect(ast(where)).toEqual({
       table: 'issue',
       where: [{type: 'simple', field: 'id', op: '=', value: '1'}],
     });
 
     const where2 = where.where('title', '=', 'foo');
-    expect((where2 as unknown as QueryImpl<never, never>).ast).toEqual({
+    expect(ast(where2)).toEqual({
       table: 'issue',
       where: [
         {type: 'simple', field: 'id', op: '=', value: '1'},
@@ -41,7 +52,7 @@ describe('building the AST', () => {
   test('start adds a start field', () => {
     const issueQuery = newQuery(mockDelegate, issueSchema);
     const start = issueQuery.start({id: '1'});
-    expect((start as unknown as QueryImpl<never, never>).ast).toEqual({
+    expect(ast(start)).toEqual({
       table: 'issue',
       start: {
         row: {id: '1'},
@@ -49,7 +60,7 @@ describe('building the AST', () => {
       },
     });
     const start2 = issueQuery.start({id: '2', closed: true}, {inclusive: true});
-    expect((start2 as unknown as QueryImpl<never, never>).ast).toEqual({
+    expect(ast(start2)).toEqual({
       table: 'issue',
       start: {
         row: {id: '2', closed: true},
@@ -61,7 +72,7 @@ describe('building the AST', () => {
   test('related: field edges', () => {
     const issueQuery = newQuery(mockDelegate, issueSchema);
     const related = issueQuery.related('owner', q => q);
-    expect((related as unknown as QueryImpl<never, never>).ast).toEqual({
+    expect(ast(related)).toEqual({
       related: [
         {
           correlation: {
@@ -83,7 +94,7 @@ describe('building the AST', () => {
   test('related: junction edges', () => {
     const issueQuery = newQuery(mockDelegate, issueSchema);
     const related = issueQuery.related('labels', q => q);
-    expect((related as unknown as QueryImpl<never, never>).ast).toEqual({
+    expect(ast(related)).toEqual({
       related: [
         {
           correlation: {
@@ -120,12 +131,12 @@ describe('building the AST', () => {
     });
   });
 
-  test('related: mnever stacked edges', () => {
+  test('related: never stacked edges', () => {
     const issueQuery = newQuery(mockDelegate, issueSchema);
     const related = issueQuery.related('owner', oq =>
       oq.related('issues', iq => iq.related('labels', lq => lq)),
     );
-    expect((related as unknown as QueryImpl<never, never>).ast).toEqual({
+    expect(ast(related)).toEqual({
       related: [
         {
           correlation: {
@@ -190,13 +201,13 @@ describe('building the AST', () => {
     });
   });
 
-  test('related: mnever siblings', () => {
+  test('related: never siblings', () => {
     const issueQuery = newQuery(mockDelegate, issueSchema);
     const related = issueQuery
       .related('owner', oq => oq)
       .related('comments', cq => cq)
       .related('labels', lq => lq);
-    expect((related as unknown as QueryImpl<never, never>).ast).toEqual({
+    expect(ast(related)).toEqual({
       related: [
         {
           correlation: {

@@ -1,9 +1,5 @@
 import {expect, test} from 'vitest';
-import {ArrayView} from './array-view.js';
-import {Filter} from './filter.js';
-import {Join} from './join.js';
 import {MemorySource} from './memory-source.js';
-import {MemoryStorage} from './memory-storage.js';
 import {Snitch} from './snitch.js';
 
 test('destroy source connections', () => {
@@ -55,93 +51,4 @@ test('destroy source connections', () => {
     ['snitch2', 'push', msg1],
     ['snitch2', 'push', msg2],
   ]);
-});
-
-test('destroy a pipeline from the view', () => {
-  // two sources
-  // filtered
-  // joined
-  const source1 = new MemorySource(
-    'table',
-    {a: {type: 'string'}, b: {type: 'string'}},
-    ['b'],
-  );
-  const source2 = new MemorySource(
-    'table',
-    {a: {type: 'string'}, b: {type: 'string'}},
-    ['b'],
-  );
-
-  const filter1 = new Filter(
-    source1.connect([['b', 'asc']]),
-    'all',
-    () => true,
-  );
-  const filter2 = new Filter(
-    source2.connect([['b', 'asc']]),
-    'all',
-    () => true,
-  );
-  const join = new Join({
-    parent: filter1,
-    child: filter2,
-    storage: new MemoryStorage(),
-    parentKey: 'a',
-    childKey: 'a',
-    relationshipName: 'stuff',
-    hidden: false,
-  });
-
-  const view = new ArrayView(join, {
-    singular: false,
-    relationships: {stuff: {singular: false, relationships: {}}},
-  });
-  let data: unknown;
-  view.addListener(d => {
-    data = structuredClone(d);
-  });
-
-  source1.push({
-    type: 'add',
-    row: {
-      a: 'a',
-      b: 'b-source-1',
-    },
-  });
-  source2.push({
-    type: 'add',
-    row: {
-      a: 'a',
-      b: 'b-source-2',
-    },
-  });
-  view.flush();
-
-  const expected = [
-    {
-      a: 'a',
-      b: 'b-source-1',
-      stuff: [
-        {
-          a: 'a',
-          b: 'b-source-2',
-        },
-      ],
-    },
-  ];
-  expect(data).toEqual(expected);
-
-  view.destroy();
-
-  source2.push({
-    type: 'remove',
-    row: {
-      a: 'a',
-      b: 'b-source-2',
-    },
-  });
-  view.flush();
-
-  // view was destroyed before last push so data is unchanged
-  expect(data).toEqual(expected);
 });

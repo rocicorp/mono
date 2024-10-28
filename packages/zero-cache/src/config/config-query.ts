@@ -1,5 +1,5 @@
 import type {AST} from '../../../zero-protocol/src/ast.js';
-import type {Format} from '../../../zql/src/zql/ivm/array-view.js';
+import type {Format} from '../../../zql/src/zql/ivm/view.js';
 import type {NormalizedTableSchema} from '../../../zql/src/zql/query/normalize-table-schema.js';
 import {AbstractQuery} from '../../../zql/src/zql/query/query-impl.js';
 import type {
@@ -17,7 +17,7 @@ export class ConfigQuery<
 > extends AbstractQuery<TTableSchema, TReturn> {
   constructor(
     schema: NormalizedTableSchema,
-    ast?: AST | undefined,
+    ast: AST = {table: schema.tableName},
     format?: Format | undefined,
   ) {
     super(schema, ast, format);

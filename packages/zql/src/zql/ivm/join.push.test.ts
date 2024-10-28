@@ -5,7 +5,7 @@ import {must} from '../../../../shared/src/must.js';
 import type {Ordering} from '../../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.js';
-import {ArrayView, type Format} from './array-view.js';
+import {ArrayView} from './array-view.js';
 import {Catch} from './catch.js';
 import type {Change} from './change.js';
 import type {NormalizedValue} from './data.js';
@@ -16,6 +16,7 @@ import type {Input} from './operator.js';
 import type {SchemaValue} from './schema.js';
 import {Snitch, type SnitchMessage} from './snitch.js';
 import type {SourceChange} from './source.js';
+import type {Format} from './view.js';
 
 suite('push one:many', () => {
   const base = {

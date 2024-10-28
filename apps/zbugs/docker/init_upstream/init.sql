@@ -70,6 +70,19 @@ AFTER INSERT ON comment
 FOR EACH ROW
 EXECUTE FUNCTION update_issue_modified_time();
 
+CREATE OR REPLACE FUNCTION comment_set_created_on_insert()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.created = (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER comment_set_created_on_insert_trigger
+BEFORE INSERT ON comment
+FOR EACH ROW
+EXECUTE FUNCTION comment_set_created_on_insert();
+
 CREATE TABLE label (
     "id" VARCHAR PRIMARY KEY,
     "name" VARCHAR NOT NULL
@@ -109,19 +122,29 @@ BEGIN
         RAISE EXCEPTION 'id ''%'' does not exist in issue or comment', NEW."subjectID";
     END IF;
     
+    PERFORM update_issue_modified_on_emoji_change(NEW."subjectID");
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER emoji_check_subject_id_update_trigger
-BEFORE UPDATE ON emoji
+CREATE OR REPLACE TRIGGER emoji_check_subject_id_update_trigger
+BEFORE INSERT OR UPDATE ON emoji
 FOR EACH ROW
 EXECUTE FUNCTION emoji_check_subject_id();
 
-CREATE TRIGGER emoji_check_subject_id_insert_trigger
+CREATE OR REPLACE FUNCTION emoji_set_created_on_insert()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.created = EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER emoji_set_created_on_insert_trigger
 BEFORE INSERT ON emoji
 FOR EACH ROW
-EXECUTE FUNCTION emoji_check_subject_id();
+EXECUTE FUNCTION emoji_set_created_on_insert();
 
 -- Delete emoji when issue is deleted
 CREATE OR REPLACE FUNCTION delete_emoji_on_issue_delete()
@@ -150,6 +173,21 @@ CREATE TRIGGER delete_emoji_on_comment_delete_trigger
 AFTER DELETE ON comment
 FOR EACH ROW
 EXECUTE FUNCTION delete_emoji_on_comment_delete();
+
+-- When an emoji is added or deleted we find the issue and update the modified time
+CREATE OR REPLACE FUNCTION update_issue_modified_on_emoji_change("subjectID" VARCHAR)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE issue
+    SET modified = EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000
+    FROM (
+        SELECT issue.id AS id
+        FROM issue JOIN comment ON issue.id=comment."issueID"
+        WHERE comment.id = "subjectID" OR issue.id = "subjectID"
+    ) AS subquery
+    WHERE issue.id = subquery.id;
+END;   
+$$ LANGUAGE plpgsql;
 
 CREATE TABLE "userPref" (
     "key" VARCHAR NOT NULL,
@@ -185,10 +223,23 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER set_last_modified
-BEFORE UPDATE ON issue
+CREATE TRIGGER issue_set_last_modified
+BEFORE INSERT OR UPDATE ON issue
 FOR EACH ROW
 EXECUTE FUNCTION update_modified_column();
+
+CREATE OR REPLACE FUNCTION issue_set_created_on_insert()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.created = (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER issue_set_created_on_insert_trigger
+BEFORE INSERT ON issue
+FOR EACH ROW
+EXECUTE FUNCTION issue_set_created_on_insert();
 
 
 -- We use a trigger to maintain the "labelIDs" column in the issue table.

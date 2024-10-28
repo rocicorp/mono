@@ -2,14 +2,18 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../../shared/src/asserts.js';
+import {hashOfAST} from '../../../../zero-protocol/src/ast-hash.js';
 import type {AST, Ordering} from '../../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../../zero-protocol/src/data.js';
 import {buildPipeline, type BuilderDelegate} from '../builder/builder.js';
-import {ArrayView, type Format} from '../ivm/array-view.js';
+import {ArrayView} from '../ivm/array-view.js';
+import type {Input} from '../ivm/operator.js';
+import type {Format, ViewFactory} from '../ivm/view.js';
 import {
   normalizeTableSchema,
   type NormalizedTableSchema,
 } from './normalize-table-schema.js';
+import type {QueryInternal} from './query-internal.js';
 import type {
   AddSelections,
   AddSubselect,
@@ -72,26 +76,34 @@ export function staticParam<TAnchor, TField extends keyof TAnchor>(
 export abstract class AbstractQuery<
   TSchema extends TableSchema,
   TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
-> implements Query<TSchema, TReturn>
+> implements QueryInternal<TSchema, TReturn>
 {
   readonly #ast: AST;
   readonly #schema: NormalizedTableSchema;
   readonly #format: Format;
+  #hash: string = '';
 
   constructor(
     schema: NormalizedTableSchema,
-    ast?: AST | undefined,
+    ast: AST,
     format?: Format | undefined,
   ) {
-    this.#ast = ast ?? {
-      table: schema.tableName,
-    };
+    this.#ast = ast;
     this.#format = format ?? {singular: false, relationships: {}};
     this.#schema = schema;
   }
 
-  get ast() {
-    return this.#ast;
+  get format(): Format {
+    return this.#format;
+  }
+
+  hash(): string {
+    if (!this.#hash) {
+      const ast = this._completeAst();
+      const hash = hashOfAST(ast);
+      this.#hash = hash;
+    }
+    return this.#hash;
   }
 
   select<TFields extends Selector<TSchema>[]>(
@@ -178,7 +190,7 @@ export abstract class AbstractQuery<
                 childField: related1.dest.field,
                 op: '=',
               },
-              subquery: addPrimaryKeysToAst(destSchema, sq.ast),
+              subquery: addPrimaryKeysToAst(destSchema, sq.#ast),
             },
           ],
         },
@@ -186,7 +198,7 @@ export abstract class AbstractQuery<
           ...this.#format,
           relationships: {
             ...this.#format.relationships,
-            [relationship as string]: sq.format,
+            [relationship as string]: sq.#format,
           },
         },
       );
@@ -229,7 +241,7 @@ export abstract class AbstractQuery<
                       op: '=',
                     },
                     hidden: true,
-                    subquery: addPrimaryKeysToAst(destSchema, sq.ast),
+                    subquery: addPrimaryKeysToAst(destSchema, sq.#ast),
                   },
                 ],
               },
@@ -240,7 +252,7 @@ export abstract class AbstractQuery<
           ...this.#format,
           relationships: {
             ...this.#format.relationships,
-            [relationship as string]: sq.format,
+            [relationship as string]: sq.#format,
           },
         },
       );
@@ -333,60 +345,66 @@ export abstract class AbstractQuery<
     );
   }
 
+  #completedAST: AST | undefined;
+
   protected _completeAst(): AST {
-    const finalOrderBy = addPrimaryKeys(this.#schema, this.#ast.orderBy);
-    if (this.#ast.start) {
-      const {row} = this.#ast.start;
-      const narrowedRow: Row = {};
-      for (const [field] of finalOrderBy) {
-        narrowedRow[field] = row[field];
+    if (!this.#completedAST) {
+      const finalOrderBy = addPrimaryKeys(this.#schema, this.#ast.orderBy);
+      if (this.#ast.start) {
+        const {row} = this.#ast.start;
+        const narrowedRow: Row = {};
+        for (const [field] of finalOrderBy) {
+          narrowedRow[field] = row[field];
+        }
+        this.#completedAST = {
+          ...this.#ast,
+          start: {
+            ...this.#ast.start,
+            row: narrowedRow,
+          },
+          orderBy: finalOrderBy,
+        };
+      } else {
+        this.#completedAST = {
+          ...this.#ast,
+          orderBy: addPrimaryKeys(this.#schema, this.#ast.orderBy),
+        };
       }
-      return {
-        ...this.#ast,
-        start: {
-          ...this.#ast.start,
-          row: narrowedRow,
-        },
-        orderBy: finalOrderBy,
-      };
     }
-    return {
-      ...this.#ast,
-      orderBy: addPrimaryKeys(this.#schema, this.#ast.orderBy),
-    };
+    return this.#completedAST;
   }
 
   abstract materialize(): TypedView<Smash<TReturn>>;
+  abstract materialize<T>(factory: ViewFactory<TSchema, TReturn, T>): T;
   abstract preload(): {
     cleanup: () => void;
     complete: Promise<void>;
   };
 }
 
+export const astForTestingSymbol = Symbol();
+
 export class QueryImpl<
   TSchema extends TableSchema,
   TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
 > extends AbstractQuery<TSchema, TReturn> {
   readonly #delegate: QueryDelegate;
-  readonly #format: Format;
+  readonly #ast: AST;
 
   constructor(
     delegate: QueryDelegate,
     schema: NormalizedTableSchema,
-    ast?: AST | undefined,
+    ast: AST = {table: schema.tableName},
     format?: Format | undefined,
   ) {
     super(schema, ast, format);
-    this.#format = format ?? {singular: false, relationships: {}};
     this.#delegate = delegate;
+    this.#ast = ast;
   }
 
-  get format() {
-    return this.#format;
-  }
-
-  get singular(): TReturn['singular'] {
-    return this.#format.singular;
+  // Not part of Query or QueryInternal interface
+  get [astForTestingSymbol](): AST {
+    return this.#ast;
   }
 
   protected _newQuery<TSchema extends TableSchema, TReturn extends QueryType>(
@@ -397,21 +415,30 @@ export class QueryImpl<
     return newQueryWithDetails(this.#delegate, schema, ast, format);
   }
 
-  materialize(): TypedView<Smash<TReturn>> {
+  materialize<T>(factory?: ViewFactory<TSchema, TReturn, T>): T {
     const ast = this._completeAst();
     const removeServerQuery = this.#delegate.addServerQuery(ast);
-    const view = new ArrayView<Smash<TReturn>>(
-      buildPipeline(ast, this.#delegate, undefined),
-      this.#format,
-    );
-    const removeCommitObserver = this.#delegate.onTransactionCommit(() => {
-      view.flush();
-    });
-    view.onDestroy = () => {
-      removeCommitObserver();
+
+    const input = buildPipeline(ast, this.#delegate, undefined);
+    let removeCommitObserver: (() => void) | undefined;
+
+    const onDestroy = () => {
+      input.destroy();
+      removeCommitObserver?.();
       removeServerQuery();
     };
-    return view;
+
+    const view = (factory ?? arrayViewFactory)(
+      this,
+      input,
+      this.format,
+      onDestroy,
+      cb => {
+        removeCommitObserver = this.#delegate.onTransactionCommit(cb);
+      },
+    );
+
+    return view as T;
   }
 
   preload(): {
@@ -459,4 +486,22 @@ function addPrimaryKeysToAst(schema: NormalizedTableSchema, ast: AST): AST {
     ...ast,
     orderBy: addPrimaryKeys(schema, ast.orderBy),
   };
+}
+
+function arrayViewFactory<
+  TSchema extends TableSchema,
+  TReturn extends QueryType,
+>(
+  _query: Query<TSchema, TReturn>,
+  input: Input,
+  format: Format,
+  onDestroy: () => void,
+  onTransactionCommit: (cb: () => void) => void,
+): TypedView<Smash<TReturn>> {
+  const v = new ArrayView<Smash<TReturn>>(input, format);
+  v.onDestroy = onDestroy;
+  onTransactionCommit(() => {
+    v.flush();
+  });
+  return v;
 }
