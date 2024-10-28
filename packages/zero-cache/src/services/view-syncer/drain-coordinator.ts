@@ -1,6 +1,10 @@
 import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../../shared/src/asserts.js';
 
+// The target (additional) utilization to impose on the server
+// that receives the drained connections.
+const TARGET_UTILIZATION = 0.6;
+
 /**
  * There are two types of drains:
  * 1. Elective drains happen when a view-syncer is about to process
@@ -34,6 +38,10 @@ export class DrainCoordinator {
   }
 
   drainNextIn(interval: number) {
+    // Increase the timeout between drains to give the receiving
+    // server space to perform normal processing.
+    interval /= TARGET_UTILIZATION;
+
     const now = Date.now();
     assert(
       this.#nextDrainTime <= now,
