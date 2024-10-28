@@ -28,7 +28,6 @@ export class Terminator {
   readonly #userFacing = new Set<Worker>();
   readonly #all = new Set<Worker>();
   readonly #exit: (code: number) => never;
-  readonly #frontlineServices: SingletonService[] = [];
 
   #drainStart = 0;
 
@@ -48,11 +47,9 @@ export class Terminator {
     }
 
     // ... which will result in sending `SIGTERM` to the remaining workers.
-    proc.on('exit', code => {
-      const signal = code === 0 ? GRACEFUL_SHUTDOWN[0] : FORCEFUL_SHUTDOWN[0];
-      this.#stopServices(signal);
-      kill(this.#all, signal);
-    });
+    proc.on('exit', code =>
+      kill(this.#all, code === 0 ? GRACEFUL_SHUTDOWN[0] : FORCEFUL_SHUTDOWN[0]),
+    );
 
     // For other (catchable) kill signals, exit with a non-zero error code
     // to send a `SIGQUIT` to all workers. For this signal, workers are
@@ -66,22 +63,11 @@ export class Terminator {
 
   #startDrain(signal: 'SIGTERM' | 'SIGINT' = 'SIGTERM') {
     this.#drainStart = Date.now();
-    this.#stopServices(signal);
     if (this.#userFacing.size) {
       kill(this.#userFacing, signal);
     } else {
       kill(this.#all, signal);
     }
-  }
-
-  #stopServices(signal: NodeJS.Signals) {
-    stop(this.#lc, this.#frontlineServices, signal);
-    this.#frontlineServices.splice(0);
-  }
-
-  /** Adds a "frontline" service that is killed on any signal. */
-  addFrontlineService(service: SingletonService) {
-    this.#frontlineServices.push(service);
   }
 
   addWorker(worker: Worker, type: WorkerType): Worker {
@@ -146,23 +132,6 @@ function kill(workers: Iterable<Worker>, signal: NodeJS.Signals) {
   }
 }
 
-function stop(
-  lc: LogContext,
-  services: SingletonService[],
-  signal: NodeJS.Signals,
-) {
-  const GRACEFUL_SIGNALS = GRACEFUL_SHUTDOWN as readonly NodeJS.Signals[];
-
-  services.forEach(async svc => {
-    if (GRACEFUL_SIGNALS.includes(signal) && svc.drain) {
-      lc.info?.(`draining ${svc.constructor.name} ${svc.id} (${signal})`);
-      await svc.drain();
-    }
-    lc.info?.(`stopping ${svc.constructor.name} ${svc.id} (${signal})`);
-    await svc.stop();
-  });
-}
-
 /**
  * Runs the specified services, stopping them on `SIGTERM` or `SIGINT` with
  * an optional {@link SingletonService.drain drain()}, or stopping them
@@ -173,11 +142,22 @@ function stop(
 
 export async function runUntilKilled(
   lc: LogContext,
-  parent: Worker,
+  parent: Worker | NodeJS.Process,
   ...services: SingletonService[]
 ): Promise<void> {
   for (const signal of [...GRACEFUL_SHUTDOWN, ...FORCEFUL_SHUTDOWN]) {
-    parent.once(signal, () => stop(lc, services, signal));
+    parent.once(signal, () => {
+      const GRACEFUL_SIGNALS = GRACEFUL_SHUTDOWN as readonly NodeJS.Signals[];
+
+      services.forEach(async svc => {
+        if (GRACEFUL_SIGNALS.includes(signal) && svc.drain) {
+          lc.info?.(`draining ${svc.constructor.name} ${svc.id} (${signal})`);
+          await svc.drain();
+        }
+        lc.info?.(`stopping ${svc.constructor.name} ${svc.id} (${signal})`);
+        await svc.stop();
+      });
+    });
   }
 
   try {

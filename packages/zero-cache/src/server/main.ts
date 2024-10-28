@@ -14,7 +14,7 @@ import {
   type ReplicaFileMode,
   subscribeTo,
 } from '../workers/replicator.js';
-import {Terminator, type WorkerType} from './life-cycle.js';
+import {runUntilKilled, Terminator, type WorkerType} from './life-cycle.js';
 import {createLogContext} from './logging.js';
 
 const startMs = Date.now();
@@ -111,10 +111,8 @@ if (numSyncers) {
   const workers: Workers = {syncers};
 
   const dispatcher = new Dispatcher(lc, () => workers);
-  terminator.addFrontlineService(dispatcher);
-
   try {
-    await dispatcher.run();
+    await runUntilKilled(lc, process, dispatcher);
   } catch (err) {
     terminator.logErrorAndExit(err);
   }
