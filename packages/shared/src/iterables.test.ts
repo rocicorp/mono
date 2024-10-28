@@ -1,5 +1,6 @@
-import {expect, test} from 'vitest';
-import {wrapIterable} from './iterables.js';
+import {describe, expect, test} from 'vitest';
+import {mergeIterables, wrapIterable} from './iterables.js';
+import fc from 'fast-check';
 
 function* range(start = 0, end = Infinity, step = 1) {
   for (let i = start; i < end; i += step) {
@@ -60,4 +61,44 @@ test('chaining filter and map', () => {
     .filter(x => x % 2 === 0)
     .map(x => x * 2);
   expect([...result]).toEqual([0, 4, 8, 12, 16]);
+});
+
+describe('mergeIterables', () => {
+  test('no dupes, interleaved items', () => {
+    const iterables = [
+      [1, 3, 5],
+      [2, 4, 6],
+    ];
+    const result = mergeIterables(iterables, (l, r) => l - r);
+    expect([...result]).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  test('dupes', () => {
+    const iterables = [
+      [1, 2, 3],
+      [1, 2, 3],
+    ];
+    let result = mergeIterables(iterables, (l, r) => l - r);
+    expect([...result]).toEqual([1, 1, 2, 2, 3, 3]);
+
+    result = mergeIterables(iterables, (l, r) => l - r, true);
+    expect([...result]).toEqual([1, 2, 3]);
+  });
+
+  test('fuzz', () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.array(fc.integer())),
+        fc.boolean(),
+        (arrays, noDupes) => {
+          const sorted = arrays.map(a => a.slice().sort((l, r) => l - r));
+          const result = mergeIterables(sorted, (l, r) => l - r, noDupes);
+          const expected = sorted.flat().sort((l, r) => l - r);
+          expect([...result]).toEqual(
+            noDupes ? [...new Set(expected)] : expected,
+          );
+        },
+      ),
+    );
+  });
 });

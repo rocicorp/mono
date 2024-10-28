@@ -1,3 +1,5 @@
+import {assert} from './asserts.js';
+
 export function* joinIterables<T>(...iters: Iterable<T>[]) {
   for (const iter of iters) {
     yield* iter;
@@ -50,4 +52,50 @@ class IterWrapper<T> implements Iterable<T> {
 
 export function wrapIterable<T>(iter: Iterable<T>): IterWrapper<T> {
   return new IterWrapper(iter);
+}
+
+export function* mergeIterables<T>(
+  iterables: Iterable<T>[],
+  comparator: (l: T, r: T) => number,
+  distcint = false,
+): IterableIterator<T> {
+  const iterators = iterables.map(i => i[Symbol.iterator]());
+  try {
+    const current = iterators.map(i => i.next());
+    let lastYielded: T | undefined;
+    while (current.some(c => !c.done)) {
+      const min = current.reduce(
+        (acc: [T, number] | undefined, c, i): [T, number] | undefined => {
+          if (c.done) {
+            return acc;
+          }
+          if (acc === undefined || comparator(c.value, acc[0]) < 0) {
+            return [c.value, i];
+          }
+          return acc;
+        },
+        undefined,
+      );
+
+      assert(min !== undefined, 'min is undefined');
+      current[min[1]] = iterators[min[1]].next();
+      if (
+        lastYielded !== undefined &&
+        distcint &&
+        comparator(lastYielded, min[0]) === 0
+      ) {
+        continue;
+      }
+      lastYielded = min[0];
+      yield min[0];
+    }
+  } catch (e) {
+    for (const it of iterators) {
+      it.throw?.(e);
+    }
+  } finally {
+    for (const it of iterators) {
+      it.return?.();
+    }
+  }
 }
