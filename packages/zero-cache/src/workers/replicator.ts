@@ -1,12 +1,12 @@
 import {LogContext} from '@rocicorp/logger';
 import {rmSync} from 'node:fs';
+import {Database} from '../../../zqlite/src/db.js';
+import {Notifier} from '../services/replicator/notifier.js';
 import type {
   ReplicaState,
   ReplicaStateNotifier,
   Replicator,
 } from '../services/replicator/replicator.js';
-import {Database} from '../../../zqlite/src/db.js';
-import {Notifier} from '../services/replicator/notifier.js';
 import type {Worker} from '../types/processes.js';
 
 export type ReplicaFileMode = 'serving' | 'serving-copy' | 'backup';
@@ -92,12 +92,18 @@ export function setUpMessageHandlers(
 type Notification = ['notify', ReplicaState];
 
 export function handleSubscriptionsFrom(
-  _lc: LogContext,
+  lc: LogContext,
   subscriber: Worker,
   notifier: ReplicaStateNotifier,
 ) {
   subscriber.onMessageType('subscribe', async () => {
     const subscription = notifier.subscribe();
+
+    subscriber.on('close', () => {
+      lc.debug?.(`closing replication subscription from ${subscriber.pid}`);
+      subscription.cancel();
+    });
+
     for await (const msg of subscription) {
       subscriber.send<Notification>(['notify', msg]);
     }
