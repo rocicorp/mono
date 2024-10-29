@@ -56,8 +56,8 @@ const consoleJsonLogSink: LogSink = {
       stringify({
         level: level.toUpperCase(),
         ...context,
-        ...message,
         ...lastObj,
+        ...message,
       }),
     );
   },
@@ -68,7 +68,7 @@ function errorOrObject(v: unknown): object | undefined {
     return {
       ...v, // some properties of Error subclasses may be enumerable
       name: v.name,
-      message: v.message,
+      errorMsg: v.message,
       stack: v.stack,
       ...('cause' in v ? {cause: errorOrObject(v.cause)} : null),
     };
