@@ -678,7 +678,7 @@ function compareBounds(a: Bound, b: Bound): number {
 /**
  * Only returns optional filters if:
  * 1. It's a simple condition
- * 2. It's an `and` condition with only simple conditions
+ * 2. It's an `and` condition with only simple conditions inside of it
  * 3. It's an `or` that is a no-op.
  *
  * Otherwise the filters are dropped.
