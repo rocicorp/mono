@@ -1,8 +1,8 @@
 import {Zero} from '@rocicorp/zero';
+import {Atom} from './atom.js';
 import {type Schema, schema} from './domain/schema.js';
 import {getJwt, getRawJwt} from './jwt.js';
 import {mark} from './perf-log.js';
-import {Atom} from './atom.js';
 
 export type LoginState = {
   encoded: string;
@@ -44,17 +44,20 @@ authRef.onChange(auth => {
     .related('creator')
     .related('assignee')
     .related('labels')
-    .related('viewState', q => q.where('userID', z.userID).one());
+    .related('viewState', q => q.where('userID', z.userID).one())
+    .related('emoji');
 
   const {cleanup, complete} = baseIssueQuery.preload();
   complete.then(() => {
     mark('preload complete');
     cleanup();
-    baseIssueQuery.related('comments', q => q.limit(10)).preload();
+    baseIssueQuery
+      .related('comments', q => q.related('emoji').limit(10))
+      .preload();
   });
 
   z.query.user.preload();
   z.query.label.preload();
 });
 
-export {zeroRef, authRef};
+export {authRef, zeroRef};
