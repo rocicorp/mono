@@ -127,12 +127,14 @@ export interface ZeroOptionsInternal<S extends Schema> extends ZeroOptions<S> {
    *
    * Zero updates query view state when:
    * 1. creating a new view
-   * 2. updating all existing queries views to a new consistent state
+   * 2. updating all existing queries' views to a new consistent state
    *
-   * When creating a new view, that single views creation will be wrapped
+   * When creating a new view, that single view's creation will be wrapped
    * in a `batchViewUpdates` call.
-   * When updating existing queries, all the queries will be updated in a
-   * single `batchViewUpdates` call.
+   *
+   * When updating existing queries, all queries will be updated in a single
+   * `batchViewUpdates` call, so that the transition to the new consistent
+   * state can be done in a single render.
    *
    * Implementations must always call `applyViewUpdates` synchronously.
    */
