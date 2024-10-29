@@ -112,27 +112,85 @@ describe('shutdown', () => {
     },
   );
 
+  test.each([['SIGTERM'], ['SIGINT']])(
+    'error during graceful shutdown: %s',
+    async signal => {
+      proc.emit(signal);
+
+      await syncer1.draining.promise;
+      await syncer2.draining.promise;
+
+      syncer1.stopped.reject('doh');
+      syncer2.finishDrain.resolve();
+
+      await changeStreamer.draining.promise;
+      await replicator.draining.promise;
+
+      changeStreamer.finishDrain.resolve();
+      replicator.finishDrain.resolve();
+
+      await Promise.allSettled(all.map(w => w.stopped.promise));
+
+      expect(events).toEqual([
+        'drain user-facing',
+        'drain user-facing',
+        'stop user-facing',
+        'drain supporting',
+        'drain supporting',
+        'stop supporting',
+        'stop supporting',
+      ]);
+    },
+  );
+
   test.each([
-    ['SIGQUIT', () => proc.emit('SIGQUIT'), []],
-    ['supporting worker exits', () => replicator.stop(), []],
-    ['supporting worker error', () => changeStreamer.stopped.reject('foo'), []],
-    ['user-facing worker exits', () => syncer1.stop(), []],
-    ['user-facing worker error', () => syncer2.stopped.reject('foo'), []],
-  ])('forceful shutdown: %s', async (_name, fn, additionalEvents) => {
-    void fn();
-
-    await Promise.allSettled(all.map(w => w.stopped.promise));
-
-    // sort() because order doesn't matter.
-    expect(events.sort()).toEqual(
+    [
+      'SIGQUIT',
+      () => proc.emit('SIGQUIT'),
       [
         'stop supporting',
         'stop supporting',
         'stop user-facing',
         'stop user-facing',
-        ...additionalEvents,
-      ].sort(),
-    );
+      ],
+    ],
+    [
+      'supporting worker exits',
+      () => replicator.stop(),
+      [
+        'stop supporting',
+        'stop supporting',
+        'stop user-facing',
+        'stop user-facing',
+      ],
+    ],
+    [
+      'supporting worker error',
+      () => changeStreamer.stopped.reject('foo'),
+      ['stop supporting', 'stop user-facing', 'stop user-facing'],
+    ],
+    [
+      'user-facing worker exits',
+      () => syncer1.stop(),
+      [
+        'stop supporting',
+        'stop supporting',
+        'stop user-facing',
+        'stop user-facing',
+      ],
+    ],
+    [
+      'user-facing worker error',
+      () => syncer2.stopped.reject('foo'),
+      ['stop supporting', 'stop supporting', 'stop user-facing'],
+    ],
+  ])('forceful shutdown: %s', async (_name, fn, expectedEvents) => {
+    void fn();
+
+    await Promise.allSettled(all.map(w => w.stopped.promise));
+
+    // sort() because order doesn't matter.
+    expect(events.sort()).toEqual(expectedEvents.sort());
   });
 
   test('graceful shutdown with no user-facing workers', async () => {

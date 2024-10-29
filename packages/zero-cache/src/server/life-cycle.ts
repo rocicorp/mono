@@ -1,4 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
+import {pid} from 'process';
 import type {EventEmitter} from 'stream';
 import {HttpService, type Options} from '../services/http-service.js';
 import type {SingletonService} from '../services/service.js';
@@ -86,19 +87,34 @@ export class Terminator {
     }
     this.#all.add(worker);
 
-    worker.on('error', err => this.logErrorAndExit(err));
+    worker.on('error', err => this.logErrorAndExit(err, type, worker));
     worker.on('close', (code, signal) =>
-      this.#onExit(code, signal, worker, type),
+      this.#onExit(code, signal, type, worker),
     );
     return worker;
   }
 
-  logErrorAndExit(err: unknown) {
-    this.#lc.error?.(`shutting down for error`, err);
-    this.#exit(-1);
+  logErrorAndExit(
+    err: unknown,
+    type: WorkerType = 'user-facing',
+    worker?: Worker,
+  ) {
+    if (worker) {
+      // Remove the worker from maps to avoid attempting to send more signals to it.
+      this.#userFacing.delete(worker);
+      this.#all.delete(worker);
+    }
+    if (type === 'user-facing' && this.#drainStart > 0) {
+      // Errors from user-facing workers are not expected but need not
+      // disrupt a drain.
+      this.#lc.warn?.(`${type} worker errored while draining`, err);
+    } else {
+      this.#lc.error?.(`shutting down for error`, err);
+      this.#exit(-1);
+    }
   }
 
-  #onExit(code: number, sig: NodeJS.Signals, worker: Worker, type: WorkerType) {
+  #onExit(code: number, sig: NodeJS.Signals, type: WorkerType, worker: Worker) {
     // Remove the worker from maps to avoid attempting to send more signals to it.
     this.#userFacing.delete(worker);
     this.#all.delete(worker);
@@ -192,9 +208,10 @@ export async function runUntilKilled(
 export async function exitAfter(run: () => Promise<void>) {
   try {
     await run();
+    console.info(`pid ${pid} exiting normally`);
     process.exit(0);
   } catch (e) {
-    console.error(e);
+    console.error(`pid ${pid} exiting with error`, e);
     process.exit(-1);
   }
 }
