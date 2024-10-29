@@ -39,6 +39,10 @@ export class ConfigQuery<
     throw new Error('ConfigQuery cannot be materialized');
   }
 
+  run(): Smash<TReturn> {
+    throw new Error('ConfigQuery cannot be run');
+  }
+
   preload(): {
     cleanup: () => void;
     complete: Promise<void>;
