@@ -39,7 +39,7 @@ import {
   type TableSchema,
 } from './schema.js';
 import type {TypedView} from './typed-view.js';
-import {cmp, type GenericCondition} from './expression.js';
+import {and, cmp, type GenericCondition} from './expression.js';
 
 export function newQuery<
   TSchema extends TableSchema,
@@ -285,14 +285,7 @@ export abstract class AbstractQuery<
 
     const existingWhere = this.#ast.where;
     if (existingWhere) {
-      if (existingWhere.type === 'and') {
-        cond = flattenCondition('and', [...existingWhere.conditions, cond]);
-      } else {
-        cond = {
-          type: 'and',
-          conditions: [existingWhere, cond],
-        };
-      }
+      cond = and(existingWhere, cond);
     }
 
     return this._newQuery(
@@ -521,20 +514,4 @@ function arrayViewFactory<
     v.flush();
   });
   return v;
-}
-
-function flattenCondition(
-  type: 'and' | 'or',
-  conditions: Condition[],
-): Condition {
-  const flattened: Condition[] = [];
-  for (const c of conditions) {
-    if (c.type === type) {
-      flattened.push(...c.conditions);
-    } else {
-      flattened.push(c);
-    }
-  }
-
-  return {type, conditions: flattened};
 }
