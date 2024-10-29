@@ -65,6 +65,7 @@ export type GotCallback = (got: boolean) => void;
 export interface QueryDelegate extends BuilderDelegate {
   addServerQuery(ast: AST, gotCallback?: GotCallback | undefined): () => void;
   onTransactionCommit(cb: CommitListener): () => void;
+  batchViewUpdates<T>(applyViewUpdates: () => T): T;
 }
 
 export function staticParam<TAnchor, TField extends keyof TAnchor>(
@@ -431,14 +432,10 @@ export class QueryImpl<
       removeServerQuery();
     };
 
-    const view = (factory ?? arrayViewFactory)(
-      this,
-      input,
-      this.format,
-      onDestroy,
-      cb => {
+    const view = this.#delegate.batchViewUpdates(() =>
+      (factory ?? arrayViewFactory)(this, input, this.format, onDestroy, cb => {
         removeCommitObserver = this.#delegate.onTransactionCommit(cb);
-      },
+      }),
     );
 
     return view as T;

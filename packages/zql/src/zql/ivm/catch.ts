@@ -31,6 +31,10 @@ export class Catch implements Output {
   reset() {
     this.pushes.length = 0;
   }
+
+  destroy() {
+    this.#input.destroy();
+  }
 }
 
 export function expandChange(change: Change): Change {

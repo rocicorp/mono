@@ -84,7 +84,7 @@ import {
   getLastConnectErrorValue,
 } from './metrics.js';
 import {type NormalizedSchema, normalizeSchema} from './normalized-schema.js';
-import type {ZeroOptions} from './options.js';
+import type {ZeroOptions, ZeroOptionsInternal} from './options.js';
 import {QueryManager} from './query-manager.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
@@ -432,7 +432,8 @@ export class Zero<const S extends Schema> {
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
       kvStore = 'idb',
       schema,
-    } = options;
+      batchViewUpdates = applyViewUpdates => applyViewUpdates(),
+    } = options as ZeroOptionsInternal<S>;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
     }
@@ -532,6 +533,7 @@ export class Zero<const S extends Schema> {
     this.#zeroContext = new ZeroContext(
       normalizedSchema.tables,
       (ast, gotCallback) => this.#queryManager.add(ast, gotCallback),
+      batchViewUpdates,
     );
 
     rep.experimentalWatch(
