@@ -1,6 +1,11 @@
 import type {Change} from './change.js';
 import type {FetchRequest, Input, Operator, Output} from './operator.js';
 
+/**
+ * Forks a stream into multiple streams.
+ * Is meant to be paired with a `FanIn` operator which will
+ * later merge the forks back together.
+ */
 export class FanOut implements Operator {
   readonly #input: Input;
   readonly #outputs: Output[];
