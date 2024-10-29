@@ -32,7 +32,7 @@ export class ZeroContext implements QueryDelegate {
   readonly #sources = new Map<string, MemorySource | undefined>();
   readonly #tables: Record<string, TableSchema>;
   readonly #addQuery: AddQuery;
-  readonly #batchViewChanges: (performViewChanges: () => void) => void;
+  readonly #batchViewUpdates: (applyViewUpdates: () => void) => void;
   readonly #commitListeners: Set<CommitListener> = new Set();
 
   readonly staticQueryParameters = undefined;
@@ -40,11 +40,11 @@ export class ZeroContext implements QueryDelegate {
   constructor(
     tables: Record<string, TableSchema>,
     addQuery: AddQuery,
-    batchViewChanges: (performViewChanges: () => void) => void,
+    batchViewUpdates: (applyViewUpdates: () => void) => void,
   ) {
     this.#tables = tables;
     this.#addQuery = addQuery;
-    this.#batchViewChanges = batchViewChanges;
+    this.#batchViewUpdates = batchViewUpdates;
   }
 
   getSource(name: string): Source | undefined {
@@ -75,23 +75,23 @@ export class ZeroContext implements QueryDelegate {
     };
   }
 
-  batchViewChanges<T>(performViewChanges: () => T) {
+  batchViewUpdates<T>(applyViewUpdates: () => T) {
     let result: T | undefined;
     let viewChangesPerformed = false;
-    this.#batchViewChanges(() => {
-      result = performViewChanges();
+    this.#batchViewUpdates(() => {
+      result = applyViewUpdates();
       viewChangesPerformed = true;
     });
     assert(
       viewChangesPerformed,
-      'batchViewChanges must call performViewChanges synchronously.',
+      'batchViewUpdates must call applyViewUpdates synchronously.',
     );
     return result as T;
   }
 
   processChanges(changes: ExperimentalNoIndexDiff) {
     try {
-      this.batchViewChanges(() => {
+      this.batchViewUpdates(() => {
         for (const diff of changes) {
           const {key} = diff;
           assert(key.startsWith(ENTITIES_KEY_PREFIX));

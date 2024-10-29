@@ -20,6 +20,8 @@ import {
   revisionSchema,
   userSchema,
 } from './test/testSchemas.js';
+import type {QueryInternal} from './query-internal.js';
+import type {DefaultQueryResultRow} from './query.js';
 
 export class QueryDelegateImpl implements QueryDelegate {
   #sources: Record<string, Source> = makeSources();
@@ -27,8 +29,8 @@ export class QueryDelegateImpl implements QueryDelegate {
 
   addedServerQueries: AST[] = [];
 
-  batchViewChanges<T>(performViewChanges: () => T): T {
-    return performViewChanges();
+  batchViewUpdates<T>(applyViewUpdates: () => T): T {
+    return applyViewUpdates();
   }
 
   onTransactionCommit(listener: CommitListener): () => void {
@@ -720,4 +722,32 @@ test('run', () => {
       title: 'issue 2',
     },
   ]);
+});
+
+test('view creation is wrapped in context.batchViewUpdates call', () => {
+  let viewFactoryCalls = 0;
+  const testView = {};
+  const viewFactory = () => {
+    viewFactoryCalls++;
+    return;
+  };
+
+  class TestQueryDelegate extends QueryDelegateImpl {
+    batchViewUpdates<T>(applyViewUpdates: () => T): T {
+      expect(viewFactoryCalls).toEqual(0);
+      const result = applyViewUpdates();
+      expect(viewFactoryCalls).toEqual(1);
+      return result;
+    }
+  }
+  const queryDelegate = new TestQueryDelegate();
+
+  const issueQuery = newQuery(queryDelegate, issueSchema);
+  const view = (
+    issueQuery as QueryInternal<
+      typeof issueSchema,
+      DefaultQueryResultRow<typeof issueSchema>
+    >
+  ).materialize(viewFactory);
+  expect(view).toBe(testView);
 });

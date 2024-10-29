@@ -9,7 +9,7 @@ import type {ZeroOptionsInternal} from '../../zero-internal/src/mod.js';
 export function createZero<S extends Schema>(options: ZeroOptions<S>): Zero<S> {
   const opts: ZeroOptionsInternal<S> = {
     ...options,
-    batchViewChanges: batch,
+    batchViewUpdates: batch,
   };
   return new Zero(opts);
 }

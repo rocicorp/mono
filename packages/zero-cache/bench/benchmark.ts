@@ -60,8 +60,8 @@ export function bench(opts: Options) {
     onTransactionCommit() {
       return () => {};
     },
-    batchViewChanges<T>(performViewChanges: () => T): T {
-      return performViewChanges();
+    batchViewUpdates<T>(applyViewUpdates: () => T): T {
+      return applyViewUpdates();
     },
   };
 

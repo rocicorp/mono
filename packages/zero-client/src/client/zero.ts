@@ -432,7 +432,7 @@ export class Zero<const S extends Schema> {
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
       kvStore = 'idb',
       schema,
-      batchViewChanges = performViewChanges => performViewChanges(),
+      batchViewUpdates = applyViewUpdates => applyViewUpdates(),
     } = options as ZeroOptionsInternal<S>;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
@@ -533,7 +533,7 @@ export class Zero<const S extends Schema> {
     this.#zeroContext = new ZeroContext(
       normalizedSchema.tables,
       (ast, gotCallback) => this.#queryManager.add(ast, gotCallback),
-      batchViewChanges,
+      batchViewUpdates,
     );
 
     rep.experimentalWatch(
