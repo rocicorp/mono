@@ -67,5 +67,5 @@ function patternToRegExp(source: string, flags: '' | 'i' = ''): RegExp {
         break;
     }
   }
-  return new RegExp(pattern + '$', flags);
+  return new RegExp(pattern + '$', flags + 'm');
 }
