@@ -87,7 +87,10 @@ export class Terminator {
     }
     this.#all.add(worker);
 
-    worker.on('error', err => this.#onExit(-2, null, err, type, worker));
+    worker.on(
+      'error',
+      err => this.#lc.warn?.(`error from worker ${worker.pid}`, err),
+    );
     worker.on('close', (code, signal) =>
       this.#onExit(code, signal, null, type, worker),
     );
@@ -112,7 +115,7 @@ export class Terminator {
       this.#all.delete(worker);
     }
 
-    const pid = worker?.pid ?? 0;
+    const pid = worker?.pid ?? process.pid;
 
     if (type === 'supporting') {
       // The replication-manager has no user-facing workers.
