@@ -73,6 +73,13 @@ const issueSchema = createTableSchema({
         schema: () => viewStateSchema,
       },
     },
+    emoji: {
+      source: 'id',
+      dest: {
+        field: 'subjectID',
+        schema: () => emojiSchema,
+      },
+    },
   },
 });
 
@@ -103,6 +110,13 @@ const commentSchema = createTableSchema({
       dest: {
         field: 'id',
         schema: () => userSchema,
+      },
+    },
+    emoji: {
+      source: 'id',
+      dest: {
+        field: 'subjectID',
+        schema: () => emojiSchema,
       },
     },
   },
