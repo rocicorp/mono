@@ -350,3 +350,87 @@ test('where expressions', () => {
     ],
   });
 });
+
+// DNF conversion is pretty extensively tested in `expression.test.ts`
+// but we should double-check that `where` uses `expression` rather than trying to
+// mutate the AST itself.
+test('where to dnf', () => {
+  const issueQuery = newQuery(mockDelegate, issueSchema);
+  let dnf = issueQuery.where('id', '=', '1').where('closed', true);
+  expect(ast(dnf).where).toEqual({
+    type: 'and',
+    conditions: [
+      {type: 'simple', field: 'id', op: '=', value: '1'},
+      {type: 'simple', field: 'closed', op: '=', value: true},
+    ],
+  });
+
+  dnf = issueQuery.where('id', '=', '1');
+  expect(ast(dnf).where).toEqual({
+    type: 'simple',
+    field: 'id',
+    op: '=',
+    value: '1',
+  });
+
+  dnf = issueQuery.where(or(cmp('id', '=', '1'), cmp('closed', true)));
+  expect(ast(dnf).where).toEqual({
+    type: 'or',
+    conditions: [
+      {type: 'simple', field: 'id', op: '=', value: '1'},
+      {type: 'simple', field: 'closed', op: '=', value: true},
+    ],
+  });
+
+  dnf = issueQuery.where(and(cmp('id', '=', '1'), cmp('closed', true)));
+  expect(ast(dnf).where).toEqual({
+    type: 'and',
+    conditions: [
+      {type: 'simple', field: 'id', op: '=', value: '1'},
+      {type: 'simple', field: 'closed', op: '=', value: true},
+    ],
+  });
+
+  dnf = issueQuery.where(
+    and(cmp('id', '=', '1'), or(cmp('closed', true), cmp('id', '2'))),
+  );
+  expect(ast(dnf).where).toEqual({
+    type: 'or',
+    conditions: [
+      {
+        type: 'and',
+        conditions: [
+          {
+            type: 'simple',
+            field: 'closed',
+            op: '=',
+            value: true,
+          },
+          {
+            type: 'simple',
+            field: 'id',
+            op: '=',
+            value: '1',
+          },
+        ],
+      },
+      {
+        type: 'and',
+        conditions: [
+          {
+            type: 'simple',
+            field: 'id',
+            op: '=',
+            value: '2',
+          },
+          {
+            type: 'simple',
+            field: 'id',
+            op: '=',
+            value: '1',
+          },
+        ],
+      },
+    ],
+  });
+});
