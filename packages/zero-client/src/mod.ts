@@ -75,3 +75,4 @@ export {
 export type {TypedView} from '../../zql/src/zql/query/typed-view.js';
 export type {ZeroOptions} from './client/options.js';
 export {Zero, type Schema, createSchema} from './client/zero.js';
+export {and, or, not, cmp} from '../../zql/src/zql/query/expression.js';

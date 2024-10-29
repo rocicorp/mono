@@ -14,6 +14,8 @@ import type {
 } from '../../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.js';
+import {FanIn} from '../ivm/fan-in.js';
+import {FanOut} from '../ivm/fan-out.js';
 import {Filter} from '../ivm/filter.js';
 import {Join} from '../ivm/join.js';
 import type {Input, Storage} from '../ivm/operator.js';
@@ -218,11 +220,17 @@ function applyAnd(
 }
 
 function applyOr(
-  _input: Input,
-  _condition: Disjunction,
-  _appliedFilters: boolean,
+  input: Input,
+  condition: Disjunction,
+  appliedFilters: boolean,
 ): Input {
-  throw new Error('OR is not yet implemented');
+  const fanOut = new FanOut(input);
+  const branches: Input[] = [];
+  for (const subCondition of condition.conditions) {
+    branches.push(applyWhere(fanOut, subCondition, appliedFilters));
+  }
+  assert(branches.length > 0, 'Or condition must have at least one branch');
+  return new FanIn(fanOut, branches as [Input, ...Input[]]);
 }
 
 function applySimpleCondition(
