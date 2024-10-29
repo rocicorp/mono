@@ -1,4 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
+import {pid} from 'process';
 import type {EventEmitter} from 'stream';
 import {HttpService, type Options} from '../services/http-service.js';
 import type {SingletonService} from '../services/service.js';
@@ -86,46 +87,49 @@ export class Terminator {
     }
     this.#all.add(worker);
 
-    worker.on('error', err => this.logErrorAndExit(err));
+    worker.on('error', err => this.#onExit(-2, null, err, type, worker));
     worker.on('close', (code, signal) =>
-      this.#onExit(code, signal, worker, type),
+      this.#onExit(code, signal, null, type, worker),
     );
     return worker;
   }
 
   logErrorAndExit(err: unknown) {
-    this.#lc.error?.(`shutting down for error`, err);
-    this.#exit(-1);
+    // only accessible by the main (i.e. user-facing) process.
+    this.#onExit(-1, null, err, 'user-facing', undefined);
   }
 
-  #onExit(code: number, sig: NodeJS.Signals, worker: Worker, type: WorkerType) {
+  #onExit(
+    code: number,
+    sig: NodeJS.Signals | null,
+    err: unknown | null,
+    type: WorkerType,
+    worker: Worker | undefined,
+  ) {
     // Remove the worker from maps to avoid attempting to send more signals to it.
-    this.#userFacing.delete(worker);
-    this.#all.delete(worker);
+    if (worker) {
+      this.#userFacing.delete(worker);
+      this.#all.delete(worker);
+    }
 
     if (type === 'supporting') {
       // The replication-manager has no user-facing workers.
       // In this case, code === 0 shutdowns are not errors.
       const log = code === 0 && this.#userFacing.size === 0 ? 'info' : 'error';
-      this.#lc[log]?.(
-        `shutting down because supporting worker exited with code ${code}`,
-      );
+      this.#lc[log]?.(`${type} worker exited with code (${code})`, err ?? '');
       return this.#exit(log === 'error' ? -1 : code);
     }
-    if (this.#drainStart === 0) {
-      this.#lc.error?.(
-        `shutting down because user-facing worker exited before SIGTERM`,
-      );
-      return this.#exit(-1);
-    }
 
-    // These situations are not expected but need not disrupt the drain.
+    const log = this.#drainStart === 0 ? 'error' : 'warn';
     if (sig) {
-      this.#lc.warn?.(`${type} worker killed with (${sig}) while draining`);
+      this.#lc[log]?.(`${type} worker killed with (${sig})`, err ?? '');
     } else if (code !== 0) {
-      this.#lc.warn?.(
-        `${type} worker exited with code (${code}) while draining`,
-      );
+      this.#lc[log]?.(`${type} worker exited with code (${code})`, err ?? '');
+    }
+    // Exit only if not draining. If a user-facing worker exits unexpectedly
+    // during a drain, log a warning but let other user-facing workers drain.
+    if (log === 'error') {
+      this.#exit(code || -1);
     }
 
     // user-facing worker finished draining.
@@ -192,9 +196,10 @@ export async function runUntilKilled(
 export async function exitAfter(run: () => Promise<void>) {
   try {
     await run();
+    console.info(`pid ${pid} exiting normally`);
     process.exit(0);
   } catch (e) {
-    console.error(e);
+    console.error(`pid ${pid} exiting with error`, e);
     process.exit(-1);
   }
 }
