@@ -45,16 +45,20 @@ export class Filter implements Operator {
     return this.#input.getSchema();
   }
 
-  *fetch(req: FetchRequest) {
-    for (const node of this.#input.fetch(req)) {
+  fetch(req: FetchRequest) {
+    return this.#filter(this.#input.fetch(req));
+  }
+
+  cleanup(req: FetchRequest) {
+    return this.#filter(this.#input.cleanup(req));
+  }
+
+  *#filter(stream: Stream<Node>) {
+    for (const node of stream) {
       if (this.#mode === 'push-only' || this.#predicate(node.row)) {
         yield node;
       }
     }
-  }
-
-  cleanup(req: FetchRequest): Stream<Node> {
-    return this.fetch(req);
   }
 
   push(change: Change) {

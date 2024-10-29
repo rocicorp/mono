@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import {MemorySource} from './memory-source.js';
 import {FanOut} from './fan-out.js';
 import {Catch} from './catch.js';
@@ -158,4 +158,26 @@ test('fan-in fetch', () => {
       },
     },
   ]);
+});
+
+test('cleanup called once per branch', () => {
+  const ms = new MemorySource(
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+  const connector = ms.connect([['a', 'asc']]);
+  const fanOut = new FanOut(connector);
+  const filter1 = new Filter(fanOut, 'all', () => true);
+  const filter2 = new Filter(fanOut, 'all', () => true);
+  const filter3 = new Filter(fanOut, 'all', () => true);
+
+  const fanIn = new FanIn(fanOut, [filter1, filter2, filter3]);
+  const out = new Catch(fanIn);
+
+  const spy = vi.spyOn(connector, 'cleanup');
+
+  out.cleanup();
+
+  expect(spy).toHaveBeenCalledTimes(3);
 });
