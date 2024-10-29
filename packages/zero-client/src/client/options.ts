@@ -111,6 +111,8 @@ export interface ZeroOptions<S extends Schema> {
    * Default value: 8kb.
    */
   maxHeaderLength?: number | undefined;
+}
 
+export interface ZeroOptionsInternal<S extends Schema> extends ZeroOptions<S> {
   batchViewChanges?: ((performViewChanges: () => void) => void) | undefined;
 }
