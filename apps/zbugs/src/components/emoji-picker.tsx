@@ -58,6 +58,10 @@ export function EmojiPicker({onEmojiChange}: Props) {
     [z],
   );
 
+  // Stop propagation of keypress events to prevent the k/j useKeypress hook to
+  // get triggered
+  const onKeyPress = useCallback((e: Event) => e.stopPropagation(), []);
+
   const ref: RefCallback<Picker> = el => {
     console.log('emoji-picker', el);
     if (lastPicker.current) {
@@ -66,10 +70,12 @@ export function EmojiPicker({onEmojiChange}: Props) {
         'skin-tone-change',
         onSkinToneChange,
       );
+      lastPicker.current.removeEventListener('keypress', onKeyPress);
     }
     if (el) {
       el.addEventListener('emoji-click', onEmojiClick);
       el.addEventListener('skin-tone-change', onSkinToneChange);
+      el.addEventListener('keypress', onKeyPress);
       lastPicker.current = el;
 
       // The emoji-picker-element does not allow auto focusing the search input
