@@ -641,3 +641,79 @@ test('non int limit', () => {
     newQuery(queryDelegate, issueSchema).limit(1.5);
   }).toThrow('Limit must be an integer');
 });
+
+test('run', () => {
+  const queryDelegate = new QueryDelegateImpl();
+  addData(queryDelegate);
+
+  const issueQuery1 = newQuery(queryDelegate, issueSchema)
+    .select('id')
+    .where('title', '=', 'issue 1');
+
+  const singleFilterRows = issueQuery1.run();
+  const doubleFilterRows = issueQuery1.where('closed', '=', false).run();
+  const doubleFilterWithNoResultsRows = issueQuery1
+    .where('closed', '=', true)
+    .run();
+
+  expect(singleFilterRows.map(r => r.id)).toEqual(['0001']);
+  expect(doubleFilterRows.map(r => r.id)).toEqual(['0001']);
+  expect(doubleFilterWithNoResultsRows).toEqual([]);
+
+  const issueQuery2 = newQuery(queryDelegate, issueSchema)
+    .related('labels', q => q.select('name'))
+    .related('owner', q => q.select('name'))
+    .related('comments', q => q.select('text'))
+    .select('id');
+  const rows = issueQuery2.run();
+  expect(rows).toEqual([
+    {
+      closed: false,
+      comments: [
+        {
+          authorId: '0001',
+          body: 'comment 1',
+          id: '0001',
+          issueId: '0001',
+        },
+        {
+          authorId: '0002',
+          body: 'comment 2',
+          id: '0002',
+          issueId: '0001',
+        },
+      ],
+      description: 'description 1',
+      id: '0001',
+      labels: [
+        {
+          id: '0001',
+          name: 'label 1',
+        },
+      ],
+      owner: [
+        {
+          id: '0001',
+          name: 'Alice',
+        },
+      ],
+      ownerId: '0001',
+      title: 'issue 1',
+    },
+    {
+      closed: false,
+      comments: [],
+      description: 'description 2',
+      id: '0002',
+      labels: [],
+      owner: [
+        {
+          id: '0002',
+          name: 'Bob',
+        },
+      ],
+      ownerId: '0002',
+      title: 'issue 2',
+    },
+  ]);
+});

@@ -385,6 +385,7 @@ export abstract class AbstractQuery<
 
   abstract materialize(): TypedView<Smash<TReturn>>;
   abstract materialize<T>(factory: ViewFactory<TSchema, TReturn, T>): T;
+  abstract run(): Smash<TReturn>;
   abstract preload(): {
     cleanup: () => void;
     complete: Promise<void>;
@@ -448,6 +449,13 @@ export class QueryImpl<
     );
 
     return view as T;
+  }
+
+  run() {
+    const v: TypedView<Smash<TReturn>> = this.materialize();
+    const ret = v.data;
+    v.destroy();
+    return ret;
   }
 
   preload(): {
