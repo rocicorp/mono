@@ -148,18 +148,15 @@ function normalizeEmoji(emoji: string): string {
 }
 
 function groupAndSortEmojis(emojis: Emoji[]): Record<string, Emoji[]> {
+  // Sort the emojis by creation time. Not sure how to sort this with ZQL.
+  const sortedEmojis = [...emojis].sort((a, b) => a.created - b.created);
   const rv: Record<string, Emoji[]> = {};
-  for (const emoji of emojis) {
+  for (const emoji of sortedEmojis) {
     const normalizedEmoji = normalizeEmoji(emoji.value);
     if (!rv[normalizedEmoji]) {
       rv[normalizedEmoji] = [];
     }
     rv[normalizedEmoji].push(emoji);
-  }
-
-  // Sort the emojis by creation time. Not sure how to sort this with ZQL.
-  for (const key in rv) {
-    rv[key] = rv[key].sort((a, b) => a.created - b.created);
   }
 
   return rv;
