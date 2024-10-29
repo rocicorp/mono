@@ -1,10 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
 import {unlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {ident} from 'pg-format';
 import {expect} from 'vitest';
 import {randInt} from '../../../shared/src/rand.js';
 import {Database} from '../../../zqlite/src/db.js';
+import {id} from '../types/sql.js';
 
 export class DbFile {
   readonly path;
@@ -33,10 +33,10 @@ export function initDB(
     }
     for (const [name, rows] of Object.entries(tables ?? {})) {
       const columns = Object.keys(rows[0]);
-      const cols = columns.map(c => ident(c)).join(',');
+      const cols = columns.map(c => id(c)).join(',');
       const vals = new Array(columns.length).fill('?').join(',');
       const insertStmt = db.prepare(
-        `INSERT INTO ${ident(name)} (${cols}) VALUES (${vals})`,
+        `INSERT INTO ${id(name)} (${cols}) VALUES (${vals})`,
       );
       for (const row of rows) {
         insertStmt.run(Object.values(row));
@@ -52,7 +52,7 @@ export function expectTables(
 ) {
   for (const [table, expected] of Object.entries(tables ?? {})) {
     const actual = db
-      .prepare(`SELECT * FROM ${ident(table)}`)
+      .prepare(`SELECT * FROM ${id(table)}`)
       .safeIntegers(numberType === 'bigint')
       .all();
     expect(actual).toEqual(expect.arrayContaining(expected));
@@ -67,7 +67,7 @@ export function expectMatchingObjectsInTables(
 ) {
   for (const [table, expected] of Object.entries(tables ?? {})) {
     const actual = db
-      .prepare(`SELECT * FROM ${ident(table)}`)
+      .prepare(`SELECT * FROM ${id(table)}`)
       .safeIntegers(numberType === 'bigint')
       .all();
     expect(actual).toMatchObject(expected);

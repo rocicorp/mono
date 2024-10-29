@@ -1,6 +1,7 @@
-import {ident as id, literal as lit} from 'pg-format';
+import {literal as lit} from 'pg-format';
 import * as v from '../../../../../../shared/src/valita.js';
 import {filteredTableSpec, indexSpec} from '../../../../db/specs.js';
+import {id} from '../../../../types/sql.js';
 import {indexDefinitionsQuery, publishedTableQuery} from './published.js';
 
 // Sent in the 'version' tag of "ddlStart" and "ddlUpdate" event messages.
