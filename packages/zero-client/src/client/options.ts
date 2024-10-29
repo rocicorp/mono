@@ -113,7 +113,7 @@ export interface ZeroOptions<S extends Schema> {
   maxHeaderLength?: number | undefined;
 }
 
-export interface ZeroOptionsInternal<S extends Schema> extends ZeroOptions<S> {
+export interface ZeroAdvancedOptions<S extends Schema> extends ZeroOptions<S> {
   /**
    * UI rendering libraries will often provide a utility for batching multiple
    * state updates into a single render. Some examples are React's

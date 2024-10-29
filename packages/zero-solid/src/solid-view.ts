@@ -11,7 +11,7 @@ import {
   type Smash,
   type TableSchema,
   type View,
-} from '../../zero-internal/src/mod.js';
+} from '../../zero-advanced/src/mod.js';
 
 export class SolidView<V extends View> implements Output {
   readonly #input: Input;
