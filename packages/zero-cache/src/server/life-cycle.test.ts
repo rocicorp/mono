@@ -143,6 +143,36 @@ describe('shutdown', () => {
     },
   );
 
+  test.each([['SIGTERM'], ['SIGINT']])(
+    'all error during graceful shutdown: %s',
+    async signal => {
+      proc.emit(signal);
+
+      await syncer1.draining.promise;
+      await syncer2.draining.promise;
+
+      syncer1.stopped.reject('doh');
+      syncer2.stopped.reject('doh');
+
+      await changeStreamer.draining.promise;
+      await replicator.draining.promise;
+
+      changeStreamer.finishDrain.resolve();
+      replicator.finishDrain.resolve();
+
+      await Promise.allSettled(all.map(w => w.stopped.promise));
+
+      expect(events).toEqual([
+        'drain user-facing',
+        'drain user-facing',
+        'drain supporting',
+        'drain supporting',
+        'stop supporting',
+        'stop supporting',
+      ]);
+    },
+  );
+
   test.each([
     [
       'SIGQUIT',
