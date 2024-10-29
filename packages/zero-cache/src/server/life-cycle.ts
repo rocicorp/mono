@@ -103,14 +103,6 @@ export class Terminator {
     this.#userFacing.delete(worker);
     this.#all.delete(worker);
 
-    if (sig) {
-      this.#lc.error?.(`shutting down because ${type} worker killed (${sig})`);
-      return this.#exit(-1);
-    }
-    if (code !== 0) {
-      this.#lc.error?.(`shutting down because ${type} worker exited (${code})`);
-      return this.#exit(code);
-    }
     if (type === 'supporting') {
       // The replication-manager has no user-facing workers.
       // In this case, code === 0 shutdowns are not errors.
@@ -125,6 +117,15 @@ export class Terminator {
         `shutting down because user-facing worker exited before SIGTERM`,
       );
       return this.#exit(-1);
+    }
+
+    // These situations are not expected but need not disrupt the drain.
+    if (sig) {
+      this.#lc.warn?.(`${type} worker killed with (${sig}) while draining`);
+    } else if (code !== 0) {
+      this.#lc.warn?.(
+        `${type} worker exited with code (${code}) while draining`,
+      );
     }
 
     // user-facing worker finished draining.
