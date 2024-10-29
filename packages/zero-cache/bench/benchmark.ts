@@ -60,6 +60,9 @@ export function bench(opts: Options) {
     onTransactionCommit() {
       return () => {};
     },
+    batchViewChanges<T>(performViewChanges: () => T): T {
+      return performViewChanges();
+    },
   };
 
   const issueQuery = newQuery(host, schema.issue);
