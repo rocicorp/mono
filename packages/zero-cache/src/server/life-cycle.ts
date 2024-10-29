@@ -28,7 +28,7 @@ export class Terminator {
   readonly #lc: LogContext;
   readonly #userFacing = new Set<Worker>();
   readonly #all = new Set<Worker>();
-  readonly #exit: (code: number) => never;
+  readonly #exitImpl: (code: number) => never;
 
   #drainStart = 0;
 
@@ -49,7 +49,10 @@ export class Terminator {
 
     // ... which will result in sending `SIGTERM` to the remaining workers.
     proc.on('exit', code =>
-      kill(this.#all, code === 0 ? GRACEFUL_SHUTDOWN[0] : FORCEFUL_SHUTDOWN[0]),
+      this.#kill(
+        this.#all,
+        code === 0 ? GRACEFUL_SHUTDOWN[0] : FORCEFUL_SHUTDOWN[0],
+      ),
     );
 
     // For other (catchable) kill signals, exit with a non-zero error code
@@ -59,15 +62,21 @@ export class Terminator {
       proc.on(signal, () => exit(-1));
     }
 
-    this.#exit = exit;
+    this.#exitImpl = exit;
+  }
+
+  #exit(code: number) {
+    this.#lc.info?.('exiting with code', code);
+    void this.#lc.flush().finally(() => this.#exitImpl(code));
   }
 
   #startDrain(signal: 'SIGTERM' | 'SIGINT' = 'SIGTERM') {
+    this.#lc.info?.(`initiating drain (${signal})`);
     this.#drainStart = Date.now();
     if (this.#userFacing.size) {
-      kill(this.#userFacing, signal);
+      this.#kill(this.#userFacing, signal);
     } else {
-      kill(this.#all, signal);
+      this.#kill(this.#all, signal);
     }
   }
 
@@ -84,12 +93,16 @@ export class Terminator {
     return worker;
   }
 
-  logErrorAndExit(err: unknown): never {
+  logErrorAndExit(err: unknown) {
     this.#lc.error?.(`shutting down for error`, err);
     this.#exit(-1);
   }
 
   #onExit(code: number, sig: NodeJS.Signals, worker: Worker, type: WorkerType) {
+    // Remove the worker from maps to avoid attempting to send more signals to it.
+    this.#userFacing.delete(worker);
+    this.#all.delete(worker);
+
     if (sig) {
       this.#lc.error?.(`shutting down because ${type} worker killed (${sig})`);
       return this.#exit(-1);
@@ -115,21 +128,23 @@ export class Terminator {
     }
 
     // user-facing worker finished draining.
-    this.#userFacing.delete(worker);
-    this.#all.delete(worker);
-
     if (this.#userFacing.size === 0) {
       this.#lc.info?.(
         `all user-facing workers drained (${Date.now() - this.#drainStart} ms)`,
       );
       return this.#exit(0);
     }
+    return undefined;
   }
-}
 
-function kill(workers: Iterable<Worker>, signal: NodeJS.Signals) {
-  for (const worker of workers) {
-    worker.kill(signal);
+  #kill(workers: Iterable<Worker>, signal: NodeJS.Signals) {
+    for (const worker of workers) {
+      try {
+        worker.kill(signal);
+      } catch (e) {
+        this.#lc.error?.(e);
+      }
+    }
   }
 }
 

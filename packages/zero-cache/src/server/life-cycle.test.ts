@@ -114,9 +114,9 @@ describe('shutdown', () => {
 
   test.each([
     ['SIGQUIT', () => proc.emit('SIGQUIT'), []],
-    ['supporting worker exits', () => replicator.stop(), ['stop supporting']],
+    ['supporting worker exits', () => replicator.stop(), []],
     ['supporting worker error', () => changeStreamer.stopped.reject('foo'), []],
-    ['user-facing worker exits', () => syncer1.stop(), ['stop user-facing']],
+    ['user-facing worker exits', () => syncer1.stop(), []],
     ['user-facing worker error', () => syncer2.stopped.reject('foo'), []],
   ])('forceful shutdown: %s', async (_name, fn, additionalEvents) => {
     void fn();
@@ -150,19 +150,16 @@ describe('shutdown', () => {
 
     void changeStreamer.stop();
 
-    await changeStreamer.draining.promise;
     await replicator.draining.promise;
 
-    changeStreamer.finishDrain.resolve();
     replicator.finishDrain.resolve();
 
-    await Promise.allSettled(all.map(w => w.stopped.promise));
+    await replicator.stopped.promise;
 
+    lc.debug?.('expecting');
     expect(events).toEqual([
       'stop supporting',
       'drain supporting',
-      'drain supporting',
-      'stop supporting',
       'stop supporting',
     ]);
   });
