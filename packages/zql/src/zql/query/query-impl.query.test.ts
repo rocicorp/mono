@@ -27,6 +27,10 @@ export class QueryDelegateImpl implements QueryDelegate {
 
   addedServerQueries: AST[] = [];
 
+  batchViewChanges<T>(performViewChanges: () => T): T {
+    return performViewChanges();
+  }
+
   onTransactionCommit(listener: CommitListener): () => void {
     this.#commitListeners.add(listener);
     return () => {
