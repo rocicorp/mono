@@ -1,5 +1,4 @@
 import {LogContext} from '@rocicorp/logger';
-import {ident} from 'pg-format';
 import {assert} from '../../../../shared/src/asserts.js';
 import {must} from '../../../../shared/src/must.js';
 import * as v from '../../../../shared/src/valita.js';
@@ -13,6 +12,7 @@ import {
   type RowValue,
 } from '../../types/row-key.js';
 import {type SchemaVersions} from '../../types/schema-versions.js';
+import {id} from '../../types/sql.js';
 import {
   RESET_OP,
   changeLogEntrySchema as schema,
@@ -265,7 +265,7 @@ class Snapshot {
 
   numChangesSince(prevVersion: string) {
     const {count} = this.db.get(
-      'SELECT COUNT(*) AS count FROM "_zero.ChangeLog" WHERE stateVersion > ?',
+      'SELECT COUNT(*) AS count FROM "_zero.changeLog" WHERE stateVersion > ?',
       prevVersion,
     );
     return count;
@@ -273,7 +273,7 @@ class Snapshot {
 
   changesSince(prevVersion: string) {
     const cached = this.db.statementCache.get(
-      'SELECT * FROM "_zero.ChangeLog" WHERE stateVersion > ?',
+      'SELECT * FROM "_zero.changeLog" WHERE stateVersion > ?',
     );
     return {
       changes: cached.statement.iterate(prevVersion),
@@ -283,10 +283,10 @@ class Snapshot {
 
   getRow(table: LiteTableSpec, rowKey: JSONValue) {
     const key = normalizedKeyOrder(rowKey as RowKey);
-    const conds = Object.keys(key).map(c => `${ident(c)}=?`);
+    const conds = Object.keys(key).map(c => `${id(c)}=?`);
     const cols = Object.keys(table.columns);
     const cached = this.db.statementCache.get(
-      `SELECT ${cols.map(c => ident(c)).join(',')} FROM ${ident(
+      `SELECT ${cols.map(c => id(c)).join(',')} FROM ${id(
         table.name,
       )} WHERE ${conds.join(' AND ')}`,
     );
@@ -302,7 +302,7 @@ class Snapshot {
   getRows(table: LiteTableSpec) {
     const cols = Object.keys(table.columns);
     const cached = this.db.statementCache.get(
-      `SELECT ${cols.map(c => ident(c)).join(',')} FROM ${ident(table.name)}`,
+      `SELECT ${cols.map(c => id(c)).join(',')} FROM ${id(table.name)}`,
     );
     cached.statement.safeIntegers(true);
     return {

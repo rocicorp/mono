@@ -1,6 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
 import {SqliteError} from 'better-sqlite3-bedrock';
-import {ident as id} from 'pg-format';
 import {LogicalReplicationService} from 'pg-logical-replication';
 import {AbortError} from '../../../../shared/src/abort-error.js';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
@@ -21,6 +20,7 @@ import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {liteRow} from '../../types/lite.js';
 import {liteTableName} from '../../types/names.js';
+import {id} from '../../types/sql.js';
 import type {Source} from '../../types/streams.js';
 import type {
   ChangeStreamer,

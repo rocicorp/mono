@@ -1,8 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
-import {ident, literal} from 'pg-format';
+import {literal} from 'pg-format';
 import {assert} from '../../../../../../shared/src/asserts.js';
 import {warnIfDataTypeSupported} from '../../../../db/pg-to-lite.js';
 import type {PostgresDB, PostgresTransaction} from '../../../../types/pg.js';
+import {id} from '../../../../types/sql.js';
 import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/replication-state.js';
 import type {ShardConfig} from '../shard-config.js';
 import {createEventTriggerStatements} from './ddl.js';
@@ -10,7 +11,7 @@ import {getPublicationInfo, type PublicationInfo} from './published.js';
 
 // Creates a function that appends `_SHARD_ID` to the input.
 export function append(shardID: string) {
-  return (name: string) => ident(name + '_' + shardID);
+  return (name: string) => id(name + '_' + shardID);
 }
 
 export function schemaFor(shardID: string) {
@@ -67,7 +68,7 @@ function shardSetup(shardID: string, publications: string[]): string {
     PRIMARY KEY("clientGroupID", "clientID")
   );
 
-  CREATE PUBLICATION ${ident(metadataPublication)}
+  CREATE PUBLICATION ${id(metadataPublication)}
     FOR TABLE zero."schemaVersions", TABLE ${schema}."clients";
 
   CREATE TABLE ${schema}."shardConfig" (

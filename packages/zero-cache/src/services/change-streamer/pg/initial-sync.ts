@@ -1,5 +1,4 @@
 import type {LogContext} from '@rocicorp/logger';
-import {ident} from 'pg-format';
 import postgres from 'postgres';
 import {Database} from '../../../../../zqlite/src/db.js';
 import {
@@ -19,6 +18,7 @@ import {
 import {liteValues} from '../../../types/lite.js';
 import {liteTableName} from '../../../types/names.js';
 import {pgClient, type PostgresDB} from '../../../types/pg.js';
+import {id} from '../../../types/sql.js';
 import {initChangeLog} from '../../replicator/schema/change-log.js';
 import {
   initReplicationState,
@@ -217,13 +217,13 @@ async function copy(
   let totalRows = 0;
   const tableName = liteTableName(table);
   const selectColumns = Object.keys(table.columns)
-    .map(c => ident(c))
+    .map(c => id(c))
     .join(',');
   const insertColumns = [
     ...Object.keys(table.columns),
     ZERO_VERSION_COLUMN_NAME,
   ];
-  const insertColumnList = insertColumns.map(c => ident(c)).join(',');
+  const insertColumnList = insertColumns.map(c => id(c)).join(',');
   const insertStmt = to.prepare(
     `INSERT INTO "${tableName}" (${insertColumnList}) VALUES (${new Array(
       insertColumns.length,
@@ -235,7 +235,7 @@ async function copy(
     .map(({rowFilter}) => rowFilter)
     .filter(f => !!f); // remove nulls
   const selectStmt =
-    `SELECT ${selectColumns} FROM ${ident(table.schema)}.${ident(table.name)}` +
+    `SELECT ${selectColumns} FROM ${id(table.schema)}.${id(table.name)}` +
     (filterConditions.length === 0
       ? ''
       : ` WHERE ${filterConditions.join(' OR ')}`);

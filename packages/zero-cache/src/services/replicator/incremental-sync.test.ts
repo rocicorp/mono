@@ -74,6 +74,7 @@ describe('replicator/incremental-sync', () => {
     issues: ['orgID', 'issueID', 'bool'],
   });
   const fooBarBaz = new ReplicationMessages({foo: 'id', bar: 'id', baz: 'id'});
+  const tables = new ReplicationMessages({transaction: 'column'});
 
   const cases: Case[] = [
     {
@@ -477,6 +478,58 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 's',
             rowKey: '{"id":101}',
+          },
+        ],
+      },
+    },
+    {
+      name: 'reserved words in DML',
+      setup: `
+      CREATE TABLE "transaction" (
+        "column" INTEGER PRIMARY KEY,
+        "trigger" INTEGER,
+        "index" INTEGER,
+        _0_version TEXT NOT NULL
+      );
+      `,
+      downstream: [
+        ['begin', orgIssues.begin()],
+        ['data', tables.truncate('transaction')],
+        [
+          'data',
+          tables.insert('transaction', {column: 1, trigger: 2, index: 3}),
+        ],
+        [
+          'data',
+          tables.update(
+            'transaction',
+            {column: 2, trigger: 3, index: 4},
+            {column: 1},
+          ),
+        ],
+        ['data', tables.delete('transaction', {column: 2})],
+        ['commit', orgIssues.commit(), {watermark: '07'}],
+      ],
+      data: {
+        transaction: [],
+        ['_zero.changeLog']: [
+          {
+            stateVersion: '02',
+            table: 'transaction',
+            op: 't',
+            rowKey: '',
+          },
+          {
+            stateVersion: '02',
+            table: 'transaction',
+            op: 'd',
+            rowKey: '{"column":1}',
+          },
+          {
+            stateVersion: '02',
+            table: 'transaction',
+            op: 'd',
+            rowKey: '{"column":2}',
           },
         ],
       },
@@ -1342,6 +1395,102 @@ describe('replicator/incremental-sync', () => {
             handle: 'ASC',
           },
           unique: false,
+        },
+      ],
+    },
+    {
+      name: 'reserved words in DDL',
+      setup: ``,
+      downstream: [
+        ['begin', tables.begin()],
+        [
+          'data',
+          tables.createTable({
+            schema: 'public',
+            name: 'transaction',
+            columns: {
+              column: {pos: 0, dataType: 'int8'},
+              commit: {pos: 1, dataType: 'int8'},
+            },
+            primaryKey: ['column'],
+          }),
+        ],
+        [
+          'data',
+          tables.addColumn('transaction', 'trigger', {
+            dataType: 'text',
+            pos: 10,
+          }),
+        ],
+        [
+          'data',
+          tables.updateColumn(
+            'transaction',
+            {
+              name: 'trigger',
+              spec: {dataType: 'text', pos: 10},
+            },
+            {
+              name: 'index',
+              spec: {dataType: 'text', pos: 10},
+            },
+          ),
+        ],
+        [
+          'data',
+          tables.updateColumn(
+            'transaction',
+            {
+              name: 'index',
+              spec: {dataType: 'text', pos: 10},
+            },
+            {
+              name: 'index',
+              spec: {dataType: 'int8', pos: 10},
+            },
+          ),
+        ],
+        ['data', tables.dropColumn('transaction', 'commit')],
+        ['commit', orgIssues.commit(), {watermark: '07'}],
+      ],
+      data: {
+        transaction: [],
+        ['_zero.changeLog']: [
+          {
+            stateVersion: '02',
+            table: 'transaction',
+            op: 'r',
+            rowKey: null,
+          },
+        ],
+      },
+      tableSpecs: [
+        {
+          name: 'transaction',
+          columns: {
+            column: {
+              characterMaximumLength: null,
+              dataType: 'int8',
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            index: {
+              characterMaximumLength: null,
+              dataType: 'int8',
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: true,
+              pos: 2,
+            },
+          },
+          primaryKey: ['column'],
         },
       ],
     },
