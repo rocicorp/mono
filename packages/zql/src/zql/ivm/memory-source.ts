@@ -123,7 +123,7 @@ export class MemorySource implements Source {
 
     const predicates: ((row: Row) => boolean)[] = filteredOptionalFilters(
       optionalFilters,
-    ).map(c => createPredicate(c));
+    ).filters.map(c => createPredicate(c));
 
     const connection: Connection = {
       input,
@@ -675,22 +675,56 @@ function compareBounds(a: Bound, b: Bound): number {
   return compareValues(a, b);
 }
 
+/**
+ * Only returns optional filters if:
+ * 1. It's a simple condition
+ * 2. It's an `and` condition with only simple conditions
+ * 3. It's an `or` that is a no-op.
+ *
+ * Otherwise the filters are dropped.
+ *
+ * This is a short term solution until we update `fetch` to pass
+ * the constraints rather than making them static in `connect`.
+ *
+ * The below way of doing things over-fetches as the optional filters
+ * are widened to cover all branches of the pipeline.
+ */
 export function filteredOptionalFilters(
   optionalFilters: Condition | undefined,
-): SimpleCondition[] {
-  let ret: SimpleCondition[] = [];
+): {filters: SimpleCondition[]; allApplied: boolean} {
+  let ret: {
+    filters: SimpleCondition[];
+    allApplied: boolean;
+  } = {
+    filters: [],
+    allApplied: false,
+  };
+
   if (optionalFilters) {
-    if (optionalFilters.type === 'and') {
-      ret = optionalFilters.conditions.filter(c => c.type === 'simple');
-      assert(
-        ret.length === optionalFilters.conditions.length,
-        'Unexpected condition type',
-      );
-    } else if (optionalFilters.type === 'simple') {
-      ret = [optionalFilters];
-    } else {
-      throw new Error('Unexpected filter type');
+    if (
+      optionalFilters.type === 'or' &&
+      optionalFilters.conditions.length === 1
+    ) {
+      optionalFilters = optionalFilters.conditions[0];
     }
+    if (optionalFilters.type === 'and') {
+      const filters = optionalFilters.conditions.filter(
+        c => c.type === 'simple',
+      );
+      ret = {
+        filters,
+        allApplied: filters.length === optionalFilters.conditions.length,
+      };
+    } else if (optionalFilters.type === 'simple') {
+      ret = {
+        filters: [optionalFilters],
+        allApplied: true,
+      };
+    } else {
+      return {filters: [], allApplied: false};
+    }
+  } else {
+    ret.allApplied = true;
   }
 
   return ret;
