@@ -195,6 +195,7 @@ export class TableSource implements Source {
   }
 
   connect(sort: Ordering, optionalFilters?: Condition | undefined) {
+    const filters = filteredOptionalFilters(optionalFilters);
     const input: SourceInput = {
       getSchema: () => this.#getSchema(connection),
       fetch: req => this.#fetch(req, connection),
@@ -207,15 +208,14 @@ export class TableSource implements Source {
         assert(idx !== -1, 'Connection not found');
         this.#connections.splice(idx, 1);
       },
-      appliedFilters: true,
+      appliedFilters: filters.allApplied,
     };
 
-    const filters: SimpleCondition[] = filteredOptionalFilters(optionalFilters);
     const connection: Connection = {
       input,
       output: undefined,
       sort,
-      filters,
+      filters: filters.filters,
       compareRows: makeComparator(sort),
     };
     assertOrderingIncludesPK(sort, this.#primaryKey);

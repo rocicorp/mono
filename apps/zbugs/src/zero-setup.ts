@@ -1,4 +1,4 @@
-import {Zero} from '@rocicorp/zero';
+import {and, cmp, not, or, Zero} from '@rocicorp/zero';
 import {Atom} from './atom.js';
 import {type Schema, schema} from './domain/schema.js';
 import {getJwt, getRawJwt} from './jwt.js';
@@ -37,8 +37,7 @@ authRef.onChange(auth => {
   });
   zeroRef.value = z;
 
-  // To enable accessing zero in the devtools easily.
-  (window as {z?: Zero<Schema>}).z = z;
+  exposeDevHooks(z);
 
   const baseIssueQuery = z.query.issue
     .related('creator')
@@ -59,5 +58,21 @@ authRef.onChange(auth => {
   z.query.user.preload();
   z.query.label.preload();
 });
+
+// To enable accessing zero in the devtools easily.
+function exposeDevHooks(z: Zero<Schema>) {
+  const casted = window as unknown as {
+    z?: Zero<Schema>;
+    or: typeof or;
+    and: typeof and;
+    not: typeof not;
+    cmp: typeof cmp;
+  };
+  casted.z = z;
+  casted.or = or;
+  casted.and = and;
+  casted.not = not;
+  casted.cmp = cmp;
+}
 
 export {authRef, zeroRef};
