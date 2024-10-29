@@ -39,14 +39,12 @@ export class FanOut implements Operator {
     return this.#input.getSchema();
   }
 
-  *fetch(req: FetchRequest) {
-    for (const node of this.#input.fetch(req)) {
-      yield node;
-    }
+  fetch(req: FetchRequest) {
+    return this.#input.fetch(req);
   }
 
   cleanup(req: FetchRequest) {
-    return this.fetch(req);
+    return this.#input.cleanup(req);
   }
 
   onFanInReceivedPush() {

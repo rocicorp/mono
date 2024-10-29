@@ -6,9 +6,11 @@ import {
 } from '../../../../shared/src/json.js';
 import {must} from '../../../../shared/src/must.js';
 import type {Change} from './change.js';
+import type {Node} from './data.js';
 import type {FanOut} from './fan-out.js';
 import type {FetchRequest, Input, Operator, Output} from './operator.js';
 import type {TableSchema} from './schema.js';
+import type {Stream} from './stream.js';
 
 /**
  * The FanIn operator merges multiple streams into one.
@@ -60,8 +62,16 @@ export class FanIn implements Operator {
     return this.#inputs[0].getSchema();
   }
 
-  *fetch(req: FetchRequest) {
-    const iterables = this.#inputs.map(input => input.fetch(req));
+  fetch(req: FetchRequest): Stream<Node> {
+    return this.#fetchOrCleanup(input => input.fetch(req));
+  }
+
+  cleanup(req: FetchRequest): Stream<Node> {
+    return this.#fetchOrCleanup(input => input.cleanup(req));
+  }
+
+  *#fetchOrCleanup(streamProvider: (input: Input) => Stream<Node>) {
+    const iterables = this.#inputs.map(input => streamProvider(input));
     for (const node of mergeIterables(
       iterables,
       (l, r) => must(this.#schema).compareRows(l.row, r.row),
@@ -69,10 +79,6 @@ export class FanIn implements Operator {
     )) {
       yield node;
     }
-  }
-
-  cleanup(req: FetchRequest) {
-    return this.fetch(req);
   }
 
   push(change: Change) {
