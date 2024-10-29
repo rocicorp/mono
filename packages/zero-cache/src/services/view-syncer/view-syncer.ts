@@ -365,8 +365,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           client = this.#clients.get(clientID);
           if (client?.wsID !== wsID) {
             // Only respond to messages of the currently connected client.
-            // Past connections may have been dropped due to an error, so consider them invalid.
-            lc.info?.(`client no longer connected. dropping ${cmd} message`);
+            // Connections may have been drained or dropped due to an error.
+            lc.debug?.(`client no longer connected. dropping ${cmd} message`);
             return;
           }
         }
