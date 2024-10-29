@@ -7,6 +7,9 @@ import {MemoryStorage} from '../../../zql/src/zql/ivm/memory-storage.js';
 import {type AddQuery, ZeroContext} from './context.js';
 import {ENTITIES_KEY_PREFIX} from './keys.js';
 
+const testBatchViewChanges = (processViewChanges: () => void) =>
+  processViewChanges();
+
 test('getSource', () => {
   const schemas = {
     users: {
@@ -29,7 +32,11 @@ test('getSource', () => {
     },
   } as const;
 
-  const context = new ZeroContext(schemas, null as unknown as AddQuery);
+  const context = new ZeroContext(
+    schemas,
+    null as unknown as AddQuery,
+    testBatchViewChanges,
+  );
 
   const source = context.getSource('users');
 
@@ -72,7 +79,11 @@ test('processChanges', () => {
     } as const,
   };
 
-  const context = new ZeroContext(schemas, null as unknown as AddQuery);
+  const context = new ZeroContext(
+    schemas,
+    null as unknown as AddQuery,
+    testBatchViewChanges,
+  );
   const out = new Catch(
     context.getSource('t1')!.connect([
       ['name', 'desc'],
@@ -137,7 +148,11 @@ test('transactions', () => {
     },
   } as const;
 
-  const context = new ZeroContext(schemas, null as unknown as AddQuery);
+  const context = new ZeroContext(
+    schemas,
+    null as unknown as AddQuery,
+    testBatchViewChanges,
+  );
   const servers = context.getSource('server')!;
   const flair = context.getSource('flair')!;
   const join = new Join({
