@@ -101,4 +101,82 @@ describe('mergeIterables', () => {
       ),
     );
   });
+
+  test('return', () => {
+    let it1 = new TestIterable([1, 2, 3]);
+    let it2 = new TestIterable([1, 2, 3]);
+    let result = mergeIterables([it1, it2], (l, r) => (l ?? 0) - (r ?? 0));
+
+    expect(it1.returned).toBe(false);
+    expect(it2.returned).toBe(false);
+
+    for (const _ of result) {
+      // noop
+    }
+
+    expect(it1.returned).toBe(true);
+    expect(it2.returned).toBe(true);
+
+    it1 = new TestIterable([1, 2]);
+    it2 = new TestIterable([1, 2, 3, 4]);
+    result = mergeIterables([it1, it2], (l, r) => (l ?? 0) - (r ?? 0));
+
+    for (const _ of result) {
+      // noop
+    }
+
+    expect(it1.returned).toBe(true);
+    expect(it2.returned).toBe(true);
+  });
+
+  test('throw', () => {
+    const it1 = new TestIterable(new ThrowingIterable());
+    const it2 = new TestIterable(new ThrowingIterable());
+    const result = mergeIterables([it1, it2], (l, r) => (l ?? 0) - (r ?? 0));
+
+    expect(it1.returned).toBe(false);
+    expect(it2.returned).toBe(false);
+
+    expect(() => {
+      for (const _ of result) {
+        // noop
+      }
+    }).toThrow();
+
+    expect(it1.returned).toBe(true);
+    expect(it2.returned).toBe(true);
+  });
 });
+
+class ThrowingIterable {
+  [Symbol.iterator]() {
+    return {
+      next: () => {
+        throw new Error();
+      },
+    };
+  }
+}
+
+class TestIterable {
+  readonly #data;
+  returned: boolean = false;
+  thrown: boolean = false;
+
+  constructor(data: Iterable<number>) {
+    this.#data = data;
+  }
+
+  [Symbol.iterator]() {
+    const iterator = this.#data[Symbol.iterator]();
+    return {
+      next: () => iterator.next(),
+      return: () => this.return(),
+    };
+  }
+
+  return() {
+    this.returned = true;
+    return {value: undefined, done: true};
+  }
+}

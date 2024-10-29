@@ -89,10 +89,6 @@ export function* mergeIterables<T>(
       lastYielded = min[0];
       yield min[0];
     }
-  } catch (e) {
-    for (const it of iterators) {
-      it.throw?.(e);
-    }
   } finally {
     for (const it of iterators) {
       it.return?.();
