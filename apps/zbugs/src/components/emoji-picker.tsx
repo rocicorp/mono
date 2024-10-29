@@ -71,6 +71,31 @@ export function EmojiPicker({onEmojiChange}: Props) {
       el.addEventListener('emoji-click', onEmojiClick);
       el.addEventListener('skin-tone-change', onSkinToneChange);
       lastPicker.current = el;
+
+      // The emoji-picker-element does not allow auto focusing the search input
+      // when it's first rendered. We can work around this by observing the
+      // shadow DOM and focusing the search input when it's added to the DOM.
+      if (el.shadowRoot) {
+        const m = new MutationObserver(records => {
+          for (const record of records) {
+            for (const node of record.addedNodes) {
+              if (node.nodeType === Node.ELEMENT_NODE) {
+                const search = (node as Element).querySelector('#search');
+                if (search) {
+                  (search as HTMLElement).focus();
+                  m.disconnect();
+                }
+                return;
+              }
+            }
+          }
+        });
+
+        m.observe(el.shadowRoot, {
+          subtree: true,
+          childList: true,
+        });
+      }
     }
   };
 
