@@ -1,6 +1,10 @@
 import {expect, test} from 'vitest';
 import {MemorySource} from './memory-source.js';
 import {Snitch} from './snitch.js';
+import {Filter} from './filter.js';
+import {FanOut} from './fan-out.js';
+import {FanIn} from './fan-in.js';
+import {Catch} from './catch.js';
 
 test('destroy source connections', () => {
   const ms = new MemorySource(
@@ -51,4 +55,46 @@ test('destroy source connections', () => {
     ['snitch2', 'push', msg1],
     ['snitch2', 'push', msg2],
   ]);
+});
+
+test('destroy a pipeline that has forking', () => {
+  const ms = new MemorySource(
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+  const connector = ms.connect([['a', 'asc']]);
+  const fanOut = new FanOut(connector);
+  const filter1 = new Filter(fanOut, 'all', () => true);
+  const filter2 = new Filter(fanOut, 'all', () => true);
+  const filter3 = new Filter(fanOut, 'all', () => true);
+  const fanIn = new FanIn(fanOut, [filter1, filter2, filter3]);
+  const out = new Catch(fanIn);
+
+  ms.push({type: 'add', row: {a: 1, b: 'foo'}});
+
+  const expected = [
+    {
+      node: {
+        relationships: {},
+        row: {
+          a: 1,
+          b: 'foo',
+        },
+      },
+      type: 'add',
+    },
+  ];
+  expect(out.pushes).toEqual(expected);
+
+  out.destroy();
+  ms.push({type: 'add', row: {a: 2, b: 'foo'}});
+
+  // The pipeline was destroyed. No new events should
+  // be received.
+  expect(out.pushes).toEqual(expected);
+
+  expect(() => out.destroy()).toThrow(
+    'FanOut already destroyed once for each output',
+  );
 });
