@@ -5,6 +5,7 @@ import {
   type Serializable,
 } from 'node:child_process';
 import EventEmitter from 'node:events';
+import {pid} from 'node:process';
 
 /**
  * Central registry of message type names, which are used to identify
@@ -95,7 +96,9 @@ export interface Sender extends EventEmitter {
   ): this;
 }
 
-export interface Worker extends Sender, Receiver {}
+export interface Worker extends Sender, Receiver {
+  pid?: number | undefined;
+}
 
 /**
  * Adds the {@link Sender.onMessageType()} and {@link Sender.onceMessageType()}
@@ -127,7 +130,7 @@ function wrap<P extends EventEmitter>(proc: P): P & Sender {
   }) as P & Sender;
 }
 
-type Proc = Pick<ChildProcess, 'send' | 'kill'> & EventEmitter;
+type Proc = Pick<ChildProcess, 'send' | 'kill' | 'pid'> & EventEmitter;
 
 /**
  * The parentWorker for forked processes, or `null` if the process was not forked.
@@ -197,7 +200,11 @@ export function inProcChannel(): [Worker, Worker] {
       dest.emit(signal, signal);
 
   return [
-    wrap(Object.assign(worker1, {send: sendTo(worker2), kill: kill(worker2)})),
-    wrap(Object.assign(worker2, {send: sendTo(worker1), kill: kill(worker1)})),
+    wrap(
+      Object.assign(worker1, {send: sendTo(worker2), kill: kill(worker2), pid}),
+    ),
+    wrap(
+      Object.assign(worker2, {send: sendTo(worker1), kill: kill(worker1), pid}),
+    ),
   ];
 }
