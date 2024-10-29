@@ -32,13 +32,19 @@ export class ZeroContext implements QueryDelegate {
   readonly #sources = new Map<string, MemorySource | undefined>();
   readonly #tables: Record<string, TableSchema>;
   readonly #addQuery: AddQuery;
+  readonly #batchViewUpdates: (applyViewUpdates: () => void) => void;
   readonly #commitListeners: Set<CommitListener> = new Set();
 
   readonly staticQueryParameters = undefined;
 
-  constructor(tables: Record<string, TableSchema>, addQuery: AddQuery) {
+  constructor(
+    tables: Record<string, TableSchema>,
+    addQuery: AddQuery,
+    batchViewUpdates: (applyViewUpdates: () => void) => void,
+  ) {
     this.#tables = tables;
     this.#addQuery = addQuery;
+    this.#batchViewUpdates = batchViewUpdates;
   }
 
   getSource(name: string): Source | undefined {
@@ -69,50 +75,66 @@ export class ZeroContext implements QueryDelegate {
     };
   }
 
+  batchViewUpdates<T>(applyViewUpdates: () => T) {
+    let result: T | undefined;
+    let viewChangesPerformed = false;
+    this.#batchViewUpdates(() => {
+      result = applyViewUpdates();
+      viewChangesPerformed = true;
+    });
+    assert(
+      viewChangesPerformed,
+      'batchViewUpdates must call applyViewUpdates synchronously.',
+    );
+    return result as T;
+  }
+
   processChanges(changes: ExperimentalNoIndexDiff) {
     try {
-      for (const diff of changes) {
-        const {key} = diff;
-        assert(key.startsWith(ENTITIES_KEY_PREFIX));
-        const slash = key.indexOf('/', ENTITIES_KEY_PREFIX.length);
-        const name = key.slice(ENTITIES_KEY_PREFIX.length, slash);
-        const source = this.getSource(name);
-        if (!source) {
-          continue;
+      this.batchViewUpdates(() => {
+        for (const diff of changes) {
+          const {key} = diff;
+          assert(key.startsWith(ENTITIES_KEY_PREFIX));
+          const slash = key.indexOf('/', ENTITIES_KEY_PREFIX.length);
+          const name = key.slice(ENTITIES_KEY_PREFIX.length, slash);
+          const source = this.getSource(name);
+          if (!source) {
+            continue;
+          }
+
+          switch (diff.op) {
+            case 'del':
+              assert(typeof diff.oldValue === 'object');
+              source.push({
+                type: 'remove',
+                row: diff.oldValue as Row,
+              });
+              break;
+            case 'add':
+              assert(typeof diff.newValue === 'object');
+              source.push({
+                type: 'add',
+                row: diff.newValue as Row,
+              });
+              break;
+            case 'change':
+              assert(typeof diff.newValue === 'object');
+              assert(typeof diff.oldValue === 'object');
+
+              // Edit changes are not yet supported everywhere. For now we only
+              // generate them in tests.
+              source.push({
+                type: 'edit',
+                row: diff.newValue as Row,
+                oldRow: diff.oldValue as Row,
+              });
+
+              break;
+            default:
+              unreachable(diff);
+          }
         }
-
-        switch (diff.op) {
-          case 'del':
-            assert(typeof diff.oldValue === 'object');
-            source.push({
-              type: 'remove',
-              row: diff.oldValue as Row,
-            });
-            break;
-          case 'add':
-            assert(typeof diff.newValue === 'object');
-            source.push({
-              type: 'add',
-              row: diff.newValue as Row,
-            });
-            break;
-          case 'change':
-            assert(typeof diff.newValue === 'object');
-            assert(typeof diff.oldValue === 'object');
-
-            // Edit changes are not yet supported everywhere. For now we only
-            // generate them in tests.
-            source.push({
-              type: 'edit',
-              row: diff.newValue as Row,
-              oldRow: diff.oldValue as Row,
-            });
-
-            break;
-          default:
-            unreachable(diff);
-        }
-      }
+      });
     } finally {
       this.#endTransaction();
     }
