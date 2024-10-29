@@ -112,20 +112,31 @@ export class Terminator {
       this.#all.delete(worker);
     }
 
+    const pid = worker?.pid ?? 0;
+
     if (type === 'supporting') {
       // The replication-manager has no user-facing workers.
       // In this case, code === 0 shutdowns are not errors.
       const log = code === 0 && this.#userFacing.size === 0 ? 'info' : 'error';
-      this.#lc[log]?.(`${type} worker exited with code (${code})`, err ?? '');
+      this.#lc[log]?.(
+        `${type} worker ${pid} exited with code (${code})`,
+        err ?? '',
+      );
       return this.#exit(log === 'error' ? -1 : code);
     }
 
     const log = this.#drainStart === 0 ? 'error' : 'warn';
     if (sig) {
-      this.#lc[log]?.(`${type} worker killed with (${sig})`, err ?? '');
+      this.#lc[log]?.(`${type} worker ${pid} killed with (${sig})`, err ?? '');
     } else if (code !== 0) {
-      this.#lc[log]?.(`${type} worker exited with code (${code})`, err ?? '');
+      this.#lc[log]?.(
+        `${type} worker ${pid} exited with code (${code})`,
+        err ?? '',
+      );
+    } else {
+      this.#lc.info?.(`${type} worker ${pid} exited with code (${code})`);
     }
+
     // Exit only if not draining. If a user-facing worker exits unexpectedly
     // during a drain, log a warning but let other user-facing workers drain.
     if (log === 'error') {
