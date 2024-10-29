@@ -259,8 +259,18 @@ export interface Query<
 
   one(): Query<TSchema, MakeSingular<TReturn>>;
 
+  /**
+   * Materialize the query. This will run the query and return a view that
+   * will update as the query updates. Incremental updates are typically very
+   * cheap.
+   */
   materialize(): TypedView<Smash<TReturn>>;
 
+  /**
+   * Run the query one time and return the result. This should only be used
+   * when a query is indeed needed only once. If the query will be run multiple
+   * times, use `materialize()` instead, as it is far cheaper for the updates.
+   */
   run(): Smash<TReturn>;
 
   preload(): {
