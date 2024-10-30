@@ -9,7 +9,7 @@
         "$TURBO_DEFAULT$",
         "../zero-cache/src/**/*.ts",
         "../zero-client/src/**/*.ts",
-        "../zero-internal/src/**/*.ts",
+        "../zero-advanced/src/**/*.ts",
         "../zero-react/src/**/*.ts",
         "../zero-solid/src/**/*.ts"
       ]

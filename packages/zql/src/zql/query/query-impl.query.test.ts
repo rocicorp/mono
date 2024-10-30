@@ -3,7 +3,7 @@ import {deepClone} from '../../../../shared/src/deep-clone.js';
 import {must} from '../../../../shared/src/must.js';
 import {newQuery, type QueryDelegate, QueryImpl} from './query-impl.js';
 import {issueSchema} from './test/testSchemas.js';
-import type {QueryInternal} from './query-internal.js';
+import type {AdvancedQuery} from './query-internal.js';
 import type {DefaultQueryResultRow} from './query.js';
 import {QueryDelegateImpl} from './test/query-delegate.js';
 
@@ -665,7 +665,7 @@ test('view creation is wrapped in context.batchViewUpdates call', () => {
 
   const issueQuery = newQuery(queryDelegate, issueSchema);
   const view = (
-    issueQuery as QueryInternal<
+    issueQuery as AdvancedQuery<
       typeof issueSchema,
       DefaultQueryResultRow<typeof issueSchema>
     >

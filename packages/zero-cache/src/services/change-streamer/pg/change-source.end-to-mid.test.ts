@@ -57,7 +57,9 @@ describe('change-source/pg/end-to-mid-test', () => {
       timea TIMESTAMPTZ,
       timeb TIMESTAMPTZ,
       date DATE,
-      time TIME
+      time TIME,
+      json JSON,
+      jsonb JSONB
     );
 
     CREATE SCHEMA test;
@@ -719,12 +721,25 @@ describe('change-source/pg/end-to-mid-test', () => {
     [
       'data types',
       `
-      ALTER PUBLICATION zero_some_public SET TABLE foo (id, int, big, flt, bool, timea, date);
+      ALTER PUBLICATION zero_some_public SET TABLE foo (
+        id, int, big, flt, bool, timea, date, json, jsonb);
 
-      INSERT INTO foo (id, int, big, flt, bool, timea, date)
-         VALUES ('abc', -2, 9007199254740993, 3.45, true, '2019-01-12T00:30:35.381101032Z', 'April 12, 2003');
+      INSERT INTO foo (id, int, big, flt, bool, timea, date, json, jsonb)
+         VALUES (
+          'abc', 
+          -2, 
+          9007199254740993, 
+          3.45, 
+          true, 
+          '2019-01-12T00:30:35.381101032Z', 
+          'April 12, 2003',
+          '[{"foo":"bar","bar":"foo"},123]',
+          '{"far": 456, "boo" : {"baz": 123}}'
+        );
       `,
       [
+        {tag: 'add-column'},
+        {tag: 'add-column'},
         {tag: 'add-column'},
         {tag: 'add-column'},
         {tag: 'add-column'},
@@ -739,6 +754,8 @@ describe('change-source/pg/end-to-mid-test', () => {
             bool: true,
             timea: 1547253035381.101,
             date: 1050105600000,
+            json: [{foo: 'bar', bar: 'foo'}, 123],
+            jsonb: {boo: {baz: 123}, far: 456},
           },
         },
       ],
@@ -752,11 +769,90 @@ describe('change-source/pg/end-to-mid-test', () => {
             bool: 1n,
             timea: 1547253035381.101,
             date: 1050105600000n,
+            json: '[{"foo":"bar","bar":"foo"},123]',
+            jsonb: '{"boo":{"baz":123},"far":456}',
             ['_0_version']: expect.stringMatching(/[a-z0-9]+/),
           },
         ],
       },
-      [],
+      [
+        {
+          name: 'foo',
+          columns: {
+            id: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: true,
+              pos: 1,
+            },
+            flt: {
+              characterMaximumLength: null,
+              dataType: 'float8',
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            big: {
+              characterMaximumLength: null,
+              dataType: 'int8',
+              dflt: null,
+              notNull: false,
+              pos: 4,
+            },
+            bool: {
+              characterMaximumLength: null,
+              dataType: 'bool',
+              dflt: null,
+              notNull: false,
+              pos: 5,
+            },
+            date: {
+              characterMaximumLength: null,
+              dataType: 'date',
+              dflt: null,
+              notNull: false,
+              pos: 6,
+            },
+            int: {
+              characterMaximumLength: null,
+              dataType: 'int4',
+              dflt: null,
+              notNull: false,
+              pos: 7,
+            },
+            json: {
+              characterMaximumLength: null,
+              dataType: 'json',
+              dflt: null,
+              notNull: false,
+              pos: 8,
+            },
+            jsonb: {
+              characterMaximumLength: null,
+              dataType: 'jsonb',
+              dflt: null,
+              notNull: false,
+              pos: 9,
+            },
+            timea: {
+              characterMaximumLength: null,
+              dataType: 'timestamptz',
+              dflt: null,
+              notNull: false,
+              pos: 10,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: true,
+              pos: 2,
+            },
+          },
+          primaryKey: ['id'],
+        },
+      ],
       [],
     ],
   ] satisfies [

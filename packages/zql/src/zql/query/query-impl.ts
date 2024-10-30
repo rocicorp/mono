@@ -17,7 +17,7 @@ import {
   normalizeTableSchema,
   type NormalizedTableSchema,
 } from './normalize-table-schema.js';
-import type {QueryInternal} from './query-internal.js';
+import type {AdvancedQuery} from './query-internal.js';
 import type {
   AddSelections,
   AddSubselect,
@@ -82,7 +82,7 @@ export function staticParam<TAnchor, TField extends keyof TAnchor>(
 export abstract class AbstractQuery<
   TSchema extends TableSchema,
   TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
-> implements QueryInternal<TSchema, TReturn>
+> implements AdvancedQuery<TSchema, TReturn>
 {
   readonly #ast: AST;
   readonly #schema: NormalizedTableSchema;

@@ -62,6 +62,8 @@ export const cases: {
       ['fooa', true],
       ['afoo', false],
       ['afoob', false],
+      ['foo\nbar', true],
+      ['foobar\nbaz', true],
     ],
   },
   {
@@ -77,6 +79,7 @@ export const cases: {
       ['fo', false],
       ['afoo', false],
       ['afoob', false],
+      ['fooa\nbar', true],
     ],
   },
   {
@@ -139,6 +142,8 @@ export const cases: {
       ['fooa', false],
       ['afoo', true],
       ['afoob', false],
+      ['monkey\nfoo', true],
+      ['mon\nkeyfoo', true],
     ],
   },
   {
@@ -154,6 +159,18 @@ export const cases: {
       ['fooa', true],
       ['afoo', true],
       ['afoob', true],
+      ['mon\nfoo\nkey', true],
+      ['m\nonfooke\ny', true],
+    ],
+  },
+  {
+    pattern: '%foo\nbar%',
+    flags: '',
+    inputs: [
+      ['foo\nbar', true],
+      ['foo\nbar\n', true],
+      ['foo\nbar\nbaz', true],
+      ['monkey\nfoo\nbar', true],
     ],
   },
 ];
