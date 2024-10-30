@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {SqliteError} from 'better-sqlite3-bedrock';
+import {SqliteError} from '@rocicorp/zero-sqlite3';
 import {LogicalReplicationService} from 'pg-logical-replication';
 import {AbortError} from '../../../../shared/src/abort-error.js';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';

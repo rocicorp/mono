@@ -1,4 +1,4 @@
-import type {RunResult} from 'better-sqlite3-bedrock';
+import type {RunResult} from '@rocicorp/zero-sqlite3';
 import {Database} from '../../../zqlite/src/db.js';
 import {StatementCache} from '../../../zqlite/src/internal/statement-cache.js';
 
