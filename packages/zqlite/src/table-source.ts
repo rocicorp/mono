@@ -614,7 +614,9 @@ function fromSQLiteType(valueType: ValueType, v: Value): Value {
   switch (valueType) {
     case 'boolean':
       return !!v;
-    default:
+    case 'number':
+    case 'string':
+    case 'null':
       if (typeof v === 'bigint') {
         if (v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER) {
           throw new UnsupportedValueError(
@@ -624,6 +626,8 @@ function fromSQLiteType(valueType: ValueType, v: Value): Value {
         return Number(v);
       }
       return v;
+    case 'json':
+      return JSON.parse(v as string);
   }
 }
 
