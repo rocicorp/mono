@@ -138,6 +138,7 @@ export const userSchema = {
   columns: {
     id: {type: 'string'},
     name: {type: 'string'},
+    metadata: {type: 'json', optional: true},
   },
   primaryKey: ['id'],
   relationships: {
