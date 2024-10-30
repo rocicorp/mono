@@ -141,6 +141,10 @@ export function dataTypeToZqlValueType(
     case 'boolean':
       return 'boolean';
 
+    // TODO: Add support for JSON.
+    // case 'json':
+    // case 'jsonb':
+
     // TODO: Add support for these.
     // case 'bytea':
     // case 'time':
