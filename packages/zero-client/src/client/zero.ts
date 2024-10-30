@@ -84,7 +84,7 @@ import {
   getLastConnectErrorValue,
 } from './metrics.js';
 import {type NormalizedSchema, normalizeSchema} from './normalized-schema.js';
-import type {ZeroOptions, ZeroOptionsInternal} from './options.js';
+import type {ZeroOptions, ZeroAdvancedOptions} from './options.js';
 import {QueryManager} from './query-manager.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
@@ -433,7 +433,7 @@ export class Zero<const S extends Schema> {
       kvStore = 'idb',
       schema,
       batchViewUpdates = applyViewUpdates => applyViewUpdates(),
-    } = options as ZeroOptionsInternal<S>;
+    } = options as ZeroAdvancedOptions<S>;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
     }

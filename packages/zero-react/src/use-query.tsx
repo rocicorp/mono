@@ -8,7 +8,7 @@ import type {
   TableSchema,
   TypedView,
 } from '../../zero-client/src/mod.js';
-import type {QueryInternal} from '../../zql/src/zql/query/query-internal.js';
+import type {AdvancedQuery} from '../../zql/src/zql/query/query-internal.js';
 import {useZero} from './use-zero.js';
 
 export function useQuery<
@@ -18,7 +18,7 @@ export function useQuery<
   const z = useZero();
   const view = viewStore.getView(
     z.clientID,
-    q as QueryInternal<TSchema, TReturn>,
+    q as AdvancedQuery<TSchema, TReturn>,
     enable,
   );
   // https://react.dev/reference/react/useSyncExternalStore
@@ -82,7 +82,7 @@ class ViewStore {
 
   getView<TSchema extends TableSchema, TReturn extends QueryType>(
     clientID: string,
-    query: QueryInternal<TSchema, TReturn>,
+    query: AdvancedQuery<TSchema, TReturn>,
     enabled: boolean,
   ): {
     getSnapshot: () => Smash<TReturn>;
@@ -153,12 +153,12 @@ class ViewWrapper<TSchema extends TableSchema, TReturn extends QueryType> {
   readonly #defaultSnapshot: Smash<TReturn>;
   readonly #onDematerialized;
   readonly #onMaterialized;
-  readonly #query: QueryInternal<TSchema, TReturn>;
+  readonly #query: AdvancedQuery<TSchema, TReturn>;
   #snapshot: Smash<TReturn>;
   #reactInternals: Set<() => void>;
 
   constructor(
-    query: QueryInternal<TSchema, TReturn>,
+    query: AdvancedQuery<TSchema, TReturn>,
     onMaterialized: (view: ViewWrapper<TSchema, TReturn>) => void,
     onDematerialized: () => void,
   ) {
