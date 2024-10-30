@@ -4,6 +4,7 @@ import type {Immutable} from '../../shared/src/immutable.js';
 import type {
   Query,
   QueryType,
+  ReadonlyJSONValue,
   Smash,
   TableSchema,
   TypedView,
@@ -174,7 +175,7 @@ class ViewWrapper<TSchema extends TableSchema, TReturn extends QueryType> {
 
   #onData = (snap: Immutable<Smash<TReturn>>) => {
     this.#snapshot = (
-      snap === undefined ? snap : deepClone(snap)
+      snap === undefined ? snap : deepClone(snap as ReadonlyJSONValue)
     ) as Smash<TReturn>;
     for (const internals of this.#reactInternals) {
       internals();

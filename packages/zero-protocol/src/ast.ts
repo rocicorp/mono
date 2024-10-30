@@ -10,7 +10,7 @@ import {compareUTF8} from 'compare-utf8';
 import {must} from '../../shared/src/must.js';
 import * as v from '../../shared/src/valita.js';
 import {defined} from '../../shared/src/arrays.js';
-import type {Row} from './data.js';
+import {rowSchema, type Row} from './data.js';
 
 export const selectorSchema = v.string();
 
@@ -115,9 +115,7 @@ export const astSchema = v.object({
   orderBy: orderingSchema.optional(),
   start: v
     .object({
-      row: v.record(
-        v.union(v.string(), v.number(), v.boolean(), v.null(), v.undefined()),
-      ),
+      row: rowSchema,
       exclusive: v.boolean(),
     })
     .optional(),

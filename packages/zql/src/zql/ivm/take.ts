@@ -22,11 +22,12 @@ type TakeState = {
   bound: Row | undefined;
 };
 
-interface TakeStorage extends Storage {
+interface TakeStorage {
   get(key: typeof MAX_BOUND_KEY): Row | undefined;
   get(key: string): TakeState | undefined;
   set(key: typeof MAX_BOUND_KEY, value: Row): void;
   set(key: string, value: TakeState): void;
+  del(key: string): void;
 }
 
 /**
