@@ -120,6 +120,7 @@ describe('view-syncer/service', () => {
       parent text,
       big INTEGER,
       title text,
+      json JSON,
       _0_version TEXT NOT NULL
     );
     CREATE TABLE users (
@@ -142,7 +143,8 @@ describe('view-syncer/service', () => {
     INSERT INTO issues (id, title, owner, parent, big, _0_version) VALUES ('3', 'foo', 102, 1, 123, '00');
     INSERT INTO issues (id, title, owner, parent, big, _0_version) VALUES ('4', 'bar', 101, 2, 100, '00');
     -- The last row should not match the ISSUES_TITLE_QUERY: "WHERE id IN (1, 2, 3, 4)"
-    INSERT INTO issues (id, title, owner, parent, big, _0_version) VALUES ('5', 'not matched', 101, 2, 100, '00');
+    INSERT INTO issues (id, title, owner, parent, big, json, _0_version) VALUES 
+      ('5', 'not matched', 101, 2, 100, '[123,{"foo":456,"bar":789},"baz"]', '00');
     `);
 
     cvrDB = await testDBs.create('view_syncer_service_test');
@@ -412,6 +414,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "big": 9007199254740991,
                   "id": "1",
+                  "json": null,
                   "owner": "100",
                   "parent": null,
                   "title": "parent issue foo",
@@ -423,6 +426,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "big": -9007199254740991,
                   "id": "2",
+                  "json": null,
                   "owner": "101",
                   "parent": null,
                   "title": "parent issue bar",
@@ -434,6 +438,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "big": 123,
                   "id": "3",
+                  "json": null,
                   "owner": "102",
                   "parent": "1",
                   "title": "foo",
@@ -445,6 +450,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "big": 100,
                   "id": "4",
+                  "json": null,
                   "owner": "101",
                   "parent": "2",
                   "title": "bar",
@@ -655,6 +661,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "big": 9007199254740991,
                   "id": "1",
+                  "json": null,
                   "owner": "100",
                   "parent": null,
                   "title": "parent issue foo",
@@ -666,6 +673,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "big": -9007199254740991,
                   "id": "2",
+                  "json": null,
                   "owner": "101",
                   "parent": null,
                   "title": "parent issue bar",
@@ -677,6 +685,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "big": 123,
                   "id": "3",
+                  "json": null,
                   "owner": "102",
                   "parent": "1",
                   "title": "foo",
@@ -688,6 +697,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "big": 100,
                   "id": "4",
+                  "json": null,
                   "owner": "101",
                   "parent": "2",
                   "title": "bar",
@@ -699,6 +709,14 @@ describe('view-syncer/service', () => {
                 "value": {
                   "big": 100,
                   "id": "5",
+                  "json": [
+                    123,
+                    {
+                      "bar": 789,
+                      "foo": 456,
+                    },
+                    "baz",
+                  ],
                   "owner": "101",
                   "parent": "2",
                   "title": "not matched",
@@ -903,6 +921,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "big": 9007199254740991,
                   "id": "1",
+                  "json": null,
                   "owner": "100.0",
                   "parent": null,
                   "title": "new title",
@@ -1096,6 +1115,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "big": 9007199254740991,
                   "id": "1",
+                  "json": null,
                   "owner": "100.0",
                   "parent": null,
                   "title": "new title",
@@ -1195,6 +1215,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "big": 9007199254740991,
                   "id": "1",
+                  "json": null,
                   "newColumn": null,
                   "owner": "100",
                   "parent": null,
@@ -1207,6 +1228,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "big": -9007199254740991,
                   "id": "2",
+                  "json": null,
                   "newColumn": null,
                   "owner": "101",
                   "parent": null,
@@ -1219,6 +1241,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "big": 123,
                   "id": "3",
+                  "json": null,
                   "newColumn": null,
                   "owner": "102",
                   "parent": "1",
@@ -1231,6 +1254,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "big": 100,
                   "id": "4",
+                  "json": null,
                   "newColumn": null,
                   "owner": "101",
                   "parent": "2",
@@ -1289,6 +1313,7 @@ describe('view-syncer/service', () => {
             owner: '100.0',
             parent: null,
             title: 'new title',
+            json: null,
           },
         },
         {
@@ -1378,6 +1403,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "big": 9007199254740991,
                   "id": "1",
+                  "json": null,
                   "owner": "100.0",
                   "parent": null,
                   "title": "new title",
@@ -1600,6 +1626,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "big": 100,
                   "id": "4",
+                  "json": null,
                   "owner": "101",
                   "parent": "2",
                   "title": "caught up",
