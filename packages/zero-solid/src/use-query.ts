@@ -1,11 +1,11 @@
 import {type Accessor, createMemo, onCleanup} from 'solid-js';
 import type {
   Query,
-  QueryInternal,
+  AdvancedQuery,
   QueryType,
   Smash,
   TableSchema,
-} from '../../zero-internal/src/mod.js';
+} from '../../zero-advanced/src/mod.js';
 import {solidViewFactory} from './solid-view.js';
 
 export function useQuery<
@@ -14,7 +14,7 @@ export function useQuery<
 >(querySignal: () => Query<TSchema, TReturn>): Accessor<Smash<TReturn>> {
   return createMemo(() => {
     const query = querySignal();
-    const view = (query as QueryInternal<TSchema, TReturn>).materialize(
+    const view = (query as AdvancedQuery<TSchema, TReturn>).materialize(
       solidViewFactory,
     );
 

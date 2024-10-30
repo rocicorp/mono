@@ -15,6 +15,6 @@
   },
   "devDependencies": {
     "solid-js": "^1.0.0",
-    "zero-internal": "0.0.0"
+    "zero-advanced": "0.0.0"
   }
 }

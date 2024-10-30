@@ -57,7 +57,7 @@ describe('shutdown', () => {
 
     void runUntilKilled(lc, childPort, worker).then(
       () => parentPort.emit('close', 0),
-      err => parentPort.emit('error', err),
+      () => parentPort.emit('close', -1),
     );
     return worker;
   }

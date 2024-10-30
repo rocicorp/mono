@@ -17,7 +17,7 @@ import {
   normalizeTableSchema,
   type NormalizedTableSchema,
 } from './normalize-table-schema.js';
-import type {QueryInternal} from './query-internal.js';
+import type {AdvancedQuery} from './query-internal.js';
 import type {
   AddSelections,
   AddSubselect,
@@ -65,6 +65,7 @@ export type GotCallback = (got: boolean) => void;
 export interface QueryDelegate extends BuilderDelegate {
   addServerQuery(ast: AST, gotCallback?: GotCallback | undefined): () => void;
   onTransactionCommit(cb: CommitListener): () => void;
+  batchViewUpdates<T>(applyViewUpdates: () => T): T;
 }
 
 export function staticParam<TAnchor, TField extends keyof TAnchor>(
@@ -81,7 +82,7 @@ export function staticParam<TAnchor, TField extends keyof TAnchor>(
 export abstract class AbstractQuery<
   TSchema extends TableSchema,
   TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
-> implements QueryInternal<TSchema, TReturn>
+> implements AdvancedQuery<TSchema, TReturn>
 {
   readonly #ast: AST;
   readonly #schema: NormalizedTableSchema;
@@ -431,14 +432,10 @@ export class QueryImpl<
       removeServerQuery();
     };
 
-    const view = (factory ?? arrayViewFactory)(
-      this,
-      input,
-      this.format,
-      onDestroy,
-      cb => {
+    const view = this.#delegate.batchViewUpdates(() =>
+      (factory ?? arrayViewFactory)(this, input, this.format, onDestroy, cb => {
         removeCommitObserver = this.#delegate.onTransactionCommit(cb);
-      },
+      }),
     );
 
     return view as T;

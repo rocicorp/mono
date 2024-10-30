@@ -1,6 +1,6 @@
 {
   "name": "@rocicorp/zero",
-  "version": "0.3.2024102800+3110cf",
+  "version": "0.4.2024103000+b2617e",
   "scripts": {
     "build": "rm -rf out && npm run build-server && npm run build-client",
     "build-client": "tsc -p tsconfig.client.json && tsc-alias -p tsconfig.client.json && node tool/build.js",
@@ -73,9 +73,9 @@
       "types": "./out/zero/src/config.d.ts",
       "default": "./out/zero/src/config.js"
     },
-    "./internal": {
-      "types": "./out/zero/src/internal.d.ts",
-      "default": "./out/zero/src/internal.js"
+    "./advanced": {
+      "types": "./out/zero/src/advanced.d.ts",
+      "default": "./out/zero/src/advanced.js"
     }
   },
   "bin": {
