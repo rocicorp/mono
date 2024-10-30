@@ -1,3 +1,4 @@
+import {jsonSchema} from '../../shared/src/json-schema.js';
 import * as v from '../../shared/src/valita.js';
 
 export const valueSchema = v.union(
@@ -6,6 +7,7 @@ export const valueSchema = v.union(
   v.number(),
   v.string(),
   v.undefined(),
+  jsonSchema,
 );
 
 export const rowSchema = v.record(valueSchema);
