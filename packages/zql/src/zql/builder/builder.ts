@@ -256,7 +256,11 @@ export function assertOrderingIncludesPK(
     throw new Error(
       `Ordering must include all primary key fields. Missing: ${missingFields.join(
         ', ',
-      )}`,
+      )}. ZQL automatically appends primary key fields to the ordering if they are missing 
+      so a common cause of this error is a casing mismatch between Postgres and ZQL.
+      E.g., "userid" vs "userID".
+      You may want to add double-quotes around your Postgres column names to prevent Postgres from lower-casing them:
+      https://www.postgresql.org/docs/current/sql-syntax-lexical.htm`,
     );
   }
 }
