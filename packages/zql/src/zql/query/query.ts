@@ -12,6 +12,13 @@ import type {TypedView} from './typed-view.js';
  * references a field on an row.
  */
 export type Selector<E extends TableSchema> = keyof E['columns'];
+export type NoJsonSelector<T extends TableSchema> = Exclude<
+  Selector<T>,
+  JsonSelectors<T>
+>;
+type JsonSelectors<E extends TableSchema> = {
+  [K in keyof E['columns']]: E['columns'][K] extends {type: 'json'} ? K : never;
+}[keyof E['columns']];
 
 export type Context = {
   getSource: (name: string) => Source;
@@ -43,6 +50,14 @@ type SchemaValueToTSType<T extends SchemaValue> =
       ? boolean
       : T extends {type: 'null'}
       ? null
+      : T extends {type: 'json'}
+      ? // In schema-v2, the user will be able to specify the TS type that
+        // the JSON should match and `any`` will no
+        // longer be used here.
+        // ReadOnlyJSONValue is not used as it causes
+        // infinite depth errors to pop up for users of our APIs.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        any
       : never)
   | (T extends {optional: true} ? undefined : never);
 
@@ -210,7 +225,7 @@ export interface Query<
   ): Query<TSchema, AddSubselect<TSub, TReturn, TRelationship & string>>;
 
   where<
-    TSelector extends Selector<TSchema>,
+    TSelector extends NoJsonSelector<TSchema>,
     TOperator extends Operator,
     TParamAnchor = never,
     TParamField extends keyof TParamAnchor = never,
@@ -228,7 +243,7 @@ export interface Query<
   ): Query<TSchema, TReturn>;
 
   where<
-    TSelector extends Selector<TSchema>,
+    TSelector extends NoJsonSelector<TSchema>,
     TParamAnchor = never,
     TParamField extends keyof TParamAnchor = never,
     TParamTypeBound extends GetFieldTypeNoNullOrUndefined<

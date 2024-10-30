@@ -1,6 +1,6 @@
-import type {TableSchemaBase} from '../ivm/schema.js';
+import type {SourceOrTableSchema} from '../ivm/schema.js';
 
-export type TableSchema = TableSchemaBase & {
+export type TableSchema = SourceOrTableSchema & {
   readonly relationships: {readonly [name: string]: Relationship};
 };
 

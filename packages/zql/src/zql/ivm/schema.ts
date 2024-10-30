@@ -13,7 +13,7 @@ export type SchemaValue = {
   optional?: boolean;
 };
 
-export type TableSchemaBase = {
+export type SourceOrTableSchema = {
   readonly tableName: string;
   readonly primaryKey: PrimaryKey;
   readonly columns: Record<string, SchemaValue>;
@@ -21,7 +21,7 @@ export type TableSchemaBase = {
 /**
  * Information about the nodes output by an operator.
  */
-export type TableSchema = TableSchemaBase & {
+export type TableSchema = SourceOrTableSchema & {
   readonly relationships: {[key: string]: TableSchema};
   readonly isHidden: boolean;
   readonly compareRows: (r1: Row, r2: Row) => number;

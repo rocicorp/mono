@@ -5,6 +5,7 @@ import type {
 } from '../../../../zero-protocol/src/ast.js';
 import type {
   GetFieldTypeNoNullOrUndefined,
+  NoJsonSelector,
   Operator,
   Parameter,
   Selector,
@@ -33,7 +34,7 @@ type GenericDisjunction<TSchema extends TableSchema> = {
 
 export function cmp<
   TSchema extends TableSchema,
-  TSelector extends Selector<TSchema>,
+  TSelector extends NoJsonSelector<TSchema>,
   TOperator extends Operator,
   TParamAnchor = never,
   TParamField extends keyof TParamAnchor = never,
@@ -51,7 +52,7 @@ export function cmp<
 ): GenericCondition<TSchema>;
 export function cmp<
   TSchema extends TableSchema,
-  TSelector extends Selector<TSchema>,
+  TSelector extends NoJsonSelector<TSchema>,
   TParamAnchor = never,
   TParamField extends keyof TParamAnchor = never,
   TParamTypeBound extends GetFieldTypeNoNullOrUndefined<
@@ -87,7 +88,7 @@ export function cmp(
     type: 'simple',
     field,
     op,
-    value,
+    value: value as ValuePosition,
   };
 }
 
