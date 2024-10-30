@@ -2,7 +2,7 @@ import type {Ordering} from '../../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.js';
 
-export type ValueType = 'string' | 'number' | 'boolean' | 'null';
+export type ValueType = 'string' | 'number' | 'boolean' | 'null' | 'json';
 
 /**
  * `related` calls need to know what the available relationships are.
