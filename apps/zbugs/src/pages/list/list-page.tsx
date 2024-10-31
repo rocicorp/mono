@@ -32,7 +32,7 @@ export default function ListPage() {
   const login = useLogin();
   const qs = new URLSearchParams(useSearch());
 
-  const status = qs.get('status')?.toLowerCase();
+  const status = qs.get('status')?.toLowerCase() ?? 'open';
   const creator = qs.get('creator');
   const assignee = qs.get('assignee');
   const labels = qs.getAll('label');
