@@ -271,18 +271,6 @@ export default function IssuePage() {
           </div>
 
           <div className="sidebar-item">
-            <p className="issue-detail-label">Creator</p>
-            <Button className="sidebar-button issue-creator">
-              <img
-                src={issue.creator?.avatar}
-                className="issue-creator-avatar"
-                alt={issue.creator?.name}
-              />
-              {issue.creator.login}
-            </Button>
-          </div>
-
-          <div className="sidebar-item">
             <p className="issue-detail-label">Assignee</p>
             <UserPicker
               disabled={!canEdit}
@@ -291,6 +279,18 @@ export default function IssuePage() {
                 z.mutate.issue.update({id: issue.id, assigneeID: user.id});
               }}
             />
+          </div>
+
+          <div className="sidebar-item">
+            <p className="issue-detail-label">Creator</p>
+            <div className="issue-creator">
+              <img
+                src={issue.creator?.avatar}
+                className="issue-creator-avatar"
+                alt={issue.creator?.name}
+              />
+              {issue.creator.login}
+            </div>
           </div>
 
           <div className="sidebar-item">
