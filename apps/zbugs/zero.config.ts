@@ -75,6 +75,7 @@ export default defineConfig<AuthData, Schema>(schema, query => {
       issue: {
         row: {
           insert: [allowIfLoggedIn],
+          update: [allowIfIssueCreator, allowIfAdmin],
           delete: [allowIfIssueCreator, allowIfAdmin],
         },
       },
