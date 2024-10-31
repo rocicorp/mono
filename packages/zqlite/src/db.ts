@@ -2,7 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import SQLite3Database, {
   type RunResult,
   type Statement as SQLite3Statement,
-} from 'better-sqlite3-bedrock';
+} from '@rocicorp/zero-sqlite3';
 
 export class Database {
   readonly #db: SQLite3Database.Database;

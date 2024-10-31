@@ -269,7 +269,7 @@ export class TableSource implements Source {
       newReq = {...req, start: undefined};
       this.#stmts.cache.use(sqlAndBindings.text, cachedStatement => {
         for (const beforeRow of cachedStatement.statement.iterate<Row>(
-          ...sqlAndBindings.values.map(v => toSQLiteType(v)),
+          ...sqlAndBindings.values,
         )) {
           newReq.start = {row: beforeRow, basis: 'at'};
           break;
@@ -296,7 +296,7 @@ export class TableSource implements Source {
       try {
         cachedStatement.statement.safeIntegers(true);
         const rowIterator = cachedStatement.statement.iterate<Row>(
-          ...sqlAndBindings.values.map(v => toSQLiteType(v)),
+          ...sqlAndBindings.values,
         );
 
         const callingConnectionIndex = this.#connections.indexOf(connection);
@@ -352,6 +352,14 @@ export class TableSource implements Source {
     }
 
     // Outputs should see converted types (e.g. boolean).
+    // This conversion is here because the `pipeline-driver` reads
+    // row state from the SQLite. If you try to move this
+    // conversion into pipeline-driver (where it seems like it should go)
+    // you'll run into the issue that you need to do the `exists` checks above.
+    // The exists checks need the non-converted types since they query SQLite.
+    // So:
+    // 1. exists checks should be in the source.
+    // 2. this mapping should be in pipeline driver.
     fromSQLiteTypes(this.#columns, change.row);
 
     const outputChange: Change =
@@ -375,11 +383,17 @@ export class TableSource implements Source {
     switch (change.type) {
       case 'add':
         this.#stmts.insert.run(
-          ...toSQLiteTypes(Object.keys(this.#columns), change.row),
+          ...toSQLiteTypes(
+            Object.keys(this.#columns),
+            change.row,
+            this.#columns,
+          ),
         );
         break;
       case 'remove':
-        this.#stmts.delete.run(...toSQLiteTypes(this.#primaryKey, change.row));
+        this.#stmts.delete.run(
+          ...toSQLiteTypes(this.#primaryKey, change.row, this.#columns),
+        );
         break;
       case 'edit': {
         // If the PK is the same, use UPDATE.
@@ -393,14 +407,18 @@ export class TableSource implements Source {
         ) {
           must(this.#stmts.update).run(
             ...nonPrimaryValues(this.#columns, this.#primaryKey, change.row),
-            ...toSQLiteTypes(this.#primaryKey, change.row),
+            ...toSQLiteTypes(this.#primaryKey, change.row, this.#columns),
           );
         } else {
           this.#stmts.delete.run(
-            ...toSQLiteTypes(this.#primaryKey, change.oldRow),
+            ...toSQLiteTypes(this.#primaryKey, change.oldRow, this.#columns),
           );
           this.#stmts.insert.run(
-            ...toSQLiteTypes(Object.keys(this.#columns), change.row),
+            ...toSQLiteTypes(
+              Object.keys(this.#columns),
+              change.row,
+              this.#columns,
+            ),
           );
         }
 
@@ -437,11 +455,16 @@ export class TableSource implements Source {
     const constraints: SQLQuery[] = [];
 
     if (constraint) {
-      constraints.push(sql`${sql.ident(constraint.key)} = ${constraint.value}`);
+      constraints.push(
+        sql`${sql.ident(constraint.key)} = ${toSQLiteType(
+          constraint.value,
+          this.#columns[constraint.key].type,
+        )}`,
+      );
     }
 
     if (cursor) {
-      constraints.push(gatherStartConstraints(cursor, order));
+      constraints.push(gatherStartConstraints(cursor, order, this.#columns));
     }
 
     for (const filter of filters) {
@@ -460,7 +483,7 @@ export class TableSource implements Source {
               : filter.op === 'NOT ILIKE'
               ? 'NOT LIKE'
               : filter.op,
-          )} ${filter.value}`,
+          )} ${toSQLiteType(filter.value, this.#columns[filter.field].type)}`,
         );
       }
     }
@@ -514,7 +537,11 @@ type Cursor = {
  * - after vs before flips the comparison operators.
  * - inclusive adds a final `OR` clause for the exact match.
  */
-function gatherStartConstraints(cursor: Cursor, order: Ordering): SQLQuery {
+function gatherStartConstraints(
+  cursor: Cursor,
+  order: Ordering,
+  columnTypes: Record<string, SchemaValue>,
+): SQLQuery {
   const constraints: SQLQuery[] = [];
   const {from, direction, inclusive} = cursor;
 
@@ -525,23 +552,48 @@ function gatherStartConstraints(cursor: Cursor, order: Ordering): SQLQuery {
       if (j === i) {
         if (iDirection === 'asc') {
           if (direction === 'after') {
-            group.push(sql`${sql.ident(iField)} > ${from[iField]}`);
+            group.push(
+              sql`${sql.ident(iField)} > ${toSQLiteType(
+                from[iField],
+                columnTypes[iField].type,
+              )}`,
+            );
           } else {
             direction satisfies 'before';
-            group.push(sql`${sql.ident(iField)} < ${from[iField]}`);
+            group.push(
+              sql`${sql.ident(iField)} < ${toSQLiteType(
+                from[iField],
+                columnTypes[iField].type,
+              )}`,
+            );
           }
         } else {
           iDirection satisfies 'desc';
           if (direction === 'after') {
-            group.push(sql`${sql.ident(iField)} < ${from[iField]}`);
+            group.push(
+              sql`${sql.ident(iField)} < ${toSQLiteType(
+                from[iField],
+                columnTypes[iField].type,
+              )}`,
+            );
           } else {
             direction satisfies 'before';
-            group.push(sql`${sql.ident(iField)} > ${from[iField]}`);
+            group.push(
+              sql`${sql.ident(iField)} > ${toSQLiteType(
+                from[iField],
+                columnTypes[iField].type,
+              )}`,
+            );
           }
         }
       } else {
         const [jField] = order[j];
-        group.push(sql`${sql.ident(jField)} = ${from[jField]}`);
+        group.push(
+          sql`${sql.ident(jField)} = ${toSQLiteType(
+            from[jField],
+            columnTypes[jField].type,
+          )}`,
+        );
       }
     }
     constraints.push(sql`(${sql.join(group, sql` AND `)})`);
@@ -550,7 +602,13 @@ function gatherStartConstraints(cursor: Cursor, order: Ordering): SQLQuery {
   if (inclusive) {
     constraints.push(
       sql`(${sql.join(
-        order.map(s => sql`${sql.ident(s[0])} = ${from[s[0]]}`),
+        order.map(
+          s =>
+            sql`${sql.ident(s[0])} = ${toSQLiteType(
+              from[s[0]],
+              columnTypes[s[0]].type,
+            )}`,
+        ),
         sql` AND `,
       )})`,
     );
@@ -582,16 +640,26 @@ function assertPrimaryKeyMatch(
 function toSQLiteTypes(
   columns: readonly string[],
   row: Row,
+  columnTypes: Record<string, SchemaValue>,
 ): readonly unknown[] {
-  return columns.map(col => toSQLiteType(row[col]));
+  return columns.map(col => toSQLiteType(row[col], columnTypes[col].type));
 }
 
 function pickColumns(columns: readonly string[], row: Row): readonly Value[] {
   return columns.map(col => row[col]);
 }
 
-function toSQLiteType(v: unknown): unknown {
-  return v === false ? 0 : v === true ? 1 : v ?? null;
+function toSQLiteType(v: unknown, type: ValueType): unknown {
+  switch (type) {
+    case 'boolean':
+      return v === null ? null : v ? 1 : 0;
+    case 'number':
+    case 'string':
+    case 'null':
+      return v;
+    case 'json':
+      return JSON.stringify(v);
+  }
 }
 
 function* mapFromSQLiteTypes(
@@ -614,7 +682,9 @@ function fromSQLiteType(valueType: ValueType, v: Value): Value {
   switch (valueType) {
     case 'boolean':
       return !!v;
-    default:
+    case 'number':
+    case 'string':
+    case 'null':
       if (typeof v === 'bigint') {
         if (v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER) {
           throw new UnsupportedValueError(
@@ -624,6 +694,8 @@ function fromSQLiteType(valueType: ValueType, v: Value): Value {
         return Number(v);
       }
       return v;
+    case 'json':
+      return JSON.parse(v as string);
   }
 }
 
@@ -652,7 +724,9 @@ function nonPrimaryValues(
   primaryKey: PrimaryKey,
   row: Row,
 ): Iterable<unknown> {
-  return nonPrimaryKeys(columns, primaryKey).map(c => toSQLiteType(row[c]));
+  return nonPrimaryKeys(columns, primaryKey).map(c =>
+    toSQLiteType(row[c], columns[c].type),
+  );
 }
 
 function nonPrimaryKeys(

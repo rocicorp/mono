@@ -9,6 +9,7 @@ import {MemoryStorage} from './memory-storage.js';
 import type {Input} from './operator.js';
 import type {TableSchema} from './schema.js';
 import {Take} from './take.js';
+import type {ReadonlyJSONValue} from '../../../../shared/src/json.js';
 
 test('basics', () => {
   const ms = new MemorySource(
@@ -27,11 +28,13 @@ test('basics', () => {
   );
 
   let callCount = 0;
-  let data: unknown[] = [];
+  let data: ReadonlyJSONValue[] = [];
   const unlisten = view.addListener(entries => {
     ++callCount;
     assertArray(entries);
-    data = [...entries];
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore - stuck with `infinite depth` errors
+    data = [...entries] as ReadonlyJSONValue[];
   });
 
   expect(data).toEqual([
