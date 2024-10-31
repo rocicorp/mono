@@ -1,7 +1,7 @@
 import {FPSMeter} from '@schickling/fps-meter';
 import classNames from 'classnames';
 import {useEffect, useState} from 'react';
-import {useSearch} from 'wouter';
+import {useRoute, useSearch} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {useQuery} from 'zero-react/src/use-query.js';
 import logoURL from '../assets/images/logo.svg';
@@ -9,16 +9,22 @@ import markURL from '../assets/images/mark.svg';
 import {useLogin} from '../hooks/use-login.js';
 import {useZero} from '../hooks/use-zero.js';
 import IssueComposer from '../pages/issue/issue-composer.js';
-import {links, type ListContext, type ZbugsHistoryState} from '../routes.js';
+import {
+  links,
+  routes,
+  type ListContext,
+  type ZbugsHistoryState,
+} from '../routes.js';
 import {ButtonWithLoginCheck} from './button-with-login-check.js';
 import {Button} from './button.js';
 import {Link} from './link.js';
 
 export function Nav() {
   const qs = new URLSearchParams(useSearch());
+  const [isHome] = useRoute(routes.home);
   const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
   const listContext = zbugsHistoryState?.zbugsListContext;
-  const status = getStatus(qs, listContext);
+  const status = getStatus(isHome, qs, listContext);
   const login = useLogin();
   const [isMobile, setIsMobile] = useState(false);
   const [showUserPanel, setShowUserPanel] = useState(false); // State to control visibility of user-panel-mobile
@@ -165,30 +171,6 @@ export function Nav() {
   );
 }
 
-function getStatus(qs: URLSearchParams, listContext: ListContext | undefined) {
-  if (listContext) {
-    const open = listContext.params.open;
-    switch (open) {
-      case true:
-        return 'open';
-      case false:
-        return 'closed';
-      default:
-        return 'all';
-    }
-  } else {
-    const status = qs.get('status')?.toLowerCase();
-    switch (status) {
-      case 'closed':
-        return 'closed';
-      case 'all':
-        return 'all';
-      default:
-        return 'open';
-    }
-  }
-}
-
 const addStatusParam = (
   qs: URLSearchParams,
   status: 'closed' | 'all' | undefined,
@@ -201,3 +183,33 @@ const addStatusParam = (
   }
   return '/?' + newParams.toString();
 };
+
+function getStatus(
+  isHome: boolean,
+  qs: URLSearchParams,
+  listContext: ListContext | undefined,
+) {
+  if (isHome) {
+    const status = qs.get('status')?.toLowerCase();
+    switch (status) {
+      case 'closed':
+        return 'closed';
+      case 'all':
+        return 'all';
+      default:
+        return 'open';
+    }
+  }
+  if (listContext) {
+    const open = listContext.params.open;
+    switch (open) {
+      case true:
+        return 'open';
+      case false:
+        return 'closed';
+      default:
+        return 'all';
+    }
+  }
+  return undefined;
+}
