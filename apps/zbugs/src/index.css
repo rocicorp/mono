@@ -124,6 +124,7 @@ textarea.autoResize {
 
 .primary-cta {
   color: var(--color-text-primary-active);
+  flex: 0 0 auto;
   border-radius: 0.5rem;
   background-color: var(--color-primary-cta);
   padding: 0.4rem 1.2rem;
