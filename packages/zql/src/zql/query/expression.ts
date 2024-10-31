@@ -74,16 +74,6 @@ export function cmp(
   value?:
     | GetFieldTypeNoNullOrUndefined<any, any, any>
     | Parameter<any, any, any>,
-): GenericCondition<any>;
-export function cmp(
-  field: string,
-  opOrValue:
-    | Operator
-    | GetFieldTypeNoNullOrUndefined<any, any, any>
-    | Parameter<any, any, any>,
-  value?:
-    | GetFieldTypeNoNullOrUndefined<any, any, any>
-    | Parameter<any, any, any>,
 ): GenericCondition<any> {
   let op: Operator;
   if (value === undefined) {
