@@ -100,6 +100,7 @@ function mapLiteDataTypeToZqlValueType(dataType: string): ValueType {
 export function dataTypeToZqlValueType(
   pgDataType: string,
 ): ValueType | undefined {
+  console.log('considering datatype', pgDataType);
   switch (pgDataType.toLowerCase()) {
     case 'smallint':
     case 'integer':
@@ -131,6 +132,7 @@ export function dataTypeToZqlValueType(
       // and DATEs are represented as epoch milliseconds of UTC midnight of the date.
       return 'number';
 
+    case 'bpchar':
     case 'character':
     case 'character varying':
     case 'text':
