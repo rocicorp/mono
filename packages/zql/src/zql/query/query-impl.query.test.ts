@@ -6,6 +6,7 @@ import {issueSchema, userSchema} from './test/testSchemas.js';
 import type {AdvancedQuery} from './query-internal.js';
 import type {DefaultQueryResultRow} from './query.js';
 import {QueryDelegateImpl} from './test/query-delegate.js';
+import {and, cmp, or} from './expression.js';
 
 /**
  * Some basic manual tests to get us started.
@@ -725,4 +726,53 @@ test('json columns are returned as JS objects', () => {
       name: 'Bob',
     },
   ]);
+});
+
+test('complex expression', () => {
+  const queryDelegate = new QueryDelegateImpl();
+  addData(queryDelegate);
+
+  let rows = newQuery(queryDelegate, issueSchema)
+    .where(or(cmp('title', '=', 'issue 1'), cmp('title', '=', 'issue 2')))
+    .run();
+
+  expect(rows).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "description": "description 1",
+        "id": "0001",
+        "ownerId": "0001",
+        "title": "issue 1",
+      },
+      {
+        "closed": false,
+        "description": "description 2",
+        "id": "0002",
+        "ownerId": "0002",
+        "title": "issue 2",
+      },
+    ]
+  `);
+
+  rows = newQuery(queryDelegate, issueSchema)
+    .where(
+      and(
+        cmp('ownerId', '=', '0001'),
+        or(cmp('title', '=', 'issue 1'), cmp('title', '=', 'issue 2')),
+      ),
+    )
+    .run();
+
+  expect(rows).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "description": "description 1",
+        "id": "0001",
+        "ownerId": "0001",
+        "title": "issue 1",
+      },
+    ]
+  `);
 });
