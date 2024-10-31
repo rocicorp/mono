@@ -95,6 +95,10 @@ export function cmp(
 export function and<TSchema extends TableSchema>(
   ...conditions: GenericCondition<TSchema>[]
 ): GenericCondition<TSchema> {
+  if (conditions.length === 1) {
+    return conditions[0];
+  }
+
   // If any internal conditions are `or` then we distribute `or` over the `and`.
   // This allows the graph and pipeline builder to remain simple and not have to deal with
   // nested conditions.
@@ -133,6 +137,9 @@ export function and<TSchema extends TableSchema>(
 export function or<TSchema extends TableSchema>(
   ...conditions: GenericCondition<TSchema>[]
 ): GenericCondition<TSchema> {
+  if (conditions.length === 1) {
+    return conditions[0];
+  }
   return flatten('or', conditions);
 }
 

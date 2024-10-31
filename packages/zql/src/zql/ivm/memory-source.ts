@@ -109,7 +109,7 @@ export class MemorySource implements Source {
     optionalFilters?: Condition | undefined,
   ): SourceInput {
     const input: SourceInput = {
-      getSchema: () => this.#getSchema(connection),
+      getSchema: () => schema,
       fetch: req => this.#fetch(req, connection),
       cleanup: req => this.#cleanup(req, connection),
       setOutput: output => {
@@ -132,6 +132,7 @@ export class MemorySource implements Source {
       compareRows: makeComparator(sort),
       optionalFilters: predicates,
     };
+    const schema = this.#getSchema(connection);
     assertOrderingIncludesPK(sort, this.#primaryKey);
     this.#connections.push(connection);
     return input;
@@ -692,14 +693,6 @@ function compareBounds(a: Bound, b: Bound): number {
 export function filteredOptionalFilters(
   optionalFilters: Condition | undefined,
 ): {filters: SimpleCondition[]; allApplied: boolean} {
-  let ret: {
-    filters: SimpleCondition[];
-    allApplied: boolean;
-  } = {
-    filters: [],
-    allApplied: false,
-  };
-
   if (optionalFilters) {
     if (
       optionalFilters.type === 'or' &&
@@ -707,25 +700,29 @@ export function filteredOptionalFilters(
     ) {
       optionalFilters = optionalFilters.conditions[0];
     }
+
     if (optionalFilters.type === 'and') {
       const filters = optionalFilters.conditions.filter(
         c => c.type === 'simple',
       );
-      ret = {
+      return {
         filters,
         allApplied: filters.length === optionalFilters.conditions.length,
       };
-    } else if (optionalFilters.type === 'simple') {
-      ret = {
+    }
+
+    if (optionalFilters.type === 'simple') {
+      return {
         filters: [optionalFilters],
         allApplied: true,
       };
-    } else {
-      return {filters: [], allApplied: false};
     }
-  } else {
-    ret.allApplied = true;
+
+    return {filters: [], allApplied: false};
   }
 
-  return ret;
+  return {
+    filters: [],
+    allApplied: true,
+  };
 }

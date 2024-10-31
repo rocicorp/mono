@@ -1,9 +1,5 @@
 import {assert} from '../../../../shared/src/asserts.js';
 import {mergeIterables} from '../../../../shared/src/iterables.js';
-import {
-  deepEqual,
-  type ReadonlyJSONValue,
-} from '../../../../shared/src/json.js';
 import {must} from '../../../../shared/src/must.js';
 import type {Change} from './change.js';
 import type {Node} from './data.js';
@@ -38,13 +34,7 @@ export class FanIn implements Operator {
     this.#fanOut = fanOut;
     for (const input of inputs) {
       input.setOutput(this);
-      assert(
-        deepEqual(
-          this.#schema as unknown as ReadonlyJSONValue,
-          input.getSchema() as unknown as ReadonlyJSONValue,
-        ),
-        `Schema mismatch in fan-in`,
-      );
+      assert(this.#schema === input.getSchema(), `Schema mismatch in fan-in`);
     }
   }
 
@@ -72,13 +62,11 @@ export class FanIn implements Operator {
 
   *#fetchOrCleanup(streamProvider: (input: Input) => Stream<Node>) {
     const iterables = this.#inputs.map(input => streamProvider(input));
-    for (const node of mergeIterables(
+    yield* mergeIterables(
       iterables,
       (l, r) => must(this.#schema).compareRows(l.row, r.row),
       true,
-    )) {
-      yield node;
-    }
+    );
   }
 
   push(change: Change) {
