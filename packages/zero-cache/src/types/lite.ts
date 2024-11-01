@@ -1,5 +1,5 @@
 import {assert} from '../../../shared/src/asserts.js';
-import type {SchemaValue, ValueType} from '../../../zql/src/zql/ivm/schema.js';
+import type {SchemaValue, ValueType} from '../../../zql/src/ivm/schema.js';
 import {stringify, type JSONValue} from './bigint-json.js';
 import type {PostgresValueType} from './pg.js';
 import type {RowValue} from './row-key.js';

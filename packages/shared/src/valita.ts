@@ -56,7 +56,7 @@ function displayList<T>(
   return `${expected.slice(0, -2).map(toDisplay).join(', ')}, ${suffix}`;
 }
 
-function getMessage(err: v.Err, v: unknown): string {
+function getMessage(err: v.Err | v.ValitaError, v: unknown): string {
   const firstIssue = err.issues[0];
   const {path} = firstIssue;
   const atPath = path?.length ? ` at ${path.join('.')}` : '';
@@ -158,11 +158,37 @@ export function test<T>(
   schema: v.Type<T>,
   mode?: ParseOptionsMode,
 ): Result<T> {
-  const res = (schema as v.Type<T>).try(value, mode ? {mode} : undefined);
+  const res = schema.try(value, mode ? {mode} : undefined);
   if (!res.ok) {
     return {ok: false, error: getMessage(res, value)};
   }
   return res;
+}
+
+/**
+ * Similar to {@link test} but works for AbstractTypes such as Optional.
+ * This is for advanced usage. Prefer {@link test} unless you really need
+ * to operate directly on an Optional field.
+ */
+export function testOptional<T>(
+  value: unknown,
+  schema: v.Type<T> | v.Optional<T>,
+  mode?: ParseOptionsMode,
+): Result<T | undefined> {
+  let flags = 0x1; // FLAG_FORBID_EXTRA_KEYS;
+  if (mode === 'passthrough') {
+    flags = 0;
+  } else if (mode === 'strip') {
+    flags = 0x2; // FLAG_STRIP_EXTRA_KEYS;
+  }
+  const res = schema.func(value, flags);
+  if (res === undefined) {
+    return {ok: true, value} as Result<T>;
+  } else if (res.ok) {
+    return res;
+  }
+  const err = new v.ValitaError(res);
+  return {ok: false, error: getMessage(err, value)};
 }
 
 /**
@@ -188,4 +214,13 @@ export function readonlyRecord<T extends v.Type>(
   t: T,
 ): v.Type<Readonly<Record<string, v.Infer<T>>>> {
   return v.record(t);
+}
+
+// eslint-disable-next-line @typescript-eslint/naming-convention
+const AbstractType = Object.getPrototypeOf(
+  Object.getPrototypeOf(v.string().optional()),
+).constructor;
+
+export function instanceOfAbstractType(o: unknown) {
+  return o instanceof AbstractType;
 }
