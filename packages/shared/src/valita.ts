@@ -221,6 +221,8 @@ const AbstractType = Object.getPrototypeOf(
   Object.getPrototypeOf(v.string().optional()),
 ).constructor;
 
-export function instanceOfAbstractType(o: unknown) {
-  return o instanceof AbstractType;
+export function instanceOfAbstractType<T = unknown>(
+  obj: unknown,
+): obj is v.Type<T> | v.Optional<T> {
+  return obj instanceof AbstractType;
 }
