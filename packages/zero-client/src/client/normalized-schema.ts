@@ -4,7 +4,7 @@ import {
   NormalizedTableSchema,
   normalizeTableSchemaWithCache,
   type TableSchemaCache,
-} from '../../../zql/src/zql/query/normalize-table-schema.js';
+} from '../../../zql/src/query/normalize-table-schema.js';
 import type {Schema} from './zero.js';
 
 /**

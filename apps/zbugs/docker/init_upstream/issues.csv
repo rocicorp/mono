@@ -176,17 +176,17 @@ but the type of `row` is supposed to be `{issue: Issue; labels: string[]};`",
 
 In Zeppliear we have a limit of 200 but we end up with a case where we get to `#limitedAddAll` where  the size of the BTree is 201 (changing the limit to 10 hits a case where the data.size is 11):
 
-https://github.com/rocicorp/mono/blob/baff399d78101ac77813803516b06a0c84fa4209/packages/zql/src/zql/ivm/view/tree-view.ts#L142-L144
+https://github.com/rocicorp/mono/blob/baff399d78101ac77813803516b06a0c84fa4209/packages/zql/src/ivm/view/tree-view.ts#L142-L144
 
 
 I did some debugging and the problem seems to be that the we call tree `set` without going through the _limit function_ so the tree size is larger than we expect.
 
-https://github.com/rocicorp/mono/blob/baff399d78101ac77813803516b06a0c84fa4209/packages/zql/src/zql/ivm/source/set-source.ts#L173-L175
+https://github.com/rocicorp/mono/blob/baff399d78101ac77813803516b06a0c84fa4209/packages/zql/src/ivm/source/set-source.ts#L173-L175
 ",
 "GgpFqe8eiV-A3d6_AEMk5","1822","Type Generation for Client API","True","1715671242000.0","1715671153000.0","OeVnr1y5bEM_Yg06sUFtD",,,
 "wXojICEjDrM2vZK7SXBSI","1821","Auth","True","1715671253000.0","1715671048000.0","OeVnr1y5bEM_Yg06sUFtD",,"Right now we have a few paragraphs of text and a code block. We need to design and implement both authentication and authorization.",
 "Y3WTx0k75v5gebho0Yps0","1820","test","False","1715671278000.0","1715670370000.0","OeVnr1y5bEM_Yg06sUFtD",,"test",
-"-Thbh2750u8nQUnsjkl2X","1781","AST `field` should be split into `table` and `column` parts","False","1716564468000.0","1715198543000.0","tDY6IbKdVqbBlRBc3XMwF",,"All `fields` should be tuples of `table`, `column` -- https://github.com/rocicorp/mono/blob/main/packages/zql/src/zql/ast/ast.ts#L19
+"-Thbh2750u8nQUnsjkl2X","1781","AST `field` should be split into `table` and `column` parts","False","1716564468000.0","1715198543000.0","tDY6IbKdVqbBlRBc3XMwF",,"All `fields` should be tuples of `table`, `column` -- https://github.com/rocicorp/mono/blob/main/packages/zql/src/ast/ast.ts#L19
 
 Right now we encode table + column via a dot in the string.",
 "IFSSd3eg8K3Sr9Pli5xiI","1780","Implement sub-queries / move to north star query API","True","1715196481000.0","1715196474000.0","tDY6IbKdVqbBlRBc3XMwF",,"To get us to our aspirational API and remove the awkward:
