@@ -4,11 +4,21 @@ import * as v from './valita.js';
 import {parse} from './valita.js';
 
 test('basic', () => {
-  const t = <T>(s: v.Type<T>, v: unknown, message?: string) => {
+  const t = <T>(s: v.Type<T>, val: unknown, message?: string) => {
     let ex;
     try {
-      const parsed = parse(v, s);
-      expect(parsed).toBe(v);
+      const parsed = parse(val, s);
+      expect(parsed).toBe(val);
+
+      const r1 = v.test(val, s);
+      expect(r1.ok).toBe(true);
+      assert(r1.ok);
+      expect(r1.value).toBe(val);
+
+      const r2 = v.testOptional(val, s);
+      expect(r2.ok).toBe(true);
+      assert(r2.ok);
+      expect(r2.value).toBe(val);
     } catch (err) {
       ex = err;
     }
@@ -223,14 +233,49 @@ test('basic', () => {
   }
 });
 
+test('testOptional', () => {
+  const s = v.number().optional();
+
+  expect(v.testOptional(123, s)).toEqual({ok: true, value: 123});
+  expect(v.testOptional(undefined, s)).toEqual({ok: true, value: undefined});
+
+  expect(v.testOptional('123', s)).toEqual({
+    error: 'Expected number. Got "123"',
+    ok: false,
+  });
+  expect(v.testOptional(null, s)).toEqual({
+    error: 'Expected number. Got null',
+    ok: false,
+  });
+});
+
 test('array instead of object error message', () => {
   const s = v.object({
     x: v.number(),
   });
 
   expect(v.test({x: 1}, s)).toEqual({ok: true, value: {x: 1}});
+  expect(v.testOptional({x: 1}, s)).toEqual({ok: true, value: {x: 1}});
+
   expect(v.test([], s)).toEqual({
     error: 'Expected object. Got array',
     ok: false,
   });
+  expect(v.testOptional([], s)).toEqual({
+    error: 'Expected object. Got array',
+    ok: false,
+  });
+});
+
+test('instanceOfAbstractType', () => {
+  const num = v.number();
+  const optional = num.optional();
+
+  expect(v.instanceOfAbstractType(num)).toBe(true);
+  expect(v.instanceOfAbstractType(optional)).toBe(true);
+
+  expect(v.instanceOfAbstractType({})).toBe(false);
+  expect(v.instanceOfAbstractType('foo')).toBe(false);
+  expect(v.instanceOfAbstractType(null)).toBe(false);
+  expect(v.instanceOfAbstractType(undefined)).toBe(false);
 });
