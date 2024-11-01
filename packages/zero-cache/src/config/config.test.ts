@@ -1,7 +1,8 @@
 import {SilentLogger} from '@rocicorp/logger';
-import {expect, test} from 'vitest';
+import stripAnsi from 'strip-ansi';
+import {expect, test, vi} from 'vitest';
 import * as v from '../../../shared/src/valita.js';
-import {parseOptions, type Options} from './config.js';
+import {ExitAfterUsage, parseOptions, type Options} from './config.js';
 
 const options = {
   port: {type: v.number().default(4848), desc: ['blah blah blah']},
@@ -222,3 +223,63 @@ test.each([
     );
   },
 );
+
+test('--help', () => {
+  const logger = {error: vi.fn()};
+  expect(() => parseOptions(options, ['--help'], {}, logger)).toThrow(
+    ExitAfterUsage,
+  );
+  expect(logger.error).toHaveBeenCalledOnce();
+  expect(stripAnsi(logger.error.mock.calls[0][0])).toMatchInlineSnapshot(`
+    "
+     --port number                      blah blah blah                                                       
+                                        default: 4848                                                        
+                                        env: PORT                                                            
+                                                                                                             
+     --replicaDBFile string             env: REPLICA_DB_FILE                                                 
+                                                                                                             
+     --litestream boolean               env: LITESTREAM                                                      
+                                                                                                             
+     --logFormat text,json              default: "text"                                                      
+                                        env: LOG_FORMAT                                                      
+                                                                                                             
+     --shardId string                   blah blah blah                                                       
+                                        default: "0"                                                         
+                                        env: SHARD_ID                                                        
+                                                                                                             
+     --shardPublications string[]       default: []                                                          
+                                        env: SHARD_PUBLICATIONS                                              
+                                                                                                             
+    "
+  `);
+});
+
+test('-h', () => {
+  const logger = {error: vi.fn()};
+  expect(() => parseOptions(options, ['-h'], {}, logger)).toThrow(
+    ExitAfterUsage,
+  );
+  expect(logger.error).toHaveBeenCalledOnce();
+  expect(stripAnsi(logger.error.mock.calls[0][0])).toMatchInlineSnapshot(`
+    "
+     --port number                      blah blah blah                                                       
+                                        default: 4848                                                        
+                                        env: PORT                                                            
+                                                                                                             
+     --replicaDBFile string             env: REPLICA_DB_FILE                                                 
+                                                                                                             
+     --litestream boolean               env: LITESTREAM                                                      
+                                                                                                             
+     --logFormat text,json              default: "text"                                                      
+                                        env: LOG_FORMAT                                                      
+                                                                                                             
+     --shardId string                   blah blah blah                                                       
+                                        default: "0"                                                         
+                                        env: SHARD_ID                                                        
+                                                                                                             
+     --shardPublications string[]       default: []                                                          
+                                        env: SHARD_PUBLICATIONS                                              
+                                                                                                             
+    "
+  `);
+});

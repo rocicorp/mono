@@ -150,7 +150,7 @@ export function parseOptions<T extends Options>(
 
     const spec = [...desc];
     if (defaultValue !== undefined) {
-      spec.push(`default: ${defaultValue}`);
+      spec.push(`default: ${JSON.stringify(defaultValue)}`);
     }
     spec.push(`env: ${env}`);
 
@@ -188,16 +188,18 @@ export function parseOptions<T extends Options>(
     }
 
     const parsedArgs = merge(
-      parseArgs(optsWithDefaults, argv),
-      parseArgs(optsWithoutDefaults, envArgv),
-      parseArgs(optsWithoutDefaults, argv),
+      parseArgs(optsWithDefaults, argv, logger),
+      parseArgs(optsWithoutDefaults, envArgv, logger),
+      parseArgs(optsWithoutDefaults, argv, logger),
     );
 
     const schema = configSchema(options);
     return v.parse(parsedArgs, schema);
   } catch (e) {
-    logger.error?.(String(e));
-    showUsage(optsWithDefaults, logger);
+    if (!(e instanceof ExitAfterUsage)) {
+      logger.error?.(String(e));
+      showUsage(optsWithDefaults, logger);
+    }
     throw e;
   }
 }
@@ -245,7 +247,11 @@ function valueParser(
   };
 }
 
-function parseArgs(optionDefs: DescribedOptionDefinition[], argv: string[]) {
+function parseArgs(
+  optionDefs: DescribedOptionDefinition[],
+  argv: string[],
+  logger: OptionalLogger,
+) {
   function normalizeFlagValue(value: unknown) {
     // A --flag without value is parsed by commandLineArgs() to `null`,
     // but this is a common convention to set a boolean flag to true.
@@ -262,8 +268,8 @@ function parseArgs(optionDefs: DescribedOptionDefinition[], argv: string[]) {
     partial: true,
   });
   if (unknown?.includes('--help') || unknown?.includes('-h')) {
-    showUsage(optionDefs);
-    process.exit(0);
+    showUsage(optionDefs, logger);
+    throw new ExitAfterUsage();
   }
 
   // Strip the "group" prefix the flag name.
@@ -308,3 +314,5 @@ type DescribedOptionDefinition = OptionDefinition & {
 };
 
 const PRIMITIVES = new Set(['string', 'number', 'boolean']);
+
+export class ExitAfterUsage extends Error {}
