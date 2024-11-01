@@ -1,21 +1,30 @@
 import {FPSMeter} from '@schickling/fps-meter';
 import classNames from 'classnames';
 import {useEffect, useState} from 'react';
-import {useSearch} from 'wouter';
-import {navigate} from 'wouter/use-browser-location';
+import {useRoute, useSearch} from 'wouter';
+import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {useQuery} from 'zero-react/src/use-query.js';
 import logoURL from '../assets/images/logo.svg';
 import markURL from '../assets/images/mark.svg';
 import {useLogin} from '../hooks/use-login.js';
 import {useZero} from '../hooks/use-zero.js';
 import IssueComposer from '../pages/issue/issue-composer.js';
-import {links} from '../routes.js';
+import {
+  links,
+  routes,
+  type ListContext,
+  type ZbugsHistoryState,
+} from '../routes.js';
 import {ButtonWithLoginCheck} from './button-with-login-check.js';
 import {Button} from './button.js';
 import {Link} from './link.js';
 
 export function Nav() {
   const qs = new URLSearchParams(useSearch());
+  const [isHome] = useRoute(routes.home);
+  const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
+  const listContext = zbugsHistoryState?.zbugsListContext;
+  const status = getStatus(isHome, qs, listContext);
   const login = useLogin();
   const [isMobile, setIsMobile] = useState(false);
   const [showUserPanel, setShowUserPanel] = useState(false); // State to control visibility of user-panel-mobile
@@ -25,16 +34,6 @@ export function Nav() {
   );
 
   const [showIssueModal, setShowIssueModal] = useState(false);
-
-  const addStatusParam = (status: 'closed' | 'all' | undefined) => {
-    const newParams = new URLSearchParams(qs);
-    if (status === undefined) {
-      newParams.delete('status');
-    } else {
-      newParams.set('status', status);
-    }
-    return '/?' + newParams.toString();
-  };
 
   const loginHref = links.login(
     window.location.pathname,
@@ -80,25 +79,25 @@ export function Nav() {
 
         <div className="section-tabs">
           <Link
-            href={addStatusParam(undefined)}
+            href={addStatusParam(qs, undefined)}
             className={classNames('nav-item', {
-              'nav-active': !qs.has('status'),
+              'nav-active': status === 'open',
             })}
           >
             Open
           </Link>
           <Link
-            href={addStatusParam('closed')}
+            href={addStatusParam(qs, 'closed')}
             className={classNames('nav-item', {
-              'nav-active': qs.get('status') === 'closed',
+              'nav-active': status === 'closed',
             })}
           >
             Closed
           </Link>
           <Link
-            href={addStatusParam('all')}
+            href={addStatusParam(qs, 'all')}
             className={classNames('nav-item', {
-              'nav-active': qs.get('status') === 'all',
+              'nav-active': status === 'all',
             })}
           >
             All
@@ -170,4 +169,47 @@ export function Nav() {
       />
     </>
   );
+}
+
+const addStatusParam = (
+  qs: URLSearchParams,
+  status: 'closed' | 'all' | undefined,
+) => {
+  const newParams = new URLSearchParams(qs);
+  if (status === undefined) {
+    newParams.delete('status');
+  } else {
+    newParams.set('status', status);
+  }
+  return '/?' + newParams.toString();
+};
+
+function getStatus(
+  isHome: boolean,
+  qs: URLSearchParams,
+  listContext: ListContext | undefined,
+) {
+  if (isHome) {
+    const status = qs.get('status')?.toLowerCase();
+    switch (status) {
+      case 'closed':
+        return 'closed';
+      case 'all':
+        return 'all';
+      default:
+        return 'open';
+    }
+  }
+  if (listContext) {
+    const open = listContext.params.open;
+    switch (open) {
+      case true:
+        return 'open';
+      case false:
+        return 'closed';
+      default:
+        return 'all';
+    }
+  }
+  return undefined;
 }

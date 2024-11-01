@@ -100,7 +100,6 @@ function mapLiteDataTypeToZqlValueType(dataType: string): ValueType {
 export function dataTypeToZqlValueType(
   pgDataType: string,
 ): ValueType | undefined {
-  console.log('considering datatype', pgDataType);
   switch (pgDataType.toLowerCase()) {
     case 'smallint':
     case 'integer':
