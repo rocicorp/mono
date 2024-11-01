@@ -13,12 +13,10 @@ test('basic', () => {
       expect(parsed).toBe(val);
 
       expect(r1.ok).toBe(true);
-      assert(r1.ok);
-      expect(r1.value).toBe(val);
+      expect(r1.ok && r1.value).toBe(val);
 
       expect(r2.ok).toBe(true);
-      assert(r2.ok);
-      expect(r2.value).toBe(val);
+      expect(r2.ok && r2.value).toBe(val);
     } catch (err) {
       ex = err;
     }
@@ -28,12 +26,10 @@ test('basic', () => {
       expect(ex.message).toBe(message);
 
       expect(r1.ok).toBe(false);
-      assert(!r1.ok);
-      expect(r1.error).toBe(message);
+      expect(!r1.ok && r1.error).toBe(message);
 
       expect(r2.ok).toBe(false);
-      assert(!r2.ok);
-      expect(r2.error).toBe(message);
+      expect(!r2.ok && r2.error).toBe(message);
     } else {
       expect(ex).toBe(undefined);
     }
