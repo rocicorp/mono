@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import type {JSONValue} from '../../../../shared/src/json.js';
-import type {Storage} from '../../../../zql/src/zql/ivm/operator.js';
-import type {Stream} from '../../../../zql/src/zql/ivm/stream.js';
+import type {Storage} from '../../../../zql/src/ivm/operator.js';
+import type {Stream} from '../../../../zql/src/ivm/stream.js';
 import {Database, Statement} from '../../../../zqlite/src/db.js';
 
 export interface ClientGroupStorage {
