@@ -2,7 +2,7 @@ import fc from 'fast-check';
 import {describe, expect, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.js';
 import {and, or, type GenericCondition} from './expression.js';
-import type {TableSchema} from './schema.js';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 
 type TestCondition =
   | {

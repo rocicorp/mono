@@ -1,10 +1,14 @@
 /* eslint-disable @typescript-eslint/ban-types */
 
 import type {Row} from '../../../zero-protocol/src/data.js';
-import type {SchemaValue} from '../ivm/schema.js';
 import type {Source} from '../ivm/source.js';
 import type {GenericCondition} from './expression.js';
-import type {PullSchemaForRelationship, TableSchema} from './schema.js';
+import type {
+  PullSchemaForRelationship,
+  TableSchema,
+  SchemaValueToTSType,
+  TableSchemaToRow,
+} from '../../../zero-schema/src/table-schema.js';
 import type {TypedView} from './typed-view.js';
 
 /**
@@ -35,32 +39,6 @@ type SmashOne<T extends QueryType> = T['row'] & {
     : never;
 };
 
-/**
- * Given a schema value, return the TypeScript type.
- *
- * This allows us to create the correct return type for a
- * query that has a selection.
- */
-type SchemaValueToTSType<T extends SchemaValue> =
-  | (T extends {type: 'string'}
-      ? string
-      : T extends {type: 'number'}
-      ? number
-      : T extends {type: 'boolean'}
-      ? boolean
-      : T extends {type: 'null'}
-      ? null
-      : T extends {type: 'json'}
-      ? // In schema-v2, the user will be able to specify the TS type that
-        // the JSON should match and `any`` will no
-        // longer be used here.
-        // ReadOnlyJSONValue is not used as it causes
-        // infinite depth errors to pop up for users of our APIs.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        any
-      : never)
-  | (T extends {optional: true} ? undefined : never);
-
 export type GetFieldTypeNoNullOrUndefined<
   TSchema extends TableSchema,
   TColumn extends keyof TSchema['columns'],
@@ -71,10 +49,6 @@ export type GetFieldTypeNoNullOrUndefined<
       null | undefined
     >[]
   : Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null | undefined>;
-
-export type SchemaToRow<T extends TableSchema> = {
-  [K in keyof T['columns']]: SchemaValueToTSType<T['columns'][K]>;
-};
 
 export type QueryReturnType<T extends Query<TableSchema>> = T extends Query<
   TableSchema,
@@ -261,7 +235,7 @@ export interface Query<
   where(condition: GenericCondition<TSchema>): Query<TSchema, TReturn>;
 
   start(
-    row: Partial<SchemaToRow<TSchema>>,
+    row: Partial<TableSchemaToRow<TSchema>>,
     opts?: {inclusive: boolean} | undefined,
   ): Query<TSchema, TReturn>;
 

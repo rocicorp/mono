@@ -12,7 +12,7 @@ import {
   overlayForConstraintForTest,
   overlayForStartAtForTest,
 } from './memory-source.js';
-import type {SchemaValue} from './schema.js';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {runCases} from './test/source-cases.js';
 
 runCases(

@@ -8,7 +8,7 @@ import {Catch} from './catch.js';
 import type {Node} from './data.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
-import type {SchemaValue} from './schema.js';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {type PushMessage, Snitch, type SnitchMessage} from './snitch.js';
 import {Take} from './take.js';
 

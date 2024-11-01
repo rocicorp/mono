@@ -5,7 +5,7 @@ import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
 import type {Change, ChildChange} from './change.js';
 import {normalizeUndefined, type Node, type NormalizedValue} from './data.js';
 import type {FetchRequest, Input, Output, Storage} from './operator.js';
-import type {TableSchema} from './schema.js';
+import type {SourceSchema} from './schema.js';
 import {first, take, type Stream} from './stream.js';
 
 type Args = {
@@ -34,7 +34,7 @@ export class Join implements Input {
   readonly #parentKey: string;
   readonly #childKey: string;
   readonly #relationshipName: string;
-  readonly #schema: TableSchema;
+  readonly #schema: SourceSchema;
 
   #output: Output | null = null;
 
@@ -84,7 +84,7 @@ export class Join implements Input {
     this.#output = output;
   }
 
-  getSchema(): TableSchema {
+  getSchema(): SourceSchema {
     return this.#schema;
   }
 

@@ -6,7 +6,7 @@ import {
   QueryImpl,
 } from './query-impl.js';
 import type {Query, QueryType} from './query.js';
-import type {TableSchema} from './schema.js';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 import {issueSchema} from './test/testSchemas.js';
 import {and, cmp, not, or} from './expression.js';
 

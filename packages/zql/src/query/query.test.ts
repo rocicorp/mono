@@ -3,7 +3,10 @@ import {describe, expectTypeOf, test} from 'vitest';
 import {staticParam} from './query-impl.js';
 import type {AdvancedQuery} from './query-internal.js';
 import {type Query, type QueryType} from './query.js';
-import type {Supertype, TableSchema} from './schema.js';
+import type {
+  Supertype,
+  TableSchema,
+} from '../../../zero-schema/src/table-schema.js';
 import {and, cmp, or} from './expression.js';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 

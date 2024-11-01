@@ -61,7 +61,7 @@ import type {
 } from '../../../zero-protocol/src/pull.js';
 import {newQuery} from '../../../zql/src/query/query-impl.js';
 import type {Query} from '../../../zql/src/query/query.js';
-import type {TableSchema} from '../../../zql/src/query/schema.js';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
 import {ZeroContext} from './context.js';
@@ -91,15 +91,7 @@ import {ServerError, isAuthError, isServerError} from './server-error.js';
 import {getServer} from './server-option.js';
 import {version} from './version.js';
 import {PokeHandler} from './zero-poke-handler.js';
-
-export type Schema = {
-  readonly version: number;
-  readonly tables: {readonly [table: string]: TableSchema};
-};
-
-export function createSchema<const S extends Schema>(schema: S): S {
-  return schema as S & {readonly [K in keyof S]: S[K]};
-}
+import type {Schema} from '../../../zero-schema/src/mod.js';
 
 export type NoRelations = Record<string, never>;
 

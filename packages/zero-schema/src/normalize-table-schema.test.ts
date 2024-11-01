@@ -1,10 +1,10 @@
 import {expect, test} from 'vitest';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
+import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
 import {
   normalizePrimaryKey,
   normalizeTableSchema,
 } from './normalize-table-schema.js';
-import type {TableSchema} from './schema.js';
+import type {TableSchema} from './table-schema.js';
 
 // Use JSON to preserve the order of properties since
 // the testing framework doesn't care about the order.

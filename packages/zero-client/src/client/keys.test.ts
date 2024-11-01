@@ -4,7 +4,7 @@ import type {
   PrimaryKey,
   PrimaryKeyValueRecord,
 } from '../../../zero-protocol/src/primary-key.js';
-import {normalizePrimaryKey} from '../../../zql/src/query/normalize-table-schema.js';
+import {normalizePrimaryKey} from '../../../zero-schema/src/normalize-table-schema.js';
 import {toPrimaryKeyString as toPrimaryKeyStringImpl} from './keys.js';
 
 test('toPrimaryKeyString', () => {

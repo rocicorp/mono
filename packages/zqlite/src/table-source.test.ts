@@ -4,7 +4,7 @@ import type {Row, Value} from '../../zero-protocol/src/data.js';
 import {Catch} from '../../zql/src/ivm/catch.js';
 import type {Change} from '../../zql/src/ivm/change.js';
 import {makeComparator} from '../../zql/src/ivm/data.js';
-import type {SchemaValue} from '../../zql/src/ivm/schema.js';
+import type {SchemaValue} from '../../zero-schema/src/table-schema.js';
 import {runCases} from '../../zql/src/ivm/test/source-cases.js';
 import {Database} from './db.js';
 import {compile, format, sql} from './internal/sql.js';

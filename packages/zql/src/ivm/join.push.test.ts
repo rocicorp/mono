@@ -13,10 +13,10 @@ import {Join, createPrimaryKeySetStorageKey} from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
 import type {Input} from './operator.js';
-import type {SchemaValue} from './schema.js';
 import {Snitch, type SnitchMessage} from './snitch.js';
 import type {SourceChange} from './source.js';
 import type {Format} from './view.js';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 
 suite('push one:many', () => {
   const base = {

@@ -26,11 +26,7 @@ import type {
   Input,
   Output,
 } from '../../zql/src/ivm/operator.js';
-import type {
-  SchemaValue,
-  TableSchema,
-  ValueType,
-} from '../../zql/src/ivm/schema.js';
+import type {SourceSchema} from '../../zql/src/ivm/schema.js';
 import type {
   Source,
   SourceChange,
@@ -40,6 +36,10 @@ import type {Stream} from '../../zql/src/ivm/stream.js';
 import {Database, Statement} from './db.js';
 import {compile, format, sql} from './internal/sql.js';
 import {StatementCache} from './internal/statement-cache.js';
+import type {
+  SchemaValue,
+  ValueType,
+} from '../../zero-schema/src/table-schema.js';
 
 type Connection = {
   input: Input;
@@ -181,7 +181,7 @@ export class TableSource implements Source {
     );
   }
 
-  #getSchema(connection: Connection): TableSchema {
+  #getSchema(connection: Connection): SourceSchema {
     return {
       tableName: this.#table,
       columns: this.#columns,

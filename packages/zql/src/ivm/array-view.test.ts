@@ -7,7 +7,7 @@ import {Join} from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
 import type {Input} from './operator.js';
-import type {TableSchema} from './schema.js';
+import type {SourceSchema} from './schema.js';
 import {Take} from './take.js';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 
@@ -498,7 +498,7 @@ test('tree-single', () => {
 });
 
 test('collapse', () => {
-  const schema: TableSchema = {
+  const schema: SourceSchema = {
     tableName: 'issue',
     primaryKey: ['id'],
     columns: {
@@ -779,7 +779,7 @@ test('collapse', () => {
 });
 
 test('collapse-single', () => {
-  const schema: TableSchema = {
+  const schema: SourceSchema = {
     tableName: 'issue',
     primaryKey: ['id'],
     columns: {
@@ -1148,7 +1148,7 @@ test('edit to change the order', () => {
 });
 
 test('edit to preserve relationships', () => {
-  const schema: TableSchema = {
+  const schema: SourceSchema = {
     tableName: 'issue',
     primaryKey: ['id'],
     columns: {id: {type: 'number'}, title: {type: 'string'}},

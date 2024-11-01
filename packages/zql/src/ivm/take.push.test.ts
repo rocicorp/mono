@@ -7,7 +7,7 @@ import {Catch} from './catch.js';
 import type {Change} from './change.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
-import type {SchemaValue} from './schema.js';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {Snitch, type SnitchMessage} from './snitch.js';
 import type {SourceChange} from './source.js';
 import {Take} from './take.js';

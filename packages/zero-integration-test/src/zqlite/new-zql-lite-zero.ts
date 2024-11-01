@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
-import type {Schema} from '../../../zero-client/src/mod.js';
 import {Database} from '../../../zqlite/src/db.js';
 import {ZQLiteZero} from '../../../zqlite/src/zqlite-zero.js';
+import type {Schema} from '../../../zero-schema/src/mod.js';
 
 export function newSqliteZero<S extends Schema>(
   lc: LogContext,

@@ -1,14 +1,14 @@
-import {assert} from '../../../shared/src/asserts.js';
-import {sortedEntries} from '../../../shared/src/sorted-entries.js';
-import type {Writable} from '../../../shared/src/writable.js';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
-import type {SchemaValue} from '../ivm/schema.js';
+import {assert} from '../../shared/src/asserts.js';
+import {sortedEntries} from '../../shared/src/sorted-entries.js';
+import type {Writable} from '../../shared/src/writable.js';
+import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
 import {
+  type SchemaValue,
   isFieldRelationship,
   type FieldRelationship,
   type JunctionRelationship,
   type TableSchema,
-} from './schema.js';
+} from './table-schema.js';
 
 declare const normalized: unique symbol;
 

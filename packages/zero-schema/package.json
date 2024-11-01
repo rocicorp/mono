@@ -1,0 +1,14 @@
+{
+  "name": "zero-schema",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "module": "true",
+  "scripts": {
+    "check-types": "tsc",
+    "check-types:watch": "tsc --watch"
+  },
+  "devDependencies": {
+    "zql": "0.0.0"
+  }
+}

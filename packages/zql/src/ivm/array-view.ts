@@ -3,7 +3,7 @@ import type {Immutable} from '../../../shared/src/immutable.js';
 import type {Listener, TypedView} from '../query/typed-view.js';
 import type {Change} from './change.js';
 import type {Input, Output} from './operator.js';
-import type {TableSchema} from './schema.js';
+import type {SourceSchema} from './schema.js';
 import {applyChange} from './view-apply-change.js';
 import type {Entry, Format, View} from './view.js';
 
@@ -21,7 +21,7 @@ import type {Entry, Format, View} from './view.js';
 export class ArrayView<V extends View> implements Output, TypedView<V> {
   readonly #input: Input;
   readonly #listeners = new Set<Listener<V>>();
-  readonly #schema: TableSchema;
+  readonly #schema: SourceSchema;
   readonly #format: Format;
 
   // Synthetic "root" entry that has a single "" relationship, so that we can

@@ -46,9 +46,9 @@ import {
   PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
-  type Schema,
   type UpdateNeededReason,
 } from './zero.js';
+import type {Schema} from '../../../zero-schema/src/mod.js';
 
 let realSetTimeout: typeof setTimeout;
 let clock: sinon.SinonFakeTimers;

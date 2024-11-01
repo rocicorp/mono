@@ -12,7 +12,7 @@ import type {Format, ViewFactory} from '../ivm/view.js';
 import {
   normalizeTableSchema,
   type NormalizedTableSchema,
-} from './normalize-table-schema.js';
+} from '../../../zero-schema/src/normalize-table-schema.js';
 import type {AdvancedQuery} from './query-internal.js';
 import type {
   AddSelections,
@@ -24,7 +24,6 @@ import type {
   Parameter,
   Query,
   QueryType,
-  SchemaToRow,
   Selector,
   Smash,
 } from './query.js';
@@ -32,8 +31,9 @@ import {
   isFieldRelationship,
   isJunctionRelationship,
   type PullSchemaForRelationship,
+  type TableSchemaToRow,
   type TableSchema,
-} from './schema.js';
+} from '../../../zero-schema/src/table-schema.js';
 import type {TypedView} from './typed-view.js';
 import {and, cmp, type GenericCondition} from './expression.js';
 
@@ -298,7 +298,7 @@ export abstract class AbstractQuery<
   }
 
   start(
-    row: Partial<SchemaToRow<TSchema>>,
+    row: Partial<TableSchemaToRow<TSchema>>,
     opts?: {inclusive: boolean} | undefined,
   ): Query<TSchema, TReturn> {
     return this._newQuery(

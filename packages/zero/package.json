@@ -24,6 +24,7 @@
     "@rocicorp/logger": "^5.3.0",
     "@rocicorp/resolver": "^1.0.2",
     "@rocicorp/zero-sqlite3": "^1.0.3",
+    "camelcase": "^8.0.0",
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
     "compare-utf8": "^0.1.1",
@@ -81,6 +82,10 @@
     "./advanced": {
       "types": "./out/zero/src/advanced.d.ts",
       "default": "./out/zero/src/advanced.js"
+    },
+    "./schema": {
+      "types": "./out/zero-schema/src/mod.d.ts",
+      "default": "./out/zero-schema/src/mod.js"
     }
   },
   "bin": {

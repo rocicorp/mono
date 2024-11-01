@@ -20,7 +20,8 @@ import {
 } from './data.js';
 import {LookaheadIterator} from './lookahead-iterator.js';
 import type {Constraint, FetchRequest, Input, Output} from './operator.js';
-import type {SchemaValue, TableSchema} from './schema.js';
+import type {SourceSchema} from './schema.js';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import type {
   Source,
   SourceChange,
@@ -92,7 +93,7 @@ export class MemorySource implements Source {
     };
   }
 
-  #getSchema(connection: Connection): TableSchema {
+  #getSchema(connection: Connection): SourceSchema {
     return {
       tableName: this.#tableName,
       columns: this.#columns,

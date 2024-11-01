@@ -23,13 +23,13 @@ import type {LogOptions} from './log-options.js';
 import type {ZeroOptions} from './options.js';
 import {
   ConnectionState,
-  type Schema,
   type TestingContext,
   Zero,
   createLogOptionsSymbol,
   exposedToTestingSymbol,
   onSetConnectionStateSymbol,
 } from './zero.js';
+import type {Schema} from '../../../zero-schema/src/mod.js';
 
 export async function tickAFewTimes(clock: SinonFakeTimers, duration = 100) {
   const n = 10;
