@@ -5,17 +5,17 @@ import {parse} from './valita.js';
 
 test('basic', () => {
   const t = <T>(s: v.Type<T>, val: unknown, message?: string) => {
+    const r1 = v.test(val, s);
+    const r2 = v.testOptional(val, s);
     let ex;
     try {
       const parsed = parse(val, s);
       expect(parsed).toBe(val);
 
-      const r1 = v.test(val, s);
       expect(r1.ok).toBe(true);
       assert(r1.ok);
       expect(r1.value).toBe(val);
 
-      const r2 = v.testOptional(val, s);
       expect(r2.ok).toBe(true);
       assert(r2.ok);
       expect(r2.value).toBe(val);
@@ -26,6 +26,14 @@ test('basic', () => {
     if (message !== undefined) {
       assert(ex instanceof TypeError);
       expect(ex.message).toBe(message);
+
+      expect(r1.ok).toBe(false);
+      assert(!r1.ok);
+      expect(r1.error).toBe(message);
+
+      expect(r2.ok).toBe(false);
+      assert(!r2.ok);
+      expect(r2.error).toBe(message);
     } else {
       expect(ex).toBe(undefined);
     }
