@@ -69,33 +69,22 @@ export type Config<O extends Options> = {
  * Converts an Options instance into its corresponding {@link Config} schema.
  */
 function configSchema<T extends Options>(options: T): v.Type<Config<T>> {
-  function isValitaType(val: Option<Value> | Group): val is v.Type<Value> {
-    return (
-      'name' in val &&
-      typeof val?.name === 'string' &&
-      typeof val?.toTerminals === 'function' &&
-      typeof val?.func === 'function'
-    );
-  }
-
-  function makeObjectType(options: Options | Group): unknown {
+  function makeObjectType(options: Options | Group) {
     return v.object(
       Object.fromEntries(
-        Object.entries(options).map(([name, value]) => {
-          if (isValitaType(value)) {
-            return [name, value];
-          }
-          // Unwrap the `type` from {type, desc}.
-          if ('type' in value) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const {type} = value as any;
-            if (isValitaType(type as Option<Value> | Group)) {
+        Object.entries(options).map(
+          ([name, value]): [string, OptionType<Value> | v.Type<unknown>] => {
+            if (v.instanceOfAbstractType(value)) {
+              return [name, value];
+            }
+            const {type} = value;
+            if (v.instanceOfAbstractType(type)) {
               return [name, type];
             }
-          }
-          // OptionGroup
-          return [name, makeObjectType(value as Group)];
-        }),
+            // OptionGroup
+            return [name, makeObjectType(value as Group)];
+          },
+        ),
       ),
     );
   }
@@ -115,8 +104,8 @@ export function parseOptions<T extends Options>(
 
     const {type, desc = []} = 'name' in option ? {type: option} : option;
 
-    const defaultResult = type.func(undefined, 0);
-    const defaultValue = defaultResult?.ok ? defaultResult.value : undefined;
+    const defaultResult = v.testOptional(undefined, type);
+    const defaultValue = defaultResult.ok ? defaultResult.value : undefined;
 
     const literals: string[] = [];
     let multiple = type.name === 'array';
@@ -187,11 +176,8 @@ export function parseOptions<T extends Options>(
 
   try {
     for (const [name, val] of Object.entries(options)) {
-      if (
-        val.constructor.name !== 'Object' ||
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ('type' in val && (val as any).type.constructor.name !== 'Object')
-      ) {
+      const {type} = val as {type: unknown};
+      if (v.instanceOfAbstractType(val) || v.instanceOfAbstractType(type)) {
         addOption(name, val as Option<Value>);
       } else {
         const group = name;
@@ -251,14 +237,11 @@ function valueParser(
         }
         break;
     }
-    const result = elemType.func(value, 0);
-    if (result === undefined) {
-      return value;
-    }
+    const result = v.testOptional(value, elemType);
     if (result.ok) {
       return result.value;
     }
-    throw new v.ValitaError(result);
+    throw new TypeError(result.error);
   };
 }
 
