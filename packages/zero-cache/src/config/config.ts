@@ -1,8 +1,8 @@
 import type {OptionalLogger} from '@rocicorp/logger';
+import camelcase from 'camelcase';
 import type {OptionDefinition} from 'command-line-args';
 import commandLineArgs from 'command-line-args';
 import commandLineUsage from 'command-line-usage';
-import camelCase from 'lodash.camelcase';
 import merge from 'lodash.merge';
 import snakeCase from 'lodash.snakecase';
 import {assert} from '../../../shared/src/asserts.js';
@@ -16,7 +16,20 @@ export type Option<T extends Value> =
   | OptionType<T>
   | {
       type: OptionType<T>;
+
+      /** Description lines to be displayed in --help. */
       desc?: string[];
+
+      /** One-character alias for gettop-style short flags, e.g. -m */
+      alias?: string;
+
+      /**
+       * Capitalize all letters in the name when part of a grouped flag.
+       * This is suitable for acronyms like "db", "id", "url", etc.
+       *
+       * e.g. `shard: { id: { allCaps: true } } ==> --shardID`
+       */
+      allCaps?: boolean;
     };
 
 // Related Options can be grouped.
@@ -99,10 +112,21 @@ export function parseOptions<T extends Options>(
 ): Config<T> {
   // The main logic for converting a valita Type spec to an Option (i.e. flag) spec.
   function addOption(name: string, option: Option<Value>, group?: string) {
-    // The group name is prepended to the flag name and stripped in parseArgs().
-    name = group ? camelCase(`${group}_${name}`) : name;
+    const {
+      type,
+      desc = [],
+      alias,
+      allCaps,
+    } = 'name' in option ? {type: option} : option;
 
-    const {type, desc = []} = 'name' in option ? {type: option} : option;
+    // The group name is prepended to the flag name and stripped in parseArgs().
+    if (group) {
+      name = group
+        ? camelcase(`${group}_${allCaps ? name.toUpperCase() : name}`, {
+            preserveConsecutiveUppercase: true,
+          })
+        : name;
+    }
 
     const defaultResult = v.testOptional(undefined, type);
     const defaultValue = defaultResult.ok ? defaultResult.value : undefined;
@@ -160,6 +184,7 @@ export function parseOptions<T extends Options>(
 
     const opt = {
       name,
+      alias,
       type: valueParser(name, elemType, terminalType),
       multiple,
       group,
@@ -313,7 +338,7 @@ function parseArgs(
     const prefix = groupName.length;
     const entries = Object.entries(flags);
     for (const [prefixedName, value] of entries) {
-      const name = camelCase(prefixedName.slice(prefix));
+      const name = camelcase(prefixedName.slice(prefix));
       flags[name] = normalizeFlagValue(value);
       delete flags[prefixedName];
     }
