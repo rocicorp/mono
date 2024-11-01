@@ -9,13 +9,13 @@ import {must} from '../../../shared/src/must.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import type {Change} from './change.js';
 import type {Comparator} from './data.js';
-import type {TableSchema} from './schema.js';
+import type {SourceSchema} from './schema.js';
 import type {Entry, EntryList, Format} from './view.js';
 
 export function applyChange(
   parentEntry: Entry,
   change: Change,
-  schema: TableSchema,
+  schema: SourceSchema,
   relationship: string,
   format: Format,
 ) {
@@ -229,7 +229,7 @@ function binarySearch(view: EntryList, target: Entry, comparator: Comparator) {
 function makeEntryPreserveRelationships(
   row: Row,
   entry: Entry,
-  relationships: {[key: string]: TableSchema},
+  relationships: {[key: string]: SourceSchema},
 ): Entry {
   const result: Entry = {...row};
   for (const relationship in relationships) {

@@ -4,8 +4,8 @@ import {
   NormalizedTableSchema,
   normalizeTableSchemaWithCache,
   type TableSchemaCache,
-} from '../../../zql/src/query/normalize-table-schema.js';
-import type {Schema} from './zero.js';
+} from '../../../zero-schema/src/normalize-table-schema.js';
+import type {Schema} from '../../../zero-schema/src/mod.js';
 
 /**
  * Creates a normalized schema from a schema.

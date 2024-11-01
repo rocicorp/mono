@@ -15,12 +15,12 @@ import {
   type SetOp,
   type UpdateOp,
 } from '../../../zero-protocol/src/push.js';
-import type {NormalizedPrimaryKey} from '../../../zql/src/query/normalize-table-schema.js';
-import type {SchemaToRow} from '../../../zql/src/query/query.js';
+import type {NormalizedPrimaryKey} from '../../../zero-schema/src/normalize-table-schema.js';
+import type {TableSchemaToRow} from '../../../zero-schema/src/table-schema.js';
 import {toPrimaryKeyString} from './keys.js';
 import type {NormalizedSchema} from './normalized-schema.js';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.js';
-import type {Schema} from './zero.js';
+import type {Schema} from '../../../zero-schema/src/mod.js';
 
 export type SetValue<
   R extends Row,
@@ -60,7 +60,7 @@ export type MakeCRUDMutate<S extends Schema> = BaseCRUDMutate<S> & CRUDBatch<S>;
 
 export type BaseCRUDMutate<S extends Schema> = {
   [K in keyof S['tables']]: RowCRUDMutate<
-    SchemaToRow<S['tables'][K]>,
+    TableSchemaToRow<S['tables'][K]>,
     S['tables'][K]['primaryKey']
   >;
 };

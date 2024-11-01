@@ -5,8 +5,11 @@
  */
 import {normalizeSchema} from '../../../zero-client/src/client/normalized-schema.js';
 import type {AST} from '../../../zero-protocol/src/ast.js';
-import type {Query, SchemaToRow} from '../../../zql/src/query/query.js';
-import type {TableSchema} from '../../../zql/src/query/schema.js';
+import type {Query} from '../../../zql/src/query/query.js';
+import {
+  type TableSchema,
+  type TableSchemaToRow,
+} from '../../../zero-schema/src/table-schema.js';
 import {ConfigQuery} from './config-query.js';
 import {authDataRef, preMutationRowRef} from './refs.js';
 import type {
@@ -30,7 +33,7 @@ export type Queries<TSchema extends Schema> = {
 
 type InstanceAuthzRule<TAuthDataShape, TSchema extends TableSchema> = (
   authData: TAuthDataShape,
-  row: SchemaToRow<TSchema>,
+  row: TableSchemaToRow<TSchema>,
 ) => Query<TableSchema>;
 
 type StaticAuthzRule<TAuthDataShape> = (
@@ -211,7 +214,7 @@ function compileInstanceRules<TAuthDataShape, TSchema extends TableSchema>(
         (
           rule(
             authDataRef as TAuthDataShape,
-            preMutationRowRef as SchemaToRow<TSchema>,
+            preMutationRowRef as TableSchemaToRow<TSchema>,
           ) as unknown as {
             ast: AST;
           }

@@ -1,8 +1,8 @@
 import {
   createSchema,
   createTableSchema,
-  type SchemaToRow,
-} from '@rocicorp/zero';
+  type TableSchemaToRow,
+} from '@rocicorp/zero/schema';
 
 const userSchema = createTableSchema({
   tableName: 'user',
@@ -189,6 +189,6 @@ export const schema = createSchema({
   },
 });
 
-export type IssueRow = SchemaToRow<typeof issueSchema>;
-export type CommentRow = SchemaToRow<typeof commentSchema>;
+export type IssueRow = TableSchemaToRow<typeof issueSchema>;
+export type CommentRow = TableSchemaToRow<typeof commentSchema>;
 export type Schema = typeof schema;

@@ -10,7 +10,7 @@ import type {
   Parameter,
   Selector,
 } from './query.js';
-import type {TableSchema} from './schema.js';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 
 export type GenericCondition<TSchema extends TableSchema> =
   | GenericConjunction<TSchema>

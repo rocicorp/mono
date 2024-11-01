@@ -1,17 +1,19 @@
 import type {AST} from '../../../zero-protocol/src/ast.js';
-import type {Format} from '../../../zql/src/ivm/view.js';
-import type {NormalizedTableSchema} from '../../../zero-schema/src/normalize-table-schema.js';
-import {AbstractQuery} from '../../../zql/src/query/query-impl.js';
-import type {
-  DefaultQueryResultRow,
-  Query,
-  QueryType,
-  Smash,
-} from '../../../zql/src/query/query.js';
+import type {Format} from '../ivm/view.js';
+import {
+  normalizeTableSchema,
+  type NormalizedTableSchema,
+} from '../../../zero-schema/src/normalize-table-schema.js';
+import {AbstractQuery} from './query-impl.js';
+import type {DefaultQueryResultRow, Query, QueryType, Smash} from './query.js';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
-import type {TypedView} from '../../../zql/src/query/typed-view.js';
+import type {TypedView} from './typed-view.js';
 
-export class ConfigQuery<
+export function authQuery<TSchema extends TableSchema>(schema: TSchema) {
+  return new AuthQuery<TSchema>(normalizeTableSchema(schema));
+}
+
+export class AuthQuery<
   TTableSchema extends TableSchema,
   TReturn extends QueryType = DefaultQueryResultRow<TTableSchema>,
 > extends AbstractQuery<TTableSchema, TReturn> {
@@ -32,21 +34,21 @@ export class ConfigQuery<
     ast: AST,
     format: Format | undefined,
   ): Query<TSchema, TReturn> {
-    return new ConfigQuery(schema, ast, format);
+    return new AuthQuery(schema, ast, format);
   }
 
   materialize(): TypedView<Smash<TReturn>> {
-    throw new Error('ConfigQuery cannot be materialized');
+    throw new Error('AuthQuery cannot be materialized');
   }
 
   run(): Smash<TReturn> {
-    throw new Error('ConfigQuery cannot be run');
+    throw new Error('AuthQuery cannot be run');
   }
 
   preload(): {
     cleanup: () => void;
     complete: Promise<void>;
   } {
-    throw new Error('ConfigQuery cannot be preloaded');
+    throw new Error('AuthQuery cannot be preloaded');
   }
 }

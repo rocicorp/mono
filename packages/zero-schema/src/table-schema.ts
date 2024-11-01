@@ -1,4 +1,21 @@
-import type {SourceOrTableSchema} from '../ivm/schema.js';
+import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
+
+export type ValueType = 'string' | 'number' | 'boolean' | 'null' | 'json';
+
+/**
+ * `related` calls need to know what the available relationships are.
+ * The `schema` type encodes this information.
+ */
+export type SchemaValue = {
+  type: ValueType;
+  optional?: boolean;
+};
+
+export type SourceOrTableSchema = {
+  readonly tableName: string;
+  readonly primaryKey: PrimaryKey;
+  readonly columns: Record<string, SchemaValue>;
+};
 
 export type TableSchema = SourceOrTableSchema & {
   readonly relationships: {readonly [name: string]: Relationship};
@@ -7,6 +24,36 @@ export type TableSchema = SourceOrTableSchema & {
 export function createTableSchema<const T extends TableSchema>(schema: T) {
   return schema as T;
 }
+
+export type TableSchemaToRow<T extends TableSchema> = {
+  [K in keyof T['columns']]: SchemaValueToTSType<T['columns'][K]>;
+};
+
+/**
+ * Given a schema value, return the TypeScript type.
+ *
+ * This allows us to create the correct return type for a
+ * query that has a selection.
+ */
+export type SchemaValueToTSType<T extends SchemaValue> =
+  | (T extends {type: 'string'}
+      ? string
+      : T extends {type: 'number'}
+      ? number
+      : T extends {type: 'boolean'}
+      ? boolean
+      : T extends {type: 'null'}
+      ? null
+      : T extends {type: 'json'}
+      ? // In schema-v2, the user will be able to specify the TS type that
+        // the JSON should match and `any`` will no
+        // longer be used here.
+        // ReadOnlyJSONValue is not used as it causes
+        // infinite depth errors to pop up for users of our APIs.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        any
+      : never)
+  | (T extends {optional: true} ? undefined : never);
 
 export type Supertype<TSchemas extends TableSchema[]> = {
   tableName: TSchemas[number]['tableName'];

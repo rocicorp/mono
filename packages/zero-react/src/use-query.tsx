@@ -6,11 +6,11 @@ import type {
   QueryType,
   ReadonlyJSONValue,
   Smash,
-  TableSchema,
   TypedView,
 } from '../../zero-client/src/mod.js';
 import type {AdvancedQuery} from '../../zql/src/query/query-internal.js';
 import {useZero} from './use-zero.js';
+import type {TableSchema} from '../../zero-schema/src/table-schema.js';
 
 export function useQuery<
   TSchema extends TableSchema,

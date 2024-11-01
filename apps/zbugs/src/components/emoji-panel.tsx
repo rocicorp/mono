@@ -4,7 +4,7 @@ import {
   PopoverPanel,
   useClose,
 } from '@headlessui/react';
-import type {SchemaToRow} from '@rocicorp/zero';
+import type {TableSchemaToRow} from '@rocicorp/zero/schema';
 import {nanoid} from 'nanoid';
 import {useCallback} from 'react';
 import {useQuery} from 'zero-react/src/use-query.js';
@@ -16,8 +16,8 @@ import {useZero} from '../hooks/use-zero.js';
 import {ButtonWithLoginCheck} from './button-with-login-check.js';
 import {EmojiPicker, SKIN_TONE_PREF} from './emoji-picker.js';
 
-type Emoji = SchemaToRow<Schema['tables']['emoji']> & {
-  creator: SchemaToRow<Schema['tables']['user']> | undefined;
+type Emoji = TableSchemaToRow<Schema['tables']['emoji']> & {
+  creator: TableSchemaToRow<Schema['tables']['user']> | undefined;
 };
 
 type Props = {

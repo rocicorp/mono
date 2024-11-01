@@ -1,4 +1,4 @@
-import {type SchemaToRow} from '@rocicorp/zero';
+import {type TableSchemaToRow} from '@rocicorp/zero/schema';
 import {useQuery} from '@rocicorp/zero/react';
 import {useEffect, useState} from 'react';
 import avatarIcon from '../assets/icons/avatar-default.svg';
@@ -12,7 +12,7 @@ type Props = {
   disabled?: boolean | undefined;
 };
 
-type User = SchemaToRow<Schema['tables']['user']>;
+type User = TableSchemaToRow<Schema['tables']['user']>;
 
 export default function UserPicker({onSelect, selected, disabled}: Props) {
   const z = useZero();

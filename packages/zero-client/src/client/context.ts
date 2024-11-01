@@ -11,7 +11,7 @@ import type {
   GotCallback,
   QueryDelegate,
 } from '../../../zql/src/query/query-impl.js';
-import type {TableSchema} from '../../../zql/src/query/schema.js';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 import {ENTITIES_KEY_PREFIX} from './keys.js';
 
 export type AddQuery = (

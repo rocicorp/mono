@@ -1,4 +1,5 @@
-import type {SchemaToRow, Zero} from '@rocicorp/zero';
+import type {TableSchemaToRow} from '@rocicorp/zero/schema';
+import type {Zero} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {nanoid} from 'nanoid';
 import {useEffect, useMemo, useState} from 'react';
@@ -368,7 +369,7 @@ export default function IssuePage() {
 function buildListQuery(
   z: Zero<Schema>,
   listContext: ListContext | undefined,
-  issue: SchemaToRow<Schema['tables']['issue']> | undefined,
+  issue: TableSchemaToRow<Schema['tables']['issue']> | undefined,
   dir: 'next' | 'prev',
 ) {
   if (!listContext || !issue) {

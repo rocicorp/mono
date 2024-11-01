@@ -1,6 +1,6 @@
 import type {Format, ViewFactory} from '../ivm/view.js';
 import type {DefaultQueryResultRow, Query, QueryType, Smash} from './query.js';
-import type {TableSchema} from './schema.js';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 import type {TypedView} from './typed-view.js';
 
 export interface AdvancedQuery<

@@ -2,7 +2,7 @@ import type {JSONValue} from '../../../shared/src/json.js';
 import type {Row, Value} from '../../../zero-protocol/src/data.js';
 import type {Change} from './change.js';
 import type {Node} from './data.js';
-import type {TableSchema} from './schema.js';
+import type {SourceSchema} from './schema.js';
 import type {Stream} from './stream.js';
 
 /**
@@ -10,11 +10,11 @@ import type {Stream} from './stream.js';
  */
 export interface Input {
   /** The schema of the data this input returns. */
-  getSchema(): TableSchema;
+  getSchema(): SourceSchema;
 
   /**
    * Fetch data. May modify the data in place.
-   * Returns nodes sorted in order of {@linkcode TableSchema.compareRows}.
+   * Returns nodes sorted in order of {@linkcode SourceSchema.compareRows}.
    */
   fetch(req: FetchRequest): Stream<Node>;
 

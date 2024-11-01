@@ -14,16 +14,14 @@ import {
   normalizeSchema,
   type NormalizedSchema,
 } from '../../zero-client/src/client/normalized-schema.js';
-import type {
-  MakeEntityQueriesFromSchema,
-  Schema,
-} from '../../zero-client/src/client/zero.js';
+import type {MakeEntityQueriesFromSchema} from '../../zero-client/src/client/zero.js';
 import type {Query} from '../../zero-client/src/mod.js';
 import type {Row} from '../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
 import type {CRUDOp, CRUDOpKind} from '../../zero-protocol/src/push.js';
 import {newQuery} from '../../zql/src/query/query-impl.js';
-import type {TableSchema} from '../../zql/src/query/schema.js';
+import type {TableSchema} from '../../zero-schema/src/table-schema.js';
+import type {Schema} from '../../zero-schema/src/mod.js';
 import type {Database} from './db.js';
 import type {ZQLiteZeroOptions} from './options.js';
 

@@ -1,7 +1,7 @@
 import type {Value} from '../../../zero-protocol/src/data.js';
 import type {Input} from './operator.js';
 import type {Query, QueryType} from '../query/query.js';
-import type {TableSchema} from '../query/schema.js';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 
 export type View = EntryList | Entry | undefined;
 export type EntryList = Entry[];
