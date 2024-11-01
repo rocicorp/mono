@@ -5,7 +5,7 @@ import commandLineUsage from 'command-line-usage';
 import camelCase from 'lodash.camelcase';
 import merge from 'lodash.merge';
 import snakeCase from 'lodash.snakecase';
-import {must} from '../../../shared/src/must.js';
+import {assert} from '../../../shared/src/asserts.js';
 import * as v from '../../../shared/src/valita.js';
 
 type Primitive = number | string | boolean;
@@ -108,8 +108,7 @@ export function parseOptions<T extends Options>(
     const defaultValue = defaultResult.ok ? defaultResult.value : undefined;
 
     const literals: string[] = [];
-    let multiple = type.name === 'array';
-    let elemType = multiple ? (type as v.ArrayType).rest : type;
+    let {multiple, elemType} = getElemType(type, name);
     let terminalType: string | undefined;
 
     type.toTerminals(t => {
@@ -118,11 +117,16 @@ export function parseOptions<T extends Options>(
         case 'undefined':
         case 'optional':
           return;
-        case 'array':
+        case 'array': {
           multiple = true;
-          elemType = must(t.rest);
+          const {elemType: newElemType} = getElemType(
+            t as OptionType<Value>,
+            name,
+          );
+          elemType = newElemType;
           typeName = elemType.name;
           break;
+        }
         case 'literal':
           literals.push(String(t.value));
           typeName = typeof t.value;
@@ -202,6 +206,38 @@ export function parseOptions<T extends Options>(
     }
     throw e;
   }
+}
+
+function getElemType(
+  type: OptionType<Value>,
+  flagName: string,
+): {
+  multiple: boolean;
+  elemType: OptionType<Value>;
+} {
+  let multiple = false;
+  if (type.name !== 'array') {
+    return {multiple, elemType: type};
+  }
+  multiple = true;
+
+  const a = type as v.ArrayType<v.Type<Value>>;
+  const types = [
+    ...a.prefix,
+    ...(a.rest ? [a.rest] : []),
+    ...a.suffix,
+  ] as v.Type<Value>[];
+  assert(types.length);
+
+  const elemType = types[0];
+  for (const t of types) {
+    if (t.name !== elemType.name) {
+      throw new TypeError(
+        `--${flagName} has mixed types ${t.name} and ${elemType.name}`,
+      );
+    }
+  }
+  return {multiple, elemType};
 }
 
 function valueParser(

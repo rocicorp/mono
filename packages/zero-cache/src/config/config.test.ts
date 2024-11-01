@@ -15,6 +15,7 @@ const options = {
     id: {type: v.string().default('0'), desc: ['blah blah blah']},
     publications: {type: v.array(v.string()).optional(() => [])},
   },
+  tuple: v.tuple([v.string(), v.string()]).optional(() => ['a', 'b']),
 };
 
 test.each([
@@ -27,6 +28,7 @@ test.each([
       replicaDBFile: '/tmp/replica.db',
       log: {format: 'text'},
       shard: {id: '0', publications: []},
+      tuple: ['a', 'b'],
     },
   ],
   [
@@ -39,6 +41,7 @@ test.each([
       ['LOG_FORMAT']: 'json',
       ['SHARD_ID']: 'xyz',
       ['SHARD_PUBLICATIONS']: 'zero_foo',
+      ['TUPLE']: 'c,d',
     },
     {
       port: 6000,
@@ -46,6 +49,7 @@ test.each([
       litestream: true,
       log: {format: 'json'},
       shard: {id: 'xyz', publications: ['zero_foo']},
+      tuple: ['c', 'd'],
     },
   ],
   [
@@ -58,6 +62,7 @@ test.each([
       ['LOG_FORMAT']: 'json',
       ['SHARD_ID']: 'xyz',
       ['SHARD_PUBLICATIONS']: 'zero_foo,zero_bar',
+      ['TUPLE']: 'e,f',
     },
     {
       port: 6000,
@@ -65,6 +70,7 @@ test.each([
       litestream: true,
       log: {format: 'json'},
       shard: {id: 'xyz', publications: ['zero_foo', 'zero_bar']},
+      tuple: ['e', 'f'],
     },
   ],
   [
@@ -81,6 +87,9 @@ test.each([
       '--shardPublications',
       'zero_foo',
       'zero_bar',
+      '--tuple',
+      'g',
+      'h',
     ],
     {},
     {
@@ -89,6 +98,7 @@ test.each([
       litestream: true,
       log: {format: 'json'},
       shard: {id: 'abc', publications: ['zero_foo', 'zero_bar']},
+      tuple: ['g', 'h'],
     },
   ],
   [
@@ -107,6 +117,10 @@ test.each([
       'zero_foo',
       '--shardPublications',
       'zero_bar',
+      '--tuple',
+      'i',
+      '--tuple',
+      'j',
     ],
     {},
     {
@@ -115,6 +129,7 @@ test.each([
       litestream: true,
       log: {format: 'json'},
       shard: {id: 'abc', publications: ['zero_foo', 'zero_bar']},
+      tuple: ['i', 'j'],
     },
   ],
   [
@@ -128,6 +143,9 @@ test.each([
       '--shardPublications',
       'zero_foo',
       'zero_bar',
+      '--tuple',
+      'k',
+      'l',
     ],
     {
       ['PORT']: '6000',
@@ -136,6 +154,7 @@ test.each([
       ['LOG_FORMAT']: 'text',
       ['SHARD_ID']: 'xyz',
       ['SHARD_PUBLICATIONS']: 'zero_blue',
+      ['TUPLE']: 'e,f',
     },
     {
       port: 8888,
@@ -143,6 +162,7 @@ test.each([
       litestream: true,
       log: {format: 'json'},
       shard: {id: 'abc', publications: ['zero_foo', 'zero_bar']},
+      tuple: ['k', 'l'],
     },
   ],
   [
@@ -155,6 +175,7 @@ test.each([
       litestream: true,
       log: {format: 'text'},
       shard: {id: '0', publications: []},
+      tuple: ['a', 'b'],
     },
   ],
   [
@@ -167,6 +188,7 @@ test.each([
       litestream: true,
       log: {format: 'text'},
       shard: {id: '0', publications: []},
+      tuple: ['a', 'b'],
     },
   ],
   [
@@ -179,6 +201,7 @@ test.each([
       litestream: true,
       log: {format: 'text'},
       shard: {id: '0', publications: []},
+      tuple: ['a', 'b'],
     },
   ],
   [
@@ -191,6 +214,7 @@ test.each([
       litestream: false,
       log: {format: 'text'},
       shard: {id: '0', publications: []},
+      tuple: ['a', 'b'],
     },
   ],
   [
@@ -203,6 +227,7 @@ test.each([
       litestream: false,
       log: {format: 'text'},
       shard: {id: '0', publications: []},
+      tuple: ['a', 'b'],
     },
   ],
 ])('%s', (_name, argv, env, result) => {
@@ -210,17 +235,53 @@ test.each([
 });
 
 test.each([
-  ['missing required flag', {required: v.string()}, []],
-  ['missing required multiple flag', {required: v.array(v.string())}, []],
-  ['mixed type tuple', {bad: v.union(v.literal('123'), v.literal(456))}, []],
-  ['bad number', {num: v.number()}, ['--num=foobar']],
-  ['bad bool', {bool: v.boolean()}, ['--bool=yo']],
-] satisfies [string, Options, string[]][])(
+  [
+    'missing required flag',
+    {required: v.string()},
+    [],
+    'Missing property required',
+  ],
+  [
+    'missing required multiple flag',
+    {required: v.array(v.string())},
+    [],
+    'Missing property required',
+  ],
+  [
+    'mixed type union',
+    {bad: v.union(v.literal('123'), v.literal(456))},
+    [],
+    '--bad flag has mixed types number and string',
+  ],
+  [
+    'mixed type tuple',
+    {bad: v.tuple([v.number(), v.string()])},
+    [],
+    '--bad has mixed types string and number',
+  ],
+  [
+    'bad number',
+    {num: v.number()},
+    ['--num=foobar'],
+    'Invalid input for --num: "foobar"',
+  ],
+  [
+    'bad bool',
+    {bool: v.boolean()},
+    ['--bool=yo'],
+    'Invalid input for --bool: "yo"',
+  ],
+] satisfies [string, Options, string[], string][])(
   'invalid config: %s',
-  (_name, opts, argv) => {
-    expect(() => parseOptions(opts, argv, {}, new SilentLogger())).toThrow(
-      TypeError,
-    );
+  (_name, opts, argv, errorMsg) => {
+    let message;
+    try {
+      parseOptions(opts, argv, {}, new SilentLogger());
+    } catch (e) {
+      expect(e).toBeInstanceOf(TypeError);
+      message = (e as TypeError).message;
+    }
+    expect(message).toEqual(errorMsg);
   },
 );
 
@@ -249,6 +310,9 @@ test('--help', () => {
                                                                                                              
      --shardPublications string[]       default: []                                                          
                                         env: SHARD_PUBLICATIONS                                              
+                                                                                                             
+     --tuple string[]                   default: ["a","b"]                                                   
+                                        env: TUPLE                                                           
                                                                                                              
     "
   `);
@@ -279,6 +343,9 @@ test('-h', () => {
                                                                                                              
      --shardPublications string[]       default: []                                                          
                                         env: SHARD_PUBLICATIONS                                              
+                                                                                                             
+     --tuple string[]                   default: ["a","b"]                                                   
+                                        env: TUPLE                                                           
                                                                                                              
     "
   `);
