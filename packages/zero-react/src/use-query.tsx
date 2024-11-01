@@ -9,7 +9,7 @@ import type {
   TableSchema,
   TypedView,
 } from '../../zero-client/src/mod.js';
-import type {AdvancedQuery} from '../../zql/src/zql/query/query-internal.js';
+import type {AdvancedQuery} from '../../zql/src/query/query-internal.js';
 import {useZero} from './use-zero.js';
 
 export function useQuery<

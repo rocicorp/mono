@@ -19,9 +19,9 @@ import {
   primaryKeyValueSchema,
   type PrimaryKeyValue,
 } from '../../../../zero-protocol/src/primary-key.js';
-import type {BuilderDelegate} from '../../../../zql/src/zql/builder/builder.js';
-import {buildPipeline} from '../../../../zql/src/zql/builder/builder.js';
-import {MissingParameterError} from '../../../../zql/src/zql/builder/error.js';
+import type {BuilderDelegate} from '../../../../zql/src/builder/builder.js';
+import {buildPipeline} from '../../../../zql/src/builder/builder.js';
+import {MissingParameterError} from '../../../../zql/src/builder/error.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {compile, sql} from '../../../../zqlite/src/internal/sql.js';
 import {StatementCache} from '../../../../zqlite/src/internal/statement-cache.js';

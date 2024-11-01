@@ -15,8 +15,8 @@ import {
   type SetOp,
   type UpdateOp,
 } from '../../../zero-protocol/src/push.js';
-import type {NormalizedPrimaryKey} from '../../../zql/src/zql/query/normalize-table-schema.js';
-import type {SchemaToRow} from '../../../zql/src/zql/query/query.js';
+import type {NormalizedPrimaryKey} from '../../../zql/src/query/normalize-table-schema.js';
+import type {SchemaToRow} from '../../../zql/src/query/query.js';
 import {toPrimaryKeyString} from './keys.js';
 import type {NormalizedSchema} from './normalized-schema.js';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.js';

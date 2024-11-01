@@ -1,7 +1,7 @@
 import {expect, test} from 'vitest';
-import {MemorySource} from '../../zql/src/zql/ivm/memory-source.js';
+import {MemorySource} from '../../zql/src/ivm/memory-source.js';
 import {SolidView, solidViewFactory} from './solid-view.js';
-import type {Query, Smash} from '../../zql/src/zql/query/query.js';
+import type {Query, Smash} from '../../zql/src/query/query.js';
 
 test('basics', () => {
   const ms = new MemorySource(

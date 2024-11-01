@@ -5,8 +5,8 @@
  */
 import {normalizeSchema} from '../../../zero-client/src/client/normalized-schema.js';
 import type {AST} from '../../../zero-protocol/src/ast.js';
-import type {Query, SchemaToRow} from '../../../zql/src/zql/query/query.js';
-import type {TableSchema} from '../../../zql/src/zql/query/schema.js';
+import type {Query, SchemaToRow} from '../../../zql/src/query/query.js';
+import type {TableSchema} from '../../../zql/src/query/schema.js';
 import {ConfigQuery} from './config-query.js';
 import {authDataRef, preMutationRowRef} from './refs.js';
 import type {

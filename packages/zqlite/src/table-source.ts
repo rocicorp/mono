@@ -8,35 +8,35 @@ import type {
 } from '../../zero-protocol/src/ast.js';
 import type {Row, Value} from '../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
-import {assertOrderingIncludesPK} from '../../zql/src/zql/builder/builder.js';
-import type {Change} from '../../zql/src/zql/ivm/change.js';
+import {assertOrderingIncludesPK} from '../../zql/src/builder/builder.js';
+import type {Change} from '../../zql/src/ivm/change.js';
 import {
   makeComparator,
   type Comparator,
   type Node,
-} from '../../zql/src/zql/ivm/data.js';
+} from '../../zql/src/ivm/data.js';
 import {
   generateWithOverlay,
   generateWithStart,
   type Overlay,
-} from '../../zql/src/zql/ivm/memory-source.js';
+} from '../../zql/src/ivm/memory-source.js';
 import type {
   Constraint,
   FetchRequest,
   Input,
   Output,
-} from '../../zql/src/zql/ivm/operator.js';
+} from '../../zql/src/ivm/operator.js';
 import type {
   SchemaValue,
   TableSchema,
   ValueType,
-} from '../../zql/src/zql/ivm/schema.js';
+} from '../../zql/src/ivm/schema.js';
 import type {
   Source,
   SourceChange,
   SourceInput,
-} from '../../zql/src/zql/ivm/source.js';
-import type {Stream} from '../../zql/src/zql/ivm/stream.js';
+} from '../../zql/src/ivm/source.js';
+import type {Stream} from '../../zql/src/ivm/stream.js';
 import {Database, Statement} from './db.js';
 import {compile, format, sql} from './internal/sql.js';
 import {StatementCache} from './internal/statement-cache.js';

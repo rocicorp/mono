@@ -22,8 +22,8 @@ import type {Query} from '../../zero-client/src/mod.js';
 import type {Row} from '../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
 import type {CRUDOp, CRUDOpKind} from '../../zero-protocol/src/push.js';
-import {newQuery} from '../../zql/src/zql/query/query-impl.js';
-import type {TableSchema} from '../../zql/src/zql/query/schema.js';
+import {newQuery} from '../../zql/src/query/query-impl.js';
+import type {TableSchema} from '../../zql/src/query/schema.js';
 import type {Database} from './db.js';
 import type {ZQLiteZeroOptions} from './options.js';
 

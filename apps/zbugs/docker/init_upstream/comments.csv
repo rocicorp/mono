@@ -147,16 +147,16 @@ I was hitting this when testing Zeppliear
 
 In Zeppliear we have a limit of 200 but we end up with a case where we get to `#limitedAddAll` where the size of the BTree is 201 (changing the limit to 10 hits a case where the data.size is 11):
 
-[https://github.com/rocicorp/mono/blob/baff399d78101ac77813803516b06a0c84fa4209/packages/zql/src/zql/ivm/view/tree-view.ts#L142-L144](https://github.com/rocicorp/mono/blob/baff399d78101ac77813803516b06a0c84fa4209/packages/zql/src/zql/ivm/view/tree-view.ts#L142-L144)
+[https://github.com/rocicorp/mono/blob/baff399d78101ac77813803516b06a0c84fa4209/packages/zql/src/ivm/view/tree-view.ts#L142-L144](https://github.com/rocicorp/mono/blob/baff399d78101ac77813803516b06a0c84fa4209/packages/zql/src/ivm/view/tree-view.ts#L142-L144)
 
 I did some debugging and the problem seems to be that the we call tree `set` without going through the *limit function* so the tree size is larger than we expect.
 
-[https://github.com/rocicorp/mono/blob/baff399d78101ac77813803516b06a0c84fa4209/packages/zql/src/zql/ivm/source/set-source.ts#L173-L175](https://github.com/rocicorp/mono/blob/baff399d78101ac77813803516b06a0c84fa4209/packages/zql/src/zql/ivm/source/set-source.ts#L173-L175)
+[https://github.com/rocicorp/mono/blob/baff399d78101ac77813803516b06a0c84fa4209/packages/zql/src/ivm/source/set-source.ts#L173-L175](https://github.com/rocicorp/mono/blob/baff399d78101ac77813803516b06a0c84fa4209/packages/zql/src/ivm/source/set-source.ts#L173-L175)
 </p>
 </details>",pFCse65icLsHqrf1TJMuV
 B3SXUJOYMWx-CLz2E_euS,Lo98nXz8eCj624qfhyfMd,1715675726000.0,"Also, swapping the order of set and delete here seems to fix it
 
-https://github.com/rocicorp/mono/blob/a221bec5b5e6dc9e675c1ad743c39dd7113f9bdd/packages/zql/src/zql/ivm/view/tree-view.ts#L151-L154
+https://github.com/rocicorp/mono/blob/a221bec5b5e6dc9e675c1ad743c39dd7113f9bdd/packages/zql/src/ivm/view/tree-view.ts#L151-L154
 
 Which makes no sense to me! Are we mutating a shared tree somewhere?",nqYkxAGMnzk7Y5STjZryV
 B78AJAPm3JC7JQadSuh5w,Lo98nXz8eCj624qfhyfMd,1715851935000.0,#1804 ?,nqYkxAGMnzk7Y5STjZryV

@@ -57,8 +57,8 @@ export type {
   VersionNotSupportedResponse,
   WriteTransaction,
 } from '../../replicache/src/mod.js';
-export {QueryImpl} from '../../zql/src/zql/query/query-impl.js';
-export {escapeLike} from '../../zql/src/zql/query/escape-like.js';
+export {QueryImpl} from '../../zql/src/query/query-impl.js';
+export {escapeLike} from '../../zql/src/query/escape-like.js';
 export type {
   DefaultQueryResultRow as EmptyQueryResultRow,
   Query,
@@ -67,12 +67,12 @@ export type {
   QueryType,
   SchemaToRow,
   Smash,
-} from '../../zql/src/zql/query/query.js';
+} from '../../zql/src/query/query.js';
 export {
   type TableSchema,
   createTableSchema,
-} from '../../zql/src/zql/query/schema.js';
-export type {TypedView} from '../../zql/src/zql/query/typed-view.js';
+} from '../../zql/src/query/schema.js';
+export type {TypedView} from '../../zql/src/query/typed-view.js';
 export type {ZeroOptions} from './client/options.js';
 export {Zero, type Schema, createSchema} from './client/zero.js';
-export {and, or, not, cmp} from '../../zql/src/zql/query/expression.js';
+export {and, or, not, cmp} from '../../zql/src/query/expression.js';

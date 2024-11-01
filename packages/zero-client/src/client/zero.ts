@@ -59,9 +59,9 @@ import type {
   PullResponseBody,
   PullResponseMessage,
 } from '../../../zero-protocol/src/pull.js';
-import {newQuery} from '../../../zql/src/zql/query/query-impl.js';
-import type {Query} from '../../../zql/src/zql/query/query.js';
-import type {TableSchema} from '../../../zql/src/zql/query/schema.js';
+import {newQuery} from '../../../zql/src/query/query-impl.js';
+import type {Query} from '../../../zql/src/query/query.js';
+import type {TableSchema} from '../../../zql/src/query/schema.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
 import {ZeroContext} from './context.js';
