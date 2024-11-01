@@ -4,10 +4,7 @@ import * as v from '../../../shared/src/valita.js';
 import {parseOptions, type Options} from './config.js';
 
 const options = {
-  port: {
-    type: v.number().default(4848),
-    desc: ['blah blah blah'],
-  },
+  port: {type: v.number().default(4848), desc: ['blah blah blah']},
   replicaDBFile: v.string(),
   litestream: v.boolean().optional(),
   log: {
@@ -15,7 +12,7 @@ const options = {
   },
   shard: {
     id: {type: v.string().default('0'), desc: ['blah blah blah']},
-    publications: {type: v.array(v.string()).default([])},
+    publications: {type: v.array(v.string()).optional(() => [])},
   },
 };
 
