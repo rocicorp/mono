@@ -5,7 +5,6 @@ import commandLineUsage from 'command-line-usage';
 import camelCase from 'lodash.camelcase';
 import merge from 'lodash.merge';
 import snakeCase from 'lodash.snakecase';
-import {assert} from '../../../shared/src/asserts.js';
 import {must} from '../../../shared/src/must.js';
 import * as v from '../../../shared/src/valita.js';
 
@@ -225,8 +224,6 @@ function valueParser(
   if (!typeName || !PRIMITIVES.has(typeName)) {
     throw new TypeError(`--${flagName} flag has unsupported type ${typeName}`);
   }
-
-  assert(PRIMITIVES.has(typeName));
   return (input: string) => {
     let value;
     switch (typeName) {
