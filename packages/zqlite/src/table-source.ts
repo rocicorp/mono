@@ -16,7 +16,6 @@ import {
   type Node,
 } from '../../zql/src/zql/ivm/data.js';
 import {
-  filteredOptionalFilters,
   generateWithOverlay,
   generateWithStart,
   type Overlay,
@@ -46,7 +45,7 @@ type Connection = {
   input: Input;
   output: Output | undefined;
   sort: Ordering;
-  filters: SimpleCondition[];
+  filters: Condition | undefined;
   compareRows: Comparator;
 };
 
@@ -195,7 +194,6 @@ export class TableSource implements Source {
   }
 
   connect(sort: Ordering, optionalFilters?: Condition | undefined) {
-    const filters = filteredOptionalFilters(optionalFilters);
     const input: SourceInput = {
       getSchema: () => this.#getSchema(connection),
       fetch: req => this.#fetch(req, connection),
@@ -208,14 +206,14 @@ export class TableSource implements Source {
         assert(idx !== -1, 'Connection not found');
         this.#connections.splice(idx, 1);
       },
-      appliedFilters: filters.allApplied,
+      appliedFilters: true,
     };
 
     const connection: Connection = {
       input,
       output: undefined,
       sort,
-      filters: filters.filters,
+      filters: optionalFilters,
       compareRows: makeComparator(sort),
     };
     assertOrderingIncludesPK(sort, this.#primaryKey);
@@ -448,7 +446,7 @@ export class TableSource implements Source {
   #requestToSQL(
     constraint: Constraint | undefined,
     cursor: Cursor | undefined,
-    filters: SimpleCondition[],
+    filters: Condition | undefined,
     order: Ordering,
   ): SQLQuery {
     let query = sql`SELECT ${this.#allColumns} FROM ${sql.ident(this.#table)}`;
@@ -467,25 +465,8 @@ export class TableSource implements Source {
       constraints.push(gatherStartConstraints(cursor, order, this.#columns));
     }
 
-    for (const filter of filters) {
-      const {op} = filter;
-      if (op === 'IN' || op === 'NOT IN') {
-        constraints.push(
-          sql`${sql.ident(filter.field)} ${sql.__dangerous__rawValue(
-            filter.op,
-          )} (SELECT value FROM json_each(${JSON.stringify(filter.value)}))`,
-        );
-      } else {
-        constraints.push(
-          sql`${sql.ident(filter.field)} ${sql.__dangerous__rawValue(
-            filter.op === 'ILIKE'
-              ? 'LIKE'
-              : filter.op === 'NOT ILIKE'
-              ? 'NOT LIKE'
-              : filter.op,
-          )} ${toSQLiteType(filter.value, this.#columns[filter.field].type)}`,
-        );
-      }
+    if (filters) {
+      constraints.push(optionalFiltersToSQL(filters, this.#columns));
     }
 
     if (constraints.length > 0) {
@@ -513,6 +494,59 @@ export class TableSource implements Source {
 
     return query;
   }
+}
+
+/**
+ * This applies all filters present in the AST for a query to the source.
+ * This will work until subquery filters are added
+ * at which point either:
+ * a. we move optional filters to connect
+ * b. we do the transform of removing subquery filters from optionalFilters while
+ *    preserving the meaning of the filters.
+ *
+ * https://www.notion.so/replicache/Optional-Filters-OR-1303bed895458013a26ee5aafd5725d2
+ */
+export function optionalFiltersToSQL(
+  filters: Condition,
+  columnTypes: Record<string, SchemaValue>,
+): SQLQuery {
+  switch (filters.type) {
+    case 'simple':
+      return simpleConditionToSQL(filters, columnTypes);
+    case 'and':
+      return sql`(${sql.join(
+        filters.conditions.map(condition =>
+          optionalFiltersToSQL(condition, columnTypes),
+        ),
+        sql` AND `,
+      )})`;
+    case 'or':
+      return sql`(${sql.join(
+        filters.conditions.map(condition =>
+          optionalFiltersToSQL(condition, columnTypes),
+        ),
+        sql` OR `,
+      )})`;
+  }
+}
+
+function simpleConditionToSQL(
+  filter: SimpleCondition,
+  columnTypes: Record<string, SchemaValue>,
+): SQLQuery {
+  const {op} = filter;
+  if (op === 'IN' || op === 'NOT IN') {
+    return sql`${sql.ident(filter.field)} ${sql.__dangerous__rawValue(
+      filter.op,
+    )} (SELECT value FROM json_each(${JSON.stringify(filter.value)}))`;
+  }
+  return sql`${sql.ident(filter.field)} ${sql.__dangerous__rawValue(
+    filter.op === 'ILIKE'
+      ? 'LIKE'
+      : filter.op === 'NOT ILIKE'
+      ? 'NOT LIKE'
+      : filter.op,
+  )} ${toSQLiteType(filter.value, columnTypes[filter.field].type)}`;
 }
 
 type Cursor = {

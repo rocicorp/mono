@@ -7,8 +7,12 @@ import {makeComparator} from '../../zql/src/zql/ivm/data.js';
 import type {SchemaValue} from '../../zql/src/zql/ivm/schema.js';
 import {runCases} from '../../zql/src/zql/ivm/test/source-cases.js';
 import {Database} from './db.js';
-import {compile, sql} from './internal/sql.js';
-import {TableSource, UnsupportedValueError} from './table-source.js';
+import {compile, format, sql} from './internal/sql.js';
+import {
+  optionalFiltersToSQL,
+  TableSource,
+  UnsupportedValueError,
+} from './table-source.js';
 
 const columns = {
   id: {type: 'string'},
@@ -590,4 +594,133 @@ describe('shared test cases', () => {
     new Set(),
     new Set(),
   );
+});
+
+describe('optional filters to sql', () => {
+  test('simple condition', () => {
+    expect(
+      format(
+        optionalFiltersToSQL(
+          {
+            type: 'simple',
+            field: 'a',
+            op: '=',
+            value: 1,
+          },
+          {
+            a: {type: 'number'},
+          },
+        ),
+      ).text,
+    ).toEqual('"a" = ?');
+  });
+  test('anded conditions', () => {
+    expect(
+      format(
+        optionalFiltersToSQL(
+          {
+            type: 'and',
+            conditions: [
+              {
+                type: 'simple',
+                field: 'a',
+                op: '=',
+                value: 1,
+              },
+              {
+                type: 'simple',
+                field: 'b',
+                op: '=',
+                value: 2,
+              },
+            ],
+          },
+          {
+            a: {type: 'number'},
+            b: {type: 'number'},
+          },
+        ),
+      ).text,
+    ).toEqual('("a" = ? AND "b" = ?)');
+  });
+  test('ored conditions', () => {
+    expect(
+      format(
+        optionalFiltersToSQL(
+          {
+            type: 'or',
+            conditions: [
+              {
+                type: 'simple',
+                field: 'a',
+                op: '=',
+                value: 1,
+              },
+              {
+                type: 'simple',
+                field: 'b',
+                op: '=',
+                value: 2,
+              },
+            ],
+          },
+          {
+            a: {type: 'number'},
+            b: {type: 'number'},
+          },
+        ),
+      ).text,
+    ).toEqual('("a" = ? OR "b" = ?)');
+  });
+  test('dnf conditions', () => {
+    expect(
+      format(
+        optionalFiltersToSQL(
+          {
+            type: 'or',
+            conditions: [
+              {
+                type: 'and',
+                conditions: [
+                  {
+                    type: 'simple',
+                    field: 'a',
+                    op: '=',
+                    value: 1,
+                  },
+                  {
+                    type: 'simple',
+                    field: 'b',
+                    op: '=',
+                    value: 2,
+                  },
+                ],
+              },
+              {
+                type: 'and',
+                conditions: [
+                  {
+                    type: 'simple',
+                    field: 'a',
+                    op: '=',
+                    value: 3,
+                  },
+                  {
+                    type: 'simple',
+                    field: 'b',
+                    op: '=',
+                    value: 4,
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            a: {type: 'number'},
+            b: {type: 'number'},
+          },
+        ),
+      ).text,
+    ).toEqual('(("a" = ? AND "b" = ?) OR ("a" = ? AND "b" = ?))');
+  });
 });
