@@ -5,6 +5,7 @@ import type {AdvancedQuery} from './query-internal.js';
 import {type Query, type QueryType} from './query.js';
 import type {Supertype, TableSchema} from './schema.js';
 import {and, cmp, or} from './expression.js';
+import type {ReadonlyJSONValue} from '../../../../shared/src/json.js';
 
 const mockQuery = {
   select() {
@@ -42,6 +43,17 @@ type TestSchema = {
     n: {type: 'number'};
   };
   primaryKey: ['s'];
+  relationships: {};
+};
+
+type SchemaWithJson = {
+  tableName: 'testWithJson';
+  columns: {
+    a: {type: 'string'};
+    j: {type: 'json'};
+    maybeJ: {type: 'json'; optional: true};
+  };
+  primaryKey: ['a'];
   relationships: {};
 };
 
@@ -578,6 +590,23 @@ test('complex expressions', () => {
   query.where(and(cmp('b', '!=', 's')));
   // @ts-expect-error - field does not exist
   query.where(and(cmp('x', '!=', true)));
+});
+
+test('json type', () => {
+  const query = mockQuery as unknown as Query<SchemaWithJson>;
+  const datum = query.one().materialize().data;
+  const {data} = query.materialize();
+
+  expectTypeOf(datum).toMatchTypeOf<
+    {a: string; j: ReadonlyJSONValue} | undefined
+  >();
+
+  expectTypeOf(data).toMatchTypeOf<{a: string; j: ReadonlyJSONValue}[]>();
+
+  // @ts-expect-error - json fields cannot be used in `where` yet
+  query.where('j', '=', {foo: 'bar'});
+  // @ts-expect-error - json fields cannot be used in cmp yet
+  query.where(cmp('j', '=', {foo: 'bar'}));
 });
 
 function takeSchema(x: TableSchema) {

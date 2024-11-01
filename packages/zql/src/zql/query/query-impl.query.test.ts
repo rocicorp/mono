@@ -2,10 +2,11 @@ import {describe, expect, test} from 'vitest';
 import {deepClone} from '../../../../shared/src/deep-clone.js';
 import {must} from '../../../../shared/src/must.js';
 import {newQuery, type QueryDelegate, QueryImpl} from './query-impl.js';
-import {issueSchema} from './test/testSchemas.js';
+import {issueSchema, userSchema} from './test/testSchemas.js';
 import type {AdvancedQuery} from './query-internal.js';
 import type {DefaultQueryResultRow} from './query.js';
 import {QueryDelegateImpl} from './test/query-delegate.js';
+import {and, cmp, or} from './expression.js';
 
 /**
  * Some basic manual tests to get us started.
@@ -34,6 +35,10 @@ function addData(queryDelegate: QueryDelegate) {
     row: {
       id: '0001',
       name: 'Alice',
+      metadata: {
+        registrar: 'github',
+        login: 'alicegh',
+      },
     },
   });
   userSource.push({
@@ -41,6 +46,11 @@ function addData(queryDelegate: QueryDelegate) {
     row: {
       id: '0002',
       name: 'Bob',
+      metadata: {
+        registar: 'google',
+        login: 'bob@gmail.com',
+        altContacts: ['bobwave', 'bobyt', 'bobplus'],
+      },
     },
   });
   issueSource.push({
@@ -446,6 +456,10 @@ describe('joins and filters', () => {
           {
             id: '0001',
             name: 'Alice',
+            metadata: {
+              login: 'alicegh',
+              registrar: 'github',
+            },
           },
         ],
         ownerId: '0001',
@@ -461,6 +475,11 @@ describe('joins and filters', () => {
           {
             id: '0002',
             name: 'Bob',
+            metadata: {
+              altContacts: ['bobwave', 'bobyt', 'bobplus'],
+              login: 'bob@gmail.com',
+              registar: 'google',
+            },
           },
         ],
         ownerId: '0002',
@@ -622,6 +641,10 @@ test('run', () => {
         {
           id: '0001',
           name: 'Alice',
+          metadata: {
+            login: 'alicegh',
+            registrar: 'github',
+          },
         },
       ],
       ownerId: '0001',
@@ -637,6 +660,11 @@ test('run', () => {
         {
           id: '0002',
           name: 'Bob',
+          metadata: {
+            altContacts: ['bobwave', 'bobyt', 'bobplus'],
+            login: 'bob@gmail.com',
+            registar: 'google',
+          },
         },
       ],
       ownerId: '0002',
@@ -672,4 +700,79 @@ test('view creation is wrapped in context.batchViewUpdates call', () => {
   ).materialize(viewFactory);
   expect(viewFactoryCalls).toEqual(1);
   expect(view).toBe(testView);
+});
+
+test('json columns are returned as JS objects', () => {
+  const queryDelegate = new QueryDelegateImpl();
+  addData(queryDelegate);
+
+  const rows = newQuery(queryDelegate, userSchema).run();
+  expect(rows).toEqual([
+    {
+      id: '0001',
+      metadata: {
+        login: 'alicegh',
+        registrar: 'github',
+      },
+      name: 'Alice',
+    },
+    {
+      id: '0002',
+      metadata: {
+        altContacts: ['bobwave', 'bobyt', 'bobplus'],
+        login: 'bob@gmail.com',
+        registar: 'google',
+      },
+      name: 'Bob',
+    },
+  ]);
+});
+
+test('complex expression', () => {
+  const queryDelegate = new QueryDelegateImpl();
+  addData(queryDelegate);
+
+  let rows = newQuery(queryDelegate, issueSchema)
+    .where(or(cmp('title', '=', 'issue 1'), cmp('title', '=', 'issue 2')))
+    .run();
+
+  expect(rows).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "description": "description 1",
+        "id": "0001",
+        "ownerId": "0001",
+        "title": "issue 1",
+      },
+      {
+        "closed": false,
+        "description": "description 2",
+        "id": "0002",
+        "ownerId": "0002",
+        "title": "issue 2",
+      },
+    ]
+  `);
+
+  rows = newQuery(queryDelegate, issueSchema)
+    .where(
+      and(
+        cmp('ownerId', '=', '0001'),
+        or(cmp('title', '=', 'issue 1'), cmp('title', '=', 'issue 2')),
+      ),
+    )
+    .run();
+
+  expect(rows).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "description": "description 1",
+        "id": "0001",
+        "ownerId": "0001",
+        "title": "issue 1",
+      },
+    ]
+  `);
 });

@@ -5,6 +5,7 @@ import type {
 } from '../../../../zero-protocol/src/ast.js';
 import type {
   GetFieldTypeNoNullOrUndefined,
+  NoJsonSelector,
   Operator,
   Parameter,
   Selector,
@@ -33,7 +34,7 @@ type GenericDisjunction<TSchema extends TableSchema> = {
 
 export function cmp<
   TSchema extends TableSchema,
-  TSelector extends Selector<TSchema>,
+  TSelector extends NoJsonSelector<TSchema>,
   TOperator extends Operator,
   TParamAnchor = never,
   TParamField extends keyof TParamAnchor = never,
@@ -51,7 +52,7 @@ export function cmp<
 ): GenericCondition<TSchema>;
 export function cmp<
   TSchema extends TableSchema,
-  TSelector extends Selector<TSchema>,
+  TSelector extends NoJsonSelector<TSchema>,
   TParamAnchor = never,
   TParamField extends keyof TParamAnchor = never,
   TParamTypeBound extends GetFieldTypeNoNullOrUndefined<
@@ -74,16 +75,6 @@ export function cmp(
   value?:
     | GetFieldTypeNoNullOrUndefined<any, any, any>
     | Parameter<any, any, any>,
-): GenericCondition<any>;
-export function cmp(
-  field: string,
-  opOrValue:
-    | Operator
-    | GetFieldTypeNoNullOrUndefined<any, any, any>
-    | Parameter<any, any, any>,
-  value?:
-    | GetFieldTypeNoNullOrUndefined<any, any, any>
-    | Parameter<any, any, any>,
 ): GenericCondition<any> {
   let op: Operator;
   if (value === undefined) {
@@ -97,13 +88,17 @@ export function cmp(
     type: 'simple',
     field,
     op,
-    value,
+    value: value as ValuePosition,
   };
 }
 
 export function and<TSchema extends TableSchema>(
   ...conditions: GenericCondition<TSchema>[]
 ): GenericCondition<TSchema> {
+  if (conditions.length === 1) {
+    return conditions[0];
+  }
+
   // If any internal conditions are `or` then we distribute `or` over the `and`.
   // This allows the graph and pipeline builder to remain simple and not have to deal with
   // nested conditions.
@@ -142,6 +137,9 @@ export function and<TSchema extends TableSchema>(
 export function or<TSchema extends TableSchema>(
   ...conditions: GenericCondition<TSchema>[]
 ): GenericCondition<TSchema> {
+  if (conditions.length === 1) {
+    return conditions[0];
+  }
   return flatten('or', conditions);
 }
 

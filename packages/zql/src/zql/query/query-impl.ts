@@ -277,11 +277,13 @@ export abstract class AbstractQuery<
       | Parameter<any, any, any>,
   ): Query<TSchema, TReturn> {
     let cond: Condition;
+    // If only a single argument is provided, then the user
+    // provided a condition object.
     if (opOrValue === undefined && value === undefined) {
       assert(typeof field !== 'string', `Invalid condition: ${field}`);
       cond = field as Condition;
     } else {
-      cond = cmp(field as string, opOrValue!, value) as Condition;
+      cond = cmp(field as string, opOrValue as any, value as any) as Condition;
     }
 
     const existingWhere = this.#ast.where;
