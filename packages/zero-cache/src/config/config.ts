@@ -191,7 +191,7 @@ export function parseOptions<T extends Options>(
     const defaultValue = defaultResult.ok ? defaultResult.value : undefined;
 
     let multiple = type.name === 'array';
-    const literals: string[] = [];
+    const literals = new Set<string>();
     const terminalTypes = new Set<string>();
 
     type.toTerminals(getTerminalTypes);
@@ -209,7 +209,7 @@ export function parseOptions<T extends Options>(
           break;
         }
         case 'literal':
-          literals.push(String(t.value));
+          literals.add(String(t.value));
           terminalTypes.add(typeof t.value);
           break;
         default:
@@ -246,8 +246,8 @@ export function parseOptions<T extends Options>(
       multiple,
       group,
       description: spec.join('\n') + '\n',
-      typeLabel: literals.length
-        ? literals.join(',')
+      typeLabel: literals.size
+        ? String([...literals])
         : multiple
         ? `${terminalType}[]`
         : terminalType,
