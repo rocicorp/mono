@@ -20,7 +20,7 @@ export type Option<T extends Value> =
       /** Description lines to be displayed in --help. */
       desc?: string[];
 
-      /** One-character alias for gettop-style short flags, e.g. -m */
+      /** One-character alias for getopt-style short flags, e.g. -m */
       alias?: string;
 
       /**
