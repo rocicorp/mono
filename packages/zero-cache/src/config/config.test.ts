@@ -278,7 +278,7 @@ test.each([
     'mixed type tuple',
     {bad: v.tuple([v.number(), v.string()])},
     [],
-    '--bad has mixed types string and number',
+    '--bad has mixed types number,string',
   ],
   [
     'bad number',

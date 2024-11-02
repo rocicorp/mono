@@ -298,11 +298,10 @@ function getElemType(
   multiple: boolean;
   elemType: OptionType<Value>;
 } {
-  let multiple = false;
-  if (type.name !== 'array') {
+  const multiple = type.name === 'array';
+  if (!multiple) {
     return {multiple, elemType: type};
   }
-  multiple = true;
 
   const a = type as v.ArrayType<v.Type<Value>>;
   const types = [
@@ -312,15 +311,11 @@ function getElemType(
   ] as v.Type<Value>[];
   assert(types.length);
 
-  const elemType = types[0];
-  for (const t of types) {
-    if (t.name !== elemType.name) {
-      throw new TypeError(
-        `--${flagName} has mixed types ${t.name} and ${elemType.name}`,
-      );
-    }
+  const typeNames = new Set(types.map(t => t.name));
+  if (typeNames.size > 1) {
+    throw new TypeError(`--${flagName} has mixed types ${[...typeNames]}`);
   }
-  return {multiple, elemType};
+  return {multiple, elemType: types[0]};
 }
 
 function valueParser(
