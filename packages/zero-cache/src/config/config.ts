@@ -11,6 +11,7 @@ import * as v from '../../../shared/src/valita.js';
 type Primitive = number | string | boolean;
 type Value = Primitive | Array<Primitive>;
 type OptionType<T extends Value> = v.Type<T> | v.Optional<T>;
+
 export type WrappedOptionType<T extends Value> = {
   type: OptionType<T>;
 
@@ -158,6 +159,11 @@ function configSchema<T extends Options>(options: T): v.Type<Config<T>> {
   return makeObjectType(options) as v.Type<Config<T>>;
 }
 
+// type TerminalType is not exported from badrap/valita
+type TerminalType = Parameters<
+  Parameters<v.Type<unknown>['toTerminals']>[0]
+>[0];
+
 export function parseOptions<T extends Options>(
   options: T,
   argv: string[],
@@ -184,40 +190,38 @@ export function parseOptions<T extends Options>(
     const defaultResult = v.testOptional(undefined, type);
     const defaultValue = defaultResult.ok ? defaultResult.value : undefined;
 
-    const literals: string[] = [];
-    let {multiple, elemType} = getElemType(type, name);
-    let terminalType: string | undefined;
+    let multiple = type.name === 'array';
+    const literals = new Set<string>();
+    const terminalTypes = new Set<string>();
 
-    type.toTerminals(t => {
-      let typeName: string;
+    type.toTerminals(getTerminalTypes);
+
+    function getTerminalTypes(t: TerminalType) {
       switch (t.name) {
         case 'undefined':
         case 'optional':
-          return;
+          break;
         case 'array': {
           multiple = true;
-          const {elemType: newElemType} = getElemType(
-            t as OptionType<Value>,
-            name,
-          );
-          elemType = newElemType;
-          typeName = elemType.name;
+          t.prefix.forEach(t => t.toTerminals(getTerminalTypes));
+          t.rest?.toTerminals(getTerminalTypes);
+          t.suffix.forEach(t => t.toTerminals(getTerminalTypes));
           break;
         }
         case 'literal':
-          literals.push(String(t.value));
-          typeName = typeof t.value;
+          literals.add(String(t.value));
+          terminalTypes.add(typeof t.value);
           break;
         default:
-          typeName = t.name;
+          terminalTypes.add(t.name);
           break;
       }
-      if ((terminalType ??= typeName) !== typeName) {
-        throw new TypeError(
-          `--${name} flag has mixed types ${typeName} and ${terminalType}`,
-        );
-      }
-    });
+    }
+    if (terminalTypes.size > 1) {
+      throw new TypeError(`--${name} has mixed types ${[...terminalTypes]}`);
+    }
+    assert(terminalTypes.size === 1);
+    const terminalType = [...terminalTypes][0];
 
     const env = snakeCase(name).toUpperCase();
     if (processEnv[env]) {
@@ -238,12 +242,12 @@ export function parseOptions<T extends Options>(
     const opt = {
       name,
       alias,
-      type: valueParser(name, elemType, terminalType),
+      type: valueParser(name, terminalType),
       multiple,
       group,
       description: spec.join('\n') + '\n',
-      typeLabel: literals.length
-        ? literals.join(',')
+      typeLabel: literals.size
+        ? String([...literals])
         : multiple
         ? `${terminalType}[]`
         : terminalType,
@@ -291,73 +295,33 @@ export function parseOptions<T extends Options>(
   }
 }
 
-function getElemType(
-  type: OptionType<Value>,
-  flagName: string,
-): {
-  multiple: boolean;
-  elemType: OptionType<Value>;
-} {
-  const multiple = type.name === 'array';
-  if (!multiple) {
-    return {multiple, elemType: type};
-  }
-
-  const a = type as v.ArrayType<v.Type<Value>>;
-  const types = [
-    ...a.prefix,
-    ...(a.rest ? [a.rest] : []),
-    ...a.suffix,
-  ] as v.Type<Value>[];
-  assert(types.length);
-
-  const typeNames = new Set(types.map(t => t.name));
-  if (typeNames.size > 1) {
-    throw new TypeError(`--${flagName} has mixed types ${[...typeNames]}`);
-  }
-  return {multiple, elemType: types[0]};
-}
-
-function valueParser(
-  flagName: string,
-  elemType: v.Optional<unknown> | v.Type<unknown>,
-  typeName: string | undefined,
-) {
-  if (!typeName || !PRIMITIVES.has(typeName)) {
+function valueParser(flagName: string, typeName: string) {
+  // Should be guaranteed by the {@link Value} type.
+  if (!PRIMITIVES.has(typeName)) {
     throw new TypeError(`--${flagName} flag has unsupported type ${typeName}`);
   }
   return (input: string) => {
-    let value;
     switch (typeName) {
       case 'string':
-        value = input;
-        break;
+        return input;
       case 'boolean': {
         const bool = input.toLowerCase();
         if (['true', '1'].includes(bool)) {
-          value = true;
+          return true;
         } else if (['false', '0'].includes(bool)) {
-          value = false;
-        } else {
-          throw new TypeError(`Invalid input for --${flagName}: "${input}"`);
+          return false;
         }
-        break;
+        throw new TypeError(`Invalid input for --${flagName}: "${input}"`);
       }
-      default:
+      default: // number
         try {
-          value = JSON.parse(input);
+          return JSON.parse(input);
         } catch (e) {
           throw new TypeError(`Invalid input for --${flagName}: "${input}"`, {
             cause: e,
           });
         }
-        break;
     }
-    const result = v.testOptional(value, elemType);
-    if (result.ok) {
-      return result.value;
-    }
-    throw new TypeError(result.error);
   };
 }
 
