@@ -2,7 +2,12 @@ import {SilentLogger} from '@rocicorp/logger';
 import stripAnsi from 'strip-ansi';
 import {expect, test, vi} from 'vitest';
 import * as v from '../../../shared/src/valita.js';
-import {ExitAfterUsage, parseOptions, type Options} from './config.js';
+import {
+  ExitAfterUsage,
+  parseOptions,
+  type Config,
+  type Options,
+} from './config.js';
 
 const options = {
   port: {
@@ -45,6 +50,8 @@ const options = {
     ])
     .optional(() => ['a', 'b']),
 };
+
+type TestConfig = Config<typeof options>;
 
 test.each([
   [
@@ -107,6 +114,30 @@ test.each([
     {},
     {
       port: 6000,
+      replicaDBFile: '/tmp/replica.db',
+      log: {format: 'text'},
+      shard: {id: '0', publications: []},
+      tuple: ['a', 'b'],
+    },
+  ],
+  [
+    'argv values, hex numbers',
+    ['-p', '0x1234', '--replicaDBFile=/tmp/replica.db'],
+    {},
+    {
+      port: 4660,
+      replicaDBFile: '/tmp/replica.db',
+      log: {format: 'text'},
+      shard: {id: '0', publications: []},
+      tuple: ['a', 'b'],
+    },
+  ],
+  [
+    'argv values, scientific notation',
+    ['-p', '1.234E3', '--replicaDBFile=/tmp/replica.db'],
+    {},
+    {
+      port: 1234,
       replicaDBFile: '/tmp/replica.db',
       log: {format: 'text'},
       shard: {id: '0', publications: []},
@@ -270,9 +301,12 @@ test.each([
       tuple: ['a', 'b'],
     },
   ],
-])('%s', (_name, argv, env, result) => {
-  expect(parseOptions(options, argv, env)).toEqual(result);
-});
+] satisfies [string, string[], Record<string, string>, TestConfig][])(
+  '%s',
+  (_name, argv, env, result) => {
+    expect(parseOptions(options, argv, env)).toEqual(result);
+  },
+);
 
 test.each([
   [
@@ -289,24 +323,27 @@ test.each([
   ],
   [
     'mixed type union',
-    {bad: v.union(v.literal('123'), v.literal(456))},
+    // Options type forbids this, but cast to verify runtime check.
+    {bad: v.union(v.literal('123'), v.literal(456))} as Options,
     [],
     '--bad has mixed types string,number',
   ],
   [
     'mixed type tuple',
-    {bad: v.tuple([v.number(), v.string()])},
+    // Options type forbids this, but cast to verify runtime check.
+    {bad: v.tuple([v.number(), v.string()])} as Options,
     [],
     '--bad has mixed types number,string',
   ],
   [
     'mixed type tuple of unions',
+    // Options type forbids this, but cast to verify runtime check.
     {
       bad: v.tuple([
         v.union(v.literal('a'), v.literal('b')),
         v.union(v.literal(1), v.literal(2)),
       ]),
-    },
+    } as Options,
     [],
     '--bad has mixed types string,number',
   ],
