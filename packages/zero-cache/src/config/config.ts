@@ -10,10 +10,27 @@ import * as v from '../../../shared/src/valita.js';
 
 type Primitive = number | string | boolean;
 type Value = Primitive | Array<Primitive>;
-type OptionType<T extends Value> = v.Type<T> | v.Optional<T>;
 
-export type WrappedOptionType<T extends Value> = {
-  type: OptionType<T>;
+type RequiredOptionType =
+  | v.Type<string>
+  | v.Type<number>
+  | v.Type<boolean>
+  | v.Type<string[]>
+  | v.Type<number[]>
+  | v.Type<boolean[]>;
+
+type OptionalOptionType =
+  | v.Optional<string>
+  | v.Optional<number>
+  | v.Optional<boolean>
+  | v.Optional<string[]>
+  | v.Optional<number[]>
+  | v.Optional<boolean[]>;
+
+type OptionType = RequiredOptionType | OptionalOptionType;
+
+export type WrappedOptionType = {
+  type: OptionType;
 
   /** Description lines to be displayed in --help. */
   desc?: string[];
@@ -30,10 +47,10 @@ export type WrappedOptionType<T extends Value> = {
   allCaps?: boolean;
 };
 
-export type Option<T extends Value> = OptionType<T> | WrappedOptionType<T>;
+export type Option = OptionType | WrappedOptionType;
 
 // Related Options can be grouped.
-type Group = Record<string, Option<Value>>;
+type Group = Record<string, Option>;
 
 /**
  * # Options
@@ -89,16 +106,30 @@ type Group = Record<string, Option<Value>>;
  * * `allCaps` for acronym fields that should be in all caps when appended to
  *   a group name to produce a camelcase flag name.
  */
-export type Options = Record<string, Group | Option<Value>>;
+export type Options = Record<string, Group | Option>;
 
 /** Unwrap the Value type from an Option<V>. */
-type ValueOf<T extends Option<Value>> = T extends v.Optional<infer V>
+type ValueOf<T extends Option> = T extends v.Optional<infer V>
   ? V | undefined
   : T extends v.Type<infer V>
   ? V
-  : T extends WrappedOptionType<infer V>
-  ? V
+  : T extends WrappedOptionType
+  ? ValueOf<T['type']>
   : never;
+
+type Required =
+  | RequiredOptionType
+  | (WrappedOptionType & {type: RequiredOptionType});
+type Optional =
+  | OptionalOptionType
+  | (WrappedOptionType & {type: OptionalOptionType});
+
+// Type the fields for optional options as `field?`
+type ConfigGroup<G extends Group> = {
+  [P in keyof G as G[P] extends Required ? P : never]: ValueOf<G[P]>;
+} & {
+  [P in keyof G as G[P] extends Optional ? P : never]?: ValueOf<G[P]>;
+};
 
 /**
  * A Config is an object containing values parsed from an {@link Options} object.
@@ -121,14 +152,17 @@ type ValueOf<T extends Option<Value>> = T extends v.Optional<infer V>
  * ```
  */
 export type Config<O extends Options> = {
-  [P in keyof O]: O[P] extends Option<Value>
+  [P in keyof O as O[P] extends Required ? P : never]: O[P] extends Required
     ? ValueOf<O[P]>
-    : // O[P] is a Group
-      {
-        [K in keyof O[P]]: O[P][K] extends Option<Value>
-          ? ValueOf<O[P][K]>
-          : never;
-      };
+    : never;
+} & {
+  [P in keyof O as O[P] extends Optional ? P : never]?: O[P] extends Optional
+    ? ValueOf<O[P]>
+    : never;
+} & {
+  [P in keyof O as O[P] extends Group ? P : never]: O[P] extends Group
+    ? ConfigGroup<O[P]>
+    : never;
 };
 
 /**
@@ -139,7 +173,7 @@ function configSchema<T extends Options>(options: T): v.Type<Config<T>> {
     return v.object(
       Object.fromEntries(
         Object.entries(options).map(
-          ([name, value]): [string, OptionType<Value> | v.Type<unknown>] => {
+          ([name, value]): [string, OptionType | v.Type] => {
             // OptionType
             if (v.instanceOfAbstractType(value)) {
               return [name, value];
@@ -171,11 +205,7 @@ export function parseOptions<T extends Options>(
   logger: OptionalLogger = console,
 ): Config<T> {
   // The main logic for converting a valita Type spec to an Option (i.e. flag) spec.
-  function addOption(
-    name: string,
-    option: WrappedOptionType<Value>,
-    group?: string,
-  ) {
+  function addOption(name: string, option: WrappedOptionType, group?: string) {
     const {type, desc = [], alias, allCaps} = option;
 
     // The group name is prepended to the flag name and stripped in parseArgs().
@@ -187,7 +217,7 @@ export function parseOptions<T extends Options>(
         : name;
     }
 
-    const defaultResult = v.testOptional(undefined, type);
+    const defaultResult = v.testOptional<Value>(undefined, type);
     const defaultValue = defaultResult.ok ? defaultResult.value : undefined;
 
     let multiple = type.name === 'array';
@@ -266,7 +296,7 @@ export function parseOptions<T extends Options>(
       if (v.instanceOfAbstractType(val)) {
         addOption(name, {type: val});
       } else if (v.instanceOfAbstractType(type)) {
-        addOption(name, val as WrappedOptionType<Value>);
+        addOption(name, val as WrappedOptionType);
       } else {
         const group = name;
         for (const [name, option] of Object.entries(val as Group)) {
@@ -296,10 +326,6 @@ export function parseOptions<T extends Options>(
 }
 
 function valueParser(flagName: string, typeName: string) {
-  // Should be guaranteed by the {@link Value} type.
-  if (!PRIMITIVES.has(typeName)) {
-    throw new TypeError(`--${flagName} flag has unsupported type ${typeName}`);
-  }
   return (input: string) => {
     switch (typeName) {
       case 'string':
@@ -313,14 +339,18 @@ function valueParser(flagName: string, typeName: string) {
         }
         throw new TypeError(`Invalid input for --${flagName}: "${input}"`);
       }
-      default: // number
-        try {
-          return JSON.parse(input);
-        } catch (e) {
-          throw new TypeError(`Invalid input for --${flagName}: "${input}"`, {
-            cause: e,
-          });
+      case 'number': {
+        const val = Number(input);
+        if (Number.isNaN(val)) {
+          throw new TypeError(`Invalid input for --${flagName}: "${input}"`);
         }
+        return val;
+      }
+      default:
+        // Should be impossible given the constraints of `Option`
+        throw new TypeError(
+          `--${flagName} flag has unsupported type ${typeName}`,
+        );
     }
   };
 }
@@ -390,7 +420,5 @@ type DescribedOptionDefinition = OptionDefinition & {
   description?: string;
   typeLabel?: string | undefined;
 };
-
-const PRIMITIVES = new Set(['string', 'number', 'boolean']);
 
 export class ExitAfterUsage extends Error {}
