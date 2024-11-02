@@ -89,7 +89,7 @@ export class Terminator {
 
     worker.on(
       'error',
-      err => this.#lc.warn?.(`error from worker ${worker.pid}`, err),
+      err => this.#lc.error?.(`error from worker ${worker.pid}`, err),
     );
     worker.on('close', (code, signal) =>
       this.#onExit(code, signal, null, type, worker),
