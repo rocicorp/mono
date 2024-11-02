@@ -33,7 +33,6 @@
     "fastify": "^5.0.0",
     "jose": "^5.9.3",
     "json-custom-numbers": "^3.1.1",
-    "lodash.camelcase": "^4.3.0",
     "lodash.merge": "^4.6.2",
     "lodash.snakecase": "^4.1.1",
     "pg": "^8.11.3",
