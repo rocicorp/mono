@@ -124,7 +124,7 @@ type Optional =
   | OptionalOptionType
   | (WrappedOptionType & {type: OptionalOptionType});
 
-// Declare fields optional options as `field?`
+// Type the fields for optional options as `field?`
 type ConfigGroup<G extends Group> = {
   [P in keyof G as G[P] extends Required ? P : never]: ValueOf<G[P]>;
 } & {
