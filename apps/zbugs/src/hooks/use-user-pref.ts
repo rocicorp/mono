@@ -1,6 +1,6 @@
 import type {Zero} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
-import type {Schema} from '../domain/schema.js';
+import type {Schema} from '../../schema.js';
 import {useZero} from './use-zero.js';
 
 export function useUserPref(key: string): string | undefined {

@@ -19,7 +19,7 @@ import Markdown from '../../components/markdown.js';
 import RelativeTime from '../../components/relative-time.js';
 import Selector from '../../components/selector.js';
 import UserPicker from '../../components/user-picker.js';
-import type {Schema} from '../../domain/schema.js';
+import type {Schema} from '../../../schema.js';
 import {useCanEdit} from '../../hooks/use-can-edit.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useZero} from '../../hooks/use-zero.js';

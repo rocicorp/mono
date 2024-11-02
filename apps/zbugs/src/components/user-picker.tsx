@@ -2,7 +2,7 @@ import {type TableSchemaToRow} from '@rocicorp/zero/schema';
 import {useQuery} from '@rocicorp/zero/react';
 import {useEffect, useState} from 'react';
 import avatarIcon from '../assets/icons/avatar-default.svg';
-import {type Schema} from '../domain/schema.js';
+import {type Schema} from '../../schema.js';
 import {useZero} from '../hooks/use-zero.js';
 import Selector from './selector.js';
 
