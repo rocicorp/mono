@@ -24,7 +24,26 @@ const options = {
     },
     publications: {type: v.array(v.string()).optional(() => [])},
   },
-  tuple: v.tuple([v.string(), v.string()]).optional(() => ['a', 'b']),
+  tuple: v
+    .tuple([
+      v.union(
+        v.literal('a'),
+        v.literal('c'),
+        v.literal('e'),
+        v.literal('g'),
+        v.literal('i'),
+        v.literal('k'),
+      ),
+      v.union(
+        v.literal('b'),
+        v.literal('d'),
+        v.literal('f'),
+        v.literal('h'),
+        v.literal('j'),
+        v.literal('l'),
+      ),
+    ])
+    .optional(() => ['a', 'b']),
 };
 
 test.each([
@@ -258,27 +277,38 @@ test.each([
 test.each([
   [
     'missing required flag',
-    {required: v.string()},
+    {requiredFlag: v.string()},
     [],
-    'Missing property required',
+    'Missing property requiredFlag',
   ],
   [
     'missing required multiple flag',
-    {required: v.array(v.string())},
+    {requiredFlag: v.array(v.string())},
     [],
-    'Missing property required',
+    'Missing property requiredFlag',
   ],
   [
     'mixed type union',
     {bad: v.union(v.literal('123'), v.literal(456))},
     [],
-    '--bad flag has mixed types number and string',
+    '--bad has mixed types string,number',
   ],
   [
     'mixed type tuple',
     {bad: v.tuple([v.number(), v.string()])},
     [],
     '--bad has mixed types number,string',
+  ],
+  [
+    'mixed type tuple of unions',
+    {
+      bad: v.tuple([
+        v.union(v.literal('a'), v.literal('b')),
+        v.union(v.literal(1), v.literal(2)),
+      ]),
+    },
+    [],
+    '--bad has mixed types string,number',
   ],
   [
     'bad number',
@@ -332,7 +362,7 @@ test('--help', () => {
      --shardPublications string[]       default: []                                                          
                                         env: SHARD_PUBLICATIONS                                              
                                                                                                              
-     --tuple string[]                   default: ["a","b"]                                                   
+     --tuple a,c,e,g,i,k,b,d,f,h,j,l    default: ["a","b"]                                                   
                                         env: TUPLE                                                           
                                                                                                              
     "
@@ -365,7 +395,7 @@ test('-h', () => {
      --shardPublications string[]       default: []                                                          
                                         env: SHARD_PUBLICATIONS                                              
                                                                                                              
-     --tuple string[]                   default: ["a","b"]                                                   
+     --tuple a,c,e,g,i,k,b,d,f,h,j,l    default: ["a","b"]                                                   
                                         env: TUPLE                                                           
                                                                                                              
     "
