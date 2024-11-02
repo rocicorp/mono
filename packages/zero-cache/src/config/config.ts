@@ -128,6 +128,7 @@ type Optional =
 type ConfigGroup<G extends Group> = {
   [P in keyof G as G[P] extends Required ? P : never]: ValueOf<G[P]>;
 } & {
+  // Values for optional options are in optional fields.
   [P in keyof G as G[P] extends Optional ? P : never]?: ValueOf<G[P]>;
 };
 
@@ -152,16 +153,17 @@ type ConfigGroup<G extends Group> = {
  * ```
  */
 export type Config<O extends Options> = {
-  [P in keyof O as O[P] extends Required ? P : never]: O[P] extends Required
+  [P in keyof O as O[P] extends Required | Group
+    ? P
+    : never]: O[P] extends Required
     ? ValueOf<O[P]>
+    : O[P] extends Group
+    ? ConfigGroup<O[P]>
     : never;
 } & {
+  // Values for optional options are in optional fields.
   [P in keyof O as O[P] extends Optional ? P : never]?: O[P] extends Optional
     ? ValueOf<O[P]>
-    : never;
-} & {
-  [P in keyof O as O[P] extends Group ? P : never]: O[P] extends Group
-    ? ConfigGroup<O[P]>
     : never;
 };
 
