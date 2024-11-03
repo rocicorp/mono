@@ -24,14 +24,6 @@ describe('building the AST', () => {
     });
   });
 
-  test('selecting fields does nothing to the ast', () => {
-    const issueQuery = newQuery(mockDelegate, issueSchema);
-    const selected = issueQuery.select('id', 'title');
-    expect(ast(selected)).toEqual({
-      table: 'issue',
-    });
-  });
-
   test('where inserts a condition', () => {
     const issueQuery = newQuery(mockDelegate, issueSchema);
     const where = issueQuery.where('id', '=', '1');

@@ -292,15 +292,14 @@ describe('kitchen sink query', () => {
     const issueQuery = newQuery(queryDelegate, issueSchema)
       .where('ownerId', 'IN', ['001', '002', '003'])
       .where('closed', false)
-      .related('owner', q => q.select('name'))
+      .related('owner')
       .related('comments', q =>
         q
-          .select('text')
           .orderBy('createdAt', 'desc')
           .related('revisions', q => q.orderBy('id', 'desc').limit(1))
           .limit(2),
       )
-      .related('labels', q => q.select('name'))
+      .related('labels')
       .start({
         id: '101',
         title: 'Issue 1',

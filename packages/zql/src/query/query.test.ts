@@ -6,6 +6,7 @@ import {type Query, type QueryType} from './query.js';
 import type {
   Supertype,
   TableSchema,
+  TableSchemaToRow,
 } from '../../../zero-schema/src/table-schema.js';
 import {and, cmp, or} from './expression.js';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
@@ -116,63 +117,35 @@ describe('types', () => {
   test('simple select', () => {
     const query = mockQuery as unknown as Query<TestSchema>;
 
-    // @ts-expect-error - cannot select a field that does not exist
-    query.select('foo');
-
-    const query2 = query.select('s');
-    expectTypeOf(query2.materialize().data).toMatchTypeOf<
-      Array<{
-        readonly s: string;
-      }>
-    >();
-
-    const query3 = query2.select('s', 'b', 'n');
-    expectTypeOf(query3.materialize().data).toMatchTypeOf<
-      Array<{
-        readonly s: string;
-        readonly b: boolean;
-        readonly n: number;
-      }>
-    >();
-
     // no select? All fields are returned.
     expectTypeOf(query.materialize().data).toMatchTypeOf<
-      Array<{
-        s: string;
-        b: boolean;
-        n: number;
-      }>
+      Array<TableSchemaToRow<TestSchema>>
     >();
   });
 
   test('related', () => {
     const query = mockQuery as unknown as Query<TestSchemaWithRelationships>;
 
-    // @ts-expect-error - cannot select a field that does not exist
-    query.related('test', q => q.select('a'));
-
     // @ts-expect-error - cannot traverse a relationship that does not exist
     query.related('doesNotExist', q => q);
 
-    const query2 = query.related('test', q => q.select('b')).select('s');
+    const query2 = query.related('test');
 
     expectTypeOf(query2.materialize().data).toMatchTypeOf<
-      Array<{
-        readonly s: string;
-        readonly test: Array<{
-          readonly b: boolean;
-        }>;
-      }>
+      Array<
+        TableSchemaToRow<TestSchemaWithMoreRelationships> & {
+          test: Array<TableSchemaToRow<TestSchema>>;
+        }
+      >
     >();
 
     // Many calls to related builds up the related object.
     const query3 =
       mockQuery as unknown as Query<TestSchemaWithMoreRelationships>;
     const t = query3
-      .related('self', q => q.select('s'))
-      .related('testWithRelationships', q => q.select('b'))
-      .related('test', q => q.select('n'))
-      .select('a')
+      .related('self')
+      .related('testWithRelationships')
+      .related('test')
       .materialize().data;
     expectTypeOf(t).toMatchTypeOf<
       Array<{
@@ -340,23 +313,19 @@ describe('types', () => {
     const query =
       mockQuery as unknown as Query<TestSchemaWithMoreRelationships>;
 
-    const query2 = query
-      .select('s')
-      .related('self', query =>
-        query.related('test', q => q.select('b')).select('s'),
-      );
+    const query2 = query.related('self', query => query.related('test'));
 
     expectTypeOf(query2.materialize().data).toMatchTypeOf<
-      Array<{
-        s: string;
-        self: Array<{
-          s: string;
-          test: Array<{
-            b: boolean;
-          }>;
-        }>;
-      }>
-    >();
+      Array<
+        TableSchemaToRow<TestSchemaWithMoreRelationships> & {
+          self: Array<
+            TableSchemaToRow<TestSchemaWithMoreRelationships> & {
+              test: Array<TableSchemaToRow<TestSchema>>;
+            }
+          >;
+        }
+      >
+    >;
   });
 
   test('where', () => {
@@ -370,12 +339,8 @@ describe('types', () => {
     // @ts-expect-error - value and field types must match
     query.where('b', '=', 'false');
 
-    expectTypeOf(
-      query.select('b').where('b', '=', true).materialize().data,
-    ).toMatchTypeOf<
-      Array<{
-        b: boolean;
-      }>
+    expectTypeOf(query.where('b', '=', true).materialize().data).toMatchTypeOf<
+      Array<TableSchemaToRow<TestSchema>>
     >();
   });
 
@@ -402,12 +367,8 @@ describe('types', () => {
     // @ts-expect-error - value and field types must match
     query.where('b', 'false');
 
-    expectTypeOf(
-      query.select('b').where('b', true).materialize().data,
-    ).toMatchTypeOf<
-      Array<{
-        b: boolean;
-      }>
+    expectTypeOf(query.where('b', true).materialize().data).toMatchTypeOf<
+      Array<TableSchemaToRow<TestSchema>>
     >();
   });
 

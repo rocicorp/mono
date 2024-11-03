@@ -53,7 +53,7 @@ async function testBasics(userID: string) {
     },
   });
 
-  const q = r.query.e.select('id', 'value').limit(1);
+  const q = r.query.e.limit(1);
   const view = q.materialize();
   const log: (readonly E[])[] = [];
   const removeListener = view.addListener(rows => {

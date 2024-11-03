@@ -67,32 +67,6 @@ export type QueryRowType<T extends Query<TableSchema>> = T extends Query<
   ? SmashOne<TReturn>
   : never;
 
-/**
- * A query can have:
- * 1. Selections and
- * 2. Subqueries
- *
- * The composition of these two yields the return type
- * of the query.
- *
- * This takes a return type of a query (TReturn), a schema type (TSchema),
- * and a list of selections (TSelections) made against that row,
- * returning a new return type with the selections added.
- *
- * `.select('foo')` would add `foo` to `TReturn`.
- */
-export type AddSelections<
-  TSchema extends TableSchema,
-  TSelections extends Selector<TSchema>[],
-  TReturn extends QueryType,
-> = {
-  row: {
-    [K in TSelections[number]]: SchemaValueToTSType<TSchema['columns'][K]>;
-  };
-  related: TReturn['related'];
-  singular: TReturn['singular'];
-};
-
 // Adds TSubquery to TReturn under the alias TAs.
 export type AddSubselect<
   TSubquery extends Query<TableSchema>,
@@ -167,10 +141,6 @@ export interface Query<
   TSchema extends TableSchema,
   TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
 > {
-  select<TFields extends Selector<TSchema>[]>(
-    ...columnName: Expand<TFields>
-  ): Query<TSchema, AddSelections<TSchema, TFields, TReturn>>;
-
   related<TRelationship extends keyof TSchema['relationships']>(
     relationship: TRelationship,
   ): Query<

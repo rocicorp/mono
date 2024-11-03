@@ -121,7 +121,7 @@ function addData(queryDelegate: QueryDelegate) {
 describe('bare select', () => {
   test('empty source', () => {
     const queryDelegate = new QueryDelegateImpl();
-    const issueQuery = newQuery(queryDelegate, issueSchema).select('id');
+    const issueQuery = newQuery(queryDelegate, issueSchema);
     const m = issueQuery.materialize();
 
     let rows: readonly unknown[] = [];
@@ -143,7 +143,7 @@ describe('bare select', () => {
 
   test('empty source followed by changes', () => {
     const queryDelegate = new QueryDelegateImpl();
-    const issueQuery = newQuery(queryDelegate, issueSchema).select('id');
+    const issueQuery = newQuery(queryDelegate, issueSchema);
     const m = issueQuery.materialize();
 
     let rows: unknown[] = [];
@@ -199,7 +199,7 @@ describe('bare select', () => {
       },
     });
 
-    const issueQuery = newQuery(queryDelegate, issueSchema).select('id');
+    const issueQuery = newQuery(queryDelegate, issueSchema);
     const m = issueQuery.materialize();
 
     let rows: unknown[] = [];
@@ -232,7 +232,7 @@ describe('bare select', () => {
       },
     });
 
-    const issueQuery = newQuery(queryDelegate, issueSchema).select('id');
+    const issueQuery = newQuery(queryDelegate, issueSchema);
     const m = issueQuery.materialize();
 
     let rows: unknown[] = [];
@@ -282,7 +282,7 @@ describe('bare select', () => {
 
   test('changes after destroy', () => {
     const queryDelegate = new QueryDelegateImpl();
-    const issueQuery = newQuery(queryDelegate, issueSchema).select('id');
+    const issueQuery = newQuery(queryDelegate, issueSchema);
     const m = issueQuery.materialize();
 
     let rows: unknown[] = [];
@@ -342,9 +342,11 @@ describe('joins and filters', () => {
     const queryDelegate = new QueryDelegateImpl();
     addData(queryDelegate);
 
-    const issueQuery = newQuery(queryDelegate, issueSchema)
-      .select('id')
-      .where('title', '=', 'issue 1');
+    const issueQuery = newQuery(queryDelegate, issueSchema).where(
+      'title',
+      '=',
+      'issue 1',
+    );
 
     const singleFilterView = issueQuery.materialize();
     let singleFilterRows: {id: string}[] = [];
@@ -416,10 +418,9 @@ describe('joins and filters', () => {
     addData(queryDelegate);
 
     const issueQuery = newQuery(queryDelegate, issueSchema)
-      .related('labels', q => q.select('name'))
-      .related('owner', q => q.select('name'))
-      .related('comments', q => q.select('text'))
-      .select('id');
+      .related('labels')
+      .related('owner')
+      .related('comments');
     const view = issueQuery.materialize();
 
     let rows: unknown[] = [];
@@ -550,18 +551,12 @@ describe('joins and filters', () => {
 
     const q4 = newQuery(queryDelegate, issueSchema)
       .related('comments', q =>
-        q
-          .one()
-          .where('id', '1')
-          .limit(20)
-          .orderBy('authorId', 'asc')
-          .select('id'),
+        q.one().where('id', '1').limit(20).orderBy('authorId', 'asc'),
       )
       .one()
       .where('closed', false)
       .limit(100)
-      .orderBy('title', 'desc')
-      .select('id');
+      .orderBy('title', 'desc');
     expect((q4 as QueryImpl<never, never>).format).toEqual({
       singular: true,
       relationships: {
@@ -592,9 +587,11 @@ test('run', () => {
   const queryDelegate = new QueryDelegateImpl();
   addData(queryDelegate);
 
-  const issueQuery1 = newQuery(queryDelegate, issueSchema)
-    .select('id')
-    .where('title', '=', 'issue 1');
+  const issueQuery1 = newQuery(queryDelegate, issueSchema).where(
+    'title',
+    '=',
+    'issue 1',
+  );
 
   const singleFilterRows = issueQuery1.run();
   const doubleFilterRows = issueQuery1.where('closed', '=', false).run();
@@ -607,10 +604,9 @@ test('run', () => {
   expect(doubleFilterWithNoResultsRows).toEqual([]);
 
   const issueQuery2 = newQuery(queryDelegate, issueSchema)
-    .related('labels', q => q.select('name'))
-    .related('owner', q => q.select('name'))
-    .related('comments', q => q.select('text'))
-    .select('id');
+    .related('labels')
+    .related('owner')
+    .related('comments');
   const rows = issueQuery2.run();
   expect(rows).toEqual([
     {
