@@ -381,26 +381,28 @@ test('--help', () => {
   expect(logger.error).toHaveBeenCalledOnce();
   expect(stripAnsi(logger.error.mock.calls[0][0])).toMatchInlineSnapshot(`
     "
-     -p, --port number                  blah blah blah                                                       
-                                        default: 4848                                                        
-                                        env: PORT                                                            
+     -p, --port number                  default: 4848                                                        
+       PORT env                                                                                              
+                                        blah blah blah                                                       
                                                                                                              
-     --replicaDBFile string             env: REPLICA_DB_FILE                                                 
+     --replicaDBFile string             required                                                             
+       REPLICA_DB_FILE env                                                                                   
                                                                                                              
-     --litestream boolean               env: LITESTREAM                                                      
+     --litestream boolean               optional                                                             
+       LITESTREAM env                                                                                        
                                                                                                              
      --logFormat text,json              default: "text"                                                      
-                                        env: LOG_FORMAT                                                      
+       LOG_FORMAT env                                                                                        
                                                                                                              
-     --shardID string                   blah blah blah                                                       
-                                        default: "0"                                                         
-                                        env: SHARD_ID                                                        
+     --shardID string                   default: "0"                                                         
+       SHARD_ID env                                                                                          
+                                        blah blah blah                                                       
                                                                                                              
      --shardPublications string[]       default: []                                                          
-                                        env: SHARD_PUBLICATIONS                                              
+       SHARD_PUBLICATIONS env                                                                                
                                                                                                              
      --tuple a,c,e,g,i,k,b,d,f,h,j,l    default: ["a","b"]                                                   
-                                        env: TUPLE                                                           
+       TUPLE env                                                                                             
                                                                                                              
     "
   `);
@@ -414,26 +416,28 @@ test('-h', () => {
   expect(logger.error).toHaveBeenCalledOnce();
   expect(stripAnsi(logger.error.mock.calls[0][0])).toMatchInlineSnapshot(`
     "
-     -p, --port number                  blah blah blah                                                       
-                                        default: 4848                                                        
-                                        env: PORT                                                            
+     -p, --port number                  default: 4848                                                        
+       PORT env                                                                                              
+                                        blah blah blah                                                       
                                                                                                              
-     --replicaDBFile string             env: REPLICA_DB_FILE                                                 
+     --replicaDBFile string             required                                                             
+       REPLICA_DB_FILE env                                                                                   
                                                                                                              
-     --litestream boolean               env: LITESTREAM                                                      
+     --litestream boolean               optional                                                             
+       LITESTREAM env                                                                                        
                                                                                                              
      --logFormat text,json              default: "text"                                                      
-                                        env: LOG_FORMAT                                                      
+       LOG_FORMAT env                                                                                        
                                                                                                              
-     --shardID string                   blah blah blah                                                       
-                                        default: "0"                                                         
-                                        env: SHARD_ID                                                        
+     --shardID string                   default: "0"                                                         
+       SHARD_ID env                                                                                          
+                                        blah blah blah                                                       
                                                                                                              
      --shardPublications string[]       default: []                                                          
-                                        env: SHARD_PUBLICATIONS                                              
+       SHARD_PUBLICATIONS env                                                                                
                                                                                                              
      --tuple a,c,e,g,i,k,b,d,f,h,j,l    default: ["a","b"]                                                   
-                                        env: TUPLE                                                           
+       TUPLE env                                                                                             
                                                                                                              
     "
   `);
