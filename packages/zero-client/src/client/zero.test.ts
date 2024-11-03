@@ -519,7 +519,7 @@ suite('initConnection', () => {
       },
     });
 
-    const view = r.query.e.select('id', 'value').materialize();
+    const view = r.query.e.materialize();
     view.addListener(() => {});
 
     const mockSocket = await r.socket;
@@ -592,7 +592,7 @@ suite('initConnection', () => {
     };
 
     expect(mockSocket.messages.length).toEqual(0);
-    const view = r.query.e.select('id', 'value').materialize();
+    const view = r.query.e.materialize();
     view.addListener(() => {});
     await r.triggerConnected();
     expect(mockSocket.messages.length).toEqual(1);
@@ -652,7 +652,7 @@ suite('initConnection', () => {
 
     expect(mockSocket.messages.length).toEqual(0);
 
-    const view = r.query.e.select('id', 'value').materialize();
+    const view = r.query.e.materialize();
     view.addListener(() => {});
 
     await r.triggerConnected();
@@ -677,13 +677,13 @@ suite('initConnection', () => {
       },
     });
 
-    const view1 = r.query.e.select('id', 'value').materialize();
+    const view1 = r.query.e.materialize();
     view1.addListener(() => {});
 
     const mockSocket = await r.socket;
     expect(mockSocket.messages.length).toEqual(0);
 
-    const view2 = r.query.e.select('id', 'value').materialize();
+    const view2 = r.query.e.materialize();
     view2.addListener(() => {});
     await r.triggerConnected();
     // no `changeDesiredQueries` sent since the query was already included in `initConnection`
@@ -708,7 +708,7 @@ suite('initConnection', () => {
       },
     });
 
-    const view1 = r.query.e.select('id', 'value').materialize();
+    const view1 = r.query.e.materialize();
     const removeListener = view1.addListener(() => {});
 
     const mockSocket = await r.socket;
@@ -1146,7 +1146,7 @@ test('smokeTest', async () => {
     });
 
     const calls: Array<Array<unknown>> = [];
-    const view = r.query.issues.select('id', 'value').materialize();
+    const view = r.query.issues.materialize();
     const unsubscribe = view.addListener(c => {
       calls.push([...c]);
     });
@@ -2092,11 +2092,8 @@ test('kvStore option', async () => {
         },
       },
     });
-    const idIsAView = r.query.e
-      .select('id', 'value')
-      .where('id', '=', 'a')
-      .materialize();
-    const allDataView = r.query.e.select('id', 'value').materialize();
+    const idIsAView = r.query.e.where('id', '=', 'a').materialize();
+    const allDataView = r.query.e.materialize();
 
     // Firefox is flaky... it takes longer time than Chromium and WebKit.
     // We therefore give it a few times to pass the expectation.
@@ -2298,7 +2295,7 @@ suite('CRUD', () => {
     const z = makeZero();
 
     const createIssue: (issue: Issue) => Promise<void> = z.mutate.issue.create;
-    const view = z.query.issue.select('id', 'title').materialize();
+    const view = z.query.issue.materialize();
     await createIssue({id: 'a', title: 'A'});
     expect(view.data).toEqual([{id: 'a', title: 'A'}]);
 
@@ -2310,7 +2307,7 @@ suite('CRUD', () => {
   test('set', async () => {
     const z = makeZero();
 
-    const view = z.query.comment.select('id', 'issueID', 'text').materialize();
+    const view = z.query.comment.materialize();
     await z.mutate.comment.create({id: 'a', issueID: '1', text: 'A text'});
     expect(view.data).toEqual([{id: 'a', issueID: '1', text: 'A text'}]);
 
@@ -2332,7 +2329,7 @@ suite('CRUD', () => {
 
   test('update', async () => {
     const z = makeZero();
-    const view = z.query.comment.select('id', 'issueID').materialize();
+    const view = z.query.comment.materialize();
     await z.mutate.comment.create({id: 'a', issueID: '1', text: 'A text'});
     expect(view.data).toEqual([{id: 'a', issueID: '1', text: 'A text'}]);
 
@@ -2420,7 +2417,7 @@ suite('CRUD with compound primary key', () => {
     const z = makeZero();
 
     const createIssue: (issue: Issue) => Promise<void> = z.mutate.issue.create;
-    const view = z.query.issue.select('ids', 'idn', 'title').materialize();
+    const view = z.query.issue.materialize();
     await createIssue({ids: 'a', idn: 1, title: 'A'});
     expect(view.data).toEqual([{ids: 'a', idn: 1, title: 'A'}]);
 
@@ -2432,9 +2429,7 @@ suite('CRUD with compound primary key', () => {
   test('set', async () => {
     const z = makeZero();
 
-    const view = z.query.comment
-      .select('ids', 'idn', 'issueIDs', 'issueIDn', 'text')
-      .materialize();
+    const view = z.query.comment.materialize();
     await z.mutate.comment.create({
       ids: 'a',
       idn: 1,
@@ -2476,9 +2471,7 @@ suite('CRUD with compound primary key', () => {
 
   test('update', async () => {
     const z = makeZero();
-    const view = z.query.comment
-      .select('ids', 'idn', 'issueIDs', 'issueIDn')
-      .materialize();
+    const view = z.query.comment.materialize();
     await z.mutate.comment.create({
       ids: 'a',
       idn: 1,
@@ -2571,10 +2564,8 @@ test('mutate is a function for batching', async () => {
       },
     },
   });
-  const issueView = z.query.issue.select('id', 'title').materialize();
-  const commentView = z.query.comment
-    .select('id', 'issueID', 'text')
-    .materialize();
+  const issueView = z.query.issue.materialize();
+  const commentView = z.query.comment.materialize();
 
   const x = await z.mutate(async m => {
     expect(
@@ -2632,10 +2623,8 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
       },
     },
   });
-  const commentView = z.query.comment
-    .select('id', 'issueID', 'text')
-    .materialize();
-  const issueView = z.query.issue.select('id', 'title').materialize();
+  const commentView = z.query.comment.materialize();
+  const issueView = z.query.issue.materialize();
 
   await expect(
     z.mutate(async m => {

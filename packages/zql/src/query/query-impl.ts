@@ -15,7 +15,6 @@ import {
 } from '../../../zero-schema/src/normalize-table-schema.js';
 import type {AdvancedQuery} from './query-internal.js';
 import type {
-  AddSelections,
   AddSubselect,
   DefaultQueryResultRow,
   GetFieldTypeNoNullOrUndefined,
@@ -24,7 +23,6 @@ import type {
   Parameter,
   Query,
   QueryType,
-  Selector,
   Smash,
 } from './query.js';
 import {
@@ -106,13 +104,6 @@ export abstract class AbstractQuery<
       this.#hash = hash;
     }
     return this.#hash;
-  }
-
-  select<TFields extends Selector<TSchema>[]>(
-    ..._fields: TFields
-  ): Query<TSchema, AddSelections<TSchema, TFields, TReturn>> {
-    // we return all columns for now so we ignore the selection set and only use it for type inference
-    return this._newQuery(this.#schema, this.#ast, this.#format);
   }
 
   protected abstract _newQuery<
