@@ -1,5 +1,6 @@
 import {promiseVoid} from '../../../shared/src/resolved-promises.js';
 import type {MaybePromise} from '../../../shared/src/types.js';
+import type {Expand} from '../../../shared/src/expand.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import {
   type PrimaryKey,
@@ -22,22 +23,30 @@ import type {NormalizedSchema} from './normalized-schema.js';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.js';
 import type {Schema} from '../../../zero-schema/src/mod.js';
 
-export type SetValue<
-  R extends Row,
-  PK extends PrimaryKey,
-> = AsPrimaryKeyValueRecord<Pick<R, PK[number]>> & Omit<R, PK[number]>;
+/**
+ * If a field is |undefined, add the ? marker to also make the field optional.
+ */
+type NormalizeOptional<T> = {
+  [K in keyof T as undefined extends T[K] ? K : never]?: T[K] | undefined;
+} & {
+  [K in keyof T as undefined extends T[K] ? never : K]: T[K];
+};
+
+export type SetValue<R extends Row, PK extends PrimaryKey> = Expand<
+  AsPrimaryKeyValueRecord<Pick<R, PK[number]>> &
+    NormalizeOptional<Omit<R, PK[number]>>
+>;
 
 export type CreateValue<R extends Row, PK extends PrimaryKey> = SetValue<R, PK>;
 
-export type UpdateValue<
-  R extends Row,
-  PK extends PrimaryKey,
-> = AsPrimaryKeyValueRecord<Pick<R, PK[number]>> & Partial<Omit<R, PK[number]>>;
+export type UpdateValue<R extends Row, PK extends PrimaryKey> = Expand<
+  AsPrimaryKeyValueRecord<Pick<R, PK[number]>> &
+    NormalizeOptional<Partial<Omit<R, PK[number]>>>
+>;
 
-export type DeleteID<
-  R extends Row,
-  PK extends PrimaryKey,
-> = AsPrimaryKeyValueRecord<Pick<R, PK[number]>>;
+export type DeleteID<R extends Row, PK extends PrimaryKey> = Expand<
+  AsPrimaryKeyValueRecord<Pick<R, PK[number]>>
+>;
 
 type AsPrimaryKeyValueRecord<R extends Row> = R extends PrimaryKeyValueRecord
   ? R

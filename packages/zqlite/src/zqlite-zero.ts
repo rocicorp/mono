@@ -102,7 +102,9 @@ export class ZQLiteZero<S extends Schema> {
         assertNotInBatch(tableName, 'create');
         const existingEntity = await db
           .prepare(`SELECT * FROM ${tableName} WHERE id = ?`)
-          .get(value.id);
+          // TODO: Need to fix to not assume id is PK.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .get((value as any).id);
         if (existingEntity) return;
         //console.log('Adding', value);
         await must(this.zeroContext.getSource(tableName)).push({
@@ -119,11 +121,13 @@ export class ZQLiteZero<S extends Schema> {
       },
       update: async (value: UpdateValue<R, PK>) => {
         assertNotInBatch(tableName, 'update');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const anyVal = value as any;
         const existingEntity = await db
           .prepare(`SELECT * FROM ${tableName} WHERE id = ?`)
-          .get<Row>(value.id);
+          .get<Row>(anyVal.id);
         if (!existingEntity)
-          throw new Error(`Entity with id ${value.id} not found`);
+          throw new Error(`Entity with id ${anyVal.id} not found`);
         const mergedValue = {...existingEntity, ...value};
         await must(this.zeroContext.getSource(tableName)).push({
           type: 'remove',
