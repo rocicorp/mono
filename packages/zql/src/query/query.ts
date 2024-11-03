@@ -10,6 +10,7 @@ import type {
   TableSchemaToRow,
 } from '../../../zero-schema/src/table-schema.js';
 import type {TypedView} from './typed-view.js';
+import type {Expand} from '../../../shared/src/expand.js';
 
 /**
  * The type that can be passed into `select()`. A selector
@@ -33,11 +34,13 @@ export type Smash<T extends QueryType> = T['singular'] extends true
   ? SmashOne<T> | undefined
   : Array<SmashOne<T>>;
 
-type SmashOne<T extends QueryType> = T['row'] & {
-  [K in keyof T['related']]: T['related'][K] extends QueryType
-    ? Smash<T['related'][K]>
-    : never;
-};
+type SmashOne<T extends QueryType> = Expand<
+  T['row'] & {
+    [K in keyof T['related']]: T['related'][K] extends QueryType
+      ? Smash<T['related'][K]>
+      : never;
+  }
+>;
 
 export type GetFieldTypeNoNullOrUndefined<
   TSchema extends TableSchema,
@@ -57,9 +60,12 @@ export type QueryReturnType<T extends Query<TableSchema>> = T extends Query<
   ? Smash<TReturn>
   : never;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type QueryRowType<T extends Query<any, any>> =
-  QueryReturnType<T>[number];
+export type QueryRowType<T extends Query<TableSchema>> = T extends Query<
+  TableSchema,
+  infer TReturn
+>
+  ? SmashOne<TReturn>
+  : never;
 
 /**
  * A query can have:
@@ -146,16 +152,10 @@ export type Operator =
   | 'ILIKE';
 
 export type DefaultQueryResultRow<TSchema extends TableSchema> = {
-  row: {
-    [K in keyof TSchema['columns']]: SchemaValueToTSType<TSchema['columns'][K]>;
-  };
+  row: TableSchemaToRow<TSchema>;
   related: {};
   singular: false;
 };
-
-/** Expands/simplifies */
-type Expand<T> = T extends infer O ? {[K in keyof O]: O[K]} : never;
-
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export type Parameter<T, TField extends keyof T, _TReturn = T[TField]> = {
   type: 'static';

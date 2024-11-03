@@ -118,7 +118,7 @@ class ViewStore {
       ) as ViewWrapper<TSchema, TReturn>;
       this.#views.set(hash, existing);
     }
-    return existing;
+    return existing as ViewWrapper<TSchema, TReturn>;
   }
 }
 

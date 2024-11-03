@@ -46,14 +46,13 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
 
   const handleSubmit = () => {
     const id = nanoid();
+
     z.mutate.issue.create({
       id,
-      shortID: undefined,
       title,
       description: description ?? '',
       created: Date.now(),
       creatorID: z.userID,
-      assigneeID: undefined,
       modified: Date.now(),
       open: true,
       labelIDs: '',
