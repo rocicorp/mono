@@ -1,4 +1,5 @@
 import type {OptionalLogger} from '@rocicorp/logger';
+import c from 'ansi-colors';
 import camelcase from 'camelcase';
 import type {OptionDefinition} from 'command-line-args';
 import commandLineArgs from 'command-line-args';
@@ -220,6 +221,7 @@ export function parseOptions<T extends Options>(
     }
 
     const defaultResult = v.testOptional<Value>(undefined, type);
+    const required = !defaultResult.ok;
     const defaultValue = defaultResult.ok ? defaultResult.value : undefined;
 
     let multiple = type.name === 'array';
@@ -265,11 +267,25 @@ export function parseOptions<T extends Options>(
       }
     }
 
-    const spec = [...desc];
-    if (defaultValue !== undefined) {
-      spec.push(`default: ${JSON.stringify(defaultValue)}`);
+    const spec = [
+      (required
+        ? c.italic('required')
+        : defaultValue !== undefined
+        ? `default: ${JSON.stringify(defaultValue)}`
+        : 'optional') + '\n',
+    ];
+    if (desc) {
+      spec.push(...desc);
     }
-    spec.push(`env: ${env}`);
+
+    const typeLabel = [
+      literals.size
+        ? String([...literals].map(l => c.underline(l)))
+        : multiple
+        ? c.underline(`${terminalType}[]`)
+        : c.underline(terminalType),
+      `  ${env} env`,
+    ];
 
     const opt = {
       name,
@@ -278,11 +294,7 @@ export function parseOptions<T extends Options>(
       multiple,
       group,
       description: spec.join('\n') + '\n',
-      typeLabel: literals.size
-        ? String([...literals])
-        : multiple
-        ? `${terminalType}[]`
-        : terminalType,
+      typeLabel: typeLabel.join('\n') + '\n',
     };
     optsWithoutDefaults.push(opt);
     optsWithDefaults.push({...opt, defaultValue});
@@ -412,6 +424,7 @@ function showUsage(
           {name: 'option', width: 35},
           {name: 'description', width: 70},
         ],
+        noTrim: true,
       },
     }),
   );
