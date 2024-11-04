@@ -53,7 +53,6 @@ async function getExternal(includePeerDeps) {
     'shared',
     'zero-cache',
     'zero-client',
-    'zero-integration-test',
     'zero-protocol',
     'zero-react',
     'zero-solid',
