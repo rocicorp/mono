@@ -419,6 +419,7 @@ function showUsage(
   logger.error?.(
     commandLineUsage({
       optionList,
+      reverseNameOrder: true, // Display --flagName before -alias
       tableOptions: {
         columns: [
           {name: 'option', width: 35},
