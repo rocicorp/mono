@@ -381,7 +381,7 @@ test('--help', () => {
   expect(logger.error).toHaveBeenCalledOnce();
   expect(stripAnsi(logger.error.mock.calls[0][0])).toMatchInlineSnapshot(`
     "
-     -p, --port number                  default: 4848                                                        
+     --port, -p number                  default: 4848                                                        
        PORT env                                                                                              
                                         blah blah blah                                                       
                                                                                                              
@@ -416,7 +416,7 @@ test('-h', () => {
   expect(logger.error).toHaveBeenCalledOnce();
   expect(stripAnsi(logger.error.mock.calls[0][0])).toMatchInlineSnapshot(`
     "
-     -p, --port number                  default: 4848                                                        
+     --port, -p number                  default: 4848                                                        
        PORT env                                                                                              
                                         blah blah blah                                                       
                                                                                                              
