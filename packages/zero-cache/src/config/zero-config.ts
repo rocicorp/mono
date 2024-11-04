@@ -97,15 +97,10 @@ const logConfigSchema = v.object({
 });
 export type LogConfig = v.Infer<typeof logConfigSchema>;
 
-const rateLimitConfigSchema = v.object({
-  // Limits to `max` transactions per `windowMs` milliseconds.
-  // This uses a sliding window algorithm to track number of transactions in the current window.
-  mutationTransactions: v.object({
-    algorithm: v.literal('sliding-window'),
-    windowMs: v.number(),
-    maxTransactions: v.number(),
-  }),
-});
+const rateLimitSchema = {
+  max: v.number().optional(),
+  windowMs: v.number().default(60_000),
+};
 
 const zeroConfigBase = v.object({
   upstreamDBConnStr: v.string(),
@@ -134,7 +129,7 @@ const zeroConfigBase = v.object({
 
   jwtSecret: v.string().optional(),
 
-  rateLimit: rateLimitConfigSchema.optional(),
+  perUserMutationLimit: v.object(rateLimitSchema),
 });
 
 export type ZeroConfigBase = v.Infer<typeof zeroConfigBase>;

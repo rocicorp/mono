@@ -54,13 +54,10 @@ export default defineConfig<AuthData, Schema>(schema, query => {
       level: process.env['LOG_LEVEL'] as 'debug' | 'info' | 'warn' | 'error',
       format: process.env['LOG_FORMAT'] as 'text' | 'json' | undefined,
     },
-    rateLimit: {
-      mutationTransactions: {
-        algorithm: 'sliding-window',
-        // 100 writes per minute per user
-        windowMs: 1000 * 60,
-        maxTransactions: 100,
-      },
+    perUserMutationLimit: {
+      // 100 writes per minute per user
+      windowMs: 1000 * 60,
+      max: 100,
     },
 
     authorization: {
