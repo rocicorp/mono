@@ -1,7 +1,7 @@
 import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {Database} from '../../../../zqlite/src/db.js';
-import {type ZeroConfig, type Rule} from '../../config/zero-config.js';
+import {type Rule, type ZeroConfig} from '../../config/zero-config.js';
 import {WriteAuthorizerImpl} from './write-authorizer.js';
 
 const lc = createSilentLogContext();
@@ -12,6 +12,7 @@ const baseConfig: ZeroConfig = {
   replicaDBFile: 'replica',
   log: {level: 'debug', format: 'json'},
   shard: {id: '0', publications: []},
+  perUserMutationLimit: {windowMs: 60000},
 };
 
 const allowIfSubject = [

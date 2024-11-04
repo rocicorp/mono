@@ -79,10 +79,10 @@ export class MutagenService implements Mutagen, Service {
       clientGroupID,
     );
 
-    if (config.rateLimit) {
+    if (config.perUserMutationLimit.max !== undefined) {
       this.#limiter = new SlidingWindowLimiter(
-        config.rateLimit.mutationTransactions.windowMs,
-        config.rateLimit.mutationTransactions.maxTransactions,
+        config.perUserMutationLimit.windowMs,
+        config.perUserMutationLimit.max,
       );
     }
   }
