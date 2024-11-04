@@ -1,5 +1,5 @@
 import type {OptionalLogger} from '@rocicorp/logger';
-import c from 'ansi-colors';
+import {italic, underline} from 'ansis';
 import camelcase from 'camelcase';
 import type {OptionDefinition} from 'command-line-args';
 import commandLineArgs from 'command-line-args';
@@ -269,7 +269,7 @@ export function parseOptions<T extends Options>(
 
     const spec = [
       (required
-        ? c.italic('required')
+        ? italic('required')
         : defaultValue !== undefined
         ? `default: ${JSON.stringify(defaultValue)}`
         : 'optional') + '\n',
@@ -280,10 +280,10 @@ export function parseOptions<T extends Options>(
 
     const typeLabel = [
       literals.size
-        ? String([...literals].map(l => c.underline(l)))
+        ? String([...literals].map(underline))
         : multiple
-        ? c.underline(`${terminalType}[]`)
-        : c.underline(terminalType),
+        ? underline(`${terminalType}[]`)
+        : underline(terminalType),
       `  ${env} env`,
     ];
 
