@@ -16,6 +16,7 @@ const MAX_CHANGE_DB_CONNECTIONS = 5;
 
 export default async function runWorker(parent: Worker): Promise<void> {
   const config = await getZeroConfig();
+  const port = config.changeStreamerPort ?? config.port + 1;
   const lc = createLogContext(config.log, {worker: 'change-streamer'});
 
   // Kick off DB connection warmup in the background.
@@ -46,6 +47,7 @@ export default async function runWorker(parent: Worker): Promise<void> {
   const changeStreamerWebServer = new ChangeStreamerHttpServer(
     lc,
     changeStreamer,
+    {port},
   );
 
   parent.send(['ready', {ready: true}]);

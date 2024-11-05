@@ -113,11 +113,16 @@ if ((await orTimeout(Promise.all(ready), 30_000)) === 'timed-out') {
   lc.info?.(`all workers ready (${Date.now() - startMs} ms)`);
 }
 
-const mainServices: Service[] = [new HeartbeatMonitor(lc)];
+const {port} = config;
+const heartbeatMonitorPort = config.heartbeatMonitorPort ?? port + 2;
+
+const mainServices: Service[] = [
+  new HeartbeatMonitor(lc, {port: heartbeatMonitorPort}),
+];
 
 if (numSyncers) {
   const workers: Workers = {syncers};
-  mainServices.push(new Dispatcher(lc, () => workers));
+  mainServices.push(new Dispatcher(lc, () => workers, {port}));
 }
 
 try {

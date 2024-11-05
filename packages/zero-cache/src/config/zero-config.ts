@@ -157,6 +157,38 @@ export const zeroOptions = {
 
   shard: shardOptions,
 
+  port: {
+    type: v.number().default(4848),
+    desc: [
+      `The main port for client connections.`,
+      `Internally, zero-cache will also listen on the 2 ports after {bold --port}.`,
+    ],
+  },
+
+  changeStreamerPort: {
+    type: v.number().optional(),
+    desc: [
+      `The port on which the {bold change-streamer} runs. This is an internal`,
+      `protocol between the {bold replication-manager} and {bold zero-cache}, which`,
+      `runs in the same process in local development.`,
+      ``,
+      `If unspecified, defaults to {bold --port} + 1.`,
+    ],
+  },
+
+  heartbeatMonitorPort: {
+    type: v.number().optional(),
+    desc: [
+      `The port on which the heartbeat monitor listens for heartbeat`,
+      `health checks. Once health checks are received at this port,`,
+      `the monitor considers it a keepalive signal and triggers a drain`,
+      `if health checks stop for more than 15 seconds. If health checks`,
+      `never arrive on this port, the monitor does nothing (i.e. opt-in).`,
+      ``,
+      `If unspecified, defaults to {bold --port} + 2.`,
+    ],
+  },
+
   jwtSecret: {
     type: v.string().optional(),
     desc: [`JWT secret for verifying authentication tokens.`],

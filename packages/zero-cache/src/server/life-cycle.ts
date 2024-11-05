@@ -219,7 +219,6 @@ export async function exitAfter(run: () => Promise<void>) {
 }
 
 const DEFAULT_STOP_INTERVAL_MS = 15_000;
-const DEFAULT_HEARTBEAT_MONITOR_PORT = 4850;
 
 /**
  * The HeartbeatMonitor listens on a dedicated port to monitor the cadence
@@ -240,7 +239,7 @@ export class HeartbeatMonitor extends HttpService {
 
   constructor(
     lc: LogContext,
-    opts: Options = {port: DEFAULT_HEARTBEAT_MONITOR_PORT},
+    opts: Options,
     stopInterval = DEFAULT_STOP_INTERVAL_MS,
   ) {
     super('heartbeat-monitor', lc, opts, fastify => {
