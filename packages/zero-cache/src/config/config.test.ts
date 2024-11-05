@@ -1,5 +1,5 @@
 import {SilentLogger} from '@rocicorp/logger';
-import {Ansis} from 'ansis';
+import stripAnsi from 'strip-ansi';
 import {expect, test, vi} from 'vitest';
 import * as v from '../../../shared/src/valita.js';
 import {
@@ -8,9 +8,6 @@ import {
   type Config,
   type Options,
 } from './config.js';
-
-// For some reason, Typescript doesn't figure out `import ansis from 'ansis'`
-const ansis = new Ansis();
 
 const options = {
   port: {
@@ -380,7 +377,7 @@ test('--help', () => {
     ExitAfterUsage,
   );
   expect(logger.info).toHaveBeenCalledOnce();
-  expect(ansis.strip(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
+  expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
     "
      --port, -p number                  default: 4848                                                        
        Z_PORT env                                                                                            
@@ -415,7 +412,7 @@ test('-h', () => {
     ExitAfterUsage,
   );
   expect(logger.info).toHaveBeenCalledOnce();
-  expect(ansis.strip(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
+  expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
     "
      --port, -p number                  default: 4848                                                        
        ZERO_PORT env                                                                                         

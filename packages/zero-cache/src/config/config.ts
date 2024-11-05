@@ -1,11 +1,12 @@
 import type {OptionalLogger} from '@rocicorp/logger';
-import {Ansis, italic, underline} from 'ansis';
+import {template} from 'chalk-template';
 import type {OptionDefinition} from 'command-line-args';
 import commandLineArgs from 'command-line-args';
 import commandLineUsage from 'command-line-usage';
 import kebabcase from 'lodash.kebabcase';
 import merge from 'lodash.merge';
 import snakeCase from 'lodash.snakecase';
+import stripAnsi from 'strip-ansi';
 import {assert} from '../../../shared/src/asserts.js';
 import {must} from '../../../shared/src/must.js';
 import * as v from '../../../shared/src/valita.js';
@@ -256,7 +257,7 @@ export function parseOptions<T extends Options>(
 
     const spec = [
       (required
-        ? italic('required')
+        ? '{italic required}'
         : defaultValue !== undefined
         ? `default: ${JSON.stringify(defaultValue)}`
         : 'optional') + '\n',
@@ -267,10 +268,10 @@ export function parseOptions<T extends Options>(
 
     const typeLabel = [
       literals.size
-        ? String([...literals].map(underline))
+        ? String([...literals].map(l => `{underline ${l}}`))
         : multiple
-        ? underline(`${terminalType}[]`)
-        : underline(terminalType),
+        ? `{underline ${terminalType}[]}`
+        : `{underline ${terminalType}}`,
       `  ${env} env`,
     ];
 
@@ -400,8 +401,6 @@ function parseArgs(
   return config;
 }
 
-const ansis = new Ansis();
-
 function showUsage(
   optionList: DescribedOptionDefinition[],
   logger: OptionalLogger = console,
@@ -409,11 +408,12 @@ function showUsage(
   let leftWidth = 35;
   let rightWidth = 70;
   optionList.forEach(({name, typeLabel, description}) => {
-    const lines = ansis.strip(`${name} ${typeLabel ?? ''}`).split('\n');
+    const text = template(`${name} ${typeLabel ?? ''}`);
+    const lines = stripAnsi(text).split('\n');
     for (const l of lines) {
       leftWidth = Math.max(leftWidth, l.length + 2);
     }
-    const desc = ansis.strip(description ?? '').split('\n');
+    const desc = stripAnsi(template(description ?? '')).split('\n');
     for (const l of desc) {
       rightWidth = Math.max(rightWidth, l.length + 2);
     }
