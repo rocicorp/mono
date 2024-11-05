@@ -40,6 +40,9 @@ export type WrappedOptionType = {
 
   /** One-character alias for getopt-style short flags, e.g. -m */
   alias?: string;
+
+  /** Exclude this flag from --help text. Used for internal flags. */
+  hidden?: boolean;
 };
 
 export type Option = OptionType | WrappedOptionType;
@@ -202,7 +205,7 @@ export function parseOptions<T extends Options>(
 ): Config<T> {
   // The main logic for converting a valita Type spec to an Option (i.e. flag) spec.
   function addOption(name: string, option: WrappedOptionType, group?: string) {
-    const {type, desc = [], alias} = option;
+    const {type, desc = [], alias, hidden} = option;
 
     // The group name is prepended to the flag name.
     const flag = group ? kebabcase(`${group}-${name}`) : kebabcase(name);
@@ -283,6 +286,7 @@ export function parseOptions<T extends Options>(
       group,
       description: spec.join('\n') + '\n',
       typeLabel: typeLabel.join('\n') + '\n',
+      hidden,
     };
     optsWithoutDefaults.push(opt);
     optsWithDefaults.push({...opt, defaultValue});
@@ -405,9 +409,13 @@ function showUsage(
   optionList: DescribedOptionDefinition[],
   logger: OptionalLogger = console,
 ) {
+  const hide: string[] = [];
   let leftWidth = 35;
   let rightWidth = 70;
-  optionList.forEach(({name, typeLabel, description}) => {
+  optionList.forEach(({name, typeLabel, description, hidden}) => {
+    if (hidden) {
+      hide.push(name);
+    }
     const text = template(`${name} ${typeLabel ?? ''}`);
     const lines = stripAnsi(text).split('\n');
     for (const l of lines) {
@@ -423,6 +431,7 @@ function showUsage(
     commandLineUsage({
       optionList,
       reverseNameOrder: true, // Display --flag-name before -alias
+      hide,
       tableOptions: {
         columns: [
           {name: 'option', width: leftWidth},
@@ -438,6 +447,7 @@ type DescribedOptionDefinition = OptionDefinition & {
   // Additional fields recognized by command-line-usage
   description?: string;
   typeLabel?: string | undefined;
+  hidden?: boolean | undefined;
 };
 
 export class ExitAfterUsage extends Error {}
