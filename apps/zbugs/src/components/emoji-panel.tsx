@@ -4,7 +4,7 @@ import {
   PopoverPanel,
   useClose,
 } from '@headlessui/react';
-import type {TableSchemaToRow} from '@rocicorp/zero/schema';
+import type {TableSchemaToRow} from '@rocicorp/zero';
 import {nanoid} from 'nanoid';
 import {useCallback} from 'react';
 import {useQuery} from 'zero-react/src/use-query.js';
