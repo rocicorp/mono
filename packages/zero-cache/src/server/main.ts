@@ -53,7 +53,7 @@ function loadWorker(
 }
 
 const {promise: changeStreamerReady, resolve} = resolver();
-const changeStreamer = config.changeStreamerConnStr
+const changeStreamer = config.changeStreamerURI
   ? resolve()
   : loadWorker('./change-streamer.ts', 'supporting').once('message', resolve);
 
