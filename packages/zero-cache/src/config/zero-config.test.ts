@@ -72,6 +72,29 @@ test('zero-cache --help', () => {
                                                                                                                                         
                                                    To use a different set of publications, a new shard should be created.               
                                                                                                                                         
+     --port number                                 default: 4848                                                                        
+       ZERO_PORT env                                                                                                                    
+                                                   The main port for client connections.                                                
+                                                   Internally, zero-cache will also listen on the 2 ports after --port.                 
+                                                                                                                                        
+     --changeStreamerPort number                   optional                                                                             
+       ZERO_CHANGE_STREAMER_PORT env                                                                                                    
+                                                   The port on which the change-streamer runs. This is an internal                      
+                                                   protocol between the replication-manager and zero-cache, which                       
+                                                   runs in the same process in local development.                                       
+                                                                                                                                        
+                                                   If unspecified, defaults to --port + 1.                                              
+                                                                                                                                        
+     --heartbeatMonitorPort number                 optional                                                                             
+       ZERO_HEARTBEAT_MONITOR_PORT env                                                                                                  
+                                                   The port on which the heartbeat monitor listens for heartbeat                        
+                                                   health checks. Once health checks are received at this port,                         
+                                                   the monitor considers it a keepalive signal and triggers a drain                     
+                                                   if health checks stop for more than 15 seconds. If health checks                     
+                                                   never arrive on this port, the monitor does nothing (i.e. opt-in).                   
+                                                                                                                                        
+                                                   If unspecified, defaults to --port + 2.                                              
+                                                                                                                                        
      --jwtSecret string                            optional                                                                             
        ZERO_JWT_SECRET env                                                                                                              
                                                    JWT secret for verifying authentication tokens.                                      

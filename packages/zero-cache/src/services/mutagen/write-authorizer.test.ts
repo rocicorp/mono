@@ -17,6 +17,7 @@ const baseConfig: ZeroConfig = {
   log: {level: 'debug', format: 'json'},
   shard: {id: '0', publications: []},
   perUserMutationLimit: {windowMs: 60000},
+  port: 4848,
 };
 
 const allowIfSubject = [

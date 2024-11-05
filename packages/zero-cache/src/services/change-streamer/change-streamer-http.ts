@@ -14,17 +14,11 @@ import {
 
 export const CHANGES_URL_PATTERN = '/api/replication/:version/changes';
 
-export const DEFAULT_PORT = 4849;
-
 export class ChangeStreamerHttpServer extends HttpService {
   readonly id = 'change-streamer-http-server';
   readonly #delegate: ChangeStreamer;
 
-  constructor(
-    lc: LogContext,
-    delegate: ChangeStreamer,
-    opts: Options = {port: DEFAULT_PORT},
-  ) {
+  constructor(lc: LogContext, delegate: ChangeStreamer, opts: Options) {
     super('change-streamer-http-server', lc, opts, async fastify => {
       await fastify.register(websocket);
       fastify.get('/', (_req, res) => res.send('OK'));
@@ -58,7 +52,7 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
   readonly #lc: LogContext;
   readonly #uri: string;
 
-  constructor(lc: LogContext, uriOrPort: string | number = DEFAULT_PORT) {
+  constructor(lc: LogContext, uriOrPort: string | number) {
     this.#lc = lc;
     this.#uri =
       (typeof uriOrPort === 'string'
