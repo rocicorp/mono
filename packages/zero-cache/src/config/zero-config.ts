@@ -176,13 +176,6 @@ export const zeroOptions = {
     ],
   },
 
-  // The port on which the heartbeat monitor listens for heartbeat
-  // health checks. Once health checks are received at this port,
-  // the monitor considers it a keepalive signal and triggers a drain
-  // if health checks stop for more than 15 seconds. If health checks
-  // never arrive on this port, the monitor does nothing (i.e. opt-in).
-  //
-  // Defaults to `port + 2`.
   heartbeatMonitorPort: {
     type: v.number().optional(),
     desc: [
