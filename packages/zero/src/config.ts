@@ -1,1 +1,1 @@
-export {defineConfig} from '../../zero-cache/src/config/define-config.js';
+export {defineAuthorization} from '../../zero-cache/src/config/define-authorization.js';

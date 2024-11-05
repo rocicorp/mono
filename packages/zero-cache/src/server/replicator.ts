@@ -24,18 +24,19 @@ export default async function runWorker(
   parent: Worker,
   ...args: string[]
 ): Promise<void> {
-  const config = await getZeroConfig();
   assert(args.length > 0, `replicator mode not specified`);
 
   const fileMode = args[0] as ReplicaFileMode;
+
+  const config = await getZeroConfig(args.slice(1));
   const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';
   const workerName = `${mode}-replicator`;
   const lc = createLogContext(config.log, {worker: workerName});
 
-  const replica = setupReplica(lc, fileMode, config.replicaDBFile);
+  const replica = setupReplica(lc, fileMode, config.replicaFile);
 
-  const changeStreamer = config.changeStreamerConnStr
-    ? new ChangeStreamerHttpClient(lc, config.changeStreamerConnStr)
+  const changeStreamer = config.changeStreamerURI
+    ? new ChangeStreamerHttpClient(lc, config.changeStreamerURI)
     : new ChangeStreamerHttpClient(lc);
 
   const replicator = new ReplicatorService(
