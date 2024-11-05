@@ -57,7 +57,7 @@ async function getExternal(includePeerDeps) {
     'zero-react',
     'zero-solid',
     'zero-advanced',
-    'zer-schema',
+    'zero-schema',
     'zql',
     'zqlite',
   ]) {
@@ -94,10 +94,12 @@ async function verifyDependencies(external) {
 async function buildZeroClient() {
   const define = makeDefine('unknown');
   const entryPoints = {
+    // When adding a file here, make sure that it is included in the tsconfig so
+    // we build the dts as well.
     zero: basePath('src/zero.ts'),
     react: basePath('src/react.ts'),
     solid: basePath('src/solid.ts'),
-    internal: basePath('src/advanced.ts'),
+    advanced: basePath('src/advanced.ts'),
   };
   await esbuild.build({
     ...sharedOptions(false, false),
