@@ -1,5 +1,5 @@
 import type {OptionalLogger} from '@rocicorp/logger';
-import {italic, underline} from 'ansis';
+import {Ansis, italic, underline} from 'ansis';
 import camelcase from 'camelcase';
 import type {OptionDefinition} from 'command-line-args';
 import commandLineArgs from 'command-line-args';
@@ -412,18 +412,33 @@ function parseArgs(
   return groups;
 }
 
+const ansis = new Ansis();
+
 function showUsage(
   optionList: DescribedOptionDefinition[],
   logger: OptionalLogger = console,
 ) {
+  let leftWidth = 35;
+  let rightWidth = 70;
+  optionList.forEach(({name, typeLabel, description}) => {
+    const lines = ansis.strip(`${name} ${typeLabel ?? ''}`).split('\n');
+    for (const l of lines) {
+      leftWidth = Math.max(leftWidth, l.length + 2);
+    }
+    const desc = ansis.strip(description ?? '').split('\n');
+    for (const l of desc) {
+      rightWidth = Math.max(rightWidth, l.length + 2);
+    }
+  });
+
   logger.error?.(
     commandLineUsage({
       optionList,
       reverseNameOrder: true, // Display --flagName before -alias
       tableOptions: {
         columns: [
-          {name: 'option', width: 35},
-          {name: 'description', width: 70},
+          {name: 'option', width: leftWidth},
+          {name: 'description', width: rightWidth},
         ],
         noTrim: true,
       },
