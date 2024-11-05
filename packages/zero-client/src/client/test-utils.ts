@@ -19,6 +19,7 @@ import {
   type PullResponseMessage,
   upstreamSchema,
 } from '../../../zero-protocol/src/mod.js';
+import type {Schema} from '../../../zero-schema/src/schema.js';
 import type {LogOptions} from './log-options.js';
 import type {ZeroOptions} from './options.js';
 import {
@@ -29,7 +30,6 @@ import {
   exposedToTestingSymbol,
   onSetConnectionStateSymbol,
 } from './zero.js';
-import type {Schema} from '../../../zero-schema/src/mod.js';
 
 export async function tickAFewTimes(clock: SinonFakeTimers, duration = 100) {
   const n = 10;

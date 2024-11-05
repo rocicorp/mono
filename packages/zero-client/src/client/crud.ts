@@ -1,6 +1,6 @@
+import type {Expand} from '../../../shared/src/expand.js';
 import {promiseVoid} from '../../../shared/src/resolved-promises.js';
 import type {MaybePromise} from '../../../shared/src/types.js';
-import type {Expand} from '../../../shared/src/expand.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import {
   type PrimaryKey,
@@ -17,11 +17,11 @@ import {
   type UpdateOp,
 } from '../../../zero-protocol/src/push.js';
 import type {NormalizedPrimaryKey} from '../../../zero-schema/src/normalize-table-schema.js';
+import type {Schema} from '../../../zero-schema/src/schema.js';
 import type {TableSchemaToRow} from '../../../zero-schema/src/table-schema.js';
 import {toPrimaryKeyString} from './keys.js';
 import type {NormalizedSchema} from './normalized-schema.js';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.js';
-import type {Schema} from '../../../zero-schema/src/mod.js';
 
 /**
  * If a field is |undefined, add the ? marker to also make the field optional.

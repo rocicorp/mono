@@ -25,6 +25,7 @@ import {
   pushMessageSchema,
 } from '../../../zero-protocol/src/push.js';
 import type {NullableVersion} from '../../../zero-protocol/src/version.js';
+import type {Schema} from '../../../zero-schema/src/schema.js';
 import type {WSString} from './http-string.js';
 import type {ZeroOptions} from './options.js';
 import type {QueryManager} from './query-manager.js';
@@ -48,7 +49,6 @@ import {
   RUN_LOOP_INTERVAL_MS,
   type UpdateNeededReason,
 } from './zero.js';
-import type {Schema} from '../../../zero-schema/src/mod.js';
 
 let realSetTimeout: typeof setTimeout;
 let clock: sinon.SinonFakeTimers;

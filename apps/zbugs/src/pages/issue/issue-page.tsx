@@ -1,5 +1,4 @@
-import type {TableSchemaToRow} from '@rocicorp/zero/schema';
-import type {Zero} from '@rocicorp/zero';
+import type {TableSchemaToRow, Zero} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {nanoid} from 'nanoid';
 import {useEffect, useMemo, useState} from 'react';
