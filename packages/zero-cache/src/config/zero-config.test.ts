@@ -15,37 +15,37 @@ test('zero-cache --help', () => {
   expect(logger.info).toHaveBeenCalledOnce();
   expect(ansis.strip(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
     "
-     --upstreamDB string                           required                                                                             
+     --upstream-db string                          required                                                                             
        ZERO_UPSTREAM_DB env                                                                                                             
                                                    The "upstream" authoritative postgres database.                                      
                                                    In the future we will support other types of upstream besides PG.                    
                                                                                                                                         
-     --cvrDB string                                required                                                                             
+     --cvr-db string                               required                                                                             
        ZERO_CVR_DB env                                                                                                                  
                                                    A separate Postgres database we use to store CVRs. CVRs (client view records)        
                                                    keep track of which clients have which data. This is how we know what diff to        
                                                    send on reconnect. It can be same database as above, but it makes most sense         
                                                    for it to be a separate "database" in the same postgres "cluster".                   
                                                                                                                                         
-     --changeDB string                             required                                                                             
+     --change-db string                            required                                                                             
        ZERO_CHANGE_DB env                                                                                                               
                                                    Yet another Postgres database, used to store a replication log.                      
                                                                                                                                         
-     --replicaFile string                          required                                                                             
+     --replica-file string                         required                                                                             
        ZERO_REPLICA_FILE env                                                                                                            
                                                    File path to the SQLite replica that zero-cache maintains.                           
                                                    This can be lost, but if it is, zero-cache will have to re-replicate next            
                                                    time it starts up.                                                                   
                                                                                                                                         
-     --logLevel debug,info,warn,error              default: "info"                                                                      
+     --log-level debug,info,warn,error             default: "info"                                                                      
        ZERO_LOG_LEVEL env                                                                                                               
                                                                                                                                         
-     --logFormat text,json                         default: "text"                                                                      
+     --log-format text,json                        default: "text"                                                                      
        ZERO_LOG_FORMAT env                                                                                                              
                                                    Use text for developer-friendly console logging                                      
                                                    and json for consumption by structured-logging services                              
                                                                                                                                         
-     --shardID string                              default: "0"                                                                         
+     --shard-id string                             default: "0"                                                                         
        ZERO_SHARD_ID env                                                                                                                
                                                    Unique identifier for the zero-cache shard.                                          
                                                                                                                                         
@@ -55,7 +55,7 @@ test('zero-cache --help', () => {
                                                    A shard's zero clients table and shard-internal functions are stored in              
                                                    the zero_{id} schema in the upstream database.                                       
                                                                                                                                         
-     --shardPublications string[]                  default: []                                                                          
+     --shard-publications string[]                 default: []                                                                          
        ZERO_SHARD_PUBLICATIONS env                                                                                                      
                                                    Postgres PUBLICATIONs that define the partition of the upstream                      
                                                    replicated to the shard. All publication names must begin with the prefix            
@@ -77,7 +77,7 @@ test('zero-cache --help', () => {
                                                    The main port for client connections.                                                
                                                    Internally, zero-cache will also listen on the 2 ports after --port.                 
                                                                                                                                         
-     --changeStreamerPort number                   optional                                                                             
+     --change-streamer-port number                 optional                                                                             
        ZERO_CHANGE_STREAMER_PORT env                                                                                                    
                                                    The port on which the change-streamer runs. This is an internal                      
                                                    protocol between the replication-manager and zero-cache, which                       
@@ -85,7 +85,7 @@ test('zero-cache --help', () => {
                                                                                                                                         
                                                    If unspecified, defaults to --port + 1.                                              
                                                                                                                                         
-     --heartbeatMonitorPort number                 optional                                                                             
+     --heartbeat-monitor-port number               optional                                                                             
        ZERO_HEARTBEAT_MONITOR_PORT env                                                                                                  
                                                    The port on which the heartbeat monitor listens for heartbeat                        
                                                    health checks. Once health checks are received at this port,                         
@@ -95,27 +95,27 @@ test('zero-cache --help', () => {
                                                                                                                                         
                                                    If unspecified, defaults to --port + 2.                                              
                                                                                                                                         
-     --jwtSecret string                            optional                                                                             
+     --jwt-secret string                           optional                                                                             
        ZERO_JWT_SECRET env                                                                                                              
                                                    JWT secret for verifying authentication tokens.                                      
                                                                                                                                         
-     --perUserMutationLimitMax number              optional                                                                             
+     --per-user-mutation-limit-max number          optional                                                                             
        ZERO_PER_USER_MUTATION_LIMIT_MAX env                                                                                             
                                                    The maximum mutations per user within the specified windowMs.                        
                                                    If unset, no rate limiting is enforced.                                              
                                                                                                                                         
-     --perUserMutationLimitWindowMs number         default: 60000                                                                       
+     --per-user-mutation-limit-window-ms number    default: 60000                                                                       
        ZERO_PER_USER_MUTATION_LIMIT_WINDOW_MS env                                                                                       
                                                    The sliding window over which the perUserMutationLimitMax is enforced.               
                                                                                                                                         
-     --numSyncWorkers number                       optional                                                                             
+     --num-sync-workers number                     optional                                                                             
        ZERO_NUM_SYNC_WORKERS env                                                                                                        
                                                    The number of processes to use for view syncing.                                     
                                                    Leave this unset to use the maximum available parallelism.                           
                                                    If set to 0, the server runs without sync workers, which is the                      
                                                    configuration for running the replication-manager.                                   
                                                                                                                                         
-     --changeStreamerURI string                    optional                                                                             
+     --change-streamer-uri string                  optional                                                                             
        ZERO_CHANGE_STREAMER_URI env                                                                                                     
                                                    When unset, the zero-cache runs its own replication-manager                          
                                                    (i.e. change-streamer). In production, this should be set to                         
@@ -132,11 +132,11 @@ test('zero-cache --help', () => {
                                                    configures the internal replication logic to operate on the DB file in               
                                                    a manner that is compatible with litestream.                                         
                                                                                                                                         
-     --storageDBTmpDir string                      optional                                                                             
+     --storage-db-tmp-dir string                   optional                                                                             
        ZERO_STORAGE_DB_TMP_DIR env                                                                                                      
                                                    tmp directory for IVM operator storage. Leave unset to use os.tmpdir()               
                                                                                                                                         
-     --warmWebsocket number                        optional                                                                             
+     --warm-websocket number                       optional                                                                             
        ZERO_WARM_WEBSOCKET env                                                                                                          
                                                    For internal experimentation. Do not use this flag, as it will go away.              
                                                                                                                                         
