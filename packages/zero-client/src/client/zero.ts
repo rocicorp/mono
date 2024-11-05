@@ -66,7 +66,8 @@ import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
 import {ZeroContext} from './context.js';
 import {
-  type MakeCRUDMutate,
+  type DBMutator,
+  type BatchMutator,
   type WithCRUD,
   makeCRUDMutate,
   makeCRUDMutator,
@@ -514,7 +515,12 @@ export class Zero<const S extends Schema> {
       );
     };
 
-    this.mutate = makeCRUDMutate<S>(normalizedSchema, rep.mutate);
+    const {mutate, mutateBatch} = makeCRUDMutate<S>(
+      normalizedSchema,
+      rep.mutate,
+    );
+    this.mutate = mutate;
+    this.mutateBatch = mutateBatch;
 
     this.#queryManager = new QueryManager(
       rep.clientID,
@@ -631,30 +637,43 @@ export class Zero<const S extends Schema> {
   }
 
   /**
-   * Provides facilities to write data to Zero.
+   * Provides simple "CRUD" mutations for the tables in the schema.
    *
-   * `mutate` is a function as well as a "namespace" object for doing CRUD style
-   * mutations. When used as a function it is used to batch multiple mutations.
+   * Each table has `create`, `set`, `update`, and `delete` methods.
    *
    * ```ts
-   * await zero.mutate.issue.create({id: '1', title: 'First issue'});
+   * await zero.mutate.issue.create({id: '1', title: 'First issue', priority: 'high'});
    * await zero.mutate.comment.create({id: '1', text: 'First comment', issueID: '1'});
+   * ```
    *
-   * // or as a function:
-   * await zero.mutate(m => {
+   * The `update` methods support partials. Unspecified or `undefined` fields
+   * are left unchanged:
+   *
+   * ```ts
+   * // Priority left unchanged.
+   * await zero.mutate.issue.update({id: '1', title: 'Updated title'});
+   * ```
+   */
+  readonly mutate: DBMutator<S>;
+
+  /**
+   * Provides a way to batch multiple CRUD mutations together:
+   *
+   * ```ts
+   * await zero.mutateBatch(m => {
    *   await m.issue.create({id: '1', title: 'First issue'});
    *   await m.comment.create({id: '1', text: 'First comment', issueID: '1'});
    * });
    * ```
    *
-   * The benefit of using the function form is that it allows you to batch
-   * multiple mutations together. This can be more efficient than making
-   * individual calls to `create`, `update`, `set`, and `delete`.
+   * Batch sends all mutations in a single transaction. If one fails, all are
+   * rolled back together. Batch can also be more efficient than making many
+   * individual mutations.
    *
-   * The function form of `mutate` is not allowed to be called inside another
-   * `mutate` function. Doing so will throw an error.
+   * `mutateBatch` is not allowed inside another `mutateBatch` call. Doing so
+   * will throw an error.
    */
-  readonly mutate: MakeCRUDMutate<S>;
+  readonly mutateBatch: BatchMutator<S>;
 
   /**
    * Whether this Zero instance has been closed. Once a Zero instance has

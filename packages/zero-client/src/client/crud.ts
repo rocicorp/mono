@@ -55,27 +55,22 @@ type AsPrimaryKeyValueRecord<R extends Row> = R extends PrimaryKeyValueRecord
 /**
  * This is the type of the generated mutate.<name>.<verb> function.
  */
-export type RowCRUDMutate<R extends Row, PK extends PrimaryKey> = {
+export type TableMutator<R extends Row, PK extends PrimaryKey> = {
   create: (value: CreateValue<R, PK>) => Promise<void>;
   set: (value: SetValue<R, PK>) => Promise<void>;
   update: (value: UpdateValue<R, PK>) => Promise<void>;
   delete: (id: DeleteID<R, PK>) => Promise<void>;
 };
 
-/**
- * This is the type of the generated mutate.<name> object.
- */
-export type MakeCRUDMutate<S extends Schema> = BaseCRUDMutate<S> & CRUDBatch<S>;
-
-export type BaseCRUDMutate<S extends Schema> = {
-  [K in keyof S['tables']]: RowCRUDMutate<
+export type DBMutator<S extends Schema> = {
+  [K in keyof S['tables']]: TableMutator<
     TableSchemaToRow<S['tables'][K]>,
     S['tables'][K]['primaryKey']
   >;
 };
 
-export type CRUDBatch<S extends Schema> = <R>(
-  body: (m: BaseCRUDMutate<S>) => MaybePromise<R>,
+export type BatchMutator<S extends Schema> = <R>(
+  body: (m: DBMutator<S>) => MaybePromise<R>,
 ) => Promise<R>;
 
 type ZeroCRUDMutate = {
@@ -90,11 +85,11 @@ type ZeroCRUDMutate = {
 export function makeCRUDMutate<const S extends Schema>(
   schema: NormalizedSchema,
   repMutate: ZeroCRUDMutate,
-): MakeCRUDMutate<S> {
+): {mutate: DBMutator<S>; mutateBatch: BatchMutator<S>} {
   const {[CRUD_MUTATION_NAME]: zeroCRUD} = repMutate;
   let inBatch = false;
 
-  const mutate = async <R>(body: (m: BaseCRUDMutate<S>) => R): Promise<R> => {
+  const mutateBatch = async <R>(body: (m: DBMutator<S>) => R): Promise<R> => {
     if (inBatch) {
       throw new Error('Cannot call mutate inside a batch');
     }
@@ -107,7 +102,7 @@ export function makeCRUDMutate<const S extends Schema>(
         m[name] = makeBatchCRUDMutate(name, schema, ops);
       }
 
-      const rv = await body(m as BaseCRUDMutate<S>);
+      const rv = await body(m as DBMutator<S>);
       await zeroCRUD({ops});
       return rv;
     } finally {
@@ -121,17 +116,19 @@ export function makeCRUDMutate<const S extends Schema>(
     }
   };
 
+  const mutate: Record<string, TableMutator<Row, PrimaryKey>> = {};
   for (const [name, tableSchema] of Object.entries(schema.tables)) {
-    (mutate as unknown as Record<string, RowCRUDMutate<Row, PrimaryKey>>)[
-      name
-    ] = makeEntityCRUDMutate(
+    mutate[name] = makeEntityCRUDMutate(
       name,
       tableSchema.primaryKey,
       zeroCRUD,
       assertNotInBatch,
     );
   }
-  return mutate as MakeCRUDMutate<S>;
+  return {
+    mutate: mutate as DBMutator<S>,
+    mutateBatch: mutateBatch as BatchMutator<S>,
+  };
 }
 
 /**
@@ -142,7 +139,7 @@ function makeEntityCRUDMutate<R extends Row, PK extends NormalizedPrimaryKey>(
   primaryKey: PK,
   zeroCRUD: CRUDMutate,
   assertNotInBatch: (tableName: string, op: CRUDOpKind) => void,
-): RowCRUDMutate<R, PK> {
+): TableMutator<R, PK> {
   return {
     create: (value: CreateValue<R, PK>) => {
       assertNotInBatch(tableName, 'create');
@@ -197,7 +194,7 @@ export function makeBatchCRUDMutate<
   tableName: string,
   schema: NormalizedSchema,
   ops: CRUDOp[],
-): RowCRUDMutate<R, PK> {
+): TableMutator<R, PK> {
   const {primaryKey} = schema.tables[tableName];
   return {
     create: (value: CreateValue<R, PK>) => {
