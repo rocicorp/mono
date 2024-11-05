@@ -2567,7 +2567,7 @@ test('mutate is a function for batching', async () => {
   const issueView = z.query.issue.materialize();
   const commentView = z.query.comment.materialize();
 
-  const x = await z.mutate(async m => {
+  const x = await z.mutateBatch(async m => {
     expect(
       (m as unknown as Record<string, unknown>)._zero_crud,
     ).toBeUndefined();
@@ -2627,7 +2627,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
   const issueView = z.query.issue.materialize();
 
   await expect(
-    z.mutate(async m => {
+    z.mutateBatch(async m => {
       await m.issue.create({id: 'a', title: 'A'});
       await z.mutate.issue.create({id: 'b', title: 'B'});
     }),
@@ -2640,7 +2640,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
   expect(commentView.data).toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
 
   await expect(
-    z.mutate(async () => {
+    z.mutateBatch(async () => {
       await z.mutate.comment.update({id: 'a', text: 'A2'});
     }),
   ).rejects.toThrow('Cannot call mutate.comment.update inside a batch');
@@ -2648,7 +2648,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
   expect(commentView.data).toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
 
   await expect(
-    z.mutate(async () => {
+    z.mutateBatch(async () => {
       await z.mutate.comment.set({id: 'a', text: 'A2', issueID: 'a'});
     }),
   ).rejects.toThrow('Cannot call mutate.comment.set inside a batch');
@@ -2656,7 +2656,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
   expect(commentView.data).toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
 
   await expect(
-    z.mutate(async () => {
+    z.mutateBatch(async () => {
       await z.mutate.comment.delete({id: 'a'});
     }),
   ).rejects.toThrow('Cannot call mutate.comment.delete inside a batch');
@@ -2664,8 +2664,8 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
   expect(commentView.data).toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
 
   await expect(
-    z.mutate(async () => {
-      await z.mutate(() => {});
+    z.mutateBatch(async () => {
+      await z.mutateBatch(() => {});
     }),
   ).rejects.toThrow('Cannot call mutate inside a batch');
 });
