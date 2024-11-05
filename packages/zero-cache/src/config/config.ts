@@ -373,7 +373,7 @@ function parseArgs(
     _all,
     _none: ungrouped,
     _unknown: unknown,
-    ...groups
+    ...config // initially contains groups only
   } = commandLineArgs(optionDefs, {
     argv,
     partial: true,
@@ -384,20 +384,20 @@ function parseArgs(
   }
 
   // Remap names for grouped flags.
-  for (const flags of Object.values(groups ?? {})) {
-    for (const [flagName, value] of Object.entries(flags)) {
+  for (const group of Object.values(config ?? {})) {
+    for (const [flagName, value] of Object.entries(group)) {
+      delete group[flagName];
       const name = must(flagToField.get(flagName));
-      flags[name] = normalizeFlagValue(value);
-      delete flags[flagName];
+      group[name] = normalizeFlagValue(value);
     }
   }
 
   // Normalize and promote ungrouped flags.
   for (const [flagName, value] of Object.entries(ungrouped ?? {})) {
     const name = must(flagToField.get(flagName));
-    groups[name] = normalizeFlagValue(value);
+    config[name] = normalizeFlagValue(value);
   }
-  return groups;
+  return config;
 }
 
 const ansis = new Ansis();
