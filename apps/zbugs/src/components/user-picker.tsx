@@ -1,4 +1,4 @@
-import {type TableSchemaToRow} from '@rocicorp/zero';
+import {type TableSchemaToRow} from '@rocicorp/zero/schema';
 import {useQuery} from '@rocicorp/zero/react';
 import {useEffect, useState} from 'react';
 import avatarIcon from '../assets/icons/avatar-default.svg';
