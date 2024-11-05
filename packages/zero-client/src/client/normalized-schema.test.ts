@@ -1,7 +1,7 @@
 import {expect, test} from 'vitest';
-import type {Schema} from '../../../zero-schema/src/schema.js';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 import {normalizeSchema} from './normalized-schema.js';
+import type {Schema} from '../../../zero-schema/src/mod.js';
 
 // Use JSON to preserve the order of properties since
 // the testing framework doesn't care about the order.
