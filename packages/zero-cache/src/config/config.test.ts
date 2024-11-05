@@ -73,13 +73,13 @@ test.each([
     'env values',
     [],
     {
-      ['PORT']: '6000',
-      ['REPLICA_DB_FILE']: '/tmp/env-replica.db',
-      ['LITESTREAM']: 'true',
-      ['LOG_FORMAT']: 'json',
-      ['SHARD_ID']: 'xyz',
-      ['SHARD_PUBLICATIONS']: 'zero_foo',
-      ['TUPLE']: 'c,d',
+      ['Z_PORT']: '6000',
+      ['Z_REPLICA_DB_FILE']: '/tmp/env-replica.db',
+      ['Z_LITESTREAM']: 'true',
+      ['Z_LOG_FORMAT']: 'json',
+      ['Z_SHARD_ID']: 'xyz',
+      ['Z_SHARD_PUBLICATIONS']: 'zero_foo',
+      ['Z_TUPLE']: 'c,d',
     },
     {
       port: 6000,
@@ -94,13 +94,13 @@ test.each([
     'env value for array flag separated by commas',
     [],
     {
-      ['PORT']: '6000',
-      ['REPLICA_DB_FILE']: '/tmp/env-replica.db',
-      ['LITESTREAM']: 'true',
-      ['LOG_FORMAT']: 'json',
-      ['SHARD_ID']: 'xyz',
-      ['SHARD_PUBLICATIONS']: 'zero_foo,zero_bar',
-      ['TUPLE']: 'e,f',
+      ['Z_PORT']: '6000',
+      ['Z_REPLICA_DB_FILE']: '/tmp/env-replica.db',
+      ['Z_LITESTREAM']: 'true',
+      ['Z_LOG_FORMAT']: 'json',
+      ['Z_SHARD_ID']: 'xyz',
+      ['Z_SHARD_PUBLICATIONS']: 'zero_foo,zero_bar',
+      ['Z_TUPLE']: 'e,f',
     },
     {
       port: 6000,
@@ -222,13 +222,13 @@ test.each([
       'l',
     ],
     {
-      ['PORT']: '6000',
-      ['REPLICA_DB_FILE']: '/tmp/env-replica.db',
-      ['LITESTREAM']: 'true',
-      ['LOG_FORMAT']: 'text',
-      ['SHARD_ID']: 'xyz',
-      ['SHARD_PUBLICATIONS']: 'zero_blue',
-      ['TUPLE']: 'e,f',
+      ['Z_PORT']: '6000',
+      ['Z_REPLICA_DB_FILE']: '/tmp/env-replica.db',
+      ['Z_LITESTREAM']: 'true',
+      ['Z_LOG_FORMAT']: 'text',
+      ['Z_SHARD_ID']: 'xyz',
+      ['Z_SHARD_PUBLICATIONS']: 'zero_blue',
+      ['Z_TUPLE']: 'e,f',
     },
     {
       port: 8888,
@@ -307,7 +307,7 @@ test.each([
 ] satisfies [string, string[], Record<string, string>, TestConfig][])(
   '%s',
   (_name, argv, env, result) => {
-    expect(parseOptions(options, argv, env)).toEqual(result);
+    expect(parseOptions(options, argv, 'Z_', env)).toEqual(result);
   },
 );
 
@@ -367,7 +367,7 @@ test.each([
   (_name, opts, argv, errorMsg) => {
     let message;
     try {
-      parseOptions(opts, argv, {}, new SilentLogger());
+      parseOptions(opts, argv, '', {}, new SilentLogger());
     } catch (e) {
       expect(e).toBeInstanceOf(TypeError);
       message = (e as TypeError).message;
@@ -378,34 +378,34 @@ test.each([
 
 test('--help', () => {
   const logger = {error: vi.fn()};
-  expect(() => parseOptions(options, ['--help'], {}, logger)).toThrow(
+  expect(() => parseOptions(options, ['--help'], 'Z_', {}, logger)).toThrow(
     ExitAfterUsage,
   );
   expect(logger.error).toHaveBeenCalledOnce();
   expect(ansis.strip(logger.error.mock.calls[0][0])).toMatchInlineSnapshot(`
     "
      --port, -p number                  default: 4848                                                        
-       PORT env                                                                                              
+       Z_PORT env                                                                                            
                                         blah blah blah                                                       
                                                                                                              
      --replicaDBFile string             required                                                             
-       REPLICA_DB_FILE env                                                                                   
+       Z_REPLICA_DB_FILE env                                                                                 
                                                                                                              
      --litestream boolean               optional                                                             
-       LITESTREAM env                                                                                        
+       Z_LITESTREAM env                                                                                      
                                                                                                              
      --logFormat text,json              default: "text"                                                      
-       LOG_FORMAT env                                                                                        
+       Z_LOG_FORMAT env                                                                                      
                                                                                                              
      --shardID string                   default: "0"                                                         
-       SHARD_ID env                                                                                          
+       Z_SHARD_ID env                                                                                        
                                         blah blah blah                                                       
                                                                                                              
      --shardPublications string[]       default: []                                                          
-       SHARD_PUBLICATIONS env                                                                                
+       Z_SHARD_PUBLICATIONS env                                                                              
                                                                                                              
      --tuple a,c,e,g,i,k,b,d,f,h,j,l    default: ["a","b"]                                                   
-       TUPLE env                                                                                             
+       Z_TUPLE env                                                                                           
                                                                                                              
     "
   `);
@@ -413,34 +413,34 @@ test('--help', () => {
 
 test('-h', () => {
   const logger = {error: vi.fn()};
-  expect(() => parseOptions(options, ['-h'], {}, logger)).toThrow(
+  expect(() => parseOptions(options, ['-h'], 'ZERO_', {}, logger)).toThrow(
     ExitAfterUsage,
   );
   expect(logger.error).toHaveBeenCalledOnce();
   expect(ansis.strip(logger.error.mock.calls[0][0])).toMatchInlineSnapshot(`
     "
      --port, -p number                  default: 4848                                                        
-       PORT env                                                                                              
+       ZERO_PORT env                                                                                         
                                         blah blah blah                                                       
                                                                                                              
      --replicaDBFile string             required                                                             
-       REPLICA_DB_FILE env                                                                                   
+       ZERO_REPLICA_DB_FILE env                                                                              
                                                                                                              
      --litestream boolean               optional                                                             
-       LITESTREAM env                                                                                        
+       ZERO_LITESTREAM env                                                                                   
                                                                                                              
      --logFormat text,json              default: "text"                                                      
-       LOG_FORMAT env                                                                                        
+       ZERO_LOG_FORMAT env                                                                                   
                                                                                                              
      --shardID string                   default: "0"                                                         
-       SHARD_ID env                                                                                          
+       ZERO_SHARD_ID env                                                                                     
                                         blah blah blah                                                       
                                                                                                              
      --shardPublications string[]       default: []                                                          
-       SHARD_PUBLICATIONS env                                                                                
+       ZERO_SHARD_PUBLICATIONS env                                                                           
                                                                                                              
      --tuple a,c,e,g,i,k,b,d,f,h,j,l    default: ["a","b"]                                                   
-       TUPLE env                                                                                             
+       ZERO_TUPLE env                                                                                        
                                                                                                              
     "
   `);

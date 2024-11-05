@@ -204,6 +204,7 @@ type TerminalType = Parameters<
 export function parseOptions<T extends Options>(
   options: T,
   argv: string[],
+  envNamePrefix = '',
   processEnv = process.env,
   logger: OptionalLogger = console,
 ): Config<T> {
@@ -257,7 +258,7 @@ export function parseOptions<T extends Options>(
     assert(terminalTypes.size === 1);
     const terminalType = [...terminalTypes][0];
 
-    const env = snakeCase(name).toUpperCase();
+    const env = snakeCase(`${envNamePrefix}${name}`).toUpperCase();
     if (processEnv[env]) {
       if (multiple) {
         // Technically not water-tight; assumes values for the string[] flag don't contain commas.

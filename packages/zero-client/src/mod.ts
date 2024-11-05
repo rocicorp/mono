@@ -57,8 +57,16 @@ export type {
   VersionNotSupportedResponse,
   WriteTransaction,
 } from '../../replicache/src/mod.js';
-export {QueryImpl} from '../../zql/src/query/query-impl.js';
+export {createSchema, type Schema} from '../../zero-schema/src/schema.js';
+export {
+  createTableSchema,
+  type TableSchema,
+  type TableSchemaToRow,
+} from '../../zero-schema/src/table-schema.js';
+export {authQuery} from '../../zql/src/query/auth-query.js';
 export {escapeLike} from '../../zql/src/query/escape-like.js';
+export {and, cmp, not, or} from '../../zql/src/query/expression.js';
+export {QueryImpl} from '../../zql/src/query/query-impl.js';
 export type {
   DefaultQueryResultRow as EmptyQueryResultRow,
   Query,
@@ -70,4 +78,3 @@ export type {
 export type {TypedView} from '../../zql/src/query/typed-view.js';
 export type {ZeroOptions} from './client/options.js';
 export {Zero} from './client/zero.js';
-export {and, or, not, cmp} from '../../zql/src/query/expression.js';

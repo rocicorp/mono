@@ -2,7 +2,7 @@ import {
   createSchema,
   createTableSchema,
   type TableSchemaToRow,
-} from '@rocicorp/zero/schema';
+} from '@rocicorp/zero';
 
 const userSchema = createTableSchema({
   tableName: 'user',
