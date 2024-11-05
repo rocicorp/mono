@@ -52,6 +52,7 @@ const shardOptions = {
       `A shard's zero {bold clients} table and shard-internal functions are stored in`,
       `the {bold zero_\\{id\\}} schema in the upstream database.`,
     ],
+    allCaps: true, // so that the flag is --shardID
   },
 
   publications: {
@@ -118,8 +119,9 @@ export type RateLimit = Config<typeof perUserMutationLimit>;
 
 // Note: --help will list flags in the order in which they are defined here,
 // so order the fields such that the important (e.g. required) ones are first.
-const zeroOptions = {
-  upstreamDBConnStr: {
+// (Exported for testing)
+export const zeroOptions = {
+  upstreamDB: {
     type: v.string(),
     desc: [
       `The "upstream" authoritative postgres database.`,
@@ -127,7 +129,7 @@ const zeroOptions = {
     ],
   },
 
-  cvrDBConnStr: {
+  cvrDB: {
     type: v.string(),
     desc: [
       `A separate Postgres database we use to store CVRs. CVRs (client view records)`,
@@ -137,15 +139,15 @@ const zeroOptions = {
     ],
   },
 
-  changeDBConnStr: {
+  changeDB: {
     type: v.string(),
     desc: [`Yet another Postgres database, used to store a replication log.`],
   },
 
-  replicaDBFile: {
+  replicaFile: {
     type: v.string(),
     desc: [
-      `Place to store the SQLite data zero-cache maintains.`,
+      `File path to the SQLite replica that zero-cache maintains.`,
       `This can be lost, but if it is, zero-cache will have to re-replicate next`,
       `time it starts up.`,
     ],
@@ -216,6 +218,8 @@ export type Authorization = {authorization?: AuthorizationConfig | undefined};
 // TODO: Remove when auth is moved to schema.
 export type ZeroConfigWithAuthorization = ZeroConfig & Authorization;
 
+const ENV_VAR_PREFIX = 'ZERO_';
+
 let loadedConfig: Promise<ZeroConfigWithAuthorization> | undefined;
 
 export function getZeroConfig(
@@ -237,7 +241,7 @@ export function getZeroConfig(
     .then(async module => (await module.default) as Authorization)
     .then(authorization => ({
       ...authorization,
-      ...parseOptions(zeroOptions, argv),
+      ...parseOptions(zeroOptions, argv, ENV_VAR_PREFIX),
     }))
     .catch(e => {
       console.error(

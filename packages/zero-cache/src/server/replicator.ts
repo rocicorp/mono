@@ -33,7 +33,7 @@ export default async function runWorker(
   const workerName = `${mode}-replicator`;
   const lc = createLogContext(config.log, {worker: workerName});
 
-  const replica = setupReplica(lc, fileMode, config.replicaDBFile);
+  const replica = setupReplica(lc, fileMode, config.replicaFile);
 
   const changeStreamer = config.changeStreamerURI
     ? new ChangeStreamerHttpClient(lc, config.changeStreamerURI)
