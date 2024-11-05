@@ -432,7 +432,7 @@ function showUsage(
     }
   });
 
-  logger.error?.(
+  logger.info?.(
     commandLineUsage({
       optionList,
       reverseNameOrder: true, // Display --flagName before -alias
