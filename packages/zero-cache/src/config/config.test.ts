@@ -377,12 +377,12 @@ test.each([
 );
 
 test('--help', () => {
-  const logger = {error: vi.fn()};
+  const logger = {info: vi.fn()};
   expect(() => parseOptions(options, ['--help'], 'Z_', {}, logger)).toThrow(
     ExitAfterUsage,
   );
-  expect(logger.error).toHaveBeenCalledOnce();
-  expect(ansis.strip(logger.error.mock.calls[0][0])).toMatchInlineSnapshot(`
+  expect(logger.info).toHaveBeenCalledOnce();
+  expect(ansis.strip(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
     "
      --port, -p number                  default: 4848                                                        
        Z_PORT env                                                                                            
@@ -412,12 +412,12 @@ test('--help', () => {
 });
 
 test('-h', () => {
-  const logger = {error: vi.fn()};
+  const logger = {info: vi.fn()};
   expect(() => parseOptions(options, ['-h'], 'ZERO_', {}, logger)).toThrow(
     ExitAfterUsage,
   );
-  expect(logger.error).toHaveBeenCalledOnce();
-  expect(ansis.strip(logger.error.mock.calls[0][0])).toMatchInlineSnapshot(`
+  expect(logger.info).toHaveBeenCalledOnce();
+  expect(ansis.strip(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
     "
      --port, -p number                  default: 4848                                                        
        ZERO_PORT env                                                                                         
