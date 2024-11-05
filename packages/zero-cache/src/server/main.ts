@@ -53,7 +53,7 @@ function loadWorker(
 }
 
 const {promise: changeStreamerReady, resolve} = resolver();
-const changeStreamer = config.changeStreamerConnStr
+const changeStreamer = config.changeStreamerURI
   ? resolve()
   : loadWorker('./change-streamer.ts', 'supporting').once('message', resolve);
 
@@ -67,7 +67,7 @@ if (numSyncers) {
   // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
   // but it is done here in the main thread because it is wasteful to have all of
   // the Syncers attempt the migration in parallel.
-  const cvrDB = pgClient(lc, config.cvrDBConnStr);
+  const cvrDB = pgClient(lc, config.cvrDB);
   await initViewSyncerSchema(lc, cvrDB);
   void cvrDB.end();
 }
@@ -113,11 +113,16 @@ if ((await orTimeout(Promise.all(ready), 30_000)) === 'timed-out') {
   lc.info?.(`all workers ready (${Date.now() - startMs} ms)`);
 }
 
-const mainServices: Service[] = [new HeartbeatMonitor(lc)];
+const {port} = config;
+const heartbeatMonitorPort = config.heartbeatMonitorPort ?? port + 2;
+
+const mainServices: Service[] = [
+  new HeartbeatMonitor(lc, {port: heartbeatMonitorPort}),
+];
 
 if (numSyncers) {
   const workers: Workers = {syncers};
-  mainServices.push(new Dispatcher(lc, () => workers));
+  mainServices.push(new Dispatcher(lc, () => workers, {port}));
 }
 
 try {

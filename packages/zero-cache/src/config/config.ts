@@ -1,12 +1,14 @@
 import type {OptionalLogger} from '@rocicorp/logger';
-import {Ansis, italic, underline} from 'ansis';
-import camelcase from 'camelcase';
+import {template} from 'chalk-template';
 import type {OptionDefinition} from 'command-line-args';
 import commandLineArgs from 'command-line-args';
 import commandLineUsage from 'command-line-usage';
+import kebabcase from 'lodash.kebabcase';
 import merge from 'lodash.merge';
 import snakeCase from 'lodash.snakecase';
+import stripAnsi from 'strip-ansi';
 import {assert} from '../../../shared/src/asserts.js';
+import {must} from '../../../shared/src/must.js';
 import * as v from '../../../shared/src/valita.js';
 
 type Primitive = number | string | boolean;
@@ -38,14 +40,6 @@ export type WrappedOptionType = {
 
   /** One-character alias for getopt-style short flags, e.g. -m */
   alias?: string;
-
-  /**
-   * Capitalize all letters in the name when part of a grouped flag.
-   * This is suitable for acronyms like "db", "id", "url", etc.
-   *
-   * e.g. `shard: { id: { allCaps: true } } ==> --shardID`
-   */
-  allCaps?: boolean;
 };
 
 export type Option = OptionType | WrappedOptionType;
@@ -80,12 +74,12 @@ type Group = Record<string, Option>;
  * and/or camelCase command line flags, with flags taking precedence, based on the field
  * (and group) names:
  *
- * | Option          | Flag         | Env         |
- * | --------------  | ------------ | ----------- |
- * | port            | --port       | PORT        |
- * | numWorkers      | --numWorkers | NUM_WORKERS |
- * | log: { level }  | --logLevel   | LOG_LEVEL   |
- * | log: { format } | --logFormat  | LOG_FORMAT  |
+ * | Option          | Flag          | Env         |
+ * | --------------  | ------------- | ----------- |
+ * | port            | --port        | PORT        |
+ * | numWorkers      | --num-workers | NUM_WORKERS |
+ * | log: { level }  | --log-level   | LOG_LEVEL   |
+ * | log: { format } | --log-format  | LOG_FORMAT  |
  *
  * `Options` supports:
  * * primitive valita types `string`, `number`, `boolean`
@@ -104,8 +98,6 @@ type Group = Record<string, Option>;
  * field, along with additional optional fields:
  * * `desc` for documentation displayed in `--help`
  * * `alias` for getopt-style short flags like `-m`
- * * `allCaps` for acronym fields that should be in all caps when appended to
- *   a group name to produce a camelcase flag name.
  */
 export type Options = Record<string, Group | Option>;
 
@@ -210,16 +202,11 @@ export function parseOptions<T extends Options>(
 ): Config<T> {
   // The main logic for converting a valita Type spec to an Option (i.e. flag) spec.
   function addOption(name: string, option: WrappedOptionType, group?: string) {
-    const {type, desc = [], alias, allCaps} = option;
+    const {type, desc = [], alias} = option;
 
-    // The group name is prepended to the flag name and stripped in parseArgs().
-    if (group) {
-      name = group
-        ? camelcase(`${group}_${allCaps ? name.toUpperCase() : name}`, {
-            preserveConsecutiveUppercase: true,
-          })
-        : name;
-    }
+    // The group name is prepended to the flag name.
+    const flag = group ? kebabcase(`${group}-${name}`) : kebabcase(name);
+    flagToField.set(flag, name);
 
     const defaultResult = v.testOptional<Value>(undefined, type);
     const required = !defaultResult.ok;
@@ -253,24 +240,24 @@ export function parseOptions<T extends Options>(
       }
     }
     if (terminalTypes.size > 1) {
-      throw new TypeError(`--${name} has mixed types ${[...terminalTypes]}`);
+      throw new TypeError(`--${flag} has mixed types ${[...terminalTypes]}`);
     }
     assert(terminalTypes.size === 1);
     const terminalType = [...terminalTypes][0];
 
-    const env = snakeCase(`${envNamePrefix}${name}`).toUpperCase();
+    const env = snakeCase(`${envNamePrefix}${flag}`).toUpperCase();
     if (processEnv[env]) {
       if (multiple) {
         // Technically not water-tight; assumes values for the string[] flag don't contain commas.
-        envArgv.push(`--${name}`, ...processEnv[env].split(','));
+        envArgv.push(`--${flag}`, ...processEnv[env].split(','));
       } else {
-        envArgv.push(`--${name}`, processEnv[env]);
+        envArgv.push(`--${flag}`, processEnv[env]);
       }
     }
 
     const spec = [
       (required
-        ? italic('required')
+        ? '{italic required}'
         : defaultValue !== undefined
         ? `default: ${JSON.stringify(defaultValue)}`
         : 'optional') + '\n',
@@ -281,17 +268,17 @@ export function parseOptions<T extends Options>(
 
     const typeLabel = [
       literals.size
-        ? String([...literals].map(underline))
+        ? String([...literals].map(l => `{underline ${l}}`))
         : multiple
-        ? underline(`${terminalType}[]`)
-        : underline(terminalType),
+        ? `{underline ${terminalType}[]}`
+        : `{underline ${terminalType}}`,
       `  ${env} env`,
     ];
 
     const opt = {
-      name,
+      name: flag,
       alias,
-      type: valueParser(name, terminalType),
+      type: valueParser(flag, terminalType),
       multiple,
       group,
       description: spec.join('\n') + '\n',
@@ -301,6 +288,7 @@ export function parseOptions<T extends Options>(
     optsWithDefaults.push({...opt, defaultValue});
   }
 
+  const flagToField = new Map<string, string>();
   const optsWithDefaults: DescribedOptionDefinition[] = [];
   const optsWithoutDefaults: DescribedOptionDefinition[] = [];
   const envArgv: string[] = [];
@@ -324,9 +312,9 @@ export function parseOptions<T extends Options>(
     }
 
     const parsedArgs = merge(
-      parseArgs(optsWithDefaults, argv, logger),
-      parseArgs(optsWithoutDefaults, envArgv, logger),
-      parseArgs(optsWithoutDefaults, argv, logger),
+      parseArgs(optsWithDefaults, argv, flagToField, logger),
+      parseArgs(optsWithoutDefaults, envArgv, flagToField, logger),
+      parseArgs(optsWithoutDefaults, argv, flagToField, logger),
     );
 
     const schema = configSchema(options);
@@ -373,6 +361,7 @@ function valueParser(flagName: string, typeName: string) {
 function parseArgs(
   optionDefs: DescribedOptionDefinition[],
   argv: string[],
+  flagToField: Map<string, string>,
   logger: OptionalLogger,
 ) {
   function normalizeFlagValue(value: unknown) {
@@ -385,7 +374,7 @@ function parseArgs(
     _all,
     _none: ungrouped,
     _unknown: unknown,
-    ...groups
+    ...config // initially contains groups only
   } = commandLineArgs(optionDefs, {
     argv,
     partial: true,
@@ -395,25 +384,22 @@ function parseArgs(
     throw new ExitAfterUsage();
   }
 
-  // Strip the "group" prefix the flag name.
-  for (const [groupName, flags] of Object.entries(groups ?? {})) {
-    const prefix = groupName.length;
-    const entries = Object.entries(flags);
-    for (const [prefixedName, value] of entries) {
-      const name = camelcase(prefixedName.slice(prefix));
-      flags[name] = normalizeFlagValue(value);
-      delete flags[prefixedName];
+  // Remap names for grouped flags.
+  for (const group of Object.values(config ?? {})) {
+    for (const [flagName, value] of Object.entries(group)) {
+      delete group[flagName];
+      const name = must(flagToField.get(flagName));
+      group[name] = normalizeFlagValue(value);
     }
   }
 
   // Normalize and promote ungrouped flags.
-  for (const [name, value] of Object.entries(ungrouped ?? {})) {
-    groups[name] = normalizeFlagValue(value);
+  for (const [flagName, value] of Object.entries(ungrouped ?? {})) {
+    const name = must(flagToField.get(flagName));
+    config[name] = normalizeFlagValue(value);
   }
-  return groups;
+  return config;
 }
-
-const ansis = new Ansis();
 
 function showUsage(
   optionList: DescribedOptionDefinition[],
@@ -422,11 +408,12 @@ function showUsage(
   let leftWidth = 35;
   let rightWidth = 70;
   optionList.forEach(({name, typeLabel, description}) => {
-    const lines = ansis.strip(`${name} ${typeLabel ?? ''}`).split('\n');
+    const text = template(`${name} ${typeLabel ?? ''}`);
+    const lines = stripAnsi(text).split('\n');
     for (const l of lines) {
       leftWidth = Math.max(leftWidth, l.length + 2);
     }
-    const desc = ansis.strip(description ?? '').split('\n');
+    const desc = stripAnsi(template(description ?? '')).split('\n');
     for (const l of desc) {
       rightWidth = Math.max(rightWidth, l.length + 2);
     }
@@ -435,7 +422,7 @@ function showUsage(
   logger.info?.(
     commandLineUsage({
       optionList,
-      reverseNameOrder: true, // Display --flagName before -alias
+      reverseNameOrder: true, // Display --flag-name before -alias
       tableOptions: {
         columns: [
           {name: 'option', width: leftWidth},

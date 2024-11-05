@@ -147,6 +147,8 @@ export function singleProcessMode(): boolean {
 }
 
 export function childWorker(absModulePath: string, ...args: string[]): Worker {
+  args.push(...process.argv.slice(2));
+
   if (singleProcessMode()) {
     const [parent, child] = inProcChannel();
     import(absModulePath)

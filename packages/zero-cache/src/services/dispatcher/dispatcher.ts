@@ -12,8 +12,6 @@ export type Workers = {
   syncers: Worker[];
 };
 
-export const DEFAULT_PORT = 4848;
-
 export class Dispatcher extends HttpService {
   readonly id = 'dispatcher';
   readonly #workersByHostname: (hostname: string) => Workers;
@@ -21,7 +19,7 @@ export class Dispatcher extends HttpService {
   constructor(
     lc: LogContext,
     workersByHostname: (hostname: string) => Workers,
-    opts: Options = {port: DEFAULT_PORT},
+    opts: Options,
   ) {
     super('dispatcher', lc, opts, fastify => {
       fastify.get('/', (_req, res) => res.send('OK'));
