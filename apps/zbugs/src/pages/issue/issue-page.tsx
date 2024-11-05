@@ -317,7 +317,7 @@ export default function IssuePage() {
                 }
                 onCreateNewLabel={labelName => {
                   const labelID = nanoid();
-                  z.mutate(tx => {
+                  z.mutateBatch(tx => {
                     tx.label.create({id: labelID, name: labelName});
                     tx.issueLabel.create({issueID: issue.id, labelID});
                   });
