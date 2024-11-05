@@ -1,4 +1,4 @@
-import {defineConfig} from '@rocicorp/zero/config';
+import {defineAuthorization} from '@rocicorp/zero/config';
 import {type Schema, schema} from './src/domain/schema.js';
 
 /** The contents of the zbugs JWT */
@@ -7,7 +7,7 @@ type AuthData = {
   sub: string;
 };
 
-export default defineConfig<AuthData, Schema>(schema, query => {
+export default defineAuthorization<AuthData, Schema>(schema, query => {
   // TODO: We need `querify` so we can just check the authData without having to
   // read the DB E.g., `queries.querify(authData).where('sub', 'IS NOT', null)`
   const allowIfLoggedIn = (authData: AuthData) =>
@@ -30,36 +30,6 @@ export default defineConfig<AuthData, Schema>(schema, query => {
     query.user.where('id', '=', authData.sub).where('role', '=', 'crew');
 
   return {
-    upstreamDBConnStr: must(process.env['UPSTREAM_URI']),
-    cvrDBConnStr: must(process.env['CVR_DB_URI']),
-    changeDBConnStr: must(process.env['CHANGE_DB_URI']),
-
-    numSyncWorkers:
-      process.env['NUM_SYNC_WORKERS'] === undefined
-        ? undefined // this means numCores - 1
-        : parseInt(process.env['NUM_SYNC_WORKERS']),
-
-    changeStreamerConnStr: process.env['CHANGE_STREAMER_URI'],
-
-    replicaDBFile: must(process.env['REPLICA_DB_FILE']),
-    jwtSecret: process.env['JWT_SECRET'],
-    litestream: !!process.env['LITESTREAM'],
-    shard: {
-      id: process.env['SHARD_ID'] ?? '0',
-      publications: process.env['PUBLICATIONS']
-        ? process.env['PUBLICATIONS'].split(',')
-        : [],
-    },
-    log: {
-      level: process.env['LOG_LEVEL'] as 'debug' | 'info' | 'warn' | 'error',
-      format: process.env['LOG_FORMAT'] as 'text' | 'json' | undefined,
-    },
-    perUserMutationLimit: {
-      // 100 writes per minute per user
-      windowMs: 1000 * 60,
-      max: 100,
-    },
-
     authorization: {
       user: {
         // Only the authentication system can write to the user table.
@@ -85,12 +55,4 @@ export default defineConfig<AuthData, Schema>(schema, query => {
       },
     },
   };
-}) as ReturnType<typeof defineConfig>;
-
-function must<T>(v: T | undefined | null): T {
-  // eslint-disable-next-line eqeqeq
-  if (v == null) {
-    throw new Error(`Unexpected ${v} value`);
-  }
-  return v;
-}
+}) as ReturnType<typeof defineAuthorization>;

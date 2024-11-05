@@ -7,6 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {tsImport} from 'tsx/esm/api';
 import * as v from '../../../shared/src/valita.js';
 import {astSchema} from '../../../zero-protocol/src/ast.js';
+import {parseOptions, type Config} from './config.js';
 
 export type Action = 'select' | 'insert' | 'update' | 'delete';
 
@@ -33,50 +34,51 @@ const authorizationConfigSchema = v.record(
   }),
 );
 
+// TODO: This will be moved into schema.ts
 export type AuthorizationConfig = v.Infer<typeof authorizationConfigSchema>;
 
 /**
  * Configures the view of the upstream database replicated to this zero-cache.
  */
-const shardConfigSchema = v.object({
-  /**
-   * Unique identifier for the zero-cache shard. This is used to partition
-   * shardable tables such as `zero.clients`, as well as reserve a name for
-   * the replication slot.
-   *
-   * The shard `id` value is written to the `shardID` column when updating
-   * the `lastMutationID` for clients in the `zero.clients` table.
-   *
-   * Defaults to "0".
-   */
-  id: v.string(),
+const shardOptions = {
+  id: {
+    type: v.string().default('0'),
+    desc: [
+      'Unique identifier for the zero-cache shard.',
+      '',
+      'A shard presents a logical partition of the upstream database, delineated',
+      'by a set of publications and managed by a dedicated replication slot.',
+      '',
+      `A shard's zero {bold clients} table and shard-internal functions are stored in`,
+      `the {bold zero_\\{id\\}} schema in the upstream database.`,
+    ],
+    allCaps: true, // so that the flag is --shardID
+  },
 
-  /**
-   * Optional (comma-separated) list of of Postgres `PUBLICATION`s that the
-   * shard subscribes to. All publication names must begin with the prefix
-   * `"zero_"`, and all tables must be in the `"public"` Postgres schema.
-   *
-   * If unspecified, zero will create and use a `"zero_public"` publication that
-   * publishes all tables in the `"public"` schema.
-   *
-   * ```sql
-   * CREATE PUBLICATION zero_public FOR TABLES IN SCHEMA public;
-   * ```
-   *
-   * Note that once a shard has begun syncing data, this list of publications
-   * cannot be changed, and zero-cache will refuse to start if a specified
-   * value differs from what it originally synced.
-   *
-   * To use a different set of publications, a new shard should be created.
-   */
-  publications: v.array(v.string()),
-});
+  publications: {
+    type: v.array(v.string()).optional(() => []),
+    desc: [
+      `Postgres {bold PUBLICATION}s that define the partition of the upstream`,
+      `replicated to the shard. All publication names must begin with the prefix`,
+      `{bold zero_}, and all tables must be in the {bold public} schema.`,
+      ``,
+      `If unspecified, zero-cache will create and use a {bold zero_public} publication that`,
+      `publishes all tables in the {bold public} schema, i.e.:`,
+      ``,
+      `CREATE PUBLICATION zero_public FOR TABLES IN SCHEMA public;`,
+      ``,
+      `Note that once a shard has begun syncing data, this list of publications`,
+      `cannot be changed, and zero-cache will refuse to start if a specified`,
+      `value differs from what was originally synced.`,
+      ``,
+      `To use a different set of publications, a new shard should be created.`,
+    ],
+  },
+};
 
-const logConfigSchema = v.object({
-  /**
-   * `debug`, `info`, `warn`, or `error`.
-   * Defaults to `info`.
-   */
+export type ShardConfig = Config<typeof shardOptions>;
+
+const logOptions = {
   level: v
     .union(
       v.literal('debug'),
@@ -84,67 +86,145 @@ const logConfigSchema = v.object({
       v.literal('warn'),
       v.literal('error'),
     )
-    .optional(),
+    .default('info'),
 
-  /**
-   * Defaults to `text` for developer-friendly console logging.
-   * Also supports `json` for consumption by structured-logging services.
-   */
-  format: v.union(v.literal('text'), v.literal('json')).optional(),
-
-  datadogLogsApiKey: v.string().optional(),
-  datadogServiceLabel: v.string().optional(),
-});
-export type LogConfig = v.Infer<typeof logConfigSchema>;
-
-const rateLimitSchema = {
-  max: v.number().optional(),
-  windowMs: v.number().default(60_000),
+  format: {
+    type: v.union(v.literal('text'), v.literal('json')).default('text'),
+    desc: [
+      `Use {bold text} for developer-friendly console logging`,
+      `and {bold json} for consumption by structured-logging services`,
+    ],
+  },
 };
 
-const zeroConfigBase = v.object({
-  upstreamDBConnStr: v.string(),
-  cvrDBConnStr: v.string(),
-  changeDBConnStr: v.string(),
-  taskId: v.string().optional(),
-  replicaDBFile: v.string(),
-  storageDBTmpDir: v.string().optional(),
-  warmWebsocket: v.number().optional(),
+export type LogConfig = Config<typeof logOptions>;
 
-  // The number of sync workers defaults to available-cores - 1.
-  // It should be set to 0 for the `replication-manager`.
-  numSyncWorkers: v.number().optional(),
+const perUserMutationLimit = {
+  max: {
+    type: v.number().optional(),
+    desc: [
+      `The maximum mutations per user within the specified {bold windowMs}.`,
+      `If unset, no rate limiting is enforced.`,
+    ],
+  },
+  windowMs: {
+    type: v.number().default(60_000),
+    desc: [
+      `The sliding window over which the {bold perUserMutationLimitMax} is enforced.`,
+    ],
+  },
+};
 
-  // In development, the `zero-cache` runs its own `replication-manager`
-  // (i.e. `change-streamer`). In production, this URI should point to
-  // to the `replication-manager`, which runs a `change-streamer`
-  // on port 4849.
-  changeStreamerConnStr: v.string().optional(),
+export type RateLimit = Config<typeof perUserMutationLimit>;
 
-  // Indicates that a `litestream replicate` process is backing up
-  // the `replicatDbFile`. This should be the production configuration
-  // for the `replication-manager`. It is okay to run this in
-  // development too.
-  litestream: v.boolean().optional(),
+// Note: --help will list flags in the order in which they are defined here,
+// so order the fields such that the important (e.g. required) ones are first.
+// (Exported for testing)
+export const zeroOptions = {
+  upstreamDB: {
+    type: v.string(),
+    desc: [
+      `The "upstream" authoritative postgres database.`,
+      `In the future we will support other types of upstream besides PG.`,
+    ],
+  },
 
-  jwtSecret: v.string().optional(),
+  cvrDB: {
+    type: v.string(),
+    desc: [
+      `A separate Postgres database we use to store CVRs. CVRs (client view records)`,
+      `keep track of which clients have which data. This is how we know what diff to`,
+      `send on reconnect. It can be same database as above, but it makes most sense`,
+      `for it to be a separate "database" in the same postgres "cluster".`,
+    ],
+  },
 
-  perUserMutationLimit: v.object(rateLimitSchema),
-});
+  changeDB: {
+    type: v.string(),
+    desc: [`Yet another Postgres database, used to store a replication log.`],
+  },
 
-export type ZeroConfigBase = v.Infer<typeof zeroConfigBase>;
+  replicaFile: {
+    type: v.string(),
+    desc: [
+      `File path to the SQLite replica that zero-cache maintains.`,
+      `This can be lost, but if it is, zero-cache will have to re-replicate next`,
+      `time it starts up.`,
+    ],
+  },
 
-export const zeroConfigSchema = zeroConfigBase.extend({
-  authorization: authorizationConfigSchema.optional(),
-  shard: shardConfigSchema,
-  log: logConfigSchema,
-});
+  log: logOptions,
 
-export type ZeroConfig = v.Infer<typeof zeroConfigSchema>;
+  shard: shardOptions,
 
-let loadedConfig: Promise<ZeroConfig> | undefined;
+  jwtSecret: {
+    type: v.string().optional(),
+    desc: [`JWT secret for verifying authentication tokens.`],
+  },
 
-export function getZeroConfig(): Promise<ZeroConfig> {
+  perUserMutationLimit,
+
+  numSyncWorkers: {
+    type: v.number().optional(),
+    desc: [
+      `The number of processes to use for view syncing.`,
+      `Leave this unset to use the maximum available parallelism.`,
+      `If set to 0, the server runs without sync workers, which is the`,
+      `configuration for running the {bold replication-manager}.`,
+    ],
+  },
+
+  changeStreamerURI: {
+    type: v.string().optional(),
+    desc: [
+      `When unset, the zero-cache runs its own {bold replication-manager}`,
+      `(i.e. {bold change-streamer}). In production, this should be set to`,
+      `the {bold replication-manager} URI, which runs a {bold change-streamer}`,
+      `on port 4849.`,
+    ],
+  },
+
+  litestream: {
+    type: v.boolean().optional(),
+    desc: [
+      `Indicates that a {bold litestream replicate} process is backing up the`,
+      `{bold replicaDBFile}. This should be the production configuration for the`,
+      `{bold replication-manager}. It is okay to run this in development too.`,
+      ``,
+      `Note that this flag does actually run {bold litestream}; rather, it `,
+      `configures the internal replication logic to operate on the DB file in `,
+      `a manner that is compatible with {bold litestream}.`,
+    ],
+  },
+
+  storageDBTmpDir: {
+    type: v.string().optional(),
+    desc: [
+      `tmp directory for IVM operator storage. Leave unset to use os.tmpdir()`,
+    ],
+  },
+  warmWebsocket: {
+    type: v.number().optional(),
+    desc: [
+      `For internal experimentation. Do not use this flag, as it will go away.`,
+    ],
+  },
+};
+
+export type ZeroConfig = Config<typeof zeroOptions>;
+
+export type Authorization = {authorization?: AuthorizationConfig | undefined};
+
+// TODO: Remove when auth is moved to schema.
+export type ZeroConfigWithAuthorization = ZeroConfig & Authorization;
+
+const ENV_VAR_PREFIX = 'ZERO_';
+
+let loadedConfig: Promise<ZeroConfigWithAuthorization> | undefined;
+
+export function getZeroConfig(
+  argv = process.argv.slice(2),
+): Promise<ZeroConfigWithAuthorization> {
   if (loadedConfig) {
     return loadedConfig;
   }
@@ -158,7 +238,11 @@ export function getZeroConfig(): Promise<ZeroConfig> {
   );
 
   loadedConfig = tsImport(relativePath, import.meta.url)
-    .then(async module => (await module.default) as ZeroConfig)
+    .then(async module => (await module.default) as Authorization)
+    .then(authorization => ({
+      ...authorization,
+      ...parseOptions(zeroOptions, argv, ENV_VAR_PREFIX),
+    }))
     .catch(e => {
       console.error(
         `Failed to load zero config from ${absoluteConfigPath}: ${e}`,

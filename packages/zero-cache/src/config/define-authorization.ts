@@ -5,22 +5,18 @@
  */
 import {normalizeSchema} from '../../../zero-client/src/client/normalized-schema.js';
 import type {AST} from '../../../zero-protocol/src/ast.js';
-import type {Query} from '../../../zql/src/query/query.js';
 import {
   type TableSchema,
   type TableSchemaToRow,
 } from '../../../zero-schema/src/table-schema.js';
+import type {Query} from '../../../zql/src/query/query.js';
 import {ConfigQuery} from './config-query.js';
 import {authDataRef, preMutationRowRef} from './refs.js';
 import type {
   Action,
   AssetAuthorization as CompiledAssetAuthorization,
   AuthorizationConfig as CompiledAuthorizationConfig,
-  ZeroConfig as CompiledZeroConfig,
-  LogConfig,
-  ZeroConfigBase,
 } from './zero-config.js';
-export type {ZeroConfig as CompiledZeroConfig} from './zero-config.js';
 
 type Schema = {
   readonly version: number;
@@ -64,26 +60,21 @@ export type AuthorizationConfig<TAuthDataShape, TSchema extends Schema> = {
   };
 };
 
-export type ZeroConfig<
-  TAuthDataShape,
-  TSchema extends Schema,
-> = ZeroConfigBase & {
+export type AuthConfig<TAuthDataShape, TSchema extends Schema> = {
   authorization?: AuthorizationConfig<TAuthDataShape, TSchema>;
-  shard?: {
-    id?: string;
-    publications?: string[];
-  };
-  log?: LogConfig;
 };
 
-export async function defineConfig<TAuthDataShape, TSchema extends Schema>(
+export async function defineAuthorization<
+  TAuthDataShape,
+  TSchema extends Schema,
+>(
   schema: TSchema,
   definer: (
     query: Queries<TSchema>,
   ) =>
-    | Promise<ZeroConfig<TAuthDataShape, TSchema>>
-    | ZeroConfig<TAuthDataShape, TSchema>,
-): Promise<CompiledZeroConfig> {
+    | Promise<AuthConfig<TAuthDataShape, TSchema>>
+    | AuthConfig<TAuthDataShape, TSchema>,
+): Promise<{authorization: CompiledAuthorizationConfig | undefined}> {
   const normalizedSchema = normalizeSchema(schema);
   const queries = {} as Record<string, Query<TableSchema>>;
   for (const [name, tableSchema] of Object.entries(normalizedSchema.tables)) {
@@ -91,27 +82,7 @@ export async function defineConfig<TAuthDataShape, TSchema extends Schema>(
   }
 
   const config = await definer(queries as Queries<TSchema>);
-  return compileConfig(config);
-}
-
-const DEFAULT_SHARD_ID = '0';
-function compileConfig<TAuthDataShape, TSchema extends Schema>(
-  config: ZeroConfig<TAuthDataShape, TSchema>,
-): CompiledZeroConfig {
-  return {
-    ...config,
-    authorization: compileAuthorization(config.authorization),
-    shard: {
-      id: config.shard?.id ?? DEFAULT_SHARD_ID,
-      publications: config?.shard?.publications ?? [],
-    },
-    log: {
-      format: config.log?.format ?? 'text',
-      level: config.log?.level ?? 'info',
-      datadogLogsApiKey: config.log?.datadogLogsApiKey,
-      datadogServiceLabel: config.log?.datadogServiceLabel,
-    },
-  };
+  return {authorization: compileAuthorization(config)};
 }
 
 function compileAuthorization<TAuthDataShape, TSchema extends Schema>(

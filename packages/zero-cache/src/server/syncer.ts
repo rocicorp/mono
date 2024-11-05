@@ -31,11 +31,11 @@ export default async function runWorker(parent: Worker): Promise<void> {
 
   const lc = createLogContext(config.log, {worker: 'syncer'});
 
-  const cvrDB = pgClient(lc, config.cvrDBConnStr, {
+  const cvrDB = pgClient(lc, config.cvrDB, {
     max: MAX_CVR_CONNECTIONS,
   });
 
-  const upstreamDB = pgClient(lc, config.upstreamDBConnStr, {
+  const upstreamDB = pgClient(lc, config.upstreamDB, {
     max: MAX_MUTAGEN_CONNECTIONS,
   });
 
@@ -66,7 +66,7 @@ export default async function runWorker(parent: Worker): Promise<void> {
       cvrDB,
       new PipelineDriver(
         lc,
-        new Snapshotter(lc, config.replicaDBFile),
+        new Snapshotter(lc, config.replicaFile),
         operatorStorage.createClientGroupStorage(id),
       ),
       sub,

@@ -68,7 +68,7 @@ export class MutagenService implements Mutagen, Service {
       .withContext('serviceID', this.id);
     this.#upstream = upstream;
     this.#shardID = shardID;
-    this.#replica = new Database(this.#lc, config.replicaDBFile, {
+    this.#replica = new Database(this.#lc, config.replicaFile, {
       readonly: true,
       fileMustExist: true,
     });
