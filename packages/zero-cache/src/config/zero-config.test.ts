@@ -133,10 +133,6 @@ test('zero-cache --help', () => {
        ZERO_STORAGE_DB_TMP_DIR env                                                                                               
                                                    tmp directory for IVM operator storage. Leave unset to use os.tmpdir()        
                                                                                                                                  
-     --warm-websocket number                       optional                                                                      
-       ZERO_WARM_WEBSOCKET env                                                                                                   
-                                                   For internal experimentation. Do not use this flag, as it will go away.       
-                                                                                                                                 
     "
   `);
 });

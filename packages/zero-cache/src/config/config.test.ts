@@ -47,6 +47,10 @@ const options = {
       ),
     ])
     .optional(() => ['a', 'b']),
+  hideMe: {
+    type: v.string().optional(),
+    hidden: true,
+  },
 };
 
 type TestConfig = Config<typeof options>;
@@ -75,6 +79,7 @@ test.each([
       ['Z_SHARD_ID']: 'xyz',
       ['Z_SHARD_PUBLICATIONS']: 'zero_foo',
       ['Z_TUPLE']: 'c,d',
+      ['Z_HIDE_ME']: 'hello!',
     },
     {
       port: 6000,
@@ -83,6 +88,7 @@ test.each([
       log: {format: 'json'},
       shard: {id: 'xyz', publications: ['zero_foo']},
       tuple: ['c', 'd'],
+      hideMe: 'hello!',
     },
   ],
   [
@@ -215,6 +221,7 @@ test.each([
       '--tuple',
       'k',
       'l',
+      '--hide-me=foo',
     ],
     {
       ['Z_PORT']: '6000',
@@ -224,6 +231,7 @@ test.each([
       ['Z_SHARD_ID']: 'xyz',
       ['Z_SHARD_PUBLICATIONS']: 'zero_blue',
       ['Z_TUPLE']: 'e,f',
+      ['Z_HIDE_ME']: 'bar',
     },
     {
       port: 8888,
@@ -232,6 +240,7 @@ test.each([
       log: {format: 'json'},
       shard: {id: 'abc', publications: ['zero_foo', 'zero_bar']},
       tuple: ['k', 'l'],
+      hideMe: 'foo',
     },
   ],
   [

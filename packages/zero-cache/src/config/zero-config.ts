@@ -237,9 +237,7 @@ export const zeroOptions = {
   },
   warmWebsocket: {
     type: v.number().optional(),
-    desc: [
-      `For internal experimentation. Do not use this flag, as it will go away.`,
-    ],
+    hidden: true, // for internal experimentation
   },
 };
 
