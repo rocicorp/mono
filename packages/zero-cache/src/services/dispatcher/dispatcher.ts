@@ -7,10 +7,9 @@ import {HttpService, type Options} from '../http-service.js';
 import {getConnectParams} from './connect-params.js';
 import {installWebSocketHandoff} from './websocket-handoff.js';
 
-const CONNECT_URL_PATTERNS = [
-  new UrlPattern('/zero/sync/:version/connect'),
-  new UrlPattern('/api/sync/:version/connect'),
-];
+// The server allows the client to use any /:base/ path to facilitate
+// servicing requests on the same domain as the application.
+const CONNECT_URL_PATTERN = new UrlPattern('/:base/sync/:version/connect');
 
 const SUPPORTED_VERSION = 'v1';
 
@@ -62,12 +61,9 @@ export class Dispatcher extends HttpService {
   }
 }
 
-function parseSyncPath(url: URL): {version: string} | undefined {
-  for (const pattern of CONNECT_URL_PATTERNS) {
-    const m = pattern.match(url.pathname);
-    if (m) {
-      return m;
-    }
-  }
-  return undefined;
+export function parseSyncPath(
+  url: URL,
+): {base: string; version: string} | undefined {
+  // The match() returns both null and undefined.
+  return CONNECT_URL_PATTERN.match(url.pathname) || undefined;
 }
