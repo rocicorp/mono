@@ -135,7 +135,7 @@ export const zeroOptions = {
       desc: [
         `The maximum number of connections to open to the upstream database`,
         `for committing mutations. This is divided evenly amongst sync workers.`,
-        `In addition to this number, zero-cache will a single connection for the`,
+        `In addition to this number, zero-cache uses one connection for the`,
         `replication stream.`,
         ``,
         `Note that this number must allow for at least one connection per`,
