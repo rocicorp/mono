@@ -24,8 +24,7 @@
     "@rocicorp/logger": "^5.3.0",
     "@rocicorp/resolver": "^1.0.2",
     "@rocicorp/zero-sqlite3": "^1.0.3",
-    "ansis": "^3.3.2",
-    "camelcase": "^8.0.0",
+    "chalk-template": "^1.1.0",
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
     "compare-utf8": "^0.1.1",
@@ -34,6 +33,7 @@
     "fastify": "^5.0.0",
     "jose": "^5.9.3",
     "json-custom-numbers": "^3.1.1",
+    "lodash.kebabcase": "^4.1.1",
     "lodash.merge": "^4.6.2",
     "lodash.snakecase": "^4.1.1",
     "pg": "^8.11.3",
@@ -42,6 +42,8 @@
     "postgres": "^3.4.4",
     "postgres-array": "^3.0.2",
     "semver": "^7.5.4",
+    "strip-ansi": "^7.1.0",
+    "url-pattern": "^1.0.3",
     "tsx": "^4.19.1",
     "ws": "^8.18.0",
     "xxhash-wasm": "^1.0.2"
@@ -82,6 +84,10 @@
     "./advanced": {
       "types": "./out/zero/src/advanced.d.ts",
       "default": "./out/zero/src/advanced.js"
+    },
+    "./schema": {
+      "types": "./out/zero-schema/src/mod.d.ts",
+      "default": "./out/zero-schema/src/mod.js"
     }
   },
   "bin": {

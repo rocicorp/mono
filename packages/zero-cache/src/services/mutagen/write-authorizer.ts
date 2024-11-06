@@ -29,7 +29,7 @@ import {TableSource} from '../../../../zqlite/src/table-source.js';
 import type {
   AuthorizationConfig,
   Policy,
-  ZeroConfig,
+  ZeroConfigWithAuthorization,
 } from '../../config/zero-config.js';
 import {listTables} from '../../db/lite-tables.js';
 import {mapLiteDataTypeToZqlSchemaValue} from '../../types/lite.js';
@@ -55,7 +55,10 @@ export class WriteAuthorizerImpl {
 
   constructor(
     lc: LogContext,
-    config: ZeroConfig,
+    config: Pick<
+      ZeroConfigWithAuthorization,
+      'authorization' | 'storageDBTmpDir'
+    >,
     replica: Database,
     cgID: string,
   ) {

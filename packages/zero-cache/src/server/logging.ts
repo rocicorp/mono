@@ -1,32 +1,16 @@
 import {
   LogContext,
-  TeeLogSink,
   consoleLogSink,
   type Context,
   type LogLevel,
   type LogSink,
 } from '@rocicorp/logger';
 import {pid} from 'node:process';
-import {DatadogLogSink} from '../../../datadog/src/mod.js';
 import {type LogConfig} from '../config/zero-config.js';
 import {stringify} from '../types/bigint-json.js';
 
-const DATADOG_SOURCE = 'zeroWorker';
-
 function createLogSink(config: LogConfig) {
-  const logSink =
-    config.format === 'json' ? consoleJsonLogSink : consoleLogSink;
-  if (config.datadogLogsApiKey === undefined) {
-    return logSink;
-  }
-  return new TeeLogSink([
-    new DatadogLogSink({
-      apiKey: config.datadogLogsApiKey,
-      service: config.datadogServiceLabel ?? '',
-      source: DATADOG_SOURCE,
-    }),
-    logSink,
-  ]);
+  return config.format === 'json' ? consoleJsonLogSink : consoleLogSink;
 }
 
 export function createLogContext(

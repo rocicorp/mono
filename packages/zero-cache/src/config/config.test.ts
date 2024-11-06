@@ -1,5 +1,5 @@
 import {SilentLogger} from '@rocicorp/logger';
-import {Ansis} from 'ansis';
+import stripAnsi from 'strip-ansi';
 import {expect, test, vi} from 'vitest';
 import * as v from '../../../shared/src/valita.js';
 import {
@@ -9,14 +9,10 @@ import {
   type Options,
 } from './config.js';
 
-// For some reason, Typescript doesn't figure out `import ansis from 'ansis'`
-const ansis = new Ansis();
-
 const options = {
   port: {
     type: v.number().default(4848),
     desc: ['blah blah blah'],
-    allCaps: true, // verify that ungrouped flags are not capitalized
     alias: 'p',
   },
   replicaDBFile: v.string(),
@@ -28,7 +24,6 @@ const options = {
     id: {
       type: v.string().default('0'),
       desc: ['blah blah blah'],
-      allCaps: true, // grouped flags are capitalized
     },
     publications: {type: v.array(v.string()).optional(() => [])},
   },
@@ -52,6 +47,10 @@ const options = {
       ),
     ])
     .optional(() => ['a', 'b']),
+  hideMe: {
+    type: v.string().optional(),
+    hidden: true,
+  },
 };
 
 type TestConfig = Config<typeof options>;
@@ -59,7 +58,7 @@ type TestConfig = Config<typeof options>;
 test.each([
   [
     'defaults',
-    ['--replicaDBFile', '/tmp/replica.db'],
+    ['--replica-db-file', '/tmp/replica.db'],
     {},
     {
       port: 4848,
@@ -73,13 +72,14 @@ test.each([
     'env values',
     [],
     {
-      ['PORT']: '6000',
-      ['REPLICA_DB_FILE']: '/tmp/env-replica.db',
-      ['LITESTREAM']: 'true',
-      ['LOG_FORMAT']: 'json',
-      ['SHARD_ID']: 'xyz',
-      ['SHARD_PUBLICATIONS']: 'zero_foo',
-      ['TUPLE']: 'c,d',
+      ['Z_PORT']: '6000',
+      ['Z_REPLICA_DB_FILE']: '/tmp/env-replica.db',
+      ['Z_LITESTREAM']: 'true',
+      ['Z_LOG_FORMAT']: 'json',
+      ['Z_SHARD_ID']: 'xyz',
+      ['Z_SHARD_PUBLICATIONS']: 'zero_foo',
+      ['Z_TUPLE']: 'c,d',
+      ['Z_HIDE_ME']: 'hello!',
     },
     {
       port: 6000,
@@ -88,19 +88,20 @@ test.each([
       log: {format: 'json'},
       shard: {id: 'xyz', publications: ['zero_foo']},
       tuple: ['c', 'd'],
+      hideMe: 'hello!',
     },
   ],
   [
     'env value for array flag separated by commas',
     [],
     {
-      ['PORT']: '6000',
-      ['REPLICA_DB_FILE']: '/tmp/env-replica.db',
-      ['LITESTREAM']: 'true',
-      ['LOG_FORMAT']: 'json',
-      ['SHARD_ID']: 'xyz',
-      ['SHARD_PUBLICATIONS']: 'zero_foo,zero_bar',
-      ['TUPLE']: 'e,f',
+      ['Z_PORT']: '6000',
+      ['Z_REPLICA_DB_FILE']: '/tmp/env-replica.db',
+      ['Z_LITESTREAM']: 'true',
+      ['Z_LOG_FORMAT']: 'json',
+      ['Z_SHARD_ID']: 'xyz',
+      ['Z_SHARD_PUBLICATIONS']: 'zero_foo,zero_bar',
+      ['Z_TUPLE']: 'e,f',
     },
     {
       port: 6000,
@@ -113,7 +114,7 @@ test.each([
   ],
   [
     'argv values, short alias',
-    ['-p', '6000', '--replicaDBFile=/tmp/replica.db'],
+    ['-p', '6000', '--replica-db-file=/tmp/replica.db'],
     {},
     {
       port: 6000,
@@ -125,7 +126,7 @@ test.each([
   ],
   [
     'argv values, hex numbers',
-    ['-p', '0x1234', '--replicaDBFile=/tmp/replica.db'],
+    ['-p', '0x1234', '--replica-db-file=/tmp/replica.db'],
     {},
     {
       port: 4660,
@@ -137,7 +138,7 @@ test.each([
   ],
   [
     'argv values, scientific notation',
-    ['-p', '1.234E3', '--replicaDBFile=/tmp/replica.db'],
+    ['-p', '1.234E3', '--replica-db-file=/tmp/replica.db'],
     {},
     {
       port: 1234,
@@ -152,13 +153,13 @@ test.each([
     [
       '--port',
       '6000',
-      '--replicaDBFile=/tmp/replica.db',
+      '--replica-db-file=/tmp/replica.db',
       '--litestream',
       'true',
-      '--logFormat=json',
-      '--shardID',
+      '--log-format=json',
+      '--shard-id',
       'abc',
-      '--shardPublications',
+      '--shard-publications',
       'zero_foo',
       'zero_bar',
       '--tuple',
@@ -180,16 +181,16 @@ test.each([
     [
       '--port',
       '6000',
-      '--replicaDBFile',
+      '--replica-db-file',
       '/tmp/replica.db',
       '--litestream',
       'true',
-      '--logFormat=json',
-      '--shardID',
+      '--log-format=json',
+      '--shard-id',
       'abc',
-      '--shardPublications',
+      '--shard-publications',
       'zero_foo',
-      '--shardPublications',
+      '--shard-publications',
       'zero_bar',
       '--tuple',
       'i',
@@ -211,24 +212,26 @@ test.each([
     [
       '--port',
       '8888',
-      '--logFormat=json',
-      '--shardID',
+      '--log-format=json',
+      '--shard-id',
       'abc',
-      '--shardPublications',
+      '--shard-publications',
       'zero_foo',
       'zero_bar',
       '--tuple',
       'k',
       'l',
+      '--hide-me=foo',
     ],
     {
-      ['PORT']: '6000',
-      ['REPLICA_DB_FILE']: '/tmp/env-replica.db',
-      ['LITESTREAM']: 'true',
-      ['LOG_FORMAT']: 'text',
-      ['SHARD_ID']: 'xyz',
-      ['SHARD_PUBLICATIONS']: 'zero_blue',
-      ['TUPLE']: 'e,f',
+      ['Z_PORT']: '6000',
+      ['Z_REPLICA_DB_FILE']: '/tmp/env-replica.db',
+      ['Z_LITESTREAM']: 'true',
+      ['Z_LOG_FORMAT']: 'text',
+      ['Z_SHARD_ID']: 'xyz',
+      ['Z_SHARD_PUBLICATIONS']: 'zero_blue',
+      ['Z_TUPLE']: 'e,f',
+      ['Z_HIDE_ME']: 'bar',
     },
     {
       port: 8888,
@@ -237,11 +240,12 @@ test.each([
       log: {format: 'json'},
       shard: {id: 'abc', publications: ['zero_foo', 'zero_bar']},
       tuple: ['k', 'l'],
+      hideMe: 'foo',
     },
   ],
   [
     '--bool flag',
-    ['--litestream', '--replicaDBFile=/tmp/replica.db'],
+    ['--litestream', '--replica-db-file=/tmp/replica.db'],
     {},
     {
       port: 4848,
@@ -254,7 +258,7 @@ test.each([
   ],
   [
     '--bool=true flag',
-    ['--litestream=true', '--replicaDBFile=/tmp/replica.db'],
+    ['--litestream=true', '--replica-db-file=/tmp/replica.db'],
     {},
     {
       port: 4848,
@@ -267,7 +271,7 @@ test.each([
   ],
   [
     '--bool 1 flag',
-    ['--litestream', '1', '--replicaDBFile=/tmp/replica.db'],
+    ['--litestream', '1', '--replica-db-file=/tmp/replica.db'],
     {},
     {
       port: 4848,
@@ -280,7 +284,7 @@ test.each([
   ],
   [
     '--bool=0 flag',
-    ['--litestream=0', '--replicaDBFile=/tmp/replica.db'],
+    ['--litestream=0', '--replica-db-file=/tmp/replica.db'],
     {},
     {
       port: 4848,
@@ -293,7 +297,7 @@ test.each([
   ],
   [
     '--bool False flag',
-    ['--litestream', 'False', '--replicaDBFile=/tmp/replica.db'],
+    ['--litestream', 'False', '--replica-db-file=/tmp/replica.db'],
     {},
     {
       port: 4848,
@@ -307,7 +311,7 @@ test.each([
 ] satisfies [string, string[], Record<string, string>, TestConfig][])(
   '%s',
   (_name, argv, env, result) => {
-    expect(parseOptions(options, argv, env)).toEqual(result);
+    expect(parseOptions(options, argv, 'Z_', env)).toEqual(result);
   },
 );
 
@@ -367,7 +371,7 @@ test.each([
   (_name, opts, argv, errorMsg) => {
     let message;
     try {
-      parseOptions(opts, argv, {}, new SilentLogger());
+      parseOptions(opts, argv, '', {}, new SilentLogger());
     } catch (e) {
       expect(e).toBeInstanceOf(TypeError);
       message = (e as TypeError).message;
@@ -377,70 +381,70 @@ test.each([
 );
 
 test('--help', () => {
-  const logger = {error: vi.fn()};
-  expect(() => parseOptions(options, ['--help'], {}, logger)).toThrow(
+  const logger = {info: vi.fn()};
+  expect(() => parseOptions(options, ['--help'], 'Z_', {}, logger)).toThrow(
     ExitAfterUsage,
   );
-  expect(logger.error).toHaveBeenCalledOnce();
-  expect(ansis.strip(logger.error.mock.calls[0][0])).toMatchInlineSnapshot(`
+  expect(logger.info).toHaveBeenCalledOnce();
+  expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
     "
      --port, -p number                  default: 4848                                                        
-       PORT env                                                                                              
+       Z_PORT env                                                                                            
                                         blah blah blah                                                       
                                                                                                              
-     --replicaDBFile string             required                                                             
-       REPLICA_DB_FILE env                                                                                   
+     --replica-db-file string           required                                                             
+       Z_REPLICA_DB_FILE env                                                                                 
                                                                                                              
      --litestream boolean               optional                                                             
-       LITESTREAM env                                                                                        
+       Z_LITESTREAM env                                                                                      
                                                                                                              
-     --logFormat text,json              default: "text"                                                      
-       LOG_FORMAT env                                                                                        
+     --log-format text,json             default: "text"                                                      
+       Z_LOG_FORMAT env                                                                                      
                                                                                                              
-     --shardID string                   default: "0"                                                         
-       SHARD_ID env                                                                                          
+     --shard-id string                  default: "0"                                                         
+       Z_SHARD_ID env                                                                                        
                                         blah blah blah                                                       
                                                                                                              
-     --shardPublications string[]       default: []                                                          
-       SHARD_PUBLICATIONS env                                                                                
+     --shard-publications string[]      default: []                                                          
+       Z_SHARD_PUBLICATIONS env                                                                              
                                                                                                              
      --tuple a,c,e,g,i,k,b,d,f,h,j,l    default: ["a","b"]                                                   
-       TUPLE env                                                                                             
+       Z_TUPLE env                                                                                           
                                                                                                              
     "
   `);
 });
 
 test('-h', () => {
-  const logger = {error: vi.fn()};
-  expect(() => parseOptions(options, ['-h'], {}, logger)).toThrow(
+  const logger = {info: vi.fn()};
+  expect(() => parseOptions(options, ['-h'], 'ZERO_', {}, logger)).toThrow(
     ExitAfterUsage,
   );
-  expect(logger.error).toHaveBeenCalledOnce();
-  expect(ansis.strip(logger.error.mock.calls[0][0])).toMatchInlineSnapshot(`
+  expect(logger.info).toHaveBeenCalledOnce();
+  expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
     "
      --port, -p number                  default: 4848                                                        
-       PORT env                                                                                              
+       ZERO_PORT env                                                                                         
                                         blah blah blah                                                       
                                                                                                              
-     --replicaDBFile string             required                                                             
-       REPLICA_DB_FILE env                                                                                   
+     --replica-db-file string           required                                                             
+       ZERO_REPLICA_DB_FILE env                                                                              
                                                                                                              
      --litestream boolean               optional                                                             
-       LITESTREAM env                                                                                        
+       ZERO_LITESTREAM env                                                                                   
                                                                                                              
-     --logFormat text,json              default: "text"                                                      
-       LOG_FORMAT env                                                                                        
+     --log-format text,json             default: "text"                                                      
+       ZERO_LOG_FORMAT env                                                                                   
                                                                                                              
-     --shardID string                   default: "0"                                                         
-       SHARD_ID env                                                                                          
+     --shard-id string                  default: "0"                                                         
+       ZERO_SHARD_ID env                                                                                     
                                         blah blah blah                                                       
                                                                                                              
-     --shardPublications string[]       default: []                                                          
-       SHARD_PUBLICATIONS env                                                                                
+     --shard-publications string[]      default: []                                                          
+       ZERO_SHARD_PUBLICATIONS env                                                                           
                                                                                                              
      --tuple a,c,e,g,i,k,b,d,f,h,j,l    default: ["a","b"]                                                   
-       TUPLE env                                                                                             
+       ZERO_TUPLE env                                                                                        
                                                                                                              
     "
   `);

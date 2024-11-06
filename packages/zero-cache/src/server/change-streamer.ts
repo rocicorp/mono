@@ -12,18 +12,18 @@ import {
 import {exitAfter, runUntilKilled} from './life-cycle.js';
 import {createLogContext} from './logging.js';
 
-const MAX_CHANGE_DB_CONNECTIONS = 5;
-
 export default async function runWorker(parent: Worker): Promise<void> {
   const config = await getZeroConfig();
+  const port = config.changeStreamerPort ?? config.port + 1;
   const lc = createLogContext(config.log, {worker: 'change-streamer'});
 
   // Kick off DB connection warmup in the background.
-  const changeDB = pgClient(lc, config.changeDBConnStr, {
-    max: MAX_CHANGE_DB_CONNECTIONS,
+  const changeDB = pgClient(lc, config.change.db, {
+    max: config.change.maxConns,
+    connection: {['application_name']: 'zero-change-streamer'},
   });
   void Promise.allSettled(
-    Array.from({length: MAX_CHANGE_DB_CONNECTIONS}, () =>
+    Array.from({length: config.change.maxConns}, () =>
       changeDB`SELECT 1`.simple().execute(),
     ),
   );
@@ -31,9 +31,9 @@ export default async function runWorker(parent: Worker): Promise<void> {
   // Note: This performs initial sync of the replica if necessary.
   const {changeSource, replicationConfig} = await initializeChangeSource(
     lc,
-    config.upstreamDBConnStr,
+    config.upstream.db,
     config.shard,
-    config.replicaDBFile,
+    config.replicaFile,
   );
 
   const changeStreamer = await initializeStreamer(
@@ -46,6 +46,7 @@ export default async function runWorker(parent: Worker): Promise<void> {
   const changeStreamerWebServer = new ChangeStreamerHttpServer(
     lc,
     changeStreamer,
+    {port},
   );
 
   parent.send(['ready', {ready: true}]);
