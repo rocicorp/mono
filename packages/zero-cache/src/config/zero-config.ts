@@ -131,7 +131,7 @@ export const zeroOptions = {
     },
 
     maxConns: {
-      type: v.number().default(15),
+      type: v.number().default(20),
       desc: [
         `The maximum number of connections to open to the upstream database`,
         `for committing mutations. This is divided evenly amongst sync workers.`,
