@@ -46,6 +46,7 @@
     "postgres-array": "^3.0.2",
     "strip-ansi": "^7.1.0",
     "tsx": "^4.19.1",
+    "url-pattern": "^1.0.3",
     "ws": "^8.18.0",
     "xxhash-wasm": "^1.0.2",
     "zero-protocol": "0.0.0",

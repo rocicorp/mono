@@ -43,6 +43,7 @@
     "postgres-array": "^3.0.2",
     "semver": "^7.5.4",
     "strip-ansi": "^7.1.0",
+    "url-pattern": "^1.0.3",
     "tsx": "^4.19.1",
     "ws": "^8.18.0",
     "xxhash-wasm": "^1.0.2"
