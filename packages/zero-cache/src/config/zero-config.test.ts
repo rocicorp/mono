@@ -17,7 +17,7 @@ test('zero-cache --help', () => {
                                                    The "upstream" authoritative postgres database.                               
                                                    In the future we will support other types of upstream besides PG.             
                                                                                                                                  
-     --upstream-max-conns number                   default: 15                                                                   
+     --upstream-max-conns number                   default: 20                                                                   
        ZERO_UPSTREAM_MAX_CONNS env                                                                                               
                                                    The maximum number of connections to open to the upstream database            
                                                    for committing mutations. This is divided evenly amongst sync workers.        
