@@ -11,7 +11,8 @@
         "../zero-client/src/**/*.ts",
         "../zero-advanced/src/**/*.ts",
         "../zero-react/src/**/*.ts",
-        "../zero-solid/src/**/*.ts"
+        "../zero-solid/src/**/*.ts",
+        "../zero-schema/src/**/*.ts"
       ]
     },
     "lint": {

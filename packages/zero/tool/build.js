@@ -57,7 +57,7 @@ async function getExternal(includePeerDeps) {
     'zero-react',
     'zero-solid',
     'zero-advanced',
-    'zer-schema',
+    'zero-schema',
     'zql',
     'zqlite',
   ]) {
