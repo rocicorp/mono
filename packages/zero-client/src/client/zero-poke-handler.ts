@@ -5,6 +5,7 @@ import type {
   PokeInternal,
 } from '../../../replicache/src/impl.js';
 import type {ClientID, PatchOperation} from '../../../replicache/src/mod.js';
+import {getBrowserGlobal} from '../../../shared/src/browser-env.js';
 import type {
   ClientsPatchOp,
   PokeEndBody,
@@ -48,6 +49,8 @@ export class PokeHandler {
   // order poke errors.
   readonly #pokeLock = new Lock();
   readonly #schema: NormalizedSchema;
+
+  readonly #raf = getBrowserGlobal('requestAnimationFrame') ?? rafFallback;
 
   constructor(
     replicachePoke: (poke: PokeInternal) => Promise<void>,
@@ -119,7 +122,7 @@ export class PokeHandler {
   #startPlaybackLoop() {
     this.#lc.debug?.('starting playback loop');
     this.#pokePlaybackLoopRunning = true;
-    requestAnimationFrame(this.#rafCallback);
+    this.#raf(this.#rafCallback);
   }
 
   #rafCallback = async () => {
@@ -129,7 +132,7 @@ export class PokeHandler {
       this.#pokePlaybackLoopRunning = false;
       return;
     }
-    requestAnimationFrame(this.#rafCallback);
+    this.#raf(this.#rafCallback);
     const start = performance.now();
     rafLC.debug?.(
       'raf fired, processing pokes.  Since last raf',
@@ -340,4 +343,12 @@ function rowsPatchOpToReplicachePatchOp(
     default:
       throw new Error('to be implemented');
   }
+}
+
+/**
+ * Some environments we run in don't have `requestAnimationFrame` (such as
+ * Node, Cloudflare Workers).
+ */
+function rafFallback(callback: () => void): void {
+  setTimeout(callback, 0);
 }
