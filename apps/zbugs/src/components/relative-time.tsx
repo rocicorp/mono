@@ -1,7 +1,7 @@
-import React, {useLayoutEffect, useState} from 'react';
+import {useEffect, useState} from 'react';
 
-interface RelativeTimeProps {
-  timestamp: string | number | Date;
+interface Props {
+  timestamp: number;
   absolute?: boolean;
   format?: {
     year?: 'numeric' | '2-digit';
@@ -12,92 +12,139 @@ interface RelativeTimeProps {
   };
 }
 
-const RelativeTime: React.FC<RelativeTimeProps> = ({
-  timestamp,
-  absolute = false,
-  format,
-}) => {
-  const [displayTime, setDisplayTime] = useState<string>('');
-  const [fullTimestamp, setFullTimestamp] = useState<string>('');
-
-  useLayoutEffect(() => {
-    const getRelativeTime = (timestampDate: string | number | Date) => {
-      const now = new Date();
-      const timestamp = new Date(timestampDate);
-      const diffInSeconds = Math.max(
-        0,
-        Math.floor((now.getTime() - timestamp.getTime()) / 1000),
-      );
-      const diffInMinutes = Math.floor(diffInSeconds / 60);
-      const diffInHours = Math.floor(diffInMinutes / 60);
-      const diffInDays = Math.floor(diffInHours / 24);
-
-      const timestampYear = timestamp.getFullYear();
-      const currentYear = now.getFullYear();
-
-      // Full absolute timestamp for the title tag
-      setFullTimestamp(
-        timestamp.toLocaleString('en-US', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-          hour: 'numeric',
-          minute: 'numeric',
-        }),
-      );
-
-      if (timestampYear < currentYear) {
-        return `${timestampYear}/${String(timestamp.getMonth() + 1).padStart(
-          2,
-          '0',
-        )}/${String(timestamp.getDate()).padStart(
-          2,
-          '0',
-        )}, ${timestamp.toLocaleString('en-US', {
-          hour: 'numeric',
-          minute: 'numeric',
-          hour12: true,
-        })}`;
-      }
-      // If 'absolute' is true or timestamp is older than 2 days, show the full date and time
-      if (absolute || diffInDays > 2) {
-        return timestamp.toLocaleString('en-US', {
-          year:
-            format?.year ??
-            (timestampYear < currentYear ? 'numeric' : undefined),
-          month: format?.month ?? 'short',
-          day: format?.day ?? 'numeric',
-          hour: format?.hour ?? 'numeric',
-          minute: format?.minute ?? 'numeric',
-          hour12: true,
-        });
-      }
-
-      if (diffInSeconds < 60) {
-        return diffInSeconds === 1
-          ? '1 second ago'
-          : `${diffInSeconds} seconds ago`;
-      } else if (diffInMinutes < 60) {
-        return diffInMinutes === 1
-          ? '1 minute ago'
-          : `${diffInMinutes} minutes ago`;
-      } else if (diffInHours < 24) {
-        return diffInHours === 1 ? '1 hour ago' : `${diffInHours} hours ago`;
-      } else {
-        return diffInDays === 1 ? '1 day ago' : `${diffInDays} days ago`;
-      }
-    };
-
-    const interval = setInterval(() => {
-      setDisplayTime(getRelativeTime(timestamp));
-    }, 1000);
-
-    setDisplayTime(getRelativeTime(timestamp));
-
-    return () => clearInterval(interval);
-  }, [timestamp, absolute, format]);
-
-  return <span title={fullTimestamp}>{displayTime}</span>;
-};
+function RelativeTime({timestamp, absolute = false, format}: Props) {
+  const now = useNow();
+  const fullTimestamp = fullTimestampFormat.format(timestamp);
+  return (
+    <span title={fullTimestamp}>
+      {getRelativeTime(now, timestamp, absolute, format)}
+    </span>
+  );
+}
 
 export default RelativeTime;
+
+const fullTimestampFormat = Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: 'numeric',
+});
+
+const ONE_MINUTE = 60 * 1000;
+const TWO_MINUTES = 2 * ONE_MINUTE;
+const ONE_HOUR = 60 * ONE_MINUTE;
+
+function getRelativeTime(
+  now: number,
+  timestamp: number,
+  absolute: boolean,
+  format: Props['format'],
+) {
+  const delta = now - timestamp;
+
+  const timestampDate = new Date(timestamp);
+  const timestampYear = timestampDate.getFullYear();
+  const currentYear = new Date(now).getFullYear();
+
+  if (timestampYear < currentYear) {
+    return formatLongAgo(timestamp);
+  }
+  // If 'absolute' is true or timestamp is older than 2 days, show the full date and time
+  if (absolute || delta > 48 * ONE_HOUR) {
+    return timestampDate.toLocaleString('en-US', {
+      year:
+        format?.year ?? (timestampYear < currentYear ? 'numeric' : undefined),
+      month: format?.month ?? 'short',
+      day: format?.day ?? 'numeric',
+      hour: format?.hour ?? 'numeric',
+      minute: format?.minute ?? 'numeric',
+      hour12: true,
+    });
+  }
+
+  if (delta < ONE_MINUTE) {
+    return 'just now';
+  }
+  if (delta < TWO_MINUTES) {
+    return '1 minute ago';
+  }
+  if (delta < ONE_HOUR) {
+    return Math.floor(delta / ONE_MINUTE) + ' minutes ago';
+  }
+  if (delta < 2 * ONE_HOUR) {
+    return '1 hour ago';
+  }
+  if (delta < 24 * ONE_HOUR) {
+    return Math.floor(delta / ONE_HOUR) + ' hours ago';
+  }
+  return '1 day ago';
+}
+
+const longAgoFormatter = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: 'numeric',
+  minute: 'numeric',
+});
+
+type LongAgoParts = {
+  year: string;
+  month: string;
+  day: string;
+  hour: string;
+  minute: string;
+  dayPeriod: string;
+};
+
+function formatToNamedParts(
+  formatter: Intl.DateTimeFormat,
+  timestamp: number,
+): LongAgoParts {
+  const rv: Record<string, string> = {};
+  for (const {type, value} of formatter.formatToParts(timestamp)) {
+    rv[type] = value;
+  }
+  return rv as LongAgoParts;
+}
+
+function formatLongAgo(timestamp: number) {
+  const {year, month, day, hour, minute, dayPeriod} = formatToNamedParts(
+    longAgoFormatter,
+    timestamp,
+  );
+  return `${year}/${month}/${day}, ${hour}:${minute} ${dayPeriod}`;
+}
+
+const timers: Set<() => void> = new Set();
+let intervalID: ReturnType<typeof setInterval> | undefined;
+
+function useSharedInterval(fn: () => void): void {
+  useEffect(() => {
+    timers.add(fn);
+    if (timers.size === 1) {
+      intervalID = setInterval(() => {
+        for (const fn of timers) {
+          fn();
+        }
+      }, 1_000);
+    }
+    return () => {
+      timers.delete(fn);
+      if (timers.size === 0) {
+        clearInterval(intervalID);
+      }
+    };
+  });
+}
+
+/**
+ * The current time in milliseconds. Updates every second.
+ */
+function useNow(): number {
+  const [now, setNow] = useState(Date.now());
+  useSharedInterval(() => setNow(Date.now()));
+  return now;
+}

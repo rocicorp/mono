@@ -57,7 +57,7 @@ async function getExternal(includePeerDeps) {
     'zero-react',
     'zero-solid',
     'zero-advanced',
-    'zer-schema',
+    'zero-schema',
     'zql',
     'zqlite',
   ]) {
@@ -97,7 +97,7 @@ async function buildZeroClient() {
     zero: basePath('src/zero.ts'),
     react: basePath('src/react.ts'),
     solid: basePath('src/solid.ts'),
-    internal: basePath('src/advanced.ts'),
+    advanced: basePath('src/advanced.ts'),
   };
   await esbuild.build({
     ...sharedOptions(false, false),
