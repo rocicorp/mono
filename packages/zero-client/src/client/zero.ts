@@ -59,15 +59,16 @@ import type {
   PullResponseBody,
   PullResponseMessage,
 } from '../../../zero-protocol/src/pull.js';
+import type {Schema} from '../../../zero-schema/src/mod.js';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 import {newQuery} from '../../../zql/src/query/query-impl.js';
 import type {Query} from '../../../zql/src/query/query.js';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
 import {ZeroContext} from './context.js';
 import {
-  type DBMutator,
   type BatchMutator,
+  type DBMutator,
   type WithCRUD,
   makeCRUDMutate,
   makeCRUDMutator,
@@ -85,14 +86,13 @@ import {
   getLastConnectErrorValue,
 } from './metrics.js';
 import {type NormalizedSchema, normalizeSchema} from './normalized-schema.js';
-import type {ZeroOptions, ZeroAdvancedOptions} from './options.js';
+import type {ZeroAdvancedOptions, ZeroOptions} from './options.js';
 import {QueryManager} from './query-manager.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
 import {getServer} from './server-option.js';
 import {version} from './version.js';
 import {PokeHandler} from './zero-poke-handler.js';
-import type {Schema} from '../../../zero-schema/src/mod.js';
 
 export type NoRelations = Record<string, never>;
 
@@ -761,11 +761,8 @@ export class Zero<const S extends Schema> {
     }
   };
 
-  #onOpen = (e: Event) => {
-    const l = addWebSocketIDFromSocketToLogContext(
-      e.target as WebSocket,
-      this.#lc,
-    );
+  #onOpen = () => {
+    const l = addWebSocketIDFromSocketToLogContext(this.#socket!, this.#lc);
     if (this.#connectStart === undefined) {
       l.error?.(
         'Got open event but connect start time is undefined. This should not happen.',
@@ -781,10 +778,7 @@ export class Zero<const S extends Schema> {
   };
 
   #onClose = (e: CloseEvent) => {
-    const l = addWebSocketIDFromSocketToLogContext(
-      e.target as WebSocket,
-      this.#lc,
-    );
+    const l = addWebSocketIDFromSocketToLogContext(this.#socket!, this.#lc);
     const {code, reason, wasClean} = e;
     l.info?.('Got socket close event', {code, reason, wasClean});
 
