@@ -42,6 +42,7 @@
     "pg": "^8.11.3",
     "pg-format": "npm:pg-format-fix@^1.0.5",
     "pg-logical-replication": "^2.0.7",
+    "pg-protocol": "^1.7.0",
     "postgres": "^3.4.4",
     "postgres-array": "^3.0.2",
     "strip-ansi": "^7.1.0",
