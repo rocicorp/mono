@@ -3,22 +3,11 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {Database} from '../../../../zqlite/src/db.js';
 import {
   type Rule,
-  type ZeroConfig,
   type ZeroConfigWithAuthorization,
 } from '../../config/zero-config.js';
 import {WriteAuthorizerImpl} from './write-authorizer.js';
 
 const lc = createSilentLogContext();
-const baseConfig: ZeroConfig = {
-  upstreamDB: 'upstream',
-  cvrDB: 'cvr',
-  changeDB: 'change',
-  replicaFile: 'replica',
-  log: {level: 'debug', format: 'json'},
-  shard: {id: '0', publications: []},
-  perUserMutationLimit: {windowMs: 60000},
-  port: 4848,
-};
 
 const allowIfSubject = [
   'allow',
@@ -167,10 +156,7 @@ describe('can insert/update/delete/upsert', () => {
   }[])('$name', ({authorization, sub, id, actions, expected}) => {
     const authorizer = new WriteAuthorizerImpl(
       lc,
-      {
-        ...baseConfig,
-        authorization,
-      },
+      {authorization},
       replica,
       'cg',
     );

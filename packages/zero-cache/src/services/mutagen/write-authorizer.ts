@@ -55,7 +55,10 @@ export class WriteAuthorizerImpl {
 
   constructor(
     lc: LogContext,
-    config: ZeroConfigWithAuthorization,
+    config: Pick<
+      ZeroConfigWithAuthorization,
+      'authorization' | 'storageDBTmpDir'
+    >,
     replica: Database,
     cgID: string,
   ) {
