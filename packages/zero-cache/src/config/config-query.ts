@@ -1,6 +1,7 @@
 import type {AST} from '../../../zero-protocol/src/ast.js';
-import type {Format} from '../../../zql/src/ivm/view.js';
 import type {NormalizedTableSchema} from '../../../zero-schema/src/normalize-table-schema.js';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
+import type {Format} from '../../../zql/src/ivm/view.js';
 import {AbstractQuery} from '../../../zql/src/query/query-impl.js';
 import type {
   DefaultQueryResultRow,
@@ -8,7 +9,6 @@ import type {
   QueryType,
   Smash,
 } from '../../../zql/src/query/query.js';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 import type {TypedView} from '../../../zql/src/query/typed-view.js';
 
 export class ConfigQuery<
@@ -21,10 +21,6 @@ export class ConfigQuery<
     format?: Format | undefined,
   ) {
     super(schema, ast, format);
-  }
-
-  get ast() {
-    return this._completeAst();
   }
 
   protected _newQuery<TSchema extends TableSchema, TReturn extends QueryType>(
