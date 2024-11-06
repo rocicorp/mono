@@ -1,12 +1,12 @@
 import type {AST} from '../../../zero-protocol/src/ast.js';
-import type {Format} from '../ivm/view.js';
 import {
   normalizeTableSchema,
   type NormalizedTableSchema,
 } from '../../../zero-schema/src/normalize-table-schema.js';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
+import type {Format} from '../ivm/view.js';
 import {AbstractQuery} from './query-impl.js';
 import type {DefaultQueryResultRow, Query, QueryType, Smash} from './query.js';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 import type {TypedView} from './typed-view.js';
 
 export function authQuery<TSchema extends TableSchema>(schema: TSchema) {
@@ -23,10 +23,6 @@ export class AuthQuery<
     format?: Format | undefined,
   ) {
     super(schema, ast, format);
-  }
-
-  get ast() {
-    return this._completeAst();
   }
 
   protected _newQuery<TSchema extends TableSchema, TReturn extends QueryType>(
