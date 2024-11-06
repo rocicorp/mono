@@ -121,27 +121,76 @@ export type RateLimit = Config<typeof perUserMutationLimit>;
 // so order the fields such that the important (e.g. required) ones are first.
 // (Exported for testing)
 export const zeroOptions = {
-  upstreamDB: {
-    type: v.string(),
-    desc: [
-      `The "upstream" authoritative postgres database.`,
-      `In the future we will support other types of upstream besides PG.`,
-    ],
+  upstream: {
+    db: {
+      type: v.string(),
+      desc: [
+        `The "upstream" authoritative postgres database.`,
+        `In the future we will support other types of upstream besides PG.`,
+      ],
+    },
+
+    maxConns: {
+      type: v.number().default(20),
+      desc: [
+        `The maximum number of connections to open to the upstream database`,
+        `for committing mutations. This is divided evenly amongst sync workers.`,
+        `In addition to this number, zero-cache uses one connection for the`,
+        `replication stream.`,
+        ``,
+        `Note that this number must allow for at least one connection per`,
+        `sync worker, or zero-cache will fail to start. See {bold --numSyncWorkers}`,
+      ],
+    },
+
+    maxConnsPerWorker: {
+      type: v.number().optional(),
+      hidden: true, // Passed from main thread to sync workers
+    },
   },
 
-  cvrDB: {
-    type: v.string(),
-    desc: [
-      `A separate Postgres database we use to store CVRs. CVRs (client view records)`,
-      `keep track of which clients have which data. This is how we know what diff to`,
-      `send on reconnect. It can be same database as above, but it makes most sense`,
-      `for it to be a separate "database" in the same postgres "cluster".`,
-    ],
+  cvr: {
+    db: {
+      type: v.string(),
+      desc: [
+        `A separate Postgres database we use to store CVRs. CVRs (client view records)`,
+        `keep track of which clients have which data. This is how we know what diff to`,
+        `send on reconnect. It can be same database as above, but it makes most sense`,
+        `for it to be a separate "database" in the same postgres "cluster".`,
+      ],
+    },
+
+    maxConns: {
+      type: v.number().default(30),
+      desc: [
+        `The maximum number of connections to open to the CVR database.`,
+        `This is divided evenly amongst sync workers.`,
+        ``,
+        `Note that this number must allow for at least one connection per`,
+        `sync worker, or zero-cache will fail to start. See {bold --numSyncWorkers}`,
+      ],
+    },
+
+    maxConnsPerWorker: {
+      type: v.number().optional(),
+      hidden: true, // Passed from main thread to sync workers
+    },
   },
 
-  changeDB: {
-    type: v.string(),
-    desc: [`Yet another Postgres database, used to store a replication log.`],
+  change: {
+    db: {
+      type: v.string(),
+      desc: [`Yet another Postgres database, used to store a replication log.`],
+    },
+
+    maxConns: {
+      type: v.number().default(1),
+      desc: [
+        `The maximum number of connections to open to the change database.`,
+        `This is used by the {bold change-streamer} for catching up`,
+        `{bold zero-cache} replication subscriptions.`,
+      ],
+    },
   },
 
   replicaFile: {

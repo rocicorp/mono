@@ -30,6 +30,33 @@ const lc = createLogContext(config.log, {worker: 'dispatcher'});
 const terminator = new Terminator(lc);
 const ready: Promise<void>[] = [];
 
+const numSyncers =
+  config.numSyncWorkers !== undefined
+    ? config.numSyncWorkers
+    : // Reserve 1 core for the replicator. The change-streamer is not CPU heavy.
+      Math.max(1, availableParallelism() - 1);
+
+if (config.upstream.maxConns < numSyncers) {
+  throw new Error(
+    `insufficient upstream connections (${config.upstream.maxConns}) for ${numSyncers} syncers`,
+  );
+}
+if (config.cvr.maxConns < numSyncers) {
+  throw new Error(
+    `insufficient cvr connections (${config.cvr.maxConns}) for ${numSyncers} syncers`,
+  );
+}
+
+const internalFlags: string[] =
+  numSyncers === 0
+    ? []
+    : [
+        '--upstream-max-conns-per-worker',
+        String(Math.floor(config.upstream.maxConns / numSyncers)),
+        '--cvr-max-conns-per-worker',
+        String(Math.floor(config.cvr.maxConns / numSyncers)),
+      ];
+
 function loadWorker(
   modulePath: string,
   type: WorkerType,
@@ -41,7 +68,7 @@ function loadWorker(
   // modulePath is .ts. If we have been compiled, it should be changed to .js
   modulePath = modulePath.replace(/\.ts$/, ext);
   const absModulePath = new URL(modulePath, import.meta.url).pathname;
-  const worker = childWorker(absModulePath, ...args);
+  const worker = childWorker(absModulePath, ...args, ...internalFlags);
   const name = path.basename(absModulePath, ext) + (id ? ` (${id})` : '');
   const {promise, resolve} = resolver();
   ready.push(promise);
@@ -57,17 +84,11 @@ const changeStreamer = config.changeStreamerURI
   ? resolve()
   : loadWorker('./change-streamer.ts', 'supporting').once('message', resolve);
 
-const numSyncers =
-  config.numSyncWorkers !== undefined
-    ? config.numSyncWorkers
-    : // Reserve 1 core for the replicator. The change-streamer is not CPU heavy.
-      Math.max(1, availableParallelism() - 1);
-
 if (numSyncers) {
   // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
   // but it is done here in the main thread because it is wasteful to have all of
   // the Syncers attempt the migration in parallel.
-  const cvrDB = pgClient(lc, config.cvrDB);
+  const cvrDB = pgClient(lc, config.cvr.db);
   await initViewSyncerSchema(lc, cvrDB);
   void cvrDB.end();
 }

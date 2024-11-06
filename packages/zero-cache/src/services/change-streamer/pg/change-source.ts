@@ -196,7 +196,11 @@ class PostgresChangeSource implements ChangeSource {
 
     const changeMaker = new ChangeMaker(this.#lc, this.#shardID);
     const service = new LogicalReplicationService(
-      {connectionString: this.#upstreamUri, ssl},
+      {
+        connectionString: this.#upstreamUri,
+        ssl,
+        ['application_name']: `zero-replicator`,
+      },
       {acknowledge: {auto: false, timeoutSeconds: 0}},
     )
       .on('start', () =>

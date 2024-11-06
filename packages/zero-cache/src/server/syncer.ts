@@ -1,6 +1,7 @@
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pid} from 'node:process';
+import {assert} from '../../../shared/src/asserts.js';
 import {must} from '../../../shared/src/must.js';
 import {randInt} from '../../../shared/src/rand.js';
 import {getZeroConfig} from '../config/zero-config.js';
@@ -24,26 +25,26 @@ import {createLogContext} from './logging.js';
 
 export default async function runWorker(parent: Worker): Promise<void> {
   const config = await getZeroConfig();
-
-  // Consider parameterizing these (in main) based on total number of workers.
-  const MAX_CVR_CONNECTIONS = 5;
-  const MAX_MUTAGEN_CONNECTIONS = 5;
+  assert(config.cvr.maxConnsPerWorker);
+  assert(config.upstream.maxConnsPerWorker);
 
   const lc = createLogContext(config.log, {worker: 'syncer'});
 
-  const cvrDB = pgClient(lc, config.cvrDB, {
-    max: MAX_CVR_CONNECTIONS,
+  const cvrDB = pgClient(lc, config.cvr.db, {
+    max: config.cvr.maxConnsPerWorker,
+    connection: {['application_name']: `zero-sync-worker-${pid}-cvr`},
   });
 
-  const upstreamDB = pgClient(lc, config.upstreamDB, {
-    max: MAX_MUTAGEN_CONNECTIONS,
+  const upstreamDB = pgClient(lc, config.upstream.db, {
+    max: config.upstream.maxConnsPerWorker,
+    connection: {['application_name']: `zero-sync-worker-${pid}-upstream`},
   });
 
   const dbWarmup = Promise.allSettled([
-    ...Array.from({length: MAX_CVR_CONNECTIONS}, () =>
+    ...Array.from({length: config.cvr.maxConnsPerWorker}, () =>
       cvrDB`SELECT 1`.simple().execute(),
     ),
-    ...Array.from({length: MAX_MUTAGEN_CONNECTIONS}, () =>
+    ...Array.from({length: config.upstream.maxConnsPerWorker}, () =>
       upstreamDB`SELECT 1`.simple().execute(),
     ),
   ]);
