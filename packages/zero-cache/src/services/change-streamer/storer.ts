@@ -8,7 +8,7 @@ import type {JSONValue} from '../../types/bigint-json.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {Service} from '../service.js';
 import type {WatermarkedChange} from './change-streamer-service.js';
-import type {ChangeEntry, Commit} from './change-streamer.js';
+import {ErrorType, type ChangeEntry, type Commit} from './change-streamer.js';
 import {Subscriber} from './subscriber.js';
 
 type QueueEntry = ['change', WatermarkedChange] | ['subscriber', Subscriber];
@@ -22,18 +22,51 @@ type PendingTransaction = {
 /**
  * Handles the storage of changes and the catchup of subscribers
  * that are behind.
+ *
+ * In the context of catchup and cleanup, it is the responsibility of the
+ * Storer to decide whether a client can be caught up, or whether the
+ * changes needed to catch a client up have been purged.
+ *
+ * **Maintained invariant**: The Change DB is only empty for a
+ * completely new replica (i.e. initial-sync with no changes from the
+ * replication stream).
+ * * In this case, all new subscribers are expected start from the
+ *   `replicaVersion`, which is the version at which initial sync
+ *   was performed, and any attempts to catchup from a different
+ *   point fail.
+ *
+ * Conversely, if non-initial changes have flowed through the system
+ * (i.e. via the replication stream), the ChangeDB must *not* be empty,
+ * and the earliest change in the `changeLog` represents the earliest
+ * "commit" from (after) which a subscriber can be caught up.
+ * * Any attempts to catchup from an earlier point must fail with
+ *   a `WatermarkTooOld` error.
+ * * Failure to do so could result in streaming changes to the
+ *   subscriber such that there is a gap in its replication history.
+ *
+ * Note: Subscribers (i.e. `incremental-syncer`) consider an "error" signal
+ * an unrecoverable error and shut down in response. This allows the
+ * production system to replace it with a new task and fresh copy of the
+ * replica backup.
  */
 export class Storer implements Service {
   readonly id = 'storer';
   readonly #lc: LogContext;
   readonly #db: PostgresDB;
+  readonly #replicaVersion: string;
   readonly #onCommit: (c: Commit) => void;
   readonly #queue = new Queue<QueueEntry>();
   readonly stopped = resolver<false>();
 
-  constructor(lc: LogContext, db: PostgresDB, onCommit: (c: Commit) => void) {
+  constructor(
+    lc: LogContext,
+    db: PostgresDB,
+    replicaVersion: string,
+    onCommit: (c: Commit) => void,
+  ) {
     this.#lc = lc;
     this.#db = db;
+    this.#replicaVersion = replicaVersion;
     this.#onCommit = onCommit;
   }
 
@@ -42,6 +75,32 @@ export class Storer implements Service {
       {max: string | null}[]
     >`SELECT MAX(watermark) as max FROM cdc."changeLog"`;
     return result[0].max;
+  }
+
+  async purgeRecordsBefore(watermark: string): Promise<number> {
+    // This is a sanity check to guarantee the invariant of the "changeLog"
+    // that it always contains at least one entry (from which catchup can proceed),
+    // unless no replication changes have flowed through the system
+    // (i.e. watermark === replicaVersion).
+    const exists = await this.#db`
+      SELECT watermark FROM cdc."changeLog" WHERE watermark = ${watermark}`;
+    // Watermark boundaries should always be "commit" entries, which are the sole
+    // entry with that watermark (i.e. exists.length === 1). It follows that
+    // catchup, which proceeds from the next entry, always starts with a
+    // "begin" entry.
+    if (exists.length !== 1 && watermark !== this.#replicaVersion) {
+      this.#lc.warn?.(
+        `rejecting attempted to purge up to watermark ${watermark} with ${exists.length} entries`,
+      );
+      return 0;
+    }
+    const result = await this.#db<{deleted: bigint}[]>`
+      WITH purged AS (
+        DELETE FROM cdc."changeLog" WHERE watermark < ${watermark} 
+          RETURNING watermark, pos
+      ) SELECT COUNT(*) as deleted FROM purged;`;
+
+    return Number(result[0].deleted);
   }
 
   store(entry: WatermarkedChange) {
@@ -160,25 +219,52 @@ export class Storer implements Service {
     try {
       await reader.processReadTask(async tx => {
         const start = Date.now();
+
+        // When starting from initial-sync, there won't be a change with a watermark
+        // equal to the replica version. This is the empty changeLog scenario.
+        let watermarkFound = sub.watermark === this.#replicaVersion;
         let count = 0;
         for await (const entries of tx<ChangeEntry[]>`
           SELECT watermark, change FROM cdc."changeLog"
-           WHERE watermark > ${sub.watermark}
+           WHERE watermark >= ${sub.watermark}
            ORDER BY watermark, pos`.cursor(10000)) {
           for (const entry of entries) {
-            sub.catchup(toDownstream(entry));
-            count++;
+            if (entry.watermark === sub.watermark) {
+              // This should be the first entry.
+              // Catchup starts from *after* the watermark.
+              watermarkFound = true;
+            } else if (watermarkFound) {
+              sub.catchup(toDownstream(entry));
+              count++;
+            } else {
+              this.#lc.warn?.(
+                `rejecting subscriber at watermark ${sub.watermark}`,
+              );
+              sub.close(
+                ErrorType.WatermarkTooOld,
+                `earliest supported watermark is ${entry.watermark} (requested ${sub.watermark})`,
+              );
+              return;
+            }
           }
         }
-        // Flushes the backlog of messages buffered during catchup and
-        // allows the subscription to forward subsequent messages immediately.
-        sub.setCaughtUp();
+        if (watermarkFound) {
+          // Flushes the backlog of messages buffered during catchup and
+          // allows the subscription to forward subsequent messages immediately.
+          sub.setCaughtUp();
 
-        this.#lc.info?.(
-          `caught up ${sub.id} with ${count} changes (${
-            Date.now() - start
-          } ms)`,
-        );
+          this.#lc.info?.(
+            `caught up ${sub.id} with ${count} changes (${
+              Date.now() - start
+            } ms)`,
+          );
+        } else {
+          this.#lc.warn?.(`rejecting subscriber at watermark ${sub.watermark}`);
+          sub.close(
+            ErrorType.WatermarkNotFound,
+            `cannot catch up from requested watermark ${sub.watermark}`,
+          );
+        }
       });
     } catch (err) {
       sub.fail(err);

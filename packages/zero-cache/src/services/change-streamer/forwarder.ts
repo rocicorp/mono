@@ -1,3 +1,4 @@
+import {joinIterables, wrapIterable} from '../../../../shared/src/iterables.js';
 import type {WatermarkedChange} from './change-streamer-service.js';
 import {Subscriber} from './subscriber.js';
 
@@ -55,5 +56,14 @@ export class Forwarder {
         this.#queued.clear();
         break;
     }
+  }
+
+  getAcks(): Set<string> {
+    return new Set(
+      joinIterables(
+        wrapIterable(this.#active).map(s => s.acked),
+        wrapIterable(this.#queued).map(s => s.acked),
+      ),
+    );
   }
 }
