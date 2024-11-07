@@ -3,22 +3,7 @@ import {config} from '../shared/src/tool/vitest-config.js';
 
 const {define, esbuild} = config;
 
-const baseConfig = defineConfig({
-  define,
-  esbuild,
-  test: {
-    onConsoleLog(log: string) {
-      if (
-        log.includes(
-          'insert or update on table "fk_ref" violates foreign key constraint "fk_ref_ref_fkey"',
-        )
-      ) {
-        return false;
-      }
-      return undefined;
-    },
-  },
-});
+const baseConfig = defineConfig({define, esbuild});
 
 const pgConfigForVersion = (version: number) =>
   mergeConfig(baseConfig, {
