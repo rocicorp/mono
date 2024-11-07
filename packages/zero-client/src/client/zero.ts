@@ -599,7 +599,7 @@ export class Zero<const S extends Schema> {
 
   #createLogOptions(options: {
     consoleLogLevel: LogLevel;
-    server: string | null;
+    server: HTTPString | null;
     enableAnalytics: boolean;
   }): LogOptions {
     if (TESTING) {
