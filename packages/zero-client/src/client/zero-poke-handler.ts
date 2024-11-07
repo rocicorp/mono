@@ -5,7 +5,7 @@ import type {
   PokeInternal,
 } from '../../../replicache/src/impl.js';
 import type {ClientID, PatchOperation} from '../../../replicache/src/mod.js';
-import {getBrowserGlobal} from '../../../shared/src/browser-env.js';
+import {getBrowserGlobalMethod} from '../../../shared/src/browser-env.js';
 import type {
   ClientsPatchOp,
   PokeEndBody,
@@ -50,7 +50,8 @@ export class PokeHandler {
   readonly #pokeLock = new Lock();
   readonly #schema: NormalizedSchema;
 
-  readonly #raf = getBrowserGlobal('requestAnimationFrame') ?? rafFallback;
+  readonly #raf =
+    getBrowserGlobalMethod('requestAnimationFrame') ?? rafFallback;
 
   constructor(
     replicachePoke: (poke: PokeInternal) => Promise<void>,
