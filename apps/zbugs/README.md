@@ -61,6 +61,9 @@ ZERO_JWT_SECRET = "my-localhost-testing-secret"
 
 #### ZBugs API Server Variables ####
 
+# Same as ZERO_UPSTREAM_DB above.
+UPSTREAM_URI = "postgresql://user:password@127.0.0.1:6434/postgres"
+
 # The client id for the GitHub OAuth app responisble for OAuth:
 # https://docs.github.com/en/apps/creating-github-apps
 # Rocicorp team, see:
