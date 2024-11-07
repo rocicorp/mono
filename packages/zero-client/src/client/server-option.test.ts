@@ -35,15 +35,15 @@ test('getServer', () => {
 
   expectError(
     'https://myapp-myteam.zero.ms/foo/bar',
-    `ZeroOptions.server must have at most one path component. For example: "https://myapp-myteam.zero.ms/zero".`,
+    `ZeroOptions.server may have at most one path component. For example: "https://myapp-myteam.zero.ms/zero".`,
   );
   expectError(
     'https://myapp-myteam.zero.ms/foo//',
-    `ZeroOptions.server must have at most one path component. For example: "https://myapp-myteam.zero.ms/zero".`,
+    `ZeroOptions.server may have at most one path component. For example: "https://myapp-myteam.zero.ms/zero".`,
   );
   expectError(
     'https://myapp-myteam.zero.ms///',
-    `ZeroOptions.server must have at most one path component. For example: "https://myapp-myteam.zero.ms/zero".`,
+    `ZeroOptions.server may have at most one path component. For example: "https://myapp-myteam.zero.ms/zero".`,
   );
 
   expectError(

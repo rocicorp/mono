@@ -33,7 +33,7 @@ function validateServerParam(paramName: string, server: string): HTTPString {
   }
   if (pathComponents.length > 1) {
     throw new Error(
-      `ZeroOptions.${paramName} must have at most one path component.${forExample(
+      `ZeroOptions.${paramName} may have at most one path component.${forExample(
         'zero',
       )}`,
     );
