@@ -13,8 +13,8 @@ declare module 'vitest' {
 // Set by ./test/pg-container-setup.ts
 const CONNECTION_URI = inject('pgContainerConnectionString');
 assert(
-  CONNECTION_URI.length > 0,
-  'pg-container-setup.ts must be executed to setup the pgContainerConnectionString',
+  CONNECTION_URI,
+  'test file must have suffix ".pg-test.ts" to setup postgres container',
 );
 
 export type OnNoticeFn = (n: postgres.Notice) => void;
