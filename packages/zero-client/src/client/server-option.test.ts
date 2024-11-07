@@ -14,6 +14,15 @@ test('getServer', () => {
   expect(getServer('http://myapp-myteam.zero.ms')).equal(
     'http://myapp-myteam.zero.ms/',
   );
+  expect(getServer('https://myapp-myteam.zero.ms/foo')).equal(
+    'https://myapp-myteam.zero.ms/foo',
+  );
+  expect(getServer('https://myapp-myteam.zero.ms/foo/')).equal(
+    'https://myapp-myteam.zero.ms/foo/',
+  );
+  expect(getServer('https://myapp-myteam.zero.ms//')).equal(
+    'https://myapp-myteam.zero.ms//',
+  );
 
   const expectError = (server: string, expectedError: string) => {
     expect(() => getServer(server)).to.throw(expectedError);
@@ -23,6 +32,20 @@ test('getServer', () => {
     'myapp-myteam.zero.ms',
     `ZeroOptions.server must use the "http" or "https" scheme.`,
   );
+
+  expectError(
+    'https://myapp-myteam.zero.ms/foo/bar',
+    `ZeroOptions.server must have at most one path component. For example: "https://myapp-myteam.zero.ms/zero".`,
+  );
+  expectError(
+    'https://myapp-myteam.zero.ms/foo//',
+    `ZeroOptions.server must have at most one path component. For example: "https://myapp-myteam.zero.ms/zero".`,
+  );
+  expectError(
+    'https://myapp-myteam.zero.ms///',
+    `ZeroOptions.server must have at most one path component. For example: "https://myapp-myteam.zero.ms/zero".`,
+  );
+
   expectError(
     'https://myapp-myteam.zero.ms/?',
     'ZeroOptions.server must not contain a search component. For example: "https://myapp-myteam.zero.ms/".',

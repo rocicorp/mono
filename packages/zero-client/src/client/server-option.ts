@@ -2,8 +2,8 @@ import type {HTTPString} from './http-string.js';
 
 function validateServerParam(paramName: string, server: string): HTTPString {
   const expectedProtocol = 'http';
-  const forExample = () =>
-    ` For example: "${expectedProtocol}s://myapp-myteam.zero.ms/".`;
+  const forExample = (path: string = '') =>
+    ` For example: "${expectedProtocol}s://myapp-myteam.zero.ms/${path}".`;
 
   if (
     !server.startsWith(`${expectedProtocol}://`) &&
@@ -23,6 +23,21 @@ function validateServerParam(paramName: string, server: string): HTTPString {
   }
 
   const urlString = url.toString();
+
+  const pathComponents = url.pathname.split('/');
+  if (pathComponents[0] === '') {
+    pathComponents.shift();
+  }
+  if (pathComponents[pathComponents.length - 1] === '') {
+    pathComponents.pop();
+  }
+  if (pathComponents.length > 1) {
+    throw new Error(
+      `ZeroOptions.${paramName} must have at most one path component.${forExample(
+        'zero',
+      )}`,
+    );
+  }
 
   for (const [property, invalidEndsWith] of [
     ['search', '?'],

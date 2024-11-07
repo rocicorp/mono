@@ -8,10 +8,14 @@ import type {Schema} from '../../../zero-schema/src/mod.js';
  */
 export interface ZeroOptions<S extends Schema> {
   /**
-   * Server url prefix to connect to, for example
-   * "https://myapp-myteam.zero.ms".
-   * This can include a path prefix, for example:
-   * "https://myapp-myteam.zero.ms/zero"
+   * URL to the server. This can be a simple hostname, e.g.
+   * - "https://myapp-myteam.zero.ms"
+   * or a prefix with a single path component, e.g.
+   * - "https://myapp-myteam.zero.ms/zero"
+   * - "https://myapp-myteam.zero.ms/db"
+   *
+   * The latter is useful for configuring routing rules (e.g. "zero/**") when
+   * the server is hosted on the same domain as the application.
    */
   server?: string | null | undefined;
 
