@@ -94,7 +94,7 @@ export const enum ErrorType {
   Unknown,
   WrongReplicaVersion,
   WatermarkTooOld,
-  WatermarkNotFound = 3,
+  WatermarkNotFound,
 }
 
 const subscriptionErrorSchema = v.object({
