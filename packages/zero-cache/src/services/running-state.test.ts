@@ -1,6 +1,6 @@
+import {expect, test, vi} from 'vitest';
 import {AbortError} from '../../../shared/src/abort-error.js';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
-import {expect, test, vi} from 'vitest';
 import {RunningState} from './running-state.js';
 
 const lc = createSilentLogContext();
@@ -31,6 +31,7 @@ test('backoff', () => {
   const state = new RunningState(
     'foo-service',
     {initialRetryDelay: 1000, maxRetryDelay: 13_000},
+    setTimeout,
     mockSleep,
   );
 

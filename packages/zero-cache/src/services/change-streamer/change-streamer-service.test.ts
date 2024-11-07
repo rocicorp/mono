@@ -1,6 +1,14 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+  type Mock,
+} from 'vitest';
 import {AbortError} from '../../../../shared/src/abort-error.js';
 import {assert} from '../../../../shared/src/asserts.js';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
@@ -17,11 +25,12 @@ import {
 } from '../replicator/schema/replication-state.js';
 import {ReplicationMessages} from '../replicator/test-utils.js';
 import {initializeStreamer} from './change-streamer-service.js';
-import type {
-  ChangeStreamerService,
-  Commit,
-  Downstream,
-  DownstreamChange,
+import {
+  ErrorType,
+  type ChangeStreamerService,
+  type Commit,
+  type Downstream,
+  type DownstreamChange,
 } from './change-streamer.js';
 import type {ChangeLogEntry} from './schema/tables.js';
 
@@ -32,6 +41,10 @@ describe('change-streamer/service', () => {
   let changes: Subscription<DownstreamChange>;
   let acks: Queue<Commit>;
   let streamerDone: Promise<void>;
+
+  // vi.useFakeTimers() does not play well with the postgres client.
+  // Inject a manual mock instead.
+  let setTimeoutFn: Mock<typeof setTimeout>;
 
   const REPLICA_VERSION = '01';
 
@@ -45,6 +58,7 @@ describe('change-streamer/service', () => {
 
     changes = Subscription.create();
     acks = new Queue();
+    setTimeoutFn = vi.fn();
 
     streamer = await initializeStreamer(
       lc,
@@ -58,6 +72,7 @@ describe('change-streamer/service', () => {
           }),
       },
       getSubscriptionState(new StatementRunner(replica)),
+      setTimeoutFn as unknown as typeof setTimeout,
     );
     streamerDone = streamer.run();
   });
@@ -287,6 +302,108 @@ describe('change-streamer/service', () => {
       tag: 'commit',
       extra: 'info',
     });
+  });
+
+  test('change log cleanup', async () => {
+    // Initialize the change log with entries that will be purged.
+    await changeDB`
+      INSERT INTO cdc."changeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
+      INSERT INTO cdc."changeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"commit"}'::json);
+      INSERT INTO cdc."changeLog" (watermark, pos, change) VALUES ('05', 0, '{"tag":"begin"}'::json);
+      INSERT INTO cdc."changeLog" (watermark, pos, change) VALUES ('06', 0, '{"tag":"commit"}'::json);
+      INSERT INTO cdc."changeLog" (watermark, pos, change) VALUES ('07', 0, '{"tag":"begin"}'::json);
+      INSERT INTO cdc."changeLog" (watermark, pos, change) VALUES ('08', 0, '{"tag":"commit"}'::json);
+    `.simple();
+
+    // Start two subscribers: one at 06 and one at 04
+    await streamer.subscribe({
+      id: 'myid1',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
+    const sub2 = await streamer.subscribe({
+      id: 'myid2',
+      watermark: '04',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
+    expect(
+      await changeDB`SELECT watermark FROM cdc."changeLog"`.values(),
+    ).toEqual([['03'], ['04'], ['05'], ['06'], ['07'], ['08']]);
+
+    expect(setTimeoutFn).toHaveBeenCalledTimes(1);
+    expect(setTimeoutFn.mock.calls[0][1]).toBe(30000);
+
+    // The first purge should have deleted records before '04'.
+    await (setTimeoutFn.mock.calls[0][0]() as unknown as Promise<void>);
+    expect(
+      await changeDB`SELECT watermark FROM cdc."changeLog"`.values(),
+    ).toEqual([['04'], ['05'], ['06'], ['07'], ['08']]);
+
+    expect(setTimeoutFn).toHaveBeenCalledTimes(2);
+
+    // The second purge should be a noop, because sub2 is still at '04'.
+    await (setTimeoutFn.mock.calls[1][0]() as unknown as Promise<void>);
+    expect(
+      await changeDB`SELECT watermark FROM cdc."changeLog"`.values(),
+    ).toEqual([['04'], ['05'], ['06'], ['07'], ['08']]);
+
+    // And the timer should thus be rescheduled.
+    expect(setTimeoutFn).toHaveBeenCalledTimes(3);
+
+    for await (const msg of sub2) {
+      if (msg[0] === 'commit' && msg[2].watermark === '08') {
+        // Now that sub2 has consumed past '06',
+        // a purge should successfully clear records before '06'
+        await (setTimeoutFn.mock.calls[2][0]() as unknown as Promise<void>);
+        expect(
+          await changeDB`SELECT watermark FROM cdc."changeLog"`.values(),
+        ).toEqual([['06'], ['07'], ['08']]);
+        break;
+      }
+    }
+
+    // No more timeouts should have been scheduled because both initialWatermarks
+    // were cleaned up.
+    expect(setTimeoutFn).toHaveBeenCalledTimes(3);
+
+    // New connections earlier than 06 should now be rejected.
+    const sub3 = await streamer.subscribe({
+      id: 'myid2',
+      watermark: '04',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
+    const msgs = drainToQueue(sub3);
+    expect(await msgs.dequeue()).toEqual([
+      'error',
+      {
+        type: ErrorType.WatermarkTooOld,
+        message: 'earliest supported watermark is 06 (requested 04)',
+      },
+    ]);
+  });
+
+  test('wrong replica version', async () => {
+    const sub = await streamer.subscribe({
+      id: 'myid1',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION + 'foobar',
+      initial: true,
+    });
+
+    const msgs = drainToQueue(sub);
+    expect(await msgs.dequeue()).toEqual([
+      'error',
+      {
+        type: ErrorType.WrongReplicaVersion,
+        message: 'current replica version is 01 (requested 01foobar)',
+      },
+    ]);
   });
 
   test('retry on initial stream failure', async () => {

@@ -4,7 +4,7 @@ import {AbortError} from '../../../shared/src/abort-error.js';
 import {sleepWithAbort} from '../../../shared/src/sleep.js';
 
 const DEFAULT_INITIAL_RETRY_DELAY_MS = 100;
-const DEFAULT_MAX_RETRY_DELAY_MS = 10000;
+export const DEFAULT_MAX_RETRY_DELAY_MS = 10000;
 
 export type RetryConfig = {
   initialRetryDelay?: number;
@@ -24,15 +24,18 @@ export class RunningState {
   readonly #serviceName: string;
   readonly #controller: AbortController;
   readonly #sleep: typeof sleepWithAbort;
+  readonly #setTimeout: typeof setTimeout;
   readonly #stopped: Promise<void>;
 
   readonly #initialRetryDelay: number;
   readonly #maxRetryDelay: number;
+  readonly #pendingTimeouts = new Set<NodeJS.Timeout>();
   #retryDelay: number;
 
   constructor(
     serviceName: string,
     retryConfig?: RetryConfig,
+    setTimeoutFn = setTimeout,
     sleeper = sleepWithAbort,
   ) {
     const {
@@ -47,12 +50,21 @@ export class RunningState {
 
     this.#controller = new AbortController();
     this.#sleep = sleeper;
+    this.#setTimeout = setTimeoutFn;
 
     const {promise, resolve} = resolver();
     this.#stopped = promise;
-    this.#controller.signal.addEventListener('abort', () => resolve(), {
-      once: true,
-    });
+    this.#controller.signal.addEventListener(
+      'abort',
+      () => {
+        resolve();
+        for (const timeout of this.#pendingTimeouts) {
+          clearTimeout(timeout);
+        }
+        this.#pendingTimeouts.clear();
+      },
+      {once: true},
+    );
   }
 
   /**
@@ -73,6 +85,23 @@ export class RunningState {
     const onStop = () => c.cancel();
     this.#controller.signal.addEventListener('abort', onStop, {once: true});
     return () => this.#controller.signal.removeEventListener('abort', onStop);
+  }
+
+  /**
+   * Sets a Timeout that is automatically cancelled if the service is cancelled.
+   */
+  setTimeout<TArgs extends unknown[]>(
+    fn: (...args: TArgs) => void,
+    timeoutMs: number,
+    ...args: TArgs
+  ) {
+    const timeout = this.#setTimeout(() => {
+      clearTimeout(timeout);
+      this.#pendingTimeouts.delete(timeout);
+      return fn(...args);
+    }, timeoutMs);
+
+    this.#pendingTimeouts.add(timeout);
   }
 
   /**
