@@ -7,7 +7,6 @@ const baseConfig = defineConfig({
   define,
   esbuild,
   test: {
-    // include: ['src/**/*.test.?(c|m)[jt]s?(x)'],
     onConsoleLog(log: string) {
       if (
         log.includes(
@@ -21,12 +20,12 @@ const baseConfig = defineConfig({
   },
 });
 
-const configFor = (pgName: string) =>
+const pgConfigForVersion = (version: number) =>
   mergeConfig(baseConfig, {
     test: {
-      name: pgName,
+      name: `pg-${version}`,
       include: ['src/**/*.pg-test.?(c|m)[jt]s?(x)'],
-      globalSetup: [`./test/${pgName}.ts`],
+      globalSetup: [`./test/pg-${version}.ts`],
     },
   });
 
@@ -37,7 +36,7 @@ export default defineWorkspace([
       include: ['src/**/*.test.?(c|m)[jt]s?(x)'],
     },
   }),
-  configFor('pg-15'),
-  configFor('pg-16'),
-  configFor('pg-17'),
+  pgConfigForVersion(15),
+  pgConfigForVersion(16),
+  pgConfigForVersion(17),
 ]);
