@@ -866,12 +866,13 @@ textarea.autoResize {
 
 .markdown-container ul {
   list-style-type: disc;
-  list-style-position: inside;
+  list-style-position: outside;
+  padding-left: 2.3rem;
 }
 
 .markdown-container ul.contains-task-list {
   list-style-type: none;
-  padding-left: 1.1rem;
+  padding-left: 1rem;
 }
 
 .markdown-container ul.contains-task-list input[type='checkbox'] {
@@ -884,6 +885,8 @@ textarea.autoResize {
 .markdown-container ul.contains-task-list li.task-list-item {
   display: flex;
   align-items: center;
+  gap: 0.1rem;
+  padding-left: 0;
 }
 
 .markdown-container ul.contains-task-list li.task-list-item::before {
@@ -936,7 +939,7 @@ textarea.autoResize {
 }
 
 .markdown-container ul li {
-  padding: 0.25rem 0;
+  padding: 0.25rem 0 0.25rem 1.05rem;
   line-height: 2;
 }
 
