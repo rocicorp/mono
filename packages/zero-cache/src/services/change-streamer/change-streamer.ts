@@ -24,8 +24,6 @@ import {
  * * **Acknowledgements** are sent upstream after they are successfully
  *   stored.
  *
- * **Cleanup** (Not yet implemented)
- *
  * Unlike Postgres replication slots, in which the progress of a static
  * subscriber is tracked in the replication slot, the ChangeStreamer
  * supports a dynamic set of subscribers (i.e.. zero-caches) that can
@@ -50,7 +48,6 @@ export interface ChangeStreamer {
    * which indicates the watermark at which the subscriber is up to
    * date.
    */
-  // TODO: Also take a Source<Upstream> for receiving ACKs.
   subscribe(ctx: SubscriberContext): Promise<Source<Downstream>>;
 }
 
@@ -97,6 +94,7 @@ export const enum ErrorType {
   Unknown,
   WrongReplicaVersion,
   WatermarkTooOld,
+  WatermarkNotFound,
 }
 
 const subscriptionErrorSchema = v.object({

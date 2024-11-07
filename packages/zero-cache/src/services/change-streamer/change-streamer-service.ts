@@ -1,9 +1,9 @@
 import {LogContext} from '@rocicorp/logger';
-import {oneAfter} from '../../types/lexi-version.js';
+import {min, oneAfter} from '../../types/lexi-version.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {Sink, Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
-import {RunningState} from '../running-state.js';
+import {DEFAULT_MAX_RETRY_DELAY_MS, RunningState} from '../running-state.js';
 import {
   type ChangeStreamerService,
   type Commit,
@@ -29,13 +29,20 @@ export async function initializeStreamer(
   changeDB: PostgresDB,
   changeSource: ChangeSource,
   replicationConfig: ReplicationConfig,
+  setTimeoutFn = setTimeout,
 ): Promise<ChangeStreamerService> {
   // Make sure the ChangeLog DB is set up.
   await initChangeStreamerSchema(lc, changeDB);
   await ensureReplicationConfig(lc, changeDB, replicationConfig);
 
   const {replicaVersion} = replicationConfig;
-  return new ChangeStreamerImpl(lc, changeDB, replicaVersion, changeSource);
+  return new ChangeStreamerImpl(
+    lc,
+    changeDB,
+    replicaVersion,
+    changeSource,
+    setTimeoutFn,
+  );
 }
 
 /**
@@ -189,6 +196,26 @@ export interface ChangeSource {
  * exposed in the `Downstream` `Commit` message. The Subscriber object thus compares
  * the internal watermarks of the incoming messages against the commit watermark of
  * the caller, updating the watermark at every `Commit` message that is forwarded.
+ *
+ * ### Cleanup
+ *
+ * As mentioned in the {@link ChangeStreamer} documentation: "the ChangeStreamer
+ * uses a combination of [the "initial", i.e. backup-derived watermark and] ACK
+ * responses from connected subscribers to determine the watermark up
+ * to which it is safe to purge old change log entries."
+ *
+ * More concretely:
+ *
+ * * The `initial`, backup-derived watermark is the earliest to which cleanup
+ *   should ever happen.
+ *
+ * * However, it is possible for the replica backup to be *ahead* of a connected
+ *   subscriber; and if a network error causes that subscriber to retry from its
+ *   last watermark, the change streamer must support it.
+ *
+ * Thus, before cleaning up to an `initial` backup-derived watermark, the change
+ * streamer first confirms that all connected subscribers have also passed
+ * that watermark.
  */
 class ChangeStreamerImpl implements ChangeStreamerService {
   readonly id: string;
@@ -198,7 +225,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #storer: Storer;
   readonly #forwarder: Forwarder;
 
-  readonly #state = new RunningState('ChangeStreamer');
+  readonly #state: RunningState;
+  readonly #initialWatermarks = new Set<string>();
   #stream: ChangeStream | undefined;
 
   constructor(
@@ -206,6 +234,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     changeDB: PostgresDB,
     replicaVersion: string,
     source: ChangeSource,
+    setTimeoutFn = setTimeout,
   ) {
     this.id = `change-streamer`;
     this.#lc = lc.withContext('component', 'change-streamer');
@@ -214,9 +243,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#storer = new Storer(
       lc,
       changeDB,
+      replicaVersion,
       commit => this.#stream?.acks.push(commit),
     );
     this.#forwarder = new Forwarder();
+    this.#state = new RunningState(this.id, undefined, setTimeoutFn);
   }
 
   async run() {
@@ -259,20 +290,74 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   }
 
   subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
-    const {id, watermark} = ctx;
+    const {id, replicaVersion, watermark, initial} = ctx;
     const downstream = Subscription.create<Downstream>({
       cleanup: () => this.#forwarder.remove(subscriber),
     });
     const subscriber = new Subscriber(id, watermark, downstream);
-    if (ctx.replicaVersion !== this.#replicaVersion) {
-      subscriber.close(ErrorType.WrongReplicaVersion);
+    if (replicaVersion !== this.#replicaVersion) {
+      this.#lc.warn?.(
+        `rejecting subscriber at replica version ${replicaVersion}`,
+      );
+      subscriber.close(
+        ErrorType.WrongReplicaVersion,
+        `current replica version is ${
+          this.#replicaVersion
+        } (requested ${replicaVersion})`,
+      );
     } else {
       this.#lc.debug?.(`adding subscriber ${subscriber.id}`);
 
       this.#forwarder.add(subscriber);
       this.#storer.catchup(subscriber);
+
+      if (initial) {
+        this.#scheduleCleanup(watermark);
+      }
     }
     return Promise.resolve(downstream);
+  }
+
+  #scheduleCleanup(watermark: string) {
+    const origSize = this.#initialWatermarks.size;
+    this.#initialWatermarks.add(watermark);
+
+    if (origSize === 0) {
+      this.#state.setTimeout(() => this.#purgeOldChanges(), CLEANUP_DELAY_MS);
+    }
+  }
+
+  async #purgeOldChanges(): Promise<void> {
+    const initial = [...this.#initialWatermarks];
+    if (initial.length === 0) {
+      this.#lc.warn?.('No initial watermarks to check for cleanup'); // Not expected.
+      return;
+    }
+    const current = [...this.#forwarder.getAcks()];
+    if (current.length === 0) {
+      // Also not expected, but possible (e.g. subscriber connects, then disconnects).
+      // Bail to be safe.
+      this.#lc.warn?.('No subscribers to confirm cleanup');
+      return;
+    }
+    try {
+      const earliestInitial = min(initial[0], ...initial.slice(1));
+      const earliestCurrent = min(current[0], ...current.slice(1));
+      if (earliestCurrent < earliestInitial) {
+        this.#lc.info?.(
+          `At least one client is behind backup (${earliestCurrent} < ${earliestInitial})`,
+        );
+      } else {
+        const deleted = await this.#storer.purgeRecordsBefore(earliestInitial);
+        this.#lc.info?.(`Purged ${deleted} changes before ${earliestInitial}`);
+        this.#initialWatermarks.delete(earliestInitial);
+      }
+    } finally {
+      if (this.#initialWatermarks.size) {
+        // If there are unpurged watermarks to check, schedule the next purge.
+        this.#state.setTimeout(() => this.#purgeOldChanges(), CLEANUP_DELAY_MS);
+      }
+    }
   }
 
   async stop(err?: unknown) {
@@ -281,3 +366,20 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     await this.#storer.stop();
   }
 }
+
+// The delay between receiving an initial, backup-based watermark
+// and performing a check of whether to purge records before it.
+// This delay should be long enough to handle situations like the following:
+//
+// 1. `litestream restore` downloads a backup for the `replication-manager`
+// 2. `replication-manager` starts up and runs this `change-streamer`
+// 3. `zero-cache`s that are running on a different replica connect to this
+//    `change-streamer` after exponential backoff retries.
+//
+// It is possible for a `zero-cache`[3] to be behind the backup restored [1].
+// This cleanup delay (30 seconds) is thus set to be a value comfortably
+// longer than the max delay for exponential backoff (10 seconds) in
+// `services/running-state.ts`. This allows the `zero-cache` [3] to reconnect
+// so that the `change-streamer` can track its progress and know when it has
+// surpassed the initial watermark of the backup [1].
+const CLEANUP_DELAY_MS = DEFAULT_MAX_RETRY_DELAY_MS * 3;

@@ -5,7 +5,7 @@ import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {Subscription} from '../../types/subscription.js';
 import {ReplicationMessages} from '../replicator/test-utils.js';
-import type {Commit, Downstream} from './change-streamer.js';
+import {ErrorType, type Commit, type Downstream} from './change-streamer.js';
 import {setupCDCTables} from './schema/tables.js';
 import {Storer} from './storer.js';
 import {createSubscriber} from './test-utils.js';
@@ -16,6 +16,8 @@ describe('change-streamer/storer', () => {
   let storer: Storer;
   let done: Promise<void>;
   let commits: Queue<Commit>;
+
+  const REPLICA_VERSION = '00';
 
   beforeEach(async () => {
     db = await testDBs.create('change_streamer_storer');
@@ -33,7 +35,9 @@ describe('change-streamer/storer', () => {
       );
     });
     commits = new Queue();
-    storer = new Storer(lc, db, commit => commits.enqueue(commit));
+    storer = new Storer(lc, db, REPLICA_VERSION, commit =>
+      commits.enqueue(commit),
+    );
     done = storer.run();
   });
 
@@ -45,21 +49,52 @@ describe('change-streamer/storer', () => {
 
   const messages = new ReplicationMessages({issues: 'id'});
 
-  async function drainUntilCommit(
-    watermark: string,
-    sub: Subscription<Downstream>,
-  ) {
+  async function drain(sub: Subscription<Downstream>, untilWatermark?: string) {
     const msgs: Downstream[] = [];
     for await (const msg of sub) {
       msgs.push(msg);
-      if (msg[0] === 'commit' && msg[2].watermark === watermark) {
+      if (msg[0] === 'commit' && msg[2].watermark === untilWatermark) {
         break;
       }
     }
     return msgs;
   }
 
-  test('last stored watermark', async () => {
+  test('purge', async () => {
+    expect(await storer.purgeRecordsBefore('02')).toBe(0);
+    expect(await db`SELECT watermark, pos FROM cdc."changeLog"`).toEqual([
+      {watermark: '02', pos: 0n},
+      {watermark: '02', pos: 1n},
+      {watermark: '03', pos: 2n},
+      {watermark: '04', pos: 0n},
+      {watermark: '04', pos: 1n},
+      {watermark: '06', pos: 2n},
+    ]);
+
+    expect(await storer.purgeRecordsBefore('03')).toBe(2);
+    expect(await db`SELECT watermark, pos FROM cdc."changeLog"`).toEqual([
+      {watermark: '03', pos: 2n},
+      {watermark: '04', pos: 0n},
+      {watermark: '04', pos: 1n},
+      {watermark: '06', pos: 2n},
+    ]);
+
+    // Should be rejected as an invalid watermark.
+    expect(await storer.purgeRecordsBefore('04')).toBe(0);
+    expect(await db`SELECT watermark, pos FROM cdc."changeLog"`).toEqual([
+      {watermark: '03', pos: 2n},
+      {watermark: '04', pos: 0n},
+      {watermark: '04', pos: 1n},
+      {watermark: '06', pos: 2n},
+    ]);
+
+    expect(await storer.purgeRecordsBefore('06')).toBe(3);
+    expect(await db`SELECT watermark, pos FROM cdc."changeLog"`).toEqual([
+      {watermark: '06', pos: 2n},
+    ]);
+  });
+
+  test('stored watermarks', async () => {
     expect(await storer.getLastStoredWatermark()).toBe('06');
 
     await db`TRUNCATE TABLE cdc."changeLog"`;
@@ -77,7 +112,7 @@ describe('change-streamer/storer', () => {
     // Catchup should start immediately since there are no txes in progress.
     storer.catchup(sub);
 
-    expect(await drainUntilCommit('08', stream)).toMatchInlineSnapshot(`
+    expect(await drain(stream, '08')).toMatchInlineSnapshot(`
       [
         [
           "begin",
@@ -144,6 +179,38 @@ describe('change-streamer/storer', () => {
     `);
   });
 
+  test('watermark too old', async () => {
+    // '01' is not the replica version, and not a watermark in the changeLog
+    const [sub, _, stream] = createSubscriber('01');
+    storer.catchup(sub);
+
+    expect(await drain(stream)).toEqual([
+      [
+        'error',
+        {
+          type: ErrorType.WatermarkTooOld,
+          message: 'earliest supported watermark is 02 (requested 01)',
+        },
+      ],
+    ]);
+  });
+
+  test('watermark not found', async () => {
+    // '123' is some watermark from the future.
+    const [sub, _, stream] = createSubscriber('123');
+    storer.catchup(sub);
+
+    expect(await drain(stream)).toEqual([
+      [
+        'error',
+        {
+          type: ErrorType.WatermarkNotFound,
+          message: 'cannot catch up from requested watermark 123',
+        },
+      ],
+    ]);
+  });
+
   test('queued if transaction in progress', async () => {
     const [sub1, _0, stream1] = createSubscriber('03');
     const [sub2, _1, stream2] = createSubscriber('06');
@@ -173,7 +240,7 @@ describe('change-streamer/storer', () => {
 
     // Catchup should wait for the transaction to complete before querying
     // the database, and start after watermark '03'.
-    expect(await drainUntilCommit('0a', stream1)).toMatchInlineSnapshot(`
+    expect(await drain(stream1, '0a')).toMatchInlineSnapshot(`
       [
         [
           "begin",
@@ -235,7 +302,7 @@ describe('change-streamer/storer', () => {
 
     // Catchup should wait for the transaction to complete before querying
     // the database, and start after watermark '06'.
-    expect(await drainUntilCommit('0a', stream2)).toMatchInlineSnapshot(`
+    expect(await drain(stream2, '0a')).toMatchInlineSnapshot(`
       [
         [
           "begin",
@@ -378,7 +445,7 @@ describe('change-streamer/storer', () => {
     // from the pending transaction. '07' and '08' should not be included
     // in the snapshot used for catchup. We confirm this by sending the '0c'
     // message and ensuring that that was sent.
-    expect(await drainUntilCommit('0c', stream)).toMatchInlineSnapshot(`
+    expect(await drain(stream, '0c')).toMatchInlineSnapshot(`
       [
         [
           "begin",

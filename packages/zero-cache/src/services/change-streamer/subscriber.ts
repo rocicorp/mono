@@ -1,4 +1,5 @@
 import {assert} from '../../../../shared/src/asserts.js';
+import {max} from '../../types/lexi-version.js';
 import {Subscription} from '../../types/subscription.js';
 import type {WatermarkedChange} from './change-streamer-service.js';
 import {type Downstream, ErrorType} from './change-streamer.js';
@@ -14,6 +15,7 @@ export class Subscriber {
   readonly id: string;
   readonly #downstream: Subscription<Downstream>;
   #watermark: string;
+  #acked: string;
   #backlog: WatermarkedChange[] | null;
 
   constructor(
@@ -24,11 +26,16 @@ export class Subscriber {
     this.id = id;
     this.#downstream = downstream;
     this.#watermark = watermark;
+    this.#acked = watermark;
     this.#backlog = [];
   }
 
   get watermark() {
     return this.#watermark;
+  }
+
+  get acked() {
+    return this.#acked;
   }
 
   send(change: WatermarkedChange) {
@@ -62,9 +69,14 @@ export class Subscriber {
   #send(change: WatermarkedChange) {
     const [watermark, downstream] = change;
     if (watermark > this.watermark) {
-      this.#downstream.push(downstream);
+      const {result} = this.#downstream.push(downstream);
       if (downstream[0] === 'commit') {
         this.#watermark = watermark;
+        void result.then(val => {
+          if (val === 'consumed') {
+            this.#acked = max(this.#acked, watermark);
+          }
+        });
       }
     }
   }
@@ -75,8 +87,11 @@ export class Subscriber {
 
   close(error?: ErrorType, message?: string) {
     if (error) {
-      this.#downstream.push(['error', {type: error, message}]);
+      const {result} = this.#downstream.push(['error', {type: error, message}]);
+      // Wait for the ACK of the error message before closing the connection.
+      void result.then(() => this.#downstream.cancel());
+    } else {
+      this.#downstream.cancel();
     }
-    this.#downstream.cancel();
   }
 }

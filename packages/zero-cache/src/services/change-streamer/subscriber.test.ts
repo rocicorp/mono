@@ -118,4 +118,48 @@ describe('change-streamer/subscriber', () => {
       ]
     `);
   });
+
+  test('ack tracking', async () => {
+    const [sub, _, receiver] = createSubscriber('00');
+
+    // Send some messages while it is catching up.
+    sub.send(['11', ['begin', messages.begin()]]);
+    sub.send(['12', ['commit', messages.commit(), {watermark: '12'}]]);
+
+    // Send catchup messages.
+    sub.catchup(['01', ['begin', messages.begin()]]);
+    sub.catchup(['02', ['commit', messages.commit(), {watermark: '02'}]]);
+
+    sub.setCaughtUp();
+
+    // Send some messages after catchup.
+    sub.send(['21', ['begin', messages.begin()]]);
+    sub.send(['22', ['commit', messages.commit(), {watermark: '22'}]]);
+
+    sub.send(['31', ['begin', messages.begin()]]);
+
+    expect(sub.acked).toBe('00');
+
+    let txNum = 0;
+    for await (const msg of receiver) {
+      if (msg[0] === 'begin') {
+        txNum++;
+      }
+      switch (txNum) {
+        case 1:
+          expect(sub.acked).toBe('00');
+          break;
+        case 2:
+          expect(sub.acked).toBe('02');
+          break;
+        case 3:
+          expect(sub.acked).toBe('12');
+          break;
+        case 4:
+          expect(sub.acked).toBe('22');
+          sub.close();
+          break;
+      }
+    }
+  });
 });
