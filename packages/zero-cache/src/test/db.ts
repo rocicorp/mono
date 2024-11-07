@@ -1,15 +1,20 @@
 import postgres from 'postgres';
-import {afterAll, expect} from 'vitest';
-import {assert, assertString} from '../../../shared/src/asserts.js';
+import {afterAll, expect, inject} from 'vitest';
+import {assert} from '../../../shared/src/asserts.js';
 import {sleep} from '../../../shared/src/sleep.js';
 import {type PostgresDB, postgresTypeConfig} from '../types/pg.js';
 
+declare module 'vitest' {
+  export interface ProvidedContext {
+    pgContainerConnectionString: string;
+  }
+}
+
 // Set by ./test/pg-container-setup.ts
-assertString(process.env.PG_CONTAINER_CONNECTION_URI);
-const CONNECTION_URI: string = process.env.PG_CONTAINER_CONNECTION_URI;
+const CONNECTION_URI = inject('pgContainerConnectionString');
 assert(
   CONNECTION_URI.length > 0,
-  'pg-container-setup.ts must be executed to setup the PG_CONTAINER_CONNECTION_URI',
+  'pg-container-setup.ts must be executed to setup the pgContainerConnectionString',
 );
 
 export type OnNoticeFn = (n: postgres.Notice) => void;
