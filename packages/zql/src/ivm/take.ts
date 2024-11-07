@@ -152,6 +152,9 @@ export class Take implements Operator {
         }
       }
       downstreamEarlyReturn = false;
+    } catch (e) {
+      console.error('error in take initialFetch', e);
+      throw e;
     } finally {
       this.#setTakeState(
         takeStateKey,

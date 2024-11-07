@@ -297,7 +297,8 @@ describe('kitchen sink query', () => {
         q
           .orderBy('createdAt', 'desc')
           .related('revisions', q => q.orderBy('id', 'desc').limit(1))
-          .limit(2),
+          .limit(2)
+          .start({createdAt: 10}),
       )
       .related('labels')
       .start({
@@ -345,6 +346,12 @@ describe('kitchen sink query', () => {
                 ['createdAt', 'desc'],
                 ['id', 'asc'],
               ],
+              start: {
+                exclusive: true,
+                row: {
+                  createdAt: 10,
+                },
+              },
               related: [
                 {
                   correlation: {
@@ -547,31 +554,7 @@ describe('kitchen sink query', () => {
       },
       {
         closed: false,
-        comments: [
-          {
-            authorId: '003',
-            createdAt: 12,
-            id: '212',
-            issueId: '105',
-            revisions: [],
-            text: 'Comment 12',
-          },
-          {
-            authorId: '002',
-            createdAt: 11,
-            id: '211',
-            issueId: '105',
-            revisions: [
-              {
-                authorId: '003',
-                commentId: '211',
-                id: '309',
-                text: 'Revision 3',
-              },
-            ],
-            text: 'Comment 11',
-          },
-        ],
+        comments: [],
         description: 'Description 5',
         id: '105',
         labels: [],

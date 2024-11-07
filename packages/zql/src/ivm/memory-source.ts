@@ -282,10 +282,9 @@ export class MemorySource implements Source {
     let startAt = req.start?.row;
     if (startAt) {
       if (req.constraint) {
-        // There's no problem supporting startAt outside of constraints, but I
-        // don't think we have a use case for this – if we see it, it's probably
-        // a bug.
-        if (!matchesConstraint(startAt)) {
+        if (startAt[req.constraint.key] === undefined) {
+          startAt = {...startAt, [req.constraint.key]: req.constraint.value};
+        } else if (!matchesConstraint(startAt)) {
           assert(false, 'Start row must match constraint');
         }
       }
