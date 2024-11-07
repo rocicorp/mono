@@ -8,7 +8,10 @@ import type {Schema} from '../../../zero-schema/src/mod.js';
  */
 export interface ZeroOptions<S extends Schema> {
   /**
-   * Server to connect to, for example "https://myapp-myteam.zero.ms/".
+   * Server url prefix to connect to, for example
+   * "https://myapp-myteam.zero.ms".
+   * This can include a path prefix, for example:
+   * "https://myapp-myteam.zero.ms/zero"
    */
   server?: string | null | undefined;
 
@@ -77,14 +80,6 @@ export interface ZeroOptions<S extends Schema> {
    * Default is 5_000.
    */
   hiddenTabDisconnectDelay?: number | undefined;
-
-  /**
-   * Help Zero improve its service by automatically sending diagnostic and
-   * usage data.
-   *
-   * Default is true.
-   */
-  enableAnalytics?: boolean | undefined;
 
   /**
    * Determines what kind of storage implementation to use on the client.

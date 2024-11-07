@@ -19,3 +19,10 @@ export function assertHTTPString(url: string): asserts url is HTTPString {
 export function assertWSString(url: string): asserts url is WSString {
   assert(/^wss?:\/\//.test(url));
 }
+
+export function appendPath<T extends HTTPString | WSString>(
+  url: T,
+  toAppend: `/${string}`,
+): T {
+  return (url + (url.endsWith('/') ? toAppend.substring(1) : toAppend)) as T;
+}

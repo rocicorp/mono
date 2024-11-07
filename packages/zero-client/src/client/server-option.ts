@@ -24,12 +24,6 @@ function validateServerParam(paramName: string, server: string): HTTPString {
 
   const urlString = url.toString();
 
-  if (url.pathname !== '/') {
-    throw new Error(
-      `ZeroOptions.${paramName} must not contain a path component (other than "/").${forExample()}`,
-    );
-  }
-
   for (const [property, invalidEndsWith] of [
     ['search', '?'],
     ['hash', '#'],

@@ -24,14 +24,6 @@ test('getServer', () => {
     `ZeroOptions.server must use the "http" or "https" scheme.`,
   );
   expectError(
-    'https://myapp-myteam.zero.ms/x',
-    'ZeroOptions.server must not contain a path component (other than "/"). For example: "https://myapp-myteam.zero.ms/".',
-  );
-  expectError(
-    'https://myapp-myteam.zero.ms/x/',
-    'ZeroOptions.server must not contain a path component (other than "/"). For example: "https://myapp-myteam.zero.ms/".',
-  );
-  expectError(
     'https://myapp-myteam.zero.ms/?',
     'ZeroOptions.server must not contain a search component. For example: "https://myapp-myteam.zero.ms/".',
   );

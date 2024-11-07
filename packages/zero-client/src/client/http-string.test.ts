@@ -1,5 +1,6 @@
 import {expect, test} from 'vitest';
 import {
+  appendPath,
   assertHTTPString,
   assertWSString,
   toHTTPString,
@@ -28,4 +29,19 @@ test('assertWSString', () => {
   expect(() => assertWSString('wss://example.com')).not.throw();
   expect(() => assertWSString('http://example.com')).throw();
   expect(() => assertWSString('https://example.com')).throw();
+});
+
+test('appendPath', () => {
+  expect(appendPath('http://example.com', '/foo/bar')).toEqual(
+    'http://example.com/foo/bar',
+  );
+  expect(appendPath('wss://example.com', '/foo/bar')).toEqual(
+    'wss://example.com/foo/bar',
+  );
+  expect(appendPath('http://example.com/', '/foo/bar')).toEqual(
+    'http://example.com/foo/bar',
+  );
+  expect(appendPath('http://example.com', '/foo/bar/')).toEqual(
+    'http://example.com/foo/bar/',
+  );
 });

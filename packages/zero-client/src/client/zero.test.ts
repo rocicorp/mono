@@ -364,7 +364,31 @@ suite('createSocket', () => {
     0,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+  );
+  t(
+    'ws://example.com/prefix',
+    null,
+    'clientID',
+    'userID',
+    '',
+    undefined,
+    0,
+    false,
+    0,
+    'ws://example.com/prefix/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+  );
+  t(
+    'ws://example.com/prefix/',
+    null,
+    'clientID',
+    'userID',
+    '',
+    undefined,
+    0,
+    false,
+    0,
+    'ws://example.com/prefix/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
@@ -377,7 +401,7 @@ suite('createSocket', () => {
     0,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
@@ -390,7 +414,7 @@ suite('createSocket', () => {
     0,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
@@ -403,7 +427,7 @@ suite('createSocket', () => {
     123,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
+    'ws://example.com/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
   );
 
   t(
@@ -416,7 +440,7 @@ suite('createSocket', () => {
     123,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
+    'ws://example.com/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx',
   );
 
   t(
@@ -429,7 +453,7 @@ suite('createSocket', () => {
     0,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
@@ -442,7 +466,7 @@ suite('createSocket', () => {
     0,
     false,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
@@ -455,7 +479,7 @@ suite('createSocket', () => {
     0,
     true,
     0,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx&debugPerf=true',
+    'ws://example.com/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx&debugPerf=true',
   );
 
   t(
@@ -468,7 +492,7 @@ suite('createSocket', () => {
     0,
     false,
     456,
-    'ws://example.com/api/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx',
+    'ws://example.com/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx',
   );
 });
 
