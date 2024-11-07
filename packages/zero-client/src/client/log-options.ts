@@ -10,6 +10,7 @@ import {
   type DatadogLogSinkOptions,
 } from '../../../datadog/src/mod.js';
 import {version} from './version.js';
+import {appendPath, type HTTPString} from './http-string.js';
 
 class LevelFilterLogSink implements LogSink {
   readonly #wrappedLogSink: LogSink;
@@ -46,7 +47,7 @@ export type LogOptions = {
 export function createLogOptions(
   options: {
     consoleLogLevel: LogLevel;
-    server: string | null;
+    server: HTTPString | null;
     enableAnalytics: boolean;
   },
   createDatadogLogSink: (options: DatadogLogSinkOptions) => LogSink = (
@@ -63,13 +64,13 @@ export function createLogOptions(
   }
 
   const serverURL = new URL(server);
-  const socketHostname = serverURL.hostname;
-  const datadogServiceLabel = socketHostname.endsWith(ZERO_SASS_DOMAIN)
-    ? socketHostname
-        .substring(0, socketHostname.length - ZERO_SASS_DOMAIN.length)
+  const {hostname} = serverURL;
+  const datadogServiceLabel = hostname.endsWith(ZERO_SASS_DOMAIN)
+    ? hostname
+        .substring(0, hostname.length - ZERO_SASS_DOMAIN.length)
         .toLowerCase()
-    : socketHostname;
-  const baseURL = new URL('/api/logs/v0/log', server);
+    : hostname;
+  const baseURL = new URL(appendPath(server, '/logs/v0/log'));
   const logLevel = consoleLogLevel === 'debug' ? 'debug' : 'info';
   const logSink = new TeeLogSink([
     new LevelFilterLogSink(consoleLogSink, consoleLogLevel),

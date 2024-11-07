@@ -6,10 +6,12 @@ import {nanoid} from '../util/nanoid.js';
 import {
   type HTTPString,
   type WSString,
+  appendPath,
   assertHTTPString,
   assertWSString,
   toWSString,
 } from './http-string.js';
+import {PROTOCOL_VERSION} from './protocol-version.js';
 
 type CheckResult = {success: boolean; detail: string};
 type Check = (l: LogContext) => Promise<CheckResult>;
@@ -104,8 +106,9 @@ function checkRenderGet(id: string, signal: AbortSignal) {
 }
 
 function checkCfGet(id: string, server: HTTPString, signal: AbortSignal) {
-  const cfGetCheckBaseURL = new URL(server);
-  cfGetCheckBaseURL.pathname = '/api/canary/v0/get';
+  const cfGetCheckBaseURL = new URL(
+    appendPath(server, `/canary/v${PROTOCOL_VERSION}/get`),
+  );
   const url = cfGetCheckBaseURL.toString();
   assertHTTPString(url);
   return checkGet(id, url, signal);
@@ -148,8 +151,9 @@ function checkCfSocket(
   lc: LogContext,
   signal: AbortSignal,
 ) {
-  const cfSocketCheckBaseURL = new URL(socketOrigin);
-  cfSocketCheckBaseURL.pathname = '/api/canary/v0/websocket';
+  const cfSocketCheckBaseURL = new URL(
+    appendPath(socketOrigin, `/canary/v${PROTOCOL_VERSION}/websocket`),
+  );
   const url = cfSocketCheckBaseURL.toString();
   assertWSString(url);
   return checkSocket(id, url, wSecWebSocketProtocolHeader, lc, signal);

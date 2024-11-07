@@ -4,6 +4,7 @@ import {TestLogSink} from '../../../shared/src/logging-test-utils.js';
 import * as sinon from 'sinon';
 import {afterEach, beforeEach, expect, suite, test} from 'vitest';
 import {createLogOptions} from './log-options.js';
+import type {HTTPString} from './http-string.js';
 
 let consoleLogSinkSpy: sinon.SinonSpiedInstance<LogSink>;
 let datadogLogSinkSpy: sinon.SinonSpiedInstance<LogSink>;
@@ -22,7 +23,7 @@ afterEach(() => {
   sinon.restore();
 });
 
-function testEnableAnalyticsFalse(server: string | null) {
+function testEnableAnalyticsFalse(server: HTTPString | null) {
   test(`server ${server}, enableAnalytics false`, () => {
     const {logLevel, logSink} = createLogOptions(
       {
@@ -39,7 +40,7 @@ function testEnableAnalyticsFalse(server: string | null) {
 }
 
 function testLogLevels(
-  server: string,
+  server: HTTPString,
   expectedServiceLabel: string,
   expectedBaseURLString: string,
 ) {
@@ -199,7 +200,7 @@ suite('when server is subdomain of .reflect-server.net', () => {
   testLogLevels(
     server,
     'testsubdomain',
-    'https://testsubdomain.reflect-server.net/api/logs/v0/log',
+    'https://testsubdomain.reflect-server.net/logs/v0/log',
   );
   testEnableAnalyticsFalse(server);
 });
@@ -209,7 +210,17 @@ suite('when server is not a subdomain of .reflect-server.net', () => {
   testLogLevels(
     server,
     'foobar.fuzzywuzzy.com',
-    'https://foobar.fuzzywuzzy.com/api/logs/v0/log',
+    'https://foobar.fuzzywuzzy.com/logs/v0/log',
+  );
+  testEnableAnalyticsFalse(server);
+});
+
+suite('when server has a path prefix', () => {
+  const server = 'https://fooBar.FuzzyWuzzy.com/prefix';
+  testLogLevels(
+    server,
+    'foobar.fuzzywuzzy.com',
+    'https://foobar.fuzzywuzzy.com/prefix/logs/v0/log',
   );
   testEnableAnalyticsFalse(server);
 });

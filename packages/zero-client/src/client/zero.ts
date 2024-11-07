@@ -74,7 +74,12 @@ import {
   makeCRUDMutator,
 } from './crud.js';
 import {shouldEnableAnalytics} from './enable-analytics.js';
-import {type HTTPString, type WSString, toWSString} from './http-string.js';
+import {
+  type HTTPString,
+  type WSString,
+  appendPath,
+  toWSString,
+} from './http-string.js';
 import {ENTITIES_KEY_PREFIX} from './keys.js';
 import {type LogOptions, createLogOptions} from './log-options.js';
 import {
@@ -93,6 +98,7 @@ import {ServerError, isAuthError, isServerError} from './server-error.js';
 import {getServer} from './server-option.js';
 import {version} from './version.js';
 import {PokeHandler} from './zero-poke-handler.js';
+import {PROTOCOL_VERSION} from './protocol-version.js';
 
 export type NoRelations = Record<string, never>;
 
@@ -164,9 +170,6 @@ export const CONNECT_TIMEOUT_MS = 10_000;
 const CHECK_CONNECTIVITY_ON_ERROR_FREQUENCY = 6;
 
 const NULL_LAST_MUTATION_ID_SENT = {clientID: '', id: -1} as const;
-
-// When the protocol changes (pull, push, poke,...) we need to bump this.
-const REFLECT_VERSION = 1;
 
 /**
  * The reason {@link onUpdateNeeded} was called.
@@ -433,7 +436,7 @@ export class Zero<const S extends Schema> {
     const server = getServer(options.server);
     this.#enableAnalytics = shouldEnableAnalytics(
       server,
-      options.enableAnalytics,
+      false /*options.enableAnalytics,*/, // Reenable analytics
     );
 
     if (jurisdiction !== undefined && jurisdiction !== 'eu') {
@@ -596,7 +599,7 @@ export class Zero<const S extends Schema> {
 
   #createLogOptions(options: {
     consoleLogLevel: LogLevel;
-    server: string | null;
+    server: HTTPString | null;
     enableAnalytics: boolean;
   }): LogOptions {
     if (TESTING) {
@@ -1395,18 +1398,19 @@ export class Zero<const S extends Schema> {
 
       if (gotError) {
         this.#setOnline(false);
-        let cfGetCheckSucceeded = false;
-        const cfGetCheckURL = new URL(this.#server);
-        cfGetCheckURL.pathname = '/api/canary/v0/get';
-        cfGetCheckURL.searchParams.set('id', nanoid());
-        const cfGetCheckController = new AbortController();
-        fetch(cfGetCheckURL, {signal: cfGetCheckController.signal})
-          .then(_ => {
-            cfGetCheckSucceeded = true;
-          })
-          .catch(_ => {
-            cfGetCheckSucceeded = false;
-          });
+        //
+        // let cfGetCheckSucceeded = false;
+        // const cfGetCheckURL = new URL(this.#server);
+        // cfGetCheckURL.pathname = '/api/canary/v0/get';
+        // cfGetCheckURL.searchParams.set('id', nanoid());
+        // const cfGetCheckController = new AbortController();
+        // fetch(cfGetCheckURL, {signal: cfGetCheckController.signal})
+        //   .then(_ => {
+        //     cfGetCheckSucceeded = true;
+        //   })
+        //   .catch(_ => {
+        //     cfGetCheckSucceeded = false;
+        //   });
 
         lc.debug?.(
           'Sleeping',
@@ -1415,13 +1419,13 @@ export class Zero<const S extends Schema> {
           this.#connectionState,
         );
         await sleep(RUN_LOOP_INTERVAL_MS);
-        cfGetCheckController.abort();
-        if (!cfGetCheckSucceeded) {
-          lc.info?.(
-            'Canary request failed, resetting total time to connect start time.',
-          );
-          this.#totalToConnectStart = undefined;
-        }
+        // cfGetCheckController.abort();
+        // if (!cfGetCheckSucceeded) {
+        //   lc.info?.(
+        //     'Canary request failed, resetting total time to connect start time.',
+        //   );
+        //   this.#totalToConnectStart = undefined;
+        // }
       }
     }
   }
@@ -1636,9 +1640,9 @@ export async function createSocket(
   lc: LogContext,
   maxHeaderLength = 1024 * 8,
 ): Promise<[WebSocket, Map<string, QueriesPatchOp> | undefined]> {
-  const url = new URL(socketOrigin);
-  // Keep this in sync with the server.
-  url.pathname = `/api/sync/v${REFLECT_VERSION}/connect`;
+  const url = new URL(
+    appendPath(socketOrigin, `/sync/v${PROTOCOL_VERSION}/connect`),
+  );
   const {searchParams} = url;
   searchParams.set('clientID', clientID);
   searchParams.set('clientGroupID', clientGroupID);
