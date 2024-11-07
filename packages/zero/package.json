@@ -84,7 +84,7 @@
     },
     "./advanced": {
       "types": "./out/zero/src/advanced.d.ts",
-      "default": "./out/zero/src/advanced.js"
+      "default": "./out/advanced.js"
     },
     "./schema": {
       "types": "./out/zero-schema/src/mod.d.ts",
