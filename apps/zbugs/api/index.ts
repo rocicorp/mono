@@ -14,7 +14,7 @@ declare module 'fastify' {
   }
 }
 
-const sql = postgres(process.env.UPSTREAM_URI as string);
+const sql = postgres(process.env.ZERO_UPSTREAM_DB as string);
 type QueryParams = {redirect?: string | undefined};
 
 export const fastify = Fastify({
@@ -86,7 +86,7 @@ fastify.get<{
   const jwt = await new SignJWT(jwtPayload)
     .setProtectedHeader({alg: 'HS256'})
     .setExpirationTime('30days')
-    .sign(new TextEncoder().encode(process.env.JWT_SECRET));
+    .sign(new TextEncoder().encode(process.env.ZERO_JWT_SECRET));
 
   reply
     .cookie('jwt', jwt, {

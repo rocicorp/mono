@@ -54,15 +54,12 @@ ZERO_LOG_LEVEL = "info"
 # Use "json" for logs consumed by structured logging services.
 ZERO_LOG_FORMAT = "text"
 
-# Secret used to verify the JWT
+# Secret used to sign and verify the JWT
 # Set this to something real if you intend to deploy
 # the app.
 ZERO_JWT_SECRET = "my-localhost-testing-secret"
 
 #### ZBugs API Server Variables ####
-
-# Same as ZERO_UPSTREAM_DB above.
-UPSTREAM_URI = "postgresql://user:password@127.0.0.1:6434/postgres"
 
 # The client id for the GitHub OAuth app responisble for OAuth:
 # https://docs.github.com/en/apps/creating-github-apps
@@ -71,11 +68,6 @@ UPSTREAM_URI = "postgresql://user:password@127.0.0.1:6434/postgres"
 GITHUB_CLIENT_ID = ""
 # The secret for the client
 GITHUB_CLIENT_SECRET = ""
-
-# Secret used to sign the JWT
-# Set this to something real if you intend to deploy
-# the app.
-JWT_SECRET = "my-localhost-testing-secret"
 ```
 
 Then start the server:
