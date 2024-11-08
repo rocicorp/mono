@@ -81,6 +81,7 @@ export function Nav() {
         <div className="section-tabs">
           <Link
             href={addStatusParam(qs, undefined)}
+            eventName="Toggle open issues"
             className={classNames('nav-item', {
               'nav-active': status === 'open',
             })}
@@ -89,6 +90,7 @@ export function Nav() {
           </Link>
           <Link
             href={addStatusParam(qs, 'closed')}
+            eventName="Toggle closed issues"
             className={classNames('nav-item', {
               'nav-active': status === 'closed',
             })}
@@ -97,6 +99,7 @@ export function Nav() {
           </Link>
           <Link
             href={addStatusParam(qs, 'all')}
+            eventName="Toggle all issues"
             className={classNames('nav-item', {
               'nav-active': status === 'all',
             })}

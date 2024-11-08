@@ -22,13 +22,14 @@ export function Selector<T>({
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
-  // We keep track of the time of the last open event to prevent the dropdown
-  // from closing immediately after clicking on the selected option.
   const openTimeRef = useRef(0);
 
   const setMenuOpen = (b: boolean) => {
     if (b) {
       openTimeRef.current = Date.now();
+      umami.track('Selector opened'); // Track open action
+    } else {
+      umami.track('Selector closed'); // Track close action
     }
     setIsOpen(b);
   };
@@ -42,7 +43,7 @@ export function Selector<T>({
       const handleMouseDown = (e: MouseEvent) => {
         const target = e.target as HTMLElement;
         if (!dropdownRef.current?.contains(target)) {
-          setIsOpen(false);
+          setMenuOpen(false);
         }
       };
 
@@ -60,15 +61,15 @@ export function Selector<T>({
     (value: T) => {
       onChange?.(value);
       setIsOpen(false);
+      const selectedText =
+        items?.find(item => item.value === value)?.text || 'Unknown';
+      umami.track('Selector selection made', {selection: selectedText}); // Track selection with data
     },
-    [onChange],
+    [onChange, items],
   );
 
   const onMouseUp = useCallback(
     (value: T) => {
-      // if we press down and up on the selectedoption we want to trigger the action
-      // after a short pause. This is to prevent the dropdown from closing immediately
-      // after clicking on the selected option.
       const now = Date.now();
       if (!(now - openTimeRef.current < 500)) {
         handleSelect(value);
@@ -100,10 +101,12 @@ export function Selector<T>({
       switch (e.key) {
         case 'Escape':
           setIsOpen(false);
+          umami.track('Selector Closed'); // Track close action on Escape
           break;
         case ' ':
           if (!isOpen) {
             setIsOpen(true);
+            umami.track('Selector Opened'); // Track open action on space key
           } else {
             handleSelect(openItems[selectedIndex]?.value);
           }
