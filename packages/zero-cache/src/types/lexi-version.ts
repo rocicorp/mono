@@ -52,17 +52,21 @@ export function versionFromLexi(lexiVersion: LexiVersion): bigint {
   return parseBigInt(base36Version, 36);
 }
 
-export function max(a: LexiVersion, ...more: LexiVersion[]): LexiVersion {
-  let winner = a;
-  for (const b of more) {
+export type AtLeastOne<T> = [T, ...T[]];
+
+export function max(...versions: AtLeastOne<LexiVersion>): LexiVersion {
+  let winner = versions[0];
+  for (let i = 1; i < versions.length; i++) {
+    const b = versions[i];
     winner = winner > b ? winner : b;
   }
   return winner;
 }
 
-export function min(a: LexiVersion, ...more: LexiVersion[]): LexiVersion {
-  let winner = a;
-  for (const b of more) {
+export function min(...versions: AtLeastOne<LexiVersion>): LexiVersion {
+  let winner = versions[0];
+  for (let i = 1; i < versions.length; i++) {
+    const b = versions[i];
     winner = winner < b ? winner : b;
   }
   return winner;

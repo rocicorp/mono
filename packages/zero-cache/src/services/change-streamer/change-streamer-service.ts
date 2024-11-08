@@ -1,15 +1,20 @@
 import {LogContext} from '@rocicorp/logger';
-import {min, oneAfter} from '../../types/lexi-version.js';
+import {
+  min,
+  oneAfter,
+  type AtLeastOne,
+  type LexiVersion,
+} from '../../types/lexi-version.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {Sink, Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import {DEFAULT_MAX_RETRY_DELAY_MS, RunningState} from '../running-state.js';
 import {
+  ErrorType,
   type ChangeStreamerService,
   type Commit,
   type Downstream,
   type DownstreamChange,
-  ErrorType,
   type SubscriberContext,
 } from './change-streamer.js';
 import {Forwarder} from './forwarder.js';
@@ -341,8 +346,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       return;
     }
     try {
-      const earliestInitial = min(initial[0], ...initial.slice(1));
-      const earliestCurrent = min(current[0], ...current.slice(1));
+      const earliestInitial = min(...(initial as AtLeastOne<LexiVersion>));
+      const earliestCurrent = min(...(current as AtLeastOne<LexiVersion>));
       if (earliestCurrent < earliestInitial) {
         this.#lc.info?.(
           `At least one client is behind backup (${earliestCurrent} < ${earliestInitial})`,
