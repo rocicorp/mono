@@ -71,8 +71,13 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
       {editing ? null : (
         <CanEdit ownerID={comment.creatorID}>
           <div className={style.commentActions}>
-            <Button onAction={edit}>Edit</Button>
-            <Button onAction={() => setDeleteConfirmationShown(true)}>
+            <Button eventName="Edit comment" onAction={edit}>
+              Edit
+            </Button>
+            <Button
+              eventName="Delete comment"
+              onAction={() => setDeleteConfirmationShown(true)}
+            >
               Delete
             </Button>
           </div>
