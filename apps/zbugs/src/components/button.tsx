@@ -17,7 +17,9 @@ export function Button(props: Props) {
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       onAction?.();
-      e.preventDefault(); // Prevents button from taking focus on click
+      // Prevent default to avoid the button taking focus on click, which
+      // wil steal focus from anything focused in response to onAction.
+      e.preventDefault();
     },
     [onAction],
   );
