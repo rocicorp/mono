@@ -82,6 +82,7 @@ export function EmojiPanel({issueID, commentID}: Props) {
   const button = (
     <ButtonWithLoginCheck
       className="add-emoji-button"
+      eventName="Add new emoji reaction"
       loginMessage={loginMessage}
     >
       <img src={addEmojiIcon} />
@@ -93,6 +94,7 @@ export function EmojiPanel({issueID, commentID}: Props) {
       {Object.entries(groups).map(([normalizedEmoji, emojis]) => (
         <ButtonWithLoginCheck
           className="emoji-pill"
+          eventName="Add to existing emoji reaction"
           key={normalizedEmoji}
           title={'TODO: Who reacted with this emoji'}
           loginMessage={loginMessage}

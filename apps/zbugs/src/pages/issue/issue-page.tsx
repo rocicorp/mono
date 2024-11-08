@@ -183,12 +183,14 @@ export default function IssuePage() {
                 <>
                   <Button
                     className="edit-button"
+                    eventName="Edit issue"
                     onAction={() => setEditing(issue)}
                   >
                     Edit
                   </Button>
                   <Button
                     className="delete-button"
+                    eventName="Delete issue"
                     onAction={() => setDeleteConfirmationShown(true)}
                   >
                     Delete
@@ -198,6 +200,7 @@ export default function IssuePage() {
                 <>
                   <Button
                     className="save-button"
+                    eventName="Save issue edits"
                     onAction={save}
                     disabled={
                       !edits || edits.title === '' || edits.description === ''
@@ -205,7 +208,11 @@ export default function IssuePage() {
                   >
                     Save
                   </Button>
-                  <Button className="cancel-button" onAction={cancel}>
+                  <Button
+                    className="cancel-button"
+                    eventName="Cancel issue edits"
+                    onAction={cancel}
+                  >
                     Cancel
                   </Button>
                 </>

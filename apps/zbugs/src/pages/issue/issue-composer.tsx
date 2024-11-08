@@ -108,6 +108,7 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
       <ModalActions>
         <Button
           className="modal-confirm"
+          eventName="New issue confirm"
           onAction={handleSubmit}
           disabled={!canSave()}
         >

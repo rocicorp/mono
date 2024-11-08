@@ -33,6 +33,7 @@ export default function Filter({onSelect}: Props) {
     <div className="add-filter-container">
       <Button
         className={classNames('add-filter', {active: isOpen})}
+        eventName="Add filter toggle"
         onAction={() => setIsOpen(!isOpen)}
         style={{
           zIndex: isOpen ? 1 : 0,

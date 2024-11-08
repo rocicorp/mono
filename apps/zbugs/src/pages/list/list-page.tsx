@@ -296,11 +296,16 @@ export default function ListPage() {
         </div>
         <Filter onSelect={onFilter} />
         <div className="sort-control-container">
-          <Button className="sort-control" onAction={toggleSortField}>
+          <Button
+            className="sort-control"
+            eventName="Toggle sort type"
+            onAction={toggleSortField}
+          >
             {sortField === 'modified' ? 'Modified' : 'Created'}
           </Button>
           <Button
             className={classNames('sort-direction', sortDirection)}
+            eventName="Toggle sort direction"
             onAction={toggleSortDirection}
           ></Button>
         </div>

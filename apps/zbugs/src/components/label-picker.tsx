@@ -37,6 +37,7 @@ export default function LabelPicker({
     <div className={style.root} ref={ref}>
       <Button
         title="Add label"
+        eventName="Add issue label toggle"
         className={style.addLabel}
         onAction={() => setIsOpen(!isOpen)}
       >
