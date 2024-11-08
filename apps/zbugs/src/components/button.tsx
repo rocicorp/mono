@@ -17,11 +17,14 @@ export function Button(props: Props) {
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       onAction?.();
+      if (eventName) {
+        umami.track(eventName);
+      }
       // Prevent default to avoid the button taking focus on click, which
-      // wil steal focus from anything focused in response to onAction.
+      // will steal focus from anything focused in response to onAction.
       e.preventDefault();
     },
-    [onAction],
+    [onAction, eventName],
   );
 
   const actionProps = onAction
@@ -30,21 +33,21 @@ export function Button(props: Props) {
         onKeyUp: (e: React.KeyboardEvent<Element>) => {
           if (e.key === ' ') {
             onAction();
+            if (eventName) umami.track(eventName);
           }
         },
         onKeyPress: (e: React.KeyboardEvent<Element>) => {
           if (e.key === 'Enter') {
             onAction();
+            if (eventName) umami.track(eventName);
           }
         },
       }
     : {};
 
   return (
-    <button
-      {...actionProps}
-      {...rest}
-      {...(eventName ? {'data-umami-event': eventName} : {})}
-    />
+    <button {...actionProps} {...rest}>
+      {props.children}
+    </button>
   );
 }

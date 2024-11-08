@@ -8,12 +8,20 @@ export type Props = {
   className?: string | undefined;
   title?: string | undefined;
   state?: ZbugsHistoryState | undefined;
+  eventName?: string | undefined;
 };
 /**
  * The Link from wouter uses onClick and there's no way to change it.
  * We like mousedown here at Rocicorp.
  */
-export function Link({children, href, className, title, state}: Props) {
+export function Link({
+  children,
+  href,
+  className,
+  title,
+  state,
+  eventName,
+}: Props) {
   const isPrimary = (e: React.MouseEvent) => {
     if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.button !== 0) {
       return false;
@@ -23,6 +31,9 @@ export function Link({children, href, className, title, state}: Props) {
   const onMouseDown = (e: React.MouseEvent) => {
     if (isPrimary(e)) {
       navigate(href, {state});
+      if (eventName) {
+        umami.track(eventName);
+      }
     }
   };
   const onClick = (e: React.MouseEvent) => {
