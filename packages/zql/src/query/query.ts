@@ -1,16 +1,16 @@
 /* eslint-disable @typescript-eslint/ban-types */
 
+import type {Expand} from '../../../shared/src/expand.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
-import type {Source} from '../ivm/source.js';
-import type {GenericCondition} from './expression.js';
 import type {
   PullSchemaForRelationship,
-  TableSchema,
   SchemaValueToTSType,
+  TableSchema,
   TableSchemaToRow,
 } from '../../../zero-schema/src/table-schema.js';
+import type {Source} from '../ivm/source.js';
+import type {GenericCondition} from './expression.js';
 import type {TypedView} from './typed-view.js';
-import type {Expand} from '../../../shared/src/expand.js';
 
 /**
  * The type that can be passed into `select()`. A selector
@@ -87,12 +87,8 @@ export type MakeSingular<TReturn extends QueryType> = {
   singular: true;
 };
 
-type InferSubreturn<TSubquery> = TSubquery extends Query<
-  TableSchema,
-  infer TSubreturn
->
-  ? TSubreturn
-  : EmptyQueryResultRow;
+type InferSubreturn<TSubquery extends Query<TableSchema, QueryType>> =
+  TSubquery extends Query<TableSchema, infer TSubreturn> ? TSubreturn : never;
 
 /**
  * Encodes the internal "type" of the query. This is different than the schema,
@@ -106,11 +102,6 @@ export type QueryType = {
   row: Row;
   related: Record<string, QueryType>;
   singular: boolean;
-};
-
-type EmptyQueryResultRow = {
-  row: {};
-  related: {};
 };
 
 export type Operator =
@@ -155,9 +146,8 @@ export interface Query<
     >
   >;
   related<
-    TRelationship extends keyof TSchema['relationships'],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    TSub extends Query<any, any>,
+    TRelationship extends keyof TSchema['relationships'] & string,
+    TSub extends Query<TableSchema, QueryType>,
   >(
     relationship: TRelationship,
     cb: (
@@ -166,7 +156,7 @@ export interface Query<
         DefaultQueryResultRow<PullSchemaForRelationship<TSchema, TRelationship>>
       >,
     ) => TSub,
-  ): Query<TSchema, AddSubselect<TSub, TReturn, TRelationship & string>>;
+  ): Query<TSchema, AddSubselect<TSub, TReturn, TRelationship>>;
 
   where<
     TSelector extends NoJsonSelector<TSchema>,
