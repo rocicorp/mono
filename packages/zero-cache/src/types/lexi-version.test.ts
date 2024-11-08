@@ -5,6 +5,8 @@ import {
   oneAfter,
   versionFromLexi,
   versionToLexi,
+  type AtLeastOne,
+  type LexiVersion,
 } from './lexi-version.js';
 
 test('LexiVersion encoding', () => {
@@ -33,6 +35,28 @@ test('LexiVersion encoding', () => {
 test('oneAfter', () => {
   expect(oneAfter('2zzz')).toBe('31000');
   expect(oneAfter('e65gym2kbgwjf668')).toBe('e65gym2kbgwjf669');
+});
+
+test('min max', () => {
+  expect(min('01')).toBe('01');
+  expect(max('01')).toBe('01');
+
+  expect(min('01', '02')).toBe('01');
+  expect(max('01', '02')).toBe('02');
+
+  expect(min('01', '03', '02')).toBe('01');
+  expect(min('02', '03', '01')).toBe('01');
+  expect(max('01', '03', '02')).toBe('03');
+  expect(max('02', '01', '03')).toBe('03');
+
+  expect(min('04', '01', '03', '02')).toBe('01');
+  expect(max('04', '01', '03', '02')).toBe('04');
+  expect(min('04', '01', '03', '02', '00')).toBe('00');
+  expect(max('04', '01', '03', '02', '05')).toBe('05');
+
+  const array = ['02', '04', '01', '03', '02'];
+  expect(min(...(array as AtLeastOne<LexiVersion>))).toBe('01');
+  expect(max(...(array as AtLeastOne<LexiVersion>))).toBe('04');
 });
 
 test('LexiVersion sorting', () => {
