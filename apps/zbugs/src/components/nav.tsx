@@ -71,6 +71,7 @@ export function Nav() {
         {/* could not figure out how to add this color to tailwind.config.js */}
         <ButtonWithLoginCheck
           className="primary-cta"
+          eventName="New issue modal"
           onAction={newIssue}
           loginMessage="You need to be logged in to create a new issue."
         >
@@ -115,7 +116,10 @@ export function Nav() {
               <div className="logged-in-user">
                 {isMobile ? (
                   <div className="mobile-login-container">
-                    <Button onAction={handleClick}>
+                    <Button
+                      eventName="Toggle user options (mobile)"
+                      onAction={handleClick}
+                    >
                       <img
                         src={user?.avatar}
                         className="issue-creator-avatar"
@@ -130,6 +134,7 @@ export function Nav() {
                     >
                       <Button
                         className="logout-button-mobile"
+                        eventName="Log out (mobile)"
                         onAction={login.logout}
                         title="Log out"
                       >
@@ -151,6 +156,7 @@ export function Nav() {
               </div>
               <Button
                 className="logout-button"
+                eventName="Log out"
                 onAction={login.logout}
                 title="Log out"
               ></Button>
