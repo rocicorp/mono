@@ -31,10 +31,13 @@ class TestDBs {
   readonly #dbs: Record<string, postgres.Sql> = {};
 
   async create(database: string, onNotice?: OnNoticeFn): Promise<PostgresDB> {
-    assert(!(database in this.#dbs), `${database} has already been created`);
+    const exists = this.#dbs[database];
+    if (exists !== undefined) {
+      console.warn('dropping database', database);
+      await this.#drop(exists);
+    }
 
     const sql = this.#sql;
-    await sql`DROP DATABASE IF EXISTS ${sql(database)} WITH (FORCE)`;
     await sql`CREATE DATABASE ${sql(database)}`;
 
     const {host, port, user: username, pass} = sql.options;
@@ -60,12 +63,23 @@ class TestDBs {
 
   async #drop(db: postgres.Sql) {
     const {database} = db.options;
-    await db.end();
-    const sql = this.#sql;
-    if (sql) {
-      await sql`DROP DATABASE IF EXISTS ${sql(database)} WITH (FORCE)`;
+    for (let i = 0; i < 10; i++) {
+      await dropReplicationSlots(db);
+      const sql = this.#sql;
+      try {
+        await sql`DROP DATABASE IF EXISTS ${sql(database)} WITH (FORCE)`;
+        break;
+      } catch (e) {
+        // Sometimes the replication slot isn't immediately dropped, which
+        // causes the DROP DATABASE command to fail as well. Log a warning
+        // but continue to allow subsequent tests to proceed (provided that
+        // they are using unique database and replication slot names).
+        console.warn(`Unable to drop database ${database}`, e);
+      }
+      await sleep(50);
     }
 
+    await db.end();
     delete this.#dbs[database];
   }
 
@@ -121,24 +135,27 @@ export async function expectTables(
   }
 }
 
-export async function dropReplicationSlot(db: postgres.Sql, slotName: string) {
-  // A replication slot can't be dropped when it is still marked "active" on the upstream
-  // database. The slot becomes inactive when the downstream connection is closed (e.g. the
-  // initial-sync SUBSCRIPTION is disabled, or the incremental-sync connection is closed),
-  // but because this is a non-transactional process that happens in the internals of Postgres,
-  // we have to poll the status and wait for the slot to be released.
+export async function dropReplicationSlots(db: postgres.Sql) {
+  const {database} = db.options;
+
   for (let i = 0; i < 100; i++) {
     const results = await db<{slotName: string; active: boolean}[]>`
-    SELECT slot_name as "slotName", active FROM pg_replication_slots WHERE slot_name = ${slotName}`;
+    SELECT slot_name as "slotName", active FROM pg_replication_slots WHERE database = ${database}`;
 
     if (results.count === 0) {
       break;
     }
-    const result = results[0];
-    if (!result.active) {
-      await db`SELECT pg_drop_replication_slot(${slotName})`;
-      break;
+    for (const {slotName, active} of results) {
+      if (active) {
+        // A replication slot can't be dropped when it is still marked "active" on the upstream
+        // database. The slot becomes inactive when the downstream connection is closed (e.g. the
+        // initial-sync SUBSCRIPTION is disabled, or the incremental-sync connection is closed),
+        // but because this is a non-transactional process that happens in the internals of Postgres,
+        // we have to poll the status and wait for the slot to be released.
+        await sleep(10);
+      } else {
+        await db`SELECT pg_drop_replication_slot(${slotName})`;
+      }
     }
-    await sleep(10);
   }
 }
