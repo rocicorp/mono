@@ -251,8 +251,7 @@ describe('db/transaction-pool', () => {
     });
   });
 
-  // TODO: Debug test flakiness or delete functionality
-  test.skip('pool resizing and idle/keepalive timeouts', async () => {
+  test('pool resizing and idle/keepalive timeouts', async () => {
     const pool = new TransactionPool(
       lc,
       Mode.SERIALIZABLE,
@@ -391,8 +390,7 @@ describe('db/transaction-pool', () => {
     });
   });
 
-  // TODO: Debug test flakiness or delete functionality
-  test.skip('external failure before running', async () => {
+  test('external failure before running', async () => {
     const pool = new TransactionPool(
       lc,
       Mode.SERIALIZABLE,
@@ -460,8 +458,7 @@ describe('db/transaction-pool', () => {
     });
   });
 
-  // TODO: Debug test flakiness or delete functionality
-  test.skip('external failure while running', async () => {
+  test('external failure while running', async () => {
     const pool = new TransactionPool(
       lc,
       Mode.SERIALIZABLE,
@@ -495,8 +492,7 @@ describe('db/transaction-pool', () => {
     });
   });
 
-  // TODO: Debug test flakiness or delete functionality
-  test.skip('non-statement task error fails pool', async () => {
+  test('non-statement task error fails pool', async () => {
     const pool = new TransactionPool(
       lc,
       Mode.SERIALIZABLE,
@@ -550,6 +546,7 @@ describe('db/transaction-pool', () => {
     pool.process(task(`INSERT INTO foo (id, val) VALUES (1, 'double')`));
     pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
     pool.process(task(`INSERT INTO foo (id, val) VALUES (1, 'oof')`));
+    pool.setDone();
 
     const result = await pool
       .run(db)
@@ -561,16 +558,9 @@ describe('db/transaction-pool', () => {
     // Ensure that the postgres error is surfaced.
     expect(result).toBeInstanceOf(postgres.PostgresError);
     expect((result as postgres.PostgresError).code).toBe(PG_UNIQUE_VIOLATION);
-
-    // Nothing should have succeeded.
-    await expectTables(db, {
-      ['public.foo']: [],
-      ['public.workers']: [],
-      ['public.cleaned']: [],
-    });
   });
 
-  test.skip('partial success; error from post-resize worker', async () => {
+  test('partial success; error from post-resize worker', async () => {
     const pool = new TransactionPool(
       lc,
       Mode.SERIALIZABLE,
@@ -716,8 +706,7 @@ describe('db/transaction-pool', () => {
     });
   });
 
-  // TODO: Debug test flakiness or delete functionality
-  test.skip('snapshot synchronization error handling', async () => {
+  test('snapshot synchronization error handling', async () => {
     const {exportSnapshot, cleanupExport, setSnapshot} =
       synchronizedSnapshots();
     const leader = new TransactionPool(

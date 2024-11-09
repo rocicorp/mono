@@ -63,9 +63,11 @@ class TestDBs {
 
   async #drop(db: postgres.Sql) {
     const {database} = db.options;
+    await db.end();
+
     for (let i = 0; i < 10; i++) {
-      await dropReplicationSlots(db);
       const sql = this.#sql;
+      await dropReplicationSlotsFor(sql, database);
       try {
         await sql`DROP DATABASE IF EXISTS ${sql(database)} WITH (FORCE)`;
         break;
@@ -79,7 +81,6 @@ class TestDBs {
       await sleep(50);
     }
 
-    await db.end();
     delete this.#dbs[database];
   }
 
@@ -135,9 +136,12 @@ export async function expectTables(
   }
 }
 
-export async function dropReplicationSlots(db: postgres.Sql) {
+export async function dropReplicationSlots(db: postgres.Sql): Promise<void> {
   const {database} = db.options;
+  await dropReplicationSlotsFor(db, database);
+}
 
+async function dropReplicationSlotsFor(db: postgres.Sql, database: string) {
   for (let i = 0; i < 100; i++) {
     const results = await db<{slotName: string; active: boolean}[]>`
     SELECT slot_name as "slotName", active FROM pg_replication_slots WHERE database = ${database}`;
