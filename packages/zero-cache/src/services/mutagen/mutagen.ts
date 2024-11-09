@@ -187,17 +187,22 @@ export async function processMutation(
     for (let i = 0; i < MAX_SERIALIZATION_ATTEMPTS; i++) {
       try {
         await db.begin(Mode.SERIALIZABLE, async tx => {
-          await onTxStart?.();
-          return processMutationWithTx(
-            tx,
-            authData,
-            shardID,
-            clientGroupID,
-            schemaVersion,
-            mutation,
-            errorMode,
-            writeAuthorizer,
-          );
+          // Simulates a concurrent request for testing. In production this is a noop.
+          const done = onTxStart?.();
+          try {
+            return processMutationWithTx(
+              tx,
+              authData,
+              shardID,
+              clientGroupID,
+              schemaVersion,
+              mutation,
+              errorMode,
+              writeAuthorizer,
+            );
+          } finally {
+            await done;
+          }
         });
         if (errorMode) {
           lc?.debug?.('Ran mutation successfully in error mode');
