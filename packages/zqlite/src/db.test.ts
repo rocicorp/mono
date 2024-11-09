@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
-import {TestLogSink} from '../../shared/src/logging-test-utils.js';
 import {expect, test, vi} from 'vitest';
+import {TestLogSink} from '../../shared/src/logging-test-utils.js';
 import {Database} from './db.js';
 
 test('slow queries are logged', () => {
@@ -40,6 +40,15 @@ test('slow queries are logged', () => {
     [
       'warn',
       {
+        class: 'Database',
+        path: ':memory:',
+        method: 'prepare',
+      },
+      ['Slow query', 0],
+    ],
+    [
+      'warn',
+      {
         class: 'Statement',
         path: ':memory:',
         sql: 'SELECT * FROM foo WHERE name = ?',
@@ -70,6 +79,15 @@ test('slow queries are logged', () => {
     [
       'warn',
       {
+        class: 'Database',
+        path: ':memory:',
+        method: 'prepare',
+      },
+      ['Slow query', 0],
+    ],
+    [
+      'warn',
+      {
         class: 'Statement',
         path: ':memory:',
         sql: 'SELECT * FROM foo',
@@ -90,4 +108,38 @@ test('slow queries are logged', () => {
       ['Slow query', 0],
     ],
   ]);
+});
+
+test('sql errors are annotated with sql', () => {
+  const sink = new TestLogSink();
+  const lc = new LogContext('debug', undefined, sink);
+
+  // threshold is 0 so all queries will be logged
+  const db = new Database(lc, ':memory:');
+
+  let result;
+  try {
+    db.exec('CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT))');
+  } catch (e) {
+    result = String(e);
+  }
+  expect(result).toBe(
+    'SqliteError: near ")": syntax error: CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT))',
+  );
+
+  try {
+    db.prepare('SELECT * FROM foo WHERE name = ??');
+  } catch (e) {
+    result = String(e);
+  }
+  expect(result).toBe(
+    'SqliteError: near "?": syntax error: SELECT * FROM foo WHERE name = ??',
+  );
+
+  try {
+    db.pragma('&Df6(&');
+  } catch (e) {
+    result = String(e);
+  }
+  expect(result).toBe('SqliteError: near "&": syntax error: &Df6(&');
 });

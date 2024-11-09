@@ -2,6 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import SQLite3Database, {
   type RunResult,
   type Statement as SQLite3Statement,
+  SqliteError,
 } from '@rocicorp/zero-sqlite3';
 
 export class Database {
@@ -21,25 +22,42 @@ export class Database {
   }
 
   prepare(sql: string): Statement {
-    return new Statement(
-      this.#lc.withContext('class', 'Statement').withContext('sql', sql),
-      this.#db.prepare(sql),
-      this.#threshold,
+    return this.#run(
+      'prepare',
+      sql,
+      () =>
+        new Statement(
+          this.#lc.withContext('class', 'Statement').withContext('sql', sql),
+          this.#db.prepare(sql),
+          this.#threshold,
+        ),
     );
   }
 
   exec(sql: string): void {
-    const start = performance.now();
-    this.#db.exec(sql);
-    logIfSlow(
-      performance.now() - start,
-      this.#lc.withContext('method', 'exec'),
-      this.#threshold,
-    );
+    this.#run('exec', sql, () => this.#db.exec(sql));
   }
 
   pragma(sql: string): unknown {
-    return this.#db.pragma(sql);
+    return this.#run('pragma', sql, () => this.#db.pragma(sql));
+  }
+
+  #run<T>(method: string, sql: string, fn: () => T): T {
+    const start = performance.now();
+    try {
+      return fn();
+    } catch (e) {
+      if (e instanceof SqliteError) {
+        e.message += `: ${sql}`;
+      }
+      throw e;
+    } finally {
+      logIfSlow(
+        performance.now() - start,
+        this.#lc.withContext('method', method),
+        this.#threshold,
+      );
+    }
   }
 
   close(): void {
