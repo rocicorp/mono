@@ -7,12 +7,7 @@ import type {
   LiteIndexSpec,
   LiteTableSpec,
 } from '../../../db/specs.js';
-import {
-  dropReplicationSlot,
-  getConnectionURI,
-  initDB,
-  testDBs,
-} from '../../../test/db.js';
+import {getConnectionURI, initDB, testDBs} from '../../../test/db.js';
 import {expectTables, initDB as initLiteDB} from '../../../test/lite.js';
 import type {PostgresDB} from '../../../types/pg.js';
 import {initialSync, replicationSlot} from './initial-sync.js';
@@ -840,7 +835,6 @@ describe('replicator/initial-sync', () => {
   });
 
   afterEach(async () => {
-    await dropReplicationSlot(upstream, replicationSlot(SHARD_ID));
     await testDBs.drop(upstream);
   });
 

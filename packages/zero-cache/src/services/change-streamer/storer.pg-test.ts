@@ -1,6 +1,7 @@
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {Queue} from '../../../../shared/src/queue.js';
+import {sleep} from '../../../../shared/src/sleep.js';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {Subscription} from '../../types/subscription.js';
@@ -440,6 +441,16 @@ describe('change-streamer/storer', () => {
     // catchup doesn't include the next transaction.
     storer.store(['09', ['begin', messages.begin()]]);
     storer.store(['0a', ['commit', messages.commit(), {watermark: '0a'}]]);
+
+    // Wait for the storer to commit that transaction.
+    for (let i = 0; i < 10; i++) {
+      const result =
+        await db`SELECT * FROM cdc."changeLog" WHERE watermark = '0a'`;
+      if (result.length) {
+        break;
+      }
+      await sleep(10);
+    }
 
     // Messages should catchup from after '03' and include '06'
     // from the pending transaction. '07' and '08' should not be included

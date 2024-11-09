@@ -6,11 +6,7 @@ import {
 import type postgres from 'postgres';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {Queue} from '../../../../../../shared/src/queue.js';
-import {
-  dropReplicationSlot,
-  getConnectionURI,
-  testDBs,
-} from '../../../../test/db.js';
+import {getConnectionURI, testDBs} from '../../../../test/db.js';
 import type {PostgresDB} from '../../../../types/pg.js';
 import {
   createEventTriggerStatements,
@@ -65,7 +61,6 @@ describe('change-source/tables/ddl', () => {
 
   afterEach(async () => {
     void service?.stop();
-    await dropReplicationSlot(upstream, SLOT_NAME);
     await testDBs.drop(upstream);
   });
 

@@ -13,7 +13,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {Database} from '../../../../zqlite/src/db.js';
 import {listIndexes, listTables} from '../../db/lite-tables.js';
 import type {LiteIndexSpec, LiteTableSpec} from '../../db/specs.js';
-import {dropReplicationSlot, testDBs} from '../../test/db.js';
+import {testDBs} from '../../test/db.js';
 import {expectTables, initDB} from '../../test/lite.js';
 import type {JSONObject} from '../../types/bigint-json.js';
 import type {PostgresDB} from '../../types/pg.js';
@@ -22,7 +22,6 @@ import type {
   Downstream,
   SubscriberContext,
 } from '../change-streamer/change-streamer.js';
-import {replicationSlot} from '../change-streamer/pg/initial-sync.js';
 import {IncrementalSyncer} from './incremental-sync.js';
 import {initChangeLog} from './schema/change-log.js';
 import {initReplicationState} from './schema/replication-state.js';
@@ -56,7 +55,6 @@ describe('replicator/incremental-sync', () => {
 
   afterEach(async () => {
     await syncer.stop(lc);
-    await dropReplicationSlot(upstream, replicationSlot(REPLICA_ID));
     await testDBs.drop(upstream);
   });
 

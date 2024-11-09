@@ -1,7 +1,6 @@
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
 import {
-  dropReplicationSlot,
   expectTables,
   getConnectionURI,
   initDB,
@@ -110,7 +109,6 @@ describe('change-streamer/pg/sync-schema', () => {
   });
 
   afterEach(async () => {
-    await dropReplicationSlot(upstream, replicationSlot(SHARD_ID));
     await testDBs.drop(upstream);
     await replicaFile.unlink();
   }, 10000);

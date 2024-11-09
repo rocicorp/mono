@@ -5,7 +5,7 @@ import {createSilentLogContext} from '../../../../../shared/src/logging-test-uti
 import {Queue} from '../../../../../shared/src/queue.js';
 import {StatementRunner} from '../../../db/statements.js';
 import {
-  dropReplicationSlot,
+  dropReplicationSlots,
   getConnectionURI,
   testDBs,
 } from '../../../test/db.js';
@@ -67,7 +67,7 @@ describe('change-source/pg', () => {
   });
 
   afterEach(async () => {
-    await dropReplicationSlot(upstream, replicationSlot(SHARD_ID));
+    await dropReplicationSlots(upstream);
     await testDBs.drop(upstream);
     await replicaDbFile.unlink();
   });
@@ -312,7 +312,7 @@ describe('change-source/pg', () => {
 
   test('error handling', async () => {
     // Purposely drop the replication slot to test the error case.
-    await dropReplicationSlot(upstream, replicationSlot(SHARD_ID));
+    await dropReplicationSlots(upstream);
 
     let err;
     try {

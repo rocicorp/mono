@@ -5,11 +5,7 @@ import {Queue} from '../../../../../shared/src/queue.js';
 import type {Database} from '../../../../../zqlite/src/db.js';
 import {listIndexes, listTables} from '../../../db/lite-tables.js';
 import type {LiteIndexSpec, LiteTableSpec} from '../../../db/specs.js';
-import {
-  dropReplicationSlot,
-  getConnectionURI,
-  testDBs,
-} from '../../../test/db.js';
+import {getConnectionURI, testDBs} from '../../../test/db.js';
 import {DbFile, expectMatchingObjectsInTables} from '../../../test/lite.js';
 import type {JSONValue} from '../../../types/bigint-json.js';
 import type {PostgresDB} from '../../../types/pg.js';
@@ -19,7 +15,6 @@ import {createMessageProcessor} from '../../replicator/test-utils.js';
 import type {DownstreamChange} from '../change-streamer.js';
 import type {DataChange} from '../schema/change.js';
 import {initializeChangeSource} from './change-source.js';
-import {replicationSlot} from './initial-sync.js';
 
 const SHARD_ID = 'change_source_end_to_mid_test_id';
 
@@ -84,8 +79,7 @@ describe('change-source/pg/end-to-mid-test', () => {
   });
 
   afterAll(async () => {
-    changes.cancel();
-    await dropReplicationSlot(upstream, replicationSlot(SHARD_ID));
+    changes?.cancel();
     await testDBs.drop(upstream);
     await replicaDbFile.unlink();
   });
