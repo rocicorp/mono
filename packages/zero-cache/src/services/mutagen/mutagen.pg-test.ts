@@ -607,7 +607,7 @@ describe('processMutation', () => {
          VALUES ('abc', '123', 2)`;
 
     // Start a concurrent mutation that bumps the lmid from 2 => 3.
-    void db.begin(Mode.SERIALIZABLE, async tx => {
+    const done = db.begin(Mode.SERIALIZABLE, async tx => {
       // Simulate holding a lock on the row.
       tx`SELECT * FROM ${db(
         `zero_${SHARD_ID}`,
@@ -651,7 +651,11 @@ describe('processMutation', () => {
       },
       mockWriteAuthorizer,
       TEST_SCHEMA_VERSION,
-      resolve, // Finish the 2 => 3 transaction only after this 3 => 4 transaction begins.
+      async () => {
+        // Finish the 2 => 3 transaction only after this 3 => 4 transaction begins.
+        resolve();
+        await done;
+      },
     );
 
     expect(error).undefined;
