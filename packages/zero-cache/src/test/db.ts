@@ -38,7 +38,6 @@ class TestDBs {
     }
 
     const sql = this.#sql;
-    await sql`DROP DATABASE IF EXISTS ${sql(database)} WITH (FORCE)`;
     await sql`CREATE DATABASE ${sql(database)}`;
 
     const {host, port, user: username, pass} = sql.options;
