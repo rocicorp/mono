@@ -67,7 +67,6 @@ describe('change-source/pg', () => {
   });
 
   afterEach(async () => {
-    await dropReplicationSlots(upstream);
     await testDBs.drop(upstream);
     await replicaDbFile.unlink();
   });
