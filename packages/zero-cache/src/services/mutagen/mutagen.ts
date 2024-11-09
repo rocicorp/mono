@@ -120,7 +120,7 @@ export class MutagenService implements Mutagen, Service {
   }
 }
 
-const MAX_SERIALIZATION_ATTEMPTS = 2;
+const MAX_SERIALIZATION_ATTEMPTS = 3;
 
 export async function processMutation(
   lc: LogContext | undefined,
@@ -131,7 +131,7 @@ export async function processMutation(
   mutation: Mutation,
   writeAuthorizer: WriteAuthorizer,
   schemaVersion: number,
-  onTxStart?: () => void, // for testing
+  onTxStart?: () => void | Promise<void>, // for testing
 ): Promise<MutationError | undefined> {
   assert(
     mutation.type === MutationType.CRUD,
@@ -186,8 +186,8 @@ export async function processMutation(
     let errorMode = false;
     for (let i = 0; i < MAX_SERIALIZATION_ATTEMPTS; i++) {
       try {
-        await db.begin(Mode.SERIALIZABLE, tx => {
-          onTxStart?.();
+        await db.begin(Mode.SERIALIZABLE, async tx => {
+          await onTxStart?.();
           return processMutationWithTx(
             tx,
             authData,
