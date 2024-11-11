@@ -3,8 +3,8 @@
  * These types represent the shape that their config must adhere to
  * so we can compile it to a JSON ZeroConfig.
  */
-import {normalizeSchema} from '../../../zero-client/src/client/normalized-schema.js';
 import type {AST} from '../../../zero-protocol/src/ast.js';
+import {normalizeSchema} from '../../../zero-schema/src/normalized-schema.js';
 import {
   type TableSchema,
   type TableSchemaToRow,
