@@ -27,7 +27,7 @@ import {
 import {toLexiVersion} from './lsn.js';
 import {initShardSchema} from './schema/init.js';
 import {getPublicationInfo, type PublicationInfo} from './schema/published.js';
-import {getShardConfig} from './schema/shard.js';
+import {getShardConfig, validatePublications} from './schema/shard.js';
 import type {ShardConfig} from './shard-config.js';
 
 export function replicationSlot(shardID: string): string {
@@ -124,7 +124,13 @@ async function ensurePublishedTables(
 
   const {publications} = await getShardConfig(upstreamDB, shard.id);
 
-  return getPublicationInfo(upstreamDB, publications);
+  const published = await getPublicationInfo(upstreamDB, publications);
+
+  // The publications were validated in initShardSchema, but they published
+  // tables may have since changed, so validate them again.
+  validatePublications(lc, shard.id, published);
+
+  return published;
 }
 
 /* eslint-disable @typescript-eslint/naming-convention */

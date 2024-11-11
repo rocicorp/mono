@@ -1,13 +1,12 @@
 import type {LogContext} from '@rocicorp/logger';
 import {literal} from 'pg-format';
 import {assert} from '../../../../../../shared/src/asserts.js';
-import {warnIfDataTypeSupported} from '../../../../db/pg-to-lite.js';
 import type {PostgresDB, PostgresTransaction} from '../../../../types/pg.js';
 import {id} from '../../../../types/sql.js';
-import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/replication-state.js';
 import type {ShardConfig} from '../shard-config.js';
 import {createEventTriggerStatements} from './ddl.js';
 import {getPublicationInfo, type PublicationInfo} from './published.js';
+import {validate} from './validation.js';
 
 // Creates a function that appends `_SHARD_ID` to the input.
 export function append(shardID: string) {
@@ -148,16 +147,15 @@ export async function setupTablesAndReplication(
   await tx.unsafe(GLOBAL_SETUP + shardSetup(id, allPublications));
 
   const pubInfo = await getPublicationInfo(tx, allPublications);
-  validatePublications(lc, unescapedSchema(id), pubInfo);
+  validatePublications(lc, id, pubInfo);
 }
 
-const ALLOWED_IDENTIFIER_CHARS = /^[A-Za-z_]+[A-Za-z0-9_-]*$/;
-
-function validatePublications(
+export function validatePublications(
   lc: LogContext,
-  shardSchema: string,
+  shardID: string,
   published: PublicationInfo,
 ) {
+  const shardSchema = unescapedSchema(shardID);
   // Verify that all publications export the proper events.
   published.publications.forEach(pub => {
     if (
@@ -173,29 +171,5 @@ function validatePublications(
     }
   });
 
-  published.tables.forEach(table => {
-    if (!['public', 'zero', shardSchema].includes(table.schema)) {
-      // This may be relaxed in the future. We would need a plan for support in the AST first.
-      throw new Error('Only the default "public" schema is supported.');
-    }
-    if (ZERO_VERSION_COLUMN_NAME in table.columns) {
-      throw new Error(
-        `Table "${table.name}" uses reserved column name "${ZERO_VERSION_COLUMN_NAME}"`,
-      );
-    }
-    if (table.primaryKey.length === 0) {
-      throw new Error(`Table "${table.name}" does not have a PRIMARY KEY`);
-    }
-    if (!ALLOWED_IDENTIFIER_CHARS.test(table.name)) {
-      throw new Error(`Table "${table.name}" has invalid characters.`);
-    }
-    for (const [col, spec] of Object.entries(table.columns)) {
-      if (!ALLOWED_IDENTIFIER_CHARS.test(col)) {
-        throw new Error(
-          `Column "${col}" in table "${table.name}" has invalid characters.`,
-        );
-      }
-      warnIfDataTypeSupported(lc, spec.dataType, table.name, col);
-    }
-  });
+  published.tables.forEach(table => validate(lc, shardSchema, table));
 }
