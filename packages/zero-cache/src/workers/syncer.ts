@@ -171,7 +171,7 @@ export async function decodeAndCheckToken(
 ) {
   assert(
     secret,
-    'JWT secret was not set in `zero.config.ts`. Set this to the secret that you use to sign JWTs.',
+    'JWT secret was not set in `zero.config`. Set this to the secret that you use to sign JWTs.',
   );
   const decodedToken = (await jwtVerify(auth, secret)).payload;
   must(decodedToken, 'Failed to verify JWT');

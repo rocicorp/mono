@@ -2,40 +2,8 @@
  * These types represent the _compiled_ config whereas `define-config` types represent the _source_ config.
  */
 
-import path from 'node:path';
-import {fileURLToPath} from 'node:url';
-import {tsImport} from 'tsx/esm/api';
 import * as v from '../../../shared/src/valita.js';
-import {astSchema} from '../../../zero-protocol/src/ast.js';
 import {parseOptions, type Config} from './config.js';
-
-export type Action = 'select' | 'insert' | 'update' | 'delete';
-
-const ruleSchema = v.tuple([v.literal('allow'), astSchema]);
-export type Rule = v.Infer<typeof ruleSchema>;
-const policySchema = v.array(ruleSchema);
-export type Policy = v.Infer<typeof policySchema>;
-
-const assetSchema = v.object({
-  select: policySchema.optional(),
-  insert: policySchema.optional(),
-  update: policySchema.optional(),
-  delete: policySchema.optional(),
-});
-
-export type AssetAuthorization = v.Infer<typeof assetSchema>;
-
-const authorizationConfigSchema = v.record(
-  v.object({
-    table: assetSchema.optional(),
-    column: v.record(assetSchema).optional(),
-    row: assetSchema.optional(),
-    cell: v.record(assetSchema).optional(),
-  }),
-);
-
-// TODO: This will be moved into schema.ts
-export type AuthorizationConfig = v.Infer<typeof authorizationConfigSchema>;
 
 /**
  * Configures the view of the upstream database replicated to this zero-cache.
@@ -295,41 +263,15 @@ export const zeroOptions = {
 
 export type ZeroConfig = Config<typeof zeroOptions>;
 
-export type Authorization = {authorization?: AuthorizationConfig | undefined};
-
-// TODO: Remove when auth is moved to schema.
-export type ZeroConfigWithAuthorization = ZeroConfig & Authorization;
-
 const ENV_VAR_PREFIX = 'ZERO_';
 
-let loadedConfig: Promise<ZeroConfigWithAuthorization> | undefined;
+let loadedConfig: ZeroConfig | undefined;
 
-export function getZeroConfig(
-  argv = process.argv.slice(2),
-): Promise<ZeroConfigWithAuthorization> {
-  if (loadedConfig) {
-    return loadedConfig;
+export function getZeroConfig(argv = process.argv.slice(2)): ZeroConfig {
+  if (!loadedConfig) {
+    const config = parseOptions(zeroOptions, argv, ENV_VAR_PREFIX);
+    loadedConfig = config;
   }
 
-  const dirname = path.dirname(fileURLToPath(import.meta.url));
-  const configFile = process.env['ZERO_CONFIG_PATH'] ?? './zero.config.ts';
-  const absoluteConfigPath = path.resolve(configFile);
-  const relativePath = path.join(
-    path.relative(dirname, path.dirname(absoluteConfigPath)),
-    path.basename(absoluteConfigPath),
-  );
-
-  loadedConfig = tsImport(relativePath, import.meta.url)
-    .then(async module => (await module.default) as Authorization)
-    .then(authorization => ({
-      ...authorization,
-      ...parseOptions(zeroOptions, argv, ENV_VAR_PREFIX),
-    }))
-    .catch(e => {
-      console.error(
-        `Failed to load zero config from ${absoluteConfigPath}: ${e}`,
-      );
-      throw e;
-    });
   return loadedConfig;
 }

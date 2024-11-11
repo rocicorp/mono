@@ -1,11 +1,11 @@
 import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {Database} from '../../../../zqlite/src/db.js';
-import {
-  type Rule,
-  type ZeroConfigWithAuthorization,
-} from '../../config/zero-config.js';
 import {WriteAuthorizerImpl} from './write-authorizer.js';
+import type {
+  AuthorizationConfig,
+  Rule,
+} from '../../../../zero-schema/src/compiled-authorization.js';
 
 const lc = createSilentLogContext();
 
@@ -152,11 +152,12 @@ describe('can insert/update/delete/upsert', () => {
     id?: string | undefined;
     actions?: ('Insert' | 'Update' | 'Delete' | 'Upsert')[] | undefined;
     expected: boolean;
-    authorization: ZeroConfigWithAuthorization['authorization'];
+    authorization: AuthorizationConfig | undefined;
   }[])('$name', ({authorization, sub, id, actions, expected}) => {
     const authorizer = new WriteAuthorizerImpl(
       lc,
-      {authorization},
+      {},
+      authorization,
       replica,
       'cg',
     );

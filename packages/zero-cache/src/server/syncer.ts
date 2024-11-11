@@ -22,9 +22,13 @@ import {Subscription} from '../types/subscription.js';
 import {Syncer} from '../workers/syncer.js';
 import {exitAfter, runUntilKilled} from './life-cycle.js';
 import {createLogContext} from './logging.js';
+import {getAuthorizationConfig} from '../auth/load-authorization.js';
 
 export default async function runWorker(parent: Worker): Promise<void> {
-  const config = await getZeroConfig();
+  const [config, authorizationConfig] = await Promise.all([
+    getZeroConfig(),
+    getAuthorizationConfig(),
+  ]);
   assert(config.cvr.maxConnsPerWorker);
   assert(config.upstream.maxConnsPerWorker);
 
@@ -75,7 +79,14 @@ export default async function runWorker(parent: Worker): Promise<void> {
     );
 
   const mutagenFactory = (id: string) =>
-    new MutagenService(lc, config.shard.id, id, upstreamDB, config);
+    new MutagenService(
+      lc,
+      config.shard.id,
+      id,
+      upstreamDB,
+      config,
+      authorizationConfig,
+    );
 
   const syncer = new Syncer(
     lc,
