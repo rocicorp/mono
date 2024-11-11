@@ -60,10 +60,6 @@ export type AuthorizationConfig<TAuthDataShape, TSchema extends Schema> = {
   };
 };
 
-export type AuthConfig<TAuthDataShape, TSchema extends Schema> = {
-  authorization?: AuthorizationConfig<TAuthDataShape, TSchema>;
-};
-
 export async function defineAuthorization<
   TAuthDataShape,
   TSchema extends Schema,
@@ -72,8 +68,8 @@ export async function defineAuthorization<
   definer: (
     query: Queries<TSchema>,
   ) =>
-    | Promise<AuthConfig<TAuthDataShape, TSchema>>
-    | AuthConfig<TAuthDataShape, TSchema>,
+    | Promise<AuthorizationConfig<TAuthDataShape, TSchema>>
+    | AuthorizationConfig<TAuthDataShape, TSchema>,
 ): Promise<{authorization: CompiledAuthorizationConfig | undefined}> {
   const normalizedSchema = normalizeSchema(schema);
   const queries = {} as Record<string, Query<TableSchema>>;
@@ -128,11 +124,7 @@ function compileStaticRules<TAuthDataShape>(
     rule =>
       [
         'allow',
-        (
-          rule(authDataRef as TAuthDataShape) as unknown as {
-            ast: AST;
-          }
-        ).ast,
+        (rule(authDataRef as TAuthDataShape) as ConfigQuery<TableSchema>).ast,
       ] as const,
   );
 }
@@ -186,9 +178,7 @@ function compileInstanceRules<TAuthDataShape, TSchema extends TableSchema>(
           rule(
             authDataRef as TAuthDataShape,
             preMutationRowRef as TableSchemaToRow<TSchema>,
-          ) as unknown as {
-            ast: AST;
-          }
+          ) as ConfigQuery<TableSchema>
         ).ast,
       ] as const,
   );
