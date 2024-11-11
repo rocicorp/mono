@@ -30,28 +30,26 @@ export default defineAuthorization<AuthData, Schema>(schema, query => {
     query.user.where('id', '=', authData.sub).where('role', '=', 'crew');
 
   return {
-    authorization: {
-      user: {
-        // Only the authentication system can write to the user table.
-        table: {
-          insert: [],
-          update: [],
-          delete: [],
-        },
+    user: {
+      // Only the authentication system can write to the user table.
+      table: {
+        insert: [],
+        update: [],
+        delete: [],
       },
-      issue: {
-        row: {
-          insert: [allowIfLoggedIn],
-          update: [allowIfIssueCreator, allowIfAdmin],
-          delete: [allowIfIssueCreator, allowIfAdmin],
-        },
+    },
+    issue: {
+      row: {
+        insert: [allowIfLoggedIn],
+        update: [allowIfIssueCreator, allowIfAdmin],
+        delete: [allowIfIssueCreator, allowIfAdmin],
       },
-      comment: {
-        row: {
-          insert: [allowIfLoggedIn],
-          update: [allowIfCommentCreator, allowIfAdmin],
-          delete: [allowIfCommentCreator, allowIfAdmin],
-        },
+    },
+    comment: {
+      row: {
+        insert: [allowIfLoggedIn],
+        update: [allowIfCommentCreator, allowIfAdmin],
+        delete: [allowIfCommentCreator, allowIfAdmin],
       },
     },
   };

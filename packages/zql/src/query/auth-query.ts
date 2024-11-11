@@ -13,6 +13,10 @@ export function authQuery<TSchema extends TableSchema>(schema: TSchema) {
   return new AuthQuery<TSchema>(normalizeTableSchema(schema));
 }
 
+/**
+ * This class will replace `config-query` once we have moved all
+ * authorization logic out of the config.
+ */
 export class AuthQuery<
   TTableSchema extends TableSchema,
   TReturn extends QueryType = DefaultQueryResultRow<TTableSchema>,
@@ -31,6 +35,10 @@ export class AuthQuery<
     format: Format | undefined,
   ): Query<TSchema, TReturn> {
     return new AuthQuery(schema, ast, format);
+  }
+
+  get ast() {
+    return this._completeAst();
   }
 
   materialize(): TypedView<Smash<TReturn>> {

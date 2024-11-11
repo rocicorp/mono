@@ -121,7 +121,7 @@ describe('can insert/update/delete/upsert', () => {
       },
     },
     {
-      name: 'upsert uses insert policy if nothing exists',
+      name: 'upsert uses insert policy if no row exists',
       id: '2',
       expected: false,
       actions: ['Upsert'],
@@ -134,7 +134,7 @@ describe('can insert/update/delete/upsert', () => {
       },
     },
     {
-      name: 'upsert uses update policy if something exists',
+      name: 'upsert uses update policy if a row exists to update',
       id: '1',
       expected: false,
       actions: ['Upsert'],

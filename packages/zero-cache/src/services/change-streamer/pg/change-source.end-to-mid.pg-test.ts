@@ -859,7 +859,7 @@ describe('change-source/pg/end-to-mid-test', () => {
   ][])(
     '%s',
     async (
-      name,
+      _name,
       stmts,
       changes,
       expectedData,
