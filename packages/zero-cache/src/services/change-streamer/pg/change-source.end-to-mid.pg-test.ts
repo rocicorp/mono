@@ -866,10 +866,6 @@ describe('change-source/pg/end-to-mid-test', () => {
       expectedTables,
       expectedIndexes,
     ) => {
-      if (name.startsWith('DISABLED: ')) {
-        lc.info?.('skipping test:', name);
-        return;
-      }
       await upstream.unsafe(stmts);
       const transaction = await nextTransaction();
       expect(transaction.length).toBe(changes.length);
