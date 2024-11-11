@@ -95,7 +95,7 @@ const issueLabelSchema: TableSchema = {
     labelID: {type: 'string'},
   },
   // mutators require an ID field still.
-  primaryKey: ['id'],
+  primaryKey: ['labelID', 'issueID'],
   relationships: {},
 };
 

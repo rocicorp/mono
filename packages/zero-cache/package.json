@@ -14,6 +14,7 @@
     "local": "tsx tool/local.ts",
     "start": "tsx ./src/server/main.ts",
     "bench": "tsx ./bench/bench.ts",
+    "double": "tsx ./bench/double.ts",
     "wal_bench": "tsx ./bench/wal-bench.ts",
     "wal2_bench": "tsx ./bench/wal2-bench.ts"
   },
