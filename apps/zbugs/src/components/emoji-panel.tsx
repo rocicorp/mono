@@ -9,7 +9,7 @@ import {nanoid} from 'nanoid';
 import {useCallback} from 'react';
 import {useQuery} from 'zero-react/src/use-query.js';
 import addEmojiIcon from '../assets/icons/add-emoji.svg';
-import type {Schema} from '../domain/schema.js';
+import type {Schema} from '../../schema.js';
 import {useLogin} from '../hooks/use-login.js';
 import {useNumericPref} from '../hooks/use-user-pref.js';
 import {useZero} from '../hooks/use-zero.js';

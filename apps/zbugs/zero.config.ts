@@ -1,5 +1,5 @@
 import {defineAuthorization} from '@rocicorp/zero/config';
-import {type Schema, schema} from './src/domain/schema.js';
+import {type Schema, schema} from './schema.js';
 
 /** The contents of the zbugs JWT */
 type AuthData = {

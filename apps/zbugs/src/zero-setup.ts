@@ -1,6 +1,6 @@
 import {and, cmp, not, or, Zero} from '@rocicorp/zero';
 import {Atom} from './atom.js';
-import {type Schema, schema} from './domain/schema.js';
+import {type Schema, schema} from '../schema.js';
 import {getJwt, getRawJwt} from './jwt.js';
 import {mark} from './perf-log.js';
 
