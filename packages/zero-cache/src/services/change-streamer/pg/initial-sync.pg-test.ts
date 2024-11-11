@@ -12,7 +12,9 @@ import {expectTables, initDB as initLiteDB} from '../../../test/lite.js';
 import type {PostgresDB} from '../../../types/pg.js';
 import {initialSync, replicationSlot} from './initial-sync.js';
 import {fromLexiVersion} from './lsn.js';
+import {initShardSchema} from './schema/init.js';
 import {getPublicationInfo} from './schema/published.js';
+import {UnsupportedTableSchemaError} from './schema/validation.js';
 
 const SHARD_ID = 'initial_sync_test_id';
 
@@ -911,4 +913,24 @@ describe('replicator/initial-sync', () => {
       });
     });
   }
+
+  test('resume initial sync with invalid table', async () => {
+    const lc = createSilentLogContext();
+    const shardConfig = {id: SHARD_ID, publications: []};
+
+    await initShardSchema(lc, upstream, shardConfig);
+
+    // Shard should be setup to publish all "public" tables.
+    // Now add an invalid table that becomes part of that publication.
+
+    await upstream`CREATE TABLE no_primary_key(id int4)`;
+
+    let result;
+    try {
+      await initialSync(lc, shardConfig, replica, getConnectionURI(upstream));
+    } catch (e) {
+      result = e;
+    }
+    expect(result).toBeInstanceOf(UnsupportedTableSchemaError);
+  });
 });

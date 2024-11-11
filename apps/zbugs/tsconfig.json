@@ -10,5 +10,5 @@
       "@rocicorp/zero/react": ["./zero/src/react.ts"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "schema.ts"]
 }
