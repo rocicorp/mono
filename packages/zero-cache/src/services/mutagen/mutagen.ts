@@ -29,6 +29,7 @@ import {unescapedSchema as schema} from '../change-streamer/pg/schema/shard.js';
 import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.js';
 import type {Service} from '../service.js';
 import {WriteAuthorizerImpl, type WriteAuthorizer} from './write-authorizer.js';
+import type {AuthorizationConfig} from '../../../../zero-schema/src/compiled-authorization.js';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
@@ -61,6 +62,7 @@ export class MutagenService implements Mutagen, Service {
     clientGroupID: string,
     upstream: PostgresDB,
     config: ZeroConfig,
+    authorizationConfig: AuthorizationConfig,
   ) {
     this.id = clientGroupID;
     this.#lc = lc
@@ -75,6 +77,7 @@ export class MutagenService implements Mutagen, Service {
     this.#writeAuthorizer = new WriteAuthorizerImpl(
       this.#lc,
       config,
+      authorizationConfig,
       this.#replica,
       clientGroupID,
     );
