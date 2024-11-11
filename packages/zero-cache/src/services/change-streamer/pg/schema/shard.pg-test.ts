@@ -3,6 +3,7 @@ import {createSilentLogContext} from '../../../../../../shared/src/logging-test-
 import {expectTables, initDB, testDBs} from '../../../../test/db.js';
 import type {PostgresDB} from '../../../../types/pg.js';
 import {setupTablesAndReplication} from './shard.js';
+import {UnsupportedTableSchemaError} from './validation.js';
 
 describe('change-source/pg', () => {
   const lc = createSilentLogContext();
@@ -242,7 +243,7 @@ describe('change-source/pg', () => {
         )
         .catch(e => e);
 
-      expect(result).toBeInstanceOf(Error);
+      expect(result).toBeInstanceOf(UnsupportedTableSchemaError);
       expect(String(result)).toContain(c.error);
     });
   }
