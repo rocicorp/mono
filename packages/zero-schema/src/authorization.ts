@@ -1,27 +1,16 @@
-/**
- * Developers can define their configuration via typescript.
- * These types represent the shape that their config must adhere to
- * so we can compile it to a JSON ZeroConfig.
- */
-import type {AST} from '../../../zero-protocol/src/ast.js';
-import {normalizeSchema} from '../../../zero-schema/src/normalized-schema.js';
-import {
-  type TableSchema,
-  type TableSchemaToRow,
-} from '../../../zero-schema/src/table-schema.js';
-import type {Query} from '../../../zql/src/query/query.js';
-import {ConfigQuery} from './config-query.js';
-import {authDataRef, preMutationRowRef} from './refs.js';
+import type {Query} from '../../zql/src/query/query.js';
+import type {Schema} from './schema.js';
+import type {TableSchema, TableSchemaToRow} from './table-schema.js';
 import type {
-  Action,
   AssetAuthorization as CompiledAssetAuthorization,
   AuthorizationConfig as CompiledAuthorizationConfig,
-} from './zero-config.js';
+} from './compiled-authorization.js';
+import {normalizeSchema} from './normalized-schema.js';
+import {AuthQuery} from '../../zql/src/query/auth-query.js';
+import type {AST} from '../../zero-protocol/src/ast.js';
+import {staticParam} from '../../zql/src/query/query-impl.js';
 
-type Schema = {
-  readonly version: number;
-  readonly tables: {readonly [table: string]: TableSchema};
-};
+type Action = 'select' | 'insert' | 'update' | 'delete';
 
 export type Queries<TSchema extends Schema> = {
   [K in keyof TSchema['tables']]: Query<TSchema['tables'][K]>;
@@ -70,15 +59,15 @@ export async function defineAuthorization<
   ) =>
     | Promise<AuthorizationConfig<TAuthDataShape, TSchema>>
     | AuthorizationConfig<TAuthDataShape, TSchema>,
-): Promise<{authorization: CompiledAuthorizationConfig | undefined}> {
+): Promise<CompiledAuthorizationConfig | undefined> {
   const normalizedSchema = normalizeSchema(schema);
   const queries = {} as Record<string, Query<TableSchema>>;
   for (const [name, tableSchema] of Object.entries(normalizedSchema.tables)) {
-    queries[name] = new ConfigQuery(tableSchema);
+    queries[name] = new AuthQuery(tableSchema);
   }
 
   const config = await definer(queries as Queries<TSchema>);
-  return {authorization: compileAuthorization(config)};
+  return compileAuthorization(config);
 }
 
 function compileAuthorization<TAuthDataShape, TSchema extends Schema>(
@@ -124,7 +113,7 @@ function compileStaticRules<TAuthDataShape>(
     rule =>
       [
         'allow',
-        (rule(authDataRef as TAuthDataShape) as ConfigQuery<TableSchema>).ast,
+        (rule(authDataRef as TAuthDataShape) as AuthQuery<TableSchema>).ast,
       ] as const,
   );
 }
@@ -178,7 +167,7 @@ function compileInstanceRules<TAuthDataShape, TSchema extends TableSchema>(
           rule(
             authDataRef as TAuthDataShape,
             preMutationRowRef as TableSchemaToRow<TSchema>,
-          ) as ConfigQuery<TableSchema>
+          ) as AuthQuery<TableSchema>
         ).ast,
       ] as const,
   );
@@ -203,3 +192,23 @@ function compileCellConfig<TAuthDataShape, TSchema extends TableSchema>(
   }
   return ret;
 }
+
+export const authDataRef = new Proxy(
+  {},
+  {
+    get(_target, prop, _receiver) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return staticParam<any, any>('authData', prop as string);
+    },
+  },
+);
+
+export const preMutationRowRef = new Proxy(
+  {},
+  {
+    get(_target, prop, _receiver) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return staticParam<any, any>('preMutationRow', prop as string);
+    },
+  },
+);

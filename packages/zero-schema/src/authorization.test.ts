@@ -1,7 +1,7 @@
 import {expect, test} from 'vitest';
-import {createSchema} from '../../../zero-schema/src/schema.js';
-import {createTableSchema} from '../../../zero-schema/src/table-schema.js';
-import {defineAuthorization} from './define-authorization.js';
+import {createSchema} from './schema.js';
+import {createTableSchema} from './table-schema.js';
+import {defineAuthorization} from './authorization.js';
 
 const userSchema = createTableSchema({
   tableName: 'user',

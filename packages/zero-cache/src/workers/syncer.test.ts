@@ -13,7 +13,7 @@ describe('decodeAndCheckToken', () => {
   test('no secret', async () => {
     await expect(async () =>
       decodeAndCheckToken(await makeJWT(), undefined, 'testID'),
-    ).rejects.toThrow('JWT secret was not set in `zero.config.ts`');
+    ).rejects.toThrow('JWT secret was not set in `zero.config`');
   });
 
   test('invalid token', async () => {
