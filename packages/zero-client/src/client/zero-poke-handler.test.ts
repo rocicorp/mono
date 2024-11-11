@@ -10,7 +10,7 @@ import {
   vi,
 } from 'vitest';
 import type {AST} from '../../../zero-protocol/src/ast.js';
-import {normalizeSchema} from './normalized-schema.js';
+import {normalizeSchema} from '../../../zero-schema/src/normalized-schema.js';
 import {PokeHandler, mergePokes} from './zero-poke-handler.js';
 
 let rafStub: MockInstance<(cb: FrameRequestCallback) => number>;

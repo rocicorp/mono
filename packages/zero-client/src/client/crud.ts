@@ -19,9 +19,9 @@ import {
 import type {NormalizedPrimaryKey} from '../../../zero-schema/src/normalize-table-schema.js';
 import type {TableSchemaToRow} from '../../../zero-schema/src/table-schema.js';
 import {toPrimaryKeyString} from './keys.js';
-import type {NormalizedSchema} from './normalized-schema.js';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.js';
 import type {Schema} from '../../../zero-schema/src/mod.js';
+import type {NormalizedSchema} from '../../../zero-schema/src/normalized-schema.js';
 
 /**
  * If a field is |undefined, add the ? marker to also make the field optional.

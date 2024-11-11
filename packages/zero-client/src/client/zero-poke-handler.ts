@@ -20,7 +20,7 @@ import {
   toGotQueriesKey,
   toPrimaryKeyString,
 } from './keys.js';
-import {type NormalizedSchema} from './normalized-schema.js';
+import type {NormalizedSchema} from '../../../zero-schema/src/normalized-schema.js';
 
 type PokeAccumulator = {
   readonly pokeStart: PokeStartBody;
