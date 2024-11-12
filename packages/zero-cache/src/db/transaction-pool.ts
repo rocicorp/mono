@@ -50,7 +50,7 @@ export class TransactionPool {
   readonly #mode: Mode;
   readonly #init: QueuedTask | undefined;
   readonly #cleanup: QueuedTask | undefined;
-  readonly #tasks = new Queue<TaskTracker | Error | 'done'>();
+  readonly #tasks = new Queue<TaskTracker | Error | 'done' | 'abort'>();
   readonly #workers: Promise<unknown>[] = [];
   readonly #initialWorkers: number;
   readonly #maxWorkers: number;
@@ -226,12 +226,12 @@ export class TransactionPool {
           }
         };
 
-        let task: TaskTracker | Error | 'done' = this.#init
+        let task: TaskTracker | Error | 'done' | 'abort' = this.#init
           ? {task: this.#init}
           : await this.#tasks.dequeue(timeoutTask, timeoutMs);
 
         try {
-          while (task !== 'done') {
+          while (task !== 'done' && task !== 'abort') {
             if (
               task instanceof Error ||
               (task.task !== this.#init && this.#failure)
@@ -248,6 +248,9 @@ export class TransactionPool {
           // Execute the cleanup task even on failure.
           if (this.#cleanup) {
             await executeTask({task: this.#cleanup});
+          }
+          if (task === 'abort') {
+            await executeTask(ABORT_TASK); // ROLLBACK the transaction
           }
         }
 
@@ -310,15 +313,27 @@ export class TransactionPool {
   }
 
   /**
+   * Ends all workers with a ROLLBACK. Throws if the pool is already done
+   * or aborted.
+   */
+  abort() {
+    this.#setDone('abort');
+  }
+
+  /**
    * Signals to all workers to end their transaction once all pending tasks have
-   * been completed.
+   * been completed. Throws if the pool is already done or aborted.
    */
   setDone() {
+    this.#setDone('done');
+  }
+
+  #setDone(terminal: 'done' | 'abort') {
     assert(!this.#done, 'already set done');
     this.#done = true;
 
-    for (let i = 0; i < this.#workers.length; i++) {
-      void this.#tasks.enqueue('done');
+    for (let i = 0; i < this.#numWorkers; i++) {
+      void this.#tasks.enqueue(terminal);
     }
   }
 
@@ -595,13 +610,15 @@ type QueuedTask<T = unknown> = (
 
 type TaskTracker<T = unknown> =
   | {
-      task: QueuedTask;
-      resolver?: undefined;
+      readonly task: QueuedTask;
+      readonly resolver?: undefined;
     }
   | {
-      task: QueuedTask<ReadResult<T>>;
-      resolver: Resolver<T>;
+      readonly task: QueuedTask<ReadResult<T>>;
+      readonly resolver: Resolver<T>;
     };
+
+const ABORT_TASK: TaskTracker = {task: tx => new Statements([tx`ROLLBACK`])};
 
 const IDLE_TIMEOUT_MS = 5_000;
 
