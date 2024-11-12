@@ -315,7 +315,7 @@ type ReplicationError = {
   lsn: string;
   msg: Pgoutput.Message;
   err: unknown;
-  lastLogged: Date;
+  lastLogTime: number;
 };
 
 class ChangeMaker {
@@ -337,21 +337,23 @@ class ChangeMaker {
       try {
         return this.#makeChanges(lsn, msg);
       } catch (err) {
-        this.#error = {lsn, msg, err, lastLogged: new Date(0)};
+        this.#error = {lsn, msg, err, lastLogTime: 0};
       }
     }
-    const {err, lastLogged} = this.#error;
+    const {err, lastLogTime} = this.#error;
     const now = Date.now();
 
-    // Log an error as replication messages continue to be dropped,
+    // Output an error to logs as replication messages continue to be dropped,
     // at most once a minute.
-    if (now - lastLogged.getTime() > 60_000) {
+    if (now - lastLogTime > 60_000) {
       this.#lc.error?.(
         `Unable to continue replication since ${this.#error.lsn}: ${String(
           err,
         )}`,
+        // 'content' can be a large byte Buffer. Exclude it from logging output.
         {...this.#error.msg, content: undefined},
       );
+      this.#error.lastLogTime = now;
     }
     return [];
   }
