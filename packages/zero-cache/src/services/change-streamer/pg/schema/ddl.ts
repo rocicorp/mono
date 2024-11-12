@@ -285,9 +285,11 @@ BEGIN
 
   -- Construct and emit the DdlUpdateEvent message.
 
-  IF target IS NOT NULL
-  THEN
+  IF target IS NOT NULL THEN
     SELECT json_build_object('tag', tag, cmd.object_type, target) INTO event;
+  ELSIF tag LIKE 'CREATE %' THEN
+    PERFORM ${schema}.notice_ignore('noop ' || tag);
+    RETURN;
   ELSE
     SELECT json_build_object('tag', tag) INTO event;
   END IF;
