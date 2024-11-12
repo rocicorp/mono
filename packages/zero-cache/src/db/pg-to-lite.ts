@@ -70,6 +70,7 @@ function mapPostgresToLiteDefault(
 export function mapPostgresToLiteColumn(
   table: string,
   column: {name: string; spec: ColumnSpec},
+  ignoreDefault?: 'ignore-default',
 ): ColumnSpec {
   const {pos, dataType, notNull, dflt} = column.spec;
   return {
@@ -77,7 +78,10 @@ export function mapPostgresToLiteColumn(
     dataType,
     characterMaximumLength: null,
     notNull,
-    dflt: mapPostgresToLiteDefault(table, column.name, dataType, dflt),
+    dflt:
+      ignoreDefault === 'ignore-default'
+        ? null
+        : mapPostgresToLiteDefault(table, column.name, dataType, dflt),
   };
 }
 
@@ -91,7 +95,9 @@ export function mapPostgresToLite(t: TableSpec): LiteTableSpec {
       ...Object.fromEntries(
         Object.entries(t.columns).map(([col, spec]) => [
           col,
-          mapPostgresToLiteColumn(name, {name: col, spec}),
+          // `ignore-default` for create table statements because
+          // there are no rows to set the default for.
+          mapPostgresToLiteColumn(name, {name: col, spec}, 'ignore-default'),
         ]),
       ),
       [ZERO_VERSION_COLUMN_NAME]: ZERO_VERSION_COLUMN_SPEC,
