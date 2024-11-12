@@ -988,36 +988,39 @@ describe('change-source/tables/ddl', () => {
   test.each([
     [
       'CREATE TABLE private.bar(id TEXT PRIMARY KEY, a INT4 UNIQUE, b INT8 UNIQUE, UNIQUE(b, a))',
-      'zero(0) ignoring private.bar',
+      ['zero(0) ignoring private.bar'],
     ],
     [
       'CREATE INDEX foo_name_index on private.foo (name desc, id)',
-      'zero(0) ignoring private.foo_name_index',
+      ['zero(0) ignoring private.foo_name_index'],
     ],
-    ['ALTER TABLE private.foo RENAME TO food', 'zero(0) ignoring private.food'],
+    [
+      'ALTER TABLE private.foo RENAME TO food',
+      ['zero(0) ignoring private.food'],
+    ],
     [
       'ALTER TABLE private.foo ADD username TEXT UNIQUE',
-      'zero(0) ignoring private.foo',
+      ['zero(0) ignoring private.foo'],
     ],
     [
       `ALTER TABLE private.foo ADD bar text DEFAULT 'boo'`,
-      'zero(0) ignoring private.foo',
+      ['zero(0) ignoring private.foo'],
     ],
     [
       `ALTER TABLE private.foo ALTER name SET DEFAULT 'alice'`,
-      'zero(0) ignoring private.foo',
+      ['zero(0) ignoring private.foo'],
     ],
     [
       `ALTER TABLE private.foo RENAME name to handle`,
-      'zero(0) ignoring private.foo.handle',
+      ['zero(0) ignoring private.foo.handle'],
     ],
     [
       `ALTER TABLE private.foo drop description`,
-      'zero(0) ignoring private.foo',
+      ['zero(0) ignoring private.foo'],
     ],
     [
       `ALTER PUBLICATION nonzeropub ADD TABLE pub.yoo`,
-      'zero(0) ignoring pub.yoo in publication nonzeropub',
+      ['zero(0) ignoring pub.yoo in publication nonzeropub'],
     ],
     [
       `
@@ -1033,11 +1036,18 @@ describe('change-source/tables/ddl', () => {
       );
       SELECT "dataVersion", "schemaVersion", "minSafeVersion" FROM "cvr"."versionHistory";
       `,
-      'zero(0) ignoring cvr."versionHistory"',
+      ['zero(0) ignoring cvr."versionHistory"'],
     ],
-  ] satisfies [string, string][])(
+    [
+      `CREATE TABLE IF NOT EXISTS pub.foo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);`,
+      [
+        `relation "foo" already exists, skipping`,
+        `zero(0) ignoring noop CREATE TABLE`,
+      ],
+    ],
+  ] satisfies [string, string[]][])(
     'ignore unrelated events: %s',
-    async (query, expectedNotice) => {
+    async (query, expectedNotices) => {
       while (notices.size()) {
         await notices.dequeue();
       }
@@ -1068,8 +1078,10 @@ describe('change-source/tables/ddl', () => {
         type: 'ddlStart',
       });
 
-      const notice = await notices.dequeue();
-      expect(notice.message).toBe(expectedNotice);
+      for (const n of expectedNotices) {
+        const notice = await notices.dequeue();
+        expect(notice.message).toBe(n);
+      }
     },
   );
 
