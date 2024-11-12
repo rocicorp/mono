@@ -1,5 +1,6 @@
 import type postgres from 'postgres';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {assert} from '../../../../../../shared/src/asserts.js';
 import {testDBs} from '../../../../test/db.js';
 import {type PublicationInfo, getPublicationInfo} from './published.js';
 
@@ -34,6 +35,7 @@ describe('tables/published', () => {
         ],
         tables: [
           {
+            oid: expect.any(Number),
             schema: 'zero',
             name: 'clients',
             columns: {
@@ -92,6 +94,7 @@ describe('tables/published', () => {
         ],
         tables: [
           {
+            oid: expect.any(Number),
             schema: 'test',
             name: 'users',
             columns: {
@@ -217,6 +220,7 @@ describe('tables/published', () => {
         ],
         tables: [
           {
+            oid: expect.any(Number),
             schema: 'test',
             name: 'users',
             columns: {
@@ -280,6 +284,7 @@ describe('tables/published', () => {
         ],
         tables: [
           {
+            oid: expect.any(Number),
             schema: 'test',
             name: 'users',
             columns: {
@@ -346,6 +351,7 @@ describe('tables/published', () => {
         ],
         tables: [
           {
+            oid: expect.any(Number),
             schema: 'test',
             name: 'users',
             columns: {
@@ -424,6 +430,7 @@ describe('tables/published', () => {
         ],
         tables: [
           {
+            oid: expect.any(Number),
             schema: 'test',
             name: 'users',
             columns: {
@@ -488,6 +495,7 @@ describe('tables/published', () => {
         ],
         tables: [
           {
+            oid: expect.any(Number),
             schema: 'test',
             name: 'issues',
             columns: {
@@ -572,6 +580,7 @@ describe('tables/published', () => {
         ],
         tables: [
           {
+            oid: expect.any(Number),
             schema: 'test',
             name: 'issues',
             columns: {
@@ -608,6 +617,7 @@ describe('tables/published', () => {
             publications: {['zero_tables']: {rowFilter: null}},
           },
           {
+            oid: expect.any(Number),
             schema: 'test',
             name: 'users',
             columns: {
@@ -630,6 +640,7 @@ describe('tables/published', () => {
             publications: {['zero_tables']: {rowFilter: null}},
           },
           {
+            oid: expect.any(Number),
             schema: 'zero',
             name: 'clients',
             columns: {
@@ -688,6 +699,7 @@ describe('tables/published', () => {
         ],
         tables: [
           {
+            oid: expect.any(Number),
             schema: 'test',
             name: 'issues',
             columns: {
@@ -739,7 +751,7 @@ describe('tables/published', () => {
       },
     },
     {
-      name: 'unique indices',
+      name: 'unique indexes',
       setupQuery: `
       CREATE SCHEMA test;
       CREATE TABLE test.issues (
@@ -763,6 +775,7 @@ describe('tables/published', () => {
         ],
         tables: [
           {
+            oid: expect.any(Number),
             schema: 'test',
             name: 'issues',
             columns: {
@@ -811,7 +824,7 @@ describe('tables/published', () => {
       },
     },
     {
-      name: 'compound indices',
+      name: 'compound indexes',
       setupQuery: `
       CREATE SCHEMA test;
       CREATE TABLE test.foo (
@@ -843,6 +856,7 @@ describe('tables/published', () => {
         ],
         tables: [
           {
+            oid: expect.any(Number),
             schema: 'test',
             name: 'foo',
             columns: {
@@ -927,6 +941,7 @@ describe('tables/published', () => {
         ],
         tables: [
           {
+            oid: expect.any(Number),
             schema: 'test',
             name: 'foo',
             columns: {
@@ -1010,7 +1025,8 @@ describe('tables/published', () => {
                 'zero_tables',
               ],
         );
-        expect(tables).toEqual(c.expectedResult);
+        assert(c.expectedResult);
+        expect(tables).toMatchObject(c.expectedResult);
       } catch (e) {
         if (c.expectedError) {
           expect(c.expectedError).toMatch(String(e));

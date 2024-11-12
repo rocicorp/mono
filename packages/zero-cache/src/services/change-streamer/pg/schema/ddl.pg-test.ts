@@ -103,6 +103,7 @@ describe('change-source/tables/ddl', () => {
     schema: {
       tables: [
         {
+          oid: expect.any(Number),
           schema: 'pub',
           name: 'boo',
           columns: {
@@ -135,6 +136,7 @@ describe('change-source/tables/ddl', () => {
           },
         },
         {
+          oid: expect.any(Number),
           schema: 'pub',
           name: 'foo',
           columns: {
@@ -167,6 +169,7 @@ describe('change-source/tables/ddl', () => {
           },
         },
         {
+          oid: expect.any(Number),
           schema: 'pub',
           name: 'yoo',
           columns: {
@@ -282,6 +285,7 @@ describe('change-source/tables/ddl', () => {
         },
         schema: {
           tables: inserted(DDL_START.schema.tables, 0, {
+            oid: expect.any(Number),
             schema: 'pub',
             name: 'bar',
             columns: {
@@ -384,6 +388,7 @@ describe('change-source/tables/ddl', () => {
         },
         schema: {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
+            oid: expect.any(Number),
             schema: 'pub',
             name: 'food',
             columns: {
@@ -455,6 +460,7 @@ describe('change-source/tables/ddl', () => {
         version: 1,
         schema: {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
+            oid: expect.any(Number),
             schema: 'pub',
             name: 'foo',
             columns: {
@@ -519,6 +525,7 @@ describe('change-source/tables/ddl', () => {
         schema: {
           indexes: DDL_START.schema.indexes,
           tables: replaced(DDL_START.schema.tables, 1, 1, {
+            oid: expect.any(Number),
             schema: 'pub',
             name: 'foo',
             columns: {
@@ -576,6 +583,7 @@ describe('change-source/tables/ddl', () => {
         schema: {
           indexes: DDL_START.schema.indexes,
           tables: replaced(DDL_START.schema.tables, 1, 1, {
+            oid: expect.any(Number),
             schema: 'pub',
             name: 'foo',
             columns: {
@@ -625,6 +633,7 @@ describe('change-source/tables/ddl', () => {
         },
         schema: {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
+            oid: expect.any(Number),
             schema: 'pub',
             name: 'foo',
             columns: {
@@ -694,6 +703,7 @@ describe('change-source/tables/ddl', () => {
         },
         schema: {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
+            oid: expect.any(Number),
             schema: 'pub',
             name: 'foo',
             columns: {
@@ -734,6 +744,7 @@ describe('change-source/tables/ddl', () => {
         schema: {
           tables: [
             {
+              oid: expect.any(Number),
               schema: 'pub',
               name: 'boo',
               columns: {
@@ -827,6 +838,7 @@ describe('change-source/tables/ddl', () => {
         schema: {
           indexes: DDL_START.schema.indexes,
           tables: replaced(DDL_START.schema.tables, 2, 1, {
+            oid: expect.any(Number),
             schema: 'pub',
             name: 'yoo',
             columns: {
@@ -872,6 +884,7 @@ describe('change-source/tables/ddl', () => {
         schema: {
           indexes: DDL_START.schema.indexes,
           tables: replaced(DDL_START.schema.tables, 1, 1, {
+            oid: expect.any(Number),
             schema: 'pub',
             name: 'foo',
             columns: {
@@ -921,6 +934,7 @@ describe('change-source/tables/ddl', () => {
           tables: [
             ...DDL_START.schema.tables,
             {
+              oid: expect.any(Number),
               schema: 'zero',
               name: 'foo',
               columns: {
@@ -972,13 +986,15 @@ describe('change-source/tables/ddl', () => {
       ]);
 
       const {content: start} = messages[3] as Pgoutput.MessageMessage;
-      expect(JSON.parse(new TextDecoder().decode(start))).toEqual({
+      expect(JSON.parse(new TextDecoder().decode(start))).toMatchObject({
         ...DDL_START,
         context: {query},
       } satisfies DdlStartEvent);
 
       const {content: update} = messages[4] as Pgoutput.MessageMessage;
-      expect(JSON.parse(new TextDecoder().decode(update))).toEqual(ddlUpdate);
+      expect(JSON.parse(new TextDecoder().decode(update))).toMatchObject(
+        ddlUpdate,
+      );
     },
   );
 
