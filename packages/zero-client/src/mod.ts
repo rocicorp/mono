@@ -57,6 +57,12 @@ export type {
   VersionNotSupportedResponse,
   WriteTransaction,
 } from '../../replicache/src/mod.js';
+export {defineAuthorization} from '../../zero-schema/src/authorization.js';
+export {createSchema} from '../../zero-schema/src/schema.js';
+export {
+  createTableSchema,
+  type TableSchemaToRow,
+} from '../../zero-schema/src/table-schema.js';
 export {escapeLike} from '../../zql/src/query/escape-like.js';
 export type {
   ExpressionBuilder,
