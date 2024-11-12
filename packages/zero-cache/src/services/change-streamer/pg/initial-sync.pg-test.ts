@@ -229,6 +229,7 @@ describe('replicator/initial-sync', () => {
           "jsonb" JSONB,
           "date" DATE,
           "time" TIME,
+          "serial" SERIAL,
           PRIMARY KEY ("orgID", "issueID")
         );
       `,
@@ -313,6 +314,13 @@ describe('replicator/initial-sync', () => {
               dataType: 'time',
               notNull: false,
               dflt: null,
+            },
+            serial: {
+              pos: 12,
+              characterMaximumLength: null,
+              dataType: 'int4',
+              dflt: "nextval('issues_serial_seq'::regclass)",
+              notNull: true,
             },
           },
           name: 'issues',
@@ -402,8 +410,15 @@ describe('replicator/initial-sync', () => {
               notNull: false,
               dflt: null,
             },
-            ['_0_version']: {
+            serial: {
               pos: 12,
+              characterMaximumLength: null,
+              dataType: 'int4',
+              notNull: true,
+              dflt: null,
+            },
+            ['_0_version']: {
+              pos: 13,
               characterMaximumLength: null,
               dataType: 'TEXT',
               notNull: true,
@@ -472,6 +487,7 @@ describe('replicator/initial-sync', () => {
             jsonb: '{"bar":"baz"}',
             date: null,
             time: null,
+            serial: 1n,
             ['_0_version']: '00',
           },
           {
@@ -486,6 +502,7 @@ describe('replicator/initial-sync', () => {
             jsonb: '[{"boo":123}]',
             date: null,
             time: null,
+            serial: 2n,
             ['_0_version']: '00',
           },
           {
@@ -500,6 +517,7 @@ describe('replicator/initial-sync', () => {
             jsonb: null,
             date: BigInt(Date.UTC(2003, 3, 23)),
             time: '09:10:11.123457', // PG rounds to microseconds
+            serial: 3n,
             ['_0_version']: '00',
           },
         ],

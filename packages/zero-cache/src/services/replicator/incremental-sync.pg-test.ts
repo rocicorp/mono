@@ -623,18 +623,35 @@ describe('replicator/incremental-sync', () => {
               id: {pos: 0, dataType: 'varchar'},
               count: {pos: 1, dataType: 'int8'},
               bool: {pos: 3, dataType: 'bool'},
+              serial: {
+                pos: 4,
+                dataType: 'int4',
+                dflt: "nextval('issues_serial_seq'::regclass)",
+                notNull: true,
+              },
             },
             primaryKey: ['id'],
           }),
         ],
-        ['data', fooBarBaz.insert('foo', {id: 'bar', count: 2, bool: true})],
-        ['data', fooBarBaz.insert('foo', {id: 'baz', count: 3, bool: false})],
+        [
+          'data',
+          fooBarBaz.insert('foo', {id: 'bar', count: 2, bool: true, serial: 1}),
+        ],
+        [
+          'data',
+          fooBarBaz.insert('foo', {
+            id: 'baz',
+            count: 3,
+            bool: false,
+            serial: 2,
+          }),
+        ],
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
       data: {
         foo: [
-          {id: 'bar', count: 2n, bool: 1n, ['_0_version']: '02'},
-          {id: 'baz', count: 3n, bool: 0n, ['_0_version']: '02'},
+          {id: 'bar', count: 2n, bool: 1n, serial: 1n, ['_0_version']: '02'},
+          {id: 'baz', count: 3n, bool: 0n, serial: 2n, ['_0_version']: '02'},
         ],
         ['_zero.changeLog']: [
           {
@@ -682,12 +699,19 @@ describe('replicator/incremental-sync', () => {
               notNull: false,
               pos: 3,
             },
+            serial: {
+              characterMaximumLength: null,
+              dataType: 'int4',
+              dflt: null,
+              notNull: true,
+              pos: 4,
+            },
             ['_0_version']: {
               characterMaximumLength: null,
               dataType: 'TEXT',
               dflt: null,
               notNull: true,
-              pos: 4,
+              pos: 5,
             },
           },
           primaryKey: ['id'],
