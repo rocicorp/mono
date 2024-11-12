@@ -8,20 +8,17 @@ import type {FetchRequest, Input, Operator, Output} from './operator.js';
  */
 export class FanOut implements Operator {
   readonly #input: Input;
-  readonly #outputs: Output[];
+  readonly #outputs: Output[] = [];
   // FanOut is paired with a FanIn.
   // Once FanIn has received a push from FanOut along
   // any branch, FanOut no longer needs to push that value
   // across the rest of its outputs..
-  #fanInReceivedPush: boolean;
-  #destroyCount: number;
+  #fanInReceivedPush: boolean = false;
+  #destroyCount: number = 0;
 
   constructor(input: Input) {
     this.#input = input;
-    this.#input.setOutput(this);
-    this.#outputs = [];
-    this.#fanInReceivedPush = false;
-    this.#destroyCount = 0;
+    input.setOutput(this);
   }
 
   setOutput(output: Output): void {

@@ -39,8 +39,8 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
     this.#input = input;
     this.#schema = input.getSchema();
     this.#format = format;
-    this.#input.setOutput(this);
     this.#root = {'': format.singular ? undefined : []};
+    input.setOutput(this);
 
     this.#hydrate();
   }
