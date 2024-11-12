@@ -1,7 +1,6 @@
 import type {ErrorMessage} from '../../../zero-protocol/src/mod.js';
 
 export class ErrorForClient extends Error {
-  readonly name = 'ErrorForClient';
   readonly errorMessage;
   constructor(errorMessage: ErrorMessage, options?: ErrorOptions) {
     super(JSON.stringify(errorMessage), options);
