@@ -9,7 +9,7 @@ import type {
   TableSchemaToRow,
 } from '../../../zero-schema/src/table-schema.js';
 import type {Source} from '../ivm/source.js';
-import type {GenericCondition} from './expression.js';
+import type {ExpressionFactory} from './expression.js';
 import type {TypedView} from './typed-view.js';
 
 /**
@@ -69,7 +69,7 @@ export type QueryRowType<T extends Query<TableSchema>> = T extends Query<
 
 // Adds TSubquery to TReturn under the alias TAs.
 export type AddSubselect<
-  TSubquery extends Query<TableSchema>,
+  TSubquery extends Query<TableSchema, QueryType>,
   TReturn extends QueryType,
   TAs extends string,
 > = {
@@ -192,7 +192,7 @@ export interface Query<
       | Parameter<TParamAnchor, TParamField, TParamTypeBound>,
   ): Query<TSchema, TReturn>;
 
-  where(condition: GenericCondition<TSchema>): Query<TSchema, TReturn>;
+  where(expressionFactory: ExpressionFactory<TSchema>): Query<TSchema, TReturn>;
 
   start(
     row: Partial<TableSchemaToRow<TSchema>>,

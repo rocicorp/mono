@@ -1,15 +1,14 @@
 /* eslint-disable @typescript-eslint/ban-types */
 import {describe, expectTypeOf, test} from 'vitest';
-import {staticParam} from './query-impl.js';
-import type {AdvancedQuery} from './query-internal.js';
-import {type Query, type QueryType} from './query.js';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 import type {
   Supertype,
   TableSchema,
   TableSchemaToRow,
 } from '../../../zero-schema/src/table-schema.js';
-import {and, cmp, or} from './expression.js';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
+import {staticParam} from './query-impl.js';
+import type {AdvancedQuery} from './query-internal.js';
+import {type Query, type QueryType} from './query.js';
 
 const mockQuery = {
   select() {
@@ -539,21 +538,23 @@ test('supertype query', () => {
 test('complex expressions', () => {
   const query = mockQuery as unknown as Query<TestSchema>;
 
-  query.where(or(cmp('b', '!=', true), cmp('s', 'IN', ['foo', 'bar'])));
-  query.where(cmp('b', '!=', true));
+  query.where(({cmp, or}) =>
+    or(cmp('b', '!=', true), cmp('s', 'IN', ['foo', 'bar'])),
+  );
+  query.where(({cmp}) => cmp('b', '!=', true));
 
   // @ts-expect-error - boolean compared to string
-  query.where(cmp('b', '!=', 's'));
+  query.where(({cmp}) => cmp('b', '!=', 's'));
   // @ts-expect-error - field does not exist
-  query.where(cmp('x', '!=', true));
+  query.where(({cmp}) => cmp('x', '!=', true));
   // @ts-expect-error - boolean compared to string
-  query.where(or(cmp('b', '!=', 's')));
+  query.where(({cmp, or}) => or(cmp('b', '!=', 's')));
   // @ts-expect-error - field does not exist
-  query.where(or(cmp('x', '!=', true)));
+  query.where(({cmp, or}) => or(cmp('x', '!=', true)));
   // @ts-expect-error - boolean compared to string
-  query.where(and(cmp('b', '!=', 's')));
+  query.where(({and, cmp}) => and(cmp('b', '!=', 's')));
   // @ts-expect-error - field does not exist
-  query.where(and(cmp('x', '!=', true)));
+  query.where(({and, cmp}) => and(cmp('x', '!=', true)));
 });
 
 test('json type', () => {
@@ -570,14 +571,14 @@ test('json type', () => {
   // @ts-expect-error - json fields cannot be used in `where` yet
   query.where('j', '=', {foo: 'bar'});
   // @ts-expect-error - json fields cannot be used in cmp yet
-  query.where(cmp('j', '=', {foo: 'bar'}));
+  query.where(({cmp}) => cmp('j', '=', {foo: 'bar'}));
 });
 
 function takeSchema(x: TableSchema) {
   return x;
 }
 
-test.skip('custom materialize factory', () => {
+test('custom materialize factory', () => {
   const query = mockQuery as unknown as AdvancedQuery<TestSchema>;
   const x = query.materialize();
   expectTypeOf(x.data).toMatchTypeOf<
@@ -600,7 +601,7 @@ test.skip('custom materialize factory', () => {
   >();
 });
 
-test.skip('Make sure that QueryInternal does not expose the ast', () => {
+test('Make sure that QueryInternal does not expose the ast', () => {
   const query = mockQuery as unknown as Query<TestSchema>;
   // @ts-expect-error - ast is not part of the public API
   query.ast;
@@ -608,4 +609,51 @@ test.skip('Make sure that QueryInternal does not expose the ast', () => {
   const internalQuery = mockQuery as unknown as AdvancedQuery<TestSchema>;
   // @ts-expect-error - ast is not part of the public API
   internalQuery.ast;
+});
+
+describe('Where expression factory and builder', () => {
+  test('does not change the type', () => {
+    const query = mockQuery as unknown as Query<TestSchema>;
+
+    const query2 = query.where('n', '>', 42);
+    expectTypeOf(query2).toMatchTypeOf(query);
+
+    const query3 = query.where(eb => {
+      eb.cmp('b', '=', true);
+      eb.cmp('n', '>', 42);
+      eb.cmp('s', '=', 'foo');
+
+      // @ts-expect-error - field does not exist
+      eb.cmp('no-b', '=', true);
+
+      // @ts-expect-error - boolean compared to string
+      eb.cmp('b', '=', 'foo');
+
+      // skipping '='
+      eb.cmp('b', true);
+      eb.cmp('n', 42);
+      return eb.cmp('s', 'foo');
+    });
+
+    // Where does not change the type of the query.
+    expectTypeOf(query3).toMatchTypeOf(query);
+  });
+
+  test('and, or, not, cmp, eb', () => {
+    const query = mockQuery as unknown as Query<TestSchema>;
+
+    query.where(({and, cmp, or}) =>
+      and(cmp('n', '>', 42), or(cmp('b', true), cmp('s', 'foo'))),
+    );
+    query.where(({not, cmp}) => not(cmp('n', '>', 42)));
+
+    query.where(({eb}) => eb.cmp('n', '>', 42));
+
+    query.where(({not, cmp}) =>
+      not(
+        // @ts-expect-error - field does not exist
+        cmp('n2', '>', 42),
+      ),
+    );
+  });
 });

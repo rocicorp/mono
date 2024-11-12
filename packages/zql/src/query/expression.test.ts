@@ -1,8 +1,8 @@
 import fc from 'fast-check';
 import {describe, expect, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.js';
-import {and, or, type GenericCondition} from './expression.js';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
+import type {Condition} from '../../../zero-protocol/src/ast.js';
+import {and, or} from './expression.js';
 
 type TestCondition =
   | {
@@ -180,9 +180,7 @@ test('compare test framework to real framework', () => {
     }),
   );
 
-  function convertTestCondition(
-    c: TestCondition,
-  ): GenericCondition<TableSchema> {
+  function convertTestCondition(c: TestCondition): Condition {
     assert(c.type === 'simple');
     return {
       type: 'simple',
@@ -223,11 +221,11 @@ function t() {
   return simple(++id);
 }
 
-function simple(value: number): GenericCondition<TableSchema> {
+function simple(value: number): Condition {
   return {type: 'simple', value, op: '=', field: 'n/a'};
 }
 
-function toStr(condition: GenericCondition<TableSchema>): string {
+function toStr(condition: Condition): string {
   switch (condition.type) {
     case 'simple':
       return condition.value.toString();

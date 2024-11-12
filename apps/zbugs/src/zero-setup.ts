@@ -1,4 +1,4 @@
-import {and, cmp, not, or, Zero} from '@rocicorp/zero';
+import {Zero} from '@rocicorp/zero';
 import {Atom} from './atom.js';
 import {type Schema, schema} from '../schema.js';
 import {getJwt, getRawJwt} from './jwt.js';
@@ -63,16 +63,8 @@ authRef.onChange(auth => {
 function exposeDevHooks(z: Zero<Schema>) {
   const casted = window as unknown as {
     z?: Zero<Schema>;
-    or: typeof or;
-    and: typeof and;
-    not: typeof not;
-    cmp: typeof cmp;
   };
   casted.z = z;
-  casted.or = or;
-  casted.and = and;
-  casted.not = not;
-  casted.cmp = cmp;
 }
 
 export {authRef, zeroRef};

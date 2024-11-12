@@ -57,8 +57,12 @@ export type {
   VersionNotSupportedResponse,
   WriteTransaction,
 } from '../../replicache/src/mod.js';
-export {QueryImpl} from '../../zql/src/query/query-impl.js';
 export {escapeLike} from '../../zql/src/query/escape-like.js';
+export type {
+  ExpressionBuilder,
+  ExpressionFactory,
+} from '../../zql/src/query/expression.js';
+export {QueryImpl} from '../../zql/src/query/query-impl.js';
 export type {
   DefaultQueryResultRow as EmptyQueryResultRow,
   Query,
@@ -70,4 +74,3 @@ export type {
 export type {TypedView} from '../../zql/src/query/typed-view.js';
 export type {ZeroOptions} from './client/options.js';
 export {Zero} from './client/zero.js';
-export {and, or, not, cmp} from '../../zql/src/query/expression.js';

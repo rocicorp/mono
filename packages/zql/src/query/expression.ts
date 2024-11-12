@@ -1,81 +1,112 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type {
+  Condition,
   SimpleOperator,
   ValuePosition,
 } from '../../../zero-protocol/src/ast.js';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 import type {
   GetFieldTypeNoNullOrUndefined,
   NoJsonSelector,
   Operator,
   Parameter,
-  Selector,
 } from './query.js';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 
-export type GenericCondition<TSchema extends TableSchema> =
-  | GenericConjunction<TSchema>
-  | GenericDisjunction<TSchema>
-  | {
-      type: 'simple';
-      op: SimpleOperator;
-      field: Selector<TSchema>;
-      value: ValuePosition;
-    };
+/**
+ * A factory function that creates a condition. This is used to create
+ * complex conditions that can be passed to the `where` method of a query.
+ *
+ * @example
+ *
+ * ```ts
+ * const condition: ExpressionFactory<User> = ({and, cmp, or}) =>
+ *   and(
+ *     cmp('name', '=', 'Alice'),
+ *     or(cmp('age', '>', 18), cmp('isStudent', '=', true)),
+ *   );
+ *
+ * const query = z.query.user.where(condition);
+ * ```
+ */
+export interface ExpressionFactory<TSchema extends TableSchema> {
+  (eb: ExpressionBuilder<TSchema>): Condition;
+}
 
-type GenericConjunction<TSchema extends TableSchema> = {
-  type: 'and';
-  conditions: readonly GenericCondition<TSchema>[];
-};
+export interface ExpressionBuilder<TSchema extends TableSchema> {
+  readonly eb: ExpressionBuilder<TSchema>;
 
-type GenericDisjunction<TSchema extends TableSchema> = {
-  type: 'or';
-  conditions: readonly GenericCondition<TSchema>[];
-};
+  cmp<
+    TSelector extends NoJsonSelector<TSchema>,
+    TOperator extends Operator,
+    TParamAnchor = never,
+    TParamField extends keyof TParamAnchor = never,
+    TParamTypeBound extends GetFieldTypeNoNullOrUndefined<
+      TSchema,
+      TSelector,
+      TOperator
+    > = never,
+  >(
+    field: TSelector,
+    op: TOperator,
+    value:
+      | GetFieldTypeNoNullOrUndefined<TSchema, TSelector, TOperator>
+      | Parameter<TParamAnchor, TParamField, TParamTypeBound>,
+  ): Condition;
 
-export function cmp<
-  TSchema extends TableSchema,
-  TSelector extends NoJsonSelector<TSchema>,
-  TOperator extends Operator,
-  TParamAnchor = never,
-  TParamField extends keyof TParamAnchor = never,
-  TParamTypeBound extends GetFieldTypeNoNullOrUndefined<
-    TSchema,
-    TSelector,
-    TOperator
-  > = never,
->(
-  field: TSelector,
-  op: TOperator,
-  value:
-    | GetFieldTypeNoNullOrUndefined<TSchema, TSelector, TOperator>
-    | Parameter<TParamAnchor, TParamField, TParamTypeBound>,
-): GenericCondition<TSchema>;
-export function cmp<
-  TSchema extends TableSchema,
-  TSelector extends NoJsonSelector<TSchema>,
-  TParamAnchor = never,
-  TParamField extends keyof TParamAnchor = never,
-  TParamTypeBound extends GetFieldTypeNoNullOrUndefined<
-    TSchema,
-    TSelector,
-    '='
-  > = never,
->(
-  field: TSelector,
-  value:
-    | GetFieldTypeNoNullOrUndefined<TSchema, TSelector, '='>
-    | Parameter<TParamAnchor, TParamField, TParamTypeBound>,
-): GenericCondition<TSchema>;
+  cmp<
+    TSelector extends NoJsonSelector<TSchema>,
+    TParamAnchor = never,
+    TParamField extends keyof TParamAnchor = never,
+    TParamTypeBound extends GetFieldTypeNoNullOrUndefined<
+      TSchema,
+      TSelector,
+      '='
+    > = never,
+  >(
+    field: TSelector,
+    value:
+      | GetFieldTypeNoNullOrUndefined<TSchema, TSelector, '='>
+      | Parameter<TParamAnchor, TParamField, TParamTypeBound>,
+  ): Condition;
+
+  and(...conditions: Condition[]): Condition;
+  or(...conditions: Condition[]): Condition;
+  not(condition: Condition): Condition;
+}
+
+class ExpressionBuilderImpl<TSchema extends TableSchema>
+  implements ExpressionBuilder<TSchema>
+{
+  readonly eb = this;
+
+  cmp(field: string, opOrValue: any, value?: any): Condition {
+    return cmp(field, opOrValue, value);
+  }
+
+  and(...conditions: Condition[]): Condition {
+    return and(...conditions);
+  }
+
+  or(...expressions: Condition[]): Condition {
+    return or(...expressions);
+  }
+
+  not(expression: Condition): Condition {
+    return not(expression);
+  }
+}
+
+export function newExpressionBuilder<
+  T extends TableSchema,
+>(): ExpressionBuilder<T> {
+  return new ExpressionBuilderImpl<T>();
+}
+
 export function cmp(
   field: string,
-  opOrValue:
-    | Operator
-    | GetFieldTypeNoNullOrUndefined<any, any, any>
-    | Parameter<any, any, any>,
-  value?:
-    | GetFieldTypeNoNullOrUndefined<any, any, any>
-    | Parameter<any, any, any>,
-): GenericCondition<any> {
+  opOrValue: Operator | ValuePosition,
+  value?: ValuePosition,
+): Condition {
   let op: Operator;
   if (value === undefined) {
     value = opOrValue;
@@ -88,13 +119,11 @@ export function cmp(
     type: 'simple',
     field,
     op,
-    value: value as ValuePosition,
+    value,
   };
 }
 
-export function and<TSchema extends TableSchema>(
-  ...conditions: GenericCondition<TSchema>[]
-): GenericCondition<TSchema> {
+export function and(...conditions: Condition[]): Condition {
   if (conditions.length === 1) {
     return conditions[0];
   }
@@ -103,17 +132,16 @@ export function and<TSchema extends TableSchema>(
   // This allows the graph and pipeline builder to remain simple and not have to deal with
   // nested conditions.
   // In other words, conditions are in [DNF](https://en.wikipedia.org/wiki/Disjunctive_normal_form).
-  const ands: GenericCondition<TSchema>[] = conditions.flatMap(c => {
+  const ands = conditions.flatMap(c => {
     if (c.type === 'and') {
       return c.conditions;
-    } else if (c.type === 'simple') {
+    }
+    if (c.type === 'simple') {
       return [c];
     }
     return [];
   });
-  const ors: GenericCondition<TSchema>[] = conditions.filter(
-    c => c.type === 'or',
-  );
+  const ors = conditions.filter(c => c.type === 'or');
 
   if (ors.length === 0) {
     return {type: 'and', conditions: ands};
@@ -124,56 +152,47 @@ export function and<TSchema extends TableSchema>(
 
   return {
     type: 'or',
-    conditions: flatOrs.conditions.map(part => ({
+    conditions: flatOrs.map(part => ({
       type: 'and',
       conditions: [
         ...(part.type === 'and' ? part.conditions : [part]),
-        ...flatAnds.conditions,
+        ...flatAnds,
       ],
     })),
   };
 }
 
-export function or<TSchema extends TableSchema>(
-  ...conditions: GenericCondition<TSchema>[]
-): GenericCondition<TSchema> {
-  if (conditions.length === 1) {
-    return conditions[0];
+export function or(...expressions: Condition[]): Condition {
+  if (expressions.length === 1) {
+    return expressions[0];
   }
-  return flatten('or', conditions);
+  return {type: 'or', conditions: flatten('or', expressions)};
 }
 
-export function not<TSchema extends TableSchema>(
-  expr: GenericCondition<TSchema>,
-): GenericCondition<TSchema> {
-  switch (expr.type) {
+function not(expression: Condition): Condition {
+  switch (expression.type) {
     case 'and':
       return {
         type: 'or',
-        conditions: expr.conditions.map(not),
+        conditions: expression.conditions.map(not),
       };
     case 'or':
       return {
         type: 'and',
-        conditions: expr.conditions.map(not),
+        conditions: expression.conditions.map(not),
       };
     default:
       return {
         type: 'simple',
-        op: negateOperator(expr.op),
-        field: expr.field,
-        value: expr.value,
+        op: negateOperator(expression.op),
+        field: expression.field,
+        value: expression.value,
       };
   }
 }
 
-function flatten<TSchema extends TableSchema, TConnector extends 'and' | 'or'>(
-  type: TConnector,
-  conditions: GenericCondition<TSchema>[],
-): TConnector extends 'and'
-  ? GenericConjunction<TSchema>
-  : GenericDisjunction<TSchema> {
-  const flattened: GenericCondition<TSchema>[] = [];
+function flatten(type: 'and' | 'or', conditions: Condition[]): Condition[] {
+  const flattened: Condition[] = [];
   for (const c of conditions) {
     if (c.type === type) {
       flattened.push(...c.conditions);
@@ -182,10 +201,7 @@ function flatten<TSchema extends TableSchema, TConnector extends 'and' | 'or'>(
     }
   }
 
-  return {
-    type,
-    conditions: flattened,
-  } satisfies GenericCondition<TSchema> as any;
+  return flattened;
 }
 
 function negateOperator(op: SimpleOperator): SimpleOperator {

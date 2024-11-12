@@ -2,11 +2,10 @@ import {describe, expect, test} from 'vitest';
 import {deepClone} from '../../../shared/src/deep-clone.js';
 import {must} from '../../../shared/src/must.js';
 import {newQuery, type QueryDelegate, QueryImpl} from './query-impl.js';
-import {issueSchema, userSchema} from './test/testSchemas.js';
 import type {AdvancedQuery} from './query-internal.js';
 import type {DefaultQueryResultRow} from './query.js';
 import {QueryDelegateImpl} from './test/query-delegate.js';
-import {and, cmp, or} from './expression.js';
+import {issueSchema, userSchema} from './test/testSchemas.js';
 
 /**
  * Some basic manual tests to get us started.
@@ -729,7 +728,9 @@ test('complex expression', () => {
   addData(queryDelegate);
 
   let rows = newQuery(queryDelegate, issueSchema)
-    .where(or(cmp('title', '=', 'issue 1'), cmp('title', '=', 'issue 2')))
+    .where(({or, cmp}) =>
+      or(cmp('title', '=', 'issue 1'), cmp('title', '=', 'issue 2')),
+    )
     .run();
 
   expect(rows).toMatchInlineSnapshot(`
@@ -752,7 +753,7 @@ test('complex expression', () => {
   `);
 
   rows = newQuery(queryDelegate, issueSchema)
-    .where(
+    .where(({and, or, cmp}) =>
       and(
         cmp('ownerId', '=', '0001'),
         or(cmp('title', '=', 'issue 1'), cmp('title', '=', 'issue 2')),
