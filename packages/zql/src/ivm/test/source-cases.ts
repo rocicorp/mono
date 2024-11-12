@@ -1,11 +1,11 @@
 import {expect, test} from 'vitest';
+import type {ReadonlyJSONValue} from '../../../../shared/src/json.js';
 import type {Row, Value} from '../../../../zero-protocol/src/data.js';
+import type {SchemaValue} from '../../../../zero-schema/src/table-schema.js';
 import {Catch, expandNode} from '../catch.js';
 import type {Node} from '../data.js';
 import type {FetchRequest, Input, Output, Start} from '../operator.js';
-import type {SchemaValue} from '../../../../zero-schema/src/table-schema.js';
 import type {Source, SourceChange} from '../source.js';
-import type {ReadonlyJSONValue} from '../../../../shared/src/json.js';
 
 type SourceFactory = (
   name: string,
@@ -38,7 +38,7 @@ class OverlaySpy implements Output {
 
   constructor(input: Input) {
     this.#input = input;
-    this.#input.setOutput(this);
+    input.setOutput(this);
   }
 
   fetch(req: FetchRequest) {

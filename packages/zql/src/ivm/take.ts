@@ -58,10 +58,10 @@ export class Take implements Operator {
     this.#partitionKey = partitionKey;
     assert(limit >= 0);
     assertOrderingIncludesPK(
-      this.#input.getSchema().sort,
-      this.#input.getSchema().primaryKey,
+      input.getSchema().sort,
+      input.getSchema().primaryKey,
     );
-    this.#input.setOutput(this);
+    input.setOutput(this);
   }
 
   setOutput(output: Output): void {

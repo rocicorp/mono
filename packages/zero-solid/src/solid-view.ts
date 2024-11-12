@@ -31,18 +31,18 @@ export class SolidView<V extends View> implements Output {
     this.#input = input;
     this.#format = format;
     this.#onDestroy = onDestroy;
-    this.#input.setOutput(this);
     [this.#root, this.#setRoot] = createStore({
       '': format.singular ? undefined : [],
     });
+    input.setOutput(this);
 
     this.#setRoot(
       produce(draftRoot => {
-        for (const node of this.#input.fetch({})) {
+        for (const node of input.fetch({})) {
           applyChange(
             draftRoot,
             {type: 'add', node},
-            this.#input.getSchema(),
+            input.getSchema(),
             '',
             this.#format,
           );

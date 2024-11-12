@@ -27,7 +27,7 @@ export class Skip implements Operator {
     this.#input = input;
     this.#bound = bound;
     this.#comparator = input.getSchema().compareRows;
-    this.#input.setOutput(this);
+    input.setOutput(this);
   }
 
   getSchema(): SourceSchema {
