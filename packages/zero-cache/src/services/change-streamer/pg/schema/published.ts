@@ -2,15 +2,16 @@ import {literal} from 'pg-format';
 import type postgres from 'postgres';
 import {equals} from '../../../../../../shared/src/set-utils.js';
 import * as v from '../../../../../../shared/src/valita.js';
-import type {FilteredTableSpec, IndexSpec} from '../../../../db/specs.js';
+import type {IndexSpec, PublishedTableSpec} from '../../../../db/specs.js';
 
 type PublishedTableQueryResult = {
-  tables: FilteredTableSpec[];
+  tables: PublishedTableSpec[];
 };
 
 export function publishedTableQuery(publications: string[]) {
   return `
 WITH published_columns AS (SELECT 
+  pc.oid::int8 AS "oid",
   nspname AS "schema", 
   pc.relname AS "name", 
   attnum AS "pos", 
@@ -38,6 +39,7 @@ WHERE pb.pubname IN (${literal(publications)})
 ORDER BY nspname, pc.relname),
 
 tables AS (SELECT json_build_object(
+  'oid', "oid",
   'schema', "schema", 
   'name', "name", 
   'columns', json_object_agg(
@@ -68,7 +70,7 @@ tables AS (SELECT json_build_object(
     "publication", 
     jsonb_build_object('rowFilter', "rowFilter")
   )
-) AS "table" FROM published_columns GROUP BY "schema", "name")
+) AS "table" FROM published_columns GROUP BY "schema", "name", "oid")
 
 SELECT COALESCE(json_agg("table"), '[]'::json) as "tables" FROM tables
   `;
@@ -150,7 +152,7 @@ export type Publication = v.Infer<typeof publicationSchema>;
 
 export type PublicationInfo = {
   readonly publications: Publication[];
-  readonly tables: FilteredTableSpec[];
+  readonly tables: PublishedTableSpec[];
   readonly indices: IndexSpec[];
 };
 

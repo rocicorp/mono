@@ -9,7 +9,7 @@ import {
   mapPostgresToLite,
   mapPostgresToLiteIndex,
 } from '../../../db/pg-to-lite.js';
-import type {FilteredTableSpec, IndexSpec} from '../../../db/specs.js';
+import type {IndexSpec, PublishedTableSpec} from '../../../db/specs.js';
 import {
   importSnapshot,
   Mode,
@@ -210,7 +210,7 @@ function startTableCopyWorkers(
   return tableCopiers;
 }
 
-function createLiteTables(tx: Database, tables: FilteredTableSpec[]) {
+function createLiteTables(tx: Database, tables: PublishedTableSpec[]) {
   for (const t of tables) {
     tx.exec(createTableStatement(mapPostgresToLite(t)));
   }
@@ -224,7 +224,7 @@ function createLiteIndices(tx: Database, indices: IndexSpec[]) {
 
 async function copy(
   lc: LogContext,
-  table: FilteredTableSpec,
+  table: PublishedTableSpec,
   from: PostgresDB,
   to: Database,
 ) {
