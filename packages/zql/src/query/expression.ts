@@ -74,32 +74,20 @@ export interface ExpressionBuilder<TSchema extends TableSchema> {
   not(condition: Condition): Condition;
 }
 
-class ExpressionBuilderImpl<TSchema extends TableSchema>
-  implements ExpressionBuilder<TSchema>
-{
-  readonly eb = this;
-
-  cmp(field: string, opOrValue: any, value?: any): Condition {
-    return cmp(field, opOrValue, value);
-  }
-
-  and(...conditions: (Condition | undefined)[]): Condition {
-    return and(...filterUndefined(conditions));
-  }
-
-  or(...conditions: (Condition | undefined)[]): Condition {
-    return or(...filterUndefined(conditions));
-  }
-
-  not(expression: Condition): Condition {
-    return not(expression);
-  }
-}
+const expressionBuilder: ExpressionBuilder<TableSchema> = {
+  get eb() {
+    return this;
+  },
+  cmp,
+  and,
+  or,
+  not,
+};
 
 export function newExpressionBuilder<
   T extends TableSchema,
 >(): ExpressionBuilder<T> {
-  return new ExpressionBuilderImpl<T>();
+  return expressionBuilder;
 }
 
 export function cmp(
@@ -123,16 +111,18 @@ export function cmp(
   };
 }
 
-export function and(...conditions: Condition[]): Condition {
-  if (conditions.length === 1) {
-    return conditions[0];
+export function and(...conditions: (Condition | undefined)[]): Condition {
+  const expressions = filterUndefined(conditions);
+
+  if (expressions.length === 1) {
+    return expressions[0];
   }
 
   // If any internal conditions are `or` then we distribute `or` over the `and`.
   // This allows the graph and pipeline builder to remain simple and not have to deal with
   // nested conditions.
   // In other words, conditions are in [DNF](https://en.wikipedia.org/wiki/Disjunctive_normal_form).
-  const ands = conditions.flatMap(c => {
+  const ands = expressions.flatMap(c => {
     if (c.type === 'and') {
       return c.conditions;
     }
@@ -141,7 +131,7 @@ export function and(...conditions: Condition[]): Condition {
     }
     return [];
   });
-  const ors = conditions.filter(c => c.type === 'or');
+  const ors = expressions.filter(c => c.type === 'or');
 
   if (ors.length === 0) {
     return {type: 'and', conditions: ands};
@@ -162,14 +152,15 @@ export function and(...conditions: Condition[]): Condition {
   };
 }
 
-export function or(...conditions: Condition[]): Condition {
-  if (conditions.length === 0) {
+export function or(...conditions: (Condition | undefined)[]): Condition {
+  const expressions = filterUndefined(conditions);
+  if (expressions.length === 0) {
     return {type: 'or', conditions: []};
   }
-  if (conditions.length === 1) {
-    return conditions[0];
+  if (expressions.length === 1) {
+    return expressions[0];
   }
-  return {type: 'or', conditions: flatten('or', conditions)};
+  return {type: 'or', conditions: flatten('or', expressions)};
 }
 
 function not(expression: Condition): Condition {
