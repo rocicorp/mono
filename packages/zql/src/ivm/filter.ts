@@ -30,7 +30,7 @@ export class Filter implements Operator {
     this.#input = input;
     this.#mode = mode;
     this.#predicate = predicate;
-    this.#input.setOutput(this);
+    input.setOutput(this);
   }
 
   setOutput(output: Output) {

@@ -13,7 +13,7 @@ export class Catch implements Output {
 
   constructor(input: Input) {
     this.#input = input;
-    this.#input.setOutput(this);
+    input.setOutput(this);
   }
 
   fetch(req: FetchRequest = {}) {

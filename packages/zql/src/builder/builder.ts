@@ -61,7 +61,7 @@ export interface BuilderDelegate {
  *
  *   constructor(input: Input) {
  *     this.#input = input;
- *     this.#input.setOutput(this);
+ *     input.setOutput(this);
  *   }
  *
  *   push(change: Change, _: Operator) {
