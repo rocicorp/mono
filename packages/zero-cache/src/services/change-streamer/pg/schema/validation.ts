@@ -2,14 +2,12 @@ import type {LogContext} from '@rocicorp/logger';
 import {warnIfDataTypeSupported} from '../../../../db/pg-to-lite.js';
 import type {TableSpec} from '../../../../db/specs.js';
 import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/replication-state.js';
+import {unescapedSchema} from './shard.js';
 
 const ALLOWED_IDENTIFIER_CHARS = /^[A-Za-z_]+[A-Za-z0-9_-]*$/;
 
-export function validate(
-  lc: LogContext,
-  shardSchema: string,
-  table: TableSpec,
-) {
+export function validate(lc: LogContext, shardID: string, table: TableSpec) {
+  const shardSchema = unescapedSchema(shardID);
   if (!['public', 'zero', shardSchema].includes(table.schema)) {
     // This may be relaxed in the future. We would need a plan for support in the AST first.
     throw new UnsupportedTableSchemaError(
