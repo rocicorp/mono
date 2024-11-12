@@ -23,7 +23,7 @@ import type {Format, ViewFactory} from '../ivm/view.js';
 import {
   and,
   cmp,
-  newExpressionBuilder,
+  expressionBuilder,
   type ExpressionFactory,
 } from './expression.js';
 import type {AdvancedQuery} from './query-internal.js';
@@ -271,8 +271,7 @@ export abstract class AbstractQuery<
     let cond: Condition;
 
     if (typeof fieldOrExpressionFactory === 'function') {
-      const eb = newExpressionBuilder<TSchema>();
-      cond = fieldOrExpressionFactory(eb);
+      cond = fieldOrExpressionFactory(expressionBuilder);
     } else {
       assert(opOrValue !== undefined, 'Invalid condition');
       cond = cmp(fieldOrExpressionFactory, opOrValue, value);

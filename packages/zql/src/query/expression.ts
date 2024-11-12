@@ -74,7 +74,7 @@ export interface ExpressionBuilder<TSchema extends TableSchema> {
   not(condition: Condition): Condition;
 }
 
-const expressionBuilder: ExpressionBuilder<TableSchema> = {
+export const expressionBuilder: ExpressionBuilder<TableSchema> = Object.freeze({
   get eb() {
     return this;
   },
@@ -82,13 +82,7 @@ const expressionBuilder: ExpressionBuilder<TableSchema> = {
   and,
   or,
   not,
-};
-
-export function newExpressionBuilder<
-  T extends TableSchema,
->(): ExpressionBuilder<T> {
-  return expressionBuilder;
-}
+});
 
 export function cmp(
   field: string,
