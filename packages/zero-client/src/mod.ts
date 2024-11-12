@@ -71,3 +71,9 @@ export type {TypedView} from '../../zql/src/query/typed-view.js';
 export type {ZeroOptions} from './client/options.js';
 export {Zero} from './client/zero.js';
 export {and, or, not, cmp} from '../../zql/src/query/expression.js';
+export {createSchema} from '../../zero-schema/src/schema.js';
+export {
+  createTableSchema,
+  type TableSchemaToRow,
+} from '../../zero-schema/src/table-schema.js';
+export {defineAuthorization} from '../../zero-schema/src/authorization.js';
