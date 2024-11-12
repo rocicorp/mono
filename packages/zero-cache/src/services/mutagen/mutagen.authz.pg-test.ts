@@ -11,7 +11,6 @@ import {WriteAuthorizerImpl, type WriteAuthorizer} from './write-authorizer.js';
 import {MutationType} from '../../../../zero-protocol/src/push.js';
 import {zeroSchema} from './mutagen-test-shared.js';
 import {defineAuthorization} from '../../../../zero-schema/src/authorization.js';
-import {getZeroConfig} from '../../config/zero-config.js';
 
 const SHARD_ID = '0';
 const CG_ID = 'abc';
@@ -291,7 +290,6 @@ let upstream: PostgresDB;
 let replica: Database;
 let authorizer: WriteAuthorizer;
 let lmid = 0;
-const config = getZeroConfig();
 const lc = createSilentLogContext();
 beforeEach(async () => {
   upstream = await testDBs.create('authz');
@@ -300,7 +298,7 @@ beforeEach(async () => {
   createReplicaTables(replica);
   authorizer = new WriteAuthorizerImpl(
     lc,
-    config,
+    {},
     authorizationConfig,
     replica,
     SHARD_ID,

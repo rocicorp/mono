@@ -1,9 +1,9 @@
 import {
   createSchema,
   createTableSchema,
-  type TableSchemaToRow,
   defineAuthorization,
-} from '@rocicorp/zero/schema';
+  type TableSchemaToRow,
+} from '@rocicorp/zero';
 
 const userSchema = createTableSchema({
   tableName: 'user',

@@ -24,5 +24,4 @@ const authorizationConfigSchema = v.record(
   }),
 );
 
-// TODO: This will be moved into schema.ts
 export type AuthorizationConfig = v.Infer<typeof authorizationConfigSchema>;
