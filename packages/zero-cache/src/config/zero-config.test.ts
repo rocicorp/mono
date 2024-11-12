@@ -76,6 +76,9 @@ test('zero-cache --help', () => {
                                                    A shard's zero clients table and shard-internal functions are stored in       
                                                    the zero_{id} schema in the upstream database.                                
                                                                                                                                  
+                                                   Due to constraints on replication slot names, a shard ID may only consist of  
+                                                   lower-case letters, numbers, and the underscore character.                    
+                                                                                                                                 
      --shard-publications string[]                 default: []                                                                   
        ZERO_SHARD_PUBLICATIONS env                                                                                               
                                                    Postgres PUBLICATIONs that define the partition of the upstream               
