@@ -356,7 +356,7 @@ class ChangeMaker {
     // at most once a minute.
     if (now - lastLogTime > 60_000) {
       this.#lc.error?.(
-        `Unable to continue replication since ${lsn}: ${String(err)}`,
+        `Unable to continue replication from LSN ${lsn}: ${String(err)}`,
         // 'content' can be a large byte Buffer. Exclude it from logging output.
         {...msg, content: undefined},
       );
