@@ -32,8 +32,5 @@
   "eslintConfig": {
     "extends": "./eslint-config.json"
   },
-  "prettier": "@rocicorp/prettier-config",
-  "dependencies": {
-    "@types/umami": "^2.10.0"
-  }
+  "prettier": "@rocicorp/prettier-config"
 }
