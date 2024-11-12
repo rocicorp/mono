@@ -667,5 +667,15 @@ describe('Where expression factory and builder', () => {
       query.where(({and}) => and(undefined, undefined, undefined));
       query.where(({and, cmp}) => and(cmp('n', 1), undefined, cmp('n', 2)));
     });
+
+    test('or', () => {
+      const query = mockQuery as unknown as Query<TestSchema>;
+
+      query.where(({or}) => or());
+      query.where(({or}) => or(undefined));
+      query.where(({or}) => or(undefined, undefined));
+      query.where(({or}) => or(undefined, undefined, undefined));
+      query.where(({or, cmp}) => or(cmp('n', 1), undefined, cmp('n', 2)));
+    });
   });
 });
