@@ -449,3 +449,48 @@ test('-h', () => {
     "
   `);
 });
+
+test('unknown arguments', () => {
+  const logger = {info: vi.fn(), error: vi.fn()};
+  expect(() =>
+    parseOptions(options, ['--shardID', 'foo'], '', {}, logger),
+  ).toThrow(ExitAfterUsage);
+  expect(logger.error).toHaveBeenCalledOnce();
+  expect(logger.error.mock.calls[0]).toMatchInlineSnapshot(`
+    [
+      "Invalid arguments:",
+      [
+        "--shardID",
+        "foo",
+      ],
+    ]
+  `);
+  expect(logger.info).toHaveBeenCalledOnce();
+  expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
+    "
+     --port, -p number                  default: 4848                                                        
+       PORT env                                                                                              
+                                        blah blah blah                                                       
+                                                                                                             
+     --replica-db-file string           required                                                             
+       REPLICA_DB_FILE env                                                                                   
+                                                                                                             
+     --litestream boolean               optional                                                             
+       LITESTREAM env                                                                                        
+                                                                                                             
+     --log-format text,json             default: "text"                                                      
+       LOG_FORMAT env                                                                                        
+                                                                                                             
+     --shard-id string                  default: "0"                                                         
+       SHARD_ID env                                                                                          
+                                        blah blah blah                                                       
+                                                                                                             
+     --shard-publications string[]      default: []                                                          
+       SHARD_PUBLICATIONS env                                                                                
+                                                                                                             
+     --tuple a,c,e,g,i,k,b,d,f,h,j,l    default: ["a","b"]                                                   
+       TUPLE env                                                                                             
+                                                                                                             
+    "
+  `);
+});

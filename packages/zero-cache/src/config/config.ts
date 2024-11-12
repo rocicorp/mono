@@ -383,7 +383,15 @@ function parseArgs(
     argv,
     partial: true,
   });
-  if (unknown?.includes('--help') || unknown?.includes('-h')) {
+
+  if (unknown?.length) {
+    switch (unknown[0]) {
+      case '--help':
+      case '-h':
+        break;
+      default:
+        logger.error?.('Invalid arguments:', unknown);
+    }
     showUsage(optionDefs, logger);
     throw new ExitAfterUsage();
   }
