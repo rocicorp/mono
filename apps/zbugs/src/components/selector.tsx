@@ -1,5 +1,6 @@
 import classNames from 'classnames';
 import {useCallback, useEffect, useRef, useState} from 'react';
+import {umami} from '../umami.js';
 
 type Item<T> = {
   text: string;
