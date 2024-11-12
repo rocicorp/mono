@@ -4,7 +4,6 @@
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
     "jsx": "react-jsx",
     "baseUrl": "../../packages",
-    "types": ["@types/umami"],
     "paths": {
       "@rocicorp/zero": ["./zero/src/zero.ts"],
       "@rocicorp/zero/react": ["./zero/src/react.ts"]
