@@ -1,6 +1,7 @@
 import type {ReactNode} from 'react';
 import {navigate} from 'wouter/use-browser-location';
 import type {ZbugsHistoryState} from '../routes.js';
+import {umami} from '../umami.js';
 
 export type Props = {
   children: ReactNode;

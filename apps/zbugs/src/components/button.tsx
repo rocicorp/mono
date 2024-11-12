@@ -1,4 +1,5 @@
 import {useCallback, type CSSProperties, type ReactNode} from 'react';
+import {umami} from '../umami.js';
 
 export interface Props {
   onAction?: (() => void) | undefined;
@@ -33,13 +34,17 @@ export function Button(props: Props) {
         onKeyUp: (e: React.KeyboardEvent<Element>) => {
           if (e.key === ' ') {
             onAction();
-            if (eventName) umami.track(eventName);
+            if (eventName) {
+              umami.track(eventName);
+            }
           }
         },
         onKeyPress: (e: React.KeyboardEvent<Element>) => {
           if (e.key === 'Enter') {
             onAction();
-            if (eventName) umami.track(eventName);
+            if (eventName) {
+              umami.track(eventName);
+            }
           }
         },
       }
