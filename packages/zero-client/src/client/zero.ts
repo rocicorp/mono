@@ -90,7 +90,10 @@ import {
   type Series,
   getLastConnectErrorValue,
 } from './metrics.js';
-import {type NormalizedSchema, normalizeSchema} from './normalized-schema.js';
+import {
+  type NormalizedSchema,
+  normalizeSchema,
+} from '../../../zero-schema/src/normalized-schema.js';
 import type {ZeroAdvancedOptions, ZeroOptions} from './options.js';
 import {QueryManager} from './query-manager.js';
 import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';

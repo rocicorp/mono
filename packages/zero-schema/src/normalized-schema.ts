@@ -1,11 +1,11 @@
-import {sortedEntries} from '../../../shared/src/sorted-entries.js';
-import type {Writable} from '../../../shared/src/writable.js';
+import {sortedEntries} from '../../shared/src/sorted-entries.js';
+import type {Writable} from '../../shared/src/writable.js';
 import {
-  NormalizedTableSchema,
   normalizeTableSchemaWithCache,
+  type NormalizedTableSchema,
   type TableSchemaCache,
-} from '../../../zero-schema/src/normalize-table-schema.js';
-import type {Schema} from '../../../zero-schema/src/mod.js';
+} from './normalize-table-schema.js';
+import type {Schema} from './schema.js';
 
 /**
  * Creates a normalized schema from a schema.

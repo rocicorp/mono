@@ -1,8 +1,9 @@
 import {
   createSchema,
   createTableSchema,
+  defineAuthorization,
   type TableSchemaToRow,
-} from '@rocicorp/zero/schema';
+} from '@rocicorp/zero';
 
 const userSchema = createTableSchema({
   tableName: 'user',
@@ -192,3 +193,58 @@ export const schema = createSchema({
 export type IssueRow = TableSchemaToRow<typeof issueSchema>;
 export type CommentRow = TableSchemaToRow<typeof commentSchema>;
 export type Schema = typeof schema;
+
+/** The contents of the zbugs JWT */
+type AuthData = {
+  // The logged in userID.
+  sub: string;
+};
+
+export const authorization = defineAuthorization<AuthData, Schema>(
+  schema,
+  query => {
+    const allowIfLoggedIn = (authData: AuthData) =>
+      query.user.where('id', '=', authData.sub);
+
+    const allowIfIssueCreator = (authData: AuthData, row: {id: string}) => {
+      return query.issue
+        .where('id', row.id)
+        .where('creatorID', '=', authData.sub);
+    };
+
+    // TODO: It would be nice to share code with above.
+    const allowIfCommentCreator = (authData: AuthData, row: {id: string}) => {
+      return query.comment
+        .where('id', row.id)
+        .where('creatorID', '=', authData.sub);
+    };
+
+    const allowIfAdmin = (authData: AuthData) =>
+      query.user.where('id', '=', authData.sub).where('role', '=', 'crew');
+
+    return {
+      user: {
+        // Only the authentication system can write to the user table.
+        table: {
+          insert: [],
+          update: [],
+          delete: [],
+        },
+      },
+      issue: {
+        row: {
+          insert: [allowIfLoggedIn],
+          update: [allowIfIssueCreator, allowIfAdmin],
+          delete: [allowIfIssueCreator, allowIfAdmin],
+        },
+      },
+      comment: {
+        row: {
+          insert: [allowIfLoggedIn],
+          update: [allowIfCommentCreator, allowIfAdmin],
+          delete: [allowIfCommentCreator, allowIfAdmin],
+        },
+      },
+    };
+  },
+) as ReturnType<typeof defineAuthorization>;

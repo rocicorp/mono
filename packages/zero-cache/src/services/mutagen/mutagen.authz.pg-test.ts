@@ -2,7 +2,6 @@ import {test, beforeEach, afterEach, expect} from 'vitest';
 import type {PostgresDB} from '../../types/pg.js';
 import {testDBs} from '../../test/db.js';
 import {createSchema} from '../../../../zero-schema/src/schema.js';
-import {defineAuthorization} from '../../config/define-authorization.js';
 import type {Supertype} from '../../../../zero-schema/src/table-schema.js';
 import type {Query} from '../../../../zql/src/query/query.js';
 import {Database} from '../../../../zqlite/src/db.js';
@@ -11,6 +10,7 @@ import {processMutation} from './mutagen.js';
 import {WriteAuthorizerImpl, type WriteAuthorizer} from './write-authorizer.js';
 import {MutationType} from '../../../../zero-protocol/src/push.js';
 import {zeroSchema} from './mutagen-test-shared.js';
+import {defineAuthorization} from '../../../../zero-schema/src/authorization.js';
 
 const SHARD_ID = '0';
 const CG_ID = 'abc';
@@ -298,6 +298,7 @@ beforeEach(async () => {
   createReplicaTables(replica);
   authorizer = new WriteAuthorizerImpl(
     lc,
+    {},
     authorizationConfig,
     replica,
     SHARD_ID,

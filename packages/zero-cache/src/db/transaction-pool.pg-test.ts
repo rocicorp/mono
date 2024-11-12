@@ -7,11 +7,11 @@ import {sleep} from '../../../shared/src/sleep.js';
 import {expectTables, testDBs} from '../test/db.js';
 import type {PostgresDB} from '../types/pg.js';
 import {
-  Mode,
-  TransactionPool,
   importSnapshot,
+  Mode,
   sharedSnapshot,
   synchronizedSnapshots,
+  TransactionPool,
 } from './transaction-pool.js';
 
 describe('db/transaction-pool', () => {
@@ -518,6 +518,33 @@ describe('db/transaction-pool', () => {
 
     // Ensure that the error is surfaced.
     expect(result).toBe(readError);
+
+    // Nothing should have succeeded.
+    await expectTables(db, {
+      ['public.foo']: [],
+      ['public.workers']: [],
+      ['public.cleaned']: [],
+    });
+  });
+
+  test('abort rolls back all transactions', async () => {
+    const pool = new TransactionPool(
+      lc,
+      Mode.SERIALIZABLE,
+      initTask,
+      cleanupTask,
+      3,
+      3,
+    );
+
+    pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
+    pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
+    pool.process(task(`INSERT INTO foo (id) VALUES (3)`));
+    pool.process(task(`INSERT INTO foo (id) VALUES (2)`));
+    pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
+    pool.abort();
+
+    await pool.run(db).done();
 
     // Nothing should have succeeded.
     await expectTables(db, {
