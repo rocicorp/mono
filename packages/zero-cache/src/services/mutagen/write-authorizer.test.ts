@@ -169,7 +169,7 @@ describe('can insert/update/delete/upsert', () => {
         authorizer[`can${op}`](jwtPayload, {
           tableName: 'foo',
           primaryKey: ['id'] as const,
-          value: {id: id ?? 1},
+          value: {id: id ?? 1, a: 'a'},
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any),
       ).toBe(expected);

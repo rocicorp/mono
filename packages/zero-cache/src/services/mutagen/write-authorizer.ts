@@ -192,7 +192,12 @@ export class WriteAuthorizerImpl {
 
     const columnRules = rules.column;
     if (columnRules) {
-      for (const rule of Object.values(columnRules)) {
+      for (const [column, rule] of Object.entries(columnRules)) {
+        if (action === 'update' && op.value[column] === undefined) {
+          // If the column is not being updated, we do not need to check
+          // the column rules.
+          continue;
+        }
         if (!this.#passesPolicy(rule[action], authData, undefined)) {
           return false;
         }
@@ -214,7 +219,12 @@ export class WriteAuthorizerImpl {
 
     const cellRules = rules.cell;
     if (cellRules) {
-      for (const rule of Object.values(cellRules)) {
+      for (const [column, rule] of Object.entries(cellRules)) {
+        if (action === 'update' && op.value[column] === undefined) {
+          // If the column is not being updated, we do not need to check
+          // the column rules.
+          continue;
+        }
         if (!this.#passesPolicy(rule[action], authData, preMutationRow)) {
           return false;
         }

@@ -10,6 +10,7 @@ import {expectTables, testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {processMutation} from './mutagen.js';
 import type {WriteAuthorizer} from './write-authorizer.js';
+import {zeroSchema} from './mutagen-test-shared.js';
 
 const SHARD_ID = '0';
 
@@ -52,27 +53,7 @@ async function createTables(db: PostgresDB) {
         PRIMARY KEY(id),
         FOREIGN KEY(ref) REFERENCES idonly(id)
       );
-      CREATE SCHEMA zero_${SHARD_ID};
-      CREATE TABLE zero_${SHARD_ID}.clients (
-        "clientGroupID"  TEXT NOT NULL,
-        "clientID"       TEXT NOT NULL,
-        "lastMutationID" BIGINT,
-        "userID"         TEXT,
-        PRIMARY KEY ("clientGroupID", "clientID")
-      );
-      CREATE SCHEMA zero;
-      CREATE TABLE zero."schemaVersions" (
-        "minSupportedVersion" INT4,
-        "maxSupportedVersion" INT4,
-
-        -- Ensure that there is only a single row in the table.
-        -- Application code can be agnostic to this column, and
-        -- simply invoke UPDATE statements on the version columns.
-        "lock" BOOL PRIMARY KEY DEFAULT true,
-        CONSTRAINT zero_schema_versions_single_row_constraint CHECK (lock)
-      );
-      INSERT INTO zero."schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion")
-        VALUES (true, 1, 1);
+      ${zeroSchema(SHARD_ID)}
     `);
 }
 
