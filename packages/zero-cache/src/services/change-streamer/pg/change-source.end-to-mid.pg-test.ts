@@ -57,10 +57,12 @@ describe('change-source/pg/end-to-mid-test', () => {
       jsonb JSONB
     );
 
-    CREATE SCHEMA test;
+    -- Use the internal zero schema to test tables in a different schema,
+    -- since the set of allowed schemas is restricted.
+    CREATE SCHEMA IF NOT EXISTS zero;
 
     CREATE PUBLICATION zero_some_public FOR TABLE foo (id, int);
-    CREATE PUBLICATION zero_all_test FOR TABLES IN SCHEMA test;
+    CREATE PUBLICATION zero_all_test FOR TABLES IN SCHEMA zero;
     `);
 
     const source = (
@@ -119,12 +121,12 @@ describe('change-source/pg/end-to-mid-test', () => {
   test.each([
     [
       'create table',
-      'CREATE TABLE test.bar (id INT8 PRIMARY KEY);',
+      'CREATE TABLE zero.bar (id INT8 PRIMARY KEY);',
       [{tag: 'create-table'}],
-      {['test.bar']: []},
+      {['zero.bar']: []},
       [
         {
-          name: 'test.bar',
+          name: 'zero.bar',
           columns: {
             id: {
               characterMaximumLength: null,
@@ -148,9 +150,9 @@ describe('change-source/pg/end-to-mid-test', () => {
     ],
     [
       'add column',
-      'ALTER TABLE test.bar ADD name INT8;',
+      'ALTER TABLE zero.bar ADD name INT8;',
       [{tag: 'add-column'}],
-      {['test.bar']: []},
+      {['zero.bar']: []},
       [
         {
           columns: {
@@ -176,7 +178,7 @@ describe('change-source/pg/end-to-mid-test', () => {
               pos: 3,
             },
           },
-          name: 'test.bar',
+          name: 'zero.bar',
           primaryKey: ['id'],
         },
       ],
@@ -184,9 +186,9 @@ describe('change-source/pg/end-to-mid-test', () => {
     ],
     [
       'rename column',
-      'ALTER TABLE test.bar RENAME name TO handle;',
+      'ALTER TABLE zero.bar RENAME name TO handle;',
       [{tag: 'update-column'}],
-      {['test.bar']: []},
+      {['zero.bar']: []},
       [
         {
           columns: {
@@ -212,7 +214,7 @@ describe('change-source/pg/end-to-mid-test', () => {
               pos: 3,
             },
           },
-          name: 'test.bar',
+          name: 'zero.bar',
           primaryKey: ['id'],
         },
       ],
@@ -220,9 +222,9 @@ describe('change-source/pg/end-to-mid-test', () => {
     ],
     [
       'change column data type',
-      'ALTER TABLE test.bar ALTER handle TYPE TEXT;',
+      'ALTER TABLE zero.bar ALTER handle TYPE TEXT;',
       [{tag: 'update-column'}],
-      {['test.bar']: []},
+      {['zero.bar']: []},
       [
         {
           columns: {
@@ -248,7 +250,7 @@ describe('change-source/pg/end-to-mid-test', () => {
               pos: 3,
             },
           },
-          name: 'test.bar',
+          name: 'zero.bar',
           primaryKey: ['id'],
         },
       ],
@@ -256,9 +258,9 @@ describe('change-source/pg/end-to-mid-test', () => {
     ],
     [
       'add unique column to automatically generate index',
-      'ALTER TABLE test.bar ADD username TEXT UNIQUE;',
+      'ALTER TABLE zero.bar ADD username TEXT UNIQUE;',
       [{tag: 'add-column'}, {tag: 'create-index'}],
-      {['test.bar']: []},
+      {['zero.bar']: []},
       [
         {
           columns: {
@@ -291,14 +293,14 @@ describe('change-source/pg/end-to-mid-test', () => {
               pos: 4,
             },
           },
-          name: 'test.bar',
+          name: 'zero.bar',
           primaryKey: ['id'],
         },
       ],
       [
         {
-          name: 'test.bar_username_key',
-          tableName: 'test.bar',
+          name: 'zero.bar_username_key',
+          tableName: 'zero.bar',
           columns: {username: 'ASC'},
           unique: true,
         },
@@ -306,9 +308,9 @@ describe('change-source/pg/end-to-mid-test', () => {
     ],
     [
       'rename unique column with associated index',
-      'ALTER TABLE test.bar RENAME username TO login;',
+      'ALTER TABLE zero.bar RENAME username TO login;',
       [{tag: 'update-column'}],
-      {['test.bar']: []},
+      {['zero.bar']: []},
       [
         {
           columns: {
@@ -341,14 +343,14 @@ describe('change-source/pg/end-to-mid-test', () => {
               pos: 4,
             },
           },
-          name: 'test.bar',
+          name: 'zero.bar',
           primaryKey: ['id'],
         },
       ],
       [
         {
-          name: 'test.bar_username_key',
-          tableName: 'test.bar',
+          name: 'zero.bar_username_key',
+          tableName: 'zero.bar',
           columns: {login: 'ASC'},
           unique: true,
         },
@@ -356,9 +358,9 @@ describe('change-source/pg/end-to-mid-test', () => {
     ],
     [
       'retype unique column with associated index',
-      'ALTER TABLE test.bar ALTER login TYPE VARCHAR(180);',
+      'ALTER TABLE zero.bar ALTER login TYPE VARCHAR(180);',
       [{tag: 'update-column'}],
-      {['test.bar']: []},
+      {['zero.bar']: []},
       [
         {
           columns: {
@@ -391,14 +393,14 @@ describe('change-source/pg/end-to-mid-test', () => {
               pos: 4,
             },
           },
-          name: 'test.bar',
+          name: 'zero.bar',
           primaryKey: ['id'],
         },
       ],
       [
         {
-          name: 'test.bar_username_key',
-          tableName: 'test.bar',
+          name: 'zero.bar_username_key',
+          tableName: 'zero.bar',
           columns: {login: 'ASC'},
           unique: true,
         },
@@ -406,9 +408,9 @@ describe('change-source/pg/end-to-mid-test', () => {
     ],
     [
       'drop column with index',
-      'ALTER TABLE test.bar DROP login;',
+      'ALTER TABLE zero.bar DROP login;',
       [{tag: 'drop-index'}, {tag: 'drop-column'}],
-      {['test.bar']: []},
+      {['zero.bar']: []},
       [
         {
           columns: {
@@ -434,7 +436,7 @@ describe('change-source/pg/end-to-mid-test', () => {
               pos: 3,
             },
           },
-          name: 'test.bar',
+          name: 'zero.bar',
           primaryKey: ['id'],
         },
       ],

@@ -155,7 +155,6 @@ export function validatePublications(
   shardID: string,
   published: PublicationInfo,
 ) {
-  const shardSchema = unescapedSchema(shardID);
   // Verify that all publications export the proper events.
   published.publications.forEach(pub => {
     if (
@@ -171,5 +170,5 @@ export function validatePublications(
     }
   });
 
-  published.tables.forEach(table => validate(lc, shardSchema, table));
+  published.tables.forEach(table => validate(lc, shardID, table));
 }

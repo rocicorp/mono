@@ -41,9 +41,9 @@ import {
   replicationEventSchema,
   type DdlUpdateEvent,
   type PublishedSchema,
-  type ReplicationEvent,
 } from './schema/ddl.js';
 import {INTERNAL_PUBLICATION_PREFIX} from './schema/shard.js';
+import {validate} from './schema/validation.js';
 import type {ShardConfig} from './shard-config.js';
 import {initSyncSchema} from './sync-schema.js';
 
@@ -311,17 +311,52 @@ class PostgresChangeSource implements ChangeSource {
   }
 }
 
+type ReplicationError = {
+  lsn: string;
+  msg: Pgoutput.Message;
+  err: unknown;
+  lastLogged: Date;
+};
+
 class ChangeMaker {
   readonly #lc: LogContext;
+  readonly #shardID: string;
   readonly #shardPrefix: string;
+
+  #error: ReplicationError | undefined;
 
   constructor(lc: LogContext, shardID: string) {
     this.#lc = lc;
+    this.#shardID = shardID;
     // Note: This matches the prefix used in pg_logical_emit_message() in pg/schema/ddl.ts.
     this.#shardPrefix = `zero/${shardID}`;
   }
 
   makeChanges(lsn: string, msg: Pgoutput.Message): DownstreamChange[] {
+    if (!this.#error) {
+      try {
+        return this.#makeChanges(lsn, msg);
+      } catch (err) {
+        this.#error = {lsn, msg, err, lastLogged: new Date(0)};
+      }
+    }
+    const {err, lastLogged} = this.#error;
+    const now = Date.now();
+
+    // Log an error as replication messages continue to be dropped,
+    // at most once a minute.
+    if (now - lastLogged.getTime() > 60_000) {
+      this.#lc.error?.(
+        `Unable to continue replication since ${this.#error.lsn}: ${String(
+          err,
+        )}`,
+        {...this.#error.msg, content: undefined},
+      );
+    }
+    return [];
+  }
+
+  #makeChanges(lsn: string, msg: Pgoutput.Message): DownstreamChange[] {
     switch (msg.tag) {
       case 'begin':
         return [['begin', msg]];
@@ -366,14 +401,7 @@ class ChangeMaker {
   #preSchema: PublishedSchema | undefined;
 
   #handleCustomMessage(msg: MessageMessage) {
-    let event: ReplicationEvent;
-    try {
-      event = this.#parseReplicationEvent(msg.content);
-    } catch (e) {
-      // TODO: Properly handle malformed messages.
-      this.#lc.warn?.('Ignoring malformed message', e);
-      return [];
-    }
+    const event = this.#parseReplicationEvent(msg.content);
     if (event.type === 'ddlStart') {
       // Store the schema in order to diff it with a potential ddlUpdate.
       this.#preSchema = event.schema;
@@ -420,6 +448,11 @@ class ChangeMaker {
     const [nextTables, nextIndexes] = specsByName(update.schema);
     const {tag} = update.event;
     const changes: DataChange[] = [];
+
+    // Validate the new table schemas
+    for (const table of nextTables.values()) {
+      validate(this.#lc, this.#shardID, table);
+    }
 
     const [dropped, created] = symmetricDifference(
       new Set(prevIndexes.keys()),

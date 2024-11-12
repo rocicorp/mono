@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {AbortError} from '../../../../../shared/src/abort-error.js';
-import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
+import {TestLogSink} from '../../../../../shared/src/logging-test-utils.js';
 import {Queue} from '../../../../../shared/src/queue.js';
 import {StatementRunner} from '../../../db/statements.js';
 import {
@@ -27,6 +27,7 @@ import {fromLexiVersion} from './lsn.js';
 const SHARD_ID = 'change_source_test_id';
 
 describe('change-source/pg', () => {
+  let logSink: TestLogSink;
   let lc: LogContext;
   let upstream: PostgresDB;
   let upstreamURI: string;
@@ -34,14 +35,15 @@ describe('change-source/pg', () => {
   let source: ChangeSource;
 
   beforeEach(async () => {
-    lc = createSilentLogContext();
+    logSink = new TestLogSink();
+    lc = new LogContext('error', {}, logSink);
     upstream = await testDBs.create('change_source_pg_test_upstream');
     replicaDbFile = new DbFile('change_source_pg_test_replica');
 
     upstreamURI = getConnectionURI(upstream);
     await upstream.unsafe(`
     CREATE TABLE foo(
-      id TEXT PRIMARY KEY,
+      id TEXT CONSTRAINT foo_pk PRIMARY KEY,
       int INT4,
       big BIGINT,
       flt FLOAT8,
@@ -309,7 +311,51 @@ describe('change-source/pg', () => {
     stream3.changes.cancel();
   });
 
-  test('error handling', async () => {
+  test('unsupported schema change error', async () => {
+    const {changes} = await source.startStream('00');
+    const downstream = drainToQueue(changes);
+
+    // This statement should be successfully converted to Changes.
+    await upstream`INSERT INTO foo(id) VALUES('hello')`;
+    expect(await downstream.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
+    expect(await downstream.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'commit',
+      {tag: 'commit'},
+      {watermark: expect.stringMatching(WATERMARK_REGEX)},
+    ]);
+
+    // This statement should result in a replication error and
+    // effectively freeze replication.
+    await upstream.begin(async tx => {
+      await tx`ALTER TABLE foo DROP CONSTRAINT foo_pk`;
+      await tx`INSERT INTO foo(id) VALUES('world')`;
+    });
+
+    expect(await downstream.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
+    // Should not continue the downstream change stream.
+    expect(
+      await downstream.dequeue(
+        'nuthin-hunny' as unknown as DownstreamChange,
+        10,
+      ),
+    ).toEqual('nuthin-hunny');
+
+    expect(logSink.messages[0]).toMatchObject([
+      'error',
+      {component: 'change-source'},
+      [
+        expect.stringMatching(
+          'UnsupportedTableSchemaError: Table "foo" does not have a PRIMARY KEY',
+        ),
+        {tag: 'message'},
+      ],
+    ]);
+
+    changes.cancel();
+  });
+
+  test('missing replication slot', async () => {
     // Purposely drop the replication slot to test the error case.
     await dropReplicationSlots(upstream);
 
