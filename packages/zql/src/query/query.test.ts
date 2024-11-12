@@ -656,4 +656,16 @@ describe('Where expression factory and builder', () => {
       ),
     );
   });
+
+  describe('allow undefined terms', () => {
+    test('and', () => {
+      const query = mockQuery as unknown as Query<TestSchema>;
+
+      query.where(({and}) => and());
+      query.where(({and}) => and(undefined));
+      query.where(({and}) => and(undefined, undefined));
+      query.where(({and}) => and(undefined, undefined, undefined));
+      query.where(({and, cmp}) => and(cmp('n', 1), undefined, cmp('n', 2)));
+    });
+  });
 });

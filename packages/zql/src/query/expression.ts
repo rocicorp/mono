@@ -69,8 +69,8 @@ export interface ExpressionBuilder<TSchema extends TableSchema> {
       | Parameter<TParamAnchor, TParamField, TParamTypeBound>,
   ): Condition;
 
-  and(...conditions: Condition[]): Condition;
-  or(...conditions: Condition[]): Condition;
+  and(...conditions: (Condition | undefined)[]): Condition;
+  or(...conditions: (Condition | undefined)[]): Condition;
   not(condition: Condition): Condition;
 }
 
@@ -83,12 +83,12 @@ class ExpressionBuilderImpl<TSchema extends TableSchema>
     return cmp(field, opOrValue, value);
   }
 
-  and(...conditions: Condition[]): Condition {
-    return and(...conditions);
+  and(...conditions: (Condition | undefined)[]): Condition {
+    return and(...filterUndefined(conditions));
   }
 
-  or(...expressions: Condition[]): Condition {
-    return or(...expressions);
+  or(...conditions: (Condition | undefined)[]): Condition {
+    return or(...filterUndefined(conditions));
   }
 
   not(expression: Condition): Condition {
@@ -162,11 +162,14 @@ export function and(...conditions: Condition[]): Condition {
   };
 }
 
-export function or(...expressions: Condition[]): Condition {
-  if (expressions.length === 1) {
-    return expressions[0];
+export function or(...conditions: Condition[]): Condition {
+  if (conditions.length === 0) {
+    return {type: 'or', conditions: []};
   }
-  return {type: 'or', conditions: flatten('or', expressions)};
+  if (conditions.length === 1) {
+    return conditions[0];
+  }
+  return {type: 'or', conditions: flatten('or', conditions)};
 }
 
 function not(expression: Condition): Condition {
@@ -231,4 +234,8 @@ function negateOperator(op: SimpleOperator): SimpleOperator {
     case 'NOT ILIKE':
       return 'ILIKE';
   }
+}
+
+function filterUndefined<T>(array: (T | undefined)[]): T[] {
+  return array.filter(e => e !== undefined);
 }

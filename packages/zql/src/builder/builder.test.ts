@@ -595,3 +595,29 @@ test('bind static parameters', () => {
 
   expect(newAst).toMatchSnapshot();
 });
+
+test('empty or - nothing goes through', () => {
+  const {sources, getSource} = testSources();
+  const sink = new Catch(
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        where: {
+          type: 'or',
+          conditions: [],
+        },
+      },
+      {
+        getSource,
+        createStorage: () => new MemoryStorage(),
+      },
+      undefined,
+    ),
+  );
+
+  expect(sink.fetch()).toEqual([]);
+
+  sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
+  expect(sink.pushes).toEqual([]);
+});
