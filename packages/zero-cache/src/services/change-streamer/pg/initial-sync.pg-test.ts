@@ -933,4 +933,28 @@ describe('replicator/initial-sync', () => {
     }
     expect(result).toBeInstanceOf(UnsupportedTableSchemaError);
   });
+
+  test.each([
+    'UPPERCASE',
+    'dashes-not-allowed',
+    'spaces not allowed',
+    'punctuation!',
+  ])('invalid shard ID: %s', async id => {
+    const lc = createSilentLogContext();
+    let result;
+    try {
+      await initialSync(
+        lc,
+        {id, publications: []},
+        replica,
+        getConnectionURI(upstream),
+      );
+    } catch (e) {
+      result = e;
+    }
+    expect(result).toBeInstanceOf(Error);
+    expect(String(result)).toEqual(
+      'Error: A shard ID may only consist of lower-case letters, numbers, and the underscore character',
+    );
+  });
 });

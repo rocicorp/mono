@@ -51,6 +51,9 @@ const shardOptions = {
       '',
       `A shard's zero {bold clients} table and shard-internal functions are stored in`,
       `the {bold zero_\\{id\\}} schema in the upstream database.`,
+      '',
+      'Due to constraints on replication slot names, a shard ID may only consist of',
+      'lower-case letters, numbers, and the underscore character.',
     ],
     allCaps: true, // so that the flag is --shardID
   },
