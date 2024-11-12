@@ -30,6 +30,9 @@ import {getPublicationInfo, type PublicationInfo} from './schema/published.js';
 import {getShardConfig, validatePublications} from './schema/shard.js';
 import type {ShardConfig} from './shard-config.js';
 
+// https://www.postgresql.org/docs/current/warm-standby.html#STREAMING-REPLICATION-SLOTS-MANIPULATION
+const ALLOWED_SHARD_ID_CHARACTERS = /^[a-z0-9_]+$/;
+
 export function replicationSlot(shardID: string): string {
   return `zero_${shardID}`;
 }
@@ -40,6 +43,11 @@ export async function initialSync(
   tx: Database,
   upstreamURI: string,
 ) {
+  if (!ALLOWED_SHARD_ID_CHARACTERS.test(shard.id)) {
+    throw new Error(
+      'A shard ID may only consist of lower-case letters, numbers, and the underscore character',
+    );
+  }
   const upstreamDB = pgClient(lc, upstreamURI, {
     max: MAX_WORKERS,
   });
@@ -170,7 +178,7 @@ async function createReplicationSlot(
   }
   const slot = (
     await session.unsafe<ReplicationSlot[]>(
-      `CREATE_REPLICATION_SLOT ${slotName} LOGICAL pgoutput`,
+      `CREATE_REPLICATION_SLOT "${slotName}" LOGICAL pgoutput`,
     )
   )[0];
   lc.info?.(`Created replication slot ${slotName}`, slot);
