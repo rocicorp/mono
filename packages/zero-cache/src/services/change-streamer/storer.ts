@@ -1,6 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {AbortError} from '../../../../shared/src/abort-error.js';
 import {assert} from '../../../../shared/src/asserts.js';
 import {Queue} from '../../../../shared/src/queue.js';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.js';
@@ -195,8 +194,8 @@ export class Storer implements Service {
       } else if (tag === 'rollback') {
         // Aborted transactions are not stored in the changeLog. Abort the current tx
         // and process catchup of subscribers that were waiting for it to end.
-        tx.pool.fail(new AbortError());
-        await tx.pool.done().catch(() => {}); // AbortError is expected. Don't throw it.
+        tx.pool.abort();
+        await tx.pool.done();
         tx = null;
 
         this.#processCatchup(catchupQueue.splice(0));
