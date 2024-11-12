@@ -194,6 +194,19 @@ export interface Query<
 
   where(expressionFactory: ExpressionFactory<TSchema>): Query<TSchema, TReturn>;
 
+  whereExists(
+    relationship: keyof TSchema['relationships'],
+  ): Query<TSchema, TReturn>;
+  whereExists<TRelationship extends keyof TSchema['relationships'] & string>(
+    relationship: TRelationship,
+    cb: (
+      query: Query<
+        PullSchemaForRelationship<TSchema, TRelationship>,
+        DefaultQueryResultRow<PullSchemaForRelationship<TSchema, TRelationship>>
+      >,
+    ) => Query<TableSchema, QueryType>,
+  ): Query<TSchema, TReturn>;
+
   start(
     row: Partial<TableSchemaToRow<TSchema>>,
     opts?: {inclusive: boolean} | undefined,
