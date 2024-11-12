@@ -271,7 +271,7 @@ export class MessageProcessor {
     }
   }
 
-  /** @return The number of changes committed. */
+  /** @return If a transaction was committed. */
   #processMessage(
     lc: LogContext,
     msg: Change,
@@ -303,6 +303,12 @@ export class MessageProcessor {
 
       this.#acknowledge(watermark);
       return true;
+    }
+
+    if (msg.tag === 'rollback') {
+      this.#currentTx?.abort(lc);
+      this.#currentTx = null;
+      return false;
     }
 
     switch (msg.tag) {

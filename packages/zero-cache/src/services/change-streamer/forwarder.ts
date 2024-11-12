@@ -45,8 +45,11 @@ export class Forwarder {
         this.#inTransaction = true;
         break;
       case 'commit':
-        // Upon commit, all queued subscribers are transferred to the active set.
-        // This means that they can receive messages starting from the next transaction.
+      case 'rollback':
+        // Upon commit or rollback, all queued subscribers are transferred to
+        // the active set. This means that they can receive messages starting
+        // from the next transaction.
+        //
         // Note that if catchup is still in progress (in the Storer), these messages
         // will be buffered in the backlog until catchup completes.
         this.#inTransaction = false;

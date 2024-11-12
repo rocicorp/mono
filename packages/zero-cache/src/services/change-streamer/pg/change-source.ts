@@ -333,29 +333,35 @@ class ChangeMaker {
   }
 
   makeChanges(lsn: string, msg: Pgoutput.Message): DownstreamChange[] {
-    if (!this.#error) {
-      try {
-        return this.#makeChanges(lsn, msg);
-      } catch (err) {
-        this.#error = {lsn, msg, err, lastLogTime: 0};
-      }
+    if (this.#error) {
+      this.#logError(this.#error);
+      return [];
     }
-    const {err, lastLogTime} = this.#error;
+    try {
+      return this.#makeChanges(lsn, msg);
+    } catch (err) {
+      this.#error = {lsn, msg, err, lastLogTime: 0};
+      this.#logError(this.#error);
+      // Rollback the current transaction to avoid dangling transactions in
+      // downstream processors (i.e. changeLog, replicator).
+      return [['rollback', {tag: 'rollback'}]];
+    }
+  }
+
+  #logError(error: ReplicationError) {
+    const {lsn, msg, err, lastLogTime} = error;
     const now = Date.now();
 
     // Output an error to logs as replication messages continue to be dropped,
     // at most once a minute.
     if (now - lastLogTime > 60_000) {
       this.#lc.error?.(
-        `Unable to continue replication since ${this.#error.lsn}: ${String(
-          err,
-        )}`,
+        `Unable to continue replication since ${lsn}: ${String(err)}`,
         // 'content' can be a large byte Buffer. Exclude it from logging output.
-        {...this.#error.msg, content: undefined},
+        {...msg, content: undefined},
       );
-      this.#error.lastLogTime = now;
+      error.lastLogTime = now;
     }
-    return [];
   }
 
   #makeChanges(lsn: string, msg: Pgoutput.Message): DownstreamChange[] {

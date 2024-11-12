@@ -217,6 +217,67 @@ describe('change-streamer/service', () => {
     ]);
   });
 
+  test('subscriber catchup and continuation after rollback', async () => {
+    // Process some changes upstream.
+    changes.push(['begin', messages.begin()]);
+    changes.push(['data', messages.insert('foo', {id: 'hello'})]);
+    changes.push(['data', messages.insert('foo', {id: 'world'})]);
+    changes.push([
+      'commit',
+      messages.commit({extra: 'stuff'}),
+      {watermark: '09'},
+    ]);
+
+    // Subscribe to the original watermark.
+    const sub = await streamer.subscribe({
+      id: 'myid',
+      watermark: '01',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
+    // Process more upstream changes.
+    changes.push(['begin', messages.begin()]);
+    changes.push(['data', messages.delete('foo', {id: 'world'})]);
+    changes.push(['rollback', messages.rollback()]);
+
+    // Verify that all changes were sent to the subscriber ...
+    const downstream = drainToQueue(sub);
+    expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
+    expect(await nextChange(downstream)).toMatchObject({
+      tag: 'insert',
+      new: {id: 'hello'},
+    });
+    expect(await nextChange(downstream)).toMatchObject({
+      tag: 'insert',
+      new: {id: 'world'},
+    });
+    expect(await nextChange(downstream)).toMatchObject({
+      tag: 'commit',
+      extra: 'stuff',
+    });
+    expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
+    expect(await nextChange(downstream)).toMatchObject({
+      tag: 'delete',
+      key: {id: 'world'},
+    });
+    expect(await nextChange(downstream)).toMatchObject({tag: 'rollback'});
+
+    // One commit to ACK
+    await acks.dequeue();
+
+    // Only the changes for the committed (i.e. first) transaction are persisted.
+    const logEntries = await changeDB<
+      ChangeLogEntry[]
+    >`SELECT * FROM cdc."changeLog"`;
+    expect(logEntries.map(e => e.change.tag)).toEqual([
+      'begin',
+      'insert',
+      'insert',
+      'commit',
+    ]);
+  });
+
   test('data types (forwarded and catchup)', async () => {
     const sub = await streamer.subscribe({
       id: 'myid',

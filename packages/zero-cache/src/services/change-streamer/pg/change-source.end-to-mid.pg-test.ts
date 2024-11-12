@@ -111,6 +111,7 @@ describe('change-source/pg/end-to-mid-test', () => {
           data.push(change[1]);
           break;
         case 'commit':
+        case 'rollback':
           return data;
         default:
           change satisfies never;

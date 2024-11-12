@@ -416,6 +416,159 @@ describe('change-streamer/storer', () => {
     `);
   });
 
+  // Similar to "queued if transaction is in progress" but tests rollback.
+  test('queued until transaction is rolled back', async () => {
+    const [sub1, _0, stream1] = createSubscriber('03');
+    const [sub2, _1, stream2] = createSubscriber('06');
+
+    // This should be buffered until catchup is complete.
+    sub1.send(['09', ['begin', messages.begin()]]);
+    sub1.send([
+      '0a',
+      ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
+    ]);
+    sub2.send(['09', ['begin', messages.begin()]]);
+    sub2.send([
+      '0a',
+      ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
+    ]);
+
+    // Start a transaction before enqueuing catchup.
+    storer.store(['07', ['begin', messages.begin()]]);
+    // Enqueue catchup before transaction completes.
+    storer.catchup(sub1);
+    storer.catchup(sub2);
+    // Rollback the transaction.
+    storer.store(['08', ['rollback', messages.rollback()]]);
+
+    // Catchup should wait for the transaction to complete before querying
+    // the database, and start after watermark '03'.
+    expect(await drain(stream1, '0a')).toMatchInlineSnapshot(`
+      [
+        [
+          "begin",
+          {
+            "boo": "dar",
+            "tag": "begin",
+          },
+        ],
+        [
+          "data",
+          {
+            "tag": "update",
+          },
+        ],
+        [
+          "commit",
+          {
+            "boo": "far",
+            "tag": "commit",
+          },
+          {
+            "watermark": "06",
+          },
+        ],
+        [
+          "begin",
+          {
+            "tag": "begin",
+          },
+        ],
+        [
+          "commit",
+          {
+            "buffer": "me",
+            "tag": "commit",
+          },
+          {
+            "watermark": "0a",
+          },
+        ],
+      ]
+    `);
+
+    // Catchup should wait for the transaction to complete before querying
+    // the database, and start after watermark '06'.
+    expect(await drain(stream2, '0a')).toMatchInlineSnapshot(`
+      [
+        [
+          "begin",
+          {
+            "tag": "begin",
+          },
+        ],
+        [
+          "commit",
+          {
+            "buffer": "me",
+            "tag": "commit",
+          },
+          {
+            "watermark": "0a",
+          },
+        ],
+      ]
+    `);
+
+    expect(await db`SELECT * FROM cdc."changeLog" ORDER BY watermark, pos`)
+      .toMatchInlineSnapshot(`
+      Result [
+        {
+          "change": {
+            "foo": "bar",
+            "tag": "begin",
+          },
+          "pos": 0n,
+          "precommit": null,
+          "watermark": "02",
+        },
+        {
+          "change": {
+            "tag": "insert",
+          },
+          "pos": 1n,
+          "precommit": null,
+          "watermark": "02",
+        },
+        {
+          "change": {
+            "bar": "baz",
+            "tag": "commit",
+          },
+          "pos": 2n,
+          "precommit": null,
+          "watermark": "03",
+        },
+        {
+          "change": {
+            "boo": "dar",
+            "tag": "begin",
+          },
+          "pos": 0n,
+          "precommit": null,
+          "watermark": "04",
+        },
+        {
+          "change": {
+            "tag": "update",
+          },
+          "pos": 1n,
+          "precommit": null,
+          "watermark": "04",
+        },
+        {
+          "change": {
+            "boo": "far",
+            "tag": "commit",
+          },
+          "pos": 2n,
+          "precommit": null,
+          "watermark": "06",
+        },
+      ]
+    `);
+  });
+
   test('catchup does not include subsequent transactions', async () => {
     const [sub, _0, stream] = createSubscriber('03');
 

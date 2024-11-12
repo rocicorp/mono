@@ -328,18 +328,18 @@ describe('change-source/pg', () => {
     // This statement should result in a replication error and
     // effectively freeze replication.
     await upstream.begin(async tx => {
+      await tx`INSERT INTO foo(id) VALUES('wide')`;
       await tx`ALTER TABLE foo DROP CONSTRAINT foo_pk`;
       await tx`INSERT INTO foo(id) VALUES('world')`;
     });
 
+    // The transaction should be rolled back.
     expect(await downstream.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
-    // Should not continue the downstream change stream.
-    expect(
-      await downstream.dequeue(
-        'nuthin-hunny' as unknown as DownstreamChange,
-        10,
-      ),
-    ).toEqual('nuthin-hunny');
+    expect(await downstream.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'rollback',
+      {tag: 'rollback'},
+    ]);
 
     expect(logSink.messages[0]).toMatchObject([
       'error',

@@ -1,9 +1,9 @@
 import {LogContext} from '@rocicorp/logger';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {beforeEach, describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
+import {Database} from '../../../../zqlite/src/db.js';
 import {StatementRunner} from '../../db/statements.js';
 import {expectTables} from '../../test/lite.js';
-import {Database} from '../../../../zqlite/src/db.js';
 import type {DownstreamChange} from '../change-streamer/change-streamer.js';
 import {initChangeLog} from './schema/change-log.js';
 import {
@@ -159,6 +159,16 @@ describe('replicator/message-processor', () => {
       expect(watermark).toBe(c.acknowledged.at(-1));
     });
   }
+
+  test('rollback', () => {
+    const processor = createMessageProcessor(replica);
+
+    expect(replica.inTransaction).toBe(false);
+    processor.processMessage(lc, ['begin', {tag: 'begin'}]);
+    expect(replica.inTransaction).toBe(true);
+    processor.processMessage(lc, ['rollback', {tag: 'rollback'}]);
+    expect(replica.inTransaction).toBe(false);
+  });
 
   test('abort', () => {
     const processor = createMessageProcessor(replica);
