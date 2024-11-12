@@ -1,6 +1,6 @@
 import {literal as lit} from 'pg-format';
 import * as v from '../../../../../../shared/src/valita.js';
-import {filteredTableSpec, indexSpec} from '../../../../db/specs.js';
+import {indexSpec, publishedTableSpec} from '../../../../db/specs.js';
 import {id} from '../../../../types/sql.js';
 import {indexDefinitionsQuery, publishedTableQuery} from './published.js';
 
@@ -19,7 +19,7 @@ const triggerEvent = v.object({
 // The Schema type encapsulates a snapshot of the tables and indexes that
 // are published / relevant to the shard.
 const publishedSchema = v.object({
-  tables: v.array(filteredTableSpec),
+  tables: v.array(publishedTableSpec),
   indexes: v.array(indexSpec),
 });
 

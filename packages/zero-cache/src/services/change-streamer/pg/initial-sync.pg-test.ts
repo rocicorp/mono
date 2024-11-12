@@ -3,9 +3,9 @@ import {createSilentLogContext} from '../../../../../shared/src/logging-test-uti
 import {Database} from '../../../../../zqlite/src/db.js';
 import {listIndexes, listTables} from '../../../db/lite-tables.js';
 import type {
-  FilteredTableSpec,
   LiteIndexSpec,
   LiteTableSpec,
+  PublishedTableSpec,
 } from '../../../db/specs.js';
 import {getConnectionURI, initDB, testDBs} from '../../../test/db.js';
 import {expectTables, initDB as initLiteDB} from '../../../test/lite.js';
@@ -18,7 +18,7 @@ import {UnsupportedTableSchemaError} from './schema/validation.js';
 
 const SHARD_ID = 'initial_sync_test_id';
 
-const ZERO_SCHEMA_VERSIONS_SPEC: FilteredTableSpec = {
+const ZERO_SCHEMA_VERSIONS_SPEC: PublishedTableSpec = {
   columns: {
     minSupportedVersion: {
       characterMaximumLength: null,
@@ -42,13 +42,14 @@ const ZERO_SCHEMA_VERSIONS_SPEC: FilteredTableSpec = {
       pos: 3,
     },
   },
+  oid: expect.any(Number),
   name: 'schemaVersions',
   primaryKey: ['lock'],
   publications: {[`_zero_metadata_${SHARD_ID}`]: {rowFilter: null}},
   schema: 'zero',
 } as const;
 
-const ZERO_CLIENTS_SPEC: FilteredTableSpec = {
+const ZERO_CLIENTS_SPEC: PublishedTableSpec = {
   columns: {
     clientGroupID: {
       pos: 1,
@@ -79,6 +80,7 @@ const ZERO_CLIENTS_SPEC: FilteredTableSpec = {
       dflt: null,
     },
   },
+  oid: expect.any(Number),
   name: 'clients',
   primaryKey: ['clientGroupID', 'clientID'],
   schema: `zero_${SHARD_ID}`,
@@ -154,7 +156,7 @@ describe('replicator/initial-sync', () => {
     setupUpstreamQuery?: string;
     requestedPublications?: string[];
     setupReplicaQuery?: string;
-    published: Record<string, FilteredTableSpec>;
+    published: Record<string, PublishedTableSpec>;
     upstream?: Record<string, object[]>;
     replicatedSchema: Record<string, LiteTableSpec>;
     replicatedIndices?: LiteIndexSpec[];
@@ -323,6 +325,7 @@ describe('replicator/initial-sync', () => {
               notNull: true,
             },
           },
+          oid: expect.any(Number),
           name: 'issues',
           primaryKey: ['orgID', 'issueID'],
           schema: 'public',
@@ -561,6 +564,7 @@ describe('replicator/initial-sync', () => {
               dflt: null,
             },
           },
+          oid: expect.any(Number),
           name: 'users',
           primaryKey: ['userID'],
           schema: 'public',
@@ -652,6 +656,7 @@ describe('replicator/initial-sync', () => {
               dflt: null,
             },
           },
+          oid: expect.any(Number),
           name: 'users',
           primaryKey: ['userID'],
           schema: 'public',
@@ -767,6 +772,7 @@ describe('replicator/initial-sync', () => {
               dflt: null,
             },
           },
+          oid: expect.any(Number),
           name: 'issues',
           primaryKey: ['orgID', 'issueID'],
           schema: 'public',
@@ -884,7 +890,7 @@ describe('replicator/initial-sync', () => {
         Object.fromEntries(
           tables.map(table => [`${table.schema}.${table.name}`, table]),
         ),
-      ).toEqual(c.published);
+      ).toMatchObject(c.published);
       expect(new Set(publications.map(p => p.pubname))).toEqual(
         new Set(c.resultingPublications),
       );

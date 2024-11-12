@@ -346,9 +346,10 @@ describe('tables/create', () => {
         await db.unsafe(createStatement);
 
         const published = await getPublicationInfo(db, ['zero_all']);
-        expect(published.tables).toEqual([
+        expect(published.tables).toMatchObject([
           {
             ...(c.dstTableSpec ?? c.srcTableSpec),
+            oid: expect.any(Number),
             publications: {['zero_all']: {rowFilter: null}},
           },
         ]);
