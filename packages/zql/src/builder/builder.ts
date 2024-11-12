@@ -104,6 +104,8 @@ export function bindStaticParameters(
   };
 
   function bindCondition(condition: Condition): Condition {
+    // TODO support correlatedSubquery
+    assert(condition.type !== 'correlatedSubquery');
     return condition.type === 'simple'
       ? {
           ...condition,
@@ -198,6 +200,8 @@ function applyWhere(
   // Downside of that being unbounded memory usage.
   appliedFilters: boolean,
 ): Input {
+  // TODO support correlatedSubquery
+  assert(condition.type !== 'correlatedSubquery');
   switch (condition.type) {
     case 'and':
       return applyAnd(input, condition, appliedFilters);

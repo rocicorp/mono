@@ -275,7 +275,11 @@ export abstract class AbstractQuery<
 
     const existingWhere = this.#ast.where;
     if (existingWhere) {
-      cond = and(existingWhere, cond);
+      // TODO: fix casting once merged with expression builder
+      cond = and(
+        existingWhere as GenericCondition<TSchema>,
+        cond as GenericCondition<TSchema>,
+      ) as Condition;
     }
 
     return this._newQuery(
