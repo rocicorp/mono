@@ -155,7 +155,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
         await this.#runInLockWithCVR(async cvr => {
           if (
-            cvr.version.stateVersion !== '00' &&
+            (cvr.replicaVersion !== null ||
+              cvr.version.stateVersion !== '00') &&
             cvr.replicaVersion !== this.#pipelines.replicaVersion
           ) {
             const msg = `Replica Version mismatch: CVR=${
