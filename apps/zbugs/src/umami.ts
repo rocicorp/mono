@@ -1,8 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// Based on
-// https://github.com/DefinitelyTyped/DefinitelyTyped/blob/4677b2523d7cdb6545907896b7dcaba098f22ce1/types/umami/index.d.ts
-// But we do not want to add @types/umami because browsers block tracking
+// Based on:
+//
+// https://github.com/umami-software/umami/blob/master/src/tracker/index.js
+// https://github.com/umami-software/umami/blob/master/src/tracker/index.d.ts
+//
+// We do not want to add @types/umami because browsers block tracking
 // scripts so the global might be undefined
 
 interface Umami {
