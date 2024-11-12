@@ -658,6 +658,50 @@ describe('Where expression factory and builder', () => {
     );
   });
 
+  test('exists', () => {
+    const query =
+      mockQuery as unknown as Query<TestSchemaWithMoreRelationships>;
+
+    // can check relationships
+    query.where(({exists}) => exists('self'));
+
+    // can check relationships with a subquery
+    query.where(({exists}) =>
+      exists('testWithRelationships', q => q.where('b', true)),
+    );
+
+    // relationships that do not exist are type errors
+    query.where(({exists}) =>
+      // @ts-expect-error - relationship does not exist
+      exists('doesNotExist'),
+    );
+
+    // nested existence is not an error
+    query.where(({exists}) =>
+      exists('self', q =>
+        q.where(({exists}) =>
+          exists('testWithRelationships', q =>
+            q.where(({exists}) => exists('test')),
+          ),
+        ),
+      ),
+    );
+
+    query.where(({exists}) =>
+      exists('self', q =>
+        q.where(({exists}) =>
+          exists('testWithRelationships', q =>
+            // @ts-expect-error - relationship does not exist
+            q.where(({exists}) => exists('bogus')),
+          ),
+        ),
+      ),
+    );
+
+    // not exists
+    query.where(({not, exists}) => not(exists('self')));
+  });
+
   describe('allow undefined terms', () => {
     test('and', () => {
       const query = mockQuery as unknown as Query<TestSchema>;

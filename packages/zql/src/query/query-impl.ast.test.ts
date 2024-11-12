@@ -820,3 +820,548 @@ describe('expression builder', () => {
     `);
   });
 });
+
+describe('exists', () => {
+  test('field relationship', () => {
+    const issueQuery = newQuery(mockDelegate, issueSchema);
+
+    // full expression
+    expect(ast(issueQuery.where(({exists}) => exists('owner'))))
+      .toMatchInlineSnapshot(`
+        {
+          "table": "issue",
+          "where": {
+            "op": "EXISTS",
+            "related": {
+              "correlation": {
+                "childField": "id",
+                "op": "=",
+                "parentField": "ownerId",
+              },
+              "subquery": {
+                "alias": "zsubq_1_owner",
+                "orderBy": [
+                  [
+                    "id",
+                    "asc",
+                  ],
+                ],
+                "table": "user",
+              },
+            },
+            "type": "correlatedSubquery",
+          },
+        }
+      `);
+
+    // shorthand
+    expect(ast(issueQuery.whereExists('owner'))).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "op": "EXISTS",
+          "related": {
+            "correlation": {
+              "childField": "id",
+              "op": "=",
+              "parentField": "ownerId",
+            },
+            "subquery": {
+              "alias": "zsubq_2_owner",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "table": "user",
+            },
+          },
+          "type": "correlatedSubquery",
+        },
+      }
+    `);
+  });
+
+  test('field relationship with further conditions', () => {
+    const issueQuery = newQuery(mockDelegate, issueSchema);
+
+    expect(ast(issueQuery.whereExists('owner', q => q.where('id', '1'))))
+      .toMatchInlineSnapshot(`
+        {
+          "table": "issue",
+          "where": {
+            "op": "EXISTS",
+            "related": {
+              "correlation": {
+                "childField": "id",
+                "op": "=",
+                "parentField": "ownerId",
+              },
+              "subquery": {
+                "alias": "zsubq_3_owner",
+                "orderBy": [
+                  [
+                    "id",
+                    "asc",
+                  ],
+                ],
+                "table": "user",
+                "where": {
+                  "field": "id",
+                  "op": "=",
+                  "type": "simple",
+                  "value": "1",
+                },
+              },
+            },
+            "type": "correlatedSubquery",
+          },
+        }
+      `);
+
+    expect(
+      ast(
+        issueQuery.whereExists('owner', q =>
+          q.where(({or, cmp}) => or(cmp('id', '1'), cmp('name', 'foo'))),
+        ),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "op": "EXISTS",
+          "related": {
+            "correlation": {
+              "childField": "id",
+              "op": "=",
+              "parentField": "ownerId",
+            },
+            "subquery": {
+              "alias": "zsubq_4_owner",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "table": "user",
+              "where": {
+                "conditions": [
+                  {
+                    "field": "id",
+                    "op": "=",
+                    "type": "simple",
+                    "value": "1",
+                  },
+                  {
+                    "field": "name",
+                    "op": "=",
+                    "type": "simple",
+                    "value": "foo",
+                  },
+                ],
+                "type": "or",
+              },
+            },
+          },
+          "type": "correlatedSubquery",
+        },
+      }
+    `);
+  });
+
+  test('junction edge', () => {
+    const issueQuery = newQuery(mockDelegate, issueSchema);
+
+    expect(ast(issueQuery.whereExists('labels'))).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "op": "EXISTS",
+          "related": {
+            "correlation": {
+              "childField": "issueId",
+              "op": "=",
+              "parentField": "id",
+            },
+            "subquery": {
+              "alias": "zsubq_5_labels",
+              "orderBy": [
+                [
+                  "issueId",
+                  "asc",
+                ],
+                [
+                  "labelId",
+                  "asc",
+                ],
+              ],
+              "table": "issueLabel",
+              "where": {
+                "op": "EXISTS",
+                "related": {
+                  "correlation": {
+                    "childField": "id",
+                    "op": "=",
+                    "parentField": "labelId",
+                  },
+                  "subquery": {
+                    "alias": "zsubq_5_labels",
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "label",
+                  },
+                },
+                "type": "correlatedSubquery",
+              },
+            },
+          },
+          "type": "correlatedSubquery",
+        },
+      }
+    `);
+  });
+
+  test('existence within an or branch', () => {
+    const issueQuery = newQuery(mockDelegate, issueSchema);
+
+    expect(
+      ast(
+        issueQuery.where(({or, exists}) =>
+          or(exists('owner'), exists('comments')),
+        ),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "conditions": [
+            {
+              "op": "EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": "id",
+                  "op": "=",
+                  "parentField": "ownerId",
+                },
+                "subquery": {
+                  "alias": "zsubq_6_owner",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "user",
+                },
+              },
+              "type": "correlatedSubquery",
+            },
+            {
+              "op": "EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": "issueId",
+                  "op": "=",
+                  "parentField": "id",
+                },
+                "subquery": {
+                  "alias": "zsubq_7_comments",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "comment",
+                },
+              },
+              "type": "correlatedSubquery",
+            },
+          ],
+          "type": "or",
+        },
+      }
+    `);
+  });
+
+  test('negated existence', () => {
+    const issueQuery = newQuery(mockDelegate, issueSchema);
+
+    expect(ast(issueQuery.where(({not, exists}) => not(exists('comments')))))
+      .toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "op": "NOT EXISTS",
+          "related": {
+            "correlation": {
+              "childField": "issueId",
+              "op": "=",
+              "parentField": "id",
+            },
+            "subquery": {
+              "alias": "zsubq_8_comments",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "table": "comment",
+            },
+          },
+          "type": "correlatedSubquery",
+        },
+      }
+    `);
+  });
+
+  test('negated existence over junction edge', () => {
+    const issueQuery = newQuery(mockDelegate, issueSchema);
+
+    expect(ast(issueQuery.where(({not, exists}) => not(exists('labels')))))
+      .toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "op": "NOT EXISTS",
+          "related": {
+            "correlation": {
+              "childField": "issueId",
+              "op": "=",
+              "parentField": "id",
+            },
+            "subquery": {
+              "alias": "zsubq_9_labels",
+              "orderBy": [
+                [
+                  "issueId",
+                  "asc",
+                ],
+                [
+                  "labelId",
+                  "asc",
+                ],
+              ],
+              "table": "issueLabel",
+              "where": {
+                "op": "EXISTS",
+                "related": {
+                  "correlation": {
+                    "childField": "id",
+                    "op": "=",
+                    "parentField": "labelId",
+                  },
+                  "subquery": {
+                    "alias": "zsubq_9_labels",
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "label",
+                  },
+                },
+                "type": "correlatedSubquery",
+              },
+            },
+          },
+          "type": "correlatedSubquery",
+        },
+      }
+    `);
+  });
+
+  test('many exists on different relationships', () => {
+    const issueQuery = newQuery(mockDelegate, issueSchema);
+    expect(
+      ast(
+        issueQuery
+          .whereExists('owner')
+          .whereExists('comments')
+          .whereExists('labels'),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "conditions": [
+            {
+              "op": "EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": "id",
+                  "op": "=",
+                  "parentField": "ownerId",
+                },
+                "subquery": {
+                  "alias": "zsubq_10_owner",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "user",
+                },
+              },
+              "type": "correlatedSubquery",
+            },
+            {
+              "op": "EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": "issueId",
+                  "op": "=",
+                  "parentField": "id",
+                },
+                "subquery": {
+                  "alias": "zsubq_11_comments",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "comment",
+                },
+              },
+              "type": "correlatedSubquery",
+            },
+            {
+              "op": "EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": "issueId",
+                  "op": "=",
+                  "parentField": "id",
+                },
+                "subquery": {
+                  "alias": "zsubq_12_labels",
+                  "orderBy": [
+                    [
+                      "issueId",
+                      "asc",
+                    ],
+                    [
+                      "labelId",
+                      "asc",
+                    ],
+                  ],
+                  "table": "issueLabel",
+                  "where": {
+                    "op": "EXISTS",
+                    "related": {
+                      "correlation": {
+                        "childField": "id",
+                        "op": "=",
+                        "parentField": "labelId",
+                      },
+                      "subquery": {
+                        "alias": "zsubq_12_labels",
+                        "orderBy": [
+                          [
+                            "id",
+                            "asc",
+                          ],
+                        ],
+                        "table": "label",
+                      },
+                    },
+                    "type": "correlatedSubquery",
+                  },
+                },
+              },
+              "type": "correlatedSubquery",
+            },
+          ],
+          "type": "and",
+        },
+      }
+    `);
+  });
+
+  test('many exists on the same relationship', () => {
+    const issueQuery = newQuery(mockDelegate, issueSchema);
+    expect(
+      ast(
+        issueQuery.where(({and, exists}) =>
+          and(
+            exists('owner', o => o.where('name', 'foo')),
+            exists('owner', o => o.where('name', 'bar')),
+          ),
+        ),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "conditions": [
+            {
+              "op": "EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": "id",
+                  "op": "=",
+                  "parentField": "ownerId",
+                },
+                "subquery": {
+                  "alias": "zsubq_13_owner",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "user",
+                  "where": {
+                    "field": "name",
+                    "op": "=",
+                    "type": "simple",
+                    "value": "foo",
+                  },
+                },
+              },
+              "type": "correlatedSubquery",
+            },
+            {
+              "op": "EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": "id",
+                  "op": "=",
+                  "parentField": "ownerId",
+                },
+                "subquery": {
+                  "alias": "zsubq_14_owner",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "user",
+                  "where": {
+                    "field": "name",
+                    "op": "=",
+                    "type": "simple",
+                    "value": "bar",
+                  },
+                },
+              },
+              "type": "correlatedSubquery",
+            },
+          ],
+          "type": "and",
+        },
+      }
+    `);
+  });
+});
