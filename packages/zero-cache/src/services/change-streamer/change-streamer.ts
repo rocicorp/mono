@@ -5,6 +5,7 @@ import {
   beginSchema,
   commitSchema,
   dataChangeSchema,
+  rollbackSchema,
   type Change,
 } from './schema/change.js';
 
@@ -111,25 +112,28 @@ const commit = v.tuple([
   commitSchema,
   v.object({watermark: v.string()}),
 ]);
+const rollback = v.tuple([v.literal('rollback'), rollbackSchema]);
 const error = v.tuple([v.literal('error'), subscriptionErrorSchema]);
 
-const downstreamChange = v.union(begin, data, commit);
+const downstreamChange = v.union(begin, data, commit, rollback);
 
 export const downstreamSchema = v.union(downstreamChange, error);
 
 export type Begin = v.Infer<typeof begin>;
 export type Data = v.Infer<typeof data>;
 export type Commit = v.Infer<typeof commit>;
+export type Rollback = v.Infer<typeof rollback>;
 export type Error = v.Infer<typeof error>;
 
 export type DownstreamChange = v.Infer<typeof downstreamChange>;
 
 /**
- * A stream of transactions, each starting with a {@link MessageBegin},
- * containing one or more {@link DataChange}s, and ending with a
- * {@link MessageCommit}. The 'commit' tuple includes a `watermark` that
- * should be stored with the committed data and used for resuming
- * a subscription (e.g. in the {@link SubscriberContext}).
+ * A stream of transactions, each starting with a {@link Begin} message,
+ * containing one or more {@link Data} messages, and ending with a
+ * {@link Commit} or {@link Rollback} message. The 'commit' tuple
+ * includes a `watermark` that should be stored with the committed
+ * data and used for resuming a subscription (e.g. in the
+ * {@link SubscriberContext}).
  *
  * A {@link SubscriptionError} indicates an unrecoverable error that requires
  * manual intervention (e.g. configuration / operational error).

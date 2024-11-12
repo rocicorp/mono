@@ -16,6 +16,7 @@ import type {
   MessageDelete,
   MessageInsert,
   MessageRelation,
+  MessageRollback,
   MessageTruncate,
   MessageUpdate,
   TableCreate,
@@ -199,5 +200,9 @@ export class ReplicationMessages<
 
   commit(extra?: object): MessageCommit {
     return {tag: 'commit', ...extra};
+  }
+
+  rollback(): MessageRollback {
+    return {tag: 'rollback'};
   }
 }

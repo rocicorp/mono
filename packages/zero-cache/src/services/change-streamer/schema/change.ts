@@ -11,6 +11,10 @@ export const commitSchema = v.object({
   tag: v.literal('commit'),
 });
 
+export const rollbackSchema = v.object({
+  tag: v.literal('rollback'),
+});
+
 export const relationSchema = v.object({
   tag: v.literal('relation'),
   schema: v.string(),
@@ -110,6 +114,7 @@ export const dropIndexSchema = v.object({
 
 export type MessageBegin = v.Infer<typeof beginSchema>;
 export type MessageCommit = v.Infer<typeof commitSchema>;
+export type MessageRollback = v.Infer<typeof rollbackSchema>;
 
 export type MessageRelation = v.Infer<typeof relationSchema>;
 export type MessageInsert = v.Infer<typeof insertSchema>;
@@ -146,6 +151,10 @@ export type DataChange = Satisfies<
   v.Infer<typeof dataChangeSchema>
 >;
 
-export type Change = MessageBegin | DataChange | MessageCommit;
+export type Change =
+  | MessageBegin
+  | DataChange
+  | MessageCommit
+  | MessageRollback;
 
 export type ChangeTag = Change['tag'];
