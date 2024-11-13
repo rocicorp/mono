@@ -7,7 +7,10 @@ import type {Query} from '../../../../zql/src/query/query.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {processMutation} from './mutagen.js';
-import {WriteAuthorizerImpl, type WriteAuthorizer} from './write-authorizer.js';
+import {
+  WriteAuthorizerImpl,
+  type WriteAuthorizer,
+} from '../../auth/write-authorizer.js';
 import {MutationType} from '../../../../zero-protocol/src/push.js';
 import {zeroSchema} from './mutagen-test-shared.js';
 import {defineAuthorization} from '../../../../zero-schema/src/authorization.js';

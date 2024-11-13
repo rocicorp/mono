@@ -28,7 +28,10 @@ import {throwErrorForClientIfSchemaVersionNotSupported} from '../../types/schema
 import {unescapedSchema as schema} from '../change-streamer/pg/schema/shard.js';
 import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.js';
 import type {Service} from '../service.js';
-import {WriteAuthorizerImpl, type WriteAuthorizer} from './write-authorizer.js';
+import {
+  WriteAuthorizerImpl,
+  type WriteAuthorizer,
+} from '../../auth/write-authorizer.js';
 import type {AuthorizationConfig} from '../../../../zero-schema/src/compiled-authorization.js';
 
 // An error encountered processing a mutation.

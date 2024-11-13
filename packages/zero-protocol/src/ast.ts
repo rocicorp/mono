@@ -69,6 +69,11 @@ export const simpleConditionSchema = v.object({
   ),
 });
 
+export const constantConditionSchema = v.object({
+  type: v.literal('const'),
+  value: v.boolean(),
+});
+
 export const correlatedSubqueryConditionOperatorSchema = v.union(
   v.literal('EXISTS'),
   v.literal('NOT EXISTS'),
@@ -82,6 +87,7 @@ export const correlatedSubqueryConditionSchema = v.readonlyObject({
 
 export const conditionSchema = v.union(
   simpleConditionSchema,
+  constantConditionSchema,
   v.lazy(() => conjunctionSchema),
   v.lazy(() => disjunctionSchema),
   correlatedSubqueryConditionSchema,
@@ -214,6 +220,7 @@ export type LiteralValue =
  */
 export type Condition =
   | SimpleCondition
+  | ConstantCondition
   | Conjunction
   | Disjunction
   | CorrelatedSubqueryCondition;
@@ -234,6 +241,11 @@ export type SimpleCondition = {
    * operator defined and `null != null` in SQL.
    */
   value: ValuePosition;
+};
+
+export type ConstantCondition = {
+  type: 'const';
+  value: boolean;
 };
 
 export type Conjunction = {
@@ -321,7 +333,11 @@ export function normalizeAST(ast: AST): Required<AST> {
 }
 
 function sortedWhere(where: Condition): Condition {
-  if (where.type === 'simple' || where.type === 'correlatedSubquery') {
+  if (
+    where.type === 'simple' ||
+    where.type === 'correlatedSubquery' ||
+    where.type === 'const'
+  ) {
     return where;
   }
   return {
@@ -339,7 +355,7 @@ function sortedRelated(
 function cmpCondition(a: Condition, b: Condition): number {
   if (a.type === 'simple') {
     if (b.type !== 'simple') {
-      return -1; // Order SimpleConditions first to simplify logic for invalidation filtering.
+      return -1; // Order SimpleConditions first
     }
     return (
       compareUTF8MaybeNull(a.field, b.field) ||
@@ -352,7 +368,17 @@ function cmpCondition(a: Condition, b: Condition): number {
   }
 
   if (b.type === 'simple') {
-    return 1; // Order SimpleConditions first to simplify logic for invalidation filtering.
+    return 1; // Order SimpleConditions first
+  }
+
+  if (a.type === 'const') {
+    if (b.type !== 'const') {
+      return -1;
+    }
+    return a.value === b.value ? 0 : a.value ? 1 : -1;
+  }
+  if (b.type === 'const') {
+    return 1;
   }
 
   if (a.type === 'correlatedSubquery') {
@@ -402,7 +428,11 @@ function flattened<T extends Condition>(cond: T | undefined): T | undefined {
   if (cond === undefined) {
     return undefined;
   }
-  if (cond.type === 'simple' || cond.type === 'correlatedSubquery') {
+  if (
+    cond.type === 'simple' ||
+    cond.type === 'correlatedSubquery' ||
+    cond.type === 'const'
+  ) {
     return cond;
   }
   const conditions = defined(

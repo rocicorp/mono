@@ -9,7 +9,7 @@ import {Mode} from '../../db/transaction-pool.js';
 import {expectTables, testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {processMutation} from './mutagen.js';
-import type {WriteAuthorizer} from './write-authorizer.js';
+import type {WriteAuthorizer} from '../../auth/write-authorizer.js';
 import {zeroSchema} from './mutagen-test-shared.js';
 
 const SHARD_ID = '0';

@@ -1,11 +1,11 @@
 import {beforeEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import {Database} from '../../../../zqlite/src/db.js';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
+import {Database} from '../../../zqlite/src/db.js';
 import {WriteAuthorizerImpl} from './write-authorizer.js';
 import type {
   AuthorizationConfig,
   Rule,
-} from '../../../../zero-schema/src/compiled-authorization.js';
+} from '../../../zero-schema/src/compiled-authorization.js';
 
 const lc = createSilentLogContext();
 

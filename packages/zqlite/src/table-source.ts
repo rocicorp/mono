@@ -528,6 +528,8 @@ export function optionalFiltersToSQL(
         ),
         sql` OR `,
       )})`;
+    case 'const':
+      return filters.value ? sql`1` : sql`0`;
   }
 }
 

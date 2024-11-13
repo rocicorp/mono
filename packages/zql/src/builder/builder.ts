@@ -5,6 +5,7 @@ import type {
   AST,
   Condition,
   Conjunction,
+  ConstantCondition,
   Disjunction,
   LiteralValue,
   Ordering,
@@ -111,6 +112,8 @@ export function bindStaticParameters(
           ...condition,
           value: bindValue(condition.value),
         }
+      : condition.type === 'const'
+      ? condition
       : {
           ...condition,
           conditions: condition.conditions.map(bindCondition),
@@ -207,6 +210,8 @@ function applyWhere(
       return applyAnd(input, condition, appliedFilters);
     case 'or':
       return applyOr(input, condition, appliedFilters);
+    case 'const':
+      return applyConst(input, condition, appliedFilters);
     default:
       return applySimpleCondition(input, condition, appliedFilters);
   }
@@ -244,6 +249,18 @@ function applySimpleCondition(
     input,
     appliedFilters ? 'push-only' : 'all',
     createPredicate(condition),
+  );
+}
+
+function applyConst(
+  input: Input,
+  condition: ConstantCondition,
+  appliedFilters: boolean,
+): Input {
+  return new Filter(
+    input,
+    appliedFilters ? 'push-only' : 'all',
+    () => condition.value,
   );
 }
 

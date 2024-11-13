@@ -4,38 +4,38 @@ import type {JWTPayload} from 'jose';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pid} from 'node:process';
-import {assert} from '../../../../shared/src/asserts.js';
-import type {JSONValue} from '../../../../shared/src/json.js';
-import {randInt} from '../../../../shared/src/rand.js';
-import * as v from '../../../../shared/src/valita.js';
-import type {Row} from '../../../../zero-protocol/src/data.js';
+import {assert} from '../../../shared/src/asserts.js';
+import type {JSONValue} from '../../../shared/src/json.js';
+import {randInt} from '../../../shared/src/rand.js';
+import * as v from '../../../shared/src/valita.js';
+import type {Row} from '../../../zero-protocol/src/data.js';
 import type {
   CreateOp,
   DeleteOp,
   SetOp,
   UpdateOp,
-} from '../../../../zero-protocol/src/mod.js';
+} from '../../../zero-protocol/src/mod.js';
 import {
   primaryKeyValueSchema,
   type PrimaryKeyValue,
-} from '../../../../zero-protocol/src/primary-key.js';
-import type {BuilderDelegate} from '../../../../zql/src/builder/builder.js';
-import {buildPipeline} from '../../../../zql/src/builder/builder.js';
-import {MissingParameterError} from '../../../../zql/src/builder/error.js';
-import {Database} from '../../../../zqlite/src/db.js';
-import {compile, sql} from '../../../../zqlite/src/internal/sql.js';
-import {StatementCache} from '../../../../zqlite/src/internal/statement-cache.js';
-import {TableSource} from '../../../../zqlite/src/table-source.js';
-import type {ZeroConfig} from '../../config/zero-config.js';
-import {listTables} from '../../db/lite-tables.js';
-import {mapLiteDataTypeToZqlSchemaValue} from '../../types/lite.js';
-import {DatabaseStorage} from '../view-syncer/database-storage.js';
-import type {NormalizedTableSpec} from '../view-syncer/pipeline-driver.js';
-import {normalize} from '../view-syncer/pipeline-driver.js';
+} from '../../../zero-protocol/src/primary-key.js';
+import type {BuilderDelegate} from '../../../zql/src/builder/builder.js';
+import {buildPipeline} from '../../../zql/src/builder/builder.js';
+import {MissingParameterError} from '../../../zql/src/builder/error.js';
+import {Database} from '../../../zqlite/src/db.js';
+import {compile, sql} from '../../../zqlite/src/internal/sql.js';
+import {StatementCache} from '../../../zqlite/src/internal/statement-cache.js';
+import {TableSource} from '../../../zqlite/src/table-source.js';
+import type {ZeroConfig} from '../config/zero-config.js';
+import {listTables} from '../db/lite-tables.js';
+import {mapLiteDataTypeToZqlSchemaValue} from '../types/lite.js';
+import {DatabaseStorage} from '../services/view-syncer/database-storage.js';
+import type {NormalizedTableSpec} from '../services/view-syncer/pipeline-driver.js';
+import {normalize} from '../services/view-syncer/pipeline-driver.js';
 import type {
   AuthorizationConfig,
   Policy,
-} from '../../../../zero-schema/src/compiled-authorization.js';
+} from '../../../zero-schema/src/compiled-authorization.js';
 
 export interface WriteAuthorizer {
   canInsert(authData: JWTPayload, op: CreateOp): boolean;
