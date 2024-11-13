@@ -58,7 +58,7 @@ describe('tables/published', () => {
             publications: {['zero_all']: {rowFilter: null}},
           },
         ],
-        indices: [],
+        indexes: [],
       },
     },
     {
@@ -194,7 +194,7 @@ describe('tables/published', () => {
             publications: {['zero_data']: {rowFilter: null}},
           },
         ],
-        indices: [],
+        indexes: [],
       },
     },
     {
@@ -250,7 +250,7 @@ describe('tables/published', () => {
             publications: {['zero_data']: {rowFilter: '(org_id = 123)'}},
           },
         ],
-        indices: [],
+        indexes: [],
       },
     },
     {
@@ -317,7 +317,7 @@ describe('tables/published', () => {
             },
           },
         ],
-        indices: [],
+        indexes: [],
       },
     },
     {
@@ -384,7 +384,7 @@ describe('tables/published', () => {
             },
           },
         ],
-        indices: [],
+        indexes: [],
       },
     },
     {
@@ -467,7 +467,7 @@ describe('tables/published', () => {
             publications: {['zero_data']: {rowFilter: null}},
           },
         ],
-        indices: [],
+        indexes: [],
       },
     },
     {
@@ -532,7 +532,7 @@ describe('tables/published', () => {
             publications: {['zero_keys']: {rowFilter: null}},
           },
         ],
-        indices: [],
+        indexes: [],
       },
     },
     {
@@ -663,7 +663,7 @@ describe('tables/published', () => {
             publications: {['_zero_meta']: {rowFilter: null}},
           },
         ],
-        indices: [],
+        indexes: [],
       },
     },
     {
@@ -732,7 +732,7 @@ describe('tables/published', () => {
             },
           },
         ],
-        indices: [
+        indexes: [
           {
             schema: 'test',
             tableName: 'issues',
@@ -805,7 +805,7 @@ describe('tables/published', () => {
             publications: {['zero_data']: {rowFilter: null}},
           },
         ],
-        indices: [
+        indexes: [
           {
             schema: 'test',
             tableName: 'issues',
@@ -889,7 +889,7 @@ describe('tables/published', () => {
             },
           },
         ],
-        indices: [
+        indexes: [
           {
             schema: 'test',
             tableName: 'foo',
@@ -971,7 +971,7 @@ describe('tables/published', () => {
             publications: {['zero_data']: {rowFilter: null}},
           },
         ],
-        indices: [
+        indexes: [
           {
             schema: 'test',
             tableName: 'foo',

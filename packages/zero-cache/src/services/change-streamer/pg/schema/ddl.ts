@@ -1,8 +1,11 @@
 import {literal as lit} from 'pg-format';
 import * as v from '../../../../../../shared/src/valita.js';
-import {indexSpec, publishedTableSpec} from '../../../../db/specs.js';
 import {id} from '../../../../types/sql.js';
-import {indexDefinitionsQuery, publishedTableQuery} from './published.js';
+import {
+  indexDefinitionsQuery,
+  publishedSchema,
+  publishedTableQuery,
+} from './published.js';
 
 // Sent in the 'version' tag of "ddlStart" and "ddlUpdate" event messages.
 // This is used to ensure that the message constructed in the upstream
@@ -15,15 +18,6 @@ export const PROTOCOL_VERSION = 1;
 const triggerEvent = v.object({
   context: v.object({query: v.string()}).rest(v.string()),
 });
-
-// The Schema type encapsulates a snapshot of the tables and indexes that
-// are published / relevant to the shard.
-const publishedSchema = v.object({
-  tables: v.array(publishedTableSpec),
-  indexes: v.array(indexSpec),
-});
-
-export type PublishedSchema = v.Infer<typeof publishedSchema>;
 
 // All DDL events contain a snapshot of the current tables and indexes that
 // are published / relevant to the shard.

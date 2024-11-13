@@ -40,8 +40,8 @@ import {
   createEventTriggerStatements,
   replicationEventSchema,
   type DdlUpdateEvent,
-  type PublishedSchema,
 } from './schema/ddl.js';
+import type {PublishedSchema} from './schema/published.js';
 import {INTERNAL_PUBLICATION_PREFIX} from './schema/shard.js';
 import {validate} from './schema/validation.js';
 import type {ShardConfig} from './shard-config.js';

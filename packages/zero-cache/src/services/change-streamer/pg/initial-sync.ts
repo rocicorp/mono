@@ -58,7 +58,7 @@ export async function initialSync(
   });
   try {
     await checkUpstreamConfig(upstreamDB);
-    const {publications, tables, indices} = await ensurePublishedTables(
+    const {publications, tables, indexes} = await ensurePublishedTables(
       lc,
       upstreamDB,
       shard,
@@ -67,7 +67,7 @@ export async function initialSync(
     lc.info?.(`Upstream is setup with publications [${pubNames}]`);
 
     createLiteTables(tx, tables);
-    createLiteIndices(tx, indices);
+    createLiteIndices(tx, indexes);
 
     const {database, host} = upstreamDB.options;
     lc.info?.(`opening replication session to ${database}@${host}`);
