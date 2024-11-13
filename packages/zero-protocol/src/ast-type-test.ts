@@ -2,7 +2,9 @@ import type * as v from '../../shared/src/valita.js';
 import type {
   AST,
   Condition,
-  CorrelatedSubQuery,
+  CorrelatedSubquery,
+  CorrelatedSubqueryCondition,
+  CorrelatedSubqueryConditionOperator,
   EqualityOps,
   LikeOps,
   OrderOps,
@@ -10,6 +12,8 @@ import type {
   SimpleOperator,
   astSchema,
   conditionSchema,
+  correlatedSubqueryConditionOperatorSchema,
+  correlatedSubqueryConditionSchema,
   correlatedSubquerySchema,
   correlatedSubquerySchemaOmitSubquery,
   equalityOpsSchema,
@@ -24,18 +28,18 @@ type MakeAllFieldsRequired<T> = {
 };
 
 (
-  t: Omit<CorrelatedSubQuery, 'subquery'>,
+  t: Omit<CorrelatedSubquery, 'subquery'>,
   inferredT: v.Infer<typeof correlatedSubquerySchemaOmitSubquery>,
-  tR: MakeAllFieldsRequired<Omit<CorrelatedSubQuery, 'subquery'>>,
+  tR: MakeAllFieldsRequired<Omit<CorrelatedSubquery, 'subquery'>>,
   inferredTR: MakeAllFieldsRequired<
     v.Infer<typeof correlatedSubquerySchemaOmitSubquery>
   >,
 ) => {
   t satisfies v.Infer<typeof correlatedSubquerySchemaOmitSubquery>;
-  inferredT satisfies Omit<CorrelatedSubQuery, 'subquery'>;
+  inferredT satisfies Omit<CorrelatedSubquery, 'subquery'>;
 
   inferredTR satisfies MakeAllFieldsRequired<
-    Omit<CorrelatedSubQuery, 'subquery'>
+    Omit<CorrelatedSubquery, 'subquery'>
   >;
   tR satisfies MakeAllFieldsRequired<
     v.Infer<typeof correlatedSubquerySchemaOmitSubquery>
@@ -69,16 +73,50 @@ type MakeAllFieldsRequired<T> = {
 };
 
 (
-  t: CorrelatedSubQuery,
+  t: CorrelatedSubquery,
   inferredT: v.Infer<typeof correlatedSubquerySchema>,
-  tR: MakeAllFieldsRequired<CorrelatedSubQuery>,
+  tR: MakeAllFieldsRequired<CorrelatedSubquery>,
   inferredTR: MakeAllFieldsRequired<v.Infer<typeof correlatedSubquerySchema>>,
 ) => {
   t satisfies v.Infer<typeof correlatedSubquerySchema>;
-  inferredT satisfies CorrelatedSubQuery;
+  inferredT satisfies CorrelatedSubquery;
 
-  inferredTR satisfies MakeAllFieldsRequired<CorrelatedSubQuery>;
+  inferredTR satisfies MakeAllFieldsRequired<CorrelatedSubquery>;
   tR satisfies MakeAllFieldsRequired<v.Infer<typeof correlatedSubquerySchema>>;
+};
+
+(
+  t: CorrelatedSubqueryCondition,
+  inferredT: v.Infer<typeof correlatedSubqueryConditionSchema>,
+  tR: MakeAllFieldsRequired<CorrelatedSubqueryCondition>,
+  inferredTR: MakeAllFieldsRequired<
+    v.Infer<typeof correlatedSubqueryConditionSchema>
+  >,
+) => {
+  t satisfies v.Infer<typeof correlatedSubqueryConditionSchema>;
+  inferredT satisfies CorrelatedSubqueryCondition;
+
+  inferredTR satisfies MakeAllFieldsRequired<CorrelatedSubqueryCondition>;
+  tR satisfies MakeAllFieldsRequired<
+    v.Infer<typeof correlatedSubqueryConditionSchema>
+  >;
+};
+
+(
+  t: CorrelatedSubqueryConditionOperator,
+  inferredT: v.Infer<typeof correlatedSubqueryConditionOperatorSchema>,
+  tR: MakeAllFieldsRequired<CorrelatedSubqueryConditionOperator>,
+  inferredTR: MakeAllFieldsRequired<
+    v.Infer<typeof correlatedSubqueryConditionOperatorSchema>
+  >,
+) => {
+  t satisfies v.Infer<typeof correlatedSubqueryConditionOperatorSchema>;
+  inferredT satisfies CorrelatedSubqueryConditionOperator;
+
+  inferredTR satisfies MakeAllFieldsRequired<CorrelatedSubqueryConditionOperator>;
+  tR satisfies MakeAllFieldsRequired<
+    v.Infer<typeof correlatedSubqueryConditionOperatorSchema>
+  >;
 };
 
 (

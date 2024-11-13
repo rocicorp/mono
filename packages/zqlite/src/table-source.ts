@@ -510,6 +510,7 @@ export function optionalFiltersToSQL(
   filters: Condition,
   columnTypes: Record<string, SchemaValue>,
 ): SQLQuery {
+  assert(filters.type !== 'correlatedSubquery');
   switch (filters.type) {
     case 'simple':
       return simpleConditionToSQL(filters, columnTypes);
