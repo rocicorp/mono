@@ -190,8 +190,14 @@ export async function getVersionHistory(
   sql: postgres.Sql,
   schemaName: string,
 ): Promise<VersionHistory> {
-  // Note: The `lock` column transparently ensures that at most one row exists.
-  const results = await sql`
+  const exists = await sql`
+  SELECT nspname, relname FROM pg_class 
+    JOIN pg_namespace ON relnamespace = pg_namespace.oid
+    WHERE nspname = ${schemaName} AND relname = ${'versionHistory'}`;
+
+  if (exists.length === 0) {
+    // Note: The `lock` column transparently ensures that at most one row exists.
+    await sql`
     CREATE SCHEMA IF NOT EXISTS ${sql(schemaName)};
     CREATE TABLE IF NOT EXISTS ${sql(schemaName)}."versionHistory" (
       "dataVersion" int NOT NULL,
@@ -201,12 +207,12 @@ export async function getVersionHistory(
       lock char(1) NOT NULL CONSTRAINT DF_schema_meta_lock DEFAULT 'v',
       CONSTRAINT PK_schema_meta_lock PRIMARY KEY (lock),
       CONSTRAINT CK_schema_meta_lock CHECK (lock='v')
-    );
-    SELECT "dataVersion", "schemaVersion", "minSafeVersion" FROM ${sql(
-      schemaName,
-    )}."versionHistory";
-  `.simple();
-  const rows = results[1];
+    );`.simple();
+  }
+  const rows = await sql`
+    SELECT "dataVersion", "schemaVersion", "minSafeVersion" 
+       FROM ${sql(schemaName)}."versionHistory"`;
+
   if (rows.length === 0) {
     return {schemaVersion: 0, dataVersion: 0, minSafeVersion: 0};
   }
