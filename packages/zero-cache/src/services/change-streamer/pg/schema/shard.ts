@@ -128,7 +128,7 @@ function triggerSetup(shardID: string, publications: string[]): string {
   );
 }
 
-// Called after initial sync to store the exact schema that was initially synced.
+// Called in initial-sync to store the exact schema that was initially synced.
 export async function setInitialSchema(
   db: PostgresDB,
   shardID: string,

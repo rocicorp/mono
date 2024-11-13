@@ -53,9 +53,9 @@ export async function updateShardSchema(
   );
 }
 
-// v1 required superuser / event trigger installation. Therefore, to
+// v1 required superuser / event trigger installation.
+// Therefore, to migrate from v1 to v2:
 //
-// migrate from v1 to v2:
 // - Add the "ddlDetection" and "initialSchema" columns to "shardConfig"
 // - Set "ddlDetection" to true
 // - Populate the "initialSchema" to the current published schema
