@@ -185,6 +185,25 @@ export const versionHistory = v.object({
 // Exposed for tests.
 export type VersionHistory = v.Infer<typeof versionHistory>;
 
+// Exposed for tests.
+export async function createVersionHistoryTable(
+  sql: postgres.Sql,
+  schemaName: string,
+) {
+  // Note: The `lock` column transparently ensures that at most one row exists.
+  await sql`
+    CREATE SCHEMA IF NOT EXISTS ${sql(schemaName)};
+    CREATE TABLE IF NOT EXISTS ${sql(schemaName)}."versionHistory" (
+      "dataVersion" int NOT NULL,
+      "schemaVersion" int NOT NULL,
+      "minSafeVersion" int NOT NULL,
+
+      lock char(1) NOT NULL CONSTRAINT DF_schema_meta_lock DEFAULT 'v',
+      CONSTRAINT PK_schema_meta_lock PRIMARY KEY (lock),
+      CONSTRAINT CK_schema_meta_lock CHECK (lock='v')
+    );`.simple();
+}
+
 // Exposed for tests
 export async function getVersionHistory(
   sql: postgres.Sql,
@@ -196,18 +215,7 @@ export async function getVersionHistory(
     WHERE nspname = ${schemaName} AND relname = ${'versionHistory'}`;
 
   if (exists.length === 0) {
-    // Note: The `lock` column transparently ensures that at most one row exists.
-    await sql`
-    CREATE SCHEMA IF NOT EXISTS ${sql(schemaName)};
-    CREATE TABLE IF NOT EXISTS ${sql(schemaName)}."versionHistory" (
-      "dataVersion" int NOT NULL,
-      "schemaVersion" int NOT NULL,
-      "minSafeVersion" int NOT NULL,
-
-      lock char(1) NOT NULL CONSTRAINT DF_schema_meta_lock DEFAULT 'v',
-      CONSTRAINT PK_schema_meta_lock PRIMARY KEY (lock),
-      CONSTRAINT CK_schema_meta_lock CHECK (lock='v')
-    );`.simple();
+    await createVersionHistoryTable(sql, schemaName);
   }
   const rows = await sql`
     SELECT "dataVersion", "schemaVersion", "minSafeVersion" 
