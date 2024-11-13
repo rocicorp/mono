@@ -136,6 +136,16 @@ export async function expectTables(
   }
 }
 
+export async function expectTablesToMatch(
+  db: postgres.Sql,
+  tables?: Record<string, unknown[]>,
+) {
+  for (const [table, expected] of Object.entries(tables ?? {})) {
+    const actual = await db`SELECT * FROM ${db(table)}`;
+    expect(actual).toMatchObject(expected);
+  }
+}
+
 export async function dropReplicationSlots(db: postgres.Sql): Promise<void> {
   const {database} = db.options;
   await dropReplicationSlotsFor(db, database);
