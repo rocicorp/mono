@@ -69,10 +69,22 @@ export const simpleConditionSchema = v.object({
   ),
 });
 
+export const correlatedSubqueryConditionOperatorSchema = v.union(
+  v.literal('EXISTS'),
+  v.literal('NOT EXISTS'),
+);
+
+export const correlatedSubqueryConditionSchema = v.readonlyObject({
+  type: v.literal('correlatedSubquery'),
+  related: v.lazy(() => correlatedSubquerySchema),
+  op: correlatedSubqueryConditionOperatorSchema,
+});
+
 export const conditionSchema = v.union(
   simpleConditionSchema,
   v.lazy(() => conjunctionSchema),
   v.lazy(() => disjunctionSchema),
+  correlatedSubqueryConditionSchema,
 );
 
 const conjunctionSchema: v.Type<Conjunction> = v.readonlyObject({
@@ -86,7 +98,7 @@ const disjunctionSchema: v.Type<Disjunction> = v.readonlyObject({
 });
 
 // Split out so that its inferred type can be checked against
-// Omit<CorrelatedSubQuery, 'correlation'> in ast-type-test.ts.
+// Omit<CorrelatedSubquery, 'correlation'> in ast-type-test.ts.
 // The mutually-recursive reference of the 'other' field to astSchema
 // is the only thing added in v.lazy.  The v.lazy is necessary due to the
 // mutually-recursive types, but v.lazy prevents inference of the resulting
@@ -100,7 +112,7 @@ export const correlatedSubquerySchemaOmitSubquery = v.readonlyObject({
   hidden: v.boolean().optional(),
 });
 
-export const correlatedSubquerySchema: v.Type<CorrelatedSubQuery> =
+export const correlatedSubquerySchema: v.Type<CorrelatedSubquery> =
   correlatedSubquerySchemaOmitSubquery.extend({
     subquery: v.lazy(() => astSchema),
   });
@@ -161,13 +173,13 @@ export type AST = {
   // one exists.
   readonly where?: Condition | undefined;
 
-  readonly related?: readonly CorrelatedSubQuery[] | undefined;
+  readonly related?: readonly CorrelatedSubquery[] | undefined;
   readonly start?: Bound | undefined;
   readonly limit?: number | undefined;
   readonly orderBy?: Ordering | undefined;
 };
 
-export type CorrelatedSubQuery = {
+export type CorrelatedSubquery = {
   /**
    * Only equality correlations are supported for now.
    * E.g., direct foreign key relationships.
@@ -200,7 +212,11 @@ export type LiteralValue =
  * ivm1 supports Conjunctions and Disjunctions.
  * We'll support them in the future.
  */
-export type Condition = SimpleCondition | Conjunction | Disjunction;
+export type Condition =
+  | SimpleCondition
+  | Conjunction
+  | Disjunction
+  | CorrelatedSubqueryCondition;
 
 export type SimpleCondition = {
   type: 'simple';
@@ -229,6 +245,14 @@ export type Disjunction = {
   type: 'or';
   conditions: readonly Condition[];
 };
+
+export type CorrelatedSubqueryCondition = {
+  type: 'correlatedSubquery';
+  related: CorrelatedSubquery;
+  op: CorrelatedSubqueryConditionOperator;
+};
+
+export type CorrelatedSubqueryConditionOperator = 'EXISTS' | 'NOT EXISTS';
 
 /**
  * A parameter is a value that is not known at the time the query is written
@@ -283,7 +307,7 @@ export function normalizeAST(ast: AST): Required<AST> {
                 },
                 hidden: r.hidden,
                 subquery: normalizeAST(r.subquery),
-              }) satisfies Required<CorrelatedSubQuery>,
+              }) satisfies Required<CorrelatedSubquery>,
           ),
         )
       : undefined,
@@ -297,7 +321,7 @@ export function normalizeAST(ast: AST): Required<AST> {
 }
 
 function sortedWhere(where: Condition): Condition {
-  if (where.type === 'simple') {
+  if (where.type === 'simple' || where.type === 'correlatedSubquery') {
     return where;
   }
   return {
@@ -307,8 +331,8 @@ function sortedWhere(where: Condition): Condition {
 }
 
 function sortedRelated(
-  related: CorrelatedSubQuery[],
-): readonly CorrelatedSubQuery[] {
+  related: CorrelatedSubquery[],
+): readonly CorrelatedSubquery[] {
   return related.sort(cmpRelated);
 }
 
@@ -331,6 +355,16 @@ function cmpCondition(a: Condition, b: Condition): number {
     return 1; // Order SimpleConditions first to simplify logic for invalidation filtering.
   }
 
+  if (a.type === 'correlatedSubquery') {
+    if (b.type !== 'correlatedSubquery') {
+      return -1; // Order subquery before conjuctions/disjuctions
+    }
+    return cmpRelated(a.related, b.related) || compareUTF8MaybeNull(a.op, b.op);
+  }
+  if (b.type === 'correlatedSubquery') {
+    return -1; // Order correlatedSubquery before conjuctions/disjuctions
+  }
+
   const val = compareUTF8MaybeNull(a.type, b.type);
   if (val !== 0) {
     return val;
@@ -349,7 +383,7 @@ function cmpCondition(a: Condition, b: Condition): number {
   return a.conditions.length - b.conditions.length;
 }
 
-function cmpRelated(a: CorrelatedSubQuery, b: CorrelatedSubQuery): number {
+function cmpRelated(a: CorrelatedSubquery, b: CorrelatedSubquery): number {
   return compareUTF8(must(a.subquery.alias), must(b.subquery.alias));
 }
 
@@ -368,7 +402,7 @@ function flattened<T extends Condition>(cond: T | undefined): T | undefined {
   if (cond === undefined) {
     return undefined;
   }
-  if (cond.type === 'simple') {
+  if (cond.type === 'simple' || cond.type === 'correlatedSubquery') {
     return cond;
   }
   const conditions = defined(
