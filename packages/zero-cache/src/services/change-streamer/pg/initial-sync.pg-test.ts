@@ -877,10 +877,24 @@ describe('replicator/initial-sync', () => {
         getConnectionURI(upstream),
       );
 
-      const result = await upstream.unsafe<{publications: string[]}[]>(
-        `SELECT publications FROM zero_${SHARD_ID}."shardConfig"`,
+      const result = await upstream.unsafe(
+        `SELECT * FROM zero_${SHARD_ID}."shardConfig"`,
       );
-      expect(result[0].publications).toEqual(c.resultingPublications);
+      const tableSpecs = Object.entries(c.published)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([_, spec]) => spec);
+      expect(result[0]).toMatchObject({
+        publications: c.resultingPublications,
+        ddlDetection: true,
+        // Importantly, the initialSchema column is populated during initial sync.
+        initialSchema: {
+          tables: tableSpecs,
+          indexes: (c.replicatedIndices ?? []).map(spec => ({
+            schema: 'public',
+            ...spec,
+          })),
+        },
+      });
 
       const {publications, tables} = await getPublicationInfo(
         upstream,

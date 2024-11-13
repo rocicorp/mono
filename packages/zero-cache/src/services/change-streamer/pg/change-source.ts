@@ -36,11 +36,8 @@ import type {DataChange, Identifier, MessageDelete} from '../schema/change.js';
 import type {ReplicationConfig} from '../schema/tables.js';
 import {replicationSlot} from './initial-sync.js';
 import {fromLexiVersion, toLexiVersion} from './lsn.js';
-import {
-  createEventTriggerStatements,
-  replicationEventSchema,
-  type DdlUpdateEvent,
-} from './schema/ddl.js';
+import {replicationEventSchema, type DdlUpdateEvent} from './schema/ddl.js';
+import {updateShardSchema} from './schema/init.js';
 import type {PublishedSchema} from './schema/published.js';
 import {INTERNAL_PUBLICATION_PREFIX} from './schema/shard.js';
 import {validate} from './schema/validation.js';
@@ -126,13 +123,11 @@ class PostgresChangeSource implements ChangeSource {
     try {
       await this.#stopExistingReplicationSlotSubscriber(db, slot);
 
-      // TODO: Move this into a schema-versioned upgrade.
-      await db.unsafe(
-        createEventTriggerStatements(
-          this.#shardID,
-          this.#replicationConfig.publications,
-        ),
-      );
+      // Perform any shard schema updates
+      await updateShardSchema(this.#lc, db, {
+        id: this.#shardID,
+        publications: this.#replicationConfig.publications,
+      });
 
       this.#lc.info?.(`starting replication stream @${slot}`);
 
