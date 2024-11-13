@@ -2,11 +2,7 @@ import {literal} from 'pg-format';
 import type postgres from 'postgres';
 import {equals} from '../../../../../../shared/src/set-utils.js';
 import * as v from '../../../../../../shared/src/valita.js';
-import type {IndexSpec, PublishedTableSpec} from '../../../../db/specs.js';
-
-type PublishedTableQueryResult = {
-  tables: PublishedTableSpec[];
-};
+import {indexSpec, publishedTableSpec} from '../../../../db/specs.js';
 
 export function publishedTableQuery(publications: string[]) {
   return `
@@ -76,10 +72,6 @@ SELECT COALESCE(json_agg("table"), '[]'::json) as "tables" FROM tables
   `;
 }
 
-type IndexDefinitionsQueryResult = {
-  indexes: IndexSpec[];
-};
-
 export function indexDefinitionsQuery(publications: string[]) {
   // Note: pg_attribute contains column names for tables and for indexes.
   // However, the latter does not get updated when a column in a table is
@@ -138,6 +130,15 @@ export function indexDefinitionsQuery(publications: string[]) {
   `;
 }
 
+const publishedTablesSchema = v.object({tables: v.array(publishedTableSpec)});
+const publishedIndexesSchema = v.object({indexes: v.array(indexSpec)});
+
+export const publishedSchema = publishedTablesSchema.extend(
+  publishedIndexesSchema.shape,
+);
+
+export type PublishedSchema = v.Infer<typeof publishedSchema>;
+
 const publicationSchema = v.object({
   pubname: v.string(),
   pubinsert: v.boolean(),
@@ -148,13 +149,11 @@ const publicationSchema = v.object({
 
 const publicationsResultSchema = v.array(publicationSchema);
 
-export type Publication = v.Infer<typeof publicationSchema>;
+const publicationInfoSchema = publishedSchema.extend({
+  publications: publicationsResultSchema,
+});
 
-export type PublicationInfo = {
-  readonly publications: Publication[];
-  readonly tables: PublishedTableSpec[];
-  readonly indices: IndexSpec[];
-};
+export type PublicationInfo = v.Infer<typeof publicationInfoSchema>;
 
 /**
  * Retrieves published tables and columns. By default, includes all
@@ -210,7 +209,7 @@ export async function getPublicationInfo(
 
   return {
     publications: v.parse(result[1], publicationsResultSchema),
-    tables: (result[2] as PublishedTableQueryResult[])[0].tables,
-    indices: (result[3] as IndexDefinitionsQueryResult[])[0].indexes,
+    ...v.parse(result[2][0], publishedTablesSchema),
+    ...v.parse(result[3][0], publishedIndexesSchema),
   };
 }
