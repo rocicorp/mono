@@ -35,7 +35,7 @@ test('authorization rules create query ASTs', async () => {
 
       return {
         user: {
-          table: {
+          row: {
             insert: [allowIfAdmin],
             update: [allowIfAdmin],
             delete: [allowIfAdmin],

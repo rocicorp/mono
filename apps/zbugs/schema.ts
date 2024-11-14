@@ -225,7 +225,7 @@ export const authorization = defineAuthorization<AuthData, Schema>(
     return {
       user: {
         // Only the authentication system can write to the user table.
-        table: {
+        row: {
           insert: [],
           update: [],
           delete: [],

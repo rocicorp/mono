@@ -38,34 +38,6 @@ describe('can insert/update/delete/upsert', () => {
       authorization: undefined,
     },
     {
-      name: 'empty (deny) table policy',
-      expected: false,
-      authorization: {
-        foo: {
-          table: {
-            insert: [],
-            update: [],
-            delete: [],
-          },
-        },
-      },
-    },
-    {
-      name: 'empty (deny) column policy',
-      expected: false,
-      authorization: {
-        foo: {
-          column: {
-            a: {
-              insert: [],
-              update: [],
-              delete: [],
-            },
-          },
-        },
-      },
-    },
-    {
       name: 'empty (deny) row policy',
       expected: false,
       authorization: {

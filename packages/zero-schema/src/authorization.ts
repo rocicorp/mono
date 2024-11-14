@@ -21,24 +21,12 @@ type InstanceAuthzRule<TAuthDataShape, TSchema extends TableSchema> = (
   row: TableSchemaToRow<TSchema>,
 ) => Query<TableSchema>;
 
-type StaticAuthzRule<TAuthDataShape> = (
-  authData: TAuthDataShape,
-) => Query<TableSchema>;
-
-type StaticAssetAuthorization<TAuthDataShape> = {
-  [K in Action]?: StaticAuthzRule<TAuthDataShape>[];
-};
-
 type InstanceAssetAuthorization<TAuthDataShape, TSchema extends TableSchema> = {
   [K in Action]?: InstanceAuthzRule<TAuthDataShape, TSchema>[];
 };
 
 export type AuthorizationConfig<TAuthDataShape, TSchema extends Schema> = {
   [K in keyof TSchema['tables']]?: {
-    table?: StaticAssetAuthorization<TAuthDataShape>;
-    column?: {
-      [C in keyof TSchema['tables'][K]['columns']]?: StaticAssetAuthorization<TAuthDataShape>;
-    };
     row?: InstanceAssetAuthorization<TAuthDataShape, TSchema['tables'][K]>;
     cell?: {
       [C in keyof TSchema['tables'][K]['columns']]?: InstanceAssetAuthorization<
@@ -79,62 +67,11 @@ function compileAuthorization<TAuthDataShape, TSchema extends Schema>(
   const ret: CompiledAuthorizationConfig = {};
   for (const [tableName, tableConfig] of Object.entries(authz)) {
     ret[tableName] = {
-      table: compileTableConfig(tableConfig.table),
-      column: compileColumnConfig(tableConfig.column),
       row: compileRowConfig(tableConfig.row),
       cell: compileCellConfig(tableConfig.cell),
     };
   }
 
-  return ret;
-}
-
-function compileTableConfig<TAuthDataShape>(
-  tableRules: StaticAssetAuthorization<TAuthDataShape> | undefined,
-): CompiledAssetAuthorization | undefined {
-  if (!tableRules) {
-    return undefined;
-  }
-  return {
-    select: compileStaticRules(tableRules.select),
-    insert: compileStaticRules(tableRules.insert),
-    update: compileStaticRules(tableRules.update),
-    delete: compileStaticRules(tableRules.delete),
-  };
-}
-
-function compileStaticRules<TAuthDataShape>(
-  rules: StaticAuthzRule<TAuthDataShape>[] | undefined,
-): ['allow', AST][] | undefined {
-  if (!rules) {
-    return undefined;
-  }
-  return rules.map(
-    rule =>
-      [
-        'allow',
-        (rule(authDataRef as TAuthDataShape) as AuthQuery<TableSchema>).ast,
-      ] as const,
-  );
-}
-
-function compileColumnConfig<TAuthDataShape>(
-  columnRules:
-    | Record<string, StaticAssetAuthorization<TAuthDataShape>>
-    | undefined,
-): Record<string, CompiledAssetAuthorization> | undefined {
-  if (!columnRules) {
-    return undefined;
-  }
-  const ret: Record<string, CompiledAssetAuthorization> = {};
-  for (const [columnName, rules] of Object.entries(columnRules)) {
-    ret[columnName] = {
-      select: compileStaticRules(rules.select),
-      insert: compileStaticRules(rules.insert),
-      update: compileStaticRules(rules.update),
-      delete: compileStaticRules(rules.delete),
-    };
-  }
   return ret;
 }
 
