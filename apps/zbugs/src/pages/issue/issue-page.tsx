@@ -57,7 +57,7 @@ export default function IssuePage() {
     ) {
       // only set to viewed if the user has looked at it for > 1 second
       const handle = setTimeout(() => {
-        z.mutate.viewState.set({
+        z.mutate.viewState.upsert({
           issueID: issue.id,
           userID: z.userID,
           viewed: Date.now(),
@@ -318,7 +318,7 @@ export default function IssuePage() {
               <LabelPicker
                 selected={labelSet}
                 onAssociateLabel={labelID =>
-                  z.mutate.issueLabel.create({
+                  z.mutate.issueLabel.insert({
                     issueID: issue.id,
                     labelID,
                   })
@@ -329,8 +329,8 @@ export default function IssuePage() {
                 onCreateNewLabel={labelName => {
                   const labelID = nanoid();
                   z.mutateBatch(tx => {
-                    tx.label.create({id: labelID, name: labelName});
-                    tx.issueLabel.create({issueID: issue.id, labelID});
+                    tx.label.insert({id: labelID, name: labelName});
+                    tx.issueLabel.insert({issueID: issue.id, labelID});
                   });
                 }}
               />

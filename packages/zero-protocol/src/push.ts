@@ -13,8 +13,8 @@ export enum MutationType {
 /**
  * Inserts if entity with id does not already exist.
  */
-const createOpSchema = v.object({
-  op: v.literal('create'),
+const insertOpSchema = v.object({
+  op: v.literal('insert'),
   tableName: v.string(),
   primaryKey: primaryKeySchema,
   value: rowSchema,
@@ -24,8 +24,8 @@ const createOpSchema = v.object({
  * Upsert semantics. Inserts if entity with id does not already exist,
  * otherwise updates existing entity with id.
  */
-const setOpSchema = v.object({
-  op: v.literal('set'),
+const upsertOpSchema = v.object({
+  op: v.literal('upsert'),
   tableName: v.string(),
   primaryKey: primaryKeySchema,
   value: rowSchema,
@@ -54,8 +54,8 @@ const deleteOpSchema = v.object({
 });
 
 const crudOpSchema = v.union(
-  createOpSchema,
-  setOpSchema,
+  insertOpSchema,
+  upsertOpSchema,
   updateOpSchema,
   deleteOpSchema,
 );
@@ -97,8 +97,8 @@ export const pushBodySchema = v.object({
 
 export const pushMessageSchema = v.tuple([v.literal('push'), pushBodySchema]);
 
-export type CreateOp = v.Infer<typeof createOpSchema>;
-export type SetOp = v.Infer<typeof setOpSchema>;
+export type InsertOp = v.Infer<typeof insertOpSchema>;
+export type UpsertOp = v.Infer<typeof upsertOpSchema>;
 export type UpdateOp = v.Infer<typeof updateOpSchema>;
 export type DeleteOp = v.Infer<typeof deleteOpSchema>;
 export type CRUDOp = v.Infer<typeof crudOpSchema>;

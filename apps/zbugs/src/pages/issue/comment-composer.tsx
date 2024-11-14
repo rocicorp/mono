@@ -21,7 +21,7 @@ export default function CommentComposer({
   const save = () => {
     setCurrentBody(body ?? '');
     if (!id) {
-      z.mutate.comment.create({
+      z.mutate.comment.insert({
         id: nanoid(),
         issueID,
         creatorID: z.userID,

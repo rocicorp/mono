@@ -65,17 +65,17 @@ async function testBasics(userID: string) {
   await sleep(1);
   assert(deepEqual(log, [[]]));
 
-  await r.mutate.e.set({id: 'foo', value: 1});
+  await r.mutate.e.upsert({id: 'foo', value: 1});
   assert(deepEqual(log, [[], [{id: 'foo', value: 1}]]));
 
-  await r.mutate.e.set({id: 'foo', value: 2});
+  await r.mutate.e.upsert({id: 'foo', value: 2});
   assert(
     deepEqual(log, [[], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
   );
 
   removeListener();
 
-  await r.mutate.e.set({id: 'foo', value: 3});
+  await r.mutate.e.upsert({id: 'foo', value: 3});
   assert(
     deepEqual(log, [[], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
   );

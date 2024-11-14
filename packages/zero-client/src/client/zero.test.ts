@@ -1175,8 +1175,8 @@ test('smokeTest', async () => {
       calls.push([...c]);
     });
 
-    await r.mutate.issues.create({id: 'a', value: 1});
-    await r.mutate.issues.create({id: 'b', value: 2});
+    await r.mutate.issues.insert({id: 'a', value: 1});
+    await r.mutate.issues.insert({id: 'b', value: 2});
 
     // we get called for initial hydration, even though there's no data.
     // plus once for the each transaction
@@ -1191,12 +1191,12 @@ test('smokeTest', async () => {
 
     calls.length = 0;
 
-    await r.mutate.issues.create({id: 'a', value: 1});
-    await r.mutate.issues.create({id: 'b', value: 2});
+    await r.mutate.issues.insert({id: 'a', value: 1});
+    await r.mutate.issues.insert({id: 'b', value: 2});
 
     expect(calls.length).eq(0);
 
-    await r.mutate.issues.set({id: 'a', value: 11});
+    await r.mutate.issues.upsert({id: 'a', value: 11});
 
     // Although the set() results in a remove and add flowing through the pipeline,
     // they are in same tx, so we only get one call coming out.
@@ -1214,7 +1214,7 @@ test('smokeTest', async () => {
     unsubscribe();
 
     calls.length = 0;
-    await r.mutate.issues.create({id: 'c', value: 6});
+    await r.mutate.issues.insert({id: 'c', value: 6});
     expect(calls.length).eq(0);
   }
 });
@@ -2125,7 +2125,7 @@ test('kvStore option', async () => {
     await tickAFewTimes(clock);
     await new Promise(resolve => realSetTimeout(resolve, 100));
     expect(allDataView.data).deep.equal(expectedValue);
-    await r.mutate.e.create({id: 'a', value: 1});
+    await r.mutate.e.insert({id: 'a', value: 1});
     await tickAFewTimes(clock);
 
     expect(idIsAView.data).deep.equal([{id: 'a', value: 1}]);
@@ -2319,7 +2319,7 @@ suite('CRUD', () => {
   test('create', async () => {
     const z = makeZero();
 
-    const createIssue = z.mutate.issue.create;
+    const createIssue = z.mutate.issue.insert;
     const view = z.query.issue.materialize();
     await createIssue({id: 'a', title: 'A'});
     expect(view.data).toEqual([{id: 'a', title: 'A'}]);
@@ -2355,10 +2355,10 @@ suite('CRUD', () => {
     const z = makeZero();
 
     const view = z.query.comment.materialize();
-    await z.mutate.comment.create({id: 'a', issueID: '1', text: 'A text'});
+    await z.mutate.comment.insert({id: 'a', issueID: '1', text: 'A text'});
     expect(view.data).toEqual([{id: 'a', issueID: '1', text: 'A text'}]);
 
-    const setComment = z.mutate.comment.set;
+    const setComment = z.mutate.comment.upsert;
     await setComment({id: 'b', issueID: '2', text: 'B text'});
     expect(view.data).toEqual([
       {id: 'a', issueID: '1', text: 'A text'},
@@ -2411,7 +2411,7 @@ suite('CRUD', () => {
   test('update', async () => {
     const z = makeZero();
     const view = z.query.comment.materialize();
-    await z.mutate.comment.create({id: 'a', issueID: '1', text: 'A text'});
+    await z.mutate.comment.insert({id: 'a', issueID: '1', text: 'A text'});
     expect(view.data).toEqual([{id: 'a', issueID: '1', text: 'A text'}]);
 
     const updateComment = z.mutate.comment.update;
@@ -2441,10 +2441,10 @@ suite('CRUD', () => {
   test('compoundPK', async () => {
     const z = makeZero();
     const view = z.query.compoundPKTest.materialize();
-    await z.mutate.compoundPKTest.create({id1: 'a', id2: 'a', text: 'a'});
+    await z.mutate.compoundPKTest.insert({id1: 'a', id2: 'a', text: 'a'});
     expect(view.data).toEqual([{id1: 'a', id2: 'a', text: 'a'}]);
 
-    await z.mutate.compoundPKTest.set({id1: 'a', id2: 'a', text: 'aa'});
+    await z.mutate.compoundPKTest.upsert({id1: 'a', id2: 'a', text: 'aa'});
     expect(view.data).toEqual([{id1: 'a', id2: 'a', text: 'aa'}]);
 
     await z.mutate.compoundPKTest.update({id1: 'a', id2: 'a', text: 'aaa'});
@@ -2525,7 +2525,7 @@ suite('CRUD with compound primary key', () => {
   test('create', async () => {
     const z = makeZero();
 
-    const createIssue: (issue: Issue) => Promise<void> = z.mutate.issue.create;
+    const createIssue: (issue: Issue) => Promise<void> = z.mutate.issue.insert;
     const view = z.query.issue.materialize();
     await createIssue({ids: 'a', idn: 1, title: 'A'});
     expect(view.data).toEqual([{ids: 'a', idn: 1, title: 'A'}]);
@@ -2539,7 +2539,7 @@ suite('CRUD with compound primary key', () => {
     const z = makeZero();
 
     const view = z.query.comment.materialize();
-    await z.mutate.comment.create({
+    await z.mutate.comment.insert({
       ids: 'a',
       idn: 1,
       issueIDs: 'a',
@@ -2551,7 +2551,7 @@ suite('CRUD with compound primary key', () => {
     ]);
 
     const setComment: (comment: Comment) => Promise<void> =
-      z.mutate.comment.set;
+      z.mutate.comment.upsert;
     await setComment({
       ids: 'b',
       idn: 2,
@@ -2581,7 +2581,7 @@ suite('CRUD with compound primary key', () => {
   test('update', async () => {
     const z = makeZero();
     const view = z.query.comment.materialize();
-    await z.mutate.comment.create({
+    await z.mutate.comment.insert({
       ids: 'a',
       idn: 1,
       issueIDs: 'a',
@@ -2680,8 +2680,8 @@ test('mutate is a function for batching', async () => {
     expect(
       (m as unknown as Record<string, unknown>)._zero_crud,
     ).toBeUndefined();
-    await m.issue.create({id: 'a', title: 'A'});
-    await m.comment.create({
+    await m.issue.insert({id: 'a', title: 'A'});
+    await m.comment.insert({
       id: 'b',
       issueID: 'a',
       text: 'Comment for issue A',
@@ -2737,15 +2737,15 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
 
   await expect(
     z.mutateBatch(async m => {
-      await m.issue.create({id: 'a', title: 'A'});
-      await z.mutate.issue.create({id: 'b', title: 'B'});
+      await m.issue.insert({id: 'a', title: 'A'});
+      await z.mutate.issue.insert({id: 'b', title: 'B'});
     }),
-  ).rejects.toThrow('Cannot call mutate.issue.create inside a batch');
+  ).rejects.toThrow('Cannot call mutate.issue.insert inside a batch');
 
   // make sure that we did not update the issue collection.
   expect(issueView.data).toEqual([]);
 
-  await z.mutate.comment.create({id: 'a', text: 'A', issueID: 'a'});
+  await z.mutate.comment.insert({id: 'a', text: 'A', issueID: 'a'});
   expect(commentView.data).toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
 
   await expect(
@@ -2758,9 +2758,9 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
 
   await expect(
     z.mutateBatch(async () => {
-      await z.mutate.comment.set({id: 'a', text: 'A2', issueID: 'a'});
+      await z.mutate.comment.upsert({id: 'a', text: 'A2', issueID: 'a'});
     }),
-  ).rejects.toThrow('Cannot call mutate.comment.set inside a batch');
+  ).rejects.toThrow('Cannot call mutate.comment.upsert inside a batch');
   // make sure that we did not update the comment collection.
   expect(commentView.data).toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
 

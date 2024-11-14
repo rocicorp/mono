@@ -3,12 +3,12 @@ import type {MaybePromise} from '../../../shared/src/types.js';
 import type {Expand} from '../../../shared/src/expand.js';
 import {
   CRUD_MUTATION_NAME,
-  type CreateOp,
+  type InsertOp,
   type CRUDMutationArg,
   type CRUDOp,
   type CRUDOpKind,
   type DeleteOp,
-  type SetOp,
+  type UpsertOp,
   type UpdateOp,
 } from '../../../zero-protocol/src/push.js';
 import type {
@@ -22,7 +22,7 @@ import type {ReadonlyJSONObject} from '../mod.js';
 import type {NormalizedTableSchema} from '../../../zero-schema/src/normalize-table-schema.js';
 import type {NormalizedSchema} from '../../../zero-schema/src/normalized-schema.js';
 
-export type CreateValue<S extends TableSchema> = Expand<
+export type InsertValue<S extends TableSchema> = Expand<
   PrimaryKeyFields<S> & {
     [K in keyof S['columns'] as S['columns'][K] extends {optional: true}
       ? K
@@ -34,7 +34,7 @@ export type CreateValue<S extends TableSchema> = Expand<
   }
 >;
 
-export type SetValue<S extends TableSchema> = Expand<CreateValue<S>>;
+export type UpsertValue<S extends TableSchema> = InsertValue<S>;
 
 export type UpdateValue<S extends TableSchema> = Expand<
   PrimaryKeyFields<S> & {
@@ -63,7 +63,7 @@ export type TableMutator<S extends TableSchema> = {
    * `undefined`. Such fields will be assigned the value `null` optimistically
    * and then the default value as defined by the server.
    */
-  create: (value: SetValue<S>) => Promise<void>;
+  insert: (value: InsertValue<S>) => Promise<void>;
 
   /**
    * Writes a row unconditionally, overwriting any existing row with the same
@@ -71,7 +71,7 @@ export type TableMutator<S extends TableSchema> = {
    * set to `undefined`. Such fields will be assigned the value `null`
    * optimistically and then the default value as defined by the server.
    */
-  set: (value: SetValue<S>) => Promise<void>;
+  upsert: (value: UpsertValue<S>) => Promise<void>;
 
   /**
    * Updates a row with the same primary key. If no such row exists, this
@@ -154,7 +154,8 @@ export function makeCRUDMutate<const S extends Schema>(
 }
 
 /**
- * Creates the `{create, set, update, delete}` object for use outside a batch.
+ * Creates the `{insert, upsert, update, delete}` object for use outside a
+ * batch.
  */
 function makeEntityCRUDMutate<S extends NormalizedTableSchema>(
   tableName: string,
@@ -163,20 +164,20 @@ function makeEntityCRUDMutate<S extends NormalizedTableSchema>(
   assertNotInBatch: (tableName: string, op: CRUDOpKind) => void,
 ): TableMutator<S> {
   return {
-    create: (value: SetValue<S>) => {
-      assertNotInBatch(tableName, 'create');
-      const op: CreateOp = {
-        op: 'create',
+    insert: (value: InsertValue<S>) => {
+      assertNotInBatch(tableName, 'insert');
+      const op: InsertOp = {
+        op: 'insert',
         tableName,
         primaryKey,
         value,
       };
       return zeroCRUD({ops: [op]});
     },
-    set: (value: SetValue<S>) => {
-      assertNotInBatch(tableName, 'set');
-      const op: SetOp = {
-        op: 'set',
+    upsert: (value: UpsertValue<S>) => {
+      assertNotInBatch(tableName, 'upsert');
+      const op: UpsertOp = {
+        op: 'upsert',
         tableName,
         primaryKey,
         value,
@@ -207,7 +208,8 @@ function makeEntityCRUDMutate<S extends NormalizedTableSchema>(
 }
 
 /**
- * Creates the `{create, set, update, delete}` object for use inside a batch.
+ * Creates the `{inesrt, upsert, update, delete}` object for use inside a
+ * batch.
  */
 export function makeBatchCRUDMutate<S extends TableSchema>(
   tableName: string,
@@ -216,9 +218,9 @@ export function makeBatchCRUDMutate<S extends TableSchema>(
 ): TableMutator<S> {
   const {primaryKey} = schema.tables[tableName];
   return {
-    create: (value: SetValue<S>) => {
-      const op: CreateOp = {
-        op: 'create',
+    insert: (value: InsertValue<S>) => {
+      const op: InsertOp = {
+        op: 'insert',
         tableName,
         primaryKey,
         value,
@@ -226,9 +228,9 @@ export function makeBatchCRUDMutate<S extends TableSchema>(
       ops.push(op);
       return promiseVoid;
     },
-    set: (value: SetValue<S>) => {
-      const op: SetOp = {
-        op: 'set',
+    upsert: (value: UpsertValue<S>) => {
+      const op: UpsertOp = {
+        op: 'upsert',
         tableName,
         primaryKey,
         value,
@@ -277,11 +279,11 @@ export function makeCRUDMutator(schema: NormalizedSchema): CRUDMutator {
   ): Promise<void> {
     for (const op of crudArg.ops) {
       switch (op.op) {
-        case 'create':
-          await createImpl(tx, op, schema);
+        case 'insert':
+          await insertImpl(tx, op, schema);
           break;
-        case 'set':
-          await setImpl(tx, op, schema);
+        case 'upsert':
+          await upsertImpl(tx, op, schema);
           break;
         case 'update':
           await updateImpl(tx, op, schema);
@@ -307,9 +309,9 @@ function defaultOptionalFieldsToNull(
   return rv;
 }
 
-async function createImpl(
+async function insertImpl(
   tx: WriteTransaction,
-  arg: CreateOp,
+  arg: InsertOp,
   schema: NormalizedSchema,
 ): Promise<void> {
   const key = toPrimaryKeyString(
@@ -326,9 +328,9 @@ async function createImpl(
   }
 }
 
-async function setImpl(
+async function upsertImpl(
   tx: WriteTransaction,
-  arg: CreateOp | SetOp,
+  arg: InsertOp | UpsertOp,
   schema: NormalizedSchema,
 ): Promise<void> {
   const key = toPrimaryKeyString(
