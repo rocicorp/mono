@@ -1,4 +1,8 @@
-import type {Condition} from '../../../zero-protocol/src/ast.js';
+import type {
+  Condition,
+  CorrelatedSubquery,
+  SimpleOperator,
+} from '../../../zero-protocol/src/ast.js';
 
 // This was written by ChatGPT. It is only used for tests
 
@@ -12,7 +16,9 @@ export function parse(input: string): Condition {
 }
 
 function tokenize(input: string): string[] {
-  return input.replace(/\s+/g, '').split('');
+  // Tokenize based on identifiers (letters/numbers), operators, and parentheses.
+  const regex = /[a-zA-Z0-9]+|!=|<=|>=|[&|()!=<>]|\s+/g;
+  return input.match(regex)?.filter(token => !/^\s+$/.test(token)) ?? [];
 }
 
 function parseOr(tokens: string[]): Condition {
@@ -55,32 +61,94 @@ function parsePrimary(tokens: string[]): Condition {
     return condition;
   }
 
-  return parseSimple(tokens);
+  return parseSimpleOrCorrelated(tokens);
 }
 
-function parseSimple(tokens: string[]): Condition {
+function parseSimpleOrCorrelated(tokens: string[]): Condition {
   const token = tokens.shift();
-  if (!token || !/^[a-zA-Z0-9]$/.test(token)) {
+  if (token === 'EXISTS') {
+    eat(tokens, '(');
+    // TODO: parse subquery
+    eat(tokens, ')');
+    return {
+      type: 'correlatedSubquery',
+      related: {} as CorrelatedSubquery,
+      op: 'EXISTS',
+    };
+  } else if (token === 'NOT') {
+    eat(tokens, 'EXISTS');
+    eat(tokens, '(');
+    // TODO: parse subquery
+    eat(tokens, ')');
+    return {
+      type: 'correlatedSubquery',
+      related: {} as CorrelatedSubquery,
+      op: 'NOT EXISTS',
+    };
+  }
+  if (!token || !/^[a-zA-Z0-9]+$/.test(token)) {
     throw new Error('Invalid input');
   }
+
+  const maybeOp = tokens[0];
+  if (simpleOperators.has(maybeOp)) {
+    tokens.shift(); // consume operator
+    const value = parseValue(tokens);
+    return {type: 'simple', value, op: maybeOp as SimpleOperator, field: token};
+  }
+
   return {type: 'simple', value: token, op: '=', field: 'n/a'};
+}
+
+const simpleOperators = new Set([
+  '=',
+  '!=',
+  '<',
+  '>',
+  '>=',
+  '<=',
+  'IN',
+  'NOT IN',
+  'LIKE',
+  'NOT LIKE',
+  'ILIKE',
+  'NOT ILIKE',
+]);
+
+function parseValue(tokens: string[]): string {
+  const token = tokens.shift();
+  if (!token || !/^[a-zA-Z0-9]+$/.test(token)) {
+    throw new Error('Invalid input');
+  }
+  return token;
 }
 
 export function stringify(c: Condition): string {
   switch (c.type) {
     case 'simple':
-      return (c.op === '!=' ? '!' : '') + c.value;
+      if (c.field === 'n/a') {
+        return (c.op === '!=' ? '!' : '') + c.value;
+      }
+      return `${c.field} ${c.op} ${c.value}`;
     case 'and':
     case 'or':
       return c.conditions
-        .map(cond => {
-          // Parentheses around "and" groups or nested "or" groups for clarity
-          // and correctness. Also to catch unnecessary nesting.
-          const needsParens =
-            cond.type === 'and' ||
-            (cond.type === 'or' && c.conditions.length > 1);
-          return needsParens ? `(${stringify(cond)})` : stringify(cond);
-        })
+        .map(
+          cond =>
+            // Parentheses around "and" groups or nested "or" groups for clarity
+            // and correctness. Also to catch unnecessary nesting.
+            `(${stringify(cond)})`,
+        )
         .join(c.type === 'and' ? ' & ' : ' | ');
+    case 'correlatedSubquery':
+      return c.op + ' ()';
+  }
+}
+function eat(tokens: string[], expectedToken: string) {
+  const token = tokens.shift();
+  if (token !== expectedToken) {
+    throw new Error(
+      'Unexpected input. Got: ' + token + ' Expected: ' + expectedToken,
+    );
   }
 }

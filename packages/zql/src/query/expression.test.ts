@@ -6,7 +6,7 @@ import {
   type SimpleCondition,
 } from '../../../zero-protocol/src/ast.js';
 import {dnf} from './dnf.js';
-import {stringify} from './expression-parser.js';
+import {parse, stringify} from './expression-parser.js';
 import {and, not, or} from './expression.js';
 
 type TestCondition =
@@ -275,4 +275,15 @@ describe('simplify', () => {
 
     expect(or(and(A, B), FALSE)).toEqual(and(A, B));
   });
+});
+
+test('not', () => {
+  expect(stringify(not(parse('A = 1')))).toEqual('A != 1');
+  expect(stringify(not(parse('A != 1')))).toEqual('A = 1');
+  expect(stringify(not(parse('A < 1 & B > 2')))).toEqual('A >= 1 | B <= 2');
+  expect(stringify(not(parse('A <= 1 | B => 2')))).toEqual('A > 1 & B < 2');
+  expect(stringify(not(parse('A IN abc')))).toEqual('A NOT IN abc');
+  expect(stringify(not(parse('EXISTS () | NOT EXISTS ()')))).toEqual(
+    'NOT EXISTS () & EXISTS ()',
+  );
 });

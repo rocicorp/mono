@@ -53,6 +53,10 @@ test.for([
     'A & (B | (C & (D | (E | F))))',
     '(A & B) | (A & C & D) | (A & C & E) | (A & C & F)',
   ],
+
+  ['EXISTS ()', 'EXISTS ()'],
+  ['NOT EXISTS ()', 'NOT EXISTS ()'],
+  ['A = 2 | EXISTS () ', 'A = 2 | EXISTS ()'],
 ])(`dnf: %s -> %s`, ([input, expected]) => {
   expect(stringify(dnf(parse(input)))).toEqual(expected);
   // dnf on a dnf should produce the same thing

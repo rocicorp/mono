@@ -1,9 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type {
-  Condition,
-  SimpleOperator,
-  ValuePosition,
-} from '../../../zero-protocol/src/ast.js';
+import {must} from '../../../shared/src/must.js';
+import type {Condition, ValuePosition} from '../../../zero-protocol/src/ast.js';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 import type {
   GetFieldTypeNoNullOrUndefined,
@@ -163,6 +160,13 @@ export function not(expression: Condition): Condition {
         type: 'and',
         conditions: expression.conditions.map(not),
       };
+    case 'correlatedSubquery':
+      return {
+        type: 'correlatedSubquery',
+        related: expression.related,
+        op: negateOperator(expression.op),
+      };
+
     default:
       return {
         type: 'simple',
@@ -189,33 +193,31 @@ export function flatten(
   return flattened;
 }
 
-function negateOperator(op: SimpleOperator): SimpleOperator {
-  switch (op) {
-    case '=':
-      return '!=';
-    case '!=':
-      return '=';
-    case '<':
-      return '>=';
-    case '>':
-      return '<=';
-    case '>=':
-      return '<';
-    case '<=':
-      return '>';
-    case 'IN':
-      return 'NOT IN';
-    case 'NOT IN':
-      return 'IN';
-    case 'LIKE':
-      return 'NOT LIKE';
-    case 'NOT LIKE':
-      return 'LIKE';
-    case 'ILIKE':
-      return 'NOT ILIKE';
-    case 'NOT ILIKE':
-      return 'ILIKE';
-  }
+const negateSimpleOperatorMap = {
+  ['=']: '!=',
+  ['!=']: '=',
+  ['<']: '>=',
+  ['>']: '<=',
+  ['>=']: '<',
+  ['<=']: '>',
+  ['IN']: 'NOT IN',
+  ['NOT IN']: 'IN',
+  ['LIKE']: 'NOT LIKE',
+  ['NOT LIKE']: 'LIKE',
+  ['ILIKE']: 'NOT ILIKE',
+  ['NOT ILIKE']: 'ILIKE',
+} as const;
+
+const negateOperatorMap = {
+  ...negateSimpleOperatorMap,
+  ['EXISTS']: 'NOT EXISTS',
+  ['NOT EXISTS']: 'EXISTS',
+} as const;
+
+function negateOperator<OP extends keyof typeof negateOperatorMap>(
+  op: OP,
+): (typeof negateOperatorMap)[OP] {
+  return must(negateOperatorMap[op]);
 }
 
 function filterUndefined<T>(array: (T | undefined)[]): T[] {
