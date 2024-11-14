@@ -121,7 +121,7 @@ export const replicationEventSchema = v.union(
 export type ReplicationEvent = v.Infer<typeof replicationEventSchema>;
 
 // Creates a function that appends `_SHARD_ID` to the input.
-function append(shardID: string) {
+export function append(shardID: string) {
   return (name: string) => id(name + '_' + shardID);
 }
 
@@ -304,7 +304,8 @@ $$ LANGUAGE plpgsql;
 `;
 }
 
-const TAGS = [
+// Exported for testing.
+export const TAGS = [
   'CREATE TABLE',
   'ALTER TABLE',
   'CREATE INDEX',
