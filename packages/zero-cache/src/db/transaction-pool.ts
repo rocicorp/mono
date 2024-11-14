@@ -266,9 +266,10 @@ export class TransactionPool {
       db
         .begin(this.#mode, worker)
         .catch(e => {
-          // RollbackErrors are used to gracefully rollback the postgres.js
-          // transaction block. They should not be thrown up to the application.
-          if (!(e instanceof RollbackSignal)) {
+          if (e instanceof RollbackSignal) {
+            // A RollbackSignal is used to gracefully rollback the postgres.js
+            // transaction block. It should not be thrown up to the application.
+          } else {
             throw e;
           }
         })
