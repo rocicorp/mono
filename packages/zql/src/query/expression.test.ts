@@ -5,7 +5,6 @@ import {
   type Condition,
   type SimpleCondition,
 } from '../../../zero-protocol/src/ast.js';
-// import {dnf, unwrap} from './dnf.js';
 import {dnf} from './dnf.js';
 import {stringify} from './expression-parser.js';
 import {and, not, or} from './expression.js';
