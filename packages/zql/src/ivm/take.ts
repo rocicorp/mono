@@ -2,7 +2,12 @@ import {assert, unreachable} from '../../../shared/src/asserts.js';
 import {must} from '../../../shared/src/must.js';
 import type {Row, Value} from '../../../zero-protocol/src/data.js';
 import {assertOrderingIncludesPK} from '../builder/builder.js';
-import type {Change, EditChange, RemoveChange} from './change.js';
+import {
+  rowForChange,
+  type Change,
+  type EditChange,
+  type RemoveChange,
+} from './change.js';
 import {normalizeUndefined, type Node} from './data.js';
 import type {
   Constraint,
@@ -240,9 +245,7 @@ export class Take implements Operator {
     assert(this.#output, 'Output not set');
 
     const {takeState, takeStateKey, maxBound, constraint} =
-      this.#getStateAndConstraint(
-        change.type === 'child' ? change.row : change.node.row,
-      );
+      this.#getStateAndConstraint(rowForChange(change));
     if (!takeState) {
       return;
     }
