@@ -1,11 +1,18 @@
+import {PG_INSUFFICIENT_PRIVILEGE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {literal} from 'pg-format';
+import postgres from 'postgres';
 import {assert} from '../../../../../../shared/src/asserts.js';
+import * as v from '../../../../../../shared/src/valita.js';
 import type {PostgresDB, PostgresTransaction} from '../../../../types/pg.js';
 import {id} from '../../../../types/sql.js';
 import type {ShardConfig} from '../shard-config.js';
 import {createEventTriggerStatements} from './ddl.js';
-import {getPublicationInfo, type PublicationInfo} from './published.js';
+import {
+  publishedSchema,
+  type PublicationInfo,
+  type PublishedSchema,
+} from './published.js';
 import {validate} from './validation.js';
 
 // Creates a function that appends `_SHARD_ID` to the input.
@@ -28,7 +35,8 @@ const DEFAULT_APP_PUBLICATION = APP_PUBLICATION_PREFIX + 'public';
 const METADATA_PUBLICATION_PREFIX = INTERNAL_PUBLICATION_PREFIX + 'metadata_';
 
 // The GLOBAL_SETUP must be idempotent as it can be run multiple times for different shards.
-const GLOBAL_SETUP = `
+// Exported for testing.
+export const GLOBAL_SETUP = `
   CREATE SCHEMA IF NOT EXISTS zero;
 
   CREATE TABLE IF NOT EXISTS zero."schemaVersions" (
@@ -55,8 +63,7 @@ function shardSetup(shardID: string, publications: string[]): string {
   publications.push(metadataPublication);
   publications.sort();
 
-  return (
-    `
+  return `
   CREATE SCHEMA IF NOT EXISTS ${schema};
 
   CREATE TABLE ${schema}."clients" (
@@ -72,27 +79,76 @@ function shardSetup(shardID: string, publications: string[]): string {
 
   CREATE TABLE ${schema}."shardConfig" (
     "publications"  TEXT[] NOT NULL,
+    "ddlDetection"  BOOL NOT NULL,
+    "initialSchema" JSON,
 
     -- Ensure that there is only a single row in the table.
     "lock" BOOL PRIMARY KEY DEFAULT true,
     CONSTRAINT ${sharded('single_row_shard_config')} CHECK (lock)
   );
 
-  INSERT INTO ${schema}."shardConfig" (lock, publications)
-    VALUES (true, ARRAY[${literal(publications)}]);
-  ` + createEventTriggerStatements(shardID, publications)
+  INSERT INTO ${schema}."shardConfig" 
+    ("lock", "publications", "ddlDetection", "initialSchema")
+    VALUES (true, 
+      ARRAY[${literal(publications)}], 
+      false,  -- set in SAVEPOINT with triggerSetup() statements
+      null    -- set in initial-sync at consistent_point LSN.
+    );
+  `;
+}
+
+export function dropShard(shardID: string): string {
+  const schema = schemaFor(shardID);
+  const metadataPublication = METADATA_PUBLICATION_PREFIX + shardID;
+
+  // DROP SCHEMA ... CASCADE does not drop dependent PUBLICATIONS,
+  // so the PUBLICATION must be dropped explicitly.
+  return `
+    DROP PUBLICATION IF EXISTS ${id(metadataPublication)};
+    DROP SCHEMA IF EXISTS ${schema} CASCADE;
+  `;
+}
+
+const internalShardConfigSchema = v.object({
+  publications: v.array(v.string()),
+  ddlDetection: v.boolean(),
+  initialSchema: publishedSchema.nullable(),
+});
+
+export type InternalShardConfig = v.Infer<typeof internalShardConfigSchema>;
+
+// triggerSetup is run separately in a sub-transaction (i.e. SAVEPOINT) so
+// that a failure (e.g. due to lack of superuser permissions) can be handled
+// by continuing in a degraded mode (ddlDetection = false).
+function triggerSetup(shardID: string, publications: string[]): string {
+  const schema = schemaFor(shardID);
+  return (
+    createEventTriggerStatements(shardID, publications) +
+    `UPDATE ${schema}."shardConfig" SET "ddlDetection" = true;`
   );
 }
 
-export async function getShardConfig(
+// Called in initial-sync to store the exact schema that was initially synced.
+export async function setInitialSchema(
   db: PostgresDB,
   shardID: string,
-): Promise<{publications: string[]}> {
-  const result = await db<{publications: string[]}[]>`
-    SELECT publications FROM ${db(unescapedSchema(shardID))}."shardConfig";
+  {tables, indexes}: PublishedSchema,
+) {
+  const schema = unescapedSchema(shardID);
+  const synced: PublishedSchema = {tables, indexes};
+  await db`UPDATE ${db(schema)}."shardConfig" SET "initialSchema" = ${synced}`;
+}
+
+export async function getInternalShardConfig(
+  db: PostgresDB,
+  shardID: string,
+): Promise<InternalShardConfig> {
+  const result = await db`
+    SELECT "publications", "ddlDetection", "initialSchema" 
+      FROM ${db(unescapedSchema(shardID))}."shardConfig";
   `;
   assert(result.length === 1);
-  return result[0];
+  return v.parse(result[0], internalShardConfigSchema);
 }
 
 /**
@@ -116,7 +172,7 @@ export async function setupTablesAndReplication(
     }
   }
 
-  const allPublications = [];
+  const allPublications: string[] = [];
 
   // Setup application publications.
   if (publications.length) {
@@ -146,8 +202,25 @@ export async function setupTablesAndReplication(
   // Setup the global tables and shard tables / publications.
   await tx.unsafe(GLOBAL_SETUP + shardSetup(id, allPublications));
 
-  const pubInfo = await getPublicationInfo(tx, allPublications);
-  validatePublications(lc, id, pubInfo);
+  try {
+    await tx.savepoint(sub => sub.unsafe(triggerSetup(id, allPublications)));
+  } catch (e) {
+    if (
+      !(
+        e instanceof postgres.PostgresError &&
+        e.code === PG_INSUFFICIENT_PRIVILEGE
+      )
+    ) {
+      throw e;
+    }
+    // If triggerSetup() fails, replication continues in ddlDetection=false mode.
+    lc.warn?.(
+      `Unable to create event triggers for schema change detection:\n\n` +
+        `"${e.hint ?? e.message}"\n\n` +
+        `Proceeding in degraded mode: schema changes will halt replication,\n` +
+        `after which the operator is responsible for resyncing the replica.`,
+    );
+  }
 }
 
 export function validatePublications(
