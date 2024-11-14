@@ -71,8 +71,10 @@ async function migrateV1toV2(tx: PostgresTransaction, shardID: string) {
   const {tables, indexes} = await getPublicationInfo(tx, publications);
   const publishedSchema: PublishedSchema = {tables, indexes};
 
-  tx`ALTER TABLE ${tx(s)}."shardConfig" ADD "ddlDetection" BOOL`.execute();
-  tx`ALTER TABLE ${tx(s)}."shardConfig" ADD "initialSchema" JSON`.execute();
+  void tx`
+  ALTER TABLE ${tx(s)}."shardConfig" ADD "ddlDetection" BOOL`.execute();
+  void tx`
+  ALTER TABLE ${tx(s)}."shardConfig" ADD "initialSchema" JSON`.execute();
   await tx`
     UPDATE ${tx(s)}."shardConfig"
       SET "ddlDetection"  = true, 

@@ -167,7 +167,7 @@ describe('change-streamer/pg/schema/init', () => {
                   name: 'schemaVersions',
                   primaryKey: ['lock'],
                   publications: {
-                    _zero_metadata_shard_schema_test_id: {rowFilter: null},
+                    ['_zero_metadata_shard_schema_test_id']: {rowFilter: null},
                   },
                   columns: {
                     lock: {dataType: 'bool'},
@@ -181,7 +181,7 @@ describe('change-streamer/pg/schema/init', () => {
                   name: 'clients',
                   primaryKey: ['clientGroupID', 'clientID'],
                   publications: {
-                    _zero_metadata_shard_schema_test_id: {rowFilter: null},
+                    ['_zero_metadata_shard_schema_test_id']: {rowFilter: null},
                   },
                   columns: {
                     clientGroupID: {dataType: 'text'},
