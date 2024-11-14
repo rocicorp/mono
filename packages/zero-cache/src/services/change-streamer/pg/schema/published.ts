@@ -13,7 +13,7 @@ WITH published_columns AS (SELECT
   attnum AS "pos", 
   attname AS "col", 
   pt.typname AS "type", 
-  atttypid AS "typeID", 
+  atttypid::int8 AS "typeOID", 
   NULLIF(atttypmod, -1) AS "maxLen", 
   attndims "arrayDims", 
   attnotnull AS "notNull",
@@ -46,8 +46,9 @@ tables AS (SELECT json_build_object(
       'dataType', CASE WHEN "arrayDims" = 0 
                        THEN "type" 
                        ELSE substring("type" from 2) || repeat('[]', "arrayDims") END,
+      'typeOID', "typeOID",
       -- https://stackoverflow.com/a/52376230
-      'characterMaximumLength', CASE WHEN "typeID" = 1043 OR "typeID" = 1042 
+      'characterMaximumLength', CASE WHEN "typeOID" = 1043 OR "typeOID" = 1042 
                                      THEN "maxLen" - 4 
                                      ELSE "maxLen" END,
       'notNull', "notNull",
