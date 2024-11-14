@@ -15,6 +15,11 @@ type TestCondition =
       value: boolean;
     }
   | {
+      type: 'literal';
+      leftValue: boolean;
+      rightValue: boolean;
+    }
+  | {
       type: 'and' | 'or';
       conditions: readonly TestCondition[];
     };
@@ -41,6 +46,8 @@ function evaluate(condition: TestCondition): boolean {
       return condition.conditions.every(evaluate);
     case 'or':
       return condition.conditions.some(evaluate);
+    case 'literal':
+      return condition.leftValue === condition.rightValue;
   }
 }
 
@@ -138,12 +145,17 @@ test('compare test framework to real framework', () => {
     fc.property(fc.integer({min: 1, max: 20}), numConditions => {
       const conditions: TestCondition[] = fc
         .sample(fc.boolean(), numConditions)
-        .map(
-          value =>
-            ({
-              type: 'simple',
-              value,
-            }) as const,
+        .map(value =>
+          fc.sample(fc.boolean(), 1)[0]
+            ? ({
+                type: 'literal',
+                leftValue: fc.sample(fc.boolean(), 1)[0],
+                rightValue: fc.sample(fc.boolean(), 1)[0],
+              } as const)
+            : ({
+                type: 'simple',
+                value,
+              } as const),
         );
 
       const pivots = conditions.map(
@@ -186,7 +198,9 @@ test('compare test framework to real framework', () => {
             .every(c =>
               // all conditions must be simple as nothing can nest
               // under an `AND` in DNF
-              c.conditions.every(c => c.type === 'simple'),
+              c.conditions.every(
+                c => c.type === 'simple' || c.type === 'literal',
+              ),
             ),
         ).toBe(true);
       }

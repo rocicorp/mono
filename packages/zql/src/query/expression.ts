@@ -169,12 +169,19 @@ export function not(expression: Condition): Condition {
         related: expression.related,
         op: negateOperator(expression.op),
       };
-    default:
+    case 'simple':
       return {
         type: 'simple',
         op: negateOperator(expression.op),
         field: expression.field,
         value: expression.value,
+      };
+    case 'literal':
+      return {
+        type: 'literal',
+        op: negateOperator(expression.op),
+        leftValue: expression.leftValue,
+        rightValue: expression.rightValue,
       };
   }
 }

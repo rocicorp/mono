@@ -209,7 +209,7 @@ function applyWhere(
       return applyOr(input, condition, appliedFilters, delegate);
     case 'correlatedSubquery':
       return applyCorrelatedSubqueryCondition(input, condition, delegate);
-    default:
+    case 'simple':
       return applySimpleCondition(input, condition, appliedFilters);
   }
 }

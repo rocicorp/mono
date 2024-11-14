@@ -1296,3 +1296,127 @@ test('empty or - nothing goes through', () => {
   sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
   expect(sink.pushes).toEqual([]);
 });
+
+test('always false literal comparison - nothing goes through', () => {
+  const {sources, getSource} = testSources();
+  const sink = new Catch(
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        where: {
+          type: 'literal',
+          leftValue: true,
+          op: '=',
+          rightValue: false,
+        },
+      },
+      {
+        getSource,
+        createStorage: () => new MemoryStorage(),
+      },
+      undefined,
+    ),
+  );
+
+  expect(sink.fetch()).toEqual([]);
+
+  sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
+  expect(sink.pushes).toEqual([]);
+});
+
+test('always true literal comparison - everything goes through', () => {
+  const {sources, getSource} = testSources();
+  const sink = new Catch(
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        where: {
+          type: 'literal',
+          leftValue: true,
+          op: '=',
+          rightValue: true,
+        },
+      },
+      {
+        getSource,
+        createStorage: () => new MemoryStorage(),
+      },
+      undefined,
+    ),
+  );
+
+  expect(sink.fetch()).toEqual([
+    {
+      relationships: {},
+      row: {
+        id: 1,
+        name: 'aaron',
+        recruiterID: null,
+      },
+    },
+    {
+      relationships: {},
+      row: {
+        id: 2,
+        name: 'erik',
+        recruiterID: 1,
+      },
+    },
+    {
+      relationships: {},
+      row: {
+        id: 3,
+        name: 'greg',
+        recruiterID: 1,
+      },
+    },
+    {
+      relationships: {},
+      row: {
+        id: 4,
+        name: 'matt',
+        recruiterID: 1,
+      },
+    },
+    {
+      relationships: {},
+      row: {
+        id: 5,
+        name: 'cesar',
+        recruiterID: 3,
+      },
+    },
+    {
+      relationships: {},
+      row: {
+        id: 6,
+        name: 'darick',
+        recruiterID: 3,
+      },
+    },
+    {
+      relationships: {},
+      row: {
+        id: 7,
+        name: 'alex',
+        recruiterID: 1,
+      },
+    },
+  ]);
+
+  sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
+  expect(sink.pushes).toEqual([
+    {
+      node: {
+        relationships: {},
+        row: {
+          id: 8,
+          name: 'sam',
+        },
+      },
+      type: 'add',
+    },
+  ]);
+});

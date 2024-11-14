@@ -723,4 +723,90 @@ describe('optional filters to sql', () => {
       ).text,
     ).toEqual('(("a" = ? AND "b" = ?) OR ("a" = ? AND "b" = ?))');
   });
+  test('literal conditions', () => {
+    expect(
+      format(
+        optionalFiltersToSQL(
+          {
+            type: 'literal',
+            leftValue: 'a',
+            op: '=',
+            rightValue: 'b',
+          },
+          {},
+        ),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "text": "? = ?",
+        "values": [
+          "a",
+          "b",
+        ],
+      }
+    `);
+    expect(
+      format(
+        optionalFiltersToSQL(
+          {
+            type: 'literal',
+            leftValue: 1,
+            op: '=',
+            rightValue: 2,
+          },
+          {},
+        ),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "text": "? = ?",
+        "values": [
+          1,
+          2,
+        ],
+      }
+    `);
+    expect(
+      format(
+        optionalFiltersToSQL(
+          {
+            type: 'literal',
+            leftValue: true,
+            op: '=',
+            rightValue: false,
+          },
+          {},
+        ),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "text": "? = ?",
+        "values": [
+          1,
+          0,
+        ],
+      }
+    `);
+    expect(
+      format(
+        optionalFiltersToSQL(
+          {
+            type: 'literal',
+            leftValue: 1,
+            op: '=',
+            rightValue: [1, 2, 3],
+          },
+          {},
+        ),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "text": "? = ?",
+        "values": [
+          1,
+          "[1,2,3]",
+        ],
+      }
+    `);
+  });
 });

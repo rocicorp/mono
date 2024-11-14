@@ -6,6 +6,7 @@ import {Catch, expandNode} from '../catch.js';
 import type {Node} from '../data.js';
 import type {FetchRequest, Input, Output, Start} from '../operator.js';
 import type {Source, SourceChange} from '../source.js';
+import type {SimpleOperator} from '../../../../zero-protocol/src/ast.js';
 
 type SourceFactory = (
   name: string,
@@ -1086,6 +1087,47 @@ const cases = {
         },
       },
     ]);
+  },
+
+  'constant/literal expression': (createSource: SourceFactory) => {
+    const source = createSource(
+      'table',
+      {n: {type: 'number'}, b: {type: 'boolean'}, s: {type: 'string'}},
+      ['n'],
+    );
+
+    source.push({type: 'add', row: {n: 1, b: true, s: 'foo'}});
+    source.push({type: 'add', row: {n: 2, b: false, s: 'bar'}});
+    const allData = asNodes([
+      {n: 1, b: true, s: 'foo'},
+      {n: 2, b: false, s: 'bar'},
+    ]);
+
+    function check(
+      leftValue: number | string | boolean,
+      rightValue: number | string | boolean | number[] | boolean[] | string[],
+      expected: ReturnType<typeof asNodes>,
+      op: SimpleOperator = '=',
+    ) {
+      const out = new Catch(
+        source.connect([['n', 'asc']], {
+          type: 'literal',
+          leftValue,
+          rightValue,
+          op,
+        }),
+      );
+      expect(out.fetch({})).toEqual(expected);
+    }
+
+    check(1, 1, allData);
+    check(1, 2, []);
+    check(true, true, allData);
+    check(true, false, []);
+    check('foo', 'foo', allData);
+    check('foo', 'bar', []);
+    check(1, [1, 2, 3], allData, 'IN');
+    check(1, [2, 4, 6], [], 'IN');
   },
 };
 
