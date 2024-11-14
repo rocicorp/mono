@@ -78,13 +78,23 @@ export class Exists implements Operator {
     assert(this.#output, 'Output not set');
 
     switch (change.type) {
+      // add, remove and edit cannot change the size of the
+      // this.#relationshipName relationship, so simply #pushWithFilter
       case 'add':
-      case 'remove':
       case 'edit': {
         this.#pushWithFilter(change);
         return;
       }
+      case 'remove': {
+        this.#pushWithFilter(change);
+        this.#delSize(change.node.row);
+        return;
+      }
       case 'child':
+        // Only add and remove child changes for the
+        // this.#relationshipName relationship, can change the size
+        // of the this.#relationshipName relationship, for other
+        // child changes simply #pushWithFilter
         if (
           change.child.relationshipName !== this.#relationshipName ||
           change.child.change.type === 'edit' ||
@@ -105,13 +115,7 @@ export class Exists implements Operator {
             if (size === 1) {
               this.#output.push({
                 type: this.#not ? 'remove' : 'add',
-                node: must(
-                  first(
-                    this.#input.fetch({
-                      start: {row: change.row, basis: 'at'},
-                    }),
-                  ),
-                ),
+                node: this.#fetchNodeForRow(change.row),
               });
             } else {
               this.#pushWithFilter(change, size);
@@ -130,13 +134,7 @@ export class Exists implements Operator {
             if (size === 0) {
               this.#output.push({
                 type: this.#not ? 'add' : 'remove',
-                node: must(
-                  first(
-                    this.#input.fetch({
-                      start: {row: change.row, basis: 'at'},
-                    }),
-                  ),
-                ),
+                node: this.#fetchNodeForRow(change.row),
               });
             } else {
               this.#pushWithFilter(change, size);
@@ -150,12 +148,23 @@ export class Exists implements Operator {
     }
   }
 
-  #filter(row: Row, size?: number) {
-    const exists = size ?? this.#getOrFetchSize(row) > 0;
+  /**
+   * Returns whether or not the change's row's this.#relationshipName
+   * relationship passes the exist/not exists filter condition.
+   * If the optional `size` is passed it is used.
+   * Otherwise, if there is a stored size for the row it is used.
+   * Otherwise the size is computed by fetching a node for the row from
+   * this.#input (this computed size is also stored).
+   */
+  #filter(row: Row, size?: number): boolean {
+    const exists = (size ?? this.#getOrFetchSize(row)) > 0;
     return this.#not ? !exists : exists;
   }
 
-  #pushWithFilter(change: Change, size?: number) {
+  /**
+   * Pushes a change if this.#filter is true for its row.
+   */
+  #pushWithFilter(change: Change, size?: number): void {
     const row = rowForChange(change);
     if (this.#filter(row, size)) {
       must(this.#output).push(change);
@@ -187,13 +196,8 @@ export class Exists implements Operator {
   }
 
   #fetchSize(row: Row) {
-    const relationship = must(
-      first(
-        this.#input.fetch({
-          start: {row, basis: 'at'},
-        }),
-      ),
-    ).relationships[this.#relationshipName];
+    const relationship =
+      this.#fetchNodeForRow(row).relationships[this.#relationshipName];
     assert(relationship);
     let size = 0;
     for (const _relatedNode of relationship) {
@@ -201,6 +205,16 @@ export class Exists implements Operator {
     }
     this.#setSize(row, size);
     return size;
+  }
+
+  #fetchNodeForRow(row: Row) {
+    return must(
+      first(
+        this.#input.fetch({
+          start: {row, basis: 'at'},
+        }),
+      ),
+    );
   }
 
   #makeSizeStorageKey(row: Row) {

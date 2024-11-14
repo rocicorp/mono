@@ -235,7 +235,7 @@ suite('NOT EXISTS', () => {
   });
 });
 
-// Despite the name, this test runs the join through all three phases:
+// This test runs the join through three phases:
 // initial fetch, fetch, and cleanup.
 function fetchTest(t: FetchTest) {
   test(t.name, () => {
