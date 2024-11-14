@@ -1,4 +1,5 @@
 import {PG_ADMIN_SHUTDOWN} from '@drdgvhbh/postgres-error-codes';
+import {Lock} from '@rocicorp/lock';
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {
@@ -6,7 +7,10 @@ import {
   Pgoutput,
   PgoutputPlugin,
 } from 'pg-logical-replication';
-import type {MessageMessage} from 'pg-logical-replication/dist/output-plugins/pgoutput/pgoutput.types.js';
+import type {
+  MessageMessage,
+  MessageRelation,
+} from 'pg-logical-replication/dist/output-plugins/pgoutput/pgoutput.types.js';
 import {DatabaseError} from 'pg-protocol';
 import {AbortError} from '../../../../../shared/src/abort-error.js';
 import {assert} from '../../../../../shared/src/asserts.js';
@@ -19,7 +23,12 @@ import {
 import {sleep} from '../../../../../shared/src/sleep.js';
 import * as v from '../../../../../shared/src/valita.js';
 import {Database} from '../../../../../zqlite/src/db.js';
-import type {TableSpec} from '../../../db/specs.js';
+import {ShortLivedClient} from '../../../db/short-lived-client.js';
+import type {
+  ColumnSpec,
+  PublishedTableSpec,
+  TableSpec,
+} from '../../../db/specs.js';
 import {StatementRunner} from '../../../db/statements.js';
 import {stringify} from '../../../types/bigint-json.js';
 import {max, oneAfter, versionFromLexi} from '../../../types/lexi-version.js';
@@ -38,8 +47,12 @@ import {replicationSlot} from './initial-sync.js';
 import {fromLexiVersion, toLexiVersion} from './lsn.js';
 import {replicationEventSchema, type DdlUpdateEvent} from './schema/ddl.js';
 import {updateShardSchema} from './schema/init.js';
-import type {PublishedSchema} from './schema/published.js';
-import {INTERNAL_PUBLICATION_PREFIX} from './schema/shard.js';
+import {getPublicationInfo, type PublishedSchema} from './schema/published.js';
+import {
+  getInternalShardConfig,
+  INTERNAL_PUBLICATION_PREFIX,
+  type InternalShardConfig,
+} from './schema/shard.js';
 import {validate} from './schema/validation.js';
 import type {ShardConfig} from './shard-config.js';
 import {initSyncSchema} from './sync-schema.js';
@@ -129,17 +142,19 @@ class PostgresChangeSource implements ChangeSource {
         publications: this.#replicationConfig.publications,
       });
 
+      const config = await getInternalShardConfig(db, this.#shardID);
+
       this.#lc.info?.(`starting replication stream @${slot}`);
 
       // Unlike the postgres.js client, the pg client does not have an option to
       // only use SSL if the server supports it. We achieve it manually by
       // trying SSL first, and then falling back to connecting without SSL.
       try {
-        return await this.#startStream(db, slot, clientStart, true);
+        return await this.#startStream(db, slot, clientStart, config, true);
       } catch (e) {
         if (e instanceof SSLUnsupportedError) {
           this.#lc.info?.('retrying upstream connection without SSL');
-          return await this.#startStream(db, slot, clientStart, false);
+          return await this.#startStream(db, slot, clientStart, config, false);
         }
         throw e;
       }
@@ -152,6 +167,7 @@ class PostgresChangeSource implements ChangeSource {
     db: PostgresDB,
     slot: string,
     clientStart: string,
+    shardConfig: InternalShardConfig,
     useSSL: boolean,
   ) {
     let lastLSN = '0/0';
@@ -189,7 +205,13 @@ class PostgresChangeSource implements ChangeSource {
       }
     };
 
-    const changeMaker = new ChangeMaker(this.#lc, this.#shardID);
+    const changeMaker = new ChangeMaker(
+      this.#lc,
+      this.#shardID,
+      shardConfig,
+      this.#upstreamUri,
+    );
+    const lock = new Lock();
     const service = new LogicalReplicationService(
       {
         connectionString: this.#upstreamUri,
@@ -207,11 +229,14 @@ class PostgresChangeSource implements ChangeSource {
       .on('heartbeat', (_lsn, _time, respond) => {
         respond && ack();
       })
-      .on('data', (lsn, msg) => {
-        for (const change of changeMaker.makeChanges(lsn, msg)) {
-          changes.push(change);
-        }
-      })
+      .on('data', (lsn, msg) =>
+        // lock to ensure in-order processing
+        lock.withLock(async () => {
+          for (const change of await changeMaker.makeChanges(lsn, msg)) {
+            changes.push(change);
+          }
+        }),
+      )
       .on('error', handleError);
 
     service
@@ -317,23 +342,39 @@ class ChangeMaker {
   readonly #lc: LogContext;
   readonly #shardID: string;
   readonly #shardPrefix: string;
+  readonly #shardConfig: InternalShardConfig;
+  readonly #upstream: ShortLivedClient;
 
   #error: ReplicationError | undefined;
 
-  constructor(lc: LogContext, shardID: string) {
+  constructor(
+    lc: LogContext,
+    shardID: string,
+    shardConfig: InternalShardConfig,
+    upstreamURI: string,
+  ) {
     this.#lc = lc;
     this.#shardID = shardID;
     // Note: This matches the prefix used in pg_logical_emit_message() in pg/schema/ddl.ts.
     this.#shardPrefix = `zero/${shardID}`;
+    this.#shardConfig = shardConfig;
+    this.#upstream = new ShortLivedClient(
+      lc,
+      upstreamURI,
+      'zero-schema-change-detector',
+    );
   }
 
-  makeChanges(lsn: string, msg: Pgoutput.Message): DownstreamChange[] {
+  async makeChanges(
+    lsn: string,
+    msg: Pgoutput.Message,
+  ): Promise<DownstreamChange[]> {
     if (this.#error) {
       this.#logError(this.#error);
       return [];
     }
     try {
-      return this.#makeChanges(lsn, msg);
+      return await this.#makeChanges(lsn, msg);
     } catch (err) {
       this.#error = {lsn, msg, err, lastLogTime: 0};
       this.#logError(this.#error);
@@ -359,7 +400,11 @@ class ChangeMaker {
     }
   }
 
-  #makeChanges(lsn: string, msg: Pgoutput.Message): DownstreamChange[] {
+  // eslint-disable-next-line require-await
+  async #makeChanges(
+    lsn: string,
+    msg: Pgoutput.Message,
+  ): Promise<DownstreamChange[]> {
     switch (msg.tag) {
       case 'begin':
         return [['begin', msg]];
@@ -386,7 +431,7 @@ class ChangeMaker {
       }
 
       case 'relation':
-        return []; // Explicitly ignored. Schema handling is TODO.
+        return this.#handleRelation(msg);
       case 'type':
         throw new Error(
           `Custom types are not supported (received "${msg.typeName}")`,
@@ -622,6 +667,124 @@ class ChangeMaker {
     const json = JSON.parse(str);
     return v.parse(json, replicationEventSchema, 'passthrough');
   }
+
+  /**
+   * If `ddlDetection === true`, relation messages are irrelevant,
+   * as schema changes are detected by event triggers that
+   * emit custom messages.
+   *
+   * For degraded-mode replication (`ddlDetection === false`):
+   * 1. query the current published schemas on upstream
+   * 2. compare that with the InternalShardConfig.initialSchema
+   * 3. compare that with the incoming MessageRelation
+   * 4. On any discrepancy, throw an UnsupportedSchemaChangeError
+   *    to halt replication.
+   *
+   * Note that schemas queried in step [1] will be *post-transaction*
+   * schemas, which are not necessarily suitable for actually processing
+   * the statements in the transaction being replicated. In other words,
+   * this mechanism cannot be used to reliably *replicate* schema changes.
+   * However, they serve the purpose determining if schemas have changed.
+   */
+  async #handleRelation(rel: MessageRelation): Promise<DownstreamChange[]> {
+    const {publications, ddlDetection, initialSchema} = this.#shardConfig;
+    if (ddlDetection) {
+      return [];
+    }
+    assert(initialSchema); // Written in initial-sync
+    const currentSchema = await getPublicationInfo(
+      this.#upstream.db,
+      publications,
+    );
+    if (schemasDifferent(initialSchema, currentSchema, this.#lc)) {
+      throw new UnsupportedSchemaChangeError();
+    }
+    // Even if the currentSchema is equal to the initialSchema, the
+    // MessageRelation itself must be checked to detect transient
+    // schema changes within the transaction (e.g. adding and dropping
+    // a table, or renaming a column and then renaming it back).
+    const orel = initialSchema.tables.find(t => t.oid === rel.relationOid);
+    if (!orel) {
+      // Can happen if a table is created and then dropped in the same transaction.
+      this.#lc.info?.(`relation not in initialSchema: ${stringify(rel)}`);
+      throw new UnsupportedSchemaChangeError();
+    }
+    if (relationDifferent(orel, rel)) {
+      this.#lc.info?.(
+        `relation has changed within the transaction: ${stringify(orel)}`,
+        rel,
+      );
+      throw new UnsupportedSchemaChangeError();
+    }
+    return [];
+  }
+}
+
+export function schemasDifferent(
+  a: PublishedSchema,
+  b: PublishedSchema,
+  lc?: LogContext,
+) {
+  // Note: ignore indexes since changes need not to halt replication
+  return (
+    a.tables.length !== b.tables.length ||
+    a.tables.find((at, i) => {
+      const bt = b.tables[i];
+      if (tablesDifferent(at, bt)) {
+        lc?.info?.(`table ${stringify(at)} has changed`, bt);
+        return true;
+      }
+      return false;
+    })
+  );
+}
+
+// ColumnSpec comparator
+const byColumnPos = (a: [string, ColumnSpec], b: [string, ColumnSpec]) =>
+  a[1].pos < b[1].pos ? -1 : a[1].pos > b[1].pos ? 1 : 0;
+
+export function tablesDifferent(a: PublishedTableSpec, b: PublishedTableSpec) {
+  if (
+    a.oid !== b.oid ||
+    a.schema !== b.schema ||
+    a.name !== b.name ||
+    !deepEqual(a.primaryKey, b.primaryKey)
+  ) {
+    return true;
+  }
+  const acols = Object.entries(a.columns).sort(byColumnPos);
+  const bcols = Object.entries(b.columns).sort(byColumnPos);
+  return (
+    acols.length !== bcols.length ||
+    acols.find(([aname, acol], i) => {
+      const [bname, bcol] = bcols[i];
+      return (
+        aname !== bname ||
+        acol.pos !== bcol.pos ||
+        acol.typeOID !== bcol.typeOID
+      );
+    })
+  );
+}
+
+export function relationDifferent(a: PublishedTableSpec, b: MessageRelation) {
+  if (
+    a.oid !== b.relationOid ||
+    a.schema !== b.schema ||
+    a.name !== b.name ||
+    !deepEqual(a.primaryKey, b.keyColumns)
+  ) {
+    return true;
+  }
+  const acols = Object.entries(a.columns).sort(byColumnPos);
+  const bcols = b.columns;
+  return (
+    acols.length !== bcols.length ||
+    acols.find(([aname, acol], i) => {
+      const bcol = bcols[i];
+      return aname !== bcol.name || acol.typeOID !== bcol.typeOid;
+    })
+  );
 }
 
 function translateError(e: unknown): Error {
@@ -645,3 +808,13 @@ function specsByName(published: PublishedSchema) {
 }
 
 class SSLUnsupportedError extends Error {}
+
+export class UnsupportedSchemaChangeError extends Error {
+  readonly name = 'UnsupportedSchemaChangeError';
+
+  constructor() {
+    super(
+      'Replication halted. Schema changes cannot be reliably replicated without event trigger support. Resync the replica to recover.',
+    );
+  }
+}
