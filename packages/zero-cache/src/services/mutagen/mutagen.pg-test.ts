@@ -91,7 +91,7 @@ describe('processMutation', () => {
             {
               ops: [
                 {
-                  op: 'create',
+                  op: 'insert',
                   tableName: 'idonly',
                   primaryKey: ['id'],
                   value: {id: '1'},
@@ -144,7 +144,7 @@ describe('processMutation', () => {
           {
             ops: [
               {
-                op: 'create',
+                op: 'insert',
                 tableName: 'idonly',
                 primaryKey: ['id'],
                 value: {id: '1'},
@@ -195,7 +195,7 @@ describe('processMutation', () => {
           {
             ops: [
               {
-                op: 'create',
+                op: 'insert',
                 tableName: 'idonly',
                 primaryKey: ['id'],
                 value: {id: '1'},
@@ -247,7 +247,7 @@ describe('processMutation', () => {
           {
             ops: [
               {
-                op: 'create',
+                op: 'insert',
                 tableName: 'idonly',
                 primaryKey: ['id'],
                 value: {id: '1'}, // This would result in a duplicate key value if applied.
@@ -299,7 +299,7 @@ describe('processMutation', () => {
             {
               ops: [
                 {
-                  op: 'create',
+                  op: 'insert',
                   tableName: 'idonly',
                   primaryKey: ['id'],
                   value: {id: '1'},
@@ -354,7 +354,7 @@ describe('processMutation', () => {
             {
               ops: [
                 {
-                  op: 'create',
+                  op: 'insert',
                   tableName: 'idonly',
                   primaryKey: ['id'],
                   value: {id: '1'},
@@ -409,7 +409,7 @@ describe('processMutation', () => {
             {
               ops: [
                 {
-                  op: 'create',
+                  op: 'insert',
                   tableName: 'idonly',
                   primaryKey: ['id'],
                   value: {id: '1'},
@@ -455,7 +455,7 @@ describe('processMutation', () => {
           {
             ops: [
               {
-                op: 'create',
+                op: 'insert',
                 tableName: 'id_and_cols',
                 primaryKey: ['id'],
                 value: {
@@ -465,7 +465,7 @@ describe('processMutation', () => {
                 },
               },
               {
-                op: 'set',
+                op: 'upsert',
                 tableName: 'id_and_cols',
                 primaryKey: ['id'],
                 value: {
@@ -484,7 +484,7 @@ describe('processMutation', () => {
                 },
               },
               {
-                op: 'set',
+                op: 'update',
                 tableName: 'id_and_cols',
                 primaryKey: ['id'],
                 value: {
@@ -544,7 +544,7 @@ describe('processMutation', () => {
           {
             ops: [
               {
-                op: 'create',
+                op: 'insert',
                 tableName: 'fk_ref',
                 primaryKey: ['id'],
                 value: {
@@ -618,7 +618,7 @@ describe('processMutation', () => {
           {
             ops: [
               {
-                op: 'create',
+                op: 'insert',
                 tableName: 'idonly',
                 primaryKey: ['id'],
                 value: {
