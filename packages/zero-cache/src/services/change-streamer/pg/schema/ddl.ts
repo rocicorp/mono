@@ -352,36 +352,5 @@ CREATE EVENT TRIGGER ${sharded(`zero_${tagID}`)}
   EXECUTE PROCEDURE ${schema}.emit_${tagID}();
 `);
   }
-
-  // Delete legacy triggers/functions. This should be removable once all early
-  // testers have updated.
-  for (const trigger of LEGACY_TRIGGER_NAMES) {
-    triggers.push(`DROP EVENT TRIGGER IF EXISTS ${sharded(trigger)};`);
-  }
-  for (const fn of LEGACY_FUNCTION_NAMES) {
-    triggers.push(`DROP FUNCTION IF EXISTS zero.${fn};`);
-    triggers.push(`DROP FUNCTION IF EXISTS zero.${sharded(fn)};`);
-  }
   return triggers.join('');
 }
-
-const LEGACY_TRIGGER_NAMES = [
-  'zero_replicate_create_or_alter_table',
-  'zero_replicate_create_index',
-  'zero_replicate_alter_publication',
-  'zero_replicate_alter_publication_drop',
-  'zero_replicate_drop_table',
-  'zero_replicate_drop_index',
-];
-
-const LEGACY_FUNCTION_NAMES = [
-  'replicate_create_or_alter_table',
-  'replicate_create_index',
-  'replicate_alter_publication',
-  'replicate_alter_publication_drop',
-  'replicate_drop_event',
-  'replicate_drop_table',
-  'replicate_drop_index',
-  'get_trigger_context',
-  'emit_all_publications',
-];
