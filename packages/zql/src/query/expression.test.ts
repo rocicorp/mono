@@ -19,18 +19,18 @@ type TestCondition =
       conditions: readonly TestCondition[];
     };
 
-function simpleOr(l: TestCondition, r: TestCondition) {
+function simpleOr(...conditions: TestCondition[]): TestCondition {
   return {
     type: 'or',
-    conditions: [l, r],
-  } as const;
+    conditions,
+  };
 }
 
-function simpleAnd(l: TestCondition, r: TestCondition) {
+function simpleAnd(...conditions: TestCondition[]): TestCondition {
   return {
     type: 'and',
-    conditions: [l, r],
-  } as const;
+    conditions,
+  };
 }
 
 function evaluate(condition: TestCondition): boolean {
@@ -80,6 +80,9 @@ describe('check the test framework', () => {
         ),
       ),
     ).toBe(false);
+    expect(evaluate(simpleAnd({type: 'simple', value: false}))).toBe(false);
+    expect(evaluate(simpleAnd({type: 'simple', value: true}))).toBe(true);
+    expect(evaluate(simpleAnd())).toBe(true);
   });
 
   test('or', () => {
@@ -106,6 +109,9 @@ describe('check the test framework', () => {
         ),
       ),
     ).toBe(false);
+    expect(evaluate(simpleOr({type: 'simple', value: false}))).toBe(false);
+    expect(evaluate(simpleOr({type: 'simple', value: true}))).toBe(true);
+    expect(evaluate(simpleOr())).toBe(false);
   });
 
   test('complex', () => {
