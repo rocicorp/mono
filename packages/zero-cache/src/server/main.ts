@@ -24,7 +24,7 @@ import {
 import {createLogContext} from './logging.js';
 
 const startMs = Date.now();
-const config = await getZeroConfig();
+const config = getZeroConfig();
 const lc = createLogContext(config.log, {worker: 'dispatcher'});
 
 const terminator = new Terminator(lc);
