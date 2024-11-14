@@ -29,14 +29,6 @@ const unreadable = createTableSchema({
   primaryKey: ['id'],
   relationships: {},
 });
-const unreadableRows = createTableSchema({
-  tableName: 'unreadableRows',
-  columns: {
-    id: {type: 'string'},
-  },
-  primaryKey: ['id'],
-  relationships: {},
-});
 const readable = {
   tableName: 'readable',
   columns: {
@@ -46,13 +38,6 @@ const readable = {
   },
   primaryKey: ['id'],
   relationships: {
-    unreadable: {
-      dest: {
-        field: 'id',
-        schema: unreadable,
-      },
-      source: 'unreadableId',
-    },
     readable: {
       dest: {
         field: 'id',
@@ -60,10 +45,10 @@ const readable = {
       },
       source: 'readableId',
     },
-    unreadableRows: {
+    unreadable: {
       dest: {
         field: 'id',
-        schema: unreadableRows,
+        schema: unreadable,
       },
       source: 'unreadableId',
     },
@@ -73,9 +58,8 @@ const readable = {
 const schema = createSchema({
   version: 1,
   tables: {
-    unreadable,
     readable,
-    unreadableRows,
+    unreadable,
   },
 });
 
@@ -84,11 +68,6 @@ const auth = must(
     schema,
     () => ({
       unreadable: {
-        table: {
-          select: [],
-        },
-      },
-      unreadableRows: {
         row: {
           select: [],
         },
@@ -103,13 +82,6 @@ describe('unreadable tables', () => {
     // If a top-level query tries to query a table that cannot be read,
     // that query is set to `undefined`.
     expect(augmentQuery(ast(query), auth)).toBe(undefined);
-
-    expect(
-      augmentQuery(
-        ast(newQuery(mockDelegate, schema.tables.unreadableRows)),
-        auth,
-      ),
-    ).toBe(undefined);
   });
 
   test('nuke `related` queries', () => {
@@ -209,9 +181,7 @@ describe('unreadable tables', () => {
     expect(
       augmentQuery(
         ast(
-          newQuery(mockDelegate, schema.tables.readable).related(
-            'unreadableRows',
-          ),
+          newQuery(mockDelegate, schema.tables.readable).related('unreadable'),
         ),
         auth,
       ),
@@ -354,5 +324,36 @@ describe('unreadable tables', () => {
         },
       }
     `);
+  });
+});
+
+describe('tables with no read policies', () => {
+  test('top level query is unmodified', () => {
+    const query = newQuery(mockDelegate, schema.tables.readable);
+    expect(augmentQuery(ast(query), auth)).toEqual(ast(query));
+  });
+  test('related queries are unmodified', () => {
+    let query = newQuery(mockDelegate, schema.tables.readable).related(
+      'readable',
+    );
+    expect(augmentQuery(ast(query), auth)).toEqual(ast(query));
+
+    query = newQuery(mockDelegate, schema.tables.readable).related(
+      'readable',
+      q => q.related('readable'),
+    );
+    expect(augmentQuery(ast(query), auth)).toEqual(ast(query));
+  });
+  test('subqueries in conditions are unmodified', () => {
+    let query = newQuery(mockDelegate, schema.tables.readable).whereExists(
+      'readable',
+    );
+    expect(augmentQuery(ast(query), auth)).toEqual(ast(query));
+
+    query = newQuery(mockDelegate, schema.tables.readable).whereExists(
+      'readable',
+      q => q.whereExists('readable'),
+    );
+    expect(augmentQuery(ast(query), auth)).toEqual(ast(query));
   });
 });

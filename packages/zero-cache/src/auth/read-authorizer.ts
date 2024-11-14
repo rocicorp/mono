@@ -8,14 +8,10 @@ export function augmentQuery(
   query: AST,
   auth: AuthorizationConfig,
 ): AST | undefined {
-  const tableSelectRules = auth[query.table]?.table?.select;
   const rowSelectRules = auth[query.table]?.row?.select;
 
-  if (
-    (tableSelectRules && tableSelectRules.length === 0) ||
-    (rowSelectRules && rowSelectRules.length === 0)
-  ) {
-    // The table cannot be read. Nuke the query since
+  if (rowSelectRules && rowSelectRules.length === 0) {
+    // The table cannot be read, ever. Nuke the query since
     // there is nothing for it to do.
     return undefined;
   }
