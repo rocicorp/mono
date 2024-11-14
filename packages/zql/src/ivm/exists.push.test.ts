@@ -1486,7 +1486,7 @@ suite('NOT EXISTS', () => {
     `);
   });
 
-  test('parent remove has children is not pushed', () => {
+  test('parent remove that has children is not pushed', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
       joins,
