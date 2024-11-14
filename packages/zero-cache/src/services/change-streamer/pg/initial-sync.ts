@@ -27,7 +27,11 @@ import {
 import {toLexiVersion} from './lsn.js';
 import {initShardSchema} from './schema/init.js';
 import {getPublicationInfo, type PublicationInfo} from './schema/published.js';
-import {getShardConfig, validatePublications} from './schema/shard.js';
+import {
+  getInternalShardConfig,
+  setInitialSchema,
+  validatePublications,
+} from './schema/shard.js';
 import type {ShardConfig} from './shard-config.js';
 
 // https://www.postgresql.org/docs/current/warm-standby.html#STREAMING-REPLICATION-SLOTS-MANIPULATION
@@ -58,16 +62,8 @@ export async function initialSync(
   });
   try {
     await checkUpstreamConfig(upstreamDB);
-    const {publications, tables, indexes} = await ensurePublishedTables(
-      lc,
-      upstreamDB,
-      shard,
-    );
-    const pubNames = publications.map(p => p.pubname);
-    lc.info?.(`Upstream is setup with publications [${pubNames}]`);
-
-    createLiteTables(tx, tables);
-    createLiteIndices(tx, indexes);
+    const {publications} = await ensurePublishedTables(lc, upstreamDB, shard);
+    lc.info?.(`Upstream is setup with publications [${publications}]`);
 
     const {database, host} = upstreamDB.options;
     lc.info?.(`opening replication session to ${database}@${host}`);
@@ -75,26 +71,36 @@ export async function initialSync(
       await createReplicationSlot(lc, shard.id, replicationSession);
 
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
-    const copiers = startTableCopyWorkers(
-      lc,
-      upstreamDB,
-      tables.length,
-      snapshot,
-    );
-    await Promise.all(
-      tables.map(table =>
-        copiers.process(db => copy(lc, table, db, tx).then(() => [])),
-      ),
-    );
-    copiers.setDone();
+    const copiers = startTableCopyWorkers(lc, upstreamDB, snapshot);
+    let published: PublicationInfo;
+    try {
+      // Retrieve the published schema at the consistent_point.
+      published = await copiers.processReadTask(db =>
+        getPublicationInfo(db, publications),
+      );
+      // Note: If this throws, initial-sync is aborted.
+      validatePublications(lc, shard.id, published);
 
-    initReplicationState(tx, pubNames, toLexiVersion(lsn));
+      // Now that tables have been validated, kick off the copiers.
+      const {tables, indexes} = published;
+      createLiteTables(tx, tables);
+      createLiteIndices(tx, indexes);
+      await Promise.all(
+        tables.map(table =>
+          copiers.process(db => copy(lc, table, db, tx).then(() => [])),
+        ),
+      );
+    } finally {
+      copiers.setDone();
+    }
+
+    await setInitialSchema(upstreamDB, shard.id, published);
+
+    initReplicationState(tx, publications, toLexiVersion(lsn));
     initChangeLog(tx);
-    lc.info?.(`Synced initial data from ${pubNames} up to ${lsn}`);
-
+    lc.info?.(`Synced initial data from ${publications} up to ${lsn}`);
     await copiers.done();
   } finally {
-    // Close the upstream connections.
     await replicationSession.end();
     await upstreamDB.end();
   }
@@ -124,21 +130,13 @@ async function ensurePublishedTables(
   lc: LogContext,
   upstreamDB: PostgresDB,
   shard: ShardConfig,
-): Promise<PublicationInfo> {
+): Promise<{publications: string[]}> {
   const {database, host} = upstreamDB.options;
   lc.info?.(`Ensuring upstream PUBLICATION on ${database}@${host}`);
 
   await initShardSchema(lc, upstreamDB, shard);
 
-  const {publications} = await getShardConfig(upstreamDB, shard.id);
-
-  const published = await getPublicationInfo(upstreamDB, publications);
-
-  // The publications were validated in initShardSchema, but they published
-  // tables may have since changed, so validate them again.
-  validatePublications(lc, shard.id, published);
-
-  return published;
+  return getInternalShardConfig(upstreamDB, shard.id);
 }
 
 /* eslint-disable @typescript-eslint/naming-convention */
@@ -192,11 +190,10 @@ const BATCH_SIZE = 100_000;
 function startTableCopyWorkers(
   lc: LogContext,
   db: PostgresDB,
-  numTables: number,
   snapshot: string,
 ): TransactionPool {
   const {init} = importSnapshot(snapshot);
-  const numWorkers = Math.min(numTables, MAX_WORKERS);
+  const numWorkers = MAX_WORKERS;
   const tableCopiers = new TransactionPool(
     lc,
     Mode.READONLY,
@@ -206,7 +203,7 @@ function startTableCopyWorkers(
   );
   tableCopiers.run(db);
 
-  lc.info?.(`Started ${numWorkers} workers to copy ${numTables} tables`);
+  lc.info?.(`Started ${numWorkers} workers to copy tables`);
   return tableCopiers;
 }
 
