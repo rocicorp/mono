@@ -13,7 +13,7 @@ import {exitAfter, runUntilKilled} from './life-cycle.js';
 import {createLogContext} from './logging.js';
 
 export default async function runWorker(parent: Worker): Promise<void> {
-  const config = await getZeroConfig();
+  const config = getZeroConfig();
   const port = config.changeStreamerPort ?? config.port + 1;
   const lc = createLogContext(config.log, {worker: 'change-streamer'});
 

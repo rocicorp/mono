@@ -28,7 +28,7 @@ export default async function runWorker(
 
   const fileMode = args[0] as ReplicaFileMode;
 
-  const config = await getZeroConfig(args.slice(1));
+  const config = getZeroConfig(args.slice(1));
   const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';
   const workerName = `${mode}-replicator`;
   const lc = createLogContext(config.log, {worker: workerName});
