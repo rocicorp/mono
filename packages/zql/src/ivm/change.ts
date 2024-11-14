@@ -50,3 +50,8 @@ export type EditChange = {
   row: Row;
   oldRow: Row;
 };
+
+export function rowForChange(change: Change): Row {
+  const {type} = change;
+  return type === 'add' || type === 'remove' ? change.node.row : change.row;
+}
