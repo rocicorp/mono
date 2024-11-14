@@ -105,59 +105,53 @@ export function cmp(
   };
 }
 
+export const TRUE: Condition = {
+  type: 'and',
+  conditions: [],
+};
+
+const FALSE: Condition = {
+  type: 'or',
+  conditions: [],
+};
+
 export function and(...conditions: (Condition | undefined)[]): Condition {
-  const expressions = filterUndefined(conditions);
+  const expressions = filterTrue(filterUndefined(conditions));
 
   if (expressions.length === 1) {
     return expressions[0];
   }
 
-  // If any internal conditions are `or` then we distribute `or` over the `and`.
-  // This allows the graph and pipeline builder to remain simple and not have to deal with
-  // nested conditions.
-  // In other words, conditions are in [DNF](https://en.wikipedia.org/wiki/Disjunctive_normal_form).
-  const ands = expressions.flatMap(c => {
-    if (c.type === 'and') {
-      return c.conditions;
-    }
-    if (c.type === 'simple') {
-      return [c];
-    }
-    return [];
-  });
-  const ors = expressions.filter(c => c.type === 'or');
-
-  if (ors.length === 0) {
-    return {type: 'and', conditions: ands};
+  if (expressions.some(isAlwaysFalse)) {
+    return FALSE;
   }
 
-  const flatOrs = flatten('or', ors);
-  const flatAnds = flatten('and', ands);
-
-  return {
-    type: 'or',
-    conditions: flatOrs.map(part => ({
-      type: 'and',
-      conditions: [
-        ...(part.type === 'and' ? part.conditions : [part]),
-        ...flatAnds,
-      ],
-    })),
-  };
+  return {type: 'and', conditions: expressions};
 }
 
 export function or(...conditions: (Condition | undefined)[]): Condition {
-  const expressions = filterUndefined(conditions);
-  if (expressions.length === 0) {
-    return {type: 'or', conditions: []};
-  }
+  const expressions = filterFalse(filterUndefined(conditions));
+
   if (expressions.length === 1) {
     return expressions[0];
   }
-  return {type: 'or', conditions: flatten('or', expressions)};
+
+  if (expressions.some(isAlwaysTrue)) {
+    return TRUE;
+  }
+
+  return {type: 'or', conditions: expressions};
 }
 
-function not(expression: Condition): Condition {
+function isAlwaysTrue(condition: Condition): boolean {
+  return condition.type === 'and' && condition.conditions.length === 0;
+}
+
+function isAlwaysFalse(condition: Condition): boolean {
+  return condition.type === 'or' && condition.conditions.length === 0;
+}
+
+export function not(expression: Condition): Condition {
   switch (expression.type) {
     case 'and':
       return {
@@ -179,7 +173,10 @@ function not(expression: Condition): Condition {
   }
 }
 
-function flatten(type: 'and' | 'or', conditions: Condition[]): Condition[] {
+export function flatten(
+  type: 'and' | 'or',
+  conditions: Condition[],
+): Condition[] {
   const flattened: Condition[] = [];
   for (const c of conditions) {
     if (c.type === type) {
@@ -223,4 +220,12 @@ function negateOperator(op: SimpleOperator): SimpleOperator {
 
 function filterUndefined<T>(array: (T | undefined)[]): T[] {
   return array.filter(e => e !== undefined);
+}
+
+function filterTrue(conditions: Condition[]): Condition[] {
+  return conditions.filter(c => !isAlwaysTrue(c));
+}
+
+function filterFalse(conditions: Condition[]): Condition[] {
+  return conditions.filter(c => !isAlwaysFalse(c));
 }

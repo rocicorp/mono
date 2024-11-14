@@ -284,7 +284,7 @@ test('where expressions', () => {
   });
   expect(
     ast(
-      issueQuery.where(({or, cmp}) =>
+      issueQuery.where(({cmp, or}) =>
         or(cmp('id', '=', '1'), cmp('closed', true)),
       ),
     ).where,
@@ -297,7 +297,7 @@ test('where expressions', () => {
   });
   expect(
     ast(
-      issueQuery.where(({and, or, cmp}) =>
+      issueQuery.where(({and, cmp, or}) =>
         or(cmp('id', '1'), and(cmp('closed', true), cmp('id', '2'))),
       ),
     ).where,
@@ -412,15 +412,15 @@ test('where to dnf', () => {
         conditions: [
           {
             type: 'simple',
-            field: 'closed',
-            op: '=',
-            value: true,
-          },
-          {
-            type: 'simple',
             field: 'id',
             op: '=',
             value: '1',
+          },
+          {
+            type: 'simple',
+            field: 'closed',
+            op: '=',
+            value: true,
           },
         ],
       },
@@ -431,13 +431,13 @@ test('where to dnf', () => {
             type: 'simple',
             field: 'id',
             op: '=',
-            value: '2',
+            value: '1',
           },
           {
             type: 'simple',
             field: 'id',
             op: '=',
-            value: '1',
+            value: '2',
           },
         ],
       },
@@ -561,7 +561,7 @@ describe('expression builder', () => {
 
     expect(
       ast(
-        issueQuery.where(({cmp, and, or, not}) =>
+        issueQuery.where(({cmp, and, not, or}) =>
           // (id = 1 AND closed = true) OR (id = 2 AND NOT (closed = true))
           or(
             and(cmp('id', '=', '1'), cmp('closed', true)),
@@ -678,7 +678,7 @@ describe('expression builder', () => {
 
   test('single or turns into simple', () => {
     expect(
-      ast(issueQuery.where(({or, cmp}) => or(cmp('id', '=', '1')))),
+      ast(issueQuery.where(({cmp, or}) => or(cmp('id', '=', '1')))),
     ).toEqual({
       table: 'issue',
       where: {
@@ -693,7 +693,7 @@ describe('expression builder', () => {
   test('undefined terms in or', () => {
     expect(
       ast(
-        issueQuery.where(({or, cmp}) =>
+        issueQuery.where(({cmp, or}) =>
           or(cmp('id', '=', '1'), undefined, cmp('closed', true)),
         ),
       ),
@@ -717,5 +717,63 @@ describe('expression builder', () => {
         ],
       },
     });
+  });
+
+  test('undef', () => {
+    expect(
+      ast(
+        issueQuery.where(({and, cmp, or}) =>
+          // (undefined OR undefined) AND (id = '1' OR id = '2')
+          and(
+            or(undefined, undefined),
+            or(cmp('id', '=', '1'), cmp('id', '2')),
+          ),
+        ),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "conditions": [],
+          "type": "or",
+        },
+      }
+    `);
+  });
+
+  test('undef', () => {
+    expect(
+      ast(
+        issueQuery.where(({and, cmp, or}) =>
+          // (id = '1' AND undefined) OR (id = '1' AND undefined)
+
+          or(
+            and(cmp('id', '=', '1'), undefined),
+            and(cmp('id', '=', '2'), undefined),
+          ),
+        ),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "conditions": [
+            {
+              "field": "id",
+              "op": "=",
+              "type": "simple",
+              "value": "1",
+            },
+            {
+              "field": "id",
+              "op": "=",
+              "type": "simple",
+              "value": "2",
+            },
+          ],
+          "type": "or",
+        },
+      }
+    `);
   });
 });

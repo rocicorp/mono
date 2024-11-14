@@ -20,6 +20,7 @@ import {buildPipeline, type BuilderDelegate} from '../builder/builder.js';
 import {ArrayView} from '../ivm/array-view.js';
 import type {Input} from '../ivm/operator.js';
 import type {Format, ViewFactory} from '../ivm/view.js';
+import {dnf} from './dnf.js';
 import {
   and,
   cmp,
@@ -271,7 +272,7 @@ export abstract class AbstractQuery<
     let cond: Condition;
 
     if (typeof fieldOrExpressionFactory === 'function') {
-      cond = fieldOrExpressionFactory(expressionBuilder);
+      cond = dnf(fieldOrExpressionFactory(expressionBuilder));
     } else {
       assert(opOrValue !== undefined, 'Invalid condition');
       cond = cmp(fieldOrExpressionFactory, opOrValue, value);

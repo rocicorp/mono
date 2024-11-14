@@ -1,8 +1,14 @@
 import fc from 'fast-check';
 import {describe, expect, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.js';
-import type {Condition} from '../../../zero-protocol/src/ast.js';
-import {and, or} from './expression.js';
+import {
+  type Condition,
+  type SimpleCondition,
+} from '../../../zero-protocol/src/ast.js';
+// import {dnf, unwrap} from './dnf.js';
+import {dnf} from './dnf.js';
+import {stringify} from './expression-parser.js';
+import {and, not, or} from './expression.js';
 
 type TestCondition =
   | {
@@ -147,12 +153,14 @@ test('compare test framework to real framework', () => {
       });
 
       const actualConditions = conditions.map(convertTestCondition);
-      const actual = actualConditions.reduce((acc, value, i) => {
-        if (acc === undefined) {
-          return value;
-        }
-        return pivots[i] ? and(value, acc) : or(value, acc);
-      });
+      const actual = dnf(
+        actualConditions.reduce((acc, value, i) => {
+          if (acc === undefined) {
+            return value;
+          }
+          return pivots[i] ? and(value, acc) : or(value, acc);
+        }),
+      );
 
       expect(evaluate(actual as TestCondition)).toBe(evaluate(expected));
 
@@ -192,46 +200,74 @@ test('compare test framework to real framework', () => {
 });
 
 describe('flattening', () => {
+  let id = 0;
+  function t(): SimpleCondition {
+    return {type: 'simple', value: ++id, op: '=', field: 'n/a'};
+  }
+
   test('and chain', () => {
-    expect(toStr(and(t(), t()))).toBe('(1 && 2)');
+    expect(stringify(and(t(), t()))).toBe('1 & 2');
     id = 0;
 
-    expect(toStr(and(t(), and(t(), and(t(), t()))))).toBe('(1 && 2 && 3 && 4)');
+    expect(stringify(dnf(and(t(), and(t(), and(t(), t())))))).toBe(
+      '1 & 2 & 3 & 4',
+    );
     id = 0;
   });
 
   test('and with nested ors', () => {
-    expect(toStr(and(t(), or(t(), t())))).toBe('((2 && 1) || (3 && 1))');
+    expect(stringify(dnf(and(t(), or(t(), t()))))).toBe('(1 & 2) | (1 & 3)');
     id = 0;
 
-    expect(toStr(and(t(), or(t(), or(t(), t()))))).toBe(
-      '((2 && 1) || (3 && 1) || (4 && 1))',
+    expect(stringify(dnf(and(t(), or(t(), or(t(), t())))))).toBe(
+      '(1 & 2) | (1 & 3) | (1 & 4)',
     );
     id = 0;
 
-    expect(toStr(and(t(), and(t(), or(t(), and(t(), t())))))).toBe(
-      '((3 && 2 && 1) || (4 && 5 && 2 && 1))',
+    expect(stringify(dnf(and(t(), and(t(), or(t(), and(t(), t()))))))).toBe(
+      '(1 & 2 & 3) | (1 & 2 & 4 & 5)',
     );
     id = 0;
   });
 });
 
-let id = 0;
-function t() {
-  return simple(++id);
-}
+describe('simplify', () => {
+  const FALSE: Condition = {type: 'or', conditions: []};
+  const TRUE: Condition = {type: 'and', conditions: []};
 
-function simple(value: number): Condition {
-  return {type: 'simple', value, op: '=', field: 'n/a'};
-}
-
-function toStr(condition: Condition): string {
-  switch (condition.type) {
-    case 'simple':
-      return condition.value.toString();
-    case 'and':
-      return `(${condition.conditions.map(toStr).join(' && ')})`;
-    case 'or':
-      return `(${condition.conditions.map(toStr).join(' || ')})`;
+  function simple(value: number | string): Condition {
+    return {type: 'simple', value, op: '=', field: 'n/a'};
   }
-}
+
+  const A = simple('A');
+  const B = simple('B');
+
+  test('simplify true/false in not', () => {
+    expect(not(FALSE)).toEqual(TRUE);
+    expect(not(TRUE)).toEqual(FALSE);
+  });
+
+  test('simplify true/false in and', () => {
+    expect(and(FALSE, A)).toEqual(FALSE);
+    expect(and(TRUE, A)).toEqual(A);
+    expect(and(A, FALSE)).toEqual(FALSE);
+    expect(and(A, TRUE)).toEqual(A);
+
+    expect(and(FALSE, FALSE)).toEqual(FALSE);
+    expect(and(TRUE, TRUE)).toEqual(TRUE);
+
+    expect(and(or(A, B), TRUE)).toEqual(or(A, B));
+  });
+
+  test('simplify true/false in or', () => {
+    expect(or(FALSE, A)).toEqual(A);
+    expect(or(TRUE, A)).toEqual(TRUE);
+    expect(or(A, FALSE)).toEqual(A);
+    expect(or(A, TRUE)).toEqual(TRUE);
+
+    expect(or(FALSE, FALSE)).toEqual(FALSE);
+    expect(or(TRUE, TRUE)).toEqual(TRUE);
+
+    expect(or(and(A, B), FALSE)).toEqual(and(A, B));
+  });
+});
