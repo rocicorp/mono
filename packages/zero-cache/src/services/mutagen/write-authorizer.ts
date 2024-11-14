@@ -180,28 +180,6 @@ export class WriteAuthorizerImpl {
       return true;
     }
 
-    const tableRules = rules.table;
-    if (
-      tableRules &&
-      !this.#passesPolicy(tableRules[action], authData, undefined)
-    ) {
-      return false;
-    }
-
-    const columnRules = rules.column;
-    if (columnRules) {
-      for (const [column, rule] of Object.entries(columnRules)) {
-        if (action === 'update' && op.value[column] === undefined) {
-          // If the column is not being updated, we do not need to check
-          // the column rules.
-          continue;
-        }
-        if (!this.#passesPolicy(rule[action], authData, undefined)) {
-          return false;
-        }
-      }
-    }
-
     let preMutationRow: Row | undefined;
     if (op.op !== 'create') {
       preMutationRow = this.#getPreMutationRow(op);

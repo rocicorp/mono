@@ -17,8 +17,6 @@ export type AssetAuthorization = v.Infer<typeof assetSchema>;
 
 const authorizationConfigSchema = v.record(
   v.object({
-    table: assetSchema.optional(),
-    column: v.record(assetSchema).optional(),
     row: assetSchema.optional(),
     cell: v.record(assetSchema).optional(),
   }),
