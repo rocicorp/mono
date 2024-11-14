@@ -1,9 +1,8 @@
-import {assert, expect, suite, test} from 'vitest';
+import {expect, suite, test} from 'vitest';
 import {Snitch, type SnitchMessage} from './snitch.js';
 import {MemorySource} from './memory-source.js';
 import {Join} from './join.js';
 import {MemoryStorage} from './memory-storage.js';
-import type {SourceSchema} from './schema.js';
 import {Catch} from './catch.js';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
@@ -18,13 +17,11 @@ const base = {
     {id: {type: 'string'}, issueID: {type: 'string'}},
   ],
   primaryKeys: [['id'], ['id']],
-  joins: [
-    {
-      parentKey: 'id',
-      childKey: 'issueID',
-      relationshipName: 'comments',
-    },
-  ],
+  join: {
+    parentKey: 'id',
+    childKey: 'issueID',
+    relationshipName: 'comments',
+  },
 } as const;
 
 const oneParentWithChildTest: FetchTest = {
@@ -242,9 +239,6 @@ suite('NOT EXISTS', () => {
 // initial fetch, fetch, and cleanup.
 function fetchTest(t: FetchTest) {
   test(t.name, () => {
-    assert(t.sources.length > 0);
-    assert(t.joins.length === t.sources.length - 1);
-
     const log: SnitchMessage[] = [];
 
     const sources = t.sources.map((rows, i) => {
@@ -260,66 +254,26 @@ function fetchTest(t: FetchTest) {
       };
     });
 
-    const joins: {
-      join: Join;
-      storage: MemoryStorage;
-    }[] = [];
-    // Although we tend to think of the joins from left to right, we need to
-    // build them from right to left.
-    for (let i = t.joins.length - 1; i >= 0; i--) {
-      const info = t.joins[i];
-      const parent = sources[i].snitch;
-      const child =
-        i === t.joins.length - 1 ? sources[i + 1].snitch : joins[i + 1].join;
-      const storage = new MemoryStorage();
-      const join = new Join({
-        parent,
-        child,
-        storage,
-        ...info,
-        hidden: false,
-      });
-      joins[i] = {
-        join,
-        storage,
-      };
-    }
-
     const existsStorage = new MemoryStorage();
     const exists = new Exists(
-      joins[0].join,
+      new Join({
+        parent: sources[0].snitch,
+        child: sources[1].snitch,
+        storage: new MemoryStorage(),
+        ...t.join,
+        hidden: false,
+      }),
       existsStorage,
-      t.joins[0].relationshipName,
+      t.join.relationshipName,
       t.existsType,
     );
 
-    let expectedMessagesIndex = 0;
     for (const [method, fetchType] of [
       ['fetch', 'initialFetch'],
       ['fetch', 'fetch'],
       ['cleanup', 'cleanup'],
     ] as const) {
       log.length = 0;
-
-      // By convention we put them in the test bottom up. Why? Easier to think
-      // left-to-right.
-      const finalJoin = joins[0];
-
-      let expectedSchema: SourceSchema | undefined;
-      for (let i = sources.length - 1; i >= 0; i--) {
-        const schema = sources[i].snitch.getSchema();
-        if (expectedSchema) {
-          expectedSchema = {
-            ...schema,
-            relationships: {[t.joins[i].relationshipName]: expectedSchema},
-          };
-        } else {
-          expectedSchema = schema;
-        }
-      }
-
-      // toEqual doesn't work here for some reason that I am too lazy to find.
-      expect(finalJoin.join.getSchema()).toStrictEqual(expectedSchema);
 
       const c = new Catch(exists);
       const r = c[method]();
@@ -346,11 +300,11 @@ type FetchTest = {
   primaryKeys: readonly PrimaryKey[];
   sources: readonly Row[][];
   sorts?: (Ordering | undefined)[] | undefined;
-  joins: readonly {
+  join: {
     parentKey: string;
     childKey: string;
     relationshipName: string;
-  }[];
+  };
   existsType: 'EXISTS' | 'NOT EXISTS';
   expectedMessages: {
     initialFetch: SnitchMessage[];

@@ -1,6 +1,8 @@
 import {expect, test} from 'vitest';
 import {runJoinTest, type Joins, type Sources} from './test/join-push-tests.js';
 import type {Format} from './view.js';
+import {Take} from './take.js';
+import type {Storage, Input} from './operator.js';
 
 const sources: Sources = {
   issue: {
@@ -78,7 +80,10 @@ test('child change, parent is within bound', () => {
       ],
     ],
     format,
-    limit: 2,
+    addPostJoinsOperator: (i: Input, storage: Storage) => ({
+      name: 'take',
+      op: new Take(i, storage, 2),
+    }),
   });
 
   expect(data).toMatchInlineSnapshot(`
@@ -194,7 +199,10 @@ test('child change, parent is after bound', () => {
       ],
     ],
     format,
-    limit: 2,
+    addPostJoinsOperator: (i: Input, storage: Storage) => ({
+      name: 'take',
+      op: new Take(i, storage, 2),
+    }),
   });
 
   expect(data).toMatchInlineSnapshot(`

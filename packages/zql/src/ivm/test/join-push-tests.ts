@@ -12,11 +12,10 @@ import type {NormalizedValue} from '../data.js';
 import type {Change} from '../change.js';
 import {MemorySource} from '../memory-source.js';
 import type {Format} from '../view.js';
-import type {Input} from '../operator.js';
+import type {Storage, Input, Operator} from '../operator.js';
 import {must} from '../../../../shared/src/must.js';
 import type {JSONObject} from '../../../../shared/src/json.js';
 import {ArrayView} from '../array-view.js';
-import {Take} from '../take.js';
 
 export function pushTest(t: PushTest) {
   test(t.name, () => {
@@ -152,7 +151,9 @@ export type NewPushTest = {
   format: Format;
   joins: Joins;
   pushes: Pushes;
-  limit?: number;
+  addPostJoinsOperator?:
+    | ((i: Input, storage: Storage) => {name: string; op: Operator})
+    | undefined;
 };
 
 export function runJoinTest(t: NewPushTest) {
@@ -204,19 +205,21 @@ export function runJoinTest(t: NewPushTest) {
 
     // By convention we put them in the test bottom up. Why? Easier to think
     // left-to-right.
-    const takeStorage = new MemoryStorage();
-    const finalOutput = makeFinalOutput(
-      t.limit !== undefined
-        ? new Snitch(
-            new Take(must(last).snitch, takeStorage, t.limit),
-            'take',
-            log,
-          )
-        : must(last).snitch,
-    );
-    if (t.limit !== undefined) {
-      storage['take'] = takeStorage;
+
+    let lastSnitch: Snitch;
+    if (t.addPostJoinsOperator !== undefined) {
+      const postOpStorage = new MemoryStorage();
+      const {name, op} = t.addPostJoinsOperator(
+        must(last).snitch,
+        postOpStorage,
+      );
+      storage[name] = postOpStorage;
+      lastSnitch = new Snitch(op, name, log);
+    } else {
+      lastSnitch = must(last).snitch;
     }
+
+    const finalOutput = makeFinalOutput(lastSnitch);
 
     log.length = 0;
 
