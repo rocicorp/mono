@@ -139,6 +139,8 @@ export function stringify(c: Condition): string {
         return (c.op === '!=' ? '!' : '') + c.value;
       }
       return `${c.field} ${c.op} ${c.value}`;
+    case 'literal':
+      return `${c.leftValue} ${c.op} ${c.rightValue}`;
     case 'and':
     case 'or':
       return c.conditions

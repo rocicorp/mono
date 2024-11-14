@@ -57,22 +57,24 @@ export const simpleOperatorSchema = v.union(
   inOpsSchema,
 );
 
+const conditionValueSchema = v.union(
+  v.string(),
+  v.number(),
+  v.boolean(),
+  v.null(),
+  v.readonlyArray(v.union(v.string(), v.number(), v.boolean())),
+  v.object({
+    type: v.literal('static'),
+    anchor: v.union(v.literal('authData'), v.literal('preMutationRow')),
+    field: v.string(),
+  }),
+);
+
 export const simpleConditionSchema = v.object({
   type: v.literal('simple'),
   op: simpleOperatorSchema,
   field: selectorSchema,
-  value: v.union(
-    v.string(),
-    v.number(),
-    v.boolean(),
-    v.null(),
-    v.readonlyArray(v.union(v.string(), v.number(), v.boolean())),
-    v.object({
-      type: v.literal('static'),
-      anchor: v.union(v.literal('authData'), v.literal('preMutationRow')),
-      field: v.string(),
-    }),
-  ),
+  value: conditionValueSchema,
 });
 
 export const correlatedSubqueryConditionOperatorSchema = v.union(
@@ -221,6 +223,7 @@ export type LiteralValue =
  */
 export type Condition =
   | SimpleCondition
+  | LiteralCondition
   | Conjunction
   | Disjunction
   | CorrelatedSubqueryCondition;
@@ -236,6 +239,13 @@ export type SimpleCondition = {
    */
   field: string;
   value: ValuePosition;
+};
+
+export type LiteralCondition = {
+  type: 'literal';
+  op: SimpleOperator;
+  leftValue: ValuePosition;
+  rightValue: ValuePosition;
 };
 
 export type Conjunction = {
@@ -323,7 +333,11 @@ export function normalizeAST(ast: AST): Required<AST> {
 }
 
 function sortedWhere(where: Condition): Condition {
-  if (where.type === 'simple' || where.type === 'correlatedSubquery') {
+  if (
+    where.type === 'simple' ||
+    where.type === 'correlatedSubquery' ||
+    where.type === 'literal'
+  ) {
     return where;
   }
   return {
@@ -341,7 +355,7 @@ function sortedRelated(
 function cmpCondition(a: Condition, b: Condition): number {
   if (a.type === 'simple') {
     if (b.type !== 'simple') {
-      return -1; // Order SimpleConditions first to simplify logic for invalidation filtering.
+      return -1; // Order SimpleConditions first
     }
     return (
       compareUTF8MaybeNull(a.field, b.field) ||
@@ -354,7 +368,27 @@ function cmpCondition(a: Condition, b: Condition): number {
   }
 
   if (b.type === 'simple') {
-    return 1; // Order SimpleConditions first to simplify logic for invalidation filtering.
+    return 1; // Order SimpleConditions first
+  }
+
+  if (a.type === 'literal') {
+    if (b.type !== 'literal') {
+      return -1;
+    }
+
+    const leftCompare = compareUTF8MaybeNull(
+      String(a.leftValue),
+      String(b.rightValue),
+    );
+    if (leftCompare !== 0) {
+      return leftCompare;
+    }
+
+    return compareUTF8MaybeNull(String(a.rightValue), String(b.rightValue));
+  }
+
+  if (b.type === 'literal') {
+    return 1;
   }
 
   if (a.type === 'correlatedSubquery') {
@@ -404,7 +438,11 @@ function flattened<T extends Condition>(cond: T | undefined): T | undefined {
   if (cond === undefined) {
     return undefined;
   }
-  if (cond.type === 'simple' || cond.type === 'correlatedSubquery') {
+  if (
+    cond.type === 'simple' ||
+    cond.type === 'correlatedSubquery' ||
+    cond.type === 'literal'
+  ) {
     return cond;
   }
   const conditions = defined(

@@ -3,6 +3,7 @@ import {assert, unreachable} from '../../shared/src/asserts.js';
 import {must} from '../../shared/src/must.js';
 import type {
   Condition,
+  LiteralCondition,
   Ordering,
   SimpleCondition,
 } from '../../zero-protocol/src/ast.js';
@@ -514,6 +515,8 @@ export function optionalFiltersToSQL(
   switch (filters.type) {
     case 'simple':
       return simpleConditionToSQL(filters, columnTypes);
+    case 'literal':
+      return literalConditionToSQL(filters);
     case 'and':
       return sql`(${sql.join(
         filters.conditions.map(condition =>
@@ -548,6 +551,41 @@ function simpleConditionToSQL(
       ? 'NOT LIKE'
       : filter.op,
   )} ${toSQLiteType(filter.value, columnTypes[filter.field].type)}`;
+}
+
+function literalConditionToSQL(filter: LiteralCondition): SQLQuery {
+  const {op} = filter;
+  if (op === 'IN' || op === 'NOT IN') {
+    return sql`${toSQLiteType(
+      filter.leftValue,
+      getJsType(filter.leftValue),
+    )} ${sql.__dangerous__rawValue(
+      filter.op,
+    )} (SELECT value FROM json_each(${JSON.stringify(filter.rightValue)}))`;
+  }
+  return sql`${toSQLiteType(
+    filter.leftValue,
+    getJsType(filter.leftValue),
+  )} ${sql.__dangerous__rawValue(
+    filter.op === 'ILIKE'
+      ? 'LIKE'
+      : filter.op === 'NOT ILIKE'
+      ? 'NOT LIKE'
+      : filter.op,
+  )} ${toSQLiteType(filter.rightValue, getJsType(filter.rightValue))}`;
+}
+
+function getJsType(value: unknown): ValueType {
+  if (value === null) {
+    return 'null';
+  }
+  return typeof value === 'string'
+    ? 'string'
+    : typeof value === 'number'
+    ? 'number'
+    : typeof value === 'boolean'
+    ? 'boolean'
+    : 'json';
 }
 
 type Cursor = {
