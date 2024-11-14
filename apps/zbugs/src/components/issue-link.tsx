@@ -9,7 +9,7 @@ export default function IssueLink({
   listContext,
   scrollOffset,
 }: {
-  issue: {id: string; shortID?: number | undefined};
+  issue: {id: string; shortID?: number | null};
   listContext: ListContext;
   scrollOffset: number;
 } & Omit<LinkProps, 'href' | 'state'>) {

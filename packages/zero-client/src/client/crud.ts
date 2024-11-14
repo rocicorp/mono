@@ -1,11 +1,6 @@
 import {promiseVoid} from '../../../shared/src/resolved-promises.js';
 import type {MaybePromise} from '../../../shared/src/types.js';
 import type {Expand} from '../../../shared/src/expand.js';
-import type {Row} from '../../../zero-protocol/src/data.js';
-import {
-  type PrimaryKey,
-  type PrimaryKeyValueRecord,
-} from '../../../zero-protocol/src/primary-key.js';
 import {
   CRUD_MUTATION_NAME,
   type CreateOp,
@@ -16,57 +11,84 @@ import {
   type SetOp,
   type UpdateOp,
 } from '../../../zero-protocol/src/push.js';
-import type {NormalizedPrimaryKey} from '../../../zero-schema/src/normalize-table-schema.js';
-import type {TableSchemaToRow} from '../../../zero-schema/src/table-schema.js';
+import type {
+  SchemaValueToTSType,
+  TableSchema,
+} from '../../../zero-schema/src/table-schema.js';
 import {toPrimaryKeyString} from './keys.js';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.js';
 import type {Schema} from '../../../zero-schema/src/mod.js';
+import type {ReadonlyJSONObject} from '../mod.js';
+import type {NormalizedTableSchema} from '../../../zero-schema/src/normalize-table-schema.js';
 import type {NormalizedSchema} from '../../../zero-schema/src/normalized-schema.js';
 
-/**
- * If a field is |undefined, add the ? marker to also make the field optional.
- */
-type NormalizeOptional<T> = {
-  [K in keyof T as undefined extends T[K] ? K : never]?: T[K] | undefined;
-} & {
-  [K in keyof T as undefined extends T[K] ? never : K]: T[K];
+export type CreateValue<S extends TableSchema> = Expand<
+  PrimaryKeyFields<S> & {
+    [K in keyof S['columns'] as S['columns'][K] extends {optional: true}
+      ? K
+      : never]?: SchemaValueToTSType<S['columns'][K]> | undefined;
+  } & {
+    [K in keyof S['columns'] as S['columns'][K] extends {optional: true}
+      ? never
+      : K]: SchemaValueToTSType<S['columns'][K]>;
+  }
+>;
+
+export type SetValue<S extends TableSchema> = Expand<CreateValue<S>>;
+
+export type UpdateValue<S extends TableSchema> = Expand<
+  PrimaryKeyFields<S> & {
+    [K in keyof S['columns']]?:
+      | SchemaValueToTSType<S['columns'][K]>
+      | undefined;
+  }
+>;
+
+export type DeleteID<S extends TableSchema> = Expand<PrimaryKeyFields<S>>;
+
+type PrimaryKeyFields<S extends TableSchema> = {
+  [K in Extract<
+    S['primaryKey'][number],
+    keyof S['columns']
+  >]: SchemaValueToTSType<S['columns'][K]>;
 };
-
-export type SetValue<R extends Row, PK extends PrimaryKey> = Expand<
-  AsPrimaryKeyValueRecord<Pick<R, PK[number]>> &
-    NormalizeOptional<Omit<R, PK[number]>>
->;
-
-export type CreateValue<R extends Row, PK extends PrimaryKey> = SetValue<R, PK>;
-
-export type UpdateValue<R extends Row, PK extends PrimaryKey> = Expand<
-  AsPrimaryKeyValueRecord<Pick<R, PK[number]>> &
-    NormalizeOptional<Partial<Omit<R, PK[number]>>>
->;
-
-export type DeleteID<R extends Row, PK extends PrimaryKey> = Expand<
-  AsPrimaryKeyValueRecord<Pick<R, PK[number]>>
->;
-
-type AsPrimaryKeyValueRecord<R extends Row> = R extends PrimaryKeyValueRecord
-  ? R
-  : never;
 
 /**
  * This is the type of the generated mutate.<name>.<verb> function.
  */
-export type TableMutator<R extends Row, PK extends PrimaryKey> = {
-  create: (value: CreateValue<R, PK>) => Promise<void>;
-  set: (value: SetValue<R, PK>) => Promise<void>;
-  update: (value: UpdateValue<R, PK>) => Promise<void>;
-  delete: (id: DeleteID<R, PK>) => Promise<void>;
+export type TableMutator<S extends TableSchema> = {
+  /**
+   * Writes a row if a row with the same primary key doesn't already exists.
+   * Non-primary-key fields that are 'optional' can be omitted or set to
+   * `undefined`. Such fields will be assigned the value `null` optimistically
+   * and then the default value as defined by the server.
+   */
+  create: (value: SetValue<S>) => Promise<void>;
+
+  /**
+   * Writes a row unconditionally, overwriting any existing row with the same
+   * primary key. Non-primary-key fields that are 'optional' can be omitted or
+   * set to `undefined`. Such fields will be assigned the value `null`
+   * optimistically and then the default value as defined by the server.
+   */
+  set: (value: SetValue<S>) => Promise<void>;
+
+  /**
+   * Updates a row with the same primary key. If no such row exists, this
+   * function does nothing. All non-primary-key fields can be omitted or set to
+   * `undefined`. Such fields will be left unchanged from previous value.
+   */
+  update: (value: UpdateValue<S>) => Promise<void>;
+
+  /**
+   * Deletes the row with the specified primary key. If no such row exists, this
+   * function does nothing.
+   */
+  delete: (id: DeleteID<S>) => Promise<void>;
 };
 
 export type DBMutator<S extends Schema> = {
-  [K in keyof S['tables']]: TableMutator<
-    TableSchemaToRow<S['tables'][K]>,
-    S['tables'][K]['primaryKey']
-  >;
+  [K in keyof S['tables']]: TableMutator<S['tables'][K]>;
 };
 
 export type BatchMutator<S extends Schema> = <R>(
@@ -116,7 +138,7 @@ export function makeCRUDMutate<const S extends Schema>(
     }
   };
 
-  const mutate: Record<string, TableMutator<Row, PrimaryKey>> = {};
+  const mutate: Record<string, TableMutator<TableSchema>> = {};
   for (const [name, tableSchema] of Object.entries(schema.tables)) {
     mutate[name] = makeEntityCRUDMutate(
       name,
@@ -134,14 +156,14 @@ export function makeCRUDMutate<const S extends Schema>(
 /**
  * Creates the `{create, set, update, delete}` object for use outside a batch.
  */
-function makeEntityCRUDMutate<R extends Row, PK extends NormalizedPrimaryKey>(
+function makeEntityCRUDMutate<S extends NormalizedTableSchema>(
   tableName: string,
-  primaryKey: PK,
+  primaryKey: S['primaryKey'],
   zeroCRUD: CRUDMutate,
   assertNotInBatch: (tableName: string, op: CRUDOpKind) => void,
-): TableMutator<R, PK> {
+): TableMutator<S> {
   return {
-    create: (value: CreateValue<R, PK>) => {
+    create: (value: SetValue<S>) => {
       assertNotInBatch(tableName, 'create');
       const op: CreateOp = {
         op: 'create',
@@ -151,7 +173,7 @@ function makeEntityCRUDMutate<R extends Row, PK extends NormalizedPrimaryKey>(
       };
       return zeroCRUD({ops: [op]});
     },
-    set: (value: SetValue<R, PK>) => {
+    set: (value: SetValue<S>) => {
       assertNotInBatch(tableName, 'set');
       const op: SetOp = {
         op: 'set',
@@ -161,7 +183,7 @@ function makeEntityCRUDMutate<R extends Row, PK extends NormalizedPrimaryKey>(
       };
       return zeroCRUD({ops: [op]});
     },
-    update: (value: UpdateValue<R, PK>) => {
+    update: (value: UpdateValue<S>) => {
       assertNotInBatch(tableName, 'update');
       const op: UpdateOp = {
         op: 'update',
@@ -171,7 +193,7 @@ function makeEntityCRUDMutate<R extends Row, PK extends NormalizedPrimaryKey>(
       };
       return zeroCRUD({ops: [op]});
     },
-    delete: (id: DeleteID<R, PK>) => {
+    delete: (id: DeleteID<S>) => {
       assertNotInBatch(tableName, 'delete');
       const op: DeleteOp = {
         op: 'delete',
@@ -187,17 +209,14 @@ function makeEntityCRUDMutate<R extends Row, PK extends NormalizedPrimaryKey>(
 /**
  * Creates the `{create, set, update, delete}` object for use inside a batch.
  */
-export function makeBatchCRUDMutate<
-  R extends Row,
-  PK extends NormalizedPrimaryKey,
->(
+export function makeBatchCRUDMutate<S extends TableSchema>(
   tableName: string,
   schema: NormalizedSchema,
   ops: CRUDOp[],
-): TableMutator<R, PK> {
+): TableMutator<S> {
   const {primaryKey} = schema.tables[tableName];
   return {
-    create: (value: CreateValue<R, PK>) => {
+    create: (value: SetValue<S>) => {
       const op: CreateOp = {
         op: 'create',
         tableName,
@@ -207,7 +226,7 @@ export function makeBatchCRUDMutate<
       ops.push(op);
       return promiseVoid;
     },
-    set: (value: SetValue<R, PK>) => {
+    set: (value: SetValue<S>) => {
       const op: SetOp = {
         op: 'set',
         tableName,
@@ -217,7 +236,7 @@ export function makeBatchCRUDMutate<
       ops.push(op);
       return promiseVoid;
     },
-    update: (value: UpdateValue<R, PK>) => {
+    update: (value: UpdateValue<S>) => {
       const op: UpdateOp = {
         op: 'update',
         tableName,
@@ -227,7 +246,7 @@ export function makeBatchCRUDMutate<
       ops.push(op);
       return promiseVoid;
     },
-    delete: (id: DeleteID<R, PK>) => {
+    delete: (id: DeleteID<S>) => {
       const op: DeleteOp = {
         op: 'delete',
         tableName,
@@ -275,6 +294,19 @@ export function makeCRUDMutator(schema: NormalizedSchema): CRUDMutator {
   };
 }
 
+function defaultOptionalFieldsToNull(
+  schema: TableSchema,
+  value: ReadonlyJSONObject,
+): ReadonlyJSONObject {
+  let rv = value;
+  for (const name in schema.columns) {
+    if (rv[name] === undefined) {
+      rv = {...rv, [name]: null};
+    }
+  }
+  return rv;
+}
+
 async function createImpl(
   tx: WriteTransaction,
   arg: CreateOp,
@@ -286,7 +318,11 @@ async function createImpl(
     arg.value,
   );
   if (!(await tx.has(key))) {
-    await tx.set(key, arg.value);
+    const val = defaultOptionalFieldsToNull(
+      schema.tables[arg.tableName],
+      arg.value,
+    );
+    await tx.set(key, val);
   }
 }
 
@@ -300,7 +336,11 @@ async function setImpl(
     schema.tables[arg.tableName].primaryKey,
     arg.value,
   );
-  await tx.set(key, arg.value);
+  const val = defaultOptionalFieldsToNull(
+    schema.tables[arg.tableName],
+    arg.value,
+  );
+  await tx.set(key, val);
 }
 
 async function updateImpl(
@@ -318,7 +358,12 @@ async function updateImpl(
     return;
   }
   const update = arg.value;
-  const next = {...(prev as object), ...(update as object)};
+  const next = {...(prev as ReadonlyJSONObject)};
+  for (const k in update) {
+    if (update[k] !== undefined) {
+      next[k] = update[k];
+    }
+  }
   await tx.set(key, next);
 }
 

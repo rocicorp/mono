@@ -7,14 +7,20 @@ import {useZero} from '../hooks/use-zero.js';
 import Selector from './selector.js';
 
 type Props = {
-  onSelect?: ((user: User) => void) | undefined;
+  onSelect?: ((user: User | undefined) => void) | undefined;
   selected?: {login?: string | undefined} | undefined;
   disabled?: boolean | undefined;
+  unselectedLabel?: string | undefined;
 };
 
 type User = TableSchemaToRow<Schema['tables']['user']>;
 
-export default function UserPicker({onSelect, selected, disabled}: Props) {
+export default function UserPicker({
+  onSelect,
+  selected,
+  disabled,
+  unselectedLabel,
+}: Props) {
   const z = useZero();
 
   const users = useQuery(z.query.user);
@@ -39,29 +45,31 @@ export default function UserPicker({onSelect, selected, disabled}: Props) {
     };
   }, [users]);
 
-  const handleSelect = (user: User) => {
+  const handleSelect = (user: User | undefined) => {
     onSelect?.(user);
   };
 
   const selectedUser = selected && users.find(u => u.login === selected.login);
 
+  const defaultItem = {
+    text: unselectedLabel ?? 'Select',
+    icon: avatarIcon,
+    value: undefined,
+  };
+
   return (
     <Selector
       disabled={disabled}
       onChange={c => handleSelect(c)}
-      items={users.map(u => ({
-        text: u.login,
-        value: u,
-        icon: avatars[u.id],
-      }))}
-      defaultItem={
-        selectedUser
-          ? {text: selectedUser.login, icon: avatars[selectedUser.id]}
-          : {
-              text: 'Select',
-              icon: avatarIcon,
-            }
-      }
+      items={[
+        defaultItem,
+        ...users.map(u => ({
+          text: u.login,
+          value: u,
+          icon: avatars[u.id],
+        })),
+      ]}
+      selectedValue={selectedUser ?? undefined}
     />
   );
 }

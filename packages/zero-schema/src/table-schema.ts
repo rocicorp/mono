@@ -62,7 +62,7 @@ type BaseType<T extends SchemaValue> = T extends {type: 'string'}
 export type SchemaValueToTSType<T extends SchemaValue> = T extends {
   optional: true;
 }
-  ? BaseType<T> | undefined
+  ? BaseType<T> | null
   : BaseType<T>;
 
 export type Supertype<TSchemas extends TableSchema[]> = {

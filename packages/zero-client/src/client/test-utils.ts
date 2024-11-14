@@ -198,8 +198,6 @@ export class TestZero<const S extends Schema> extends Zero<S> {
 
 declare const TESTING: boolean;
 
-const testZeroInstances = new Set<TestZero<Schema>>();
-
 let testZeroCounter = 0;
 
 export function zeroForTest<const S extends Schema>(
@@ -231,8 +229,6 @@ export function zeroForTest<const S extends Schema>(
     };
   }
 
-  // Keep track of all instances so we can close them in teardown.
-  testZeroInstances.add(r as TestZero<Schema>);
   return r;
 }
 

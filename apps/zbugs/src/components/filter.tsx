@@ -58,11 +58,15 @@ export default function Filter({onSelect}: Props) {
           <div className="add-filter-modal">
             <div className="filter-modal-item">
               <p className="filter-modal-label">Creator</p>
-              <UserPicker onSelect={u => handleSelect({creator: u.login})} />
+              <UserPicker
+                onSelect={u => u && handleSelect({creator: u.login})}
+              />
             </div>
             <div className="filter-modal-item">
               <p className="filter-modal-label">Assignee</p>
-              <UserPicker onSelect={u => handleSelect({assignee: u.login})} />
+              <UserPicker
+                onSelect={u => u && handleSelect({assignee: u.login})}
+              />
             </div>
             <div className="filter-modal-item">
               <p className="filter-modal-label">Label</p>

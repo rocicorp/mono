@@ -3,7 +3,7 @@ import type {Zero} from '../../zero-client/src/mod.js';
 import type {Schema} from '../../zero-schema/src/mod.js';
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
-const ZeroContext = createContext<Zero<Schema> | undefined>(undefined);
+const ZeroContext = createContext<unknown | undefined>(undefined);
 
 export function useZero<S extends Schema>(): Zero<S> {
   const zero = useContext(ZeroContext);
@@ -24,9 +24,5 @@ export function ZeroProvider<S extends Schema>({
   children: React.ReactNode;
   zero: Zero<S>;
 }) {
-  return (
-    <ZeroContext.Provider value={zero as Zero<Schema>}>
-      {children}
-    </ZeroContext.Provider>
-  );
+  return <ZeroContext.Provider value={zero}>{children}</ZeroContext.Provider>;
 }

@@ -283,8 +283,12 @@ export default function IssuePage() {
             <UserPicker
               disabled={!canEdit}
               selected={{login: issue.assignee?.login}}
+              unselectedLabel="Nobody"
               onSelect={user => {
-                z.mutate.issue.update({id: issue.id, assigneeID: user.id});
+                z.mutate.issue.update({
+                  id: issue.id,
+                  assigneeID: user?.id ?? null,
+                });
               }}
             />
           </div>
