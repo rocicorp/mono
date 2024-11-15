@@ -304,7 +304,7 @@ describe('db/transaction-pool', () => {
     }
 
     // Let the extra workers hit their 50ms idle timeout.
-    await sleep(75);
+    await sleep(100);
 
     await expectTables(db, {
       ['public.cleaned']: [{id: 1}, {id: 2}, {id: 3}],
@@ -333,7 +333,7 @@ describe('db/transaction-pool', () => {
     }
 
     // Let the new extra workers hit their 50ms idle timeout.
-    await sleep(75);
+    await sleep(100);
 
     await expectTables(db, {
       ['public.cleaned']: [
@@ -348,7 +348,7 @@ describe('db/transaction-pool', () => {
     });
 
     // Let the initial workers hit their 100ms keepalive timeout.
-    await sleep(50);
+    await sleep(100);
 
     pool.setDone();
     await pool.done();
