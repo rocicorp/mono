@@ -5,6 +5,8 @@ import type {
   AST,
   Condition,
   Conjunction,
+  CorrelatedSubquery,
+  CorrelatedSubqueryCondition,
   Disjunction,
   LiteralValue,
   Ordering,
@@ -14,6 +16,7 @@ import type {
 } from '../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
+import {Exists} from '../ivm/exists.js';
 import {FanIn} from '../ivm/fan-in.js';
 import {FanOut} from '../ivm/fan-out.js';
 import {Filter} from '../ivm/filter.js';
@@ -104,17 +107,25 @@ export function bindStaticParameters(
   };
 
   function bindCondition(condition: Condition): Condition {
-    // TODO support correlatedSubquery
-    assert(condition.type !== 'correlatedSubquery');
-    return condition.type === 'simple'
-      ? {
-          ...condition,
-          value: bindValue(condition.value),
-        }
-      : {
-          ...condition,
-          conditions: condition.conditions.map(bindCondition),
-        };
+    if (condition.type === 'simple') {
+      return {
+        ...condition,
+        value: bindValue(condition.value),
+      };
+    }
+    if (condition.type === 'correlatedSubquery') {
+      return {
+        ...condition,
+        related: {
+          ...condition.related,
+          subquery: visit(condition.related.subquery),
+        },
+      };
+    }
+    return {
+      ...condition,
+      conditions: condition.conditions.map(bindCondition),
+    };
   }
 
   const bindValue = (value: ValuePosition): LiteralValue => {
@@ -159,8 +170,12 @@ function buildPipelineInternal(
     end = new Skip(end, ast.start);
   }
 
+  for (const csq of gatherCorrelatedSubqueryQueriesFromCondition(ast.where)) {
+    end = applyCorrelatedSubQuery(csq, delegate, staticQueryParameters, end);
+  }
+
   if (ast.where) {
-    end = applyWhere(end, ast.where, appliedFilters);
+    end = applyWhere(end, ast.where, appliedFilters, delegate);
   }
 
   if (ast.limit) {
@@ -168,23 +183,8 @@ function buildPipelineInternal(
   }
 
   if (ast.related) {
-    for (const sq of ast.related) {
-      assert(sq.subquery.alias, 'Subquery must have an alias');
-      const child = buildPipelineInternal(
-        sq.subquery,
-        delegate,
-        staticQueryParameters,
-        sq.correlation.childField,
-      );
-      end = new Join({
-        parent: end,
-        child,
-        storage: delegate.createStorage(),
-        parentKey: sq.correlation.parentField,
-        childKey: sq.correlation.childField,
-        relationshipName: sq.subquery.alias,
-        hidden: sq.hidden ?? false,
-      });
+    for (const csq of ast.related) {
+      end = applyCorrelatedSubQuery(csq, delegate, staticQueryParameters, end);
     }
   }
 
@@ -199,14 +199,15 @@ function applyWhere(
   // Or we do the union of queries approach and retain this `appliedFilters` and `sourceConnect` behavior.
   // Downside of that being unbounded memory usage.
   appliedFilters: boolean,
+  delegate: BuilderDelegate,
 ): Input {
-  // TODO support correlatedSubquery
-  assert(condition.type !== 'correlatedSubquery');
   switch (condition.type) {
     case 'and':
-      return applyAnd(input, condition, appliedFilters);
+      return applyAnd(input, condition, appliedFilters, delegate);
     case 'or':
-      return applyOr(input, condition, appliedFilters);
+      return applyOr(input, condition, appliedFilters, delegate);
+    case 'correlatedSubquery':
+      return applyCorrelatedSubqueryCondition(input, condition, delegate);
     default:
       return applySimpleCondition(input, condition, appliedFilters);
   }
@@ -216,9 +217,10 @@ function applyAnd(
   input: Input,
   condition: Conjunction,
   appliedFilters: boolean,
+  delegate: BuilderDelegate,
 ) {
   for (const subCondition of condition.conditions) {
-    input = applyWhere(input, subCondition, appliedFilters);
+    input = applyWhere(input, subCondition, appliedFilters, delegate);
   }
   return input;
 }
@@ -227,10 +229,11 @@ function applyOr(
   input: Input,
   condition: Disjunction,
   appliedFilters: boolean,
+  delegate: BuilderDelegate,
 ): Input {
   const fanOut = new FanOut(input);
   const branches = condition.conditions.map(subCondition =>
-    applyWhere(fanOut, subCondition, appliedFilters),
+    applyWhere(fanOut, subCondition, appliedFilters, delegate),
   );
   return new FanIn(fanOut, branches);
 }
@@ -246,6 +249,73 @@ function applySimpleCondition(
     createPredicate(condition),
   );
 }
+
+function applyCorrelatedSubQuery(
+  sq: CorrelatedSubquery,
+  delegate: BuilderDelegate,
+  staticQueryParameters: StaticQueryParameters | undefined,
+  end: Input,
+) {
+  assert(sq.subquery.alias, 'Subquery must have an alias');
+  const child = buildPipelineInternal(
+    sq.subquery,
+    delegate,
+    staticQueryParameters,
+    sq.correlation.childField,
+  );
+  end = new Join({
+    parent: end,
+    child,
+    storage: delegate.createStorage(),
+    parentKey: sq.correlation.parentField,
+    childKey: sq.correlation.childField,
+    relationshipName: sq.subquery.alias,
+    hidden: sq.hidden ?? false,
+  });
+  return end;
+}
+
+function applyCorrelatedSubqueryCondition(
+  input: Input,
+  condition: CorrelatedSubqueryCondition,
+  delegate: BuilderDelegate,
+): Input {
+  assert(condition.op === 'EXISTS' || condition.op === 'NOT EXISTS');
+  return new Exists(
+    input,
+    delegate.createStorage(),
+    must(condition.related.subquery.alias),
+    condition.op,
+  );
+}
+
+function gatherCorrelatedSubqueryQueriesFromCondition(
+  condition: Condition | undefined,
+) {
+  const csqs: CorrelatedSubquery[] = [];
+  const gather = (condition: Condition) => {
+    if (condition.type === 'correlatedSubquery') {
+      assert(condition.op === 'EXISTS' || condition.op === 'NOT EXISTS');
+      csqs.push({
+        ...condition.related,
+        subquery: {...condition.related.subquery, limit: EXISTS_LIMIT},
+      });
+      return;
+    }
+    if (condition.type === 'and' || condition.type === 'or') {
+      for (const c of condition.conditions) {
+        gather(c);
+      }
+      return;
+    }
+  };
+  if (condition) {
+    gather(condition);
+  }
+  return csqs;
+}
+
+const EXISTS_LIMIT = 5;
 
 export function assertOrderingIncludesPK(
   ordering: Ordering,
