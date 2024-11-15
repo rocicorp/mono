@@ -45,7 +45,7 @@ type Connection = {
   input: Input;
   output: Output | undefined;
   sort: Ordering;
-  filters: Condition | undefined;
+  filters: NoSubqueryCondition | undefined;
   compareRows: Comparator;
 };
 
@@ -194,6 +194,7 @@ export class TableSource implements Source {
   }
 
   connect(sort: Ordering, optionalFilters?: Condition | undefined) {
+    const transformedFilters = transformFilters(optionalFilters);
     const input: SourceInput = {
       getSchema: () => this.#getSchema(connection),
       fetch: req => this.#fetch(req, connection),
@@ -206,14 +207,14 @@ export class TableSource implements Source {
         assert(idx !== -1, 'Connection not found');
         this.#connections.splice(idx, 1);
       },
-      appliedFilters: true,
+      appliedFilters: transformedFilters.allButSubqueryApplied,
     };
 
     const connection: Connection = {
       input,
       output: undefined,
       sort,
-      filters: optionalFilters,
+      filters: transformedFilters.filters,
       compareRows: makeComparator(sort),
     };
     assertOrderingIncludesPK(sort, this.#primaryKey);
@@ -446,7 +447,7 @@ export class TableSource implements Source {
   #requestToSQL(
     constraint: Constraint | undefined,
     cursor: Cursor | undefined,
-    filters: Condition | undefined,
+    filters: NoSubqueryCondition | undefined,
     order: Ordering,
   ): SQLQuery {
     let query = sql`SELECT ${this.#allColumns} FROM ${sql.ident(this.#table)}`;
@@ -507,10 +508,9 @@ export class TableSource implements Source {
  * https://www.notion.so/replicache/Optional-Filters-OR-1303bed895458013a26ee5aafd5725d2
  */
 export function optionalFiltersToSQL(
-  filters: Condition,
+  filters: NoSubqueryCondition,
   columnTypes: Record<string, SchemaValue>,
 ): SQLQuery {
-  assert(filters.type !== 'correlatedSubquery');
   switch (filters.type) {
     case 'simple':
       return simpleConditionToSQL(filters, columnTypes);
@@ -769,4 +769,75 @@ function nonPrimaryKeys(
   primaryKey: PrimaryKey,
 ) {
   return Object.keys(columns).filter(c => !primaryKey.includes(c));
+}
+
+type NoSubqueryCondition =
+  | SimpleCondition
+  | {
+      type: 'and';
+      conditions: readonly NoSubqueryCondition[];
+    }
+  | {
+      type: 'or';
+      conditions: readonly NoSubqueryCondition[];
+    };
+
+function transformFilters(filters: Condition | undefined): {
+  filters: NoSubqueryCondition | undefined;
+  allButSubqueryApplied: boolean;
+} {
+  if (!filters) {
+    return {filters: undefined, allButSubqueryApplied: true};
+  }
+  switch (filters.type) {
+    case 'simple':
+      return {filters, allButSubqueryApplied: true};
+    case 'correlatedSubquery':
+      return {filters: undefined, allButSubqueryApplied: true};
+    case 'and': {
+      const transformedConditions = [];
+      for (const cond of filters.conditions) {
+        assert(cond.type === 'simple' || cond.type === 'correlatedSubquery');
+        if (cond.type === 'simple') {
+          transformedConditions.push(cond);
+        }
+      }
+      if (transformedConditions.length === 0) {
+        return {filters: undefined, allButSubqueryApplied: true};
+      }
+      if (transformedConditions.length === 1) {
+        return {
+          filters: transformedConditions[0],
+          allButSubqueryApplied: true,
+        };
+      }
+      return {
+        filters: {
+          type: 'and',
+          conditions: transformedConditions,
+        },
+        allButSubqueryApplied: true,
+      };
+    }
+    case 'or': {
+      if (filters.conditions.length === 1) {
+        return transformFilters(filters.conditions[0]);
+      }
+      const transformedConditions: NoSubqueryCondition[] = [];
+      for (const cond of filters.conditions) {
+        assert(cond.type !== 'or');
+        const transformed = transformFilters(cond).filters;
+        if (transformed === undefined) {
+          return {filters: undefined, allButSubqueryApplied: false};
+        }
+        transformedConditions.push(transformed);
+      }
+      return {
+        filters: {type: 'or', conditions: transformedConditions},
+        allButSubqueryApplied: true,
+      };
+    }
+    default:
+      unreachable(filters);
+  }
 }
