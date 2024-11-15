@@ -272,7 +272,7 @@ export abstract class AbstractQuery<
     let cond: Condition;
 
     if (typeof fieldOrExpressionFactory === 'function') {
-      cond = dnf(fieldOrExpressionFactory(expressionBuilder));
+      cond = fieldOrExpressionFactory(expressionBuilder);
     } else {
       assert(opOrValue !== undefined, 'Invalid condition');
       cond = cmp(fieldOrExpressionFactory, opOrValue, value);
@@ -287,7 +287,7 @@ export abstract class AbstractQuery<
       this.#schema,
       {
         ...this.#ast,
-        where: cond,
+        where: dnf(cond),
       },
       this.#format,
     );

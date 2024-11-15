@@ -45,6 +45,49 @@ describe('building the AST', () => {
     });
   });
 
+  test('multiple WHERE calls result in a single top level AND', () => {
+    const issueQuery = newQuery(mockDelegate, issueSchema);
+    const where = issueQuery
+      .where('id', '1')
+      .where('title', 'foo')
+      .where('closed', true)
+      .where('ownerId', '2');
+    expect(ast(where)).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "conditions": [
+            {
+              "field": "id",
+              "op": "=",
+              "type": "simple",
+              "value": "1",
+            },
+            {
+              "field": "title",
+              "op": "=",
+              "type": "simple",
+              "value": "foo",
+            },
+            {
+              "field": "closed",
+              "op": "=",
+              "type": "simple",
+              "value": true,
+            },
+            {
+              "field": "ownerId",
+              "op": "=",
+              "type": "simple",
+              "value": "2",
+            },
+          ],
+          "type": "and",
+        },
+      }
+    `);
+  });
+
   test('start adds a start field', () => {
     const issueQuery = newQuery(mockDelegate, issueSchema);
     const start = issueQuery.start({id: '1'});
