@@ -6,7 +6,7 @@ import {
   type SimpleCondition,
 } from '../../../zero-protocol/src/ast.js';
 import {dnf} from './dnf.js';
-import {parse, stringify} from './expression-parser.js';
+import {parse, stringify} from './expression-test-util.js';
 import {and, not, or} from './expression.js';
 
 type TestCondition =

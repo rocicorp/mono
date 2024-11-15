@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {parse, stringify} from './expression-parser.js';
+import {parse, stringify} from './expression-test-util.js';
 
 test('parse', () => {
   expect(parse('A & B')).toMatchInlineSnapshot(`

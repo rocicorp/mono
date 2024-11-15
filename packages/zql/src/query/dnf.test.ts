@@ -5,7 +5,7 @@ import {
   type Disjunction,
 } from '../../../zero-protocol/src/ast.js';
 import {dnf, unwrap} from './dnf.js';
-import {parse, stringify} from './expression-parser.js';
+import {parse, stringify} from './expression-test-util.js';
 
 function simple(value: number | string): Condition {
   return {type: 'simple', value, op: '=', field: 'n/a'};
