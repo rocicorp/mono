@@ -296,6 +296,168 @@ test('self-join', () => {
   ]);
 });
 
+test('self-join edit', () => {
+  const {sources, getSource} = testSources();
+  const sink = new Catch(
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        related: [
+          {
+            correlation: {
+              parentField: 'recruiterID',
+              op: '=',
+              childField: 'id',
+            },
+            subquery: {
+              table: 'users',
+              alias: 'recruiter',
+              orderBy: [['id', 'asc']],
+            },
+          },
+        ],
+        limit: 3,
+      },
+      {
+        getSource,
+        createStorage: () => new MemoryStorage(),
+      },
+      undefined,
+    ),
+  );
+
+  expect(sink.fetch()).toMatchInlineSnapshot(`
+    [
+      {
+        "relationships": {
+          "recruiter": [],
+        },
+        "row": {
+          "id": 1,
+          "name": "aaron",
+          "recruiterID": null,
+        },
+      },
+      {
+        "relationships": {
+          "recruiter": [
+            {
+              "relationships": {},
+              "row": {
+                "id": 1,
+                "name": "aaron",
+                "recruiterID": null,
+              },
+            },
+          ],
+        },
+        "row": {
+          "id": 2,
+          "name": "erik",
+          "recruiterID": 1,
+        },
+      },
+      {
+        "relationships": {
+          "recruiter": [
+            {
+              "relationships": {},
+              "row": {
+                "id": 1,
+                "name": "aaron",
+                "recruiterID": null,
+              },
+            },
+          ],
+        },
+        "row": {
+          "id": 3,
+          "name": "greg",
+          "recruiterID": 1,
+        },
+      },
+    ]
+  `);
+
+  // or was greg recruited by erik
+  sources.users.push({
+    type: 'edit',
+    oldRow: {
+      id: 3,
+      name: 'greg',
+      recruiterID: 1,
+    },
+    row: {
+      id: 3,
+      name: 'greg',
+      recruiterID: 2,
+    },
+  });
+
+  expect(sink.pushes).toMatchInlineSnapshot(`
+    [
+      {
+        "oldRow": {
+          "id": 3,
+          "name": "greg",
+          "recruiterID": 1,
+        },
+        "row": {
+          "id": 3,
+          "name": "greg",
+          "recruiterID": 2,
+        },
+        "type": "edit",
+      },
+      {
+        "child": {
+          "change": {
+            "node": {
+              "relationships": {},
+              "row": {
+                "id": 1,
+                "name": "aaron",
+                "recruiterID": null,
+              },
+            },
+            "type": "remove",
+          },
+          "relationshipName": "recruiter",
+        },
+        "row": {
+          "id": 3,
+          "name": "greg",
+          "recruiterID": 2,
+        },
+        "type": "child",
+      },
+      {
+        "child": {
+          "change": {
+            "node": {
+              "relationships": {},
+              "row": {
+                "id": 2,
+                "name": "erik",
+                "recruiterID": 1,
+              },
+            },
+            "type": "add",
+          },
+          "relationshipName": "recruiter",
+        },
+        "row": {
+          "id": 3,
+          "name": "greg",
+          "recruiterID": 2,
+        },
+        "type": "child",
+      },
+    ]
+  `);
+});
+
 test('multi-join', () => {
   const {sources, getSource} = testSources();
   const sink = new Catch(
@@ -549,6 +711,519 @@ test('skip', () => {
       node: {row: {id: 8, name: 'sam'}, relationships: {}},
     },
   ]);
+});
+
+test('exists junction', () => {
+  const {sources, getSource} = testSources();
+  const sink = new Catch(
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        limit: 2,
+        where: {
+          type: 'correlatedSubquery',
+          related: {
+            correlation: {
+              parentField: 'id',
+              op: '=',
+              childField: 'userID',
+            },
+            subquery: {
+              table: 'userStates',
+              alias: 'zsubq_0_userStates',
+              orderBy: [
+                ['userID', 'asc'],
+                ['stateCode', 'asc'],
+              ],
+              where: {
+                type: 'correlatedSubquery',
+                related: {
+                  correlation: {
+                    parentField: 'stateCode',
+                    op: '=',
+                    childField: 'code',
+                  },
+                  subquery: {
+                    table: 'states',
+                    alias: 'zsubq_1_states',
+                    orderBy: [['code', 'asc']],
+                  },
+                },
+                op: 'EXISTS',
+              },
+            },
+          },
+          op: 'EXISTS',
+        },
+      },
+      {
+        getSource,
+        createStorage: () => new MemoryStorage(),
+      },
+      undefined,
+    ),
+  );
+
+  expect(sink.fetch()).toMatchInlineSnapshot(`
+    [
+      {
+        "relationships": {
+          "zsubq_0_userStates": [
+            {
+              "relationships": {
+                "zsubq_1_states": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "code": "HI",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "stateCode": "HI",
+                "userID": 1,
+              },
+            },
+          ],
+        },
+        "row": {
+          "id": 1,
+          "name": "aaron",
+          "recruiterID": null,
+        },
+      },
+      {
+        "relationships": {
+          "zsubq_0_userStates": [
+            {
+              "relationships": {
+                "zsubq_1_states": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "code": "AZ",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "stateCode": "AZ",
+                "userID": 3,
+              },
+            },
+            {
+              "relationships": {
+                "zsubq_1_states": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "code": "CA",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "stateCode": "CA",
+                "userID": 3,
+              },
+            },
+          ],
+        },
+        "row": {
+          "id": 3,
+          "name": "greg",
+          "recruiterID": 1,
+        },
+      },
+    ]
+  `);
+
+  // erik moves to hawaii
+  sources.userStates.push({type: 'add', row: {userID: 2, stateCode: 'HI'}});
+
+  expect(sink.pushes).toMatchInlineSnapshot(`
+    [
+      {
+        "node": {
+          "relationships": {
+            "zsubq_0_userStates": [
+              {
+                "relationships": {
+                  "zsubq_1_states": [
+                    {
+                      "relationships": {},
+                      "row": {
+                        "code": "AZ",
+                      },
+                    },
+                  ],
+                },
+                "row": {
+                  "stateCode": "AZ",
+                  "userID": 3,
+                },
+              },
+              {
+                "relationships": {
+                  "zsubq_1_states": [
+                    {
+                      "relationships": {},
+                      "row": {
+                        "code": "CA",
+                      },
+                    },
+                  ],
+                },
+                "row": {
+                  "stateCode": "CA",
+                  "userID": 3,
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": 3,
+            "name": "greg",
+            "recruiterID": 1,
+          },
+        },
+        "type": "remove",
+      },
+      {
+        "node": {
+          "relationships": {
+            "zsubq_0_userStates": [
+              {
+                "relationships": {
+                  "zsubq_1_states": [
+                    {
+                      "relationships": {},
+                      "row": {
+                        "code": "HI",
+                      },
+                    },
+                  ],
+                },
+                "row": {
+                  "stateCode": "HI",
+                  "userID": 2,
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": 2,
+            "name": "erik",
+            "recruiterID": 1,
+          },
+        },
+        "type": "add",
+      },
+    ]
+  `);
+});
+
+test('exists self join', () => {
+  const {sources, getSource} = testSources();
+  const sink = new Catch(
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        where: {
+          type: 'correlatedSubquery',
+          related: {
+            correlation: {
+              parentField: 'recruiterID',
+              op: '=',
+              childField: 'id',
+            },
+            subquery: {
+              table: 'users',
+              alias: 'zsubq_0_recruiter',
+              orderBy: [['id', 'asc']],
+            },
+          },
+          op: 'EXISTS',
+        },
+        limit: 2,
+      },
+      {
+        getSource,
+        createStorage: () => new MemoryStorage(),
+      },
+      undefined,
+    ),
+  );
+
+  expect(sink.fetch()).toMatchInlineSnapshot(`
+    [
+      {
+        "relationships": {
+          "zsubq_0_recruiter": [
+            {
+              "relationships": {},
+              "row": {
+                "id": 1,
+                "name": "aaron",
+                "recruiterID": null,
+              },
+            },
+          ],
+        },
+        "row": {
+          "id": 2,
+          "name": "erik",
+          "recruiterID": 1,
+        },
+      },
+      {
+        "relationships": {
+          "zsubq_0_recruiter": [
+            {
+              "relationships": {},
+              "row": {
+                "id": 1,
+                "name": "aaron",
+                "recruiterID": null,
+              },
+            },
+          ],
+        },
+        "row": {
+          "id": 3,
+          "name": "greg",
+          "recruiterID": 1,
+        },
+      },
+    ]
+  `);
+
+  // or was greg recruited by erik
+  sources.users.push({
+    type: 'edit',
+    oldRow: {
+      id: 3,
+      name: 'greg',
+      recruiterID: 1,
+    },
+    row: {
+      id: 3,
+      name: 'greg',
+      recruiterID: 2,
+    },
+  });
+
+  expect(sink.pushes).toMatchInlineSnapshot(`
+    [
+      {
+        "oldRow": {
+          "id": 3,
+          "name": "greg",
+          "recruiterID": 1,
+        },
+        "row": {
+          "id": 3,
+          "name": "greg",
+          "recruiterID": 2,
+        },
+        "type": "edit",
+      },
+      {
+        "node": {
+          "relationships": {
+            "zsubq_0_recruiter": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": 2,
+                  "name": "erik",
+                  "recruiterID": 1,
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": 3,
+            "name": "greg",
+            "recruiterID": 2,
+          },
+        },
+        "type": "remove",
+      },
+      {
+        "node": {
+          "relationships": {
+            "zsubq_0_recruiter": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": 1,
+                  "name": "aaron",
+                  "recruiterID": null,
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": 4,
+            "name": "matt",
+            "recruiterID": 1,
+          },
+        },
+        "type": "add",
+      },
+      {
+        "node": {
+          "relationships": {
+            "zsubq_0_recruiter": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": 1,
+                  "name": "aaron",
+                  "recruiterID": null,
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": 4,
+            "name": "matt",
+            "recruiterID": 1,
+          },
+        },
+        "type": "remove",
+      },
+      {
+        "node": {
+          "relationships": {
+            "zsubq_0_recruiter": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": 2,
+                  "name": "erik",
+                  "recruiterID": 1,
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": 3,
+            "name": "greg",
+            "recruiterID": 2,
+          },
+        },
+        "type": "add",
+      },
+    ]
+  `);
+});
+
+test('not exists self join', () => {
+  const {sources, getSource} = testSources();
+  const sink = new Catch(
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        where: {
+          type: 'correlatedSubquery',
+          related: {
+            correlation: {
+              parentField: 'recruiterID',
+              op: '=',
+              childField: 'id',
+            },
+            subquery: {
+              table: 'users',
+              alias: 'zsubq_0_recruiter',
+              orderBy: [['id', 'asc']],
+            },
+          },
+          op: 'NOT EXISTS',
+        },
+      },
+      {
+        getSource,
+        createStorage: () => new MemoryStorage(),
+      },
+      undefined,
+    ),
+  );
+
+  expect(sink.fetch()).toMatchInlineSnapshot(`
+    [
+      {
+        "relationships": {
+          "zsubq_0_recruiter": [],
+        },
+        "row": {
+          "id": 1,
+          "name": "aaron",
+          "recruiterID": null,
+        },
+      },
+    ]
+  `);
+
+  // aaron recruited himself
+  sources.users.push({
+    type: 'edit',
+    oldRow: {
+      id: 1,
+      name: 'aaron',
+      recruiterID: null,
+    },
+    row: {
+      id: 1,
+      name: 'aaron',
+      recruiterID: 1,
+    },
+  });
+
+  expect(sink.pushes).toMatchInlineSnapshot(`
+    [
+      {
+        "oldRow": {
+          "id": 1,
+          "name": "aaron",
+          "recruiterID": null,
+        },
+        "row": {
+          "id": 1,
+          "name": "aaron",
+          "recruiterID": 1,
+        },
+        "type": "edit",
+      },
+      {
+        "node": {
+          "relationships": {
+            "zsubq_0_recruiter": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": 1,
+                  "name": "aaron",
+                  "recruiterID": null,
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": 1,
+            "name": "aaron",
+            "recruiterID": 1,
+          },
+        },
+        "type": "remove",
+      },
+    ]
+  `);
 });
 
 test('bind static parameters', () => {
