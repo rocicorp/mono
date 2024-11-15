@@ -68,20 +68,20 @@ export default function ListPage() {
     q = q.where('open', open);
   }
 
-  if (creatorID) {
-    q = q.where('creatorID', creatorID);
+  if (creator) {
+    q = q.whereExists('creator', q => q.where('name', creator));
   }
 
-  if (assigneeID) {
-    q = q.where('assigneeID', assigneeID);
+  if (assignee) {
+    q = q.whereExists('assignee', q => q.where('name', assignee));
   }
 
   if (textFilter) {
     q = q.where('title', 'ILIKE', `%${escapeLike(textFilter)}%`);
   }
 
-  for (const labelID of labelIDs) {
-    q = q.where('labelIDs', 'LIKE', `%${escapeLike(labelID.id)}%`);
+  for (const label of labels) {
+    q = q.whereExists('labels', q => q.where('name', label));
   }
 
   const issues = useQuery(q);
