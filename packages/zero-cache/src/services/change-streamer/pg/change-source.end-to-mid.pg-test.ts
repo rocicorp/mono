@@ -83,7 +83,7 @@ describe('change-source/pg/end-to-mid-test', () => {
   afterAll(async () => {
     changes?.cancel();
     await testDBs.drop(upstream);
-    await replicaDbFile.unlink();
+    replicaDbFile.delete();
   });
 
   function drainToQueue(

@@ -110,6 +110,7 @@ describe('change-source/tables/ddl', () => {
             description: {
               characterMaximumLength: null,
               dataType: 'text',
+              typeOID: 25,
               dflt: null,
               notNull: false,
               pos: 3,
@@ -117,6 +118,7 @@ describe('change-source/tables/ddl', () => {
             id: {
               characterMaximumLength: null,
               dataType: 'text',
+              typeOID: 25,
               dflt: null,
               notNull: true,
               pos: 1,
@@ -124,6 +126,7 @@ describe('change-source/tables/ddl', () => {
             name: {
               characterMaximumLength: null,
               dataType: 'text',
+              typeOID: 25,
               dflt: null,
               notNull: false,
               pos: 2,
@@ -143,6 +146,7 @@ describe('change-source/tables/ddl', () => {
             description: {
               characterMaximumLength: null,
               dataType: 'text',
+              typeOID: 25,
               dflt: null,
               notNull: false,
               pos: 3,
@@ -150,6 +154,7 @@ describe('change-source/tables/ddl', () => {
             id: {
               characterMaximumLength: null,
               dataType: 'text',
+              typeOID: 25,
               dflt: null,
               notNull: true,
               pos: 1,
@@ -157,6 +162,7 @@ describe('change-source/tables/ddl', () => {
             name: {
               characterMaximumLength: null,
               dataType: 'text',
+              typeOID: 25,
               dflt: null,
               notNull: false,
               pos: 2,
@@ -176,6 +182,7 @@ describe('change-source/tables/ddl', () => {
             description: {
               characterMaximumLength: null,
               dataType: 'text',
+              typeOID: 25,
               dflt: null,
               notNull: false,
               pos: 3,
@@ -183,6 +190,7 @@ describe('change-source/tables/ddl', () => {
             id: {
               characterMaximumLength: null,
               dataType: 'text',
+              typeOID: 25,
               dflt: null,
               notNull: true,
               pos: 1,
@@ -190,6 +198,7 @@ describe('change-source/tables/ddl', () => {
             name: {
               characterMaximumLength: null,
               dataType: 'text',
+              typeOID: 25,
               dflt: null,
               notNull: false,
               pos: 2,
@@ -292,6 +301,7 @@ describe('change-source/tables/ddl', () => {
               id: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: true,
                 dflt: null,
                 pos: 1,
@@ -299,6 +309,7 @@ describe('change-source/tables/ddl', () => {
               a: {
                 characterMaximumLength: null,
                 dataType: 'int4',
+                typeOID: 23,
                 notNull: false,
                 dflt: null,
                 pos: 2,
@@ -306,6 +317,7 @@ describe('change-source/tables/ddl', () => {
               b: {
                 characterMaximumLength: null,
                 dataType: 'int8',
+                typeOID: 20,
                 notNull: false,
                 dflt: null,
                 pos: 3,
@@ -395,6 +407,7 @@ describe('change-source/tables/ddl', () => {
               description: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: false,
                 dflt: null,
                 pos: 3,
@@ -402,6 +415,7 @@ describe('change-source/tables/ddl', () => {
               id: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: true,
                 dflt: null,
                 pos: 1,
@@ -409,6 +423,7 @@ describe('change-source/tables/ddl', () => {
               name: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: false,
                 dflt: null,
                 pos: 2,
@@ -467,6 +482,7 @@ describe('change-source/tables/ddl', () => {
               description: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: false,
                 dflt: null,
                 pos: 3,
@@ -474,6 +490,7 @@ describe('change-source/tables/ddl', () => {
               id: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: true,
                 dflt: null,
                 pos: 1,
@@ -481,6 +498,7 @@ describe('change-source/tables/ddl', () => {
               name: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: false,
                 dflt: null,
                 pos: 2,
@@ -488,6 +506,7 @@ describe('change-source/tables/ddl', () => {
               username: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: false,
                 dflt: null,
                 pos: 4,
@@ -532,6 +551,7 @@ describe('change-source/tables/ddl', () => {
               bar: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: false,
                 dflt: "'boo'::text",
                 pos: 4,
@@ -539,6 +559,7 @@ describe('change-source/tables/ddl', () => {
               description: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: false,
                 dflt: null,
                 pos: 3,
@@ -546,6 +567,7 @@ describe('change-source/tables/ddl', () => {
               id: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: true,
                 dflt: null,
                 pos: 1,
@@ -553,6 +575,7 @@ describe('change-source/tables/ddl', () => {
               name: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: false,
                 dflt: null,
                 pos: 2,
@@ -590,6 +613,7 @@ describe('change-source/tables/ddl', () => {
               description: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: false,
                 dflt: null,
                 pos: 3,
@@ -597,6 +621,7 @@ describe('change-source/tables/ddl', () => {
               id: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: true,
                 dflt: null,
                 pos: 1,
@@ -604,6 +629,7 @@ describe('change-source/tables/ddl', () => {
               name: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: false,
                 dflt: "'alice'::text",
                 pos: 2,
@@ -640,6 +666,7 @@ describe('change-source/tables/ddl', () => {
               description: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: false,
                 dflt: null,
                 pos: 3,
@@ -647,6 +674,7 @@ describe('change-source/tables/ddl', () => {
               id: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: true,
                 dflt: null,
                 pos: 1,
@@ -654,6 +682,7 @@ describe('change-source/tables/ddl', () => {
               handle: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: false,
                 dflt: null,
                 pos: 2,
@@ -710,6 +739,7 @@ describe('change-source/tables/ddl', () => {
               id: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: true,
                 dflt: null,
                 pos: 1,
@@ -717,6 +747,7 @@ describe('change-source/tables/ddl', () => {
               name: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: false,
                 dflt: null,
                 pos: 2,
@@ -751,6 +782,7 @@ describe('change-source/tables/ddl', () => {
                 description: {
                   characterMaximumLength: null,
                   dataType: 'text',
+                  typeOID: 25,
                   dflt: null,
                   notNull: false,
                   pos: 3,
@@ -758,6 +790,7 @@ describe('change-source/tables/ddl', () => {
                 id: {
                   characterMaximumLength: null,
                   dataType: 'text',
+                  typeOID: 25,
                   dflt: null,
                   notNull: true,
                   pos: 1,
@@ -765,6 +798,7 @@ describe('change-source/tables/ddl', () => {
                 name: {
                   characterMaximumLength: null,
                   dataType: 'text',
+                  typeOID: 25,
                   dflt: null,
                   notNull: false,
                   pos: 2,
@@ -845,6 +879,7 @@ describe('change-source/tables/ddl', () => {
               description: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 dflt: null,
                 notNull: false,
                 pos: 3,
@@ -852,6 +887,7 @@ describe('change-source/tables/ddl', () => {
               id: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 dflt: null,
                 notNull: true,
                 pos: 1,
@@ -859,6 +895,7 @@ describe('change-source/tables/ddl', () => {
               name: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 dflt: null,
                 notNull: false,
                 pos: 2,
@@ -891,6 +928,7 @@ describe('change-source/tables/ddl', () => {
               description: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 dflt: null,
                 notNull: false,
                 pos: 3,
@@ -898,6 +936,7 @@ describe('change-source/tables/ddl', () => {
               id: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 dflt: null,
                 notNull: true,
                 pos: 1,
@@ -905,6 +944,7 @@ describe('change-source/tables/ddl', () => {
               name: {
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 dflt: null,
                 notNull: false,
                 pos: 2,
@@ -941,6 +981,7 @@ describe('change-source/tables/ddl', () => {
                 id: {
                   characterMaximumLength: null,
                   dataType: 'text',
+                  typeOID: 25,
                   dflt: null,
                   notNull: true,
                   pos: 1,

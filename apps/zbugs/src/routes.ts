@@ -3,10 +3,10 @@ export const links = {
   home() {
     return '/';
   },
-  issue({id, shortID}: {id: string; shortID?: number | undefined}) {
+  issue({id, shortID}: {id: string; shortID?: number | null}) {
     return shortID ? `/issue/${shortID}` : `/issue/${id}`;
   },
-  login(pathname: string, search: string | undefined) {
+  login(pathname: string, search: string | null) {
     return (
       '/api/login/github?redirect=' +
       encodeURIComponent(search ? pathname + search : pathname)

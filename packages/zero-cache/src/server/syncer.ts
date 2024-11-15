@@ -4,6 +4,7 @@ import {pid} from 'node:process';
 import {assert} from '../../../shared/src/asserts.js';
 import {must} from '../../../shared/src/must.js';
 import {randInt} from '../../../shared/src/rand.js';
+import {getAuthorizationConfig} from '../auth/load-authorization.js';
 import {getZeroConfig} from '../config/zero-config.js';
 import {MutagenService} from '../services/mutagen/mutagen.js';
 import type {ReplicaState} from '../services/replicator/replicator.js';
@@ -22,13 +23,10 @@ import {Subscription} from '../types/subscription.js';
 import {Syncer} from '../workers/syncer.js';
 import {exitAfter, runUntilKilled} from './life-cycle.js';
 import {createLogContext} from './logging.js';
-import {getAuthorizationConfig} from '../auth/load-authorization.js';
 
 export default async function runWorker(parent: Worker): Promise<void> {
-  const [config, authorizationConfig] = await Promise.all([
-    getZeroConfig(),
-    getAuthorizationConfig(),
-  ]);
+  const config = getZeroConfig();
+  const authorizationConfig = await getAuthorizationConfig();
   assert(config.cvr.maxConnsPerWorker);
   assert(config.upstream.maxConnsPerWorker);
 

@@ -197,9 +197,9 @@ describe('db/migration-lite', () => {
     db.prepare(`CREATE TABLE "MigrationHistory" (event TEXT)`).run();
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     db.close();
-    await dbFile.unlink();
+    dbFile.delete();
   });
 
   for (const c of cases) {

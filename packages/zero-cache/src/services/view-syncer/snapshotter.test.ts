@@ -63,9 +63,9 @@ describe('view-syncer/snapshotter', () => {
     s = new Snapshotter(lc, dbFile.path).init();
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     s.destroy();
-    await dbFile.unlink();
+    dbFile.delete();
   });
 
   test('initial snapshot', () => {

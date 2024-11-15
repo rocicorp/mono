@@ -42,6 +42,7 @@ describe('tables/published', () => {
               clientID: {
                 pos: 1,
                 dataType: 'varchar',
+                typeOID: 1043,
                 characterMaximumLength: 180,
                 notNull: true,
                 dflt: null,
@@ -49,6 +50,7 @@ describe('tables/published', () => {
               lastMutationID: {
                 pos: 2,
                 dataType: 'int8',
+                typeOID: 20,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,
@@ -101,6 +103,7 @@ describe('tables/published', () => {
               ['user_id']: {
                 pos: 1,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: true,
                 dflt: null,
@@ -109,6 +112,7 @@ describe('tables/published', () => {
                 pos: 2,
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: false,
                 dflt: null,
               },
@@ -116,6 +120,7 @@ describe('tables/published', () => {
                 pos: 3,
                 characterMaximumLength: null,
                 dataType: 'text[]',
+                typeOID: 1009,
                 notNull: false,
                 dflt: null,
               },
@@ -123,6 +128,7 @@ describe('tables/published', () => {
                 pos: 4,
                 characterMaximumLength: null,
                 dataType: 'bool',
+                typeOID: 16,
                 notNull: false,
                 dflt: 'false',
               },
@@ -130,6 +136,7 @@ describe('tables/published', () => {
                 pos: 5,
                 characterMaximumLength: null,
                 dataType: 'int8',
+                typeOID: 20,
                 notNull: false,
                 dflt: '2147483647',
               },
@@ -137,6 +144,7 @@ describe('tables/published', () => {
                 pos: 6,
                 characterMaximumLength: null,
                 dataType: 'float8',
+                typeOID: 701,
                 notNull: false,
                 dflt: '123.456',
               },
@@ -144,12 +152,14 @@ describe('tables/published', () => {
                 pos: 7,
                 characterMaximumLength: null,
                 dataType: 'int8',
+                typeOID: 20,
                 notNull: false,
                 dflt: "'2147483648'::bigint",
               },
               timez: {
                 pos: 8,
                 dataType: 'timestamptz[]',
+                typeOID: 1185,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,
@@ -158,6 +168,7 @@ describe('tables/published', () => {
                 pos: 9,
                 characterMaximumLength: null,
                 dataType: 'int8[]',
+                typeOID: 1016,
                 notNull: false,
                 dflt: null,
               },
@@ -165,6 +176,7 @@ describe('tables/published', () => {
                 pos: 10,
                 characterMaximumLength: null,
                 dataType: 'bool[]',
+                typeOID: 1000,
                 notNull: false,
                 dflt: "'{t,f}'::boolean[]",
               },
@@ -172,12 +184,14 @@ describe('tables/published', () => {
                 pos: 11,
                 characterMaximumLength: null,
                 dataType: 'float4[]',
+                typeOID: 1021,
                 notNull: false,
                 dflt: null,
               },
               ['int_array']: {
                 pos: 12,
                 dataType: 'int4[]',
+                typeOID: 1007,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,
@@ -185,6 +199,7 @@ describe('tables/published', () => {
               ['json_val']: {
                 pos: 13,
                 dataType: 'jsonb',
+                typeOID: 3802,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,
@@ -227,6 +242,7 @@ describe('tables/published', () => {
               ['user_id']: {
                 pos: 1,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: true,
                 dflt: null,
@@ -234,6 +250,7 @@ describe('tables/published', () => {
               ['org_id']: {
                 pos: 2,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,
@@ -242,6 +259,7 @@ describe('tables/published', () => {
                 pos: 3,
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: false,
                 dflt: null,
               },
@@ -291,6 +309,7 @@ describe('tables/published', () => {
               ['user_id']: {
                 pos: 1,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: true,
                 dflt: null,
@@ -298,6 +317,7 @@ describe('tables/published', () => {
               ['org_id']: {
                 pos: 2,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,
@@ -306,6 +326,7 @@ describe('tables/published', () => {
                 pos: 3,
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: false,
                 dflt: null,
               },
@@ -358,6 +379,7 @@ describe('tables/published', () => {
               ['user_id']: {
                 pos: 1,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: true,
                 dflt: null,
@@ -365,6 +387,7 @@ describe('tables/published', () => {
               ['org_id']: {
                 pos: 2,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,
@@ -373,6 +396,7 @@ describe('tables/published', () => {
                 pos: 3,
                 characterMaximumLength: null,
                 dataType: 'text',
+                typeOID: 25,
                 notNull: false,
                 dflt: null,
               },
@@ -437,6 +461,7 @@ describe('tables/published', () => {
               ['user_id']: {
                 pos: 1,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: true,
                 dflt: null,
@@ -444,6 +469,7 @@ describe('tables/published', () => {
               ['timez']: {
                 pos: 3,
                 dataType: 'timestamptz',
+                typeOID: 1184,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,
@@ -451,6 +477,7 @@ describe('tables/published', () => {
               ['int_array']: {
                 pos: 7,
                 dataType: 'int4[]',
+                typeOID: 1007,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,
@@ -458,6 +485,7 @@ describe('tables/published', () => {
               ['json_val']: {
                 pos: 8,
                 dataType: 'jsonb',
+                typeOID: 3802,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,
@@ -502,6 +530,7 @@ describe('tables/published', () => {
               ['issue_id']: {
                 pos: 1,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: true,
                 dflt: null,
@@ -509,6 +538,7 @@ describe('tables/published', () => {
               ['description']: {
                 pos: 2,
                 dataType: 'text',
+                typeOID: 25,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,
@@ -516,6 +546,7 @@ describe('tables/published', () => {
               ['org_id']: {
                 pos: 3,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: true,
                 dflt: null,
@@ -523,6 +554,7 @@ describe('tables/published', () => {
               ['component_id']: {
                 pos: 4,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: true,
                 dflt: null,
@@ -587,6 +619,7 @@ describe('tables/published', () => {
               ['issue_id']: {
                 pos: 1,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: true,
                 dflt: null,
@@ -594,6 +627,7 @@ describe('tables/published', () => {
               ['description']: {
                 pos: 2,
                 dataType: 'text',
+                typeOID: 25,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,
@@ -601,6 +635,7 @@ describe('tables/published', () => {
               ['org_id']: {
                 pos: 3,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: true,
                 dflt: null,
@@ -608,6 +643,7 @@ describe('tables/published', () => {
               ['component_id']: {
                 pos: 4,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: true,
                 dflt: null,
@@ -624,6 +660,7 @@ describe('tables/published', () => {
               ['user_id']: {
                 pos: 1,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: true,
                 dflt: null,
@@ -631,6 +668,7 @@ describe('tables/published', () => {
               ['handle']: {
                 pos: 3,
                 dataType: 'text',
+                typeOID: 25,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: "'foo'::text",
@@ -647,6 +685,7 @@ describe('tables/published', () => {
               clientID: {
                 pos: 1,
                 dataType: 'varchar',
+                typeOID: 1043,
                 characterMaximumLength: 180,
                 notNull: true,
                 dflt: null,
@@ -654,6 +693,7 @@ describe('tables/published', () => {
               lastMutationID: {
                 pos: 2,
                 dataType: 'int8',
+                typeOID: 20,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,
@@ -706,6 +746,7 @@ describe('tables/published', () => {
               ['issue_id']: {
                 pos: 1,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: true,
                 dflt: null,
@@ -713,6 +754,7 @@ describe('tables/published', () => {
               ['org_id']: {
                 pos: 2,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,
@@ -720,6 +762,7 @@ describe('tables/published', () => {
               ['component_id']: {
                 pos: 3,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,
@@ -782,6 +825,7 @@ describe('tables/published', () => {
               ['issue_id']: {
                 pos: 1,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: true,
                 dflt: null,
@@ -789,6 +833,7 @@ describe('tables/published', () => {
               ['org_id']: {
                 pos: 2,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,
@@ -796,6 +841,7 @@ describe('tables/published', () => {
               ['component_id']: {
                 pos: 3,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,
@@ -863,6 +909,7 @@ describe('tables/published', () => {
               ['id']: {
                 pos: 1,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: true,
                 dflt: null,
@@ -870,6 +917,7 @@ describe('tables/published', () => {
               ['a']: {
                 pos: 2,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,
@@ -877,6 +925,7 @@ describe('tables/published', () => {
               ['b']: {
                 pos: 3,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,
@@ -948,6 +997,7 @@ describe('tables/published', () => {
               ['id']: {
                 pos: 1,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: true,
                 dflt: null,
@@ -955,6 +1005,7 @@ describe('tables/published', () => {
               ['az']: {
                 pos: 2,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,
@@ -962,6 +1013,7 @@ describe('tables/published', () => {
               ['bz']: {
                 pos: 3,
                 dataType: 'int4',
+                typeOID: 23,
                 characterMaximumLength: null,
                 notNull: false,
                 dflt: null,

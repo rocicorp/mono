@@ -214,7 +214,7 @@ describe('view-syncer/service', () => {
     await vs.stop();
     await viewSyncerDone;
     await testDBs.drop(cvrDB);
-    await replicaDbFile.unlink();
+    replicaDbFile.delete();
   });
 
   const serviceID = '9876';

@@ -2278,15 +2278,6 @@ test('the type of collection should be inferred from options with parse', () => 
 });
 
 suite('CRUD', () => {
-  type Issue = {
-    id: string;
-    title: string;
-  };
-  type Comment = {
-    id: string;
-    issueID: string;
-    text: string;
-  };
   const makeZero = () =>
     zeroForTest({
       schema: {
@@ -2295,7 +2286,7 @@ suite('CRUD', () => {
           issue: {
             columns: {
               id: {type: 'string'},
-              title: {type: 'string'},
+              title: {type: 'string', optional: true},
             },
             primaryKey: ['id'],
             tableName: 'issue',
@@ -2305,10 +2296,20 @@ suite('CRUD', () => {
             columns: {
               id: {type: 'string'},
               issueID: {type: 'string'},
-              text: {type: 'string'},
+              text: {type: 'string', optional: true},
             },
             primaryKey: ['id'],
             tableName: 'comment',
+            relationships: {},
+          },
+          compoundPKTest: {
+            columns: {
+              id1: {type: 'string'},
+              id2: {type: 'string'},
+              text: {type: 'string'},
+            },
+            primaryKey: ['id1', 'id2'],
+            tableName: 'compoundPKTest',
             relationships: {},
           },
         },
@@ -2318,7 +2319,7 @@ suite('CRUD', () => {
   test('create', async () => {
     const z = makeZero();
 
-    const createIssue: (issue: Issue) => Promise<void> = z.mutate.issue.create;
+    const createIssue = z.mutate.issue.create;
     const view = z.query.issue.materialize();
     await createIssue({id: 'a', title: 'A'});
     expect(view.data).toEqual([{id: 'a', title: 'A'}]);
@@ -2326,6 +2327,28 @@ suite('CRUD', () => {
     // create again should not change anything
     await createIssue({id: 'a', title: 'Again'});
     expect(view.data).toEqual([{id: 'a', title: 'A'}]);
+
+    // Optional fields can be set to null/undefined or left off completely.
+    await createIssue({id: 'b'});
+    expect(view.data).toEqual([
+      {id: 'a', title: 'A'},
+      {id: 'b', title: null},
+    ]);
+
+    await createIssue({id: 'c', title: undefined});
+    expect(view.data).toEqual([
+      {id: 'a', title: 'A'},
+      {id: 'b', title: null},
+      {id: 'c', title: null},
+    ]);
+
+    await createIssue({id: 'd', title: null});
+    expect(view.data).toEqual([
+      {id: 'a', title: 'A'},
+      {id: 'b', title: null},
+      {id: 'c', title: null},
+      {id: 'd', title: null},
+    ]);
   });
 
   test('set', async () => {
@@ -2335,8 +2358,7 @@ suite('CRUD', () => {
     await z.mutate.comment.create({id: 'a', issueID: '1', text: 'A text'});
     expect(view.data).toEqual([{id: 'a', issueID: '1', text: 'A text'}]);
 
-    const setComment: (comment: Comment) => Promise<void> =
-      z.mutate.comment.set;
+    const setComment = z.mutate.comment.set;
     await setComment({id: 'b', issueID: '2', text: 'B text'});
     expect(view.data).toEqual([
       {id: 'a', issueID: '1', text: 'A text'},
@@ -2349,6 +2371,41 @@ suite('CRUD', () => {
       {id: 'a', issueID: '11', text: 'AA text'},
       {id: 'b', issueID: '2', text: 'B text'},
     ]);
+
+    // Optional fields can be set to null/undefined or left off completely.
+    await setComment({id: 'c', issueID: '3'});
+    expect(view.data[view.data.length - 1]).toEqual({
+      id: 'c',
+      issueID: '3',
+      text: null,
+    });
+
+    await setComment({id: 'd', issueID: '4', text: undefined});
+    expect(view.data[view.data.length - 1]).toEqual({
+      id: 'd',
+      issueID: '4',
+      text: null,
+    });
+
+    await setComment({id: 'e', issueID: '5', text: undefined});
+    expect(view.data[view.data.length - 1]).toEqual({
+      id: 'e',
+      issueID: '5',
+      text: null,
+    });
+
+    // Setting with undefined/null/missing overwrites field to default/null.
+    await setComment({id: 'a', issueID: '11'});
+    expect(view.data[0]).toEqual({id: 'a', issueID: '11', text: null});
+
+    await setComment({id: 'a', issueID: '11', text: 'foo'});
+    expect(view.data[0]).toEqual({id: 'a', issueID: '11', text: 'foo'});
+
+    await setComment({id: 'a', issueID: '11', text: undefined});
+    expect(view.data[0]).toEqual({id: 'a', issueID: '11', text: null});
+
+    await setComment({id: 'a', issueID: '11', text: 'foo'});
+    expect(view.data[0]).toEqual({id: 'a', issueID: '11', text: 'foo'});
   });
 
   test('update', async () => {
@@ -2367,6 +2424,34 @@ suite('CRUD', () => {
     // update is a noop if not existing
     await updateComment({id: 'b', issueID: '2', text: 'B text'});
     expect(view.data).toEqual([{id: 'a', issueID: '11', text: 'AAA text'}]);
+
+    // All fields take previous value if left off or set to undefined.
+    await updateComment({id: 'a', issueID: '11'});
+    expect(view.data).toEqual([{id: 'a', issueID: '11', text: 'AAA text'}]);
+
+    await updateComment({id: 'a', issueID: '11', text: undefined});
+    expect(view.data).toEqual([{id: 'a', issueID: '11', text: 'AAA text'}]);
+
+    // 'optional' fields can be explicitly set to null to overwrite previous
+    // value.
+    await updateComment({id: 'a', issueID: '11', text: null});
+    expect(view.data).toEqual([{id: 'a', issueID: '11', text: null}]);
+  });
+
+  test('compoundPK', async () => {
+    const z = makeZero();
+    const view = z.query.compoundPKTest.materialize();
+    await z.mutate.compoundPKTest.create({id1: 'a', id2: 'a', text: 'a'});
+    expect(view.data).toEqual([{id1: 'a', id2: 'a', text: 'a'}]);
+
+    await z.mutate.compoundPKTest.set({id1: 'a', id2: 'a', text: 'aa'});
+    expect(view.data).toEqual([{id1: 'a', id2: 'a', text: 'aa'}]);
+
+    await z.mutate.compoundPKTest.update({id1: 'a', id2: 'a', text: 'aaa'});
+    expect(view.data).toEqual([{id1: 'a', id2: 'a', text: 'aaa'}]);
+
+    await z.mutate.compoundPKTest.delete({id1: 'a', id2: 'a'});
+    expect(view.data).toEqual([]);
   });
 
   test('do not expose _zero_crud', () => {

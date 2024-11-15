@@ -25,8 +25,6 @@ import type {
 } from '../change-streamer/schema/change.js';
 import {MessageProcessor} from './incremental-sync.js';
 
-const NOOP = () => {};
-
 export interface FakeReplicator {
   processTransaction(finalWatermark: string, ...msgs: DataChange[]): void;
 }
@@ -50,17 +48,11 @@ export function fakeReplicator(lc: LogContext, db: Database): FakeReplicator {
 
 export function createMessageProcessor(
   db: Database,
-  ack: (lsn: string) => void = NOOP,
   failures: (lc: LogContext, err: unknown) => void = (_, err) => {
     throw err;
   },
 ): MessageProcessor {
-  return new MessageProcessor(
-    new StatementRunner(db),
-    'IMMEDIATE',
-    ack,
-    failures,
-  );
+  return new MessageProcessor(new StatementRunner(db), 'IMMEDIATE', failures);
 }
 
 export class ReplicationMessages<

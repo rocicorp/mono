@@ -11,6 +11,10 @@ export const columnSpec = v.object({
 
 export type ColumnSpec = Readonly<v.Infer<typeof columnSpec>>;
 
+const publishedColumnSpec = columnSpec.extend({
+  typeOID: v.number(),
+});
+
 export const liteTableSpec = v.object({
   name: v.string(),
   columns: v.record(columnSpec),
@@ -23,6 +27,7 @@ export const tableSpec = liteTableSpec.extend({
 
 export const publishedTableSpec = tableSpec.extend({
   oid: v.number(),
+  columns: v.record(publishedColumnSpec),
   publications: v.record(v.object({rowFilter: v.string().nullable()})),
 });
 

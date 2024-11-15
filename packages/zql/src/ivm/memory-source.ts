@@ -22,17 +22,17 @@ import {LookaheadIterator} from './lookahead-iterator.js';
 import type {Constraint, FetchRequest, Input, Output} from './operator.js';
 import type {SourceSchema} from './schema.js';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
-import type {
-  Source,
-  SourceChange,
-  SourceChangeEdit,
-  SourceInput,
-} from './source.js';
+import type {Source, SourceChange, SourceInput} from './source.js';
 import type {Stream} from './stream.js';
 
 export type Overlay = {
   outputIndex: number;
   change: SourceChange;
+};
+
+export type Overlays = {
+  add: Row | undefined;
+  remove: Row | undefined;
 };
 
 type Index = {
@@ -509,126 +509,103 @@ function computeOverlays(
   constraint: Constraint | undefined,
   overlay: Overlay | undefined,
   compare: Comparator,
-): [Overlay | undefined, Overlay | undefined] {
-  let secondOverlay: Overlay | undefined;
-
-  if (
-    overlay?.change.type === 'edit' &&
-    compare(overlay.change.row, overlay.change.oldRow) !== 0
-  ) {
-    // Different PK so we split the edit change into a remove and add.
-    [overlay, secondOverlay] = splitEditChange(overlay, compare);
+): Overlays {
+  let overlays: Overlays = {
+    add: undefined,
+    remove: undefined,
+  };
+  switch (overlay?.change.type) {
+    case 'add':
+      overlays = {
+        add: overlay.change.row,
+        remove: undefined,
+      };
+      break;
+    case 'remove':
+      overlays = {
+        add: undefined,
+        remove: overlay.change.row,
+      };
+      break;
+    case 'edit':
+      overlays = {
+        add: overlay.change.row,
+        remove: overlay.change.oldRow,
+      };
+      break;
   }
 
   if (startAt) {
-    overlay = overlayForStartAt(overlay, startAt, compare);
-    secondOverlay = overlayForStartAt(secondOverlay, startAt, compare);
+    overlays = overlaysForStartAt(overlays, startAt, compare);
   }
 
   if (constraint) {
-    overlay = overlayForConstraint(overlay, constraint);
-    secondOverlay = overlayForConstraint(secondOverlay, constraint);
+    overlays = overlaysForConstraint(overlays, constraint);
   }
 
-  if (secondOverlay !== undefined && overlay === undefined) {
-    overlay = secondOverlay;
-    secondOverlay = undefined;
-  }
-
-  return [overlay, secondOverlay];
+  return overlays;
 }
 
-export {overlayForStartAt as overlayForStartAtForTest};
+export {overlaysForStartAt as overlaysForStartAtForTest};
 
-function overlayForStartAt(
-  overlay: Overlay | undefined,
+function overlaysForStartAt(
+  {add, remove}: Overlays,
   startAt: Row,
   compare: Comparator,
-): Overlay | undefined {
-  if (!overlay) {
-    return undefined;
-  }
-  if (compare(overlay.change.row, startAt) < 0) {
-    return undefined;
-  }
-  return overlay;
+): Overlays {
+  const undefinedIfBeforeStartAt = (row: Row | undefined) =>
+    row === undefined || compare(row, startAt) < 0 ? undefined : row;
+  return {
+    add: undefinedIfBeforeStartAt(add),
+    remove: undefinedIfBeforeStartAt(remove),
+  };
 }
 
-export {overlayForConstraint as overlayForConstraintForTest};
+export {overlaysForConstraint as overlaysForConstraintForTest};
 
-function overlayForConstraint(
-  overlay: Overlay | undefined,
+function overlaysForConstraint(
+  {add, remove}: Overlays,
   constraint: Constraint,
-): Overlay | undefined {
-  if (!overlay) {
-    return undefined;
-  }
+): Overlays {
+  const undefinedIfDoesntMatchConstraint = (row: Row | undefined) =>
+    row === undefined || !valuesEqual(row[constraint.key], constraint.value)
+      ? undefined
+      : row;
 
-  if (!valuesEqual(overlay.change.row[constraint.key], constraint.value)) {
-    return undefined;
-  }
-  return overlay;
-}
-
-function splitEditChange(
-  overlay: Overlay,
-  compare: Comparator,
-): [Overlay, Overlay] {
-  const {oldRow, row} = overlay.change as SourceChangeEdit;
-
-  const removeOverlay: Overlay = {
-    outputIndex: overlay.outputIndex,
-    change: {type: 'remove', row: oldRow},
+  return {
+    add: undefinedIfDoesntMatchConstraint(add),
+    remove: undefinedIfDoesntMatchConstraint(remove),
   };
-  const addOverlay: Overlay = {
-    outputIndex: overlay.outputIndex,
-    change: {type: 'add', row},
-  };
-
-  const cmp = compare(oldRow, row);
-  assert(cmp !== 0, 'We should not split edit change with same PK');
-  if (cmp < 0) {
-    return [removeOverlay, addOverlay];
-  }
-  return [addOverlay, removeOverlay];
 }
 
 export function* generateWithOverlayInner(
   rowIterator: Iterable<Row>,
-  overlays: [Overlay | undefined, Overlay | undefined],
+  overlays: Overlays,
   compare: (r1: Row, r2: Row) => number,
 ) {
-  let [overlay, secondOverlay] = overlays;
+  let addOverlayYielded = false;
+  let removeOverlaySkipped = false;
   for (const row of rowIterator) {
-    if (overlay) {
-      if (overlay.change.type === 'add' || overlay.change.type === 'edit') {
-        // For edit changes we can only get here if the edit change was not
-        // split an the row and the oldRow have the same PK.
-        const cmp = compare(overlay.change.row, row);
-        if (cmp < 0) {
-          yield {row: overlay.change.row, relationships: {}};
-          overlay = secondOverlay;
-          secondOverlay = undefined;
-        }
+    if (!addOverlayYielded && overlays.add) {
+      const cmp = compare(overlays.add, row);
+      if (cmp < 0) {
+        addOverlayYielded = true;
+        yield {row: overlays.add, relationships: {}};
       }
+    }
 
-      if (overlay?.change.type === 'remove') {
-        const cmp = compare(overlay.change.row, row);
-        if (cmp < 0) {
-          overlay = secondOverlay;
-          secondOverlay = undefined;
-        } else if (cmp === 0) {
-          overlay = secondOverlay;
-          secondOverlay = undefined;
-          continue;
-        }
+    if (!removeOverlaySkipped && overlays.remove) {
+      const cmp = compare(overlays.remove, row);
+      if (cmp === 0) {
+        removeOverlaySkipped = true;
+        continue;
       }
     }
     yield {row, relationships: {}};
   }
 
-  if (overlay && overlay.change.type === 'add') {
-    yield {row: overlay.change.row, relationships: {}};
+  if (!addOverlayYielded && overlays.add) {
+    yield {row: overlays.add, relationships: {}};
   }
 }
 

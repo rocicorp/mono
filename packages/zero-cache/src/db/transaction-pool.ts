@@ -50,7 +50,7 @@ export class TransactionPool {
   readonly #mode: Mode;
   readonly #init: QueuedTask | undefined;
   readonly #cleanup: QueuedTask | undefined;
-  readonly #tasks = new Queue<TaskTracker | Error | 'done' | 'abort'>();
+  readonly #tasks = new Queue<TaskTracker | Error | 'done'>();
   readonly #workers: Promise<unknown>[] = [];
   readonly #initialWorkers: number;
   readonly #maxWorkers: number;
@@ -226,12 +226,12 @@ export class TransactionPool {
           }
         };
 
-        let task: TaskTracker | Error | 'done' | 'abort' = this.#init
+        let task: TaskTracker | Error | 'done' = this.#init
           ? {task: this.#init}
           : await this.#tasks.dequeue(timeoutTask, timeoutMs);
 
         try {
-          while (task !== 'done' && task !== 'abort') {
+          while (task !== 'done') {
             if (
               task instanceof Error ||
               (task.task !== this.#init && this.#failure)
@@ -249,22 +249,31 @@ export class TransactionPool {
           if (this.#cleanup) {
             await executeTask({task: this.#cleanup});
           }
-          if (task === 'abort') {
-            await executeTask(ABORT_TASK); // ROLLBACK the transaction
-          }
         }
 
         lc.debug?.('worker done');
         return Promise.all(pending);
       } catch (e) {
-        lc.error?.('error from worker', e);
-        this.fail(e); // A failure in any worker should fail the pool.
+        if (e !== this.#failure) {
+          lc.error?.('error from worker', e);
+          this.fail(e); // A failure in any worker should fail the pool.
+        }
         throw e;
       }
     };
 
     this.#workers.push(
-      db.begin(this.#mode, worker).finally(() => this.#numWorkers--),
+      db
+        .begin(this.#mode, worker)
+        .catch(e => {
+          if (e instanceof RollbackSignal) {
+            // A RollbackSignal is used to gracefully rollback the postgres.js
+            // transaction block. It should not be thrown up to the application.
+          } else {
+            throw e;
+          }
+        })
+        .finally(() => this.#numWorkers--),
     );
 
     // After adding the worker, enqueue a terminal signal if we are in either of the
@@ -317,7 +326,7 @@ export class TransactionPool {
    * or aborted.
    */
   abort() {
-    this.#setDone('abort');
+    this.fail(new RollbackSignal());
   }
 
   /**
@@ -325,15 +334,11 @@ export class TransactionPool {
    * been completed. Throws if the pool is already done or aborted.
    */
   setDone() {
-    this.#setDone('done');
-  }
-
-  #setDone(terminal: 'done' | 'abort') {
     assert(!this.#done, 'already set done');
     this.#done = true;
 
     for (let i = 0; i < this.#numWorkers; i++) {
-      void this.#tasks.enqueue(terminal);
+      void this.#tasks.enqueue('done');
     }
   }
 
@@ -391,7 +396,7 @@ export class TransactionPool {
         this.#lc.error?.(this.#failure);
       }
 
-      for (let i = 0; i < this.#workers.length; i++) {
+      for (let i = 0; i < this.#numWorkers; i++) {
         // Enqueue the Error to terminate any workers waiting for tasks.
         void this.#tasks.enqueue(this.#failure);
       }
@@ -565,10 +570,25 @@ export function importSnapshot(snapshotID: string): {
  * will result in lowering the log level from `error` to `debug`.
  */
 export class ControlFlowError extends Error {
-  constructor(err: unknown) {
+  constructor(cause?: unknown) {
     super();
-    this.cause = err;
+    this.cause = cause;
   }
+}
+
+/**
+ * Internal error used to rollback the worker transaction. This is used
+ * instead of executing a `ROLLBACK` statement because the postgres.js
+ * library will otherwise try to execute an extraneous `COMMIT`, which
+ * results in outputting a "no transaction in progress" warning to the
+ * database logs.
+ *
+ * Throwing an exception, on the other hand, executes the postgres.js
+ * codepath that calls `ROLLBACK` instead.
+ */
+class RollbackSignal extends ControlFlowError {
+  readonly name = 'RollbackSignal';
+  readonly message = 'rolling back transaction';
 }
 
 function ensureError(err: unknown): Error {
@@ -617,8 +637,6 @@ type TaskTracker<T = unknown> =
       readonly task: QueuedTask<ReadResult<T>>;
       readonly resolver: Resolver<T>;
     };
-
-const ABORT_TASK: TaskTracker = {task: tx => new Statements([tx`ROLLBACK`])};
 
 const IDLE_TIMEOUT_MS = 5_000;
 

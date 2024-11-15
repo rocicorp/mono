@@ -110,7 +110,7 @@ describe('change-streamer/pg/sync-schema', () => {
 
   afterEach(async () => {
     await testDBs.drop(upstream);
-    await replicaFile.unlink();
+    replicaFile.delete();
   }, 10000);
   const lc = createSilentLogContext();
 

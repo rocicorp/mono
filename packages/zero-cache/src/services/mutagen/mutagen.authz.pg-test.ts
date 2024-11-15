@@ -25,14 +25,6 @@ CREATE TABLE "user" (
 INSERT INTO "user" VALUES ('admn', 'admin');
 INSERT INTO "user" VALUES ('usr', 'user');
 
-CREATE TABLE "roTable" (
-  id text PRIMARY KEY,
-  a text
-);
-
--- a row against which we can test delete and update
-INSERT INTO "roTable" VALUES ('1', 'a');
-
 CREATE TABLE "roColumn" (
   id text PRIMARY KEY,
   "a" text,
@@ -59,23 +51,6 @@ CREATE TABLE "roRow" (
 
 -- a row against which we can test delete and update
 INSERT INTO "roRow" VALUES ('1', 'a', 'b');
-
-CREATE TABLE "adminOnlyTable" (
-  id text PRIMARY KEY,
-  a text
-);
-
--- a row against which we can test delete and update
-INSERT INTO "adminOnlyTable" VALUES ('1', 'a');
-
-CREATE TABLE "adminOnlyColumn" (
-  id text PRIMARY KEY,
-  a text,
-  b text
-);
-
--- a row against which we can test delete and update
-INSERT INTO "adminOnlyColumn" VALUES ('1', 'a', 'b');
 
 CREATE TABLE "adminOnlyCell" (
   id text PRIMARY KEY,
@@ -116,25 +91,6 @@ const schema = createSchema({
       primaryKey: ['id'],
       relationships: {},
     },
-    roTable: {
-      tableName: 'roTable',
-      columns: {
-        id: {type: 'string'},
-        a: {type: 'string'},
-      },
-      primaryKey: ['id'],
-      relationships: {},
-    },
-    roColumn: {
-      tableName: 'roColumn',
-      columns: {
-        id: {type: 'string'},
-        a: {type: 'string'},
-        b: {type: 'string', readOnly: true},
-      },
-      primaryKey: ['id'],
-      relationships: {},
-    },
     roCell: {
       tableName: 'roCell',
       columns: {
@@ -147,25 +103,6 @@ const schema = createSchema({
     },
     roRow: {
       tableName: 'roRow',
-      columns: {
-        id: {type: 'string'},
-        a: {type: 'string'},
-        b: {type: 'string'},
-      },
-      primaryKey: ['id'],
-      relationships: {},
-    },
-    adminOnlyTable: {
-      tableName: 'adminOnlyTable',
-      columns: {
-        id: {type: 'string'},
-        a: {type: 'string'},
-      },
-      primaryKey: ['id'],
-      relationships: {},
-    },
-    adminOnlyColumn: {
-      tableName: 'adminOnlyColumn',
       columns: {
         id: {type: 'string'},
         a: {type: 'string'},
@@ -219,22 +156,6 @@ const authorizationConfig = await defineAuthorization<
     query.user.where('id', '=', authData.sub).where('role', '=', 'admin');
 
   return {
-    roTable: {
-      table: {
-        insert: [],
-        update: [],
-        delete: [],
-      },
-    },
-    roColumn: {
-      column: {
-        a: {
-          insert: [],
-          update: [],
-          delete: [],
-        },
-      },
-    },
     roCell: {
       cell: {
         a: {
@@ -249,22 +170,6 @@ const authorizationConfig = await defineAuthorization<
         insert: [],
         update: [],
         delete: [],
-      },
-    },
-    adminOnlyTable: {
-      table: {
-        insert: [allowIfAdmin],
-        update: [allowIfAdmin],
-        delete: [allowIfAdmin],
-      },
-    },
-    adminOnlyColumn: {
-      column: {
-        a: {
-          insert: [allowIfAdmin],
-          update: [allowIfAdmin],
-          delete: [allowIfAdmin],
-        },
       },
     },
     adminOnlyCell: {
@@ -347,37 +252,6 @@ function procMutation(
   );
 }
 
-test('it is impossible to write to tables that are read-only', async () => {
-  await procMutation('roTable', 'create', {id: '2', a: 'a'});
-  let rows = await upstream`SELECT * FROM "roTable" WHERE id = '2'`;
-  expect(rows.length).toBe(0);
-
-  await procMutation('roTable', 'update', {id: '1', a: 'UPDATED'});
-  rows = await upstream`SELECT * FROM "roTable" WHERE id = '1'`;
-  expect(rows).toEqual([{id: '1', a: 'a'}]);
-
-  await procMutation('roTable', 'delete', {id: '1'});
-  rows = await upstream`SELECT * FROM "roTable" WHERE id = '1'`;
-  expect(rows.length).toBe(1);
-});
-
-test('it is impossible to write to a column that is read-only', async () => {
-  await procMutation('roColumn', 'create', {id: '2', a: 'a', b: 'b'});
-  let rows = await upstream`SELECT * FROM "roColumn" WHERE id = '2'`;
-  expect(rows.length).toBe(0);
-
-  await procMutation('roColumn', 'update', {
-    id: '1',
-    a: 'UPDATED',
-  });
-  rows = await upstream`SELECT * FROM "roColumn" WHERE id = '1'`;
-  expect(rows).toEqual([{id: '1', a: 'a', b: 'b'}]);
-
-  await procMutation('roColumn', 'delete', {id: '1'});
-  rows = await upstream`SELECT * FROM "roColumn" WHERE id = '1'`;
-  expect(rows.length).toBe(1);
-});
-
 test('it is possible to write to a row with a read only column if that column is not written to', async () => {
   await procMutation('roColumn', 'update', {id: '1', b: 'UPDATED'});
   const rows = await upstream`SELECT * FROM "roColumn" WHERE id = '1'`;
@@ -422,92 +296,6 @@ test('is is impossible to update a read-only row', async () => {
   await procMutation('roRow', 'delete', {id: '1'});
   rows = await upstream`SELECT * FROM "roRow" WHERE id = '1'`;
   expect(rows.length).toBe(1);
-});
-
-test('non-admins cannot update admin-only tables', async () => {
-  await procMutation('adminOnlyTable', 'create', {id: '2', a: 'a'}, 'usr');
-  let rows = await upstream`SELECT * FROM "adminOnlyTable" WHERE id = '2'`;
-  expect(rows.length).toBe(0);
-
-  await procMutation(
-    'adminOnlyTable',
-    'update',
-    {id: '1', a: 'UPDATED'},
-    'usr',
-  );
-  rows = await upstream`SELECT * FROM "adminOnlyTable" WHERE id = '1'`;
-  expect(rows).toEqual([{id: '1', a: 'a'}]);
-
-  await procMutation('adminOnlyTable', 'delete', {id: '1'}, 'usr');
-  rows = await upstream`SELECT * FROM "adminOnlyTable" WHERE id = '1'`;
-  expect(rows.length).toBe(1);
-});
-
-test('admins can update admin-only tables', async () => {
-  await procMutation('adminOnlyTable', 'create', {id: '2', a: 'a'}, 'admn');
-  let rows = await upstream`SELECT * FROM "adminOnlyTable" WHERE id = '2'`;
-  expect(rows.length).toBe(1);
-
-  await procMutation(
-    'adminOnlyTable',
-    'update',
-    {id: '2', a: 'UPDATED'},
-    'admn',
-  );
-  rows = await upstream`SELECT * FROM "adminOnlyTable" WHERE id = '2'`;
-  expect(rows).toEqual([{id: '2', a: 'UPDATED'}]);
-
-  await procMutation('adminOnlyTable', 'delete', {id: '2'}, 'admn');
-  rows = await upstream`SELECT * FROM "adminOnlyTable" WHERE id = '2'`;
-  expect(rows.length).toBe(0);
-});
-
-test('non-admins cannot update admin-only columns', async () => {
-  await procMutation(
-    'adminOnlyColumn',
-    'create',
-    {id: '2', a: 'a', b: 'b'},
-    'usr',
-  );
-  let rows = await upstream`SELECT * FROM "adminOnlyColumn" WHERE id = '2'`;
-  expect(rows.length).toBe(0);
-
-  await procMutation(
-    'adminOnlyColumn',
-    'update',
-    {id: '1', a: 'UPDATED'},
-    'usr',
-  );
-  rows = await upstream`SELECT * FROM "adminOnlyColumn" WHERE id = '1'`;
-  expect(rows).toEqual([{id: '1', a: 'a', b: 'b'}]);
-
-  await procMutation('adminOnlyColumn', 'delete', {id: '1'}, 'usr');
-  rows = await upstream`SELECT * FROM "adminOnlyColumn" WHERE id = '1'`;
-  expect(rows.length).toBe(1);
-});
-
-test('admins can update admin-only columns', async () => {
-  await procMutation(
-    'adminOnlyColumn',
-    'create',
-    {id: '2', a: 'a', b: 'b'},
-    'admn',
-  );
-  let rows = await upstream`SELECT * FROM "adminOnlyColumn" WHERE id = '2'`;
-  expect(rows.length).toBe(1);
-
-  await procMutation(
-    'adminOnlyColumn',
-    'update',
-    {id: '2', a: 'UPDATED'},
-    'admn',
-  );
-  rows = await upstream`SELECT * FROM "adminOnlyColumn" WHERE id = '2'`;
-  expect(rows).toEqual([{id: '2', a: 'UPDATED', b: 'b'}]);
-
-  await procMutation('adminOnlyColumn', 'delete', {id: '2'}, 'admn');
-  rows = await upstream`SELECT * FROM "adminOnlyColumn" WHERE id = '2'`;
-  expect(rows.length).toBe(0);
 });
 
 test('non-admins cannot update admin-only cells', async () => {
