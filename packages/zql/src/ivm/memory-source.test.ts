@@ -8,12 +8,12 @@ import {
   filteredOptionalFilters,
   generateWithOverlayInner,
   MemorySource,
-  type Overlay,
-  overlayForConstraintForTest,
-  overlayForStartAtForTest,
+  overlaysForConstraintForTest,
+  overlaysForStartAtForTest,
 } from './memory-source.js';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {runCases} from './test/source-cases.js';
+import type {Change} from './change.js';
 
 runCases(
   (
@@ -143,6 +143,44 @@ test('push edit change', () => {
   conn.destroy();
 });
 
+test('fetch during push edit change', () => {
+  const ms = new MemorySource(
+    'table',
+    {a: {type: 'string'}, b: {type: 'string'}, c: {type: 'string'}},
+    ['a'],
+  );
+
+  ms.push({
+    type: 'add',
+    row: {a: 'a', b: 'b', c: 'c'},
+  });
+
+  const conn = ms.connect([['a', 'asc']]);
+  let fetchDuringPush = undefined;
+  conn.setOutput({
+    push(change: Change): void {
+      expect(change).toEqual({
+        type: 'edit',
+        oldRow: {a: 'a', b: 'b', c: 'c'},
+        row: {a: 'a', b: 'b2', c: 'c2'},
+      });
+      fetchDuringPush = [...conn.fetch({})];
+    },
+  });
+
+  ms.push({
+    type: 'edit',
+    oldRow: {a: 'a', b: 'b', c: 'c'},
+    row: {a: 'a', b: 'b2', c: 'c2'},
+  });
+  expect(fetchDuringPush).toEqual([
+    {
+      row: {a: 'a', b: 'b2', c: 'c2'},
+      relationships: {},
+    },
+  ]);
+});
+
 describe('generateWithOverlayInner', () => {
   const rows = [
     {id: 1, s: 'a', n: 11},
@@ -155,230 +193,259 @@ describe('generateWithOverlayInner', () => {
   test.each([
     {
       name: 'No overlay',
-      changes: [undefined],
+      overlays: {
+        add: undefined,
+        remove: undefined,
+      },
       expected: rows,
     },
 
     {
       name: 'Add overlay before start',
-      changes: [{type: 'add', row: {id: 0, s: 'd', n: 0}}],
+      overlays: {
+        add: {id: 0, s: 'd', n: 0},
+        remove: undefined,
+      },
       expected: [{id: 0, s: 'd', n: 0}, ...rows],
     },
     {
       name: 'Add overlay at end',
-      changes: [{type: 'add', row: {id: 4, s: 'd', n: 44}}],
+      overlays: {
+        add: {id: 4, s: 'd', n: 44},
+        remove: undefined,
+      },
       expected: [...rows, {id: 4, s: 'd', n: 44}],
     },
     {
       name: 'Add overlay middle',
-      changes: [{type: 'add', row: {id: 2.5, s: 'b2', n: 225}}],
+      overlays: {
+        add: {id: 2.5, s: 'b2', n: 225},
+        remove: undefined,
+      },
       expected: [rows[0], rows[1], {id: 2.5, s: 'b2', n: 225}, rows[2]],
     },
     {
       name: 'Add overlay replace',
-      changes: [{type: 'add', row: {id: 2, s: 'b2', n: 225}}],
+      overlays: {
+        add: {id: 2, s: 'b2', n: 225},
+        remove: undefined,
+      },
       expected: [rows[0], rows[1], {id: 2, s: 'b2', n: 225}, rows[2]],
     },
 
     {
       name: 'Remove overlay before start',
-      changes: [{type: 'remove', row: {id: 0, s: 'z', n: -1}}],
+      overlays: {
+        add: undefined,
+        remove: {id: 0, s: 'z', n: -1},
+      },
       expected: rows,
     },
     {
       name: 'Remove overlay start',
-      changes: [{type: 'remove', row: {id: 1, s: 'a', n: 11}}],
+      overlays: {
+        add: undefined,
+        remove: {id: 1, s: 'a', n: 11},
+      },
       expected: rows.slice(1),
     },
     {
       name: 'Remove overlay at end',
-      changes: [{type: 'remove', row: {id: 3, s: 'c', n: 33}}],
+      overlays: {
+        add: undefined,
+        remove: {id: 3, s: 'c', n: 33},
+      },
       expected: rows.slice(0, -1),
     },
     {
       name: 'Remove overlay middle',
-      changes: [{type: 'remove', row: {id: 2, s: 'b', n: 22}}],
+      overlays: {
+        add: undefined,
+        remove: {id: 2, s: 'b', n: 22},
+      },
       expected: [rows[0], rows[2]],
     },
     {
       name: 'Remove overlay after end',
-      changes: [{type: 'remove', row: {id: 4, s: 'd', n: 44}}],
+      overlays: {
+        add: undefined,
+        remove: {id: 4, s: 'd', n: 44},
+      },
       expected: rows,
     },
 
     // Two overlays
     {
       name: 'Basic edit',
-      changes: [
-        {type: 'remove', row: {id: 2, s: 'b', n: 22}},
-        {type: 'add', row: {id: 2, s: 'b2', n: 225}},
-      ],
+      overlays: {
+        add: {id: 2, s: 'b2', n: 225},
+        remove: {id: 2, s: 'b', n: 22},
+      },
       expected: [rows[0], {id: 2, s: 'b2', n: 225}, rows[2]],
     },
     {
       name: 'Edit first, still first',
-      changes: [
-        {type: 'add', row: {id: 0, s: 'a0', n: 0}},
-        {type: 'remove', row: {id: 1, s: 'a', n: 11}},
-      ],
+      overlays: {
+        add: {id: 0, s: 'a0', n: 0},
+        remove: {id: 1, s: 'a', n: 11},
+      },
       expected: [{id: 0, s: 'a0', n: 0}, rows[1], rows[2]],
     },
     {
       name: 'Edit first, now second',
-      changes: [
-        {type: 'remove', row: {id: 1, s: 'a', n: 11}},
-        {type: 'add', row: {id: 2.5, s: 'a', n: 11}},
-      ],
+      overlays: {
+        add: {id: 2.5, s: 'a', n: 11},
+        remove: {id: 1, s: 'a', n: 11},
+      },
       expected: [rows[1], {id: 2.5, s: 'a', n: 11}, rows[2]],
     },
     {
       name: 'Edit first, now last',
-      changes: [
-        {type: 'remove', row: {id: 1, s: 'a', n: 11}},
-        {type: 'add', row: {id: 3.5, s: 'a', n: 11}},
-      ],
+      overlays: {
+        add: {id: 3.5, s: 'a', n: 11},
+        remove: {id: 1, s: 'a', n: 11},
+      },
       expected: [rows[1], rows[2], {id: 3.5, s: 'a', n: 11}],
     },
 
     {
       name: 'Edit second, now first',
-      changes: [
-        {type: 'add', row: {id: 0, s: 'b', n: 22}},
-        {type: 'remove', row: {id: 2, s: 'b', n: 22}},
-      ],
+      overlays: {
+        add: {id: 0, s: 'b', n: 22},
+        remove: {id: 2, s: 'b', n: 22},
+      },
       expected: [{id: 0, s: 'b', n: 22}, rows[0], rows[2]],
     },
     {
       name: 'Edit second, still second',
-      changes: [
-        {type: 'remove', row: {id: 2, s: 'b', n: 22}},
-        {type: 'add', row: {id: 2.5, s: 'b', n: 22}},
-      ],
+      overlays: {
+        add: {id: 2.5, s: 'b', n: 22},
+        remove: {id: 2, s: 'b', n: 22},
+      },
       expected: [rows[0], {id: 2.5, s: 'b', n: 22}, rows[2]],
     },
     {
       name: 'Edit second, still second',
-      changes: [
-        {type: 'add', row: {id: 1.5, s: 'b', n: 22}},
-        {type: 'remove', row: {id: 2, s: 'b', n: 22}},
-      ],
+      overlays: {
+        add: {id: 1.5, s: 'b', n: 22},
+        remove: {id: 2, s: 'b', n: 22},
+      },
       expected: [rows[0], {id: 1.5, s: 'b', n: 22}, rows[2]],
     },
     {
       name: 'Edit second, now last',
-      changes: [
-        {type: 'remove', row: {id: 1, s: 'b', n: 22}},
-        {type: 'add', row: {id: 3.5, s: 'b', n: 22}},
-      ],
+      overlays: {
+        add: {id: 3.5, s: 'b', n: 22},
+        remove: {id: 1, s: 'b', n: 22},
+      },
       expected: [rows[1], rows[2], {id: 3.5, s: 'b', n: 22}],
     },
 
     {
       name: 'Edit last, now first',
-      changes: [
-        {type: 'add', row: {id: 0, s: 'c', n: 33}},
-        {type: 'remove', row: {id: 3, s: 'c', n: 33}},
-      ],
+      overlays: {
+        add: {id: 0, s: 'c', n: 33},
+        remove: {id: 3, s: 'c', n: 33},
+      },
       expected: [{id: 0, s: 'c', n: 33}, rows[0], rows[1]],
     },
     {
       name: 'Edit last, now second',
-      changes: [
-        {type: 'add', row: {id: 1.5, s: 'c', n: 33}},
-        {type: 'remove', row: {id: 3, s: 'c', n: 33}},
-      ],
+      overlays: {
+        add: {id: 1.5, s: 'c', n: 33},
+        remove: {id: 3, s: 'c', n: 33},
+      },
       expected: [rows[0], {id: 1.5, s: 'c', n: 33}, rows[1]],
     },
     {
       name: 'Edit last, still last',
-      changes: [
-        {type: 'remove', row: {id: 3, s: 'c', n: 33}},
-        {type: 'add', row: {id: 3.5, s: 'c', n: 33}},
-      ],
+      overlays: {
+        add: {id: 3.5, s: 'c', n: 33},
+        remove: {id: 3, s: 'c', n: 33},
+      },
       expected: [rows[0], rows[1], {id: 3.5, s: 'c', n: 33}],
     },
     {
       name: 'Edit last, still last',
-      changes: [
-        {type: 'add', row: {id: 2.5, s: 'c', n: 33}},
-        {type: 'remove', row: {id: 3, s: 'c', n: 33}},
-      ],
+      overlays: {
+        add: {id: 2.5, s: 'c', n: 33},
+        remove: {id: 3, s: 'c', n: 33},
+      },
       expected: [rows[0], rows[1], {id: 2.5, s: 'c', n: 33}],
     },
-  ] as const)('$name', ({changes, expected}) => {
-    const actual = generateWithOverlayInner(
-      rows,
-      changes.map(change => change && {change, outputIndex: 0}) as [
-        Overlay | undefined,
-        Overlay | undefined,
-      ],
-      compare,
-    );
+  ] as const)('$name', ({overlays, expected}) => {
+    const actual = generateWithOverlayInner(rows, overlays, compare);
     expect([...actual].map(({row}) => row)).toEqual(expected);
   });
 });
 
-test('overlayForConstraint', () => {
+test('overlaysForConstraint', () => {
   expect(
-    overlayForConstraintForTest(undefined, {key: 'a', value: 'b'}),
-  ).toEqual(undefined);
-
-  expect(
-    overlayForConstraintForTest(
-      {outputIndex: 0, change: {type: 'add', row: {a: 'b'}}},
+    overlaysForConstraintForTest(
+      {add: undefined, remove: undefined},
       {key: 'a', value: 'b'},
     ),
-  ).toEqual({outputIndex: 0, change: {type: 'add', row: {a: 'b'}}});
+  ).toEqual({add: undefined, remove: undefined});
 
   expect(
-    overlayForConstraintForTest(
-      {outputIndex: 0, change: {type: 'add', row: {a: 'c'}}},
+    overlaysForConstraintForTest(
+      {add: {a: 'b'}, remove: undefined},
       {key: 'a', value: 'b'},
     ),
-  ).toEqual(undefined);
+  ).toEqual({add: {a: 'b'}, remove: undefined});
+
+  expect(
+    overlaysForConstraintForTest(
+      {add: undefined, remove: {a: 'b'}},
+      {key: 'a', value: 'b'},
+    ),
+  ).toEqual({add: undefined, remove: {a: 'b'}});
+
+  expect(
+    overlaysForConstraintForTest(
+      {add: {a: 'b', b: '2'}, remove: {a: 'b', b: '1'}},
+      {key: 'a', value: 'b'},
+    ),
+  ).toEqual({add: {a: 'b', b: '2'}, remove: {a: 'b', b: '1'}});
+
+  expect(
+    overlaysForConstraintForTest(
+      {add: {a: 'c', b: '2'}, remove: {a: 'c', b: '1'}},
+      {key: 'a', value: 'b'},
+    ),
+  ).toEqual({add: undefined, remove: undefined});
 });
 
-test('overlayForStartAt', () => {
+test('overlaysForStartAt', () => {
   const compare = (a: Row, b: Row) => (a.id as number) - (b.id as number);
-  expect(overlayForStartAtForTest(undefined, {id: 1}, compare)).toEqual(
-    undefined,
-  );
   expect(
-    overlayForStartAtForTest(
-      {
-        outputIndex: 0,
-        change: {type: 'add', row: {id: 1}},
-      },
+    overlaysForStartAtForTest(
+      {add: undefined, remove: undefined},
       {id: 1},
       compare,
     ),
-  ).toEqual({
-    outputIndex: 0,
-    change: {type: 'add', row: {id: 1}},
-  });
+  ).toEqual({add: undefined, remove: undefined});
   expect(
-    overlayForStartAtForTest(
-      {
-        outputIndex: 0,
-        change: {type: 'add', row: {id: 1}},
-      },
+    overlaysForStartAtForTest(
+      {add: {id: 1}, remove: undefined},
+      {id: 1},
+      compare,
+    ),
+  ).toEqual({add: {id: 1}, remove: undefined});
+  expect(
+    overlaysForStartAtForTest(
+      {add: {id: 1}, remove: undefined},
       {id: 0},
       compare,
     ),
-  ).toEqual({
-    outputIndex: 0,
-    change: {type: 'add', row: {id: 1}},
-  });
+  ).toEqual({add: {id: 1}, remove: undefined});
   expect(
-    overlayForStartAtForTest(
-      {
-        outputIndex: 0,
-        change: {type: 'add', row: {id: 1}},
-      },
+    overlaysForStartAtForTest(
+      {add: {id: 1}, remove: undefined},
       {id: 2},
       compare,
     ),
-  ).toEqual(undefined);
+  ).toEqual({add: undefined, remove: undefined});
 });
 
 describe('filteredOptionalFilters', () => {
