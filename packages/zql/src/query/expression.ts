@@ -52,6 +52,7 @@ export class ExpressionBuilder<TSchema extends TableSchema> {
     ) => Condition,
   ) {
     this.#exists = exists;
+    this.exists = this.exists.bind(this);
   }
 
   get eb() {
