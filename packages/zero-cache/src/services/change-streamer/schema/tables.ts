@@ -65,7 +65,7 @@ export async function ensureReplicationConfig(
   lc: LogContext,
   db: PostgresDB,
   config: ReplicationConfig,
-  autoReset = false,
+  autoReset: boolean,
 ) {
   // Restrict the fields of the supplied `config`.
   const {publications, replicaVersion} = config;

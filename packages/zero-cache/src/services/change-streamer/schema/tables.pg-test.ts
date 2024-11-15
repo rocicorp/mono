@@ -28,10 +28,15 @@ describe('change-streamer/schema/tables', () => {
     const replica1 = new Database(lc, ':memory:');
     initReplicationState(replica1, ['zero_data', 'zero_metadata'], '123');
 
-    await ensureReplicationConfig(lc, db, {
-      replicaVersion: '183',
-      publications: ['zero_data', 'zero_metadata'],
-    });
+    await ensureReplicationConfig(
+      lc,
+      db,
+      {
+        replicaVersion: '183',
+        publications: ['zero_data', 'zero_metadata'],
+      },
+      true,
+    );
 
     await expectTables(db, {
       ['cdc.replicationConfig']: [
@@ -51,10 +56,15 @@ describe('change-streamer/schema/tables', () => {
     `;
 
     // Should be a no-op.
-    await ensureReplicationConfig(lc, db, {
-      replicaVersion: '183',
-      publications: ['zero_metadata', 'zero_data'],
-    });
+    await ensureReplicationConfig(
+      lc,
+      db,
+      {
+        replicaVersion: '183',
+        publications: ['zero_metadata', 'zero_data'],
+      },
+      true,
+    );
 
     await expectTables(db, {
       ['cdc.replicationConfig']: [
