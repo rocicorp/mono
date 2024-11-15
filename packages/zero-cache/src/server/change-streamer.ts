@@ -59,6 +59,7 @@ export default async function runWorker(parent: Worker): Promise<void> {
         replicationConfig,
         autoReset ?? false,
       );
+      break;
     } catch (e) {
       if (first && e instanceof AutoResetSignal) {
         lc.warn?.(`auto-reset: resetting replica ${config.replicaFile}`);
