@@ -1,4 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
+import {unreachable} from '../../../../shared/src/asserts.js';
 import * as v from '../../../../shared/src/valita.js';
 import {
   min,
@@ -329,12 +330,18 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
   async #handleControlMessage(msg: ControlMessage[1]) {
     this.#lc.info?.('received control message', msg);
-    if (msg.tag === 'reset-required') {
-      await markResetRequired(this.#changeDB);
-      if (this.#autoReset) {
-        this.#lc.warn?.('shutting down for auto-reset');
-        await this.stop(new AutoResetSignal());
-      }
+    const {tag} = msg;
+
+    switch (tag) {
+      case 'reset-required':
+        await markResetRequired(this.#changeDB);
+        if (this.#autoReset) {
+          this.#lc.warn?.('shutting down for auto-reset');
+          await this.stop(new AutoResetSignal());
+        }
+        break;
+      default:
+        unreachable(tag);
     }
   }
 
