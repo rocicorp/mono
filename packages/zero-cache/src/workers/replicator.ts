@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
-import {rmSync} from 'node:fs';
 import {Database} from '../../../zqlite/src/db.js';
+import {deleteLiteDB} from '../db/delete-lite-db.js';
 import {Notifier} from '../services/replicator/notifier.js';
 import type {
   ReplicaState,
@@ -59,9 +59,7 @@ export function setupReplica(
       // In 'serving-copy' mode, the original file is being used for 'backup'
       // mode, so we make a copy for servicing sync requests.
       const copyLocation = `${replicaDbFile}-serving-copy`;
-      for (const suffix of ['', '-wal', '-shm']) {
-        rmSync(`${copyLocation}${suffix}`, {force: true});
-      }
+      deleteLiteDB(copyLocation);
 
       const start = Date.now();
       lc.info?.(`copying ${replicaDbFile} to ${copyLocation}`);

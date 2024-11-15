@@ -1,7 +1,7 @@
 import {resolver} from '@rocicorp/resolver';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {Worker} from 'worker_threads';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {DbFile} from '../test/lite.js';
 
 describe('db/wal-checkpoint', () => {
@@ -23,8 +23,8 @@ describe('db/wal-checkpoint', () => {
     conn.close();
   });
 
-  afterEach(async () => {
-    await dbFile.unlink();
+  afterEach(() => {
+    dbFile.delete();
   });
 
   type Checkpoint = {

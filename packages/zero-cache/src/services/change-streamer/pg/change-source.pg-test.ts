@@ -78,7 +78,7 @@ describe('change-source/pg', () => {
 
   afterEach(async () => {
     await testDBs.drop(upstream);
-    await replicaDbFile.unlink();
+    replicaDbFile.delete();
   });
 
   function drainToQueue(
