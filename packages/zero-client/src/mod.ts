@@ -68,7 +68,6 @@ export type {
   ExpressionBuilder,
   ExpressionFactory,
 } from '../../zql/src/query/expression.js';
-export {QueryImpl} from '../../zql/src/query/query-impl.js';
 export type {
   DefaultQueryResultRow as EmptyQueryResultRow,
   Query,
