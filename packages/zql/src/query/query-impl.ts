@@ -80,7 +80,9 @@ export function staticParam<TAnchor, TField extends keyof TAnchor>(
 }
 
 let subqueryFilterCount = 0;
+
 export const SUBQ_PREFIX = 'zsubq_';
+
 export abstract class AbstractQuery<
   TSchema extends TableSchema,
   TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
@@ -166,7 +168,7 @@ export abstract class AbstractQuery<
     >
   >;
   related<
-    TRelationship extends keyof TSchema['relationships'],
+    TRelationship extends keyof TSchema['relationships'] & string,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     TSub extends Query<any, any>,
   >(
@@ -178,7 +180,7 @@ export abstract class AbstractQuery<
       >,
     ) => TSub = q => q as any,
   ) {
-    if ((relationship as string).startsWith(SUBQ_PREFIX)) {
+    if (relationship.startsWith(SUBQ_PREFIX)) {
       throw new Error(
         `Relationship names may not start with "${SUBQ_PREFIX}". That is a reserved prefix.`,
       );
@@ -366,16 +368,13 @@ export abstract class AbstractQuery<
 
   #exists = (
     relationship: string,
-    cb?: (
+    cb: (
       query: Query<TableSchema, QueryType>,
-    ) => Query<TableSchema, QueryType>,
+    ) => Query<TableSchema, QueryType> = q => q,
   ): Condition => {
     ++subqueryFilterCount;
-    if (cb === undefined) {
-      cb = query => query;
-    }
 
-    const related = this.#schema.relationships[relationship as string];
+    const related = this.#schema.relationships[relationship];
     assert(related, 'Invalid relationship');
     const fieldRelationship = related;
     const junctionRelationship = related;
