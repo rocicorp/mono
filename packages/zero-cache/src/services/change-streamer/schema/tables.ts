@@ -83,8 +83,8 @@ export async function ensureReplicationConfig(
     if (results.length === 0) {
       return tx`INSERT INTO cdc."replicationConfig" ${tx(replicaConfig)}`;
     }
-    const {replicaVersion, publications, resetRequired} = results[0];
 
+    const {replicaVersion, publications, resetRequired} = results[0];
     if (
       replicaVersion !== replicaConfig.replicaVersion ||
       !equals(new Set(publications), new Set(replicaConfig.publications))
