@@ -86,11 +86,20 @@ function parseSimpleOrCorrelated(tokens: string[]): Condition {
       op: 'NOT EXISTS',
     };
   }
+
   if (!token || !/^[a-zA-Z0-9]+$/.test(token)) {
     throw new Error('Invalid input');
   }
 
-  const maybeOp = tokens[0];
+  let maybeOp = tokens[0];
+  if (
+    maybeOp === 'NOT' &&
+    (tokens[1] === 'IN' || tokens[1] === 'LIKE' || tokens[1] === 'ILIKE')
+  ) {
+    maybeOp += ' ' + tokens[1];
+    tokens.shift();
+  }
+
   if (simpleOperators.has(maybeOp)) {
     tokens.shift(); // consume operator
     const value = parseValue(tokens);
