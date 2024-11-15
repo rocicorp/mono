@@ -728,7 +728,7 @@ export function schemasDifferent(
   // Note: ignore indexes since changes need not to halt replication
   return (
     a.tables.length !== b.tables.length ||
-    a.tables.find((at, i) => {
+    a.tables.some((at, i) => {
       const bt = b.tables[i];
       if (tablesDifferent(at, bt)) {
         lc?.info?.(`table ${stringify(at)} has changed`, bt);
@@ -756,7 +756,7 @@ export function tablesDifferent(a: PublishedTableSpec, b: PublishedTableSpec) {
   const bcols = Object.entries(b.columns).sort(byColumnPos);
   return (
     acols.length !== bcols.length ||
-    acols.find(([aname, acol], i) => {
+    acols.some(([aname, acol], i) => {
       const [bname, bcol] = bcols[i];
       return (
         aname !== bname ||
@@ -780,7 +780,7 @@ export function relationDifferent(a: PublishedTableSpec, b: MessageRelation) {
   const bcols = b.columns;
   return (
     acols.length !== bcols.length ||
-    acols.find(([aname, acol], i) => {
+    acols.some(([aname, acol], i) => {
       const bcol = bcols[i];
       return aname !== bcol.name || acol.typeOID !== bcol.typeOid;
     })
