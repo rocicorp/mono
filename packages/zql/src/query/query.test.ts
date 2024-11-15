@@ -6,6 +6,7 @@ import type {
   TableSchema,
   TableSchemaToRow,
 } from '../../../zero-schema/src/table-schema.js';
+import type {ExpressionFactory} from './expression.js';
 import {staticParam} from './query-impl.js';
 import type {AdvancedQuery} from './query-internal.js';
 import {type Query, type QueryType} from './query.js';
@@ -677,5 +678,38 @@ describe('Where expression factory and builder', () => {
       query.where(({or}) => or(undefined, undefined, undefined));
       query.where(({or, cmp}) => or(cmp('n', 1), undefined, cmp('n', 2)));
     });
+  });
+
+  test('expression builder append from array', () => {
+    const q = mockQuery as unknown as Query<TestSchema>;
+    const numbers = [1, 23, 456];
+    const f: ExpressionFactory<TestSchema> = b => {
+      const exprs = [];
+      for (const n of numbers) {
+        exprs.push(b.cmp('n', '>', n));
+      }
+      return b.or(...exprs);
+    };
+    const q2 = q.where(f);
+    expectTypeOf(q2).toMatchTypeOf(q);
+  });
+
+  test('expression builder append from object', () => {
+    type Entries<T> = {
+      [K in keyof T]: [K, T[K]];
+    }[keyof T][];
+
+    const q = mockQuery as unknown as Query<TestSchema>;
+    const o = {n: 1, s: 'hi', b: true};
+    const entries = Object.entries(o) as Entries<typeof o>;
+    const f: ExpressionFactory<TestSchema> = b => {
+      const exprs = [];
+      for (const [n, v] of entries) {
+        exprs.push(b.cmp(n, v));
+      }
+      return b.or(...exprs);
+    };
+    const q2 = q.where(f);
+    expectTypeOf(q2).toMatchTypeOf(q);
   });
 });
