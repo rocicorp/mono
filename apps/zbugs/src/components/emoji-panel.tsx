@@ -36,8 +36,6 @@ export function EmojiPanel({issueID, commentID}: Props) {
 
   const emojis: Emoji[] = useQuery(q);
 
-  const skinTone = useNumericPref(SKIN_TONE_PREF, 0);
-
   const addEmoji = useCallback(
     (unicode: string, annotation: string) => {
       const id = nanoid();
