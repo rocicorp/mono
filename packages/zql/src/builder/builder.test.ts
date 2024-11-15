@@ -925,7 +925,7 @@ test('exists junction', () => {
   `);
 });
 
-test.only('exists self join', () => {
+test('exists self join', () => {
   const {sources, getSource} = testSources();
   const sink = new Catch(
     buildPipeline(
@@ -1000,8 +1000,6 @@ test.only('exists self join', () => {
       },
     ]
   `);
-
-  console.log('pushhhhhhhh1!!!!!!');
 
   // or was greg recruited by erik
   sources.users.push({
@@ -1205,12 +1203,21 @@ test('not exists self join', () => {
       {
         "node": {
           "relationships": {
-            "zsubq_0_recruiter": [],
+            "zsubq_0_recruiter": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": 1,
+                  "name": "aaron",
+                  "recruiterID": null,
+                },
+              },
+            ],
           },
           "row": {
             "id": 1,
             "name": "aaron",
-            "recruiterID": null,
+            "recruiterID": 1,
           },
         },
         "type": "remove",
