@@ -35,7 +35,7 @@ describe('replicator/message-processor', () => {
   type Case = {
     name: string;
     messages: DownstreamChange[];
-    acknowledged: string[];
+    finalCommit: string;
     expectedVersionChanges: number;
     replicated: Record<string, object[]>;
     expectFailure: boolean;
@@ -63,7 +63,7 @@ describe('replicator/message-processor', () => {
         ['data', messages.insert('foo', {id: 987})],
         ['commit', messages.commit(), {watermark: '0e'}],
       ],
-      acknowledged: ['07'],
+      finalCommit: '07',
       expectedVersionChanges: 1,
       replicated: {
         foo: [
@@ -108,13 +108,7 @@ describe('replicator/message-processor', () => {
         ['data', messages.insert('foo', {id: 987})],
         ['commit', messages.commit(), {watermark: '0g'}],
       ],
-      acknowledged: [
-        '08',
-        '0c',
-        '08', // Note: The acknowledgements should be resent
-        '0c', //       so that Postgres can track progress.
-        '0g',
-      ],
+      finalCommit: '0g',
       expectedVersionChanges: 3,
       replicated: {
         foo: [
@@ -131,12 +125,10 @@ describe('replicator/message-processor', () => {
   for (const c of cases) {
     test(c.name, () => {
       const failures: unknown[] = [];
-      const acknowledgements: string[] = [];
       let versionChanges = 0;
 
       const processor = createMessageProcessor(
         replica,
-        (lsn: string) => acknowledgements.push(lsn),
         (_: LogContext, err: unknown) => failures.push(err),
       );
 
@@ -146,7 +138,6 @@ describe('replicator/message-processor', () => {
         }
       }
 
-      expect(acknowledgements).toEqual(c.acknowledged);
       expect(versionChanges).toBe(c.expectedVersionChanges);
       if (c.expectFailure) {
         expect(failures[0]).toBeInstanceOf(Error);
@@ -156,7 +147,7 @@ describe('replicator/message-processor', () => {
       expectTables(replica, c.replicated);
 
       const {watermark} = getSubscriptionState(new StatementRunner(replica));
-      expect(watermark).toBe(c.acknowledged.at(-1));
+      expect(watermark).toBe(c.finalCommit);
     });
   }
 
