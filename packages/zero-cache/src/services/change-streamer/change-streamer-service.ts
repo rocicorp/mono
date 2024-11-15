@@ -1,4 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
+import {unreachable} from '../../../../shared/src/asserts.js';
+import * as v from '../../../../shared/src/valita.js';
 import {
   min,
   oneAfter,
@@ -10,6 +12,7 @@ import type {Sink, Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import {DEFAULT_MAX_RETRY_DELAY_MS, RunningState} from '../running-state.js';
 import {
+  downstreamChange,
   ErrorType,
   type ChangeStreamerService,
   type Commit,
@@ -20,7 +23,9 @@ import {
 import {Forwarder} from './forwarder.js';
 import {initChangeStreamerSchema} from './schema/init.js';
 import {
+  AutoResetSignal,
   ensureReplicationConfig,
+  markResetRequired,
   type ReplicationConfig,
 } from './schema/tables.js';
 import {Storer} from './storer.js';
@@ -34,11 +39,12 @@ export async function initializeStreamer(
   changeDB: PostgresDB,
   changeSource: ChangeSource,
   replicationConfig: ReplicationConfig,
+  autoReset: boolean,
   setTimeoutFn = setTimeout,
 ): Promise<ChangeStreamerService> {
   // Make sure the ChangeLog DB is set up.
   await initChangeStreamerSchema(lc, changeDB);
-  await ensureReplicationConfig(lc, changeDB, replicationConfig);
+  await ensureReplicationConfig(lc, changeDB, replicationConfig, autoReset);
 
   const {replicaVersion} = replicationConfig;
   return new ChangeStreamerImpl(
@@ -46,9 +52,26 @@ export async function initializeStreamer(
     changeDB,
     replicaVersion,
     changeSource,
+    autoReset,
     setTimeoutFn,
   );
 }
+
+// ControlMessages can be sent from the ChangeSource to the ChangeStreamer
+// for non-content signals that initiate action in the ChangeStreamer
+// but otherwise do not constitute a Downstream message.
+//
+// Currently, only one type of message is defined: `reset-required`.
+const controlMessage = v.tuple([
+  v.literal('control'),
+  v.object({tag: v.literal('reset-required')}),
+]);
+
+type ControlMessage = v.Infer<typeof controlMessage>;
+
+const changeStreamMessage = v.union(downstreamChange, controlMessage);
+
+export type ChangeStreamMessage = v.Infer<typeof changeStreamMessage>;
 
 /**
  * Internally all Downstream messages (not just commits) are given a watermark.
@@ -66,7 +89,7 @@ export type ChangeStream = {
   /** The watermark at which the ChangeStream begins (i.e. inclusive). */
   initialWatermark: string;
 
-  changes: Source<DownstreamChange>;
+  changes: Source<ChangeStreamMessage>;
 
   /**
    * A Sink to push the {@link Commit} messages that have been successfully
@@ -225,11 +248,13 @@ export interface ChangeSource {
 class ChangeStreamerImpl implements ChangeStreamerService {
   readonly id: string;
   readonly #lc: LogContext;
+  readonly #changeDB: PostgresDB;
   readonly #replicaVersion: string;
   readonly #source: ChangeSource;
   readonly #storer: Storer;
   readonly #forwarder: Forwarder;
 
+  readonly #autoReset: boolean;
   readonly #state: RunningState;
   readonly #initialWatermarks = new Set<string>();
   #stream: ChangeStream | undefined;
@@ -239,10 +264,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     changeDB: PostgresDB,
     replicaVersion: string,
     source: ChangeSource,
+    autoReset: boolean,
     setTimeoutFn = setTimeout,
   ) {
     this.id = `change-streamer`;
     this.#lc = lc.withContext('component', 'change-streamer');
+    this.#changeDB = changeDB;
     this.#replicaVersion = replicaVersion;
     this.#source = source;
     this.#storer = new Storer(
@@ -252,6 +279,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       commit => this.#stream?.acks.push(commit),
     );
     this.#forwarder = new Forwarder();
+    this.#autoReset = autoReset;
     this.#state = new RunningState(this.id, undefined, setTimeoutFn);
   }
 
@@ -272,11 +300,17 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
         for await (const change of stream.changes) {
           let watermark: string;
-          if (change[0] !== 'commit') {
-            watermark = preCommitWatermark;
-          } else {
-            watermark = change[2].watermark;
-            preCommitWatermark = oneAfter(watermark); // For the next transaction.
+          switch (change[0]) {
+            case 'control':
+              await this.#handleControlMessage(change[1]);
+              continue;
+            case 'commit':
+              watermark = change[2].watermark;
+              preCommitWatermark = oneAfter(watermark); // For the next transaction.
+              break;
+            default:
+              watermark = preCommitWatermark;
+              break;
           }
 
           this.#storer.store([watermark, change]);
@@ -292,6 +326,23 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       await this.#state.backoff(this.#lc, err);
     }
     this.#lc.info?.('ChangeStreamer stopped');
+  }
+
+  async #handleControlMessage(msg: ControlMessage[1]) {
+    this.#lc.info?.('received control message', msg);
+    const {tag} = msg;
+
+    switch (tag) {
+      case 'reset-required':
+        await markResetRequired(this.#changeDB);
+        if (this.#autoReset) {
+          this.#lc.warn?.('shutting down for auto-reset');
+          await this.stop(new AutoResetSignal());
+        }
+        break;
+      default:
+        unreachable(tag);
+    }
   }
 
   subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {

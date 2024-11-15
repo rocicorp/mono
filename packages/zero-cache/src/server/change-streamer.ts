@@ -1,8 +1,12 @@
+import {assert} from '../../../shared/src/asserts.js';
 import {must} from '../../../shared/src/must.js';
 import {getZeroConfig} from '../config/zero-config.js';
+import {deleteLiteDB} from '../db/delete-lite-db.js';
 import {ChangeStreamerHttpServer} from '../services/change-streamer/change-streamer-http.js';
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.js';
+import type {ChangeStreamerService} from '../services/change-streamer/change-streamer.js';
 import {initializeChangeSource} from '../services/change-streamer/pg/change-source.js';
+import {AutoResetSignal} from '../services/change-streamer/schema/tables.js';
 import {pgClient} from '../types/pg.js';
 import {
   parentWorker,
@@ -28,20 +32,45 @@ export default async function runWorker(parent: Worker): Promise<void> {
     ),
   );
 
-  // Note: This performs initial sync of the replica if necessary.
-  const {changeSource, replicationConfig} = await initializeChangeSource(
-    lc,
-    config.upstream.db,
-    config.shard,
-    config.replicaFile,
-  );
+  let {autoReset} = config;
+  if (autoReset && config.litestream) {
+    lc.warn?.(
+      '--auto-reset is incompatible with --litestream. Disabling --auto-reset.',
+    );
+    autoReset = false;
+  }
 
-  const changeStreamer = await initializeStreamer(
-    lc,
-    changeDB,
-    changeSource,
-    replicationConfig,
-  );
+  let changeStreamer: ChangeStreamerService | undefined;
+
+  for (const first of [true, false]) {
+    // Note: This performs initial sync of the replica if necessary.
+    const {changeSource, replicationConfig} = await initializeChangeSource(
+      lc,
+      config.upstream.db,
+      config.shard,
+      config.replicaFile,
+    );
+
+    try {
+      changeStreamer = await initializeStreamer(
+        lc,
+        changeDB,
+        changeSource,
+        replicationConfig,
+        autoReset ?? false,
+      );
+      break;
+    } catch (e) {
+      if (first && e instanceof AutoResetSignal) {
+        lc.warn?.(`auto-reset: resetting replica ${config.replicaFile}`);
+        deleteLiteDB(config.replicaFile);
+        continue; // execute again with a fresh initial-sync
+      }
+      throw e;
+    }
+  }
+  // impossible: upstream must have advanced in order for replication to be stuck.
+  assert(changeStreamer, `resetting replica did not advance replicaVersion`);
 
   const changeStreamerWebServer = new ChangeStreamerHttpServer(
     lc,

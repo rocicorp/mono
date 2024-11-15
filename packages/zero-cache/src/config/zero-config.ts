@@ -236,11 +236,33 @@ export const zeroOptions = {
     ],
   },
 
+  autoReset: {
+    type: v.boolean().optional(),
+    desc: [
+      `Automatically wipe and resync the replica when replication is halted.`,
+      `This situation can occur for configurations in which the upstream database`,
+      `provider prohibits event trigger creation, preventing the zero-cache from`,
+      `being able to correctly replicating schema changes. For such configurations,`,
+      `an upstream schema change will instead result in halting replication with an`,
+      `error indicating that the replica needs to be reset.`,
+      ``,
+      `When {bold auto-reset} is enabled, zero-cache will respond to such situations`,
+      `by shutting down, and when restarted, resetting the replica and all synced `,
+      `clients. This is a heavy-weight operation and can result in user-visible`,
+      `slowness or downtime if compute resources are scarce.`,
+      ``,
+      `Moreover, {bold auto-reset} is only supported for single-node configurations`,
+      `with a permanent volume for the replica. Specifically, it is incompatible`,
+      `with the {bold litestream} option, and will be ignored with a warning if`,
+      `set in combination with {bold litestream}.`,
+    ],
+  },
+
   litestream: {
     type: v.boolean().optional(),
     desc: [
       `Indicates that a {bold litestream replicate} process is backing up the`,
-      `{bold replicaDBFile}. This should be the production configuration for the`,
+      `{bold replica-file}. This should be the production configuration for the`,
       `{bold replication-manager}. It is okay to run this in development too.`,
       ``,
       `Note that this flag does actually run {bold litestream}; rather, it `,

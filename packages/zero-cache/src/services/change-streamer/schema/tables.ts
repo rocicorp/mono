@@ -1,5 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
+import {AbortError} from '../../../../../shared/src/abort-error.js';
 import {equals} from '../../../../../shared/src/set-utils.js';
 import type {PostgresDB} from '../../../types/pg.js';
 import type {Change} from './change.js';
@@ -40,6 +41,7 @@ const CREATE_REPLICATION_CONFIG_TABLE = `
   CREATE TABLE cdc."replicationConfig" (
     "replicaVersion" TEXT NOT NULL,
     "publications" TEXT[] NOT NULL,
+    "resetRequired" BOOL,
     "lock" INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
   );
 `;
@@ -55,10 +57,15 @@ export async function setupCDCTables(
   await db.unsafe(CREATE_CDC_TABLES);
 }
 
+export async function markResetRequired(db: PostgresDB) {
+  await db`UPDATE cdc."replicationConfig" SET "resetRequired" = true`;
+}
+
 export async function ensureReplicationConfig(
   lc: LogContext,
   db: PostgresDB,
   config: ReplicationConfig,
+  autoReset: boolean,
 ) {
   // Restrict the fields of the supplied `config`.
   const {publications, replicaVersion} = config;
@@ -69,14 +76,15 @@ export async function ensureReplicationConfig(
       {
         replicaVersion: string;
         publications: string[];
+        resetRequired: boolean | null;
       }[]
-    >`SELECT "replicaVersion", "publications" FROM cdc."replicationConfig"`;
+    >`SELECT "replicaVersion", "publications", "resetRequired" FROM cdc."replicationConfig"`;
 
     if (results.length === 0) {
       return tx`INSERT INTO cdc."replicationConfig" ${tx(replicaConfig)}`;
     }
 
-    const {replicaVersion, publications} = results[0];
+    const {replicaVersion, publications, resetRequired} = results[0];
     if (
       replicaVersion !== replicaConfig.replicaVersion ||
       !equals(new Set(publications), new Set(replicaConfig.publications))
@@ -87,9 +95,22 @@ export async function ensureReplicationConfig(
       );
       return [
         tx`TRUNCATE TABLE cdc."changeLog"`,
-        tx`UPDATE cdc."replicationConfig" SET ${tx(replicaConfig)}`,
+        tx`TRUNCATE TABLE cdc."replicationConfig"`,
+        tx`INSERT INTO cdc."replicationConfig" ${tx(replicaConfig)}`,
       ].map(stmt => stmt.execute());
     }
+
+    if (resetRequired) {
+      if (autoReset) {
+        throw new AutoResetSignal();
+      }
+      lc.warn?.('reset required but auto-reset is disabled');
+    }
+
     return [];
   });
+}
+
+export class AutoResetSignal extends AbortError {
+  readonly name = 'AutoResetSignal';
 }
