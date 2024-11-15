@@ -4,7 +4,7 @@ import type {
   SimpleOperator,
 } from '../../../zero-protocol/src/ast.js';
 
-// This was written by ChatGPT. It is only used for tests
+// This was written by ChatGPT with some improvements. It is only used for tests
 
 export function parse(input: string): Condition {
   const tokens = tokenize(input);
@@ -17,8 +17,8 @@ export function parse(input: string): Condition {
 
 function tokenize(input: string): string[] {
   // Tokenize based on identifiers (letters/numbers), operators, and parentheses.
-  const regex = /[a-zA-Z0-9]+|!=|<=|>=|[&|()!=<>]|\s+/g;
-  return input.match(regex)?.filter(token => !/^\s+$/.test(token)) ?? [];
+  const regex = /[a-zA-Z0-9]+|!=|<=|>=|[&|()!=<>]/g;
+  return input.match(regex) ?? [];
 }
 
 function parseOr(tokens: string[]): Condition {
@@ -118,7 +118,7 @@ const simpleOperators = new Set([
 function parseValue(tokens: string[]): string {
   const token = tokens.shift();
   if (!token || !/^[a-zA-Z0-9]+$/.test(token)) {
-    throw new Error('Invalid input');
+    throw new Error('Invalid input: ' + token);
   }
   return token;
 }
@@ -133,12 +133,12 @@ export function stringify(c: Condition): string {
     case 'and':
     case 'or':
       return c.conditions
-        .map(
-          cond =>
-            // Parentheses around "and" groups or nested "or" groups for clarity
-            // and correctness. Also to catch unnecessary nesting.
-            `(${stringify(cond)})`,
-        )
+        .map(cond => {
+          // Parentheses around "and" groups or nested "or" groups for clarity
+          // and correctness. Also to catch unnecessary nesting.
+          const needsParens = cond.type === 'and' || cond.type === 'or';
+          return needsParens ? `(${stringify(cond)})` : stringify(cond);
+        })
         .join(c.type === 'and' ? ' & ' : ' | ');
     case 'correlatedSubquery':
       return c.op + ' ()';

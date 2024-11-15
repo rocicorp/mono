@@ -281,7 +281,7 @@ test('not', () => {
   expect(stringify(not(parse('A = 1')))).toEqual('A != 1');
   expect(stringify(not(parse('A != 1')))).toEqual('A = 1');
   expect(stringify(not(parse('A < 1 & B > 2')))).toEqual('A >= 1 | B <= 2');
-  expect(stringify(not(parse('A <= 1 | B => 2')))).toEqual('A > 1 & B < 2');
+  expect(stringify(not(parse('A <= 1 | B >= 2')))).toEqual('A > 1 & B < 2');
   expect(stringify(not(parse('A IN abc')))).toEqual('A NOT IN abc');
   expect(stringify(not(parse('EXISTS () | NOT EXISTS ()')))).toEqual(
     'NOT EXISTS () & EXISTS ()',
