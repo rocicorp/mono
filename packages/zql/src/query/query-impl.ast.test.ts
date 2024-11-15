@@ -27,22 +27,59 @@ describe('building the AST', () => {
   test('where inserts a condition', () => {
     const issueQuery = newQuery(mockDelegate, issueSchema);
     const where = issueQuery.where('id', '=', '1');
-    expect(ast(where)).toEqual({
-      table: 'issue',
-      where: {type: 'simple', field: 'id', op: '=', value: '1'},
-    });
+    expect(ast(where)).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "1",
+          },
+          "type": "simple",
+        },
+      }
+    `);
 
     const where2 = where.where('title', '=', 'foo');
-    expect(ast(where2)).toEqual({
-      table: 'issue',
-      where: {
-        type: 'and',
-        conditions: [
-          {type: 'simple', field: 'id', op: '=', value: '1'},
-          {type: 'simple', field: 'title', op: '=', value: 'foo'},
-        ],
-      },
-    });
+    expect(ast(where2)).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "conditions": [
+            {
+              "left": {
+                "name": "id",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "1",
+              },
+              "type": "simple",
+            },
+            {
+              "left": {
+                "name": "title",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "foo",
+              },
+              "type": "simple",
+            },
+          ],
+          "type": "and",
+        },
+      }
+    `);
   });
 
   test('multiple WHERE calls result in a single top level AND', () => {
@@ -58,28 +95,52 @@ describe('building the AST', () => {
         "where": {
           "conditions": [
             {
-              "field": "id",
+              "left": {
+                "name": "id",
+                "type": "column",
+              },
               "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "1",
+              },
               "type": "simple",
-              "value": "1",
             },
             {
-              "field": "title",
+              "left": {
+                "name": "title",
+                "type": "column",
+              },
               "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "foo",
+              },
               "type": "simple",
-              "value": "foo",
             },
             {
-              "field": "closed",
+              "left": {
+                "name": "closed",
+                "type": "column",
+              },
               "op": "=",
+              "right": {
+                "type": "literal",
+                "value": true,
+              },
               "type": "simple",
-              "value": true,
             },
             {
-              "field": "ownerId",
+              "left": {
+                "name": "ownerId",
+                "type": "column",
+              },
               "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "2",
+              },
               "type": "simple",
-              "value": "2",
             },
           ],
           "type": "and",
@@ -91,83 +152,112 @@ describe('building the AST', () => {
   test('start adds a start field', () => {
     const issueQuery = newQuery(mockDelegate, issueSchema);
     const start = issueQuery.start({id: '1'});
-    expect(ast(start)).toEqual({
-      table: 'issue',
-      start: {
-        row: {id: '1'},
-        exclusive: true,
-      },
-    });
+    expect(ast(start)).toMatchInlineSnapshot(`
+      {
+        "start": {
+          "exclusive": true,
+          "row": {
+            "id": "1",
+          },
+        },
+        "table": "issue",
+      }
+    `);
     const start2 = issueQuery.start({id: '2', closed: true}, {inclusive: true});
-    expect(ast(start2)).toEqual({
-      table: 'issue',
-      start: {
-        row: {id: '2', closed: true},
-        exclusive: false,
-      },
-    });
+    expect(ast(start2)).toMatchInlineSnapshot(`
+      {
+        "start": {
+          "exclusive": false,
+          "row": {
+            "closed": true,
+            "id": "2",
+          },
+        },
+        "table": "issue",
+      }
+    `);
   });
 
   test('related: field edges', () => {
     const issueQuery = newQuery(mockDelegate, issueSchema);
     const related = issueQuery.related('owner', q => q);
-    expect(ast(related)).toEqual({
-      related: [
-        {
-          correlation: {
-            childField: 'id',
-            op: '=',
-            parentField: 'ownerId',
+    expect(ast(related)).toMatchInlineSnapshot(`
+      {
+        "related": [
+          {
+            "correlation": {
+              "childField": "id",
+              "op": "=",
+              "parentField": "ownerId",
+            },
+            "subquery": {
+              "alias": "owner",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "table": "user",
+            },
           },
-          subquery: {
-            table: 'user',
-            alias: 'owner',
-            orderBy: [['id', 'asc']],
-          },
-        },
-      ],
-      table: 'issue',
-    });
+        ],
+        "table": "issue",
+      }
+    `);
   });
 
   test('related: junction edges', () => {
     const issueQuery = newQuery(mockDelegate, issueSchema);
     const related = issueQuery.related('labels', q => q);
-    expect(ast(related)).toEqual({
-      related: [
-        {
-          correlation: {
-            childField: 'issueId',
-            op: '=',
-            parentField: 'id',
-          },
-          subquery: {
-            related: [
-              {
-                correlation: {
-                  childField: 'id',
-                  op: '=',
-                  parentField: 'labelId',
+    expect(ast(related)).toMatchInlineSnapshot(`
+      {
+        "related": [
+          {
+            "correlation": {
+              "childField": "issueId",
+              "op": "=",
+              "parentField": "id",
+            },
+            "subquery": {
+              "alias": "labels",
+              "orderBy": [
+                [
+                  "issueId",
+                  "asc",
+                ],
+                [
+                  "labelId",
+                  "asc",
+                ],
+              ],
+              "related": [
+                {
+                  "correlation": {
+                    "childField": "id",
+                    "op": "=",
+                    "parentField": "labelId",
+                  },
+                  "hidden": true,
+                  "subquery": {
+                    "alias": "labels",
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "label",
+                  },
                 },
-                hidden: true,
-                subquery: {
-                  table: 'label',
-                  alias: 'labels',
-                  orderBy: [['id', 'asc']],
-                },
-              },
-            ],
-            table: 'issueLabel',
-            alias: 'labels',
-            orderBy: [
-              ['issueId', 'asc'],
-              ['labelId', 'asc'],
-            ],
+              ],
+              "table": "issueLabel",
+            },
           },
-        },
-      ],
-      table: 'issue',
-    });
+        ],
+        "table": "issue",
+      }
+    `);
   });
 
   test('related: never stacked edges', () => {
@@ -175,69 +265,92 @@ describe('building the AST', () => {
     const related = issueQuery.related('owner', oq =>
       oq.related('issues', iq => iq.related('labels', lq => lq)),
     );
-    expect(ast(related)).toEqual({
-      related: [
-        {
-          correlation: {
-            childField: 'id',
-            op: '=',
-            parentField: 'ownerId',
-          },
-          subquery: {
-            related: [
-              {
-                correlation: {
-                  childField: 'ownerId',
-                  op: '=',
-                  parentField: 'id',
-                },
-                subquery: {
-                  related: [
-                    {
-                      correlation: {
-                        childField: 'issueId',
-                        op: '=',
-                        parentField: 'id',
-                      },
-                      subquery: {
-                        related: [
-                          {
-                            correlation: {
-                              childField: 'id',
-                              op: '=',
-                              parentField: 'labelId',
+    expect(ast(related)).toMatchInlineSnapshot(`
+      {
+        "related": [
+          {
+            "correlation": {
+              "childField": "id",
+              "op": "=",
+              "parentField": "ownerId",
+            },
+            "subquery": {
+              "alias": "owner",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "related": [
+                {
+                  "correlation": {
+                    "childField": "ownerId",
+                    "op": "=",
+                    "parentField": "id",
+                  },
+                  "subquery": {
+                    "alias": "issues",
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "related": [
+                      {
+                        "correlation": {
+                          "childField": "issueId",
+                          "op": "=",
+                          "parentField": "id",
+                        },
+                        "subquery": {
+                          "alias": "labels",
+                          "orderBy": [
+                            [
+                              "issueId",
+                              "asc",
+                            ],
+                            [
+                              "labelId",
+                              "asc",
+                            ],
+                          ],
+                          "related": [
+                            {
+                              "correlation": {
+                                "childField": "id",
+                                "op": "=",
+                                "parentField": "labelId",
+                              },
+                              "hidden": true,
+                              "subquery": {
+                                "alias": "labels",
+                                "orderBy": [
+                                  [
+                                    "id",
+                                    "asc",
+                                  ],
+                                ],
+                                "table": "label",
+                              },
                             },
-                            hidden: true,
-                            subquery: {
-                              table: 'label',
-                              alias: 'labels',
-                              orderBy: [['id', 'asc']],
-                            },
-                          },
-                        ],
-                        table: 'issueLabel',
-                        alias: 'labels',
-                        orderBy: [
-                          ['issueId', 'asc'],
-                          ['labelId', 'asc'],
-                        ],
+                          ],
+                          "table": "issueLabel",
+                        },
                       },
-                    },
-                  ],
-                  table: 'issue',
-                  alias: 'issues',
-                  orderBy: [['id', 'asc']],
+                    ],
+                    "table": "issue",
+                  },
                 },
-              },
-            ],
-            table: 'user',
-            alias: 'owner',
-            orderBy: [['id', 'asc']],
+              ],
+              "table": "user",
+            },
           },
-        },
-      ],
-      table: 'issue',
-    });
+        ],
+        "table": "issue",
+      }
+    `);
   });
 
   test('related: never siblings', () => {
@@ -246,130 +359,267 @@ describe('building the AST', () => {
       .related('owner', oq => oq)
       .related('comments', cq => cq)
       .related('labels', lq => lq);
-    expect(ast(related)).toEqual({
-      related: [
-        {
-          correlation: {
-            childField: 'id',
-            op: '=',
-            parentField: 'ownerId',
+    expect(ast(related)).toMatchInlineSnapshot(`
+      {
+        "related": [
+          {
+            "correlation": {
+              "childField": "id",
+              "op": "=",
+              "parentField": "ownerId",
+            },
+            "subquery": {
+              "alias": "owner",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "table": "user",
+            },
           },
-          subquery: {
-            table: 'user',
-            alias: 'owner',
-            orderBy: [['id', 'asc']],
+          {
+            "correlation": {
+              "childField": "issueId",
+              "op": "=",
+              "parentField": "id",
+            },
+            "subquery": {
+              "alias": "comments",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "table": "comment",
+            },
           },
-        },
-        {
-          correlation: {
-            childField: 'issueId',
-            op: '=',
-            parentField: 'id',
-          },
-          subquery: {
-            table: 'comment',
-            alias: 'comments',
-            orderBy: [['id', 'asc']],
-          },
-        },
-        {
-          correlation: {
-            childField: 'issueId',
-            op: '=',
-            parentField: 'id',
-          },
-          subquery: {
-            related: [
-              {
-                correlation: {
-                  childField: 'id',
-                  op: '=',
-                  parentField: 'labelId',
+          {
+            "correlation": {
+              "childField": "issueId",
+              "op": "=",
+              "parentField": "id",
+            },
+            "subquery": {
+              "alias": "labels",
+              "orderBy": [
+                [
+                  "issueId",
+                  "asc",
+                ],
+                [
+                  "labelId",
+                  "asc",
+                ],
+              ],
+              "related": [
+                {
+                  "correlation": {
+                    "childField": "id",
+                    "op": "=",
+                    "parentField": "labelId",
+                  },
+                  "hidden": true,
+                  "subquery": {
+                    "alias": "labels",
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "label",
+                  },
                 },
-                hidden: true,
-                subquery: {
-                  table: 'label',
-                  alias: 'labels',
-                  orderBy: [['id', 'asc']],
-                },
-              },
-            ],
-            table: 'issueLabel',
-            alias: 'labels',
-            orderBy: [
-              ['issueId', 'asc'],
-              ['labelId', 'asc'],
-            ],
+              ],
+              "table": "issueLabel",
+            },
           },
-        },
-      ],
-      table: 'issue',
-    });
+        ],
+        "table": "issue",
+      }
+    `);
   });
 });
 
 test('where expressions', () => {
   const issueQuery = newQuery(mockDelegate, issueSchema);
-  expect(ast(issueQuery.where('id', '=', '1')).where).toEqual({
-    type: 'simple',
-    field: 'id',
-    op: '=',
-    value: '1',
-  });
-  expect(
-    ast(issueQuery.where('id', '=', '1').where('closed', true)).where,
-  ).toEqual({
-    type: 'and',
-    conditions: [
-      {type: 'simple', field: 'id', op: '=', value: '1'},
-      {type: 'simple', field: 'closed', op: '=', value: true},
-    ],
-  });
+  expect(ast(issueQuery.where('id', '=', '1')).where).toMatchInlineSnapshot(`
+    {
+      "left": {
+        "name": "id",
+        "type": "column",
+      },
+      "op": "=",
+      "right": {
+        "type": "literal",
+        "value": "1",
+      },
+      "type": "simple",
+    }
+  `);
+  expect(ast(issueQuery.where('id', '=', '1').where('closed', true)).where)
+    .toMatchInlineSnapshot(`
+    {
+      "conditions": [
+        {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "1",
+          },
+          "type": "simple",
+        },
+        {
+          "left": {
+            "name": "closed",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": true,
+          },
+          "type": "simple",
+        },
+      ],
+      "type": "and",
+    }
+  `);
   expect(
     ast(
       issueQuery.where(({cmp, or}) =>
         or(cmp('id', '=', '1'), cmp('closed', true)),
       ),
     ).where,
-  ).toEqual({
-    type: 'or',
-    conditions: [
-      {type: 'simple', field: 'id', op: '=', value: '1'},
-      {type: 'simple', field: 'closed', op: '=', value: true},
-    ],
-  });
+  ).toMatchInlineSnapshot(`
+    {
+      "conditions": [
+        {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "1",
+          },
+          "type": "simple",
+        },
+        {
+          "left": {
+            "name": "closed",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": true,
+          },
+          "type": "simple",
+        },
+      ],
+      "type": "or",
+    }
+  `);
   expect(
     ast(
       issueQuery.where(({and, cmp, or}) =>
         or(cmp('id', '1'), and(cmp('closed', true), cmp('id', '2'))),
       ),
     ).where,
-  ).toEqual({
-    type: 'or',
-    conditions: [
-      {type: 'simple', field: 'id', op: '=', value: '1'},
-      {
-        type: 'and',
-        conditions: [
-          {type: 'simple', field: 'closed', op: '=', value: true},
-          {type: 'simple', field: 'id', op: '=', value: '2'},
-        ],
-      },
-    ],
-  });
+  ).toMatchInlineSnapshot(`
+    {
+      "conditions": [
+        {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "1",
+          },
+          "type": "simple",
+        },
+        {
+          "conditions": [
+            {
+              "left": {
+                "name": "closed",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": true,
+              },
+              "type": "simple",
+            },
+            {
+              "left": {
+                "name": "id",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "2",
+              },
+              "type": "simple",
+            },
+          ],
+          "type": "and",
+        },
+      ],
+      "type": "or",
+    }
+  `);
   expect(
     ast(
       issueQuery.where(({and, cmp}) =>
         and(cmp('id', '=', '1'), cmp('closed', true)),
       ),
     ).where,
-  ).toEqual({
-    type: 'and',
-    conditions: [
-      {type: 'simple', field: 'id', op: '=', value: '1'},
-      {type: 'simple', field: 'closed', op: '=', value: true},
-    ],
-  });
+  ).toMatchInlineSnapshot(`
+    {
+      "conditions": [
+        {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "1",
+          },
+          "type": "simple",
+        },
+        {
+          "left": {
+            "name": "closed",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": true,
+          },
+          "type": "simple",
+        },
+      ],
+      "type": "and",
+    }
+  `);
 
   expect(
     ast(
@@ -377,13 +627,37 @@ test('where expressions', () => {
         not(and(cmp('id', '=', '1'), cmp('closed', true))),
       ),
     ).where,
-  ).toEqual({
-    type: 'or',
-    conditions: [
-      {type: 'simple', field: 'id', op: '!=', value: '1'},
-      {type: 'simple', field: 'closed', op: '!=', value: true},
-    ],
-  });
+  ).toMatchInlineSnapshot(`
+    {
+      "conditions": [
+        {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "!=",
+          "right": {
+            "type": "literal",
+            "value": "1",
+          },
+          "type": "simple",
+        },
+        {
+          "left": {
+            "name": "closed",
+            "type": "column",
+          },
+          "op": "!=",
+          "right": {
+            "type": "literal",
+            "value": true,
+          },
+          "type": "simple",
+        },
+      ],
+      "type": "or",
+    }
+  `);
 
   expect(
     ast(
@@ -391,13 +665,37 @@ test('where expressions', () => {
         not(or(cmp('id', '=', '1'), cmp('closed', true))),
       ),
     ).where,
-  ).toEqual({
-    type: 'and',
-    conditions: [
-      {type: 'simple', field: 'id', op: '!=', value: '1'},
-      {type: 'simple', field: 'closed', op: '!=', value: true},
-    ],
-  });
+  ).toMatchInlineSnapshot(`
+    {
+      "conditions": [
+        {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "!=",
+          "right": {
+            "type": "literal",
+            "value": "1",
+          },
+          "type": "simple",
+        },
+        {
+          "left": {
+            "name": "closed",
+            "type": "column",
+          },
+          "op": "!=",
+          "right": {
+            "type": "literal",
+            "value": true,
+          },
+          "type": "simple",
+        },
+      ],
+      "type": "and",
+    }
+  `);
 });
 
 // DNF conversion is pretty extensively tested in `expression.test.ts`
@@ -406,86 +704,192 @@ test('where expressions', () => {
 test('where to dnf', () => {
   const issueQuery = newQuery(mockDelegate, issueSchema);
   let dnf = issueQuery.where('id', '=', '1').where('closed', true);
-  expect(ast(dnf).where).toEqual({
-    type: 'and',
-    conditions: [
-      {type: 'simple', field: 'id', op: '=', value: '1'},
-      {type: 'simple', field: 'closed', op: '=', value: true},
-    ],
-  });
+  expect(ast(dnf).where).toMatchInlineSnapshot(`
+    {
+      "conditions": [
+        {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "1",
+          },
+          "type": "simple",
+        },
+        {
+          "left": {
+            "name": "closed",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": true,
+          },
+          "type": "simple",
+        },
+      ],
+      "type": "and",
+    }
+  `);
 
   dnf = issueQuery.where('id', '=', '1');
-  expect(ast(dnf).where).toEqual({
-    type: 'simple',
-    field: 'id',
-    op: '=',
-    value: '1',
-  });
+  expect(ast(dnf).where).toMatchInlineSnapshot(`
+    {
+      "left": {
+        "name": "id",
+        "type": "column",
+      },
+      "op": "=",
+      "right": {
+        "type": "literal",
+        "value": "1",
+      },
+      "type": "simple",
+    }
+  `);
 
   dnf = issueQuery.where(({cmp, or}) =>
     or(cmp('id', '=', '1'), cmp('closed', true)),
   );
-  expect(ast(dnf).where).toEqual({
-    type: 'or',
-    conditions: [
-      {type: 'simple', field: 'id', op: '=', value: '1'},
-      {type: 'simple', field: 'closed', op: '=', value: true},
-    ],
-  });
+  expect(ast(dnf).where).toMatchInlineSnapshot(`
+    {
+      "conditions": [
+        {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "1",
+          },
+          "type": "simple",
+        },
+        {
+          "left": {
+            "name": "closed",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": true,
+          },
+          "type": "simple",
+        },
+      ],
+      "type": "or",
+    }
+  `);
 
   dnf = issueQuery.where(({and, cmp}) =>
     and(cmp('id', '=', '1'), cmp('closed', true)),
   );
-  expect(ast(dnf).where).toEqual({
-    type: 'and',
-    conditions: [
-      {type: 'simple', field: 'id', op: '=', value: '1'},
-      {type: 'simple', field: 'closed', op: '=', value: true},
-    ],
-  });
+  expect(ast(dnf).where).toMatchInlineSnapshot(`
+    {
+      "conditions": [
+        {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "1",
+          },
+          "type": "simple",
+        },
+        {
+          "left": {
+            "name": "closed",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": true,
+          },
+          "type": "simple",
+        },
+      ],
+      "type": "and",
+    }
+  `);
 
   dnf = issueQuery.where(({and, cmp, or}) =>
     and(cmp('id', '=', '1'), or(cmp('closed', true), cmp('id', '2'))),
   );
-  expect(ast(dnf).where).toEqual({
-    type: 'or',
-    conditions: [
-      {
-        type: 'and',
-        conditions: [
-          {
-            type: 'simple',
-            field: 'id',
-            op: '=',
-            value: '1',
-          },
-          {
-            type: 'simple',
-            field: 'closed',
-            op: '=',
-            value: true,
-          },
-        ],
-      },
-      {
-        type: 'and',
-        conditions: [
-          {
-            type: 'simple',
-            field: 'id',
-            op: '=',
-            value: '1',
-          },
-          {
-            type: 'simple',
-            field: 'id',
-            op: '=',
-            value: '2',
-          },
-        ],
-      },
-    ],
-  });
+  expect(ast(dnf).where).toMatchInlineSnapshot(`
+    {
+      "conditions": [
+        {
+          "conditions": [
+            {
+              "left": {
+                "name": "id",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "1",
+              },
+              "type": "simple",
+            },
+            {
+              "left": {
+                "name": "closed",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": true,
+              },
+              "type": "simple",
+            },
+          ],
+          "type": "and",
+        },
+        {
+          "conditions": [
+            {
+              "left": {
+                "name": "id",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "1",
+              },
+              "type": "simple",
+            },
+            {
+              "left": {
+                "name": "id",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "2",
+              },
+              "type": "simple",
+            },
+          ],
+          "type": "and",
+        },
+      ],
+      "type": "or",
+    }
+  `);
 });
 
 describe('expression builder', () => {
@@ -493,28 +897,44 @@ describe('expression builder', () => {
 
   test('basics', () => {
     const expr = issueQuery.where(({cmp}) => cmp('id', '=', '1'));
-    expect(ast(expr)).toEqual({
-      table: 'issue',
-      where: {
-        type: 'simple',
-        field: 'id',
-        op: '=',
-        value: '1',
-      },
-    });
+    expect(ast(expr)).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "1",
+          },
+          "type": "simple",
+        },
+      }
+    `);
 
     type IssueSchema = typeof issueSchema;
     const f: ExpressionFactory<IssueSchema> = eb => eb.cmp('id', '2');
     const expr2 = issueQuery.where(f);
-    expect(ast(expr2)).toEqual({
-      table: 'issue',
-      where: {
-        type: 'simple',
-        field: 'id',
-        op: '=',
-        value: '2',
-      },
-    });
+    expect(ast(expr2)).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "2",
+          },
+          "type": "simple",
+        },
+      }
+    `);
 
     expect(
       ast(
@@ -526,32 +946,52 @@ describe('expression builder', () => {
           ),
         ),
       ),
-    ).toEqual({
-      table: 'issue',
-      where: {
-        type: 'and',
-        conditions: [
-          {
-            field: 'id',
-            op: '=',
-            type: 'simple',
-            value: '1',
-          },
-          {
-            field: 'closed',
-            op: '=',
-            type: 'simple',
-            value: true,
-          },
-          {
-            field: 'title',
-            op: '=',
-            type: 'simple',
-            value: 'foo',
-          },
-        ],
-      },
-    });
+    ).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "conditions": [
+            {
+              "left": {
+                "name": "id",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "1",
+              },
+              "type": "simple",
+            },
+            {
+              "left": {
+                "name": "closed",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": true,
+              },
+              "type": "simple",
+            },
+            {
+              "left": {
+                "name": "title",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "foo",
+              },
+              "type": "simple",
+            },
+          ],
+          "type": "and",
+        },
+      }
+    `);
 
     expect(
       ast(
@@ -563,44 +1003,71 @@ describe('expression builder', () => {
           ),
         ),
       ),
-    ).toEqual({
-      table: 'issue',
-      where: {
-        type: 'or',
-        conditions: [
-          {
-            field: 'id',
-            op: '=',
-            type: 'simple',
-            value: '1',
-          },
-          {
-            field: 'closed',
-            op: '=',
-            type: 'simple',
-            value: true,
-          },
-          {
-            field: 'title',
-            op: '=',
-            type: 'simple',
-            value: 'foo',
-          },
-        ],
-      },
-    });
+    ).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "conditions": [
+            {
+              "left": {
+                "name": "id",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "1",
+              },
+              "type": "simple",
+            },
+            {
+              "left": {
+                "name": "closed",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": true,
+              },
+              "type": "simple",
+            },
+            {
+              "left": {
+                "name": "title",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "foo",
+              },
+              "type": "simple",
+            },
+          ],
+          "type": "or",
+        },
+      }
+    `);
 
-    expect(
-      ast(issueQuery.where(({cmp, not}) => not(cmp('id', '=', '1')))),
-    ).toEqual({
-      table: 'issue',
-      where: {
-        field: 'id',
-        op: '!=',
-        type: 'simple',
-        value: '1',
-      },
-    });
+    expect(ast(issueQuery.where(({cmp, not}) => not(cmp('id', '=', '1')))))
+      .toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "!=",
+          "right": {
+            "type": "literal",
+            "value": "1",
+          },
+          "type": "simple",
+        },
+      }
+    `);
 
     expect(
       ast(
@@ -612,48 +1079,74 @@ describe('expression builder', () => {
           ),
         ),
       ),
-    ).toEqual({
-      table: 'issue',
-      where: {
-        type: 'or',
-        conditions: [
-          {
-            type: 'and',
-            conditions: [
-              {
-                field: 'id',
-                op: '=',
-                type: 'simple',
-                value: '1',
-              },
-              {
-                field: 'closed',
-                op: '=',
-                type: 'simple',
-                value: true,
-              },
-            ],
-          },
-          {
-            type: 'and',
-            conditions: [
-              {
-                field: 'id',
-                op: '=',
-                type: 'simple',
-                value: '2',
-              },
-              {
-                field: 'closed',
-                op: '!=',
-                type: 'simple',
-                value: true,
-              },
-            ],
-          },
-        ],
-      },
-    });
+    ).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "conditions": [
+            {
+              "conditions": [
+                {
+                  "left": {
+                    "name": "id",
+                    "type": "column",
+                  },
+                  "op": "=",
+                  "right": {
+                    "type": "literal",
+                    "value": "1",
+                  },
+                  "type": "simple",
+                },
+                {
+                  "left": {
+                    "name": "closed",
+                    "type": "column",
+                  },
+                  "op": "=",
+                  "right": {
+                    "type": "literal",
+                    "value": true,
+                  },
+                  "type": "simple",
+                },
+              ],
+              "type": "and",
+            },
+            {
+              "conditions": [
+                {
+                  "left": {
+                    "name": "id",
+                    "type": "column",
+                  },
+                  "op": "=",
+                  "right": {
+                    "type": "literal",
+                    "value": "2",
+                  },
+                  "type": "simple",
+                },
+                {
+                  "left": {
+                    "name": "closed",
+                    "type": "column",
+                  },
+                  "op": "!=",
+                  "right": {
+                    "type": "literal",
+                    "value": true,
+                  },
+                  "type": "simple",
+                },
+              ],
+              "type": "and",
+            },
+          ],
+          "type": "or",
+        },
+      }
+    `);
   });
 
   test('empty and', () => {
@@ -683,54 +1176,82 @@ describe('expression builder', () => {
           and(cmp('id', '=', '1'), undefined, cmp('closed', true)),
         ),
       ),
-    ).toEqual({
-      table: 'issue',
-      where: {
-        type: 'and',
-        conditions: [
-          {
-            field: 'id',
-            op: '=',
-            type: 'simple',
-            value: '1',
-          },
-          {
-            field: 'closed',
-            op: '=',
-            type: 'simple',
-            value: true,
-          },
-        ],
-      },
-    });
+    ).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "conditions": [
+            {
+              "left": {
+                "name": "id",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "1",
+              },
+              "type": "simple",
+            },
+            {
+              "left": {
+                "name": "closed",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": true,
+              },
+              "type": "simple",
+            },
+          ],
+          "type": "and",
+        },
+      }
+    `);
   });
 
   test('single and turns into simple', () => {
-    expect(
-      ast(issueQuery.where(({and, cmp}) => and(cmp('id', '=', '1')))),
-    ).toEqual({
-      table: 'issue',
-      where: {
-        field: 'id',
-        op: '=',
-        type: 'simple',
-        value: '1',
-      },
-    });
+    expect(ast(issueQuery.where(({and, cmp}) => and(cmp('id', '=', '1')))))
+      .toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "1",
+          },
+          "type": "simple",
+        },
+      }
+    `);
   });
 
   test('single or turns into simple', () => {
-    expect(
-      ast(issueQuery.where(({cmp, or}) => or(cmp('id', '=', '1')))),
-    ).toEqual({
-      table: 'issue',
-      where: {
-        field: 'id',
-        op: '=',
-        type: 'simple',
-        value: '1',
-      },
-    });
+    expect(ast(issueQuery.where(({cmp, or}) => or(cmp('id', '=', '1')))))
+      .toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "1",
+          },
+          "type": "simple",
+        },
+      }
+    `);
   });
 
   test('undefined terms in or', () => {
@@ -740,26 +1261,40 @@ describe('expression builder', () => {
           or(cmp('id', '=', '1'), undefined, cmp('closed', true)),
         ),
       ),
-    ).toEqual({
-      table: 'issue',
-      where: {
-        type: 'or',
-        conditions: [
-          {
-            field: 'id',
-            op: '=',
-            type: 'simple',
-            value: '1',
-          },
-          {
-            field: 'closed',
-            op: '=',
-            type: 'simple',
-            value: true,
-          },
-        ],
-      },
-    });
+    ).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "conditions": [
+            {
+              "left": {
+                "name": "id",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "1",
+              },
+              "type": "simple",
+            },
+            {
+              "left": {
+                "name": "closed",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": true,
+              },
+              "type": "simple",
+            },
+          ],
+          "type": "or",
+        },
+      }
+    `);
   });
 
   test('undef', () => {
@@ -802,16 +1337,28 @@ describe('expression builder', () => {
         "where": {
           "conditions": [
             {
-              "field": "id",
+              "left": {
+                "name": "id",
+                "type": "column",
+              },
               "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "1",
+              },
               "type": "simple",
-              "value": "1",
             },
             {
-              "field": "id",
+              "left": {
+                "name": "id",
+                "type": "column",
+              },
               "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "2",
+              },
               "type": "simple",
-              "value": "2",
             },
           ],
           "type": "or",
@@ -908,10 +1455,16 @@ describe('exists', () => {
                 ],
                 "table": "user",
                 "where": {
-                  "field": "id",
+                  "left": {
+                    "name": "id",
+                    "type": "column",
+                  },
                   "op": "=",
+                  "right": {
+                    "type": "literal",
+                    "value": "1",
+                  },
                   "type": "simple",
-                  "value": "1",
                 },
               },
             },
@@ -949,16 +1502,28 @@ describe('exists', () => {
               "where": {
                 "conditions": [
                   {
-                    "field": "id",
+                    "left": {
+                      "name": "id",
+                      "type": "column",
+                    },
                     "op": "=",
+                    "right": {
+                      "type": "literal",
+                      "value": "1",
+                    },
                     "type": "simple",
-                    "value": "1",
                   },
                   {
-                    "field": "name",
+                    "left": {
+                      "name": "name",
+                      "type": "column",
+                    },
                     "op": "=",
+                    "right": {
+                      "type": "literal",
+                      "value": "foo",
+                    },
                     "type": "simple",
-                    "value": "foo",
                   },
                 ],
                 "type": "or",
@@ -1322,10 +1887,16 @@ describe('exists', () => {
                   ],
                   "table": "user",
                   "where": {
-                    "field": "name",
+                    "left": {
+                      "name": "name",
+                      "type": "column",
+                    },
                     "op": "=",
+                    "right": {
+                      "type": "literal",
+                      "value": "foo",
+                    },
                     "type": "simple",
-                    "value": "foo",
                   },
                 },
               },
@@ -1349,10 +1920,16 @@ describe('exists', () => {
                   ],
                   "table": "user",
                   "where": {
-                    "field": "name",
+                    "left": {
+                      "name": "name",
+                      "type": "column",
+                    },
                     "op": "=",
+                    "right": {
+                      "type": "literal",
+                      "value": "bar",
+                    },
                     "type": "simple",
-                    "value": "bar",
                   },
                 },
               },

@@ -554,8 +554,14 @@ describe('view-syncer/cvr', () => {
             where: {
               type: 'simple',
               op: '=',
-              field: 'clientGroupID',
-              value: 'abc123',
+              left: {
+                type: 'column',
+                name: 'clientGroupID',
+              },
+              right: {
+                type: 'literal',
+                value: 'abc123',
+              },
             },
             orderBy: [
               ['clientGroupID', 'asc'],

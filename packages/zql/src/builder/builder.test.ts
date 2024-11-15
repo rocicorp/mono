@@ -95,9 +95,15 @@ test('filter', () => {
         orderBy: [['id', 'desc']],
         where: {
           type: 'simple',
-          field: 'name',
+          left: {
+            type: 'column',
+            name: 'name',
+          },
           op: '>=',
-          value: 'c',
+          right: {
+            type: 'literal',
+            value: 'c',
+          },
         },
       },
       {
@@ -467,9 +473,15 @@ test('multi-join', () => {
         orderBy: [['id', 'asc']],
         where: {
           type: 'simple',
-          field: 'id',
+          left: {
+            type: 'column',
+            name: 'id',
+          },
           op: '<=',
-          value: 3,
+          right: {
+            type: 'literal',
+            value: 3,
+          },
         },
         related: [
           {
@@ -1234,9 +1246,12 @@ test('bind static parameters', () => {
     orderBy: [['id', 'asc']],
     where: {
       type: 'simple',
-      field: 'id',
+      left: {
+        type: 'column',
+        name: 'id',
+      },
       op: '=',
-      value: {type: 'static', anchor: 'authData', field: 'userID'},
+      right: {type: 'static', anchor: 'authData', field: 'userID'},
     },
     related: [
       {
@@ -1250,9 +1265,12 @@ test('bind static parameters', () => {
           alias: 'userStates',
           where: {
             type: 'simple',
-            field: 'stateCode',
+            left: {
+              type: 'column',
+              name: 'stateCode',
+            },
             op: '=',
-            value: {
+            right: {
               type: 'static',
               anchor: 'preMutationRow',
               field: 'stateCode',
@@ -1268,7 +1286,55 @@ test('bind static parameters', () => {
     preMutationRow: {stateCode: 'HI'},
   });
 
-  expect(newAst).toMatchSnapshot();
+  expect(newAst).toMatchInlineSnapshot(`
+    {
+      "orderBy": [
+        [
+          "id",
+          "asc",
+        ],
+      ],
+      "related": [
+        {
+          "correlation": {
+            "childField": "userID",
+            "op": "=",
+            "parentField": "id",
+          },
+          "subquery": {
+            "alias": "userStates",
+            "related": undefined,
+            "table": "userStates",
+            "where": {
+              "left": {
+                "name": "stateCode",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "HI",
+              },
+              "type": "simple",
+            },
+          },
+        },
+      ],
+      "table": "users",
+      "where": {
+        "left": {
+          "name": "id",
+          "type": "column",
+        },
+        "op": "=",
+        "right": {
+          "type": "literal",
+          "value": 1,
+        },
+        "type": "simple",
+      },
+    }
+  `);
 });
 
 test('empty or - nothing goes through', () => {
@@ -1305,10 +1371,16 @@ test('always false literal comparison - nothing goes through', () => {
         table: 'users',
         orderBy: [['id', 'asc']],
         where: {
-          type: 'literal',
-          leftValue: true,
+          type: 'simple',
+          left: {
+            type: 'literal',
+            value: true,
+          },
           op: '=',
-          rightValue: false,
+          right: {
+            type: 'literal',
+            value: false,
+          },
         },
       },
       {
@@ -1333,10 +1405,16 @@ test('always true literal comparison - everything goes through', () => {
         table: 'users',
         orderBy: [['id', 'asc']],
         where: {
-          type: 'literal',
-          leftValue: true,
+          type: 'simple',
+          left: {
+            type: 'literal',
+            value: true,
+          },
           op: '=',
-          rightValue: true,
+          right: {
+            type: 'literal',
+            value: true,
+          },
         },
       },
       {

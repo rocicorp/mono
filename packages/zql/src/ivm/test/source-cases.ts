@@ -1111,9 +1111,15 @@ const cases = {
     ) {
       const out = new Catch(
         source.connect([['n', 'asc']], {
-          type: 'literal',
-          leftValue,
-          rightValue,
+          type: 'simple',
+          left: {
+            type: 'literal',
+            value: leftValue,
+          },
+          right: {
+            type: 'literal',
+            value: rightValue,
+          },
           op,
         }),
       );

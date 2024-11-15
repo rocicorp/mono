@@ -12,12 +12,9 @@ import {and, not, or} from './expression.js';
 type TestCondition =
   | {
       type: 'simple';
-      value: boolean;
-    }
-  | {
-      type: 'literal';
-      leftValue: boolean;
-      rightValue: boolean;
+      right: {
+        value: boolean;
+      };
     }
   | {
       type: 'and' | 'or';
@@ -41,83 +38,101 @@ function simpleAnd(...conditions: TestCondition[]): TestCondition {
 function evaluate(condition: TestCondition): boolean {
   switch (condition.type) {
     case 'simple':
-      return condition.value;
+      return condition.right.value;
     case 'and':
       return condition.conditions.every(evaluate);
     case 'or':
       return condition.conditions.some(evaluate);
-    case 'literal':
-      return condition.leftValue === condition.rightValue;
   }
 }
 
 describe('check the test framework', () => {
   test('simple', () => {
-    expect(evaluate({type: 'simple', value: true})).toBe(true);
-    expect(evaluate({type: 'simple', value: false})).toBe(false);
+    expect(evaluate({type: 'simple', right: {value: true}})).toBe(true);
+    expect(evaluate({type: 'simple', right: {value: false}})).toBe(false);
   });
 
   test('and', () => {
     expect(
       evaluate(
-        simpleAnd({type: 'simple', value: true}, {type: 'simple', value: true}),
+        simpleAnd(
+          {type: 'simple', right: {value: true}},
+          {type: 'simple', right: {value: true}},
+        ),
       ),
     ).toBe(true);
     expect(
       evaluate(
         simpleAnd(
-          {type: 'simple', value: true},
-          {type: 'simple', value: false},
+          {type: 'simple', right: {value: true}},
+          {type: 'simple', right: {value: false}},
         ),
       ),
     ).toBe(false);
     expect(
       evaluate(
         simpleAnd(
-          {type: 'simple', value: false},
-          {type: 'simple', value: true},
+          {type: 'simple', right: {value: false}},
+          {type: 'simple', right: {value: true}},
         ),
       ),
     ).toBe(false);
     expect(
       evaluate(
         simpleAnd(
-          {type: 'simple', value: false},
-          {type: 'simple', value: false},
+          {type: 'simple', right: {value: false}},
+          {type: 'simple', right: {value: false}},
         ),
       ),
     ).toBe(false);
-    expect(evaluate(simpleAnd({type: 'simple', value: false}))).toBe(false);
-    expect(evaluate(simpleAnd({type: 'simple', value: true}))).toBe(true);
+    expect(evaluate(simpleAnd({type: 'simple', right: {value: false}}))).toBe(
+      false,
+    );
+    expect(evaluate(simpleAnd({type: 'simple', right: {value: true}}))).toBe(
+      true,
+    );
     expect(evaluate(simpleAnd())).toBe(true);
   });
 
   test('or', () => {
     expect(
       evaluate(
-        simpleOr({type: 'simple', value: true}, {type: 'simple', value: true}),
-      ),
-    ).toBe(true);
-    expect(
-      evaluate(
-        simpleOr({type: 'simple', value: true}, {type: 'simple', value: false}),
-      ),
-    ).toBe(true);
-    expect(
-      evaluate(
-        simpleOr({type: 'simple', value: false}, {type: 'simple', value: true}),
+        simpleOr(
+          {type: 'simple', right: {value: true}},
+          {type: 'simple', right: {value: true}},
+        ),
       ),
     ).toBe(true);
     expect(
       evaluate(
         simpleOr(
-          {type: 'simple', value: false},
-          {type: 'simple', value: false},
+          {type: 'simple', right: {value: true}},
+          {type: 'simple', right: {value: false}},
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      evaluate(
+        simpleOr(
+          {type: 'simple', right: {value: false}},
+          {type: 'simple', right: {value: true}},
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      evaluate(
+        simpleOr(
+          {type: 'simple', right: {value: false}},
+          {type: 'simple', right: {value: false}},
         ),
       ),
     ).toBe(false);
-    expect(evaluate(simpleOr({type: 'simple', value: false}))).toBe(false);
-    expect(evaluate(simpleOr({type: 'simple', value: true}))).toBe(true);
+    expect(evaluate(simpleOr({type: 'simple', right: {value: false}}))).toBe(
+      false,
+    );
+    expect(evaluate(simpleOr({type: 'simple', right: {value: true}}))).toBe(
+      true,
+    );
     expect(evaluate(simpleOr())).toBe(false);
   });
 
@@ -126,12 +141,12 @@ describe('check the test framework', () => {
       evaluate(
         simpleOr(
           simpleAnd(
-            {type: 'simple', value: true},
-            {type: 'simple', value: true},
+            {type: 'simple', right: {value: true}},
+            {type: 'simple', right: {value: true}},
           ),
           simpleAnd(
-            {type: 'simple', value: true},
-            {type: 'simple', value: false},
+            {type: 'simple', right: {value: true}},
+            {type: 'simple', right: {value: false}},
           ),
         ),
       ),
@@ -145,17 +160,12 @@ test('compare test framework to real framework', () => {
     fc.property(fc.integer({min: 1, max: 20}), numConditions => {
       const conditions: TestCondition[] = fc
         .sample(fc.boolean(), numConditions)
-        .map(value =>
-          fc.sample(fc.boolean(), 1)[0]
-            ? ({
-                type: 'literal',
-                leftValue: fc.sample(fc.boolean(), 1)[0],
-                rightValue: fc.sample(fc.boolean(), 1)[0],
-              } as const)
-            : ({
-                type: 'simple',
-                value,
-              } as const),
+        .map(
+          value =>
+            ({
+              type: 'simple',
+              right: {value},
+            }) as const,
         );
 
       const pivots = conditions.map(
@@ -198,9 +208,7 @@ test('compare test framework to real framework', () => {
             .every(c =>
               // all conditions must be simple as nothing can nest
               // under an `AND` in DNF
-              c.conditions.every(
-                c => c.type === 'simple' || c.type === 'literal',
-              ),
+              c.conditions.every(c => c.type === 'simple'),
             ),
         ).toBe(true);
       }
@@ -211,9 +219,15 @@ test('compare test framework to real framework', () => {
     assert(c.type === 'simple');
     return {
       type: 'simple',
-      value: c.value,
+      right: {
+        type: 'literal',
+        value: c.right.value,
+      },
       op: '=',
-      field: 'n/a',
+      left: {
+        type: 'column',
+        name: 'n/a',
+      },
     };
   }
 });
@@ -221,7 +235,18 @@ test('compare test framework to real framework', () => {
 describe('flattening', () => {
   let id = 0;
   function t(): SimpleCondition {
-    return {type: 'simple', value: ++id, op: '=', field: 'n/a'};
+    return {
+      type: 'simple',
+      right: {
+        type: 'literal',
+        value: ++id,
+      },
+      op: '=',
+      left: {
+        type: 'column',
+        name: 'n/a',
+      },
+    };
   }
 
   test('and chain', () => {
@@ -255,7 +280,18 @@ describe('simplify', () => {
   const TRUE: Condition = {type: 'and', conditions: []};
 
   function simple(value: number | string): Condition {
-    return {type: 'simple', value, op: '=', field: 'n/a'};
+    return {
+      type: 'simple',
+      right: {
+        type: 'literal',
+        value,
+      },
+      op: '=',
+      left: {
+        type: 'column',
+        name: 'n/a',
+      },
+    };
   }
 
   const A = simple('A');

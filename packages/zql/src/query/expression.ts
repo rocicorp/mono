@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {must} from '../../../shared/src/must.js';
-import type {Condition, ValuePosition} from '../../../zero-protocol/src/ast.js';
+import type {Condition, LiteralValue} from '../../../zero-protocol/src/ast.js';
 import type {
   PullSchemaForRelationship,
   TableSchema,
@@ -14,6 +14,8 @@ import type {
   Query,
   QueryType,
 } from './query.js';
+
+import type {Parameter as ASTParameter} from '../../../zero-protocol/src/ast.js';
 
 /**
  * A factory function that creates a condition. This is used to create
@@ -93,8 +95,8 @@ export class ExpressionBuilder<TSchema extends TableSchema> {
   ): Condition;
   cmp(
     field: string,
-    opOrValue: Operator | ValuePosition,
-    value?: ValuePosition,
+    opOrValue: Operator | ASTParameter | LiteralValue,
+    value?: ASTParameter | LiteralValue,
   ): Condition {
     return cmp(field, opOrValue, value);
   }
@@ -173,23 +175,16 @@ export function not(expression: Condition): Condition {
       return {
         type: 'simple',
         op: negateOperator(expression.op),
-        field: expression.field,
-        value: expression.value,
-      };
-    case 'literal':
-      return {
-        type: 'literal',
-        op: negateOperator(expression.op),
-        leftValue: expression.leftValue,
-        rightValue: expression.rightValue,
+        left: expression.left,
+        right: expression.right,
       };
   }
 }
 
 export function cmp(
   field: string,
-  opOrValue: Operator | ValuePosition,
-  value?: ValuePosition,
+  opOrValue: Operator | ASTParameter | LiteralValue,
+  value?: ASTParameter | LiteralValue,
 ): Condition {
   let op: Operator;
   if (value === undefined) {
@@ -201,10 +196,18 @@ export function cmp(
 
   return {
     type: 'simple',
-    field,
+    left: {type: 'column', name: field},
+    right: isParameter(value) ? value : {type: 'literal', value},
     op,
-    value,
   };
+}
+
+function isParameter(
+  value: ASTParameter | LiteralValue,
+): value is ASTParameter {
+  return (
+    typeof value === 'object' && (value as {type: string}).type === 'static'
+  );
 }
 
 export const TRUE: Condition = {

@@ -2,6 +2,7 @@ import type {
   Condition,
   CorrelatedSubquery,
   SimpleOperator,
+  ValuePosition,
 } from '../../../zero-protocol/src/ast.js';
 
 // This was written by ChatGPT with some improvements. It is only used for tests
@@ -102,11 +103,33 @@ function parseSimpleOrCorrelated(tokens: string[]): Condition {
 
   if (simpleOperators.has(maybeOp)) {
     tokens.shift(); // consume operator
-    const value = parseValue(tokens);
-    return {type: 'simple', value, op: maybeOp as SimpleOperator, field: token};
+    const right = {
+      type: 'literal',
+      value: parseValue(tokens),
+    } as const;
+    return {
+      type: 'simple',
+      right,
+      op: maybeOp as SimpleOperator,
+      left: {
+        type: 'column',
+        name: token,
+      },
+    };
   }
 
-  return {type: 'simple', value: token, op: '=', field: 'n/a'};
+  return {
+    type: 'simple',
+    right: {
+      type: 'literal',
+      value: token,
+    },
+    op: '=',
+    left: {
+      type: 'column',
+      name: 'n/a',
+    },
+  };
 }
 
 const simpleOperators = new Set([
@@ -135,12 +158,10 @@ function parseValue(tokens: string[]): string {
 export function stringify(c: Condition): string {
   switch (c.type) {
     case 'simple':
-      if (c.field === 'n/a') {
-        return (c.op === '!=' ? '!' : '') + c.value;
+      if (c.left.type === 'column' && c.left.name === 'n/a') {
+        return (c.op === '!=' ? '!' : '') + stringifyValue(c.right);
       }
-      return `${c.field} ${c.op} ${c.value}`;
-    case 'literal':
-      return `${c.leftValue} ${c.op} ${c.rightValue}`;
+      return `${stringifyValue(c.left)} ${c.op} ${stringifyValue(c.right)}`;
     case 'and':
     case 'or':
       return c.conditions
@@ -161,5 +182,16 @@ function eat(tokens: string[], expectedToken: string) {
     throw new Error(
       'Unexpected input. Got: ' + token + ' Expected: ' + expectedToken,
     );
+  }
+}
+
+function stringifyValue(value: ValuePosition): string {
+  switch (value.type) {
+    case 'column':
+      return value.name;
+    case 'literal':
+      return `${value.value}`;
+    case 'static':
+      return `@${value.anchor}.${value.field}`;
   }
 }

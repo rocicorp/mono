@@ -50,8 +50,14 @@ const EXPECTED_LMIDS_AST: AST = {
   where: {
     type: 'simple',
     op: '=',
-    field: 'clientGroupID',
-    value: '9876',
+    left: {
+      type: 'column',
+      name: 'clientGroupID',
+    },
+    right: {
+      type: 'literal',
+      value: '9876',
+    },
   },
   orderBy: [
     ['clientGroupID', 'asc'],
@@ -223,9 +229,15 @@ describe('view-syncer/service', () => {
     table: 'issues',
     where: {
       type: 'simple',
-      field: 'id',
+      left: {
+        type: 'column',
+        name: 'id',
+      },
       op: 'IN',
-      value: ['1', '2', '3', '4'],
+      right: {
+        type: 'literal',
+        value: ['1', '2', '3', '4'],
+      },
     },
     orderBy: [['id', 'asc']],
   };

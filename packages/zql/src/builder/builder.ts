@@ -3,6 +3,7 @@ import type {JSONValue} from '../../../shared/src/json.js';
 import {must} from '../../../shared/src/must.js';
 import type {
   AST,
+  ColumnReference,
   Condition,
   Conjunction,
   CorrelatedSubquery,
@@ -110,7 +111,11 @@ export function bindStaticParameters(
     if (condition.type === 'simple') {
       return {
         ...condition,
-        value: bindValue(condition.value),
+        left: bindValue(condition.left),
+        right: bindValue(condition.right) as Exclude<
+          ValuePosition,
+          ColumnReference
+        >,
       };
     }
     if (condition.type === 'correlatedSubquery') {
@@ -128,7 +133,7 @@ export function bindStaticParameters(
     };
   }
 
-  const bindValue = (value: ValuePosition): LiteralValue => {
+  const bindValue = (value: ValuePosition): ValuePosition => {
     if (isParameter(value)) {
       const anchor = must(
         staticQueryParameters,
@@ -140,7 +145,10 @@ export function bindStaticParameters(
       if (resolvedValue == null) {
         throw new MissingParameterError();
       }
-      return resolvedValue as LiteralValue;
+      return {
+        type: 'literal',
+        value: resolvedValue as LiteralValue,
+      };
     }
     return value;
   };
@@ -148,8 +156,8 @@ export function bindStaticParameters(
   return visit(ast);
 }
 
-function isParameter(value: unknown): value is Parameter {
-  return typeof value === 'object' && value !== null && 'type' in value;
+function isParameter(value: ValuePosition): value is Parameter {
+  return value.type === 'static';
 }
 
 function buildPipelineInternal(

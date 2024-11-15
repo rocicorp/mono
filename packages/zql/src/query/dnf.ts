@@ -16,7 +16,6 @@ function dnfInner(condition: Condition): Disjunction {
   switch (condition.type) {
     case 'simple':
     case 'correlatedSubquery':
-    case 'literal':
       return {type: 'or', conditions: [condition]};
 
     case 'and':
@@ -59,11 +58,7 @@ function distributeAnd(conditions: Disjunction[]): Disjunction {
 }
 
 export function unwrap(c: Condition): Condition {
-  if (
-    c.type === 'simple' ||
-    c.type === 'correlatedSubquery' ||
-    c.type === 'literal'
-  ) {
+  if (c.type === 'simple' || c.type === 'correlatedSubquery') {
     return c;
   }
   if (c.conditions.length === 1) {

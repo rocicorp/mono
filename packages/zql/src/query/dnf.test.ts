@@ -8,7 +8,18 @@ import {dnf, unwrap} from './dnf.js';
 import {parse, stringify} from './expression-test-util.js';
 
 function simple(value: number | string): Condition {
-  return {type: 'simple', value, op: '=', field: 'n/a'};
+  return {
+    type: 'simple',
+    right: {
+      type: 'literal',
+      value,
+    },
+    op: '=',
+    left: {
+      type: 'column',
+      name: 'n/a',
+    },
+  };
 }
 
 const A = simple('A');

@@ -3,9 +3,9 @@ import {assert, unreachable} from '../../shared/src/asserts.js';
 import {must} from '../../shared/src/must.js';
 import type {
   Condition,
-  LiteralCondition,
   Ordering,
   SimpleCondition,
+  ValuePosition,
 } from '../../zero-protocol/src/ast.js';
 import type {Row, Value} from '../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
@@ -468,7 +468,7 @@ export class TableSource implements Source {
     }
 
     if (filters) {
-      constraints.push(optionalFiltersToSQL(filters, this.#columns));
+      constraints.push(optionalFiltersToSQL(filters));
     }
 
     if (constraints.length > 0) {
@@ -508,71 +508,61 @@ export class TableSource implements Source {
  *
  * https://www.notion.so/replicache/Optional-Filters-OR-1303bed895458013a26ee5aafd5725d2
  */
-export function optionalFiltersToSQL(
-  filters: NoSubqueryCondition,
-  columnTypes: Record<string, SchemaValue>,
-): SQLQuery {
+export function optionalFiltersToSQL(filters: NoSubqueryCondition): SQLQuery {
   switch (filters.type) {
     case 'simple':
-      return simpleConditionToSQL(filters, columnTypes);
-    case 'literal':
-      return literalConditionToSQL(filters);
+      return simpleConditionToSQL(filters);
     case 'and':
       return sql`(${sql.join(
-        filters.conditions.map(condition =>
-          optionalFiltersToSQL(condition, columnTypes),
-        ),
+        filters.conditions.map(condition => optionalFiltersToSQL(condition)),
         sql` AND `,
       )})`;
     case 'or':
       return sql`(${sql.join(
-        filters.conditions.map(condition =>
-          optionalFiltersToSQL(condition, columnTypes),
-        ),
+        filters.conditions.map(condition => optionalFiltersToSQL(condition)),
         sql` OR `,
       )})`;
   }
 }
 
-function simpleConditionToSQL(
-  filter: SimpleCondition,
-  columnTypes: Record<string, SchemaValue>,
-): SQLQuery {
+function simpleConditionToSQL(filter: SimpleCondition): SQLQuery {
   const {op} = filter;
   if (op === 'IN' || op === 'NOT IN') {
-    return sql`${sql.ident(filter.field)} ${sql.__dangerous__rawValue(
-      filter.op,
-    )} (SELECT value FROM json_each(${JSON.stringify(filter.value)}))`;
+    switch (filter.right.type) {
+      case 'literal':
+        return sql`${valuePositionToSQL(
+          filter.left,
+        )} ${sql.__dangerous__rawValue(
+          filter.op,
+        )} (SELECT value FROM json_each(${JSON.stringify(
+          filter.right.value,
+        )}))`;
+      case 'static':
+        throw new Error(
+          'Static parameters must be replaced before conversion to SQL',
+        );
+    }
   }
-  return sql`${sql.ident(filter.field)} ${sql.__dangerous__rawValue(
+  return sql`${valuePositionToSQL(filter.left)} ${sql.__dangerous__rawValue(
     filter.op === 'ILIKE'
       ? 'LIKE'
       : filter.op === 'NOT ILIKE'
       ? 'NOT LIKE'
       : filter.op,
-  )} ${toSQLiteType(filter.value, columnTypes[filter.field].type)}`;
+  )} ${valuePositionToSQL(filter.right)}`;
 }
 
-function literalConditionToSQL(filter: LiteralCondition): SQLQuery {
-  const {op} = filter;
-  if (op === 'IN' || op === 'NOT IN') {
-    return sql`${toSQLiteType(
-      filter.leftValue,
-      getJsType(filter.leftValue),
-    )} ${sql.__dangerous__rawValue(
-      filter.op,
-    )} (SELECT value FROM json_each(${JSON.stringify(filter.rightValue)}))`;
+function valuePositionToSQL(value: ValuePosition): SQLQuery {
+  switch (value.type) {
+    case 'column':
+      return sql.ident(value.name);
+    case 'literal':
+      return sql`${toSQLiteType(value.value, getJsType(value.value))}`;
+    case 'static':
+      throw new Error(
+        'Static parameters must be replaced before conversion to SQL',
+      );
   }
-  return sql`${toSQLiteType(
-    filter.leftValue,
-    getJsType(filter.leftValue),
-  )} ${sql.__dangerous__rawValue(
-    filter.op === 'ILIKE'
-      ? 'LIKE'
-      : filter.op === 'NOT ILIKE'
-      ? 'NOT LIKE'
-      : filter.op,
-  )} ${toSQLiteType(filter.rightValue, getJsType(filter.rightValue))}`;
 }
 
 function getJsType(value: unknown): ValueType {
