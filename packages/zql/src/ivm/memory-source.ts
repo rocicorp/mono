@@ -202,7 +202,6 @@ export class MemorySource implements Source {
   }
 
   *#fetch(req: FetchRequest, from: Connection): Stream<Node> {
-    console.log('source fetch', req);
     let overlay: Overlay | undefined;
 
     const callingConnectionNum = this.#connections.indexOf(from);
@@ -319,7 +318,6 @@ export class MemorySource implements Source {
       scanStart = startAt;
     }
 
-    console.log('fetch overlay', overlay);
     const withOverlay = generateWithOverlay(
       startAt,
       // 😬 - btree library doesn't support ideas like start "before" this
@@ -429,7 +427,6 @@ function* generateWithConstraint(
     ) {
       break;
     }
-    console.log('fetch yielding', node);
     yield node;
   }
 }
@@ -504,7 +501,6 @@ export function* generateWithOverlay(
   compare: Comparator,
 ) {
   const overlays = computeOverlays(startAt, constraint, overlay, compare);
-  console.log(overlays);
   yield* generateWithOverlayInner(rows, overlays, compare);
 }
 
