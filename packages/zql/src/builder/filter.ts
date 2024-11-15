@@ -11,22 +11,44 @@ export type SimplePredicate = (rhs: Value) => boolean;
 export type SimplePredicateNoNull = (rhs: NonNullValue) => boolean;
 
 export function createPredicate(condition: SimpleCondition) {
+  const {left} = condition;
+  const {right} = condition;
+  assert(
+    right.type !== 'static',
+    'static values should be resolved before creating predicates',
+  );
+  assert(
+    left.type !== 'static',
+    'static values should be resolved before creating predicates',
+  );
+
   switch (condition.op) {
     case 'IS':
     case 'IS NOT': {
-      const impl = createIsPredicate(condition.value, condition.op);
-      return (row: Row) => impl(row[condition.field]);
+      const impl = createIsPredicate(right.value, condition.op);
+      if (left.type === 'literal') {
+        const result = impl(left.value);
+        return () => result;
+      }
+      return (row: Row) => impl(row[left.name]);
     }
   }
 
-  if (condition.value === null || condition.value === undefined) {
+  if (right.value === null || right.value === undefined) {
     return (_row: Row) => false;
   }
 
-  const impl = createPredicateImpl(condition.value, condition.op);
+  const impl = createPredicateImpl(right.value, condition.op);
+  if (left.type === 'literal') {
+    if (left.value === null || left.value === undefined) {
+      return false;
+    }
+    const result = impl(left.value);
+    return () => result;
+  }
 
   return (row: Row) => {
-    const lhs = row[condition.field];
+    const lhs = row[left.name];
     if (lhs === null || lhs === undefined) {
       return false;
     }
