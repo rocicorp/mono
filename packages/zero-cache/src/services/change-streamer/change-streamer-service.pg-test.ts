@@ -24,21 +24,29 @@ import {
   initReplicationState,
 } from '../replicator/schema/replication-state.js';
 import {ReplicationMessages} from '../replicator/test-utils.js';
-import {initializeStreamer} from './change-streamer-service.js';
+import {
+  initializeStreamer,
+  type ChangeStreamMessage,
+} from './change-streamer-service.js';
 import {
   ErrorType,
   type ChangeStreamerService,
   type Commit,
   type Downstream,
-  type DownstreamChange,
 } from './change-streamer.js';
-import type {ChangeLogEntry} from './schema/tables.js';
+import {
+  AutoResetSignal,
+  ensureReplicationConfig,
+  type ChangeLogEntry,
+  type ReplicationConfig,
+} from './schema/tables.js';
 
 describe('change-streamer/service', () => {
   let lc: LogContext;
+  let replicaConfig: ReplicationConfig;
   let changeDB: PostgresDB;
   let streamer: ChangeStreamerService;
-  let changes: Subscription<DownstreamChange>;
+  let changes: Subscription<ChangeStreamMessage>;
   let acks: Queue<Commit>;
   let streamerDone: Promise<void>;
 
@@ -55,6 +63,7 @@ describe('change-streamer/service', () => {
 
     const replica = new Database(lc, ':memory:');
     initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
+    replicaConfig = getSubscriptionState(new StatementRunner(replica));
 
     changes = Subscription.create();
     acks = new Queue();
@@ -71,7 +80,8 @@ describe('change-streamer/service', () => {
             acks: {push: commit => acks.enqueue(commit)},
           }),
       },
-      getSubscriptionState(new StatementRunner(replica)),
+      replicaConfig,
+      true,
       setTimeoutFn as unknown as typeof setTimeout,
     );
     streamerDone = streamer.run();
@@ -478,14 +488,12 @@ describe('change-streamer/service', () => {
           return resolver().promise;
         }),
     };
-    const replica = new Database(lc, ':memory:');
-    initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
-
     const streamer = await initializeStreamer(
       lc,
       changeDB,
       source,
-      getSubscriptionState(new StatementRunner(replica)),
+      replicaConfig,
+      true,
     );
     void streamer.run();
 
@@ -500,11 +508,13 @@ describe('change-streamer/service', () => {
         return resolver().promise;
       }),
     };
-    const replica = new Database(lc, ':memory:');
-    initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
-    const config = getSubscriptionState(new StatementRunner(replica));
-
-    let streamer = await initializeStreamer(lc, changeDB, source, config);
+    let streamer = await initializeStreamer(
+      lc,
+      changeDB,
+      source,
+      replicaConfig,
+      true,
+    );
     void streamer.run();
 
     expect(await requests.dequeue()).toBe(REPLICA_VERSION);
@@ -514,7 +524,13 @@ describe('change-streamer/service', () => {
       INSERT INTO cdc."changeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"commit"}'::json);
     `.simple();
 
-    streamer = await initializeStreamer(lc, changeDB, source, config);
+    streamer = await initializeStreamer(
+      lc,
+      changeDB,
+      source,
+      replicaConfig,
+      true,
+    );
     void streamer.run();
 
     expect(await requests.dequeue()).toBe('04');
@@ -537,20 +553,26 @@ describe('change-streamer/service', () => {
           return resolver().promise;
         }),
     };
-    const replica = new Database(lc, ':memory:');
-    initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
-
     const streamer = await initializeStreamer(
       lc,
       changeDB,
       source,
-      getSubscriptionState(new StatementRunner(replica)),
+      replicaConfig,
+      true,
     );
     void streamer.run();
 
     changes.fail(new Error('doh'));
 
     expect(await hasRetried).toBe(true);
+  });
+
+  test('reset required', async () => {
+    changes.push(['control', {tag: 'reset-required'}]);
+    await streamerDone;
+    await expect(
+      ensureReplicationConfig(lc, changeDB, replicaConfig, true),
+    ).rejects.toThrow(AutoResetSignal);
   });
 
   test('shutdown on AbortError', async () => {

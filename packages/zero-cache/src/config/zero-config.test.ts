@@ -146,10 +146,29 @@ test('zero-cache --help', () => {
                                                    the replication-manager URI, which runs a change-streamer                     
                                                    on port 4849.                                                                 
                                                                                                                                  
+     --auto-reset boolean                          optional                                                                      
+       ZERO_AUTO_RESET env                                                                                                       
+                                                   Automatically wipe and resync the replica when replication is halted.         
+                                                   This situation can occur for configurations in which the upstream database    
+                                                   provider prohibits event trigger creation, preventing the zero-cache from     
+                                                   being able to correctly replicating schema changes. For such configurations,  
+                                                   an upstream schema change will instead result in halting replication with an  
+                                                   error indicating that the replica needs to be reset.                          
+                                                                                                                                 
+                                                   When auto-reset is enabled, zero-cache will respond to such situations        
+                                                   by shutting down, and when restarted, resetting the replica and all synced    
+                                                   clients. This is a heavy-weight operation and can result in user-visible      
+                                                   slowness or downtime if compute resources are scarce.                         
+                                                                                                                                 
+                                                   Moreover, auto-reset is only supported for single-node configurations         
+                                                   with a permanent volume for the replica. Specifically, it is incompatible     
+                                                   with the litestream option, and will be ignored with a warning if             
+                                                   set in combination with litestream.                                           
+                                                                                                                                 
      --litestream boolean                          optional                                                                      
        ZERO_LITESTREAM env                                                                                                       
                                                    Indicates that a litestream replicate process is backing up the               
-                                                   replicaDBFile. This should be the production configuration for the            
+                                                   replica-file. This should be the production configuration for the             
                                                    replication-manager. It is okay to run this in development too.               
                                                                                                                                  
                                                    Note that this flag does actually run litestream; rather, it                  

@@ -12,7 +12,7 @@ import type {PostgresDB} from '../../../types/pg.js';
 import type {Source} from '../../../types/streams.js';
 import type {MessageProcessor} from '../../replicator/incremental-sync.js';
 import {createMessageProcessor} from '../../replicator/test-utils.js';
-import type {DownstreamChange} from '../change-streamer.js';
+import type {ChangeStreamMessage} from '../change-streamer-service.js';
 import type {DataChange} from '../schema/change.js';
 import {initializeChangeSource} from './change-source.js';
 
@@ -31,8 +31,8 @@ describe('change-source/pg/end-to-mid-test', () => {
   let upstream: PostgresDB;
   let replicaDbFile: DbFile;
   let replica: Database;
-  let changes: Source<DownstreamChange>;
-  let downstream: Queue<DownstreamChange>;
+  let changes: Source<ChangeStreamMessage>;
+  let downstream: Queue<ChangeStreamMessage>;
   let replicator: MessageProcessor;
 
   beforeAll(async () => {
@@ -87,9 +87,9 @@ describe('change-source/pg/end-to-mid-test', () => {
   });
 
   function drainToQueue(
-    sub: Source<DownstreamChange>,
-  ): Queue<DownstreamChange> {
-    const queue = new Queue<DownstreamChange>();
+    sub: Source<ChangeStreamMessage>,
+  ): Queue<ChangeStreamMessage> {
+    const queue = new Queue<ChangeStreamMessage>();
     void (async () => {
       for await (const msg of sub) {
         void queue.enqueue(msg);
@@ -102,7 +102,9 @@ describe('change-source/pg/end-to-mid-test', () => {
     const data: DataChange[] = [];
     for (;;) {
       const change = await downstream.dequeue();
-      replicator.processMessage(lc, change);
+      if (change[0] !== 'control') {
+        replicator.processMessage(lc, change);
+      }
 
       switch (change[0]) {
         case 'begin':
@@ -112,6 +114,7 @@ describe('change-source/pg/end-to-mid-test', () => {
           break;
         case 'commit':
         case 'rollback':
+        case 'control':
           return data;
         default:
           change satisfies never;

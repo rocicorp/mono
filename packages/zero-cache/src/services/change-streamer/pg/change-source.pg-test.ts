@@ -19,8 +19,11 @@ import {
 import type {PostgresDB} from '../../../types/pg.js';
 import type {Source} from '../../../types/streams.js';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
-import type {ChangeSource} from '../change-streamer-service.js';
-import type {Commit, DownstreamChange} from '../change-streamer.js';
+import type {
+  ChangeSource,
+  ChangeStreamMessage,
+} from '../change-streamer-service.js';
+import type {Commit} from '../change-streamer.js';
 import {initializeChangeSource} from './change-source.js';
 import {replicationSlot} from './initial-sync.js';
 import {fromLexiVersion} from './lsn.js';
@@ -82,9 +85,9 @@ describe('change-source/pg', () => {
   });
 
   function drainToQueue(
-    sub: Source<DownstreamChange>,
-  ): Queue<DownstreamChange> {
-    const queue = new Queue<DownstreamChange>();
+    sub: Source<ChangeStreamMessage>,
+  ): Queue<ChangeStreamMessage> {
+    const queue = new Queue<ChangeStreamMessage>();
     void (async () => {
       for await (const msg of sub) {
         void queue.enqueue(msg);
@@ -490,6 +493,10 @@ describe('change-source/pg', () => {
         expect(await downstream.dequeue()).toMatchObject([
           'rollback',
           {tag: 'rollback'},
+        ]);
+        expect(await downstream.dequeue()).toMatchObject([
+          'control',
+          {tag: 'reset-required'},
         ]);
 
         expect(logSink.messages[0]).toMatchObject([

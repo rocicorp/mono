@@ -115,7 +115,7 @@ const commit = v.tuple([
 const rollback = v.tuple([v.literal('rollback'), rollbackSchema]);
 const error = v.tuple([v.literal('error'), subscriptionErrorSchema]);
 
-const downstreamChange = v.union(begin, data, commit, rollback);
+export const downstreamChange = v.union(begin, data, commit, rollback);
 
 export const downstreamSchema = v.union(downstreamChange, error);
 

@@ -1,10 +1,15 @@
-import {afterEach, beforeEach, describe, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
 import {Database} from '../../../../../zqlite/src/db.js';
 import {expectTables, testDBs} from '../../../test/db.js';
 import type {PostgresDB} from '../../../types/pg.js';
 import {initReplicationState} from '../../replicator/schema/replication-state.js';
-import {ensureReplicationConfig, setupCDCTables} from './tables.js';
+import {
+  AutoResetSignal,
+  ensureReplicationConfig,
+  markResetRequired,
+  setupCDCTables,
+} from './tables.js';
 
 describe('change-streamer/schema/tables', () => {
   const lc = createSilentLogContext();
@@ -33,6 +38,7 @@ describe('change-streamer/schema/tables', () => {
         {
           replicaVersion: '183',
           publications: ['zero_data', 'zero_metadata'],
+          resetRequired: null,
           lock: 1,
         },
       ],
@@ -55,6 +61,7 @@ describe('change-streamer/schema/tables', () => {
         {
           replicaVersion: '183',
           publications: ['zero_data', 'zero_metadata'],
+          resetRequired: null,
           lock: 1,
         },
       ],
@@ -68,17 +75,59 @@ describe('change-streamer/schema/tables', () => {
       ],
     });
 
-    // Different replica version should wipe the tables.
-    await ensureReplicationConfig(lc, db, {
-      replicaVersion: '1g8',
-      publications: ['zero_data', 'zero_metadata'],
+    await markResetRequired(db);
+    await expectTables(db, {
+      ['cdc.replicationConfig']: [
+        {
+          replicaVersion: '183',
+          publications: ['zero_data', 'zero_metadata'],
+          resetRequired: true,
+          lock: 1,
+        },
+      ],
     });
+
+    // Should not affect auto-reset = false (i.e. no-op).
+    await ensureReplicationConfig(
+      lc,
+      db,
+      {
+        replicaVersion: '183',
+        publications: ['zero_metadata', 'zero_data'],
+      },
+      false,
+    );
+
+    // autoReset with the same version should throw.
+    await expect(
+      ensureReplicationConfig(
+        lc,
+        db,
+        {
+          replicaVersion: '183',
+          publications: ['zero_metadata', 'zero_data'],
+        },
+        true,
+      ),
+    ).rejects.toThrow(AutoResetSignal);
+
+    // Different replica version should wipe the tables.
+    await ensureReplicationConfig(
+      lc,
+      db,
+      {
+        replicaVersion: '1g8',
+        publications: ['zero_data', 'zero_metadata'],
+      },
+      true,
+    );
 
     await expectTables(db, {
       ['cdc.replicationConfig']: [
         {
           replicaVersion: '1g8',
           publications: ['zero_data', 'zero_metadata'],
+          resetRequired: null,
           lock: 1,
         },
       ],

@@ -39,7 +39,11 @@ import {
 } from '../../../types/pg.js';
 import {Subscription} from '../../../types/subscription.js';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
-import type {ChangeSource, ChangeStream} from '../change-streamer-service.js';
+import type {
+  ChangeSource,
+  ChangeStream,
+  ChangeStreamMessage,
+} from '../change-streamer-service.js';
 import type {Commit, Data, DownstreamChange} from '../change-streamer.js';
 import type {DataChange, Identifier, MessageDelete} from '../schema/change.js';
 import type {ReplicationConfig} from '../schema/tables.js';
@@ -180,7 +184,7 @@ class PostgresChangeSource implements ChangeSource {
       void service.acknowledge(lastLSN);
     };
 
-    const changes = Subscription.create<DownstreamChange>({
+    const changes = Subscription.create<ChangeStreamMessage>({
       cleanup: () => service.stop(),
     });
 
@@ -368,7 +372,7 @@ class ChangeMaker {
   async makeChanges(
     lsn: string,
     msg: Pgoutput.Message,
-  ): Promise<DownstreamChange[]> {
+  ): Promise<ChangeStreamMessage[]> {
     if (this.#error) {
       this.#logError(this.#error);
       return [];
@@ -380,7 +384,10 @@ class ChangeMaker {
       this.#logError(this.#error);
       // Rollback the current transaction to avoid dangling transactions in
       // downstream processors (i.e. changeLog, replicator).
-      return [['rollback', {tag: 'rollback'}]];
+      return [
+        ['rollback', {tag: 'rollback'}],
+        ['control', {tag: 'reset-required'}],
+      ];
     }
   }
 
