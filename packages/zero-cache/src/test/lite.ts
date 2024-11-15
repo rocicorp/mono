@@ -1,9 +1,9 @@
 import {LogContext} from '@rocicorp/logger';
-import {unlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {expect} from 'vitest';
 import {randInt} from '../../../shared/src/rand.js';
 import {Database} from '../../../zqlite/src/db.js';
+import {deleteLiteDB} from '../db/delete-lite-db.js';
 import {id} from '../types/sql.js';
 
 export class DbFile {
@@ -17,8 +17,8 @@ export class DbFile {
     return new Database(lc, this.path);
   }
 
-  async unlink() {
-    await unlink(this.path);
+  delete() {
+    deleteLiteDB(this.path);
   }
 }
 
