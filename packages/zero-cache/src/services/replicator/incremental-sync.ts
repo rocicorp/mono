@@ -102,7 +102,6 @@ export class IncrementalSyncer {
       const processor = new MessageProcessor(
         this.#replica,
         this.#txMode,
-        (_watermark: string) => {}, // TODO: Add ACKs to ChangeStreamer API
         (lc: LogContext, err: unknown) => this.stop(lc, err),
       );
 
@@ -186,7 +185,6 @@ class ReplayedTransactionError extends Error {
 export class MessageProcessor {
   readonly #db: StatementRunner;
   readonly #txMode: TransactionMode;
-  readonly #acknowledge: (watermark: string) => unknown;
   readonly #failService: (lc: LogContext, err: unknown) => void;
 
   #currentTx: TransactionProcessor | null = null;
@@ -196,12 +194,10 @@ export class MessageProcessor {
   constructor(
     db: StatementRunner,
     txMode: TransactionMode,
-    acknowledge: (watermark: string) => unknown,
     failService: (lc: LogContext, err: unknown) => void,
   ) {
     this.#db = db;
     this.#txMode = txMode;
-    this.#acknowledge = acknowledge;
     this.#failService = failService;
   }
 
@@ -236,7 +232,6 @@ export class MessageProcessor {
     } catch (e) {
       if (e instanceof ReplayedTransactionError) {
         lc.info?.(e);
-        this.#acknowledge(e.watermark);
       } else {
         this.#fail(lc, e);
       }
@@ -300,8 +295,6 @@ export class MessageProcessor {
       assert(watermark);
       const elapsedMs = tx.processCommit(msg, watermark);
       lc.debug?.(`Committed tx (${elapsedMs} ms)`);
-
-      this.#acknowledge(watermark);
       return true;
     }
 
