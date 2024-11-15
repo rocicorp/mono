@@ -33,8 +33,8 @@ export default function ListPage() {
   const qs = new URLSearchParams(useSearch());
 
   const status = qs.get('status')?.toLowerCase() ?? 'open';
-  const creator = qs.get('creator');
-  const assignee = qs.get('assignee');
+  const creator = qs.get('creator') ?? undefined;
+  const assignee = qs.get('assignee') ?? undefined;
   const labels = qs.getAll('label');
   const textFilter = qs.get('q');
 
@@ -42,18 +42,6 @@ export default function ListPage() {
     qs.get('sort')?.toLowerCase() === 'created' ? 'created' : 'modified';
   const sortDirection =
     qs.get('sortDir')?.toLowerCase() === 'asc' ? 'asc' : 'desc';
-
-  const creatorID = useQuery(
-    z.query.user.where('login', creator ?? '').one(),
-    creator !== null,
-  )?.id;
-
-  const assigneeID = useQuery(
-    z.query.user.where('login', assignee ?? '').one(),
-    assignee !== null,
-  )?.id;
-
-  const labelIDs = useQuery(z.query.label.where('name', 'IN', labels));
 
   let q = z.query.issue
     .orderBy(sortField, sortDirection)
@@ -68,20 +56,20 @@ export default function ListPage() {
     q = q.where('open', open);
   }
 
-  if (creatorID) {
-    q = q.where('creatorID', creatorID);
+  if (creator) {
+    q = q.whereExists('creator', q => q.where('login', creator));
   }
 
-  if (assigneeID) {
-    q = q.where('assigneeID', assigneeID);
+  if (assignee) {
+    q = q.whereExists('assignee', q => q.where('login', assignee));
   }
 
   if (textFilter) {
     q = q.where('title', 'ILIKE', `%${escapeLike(textFilter)}%`);
   }
 
-  for (const labelID of labelIDs) {
-    q = q.where('labelIDs', 'LIKE', `%${escapeLike(labelID.id)}%`);
+  for (const label of labels) {
+    q = q.whereExists('labels', q => q.where('name', label));
   }
 
   const issues = useQuery(q);
@@ -98,9 +86,9 @@ export default function ListPage() {
     title,
     params: {
       open,
-      assigneeID,
-      creatorID,
-      labelIDs: labelIDs.map(l => l.id),
+      assignee,
+      creator,
+      labels,
       textFilter: textFilter ?? undefined,
       sortField,
       sortDirection,

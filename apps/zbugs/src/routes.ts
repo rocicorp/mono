@@ -24,9 +24,9 @@ export type ListContext = {
   readonly title: string;
   readonly params: {
     readonly open?: boolean | undefined;
-    readonly assigneeID?: string | undefined;
-    readonly creatorID?: string | undefined;
-    readonly labelIDs?: string[] | undefined;
+    readonly assignee?: string | undefined;
+    readonly creator?: string | undefined;
+    readonly labels?: string[] | undefined;
     readonly textFilter?: string | undefined;
     readonly sortField: 'modified' | 'created';
     readonly sortDirection: 'asc' | 'desc';
