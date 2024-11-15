@@ -5,14 +5,28 @@ import {assert} from '../../../shared/src/asserts.js';
 import {hashOfAST} from '../../../zero-protocol/src/ast-hash.js';
 import type {AST, Condition, Ordering} from '../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
-import {buildPipeline, type BuilderDelegate} from '../builder/builder.js';
-import {ArrayView} from '../ivm/array-view.js';
-import type {Input} from '../ivm/operator.js';
-import type {Format, ViewFactory} from '../ivm/view.js';
 import {
   normalizeTableSchema,
   type NormalizedTableSchema,
 } from '../../../zero-schema/src/normalize-table-schema.js';
+import {
+  isFieldRelationship,
+  isJunctionRelationship,
+  type PullSchemaForRelationship,
+  type TableSchema,
+  type TableSchemaToRow,
+} from '../../../zero-schema/src/table-schema.js';
+import {buildPipeline, type BuilderDelegate} from '../builder/builder.js';
+import {ArrayView} from '../ivm/array-view.js';
+import type {Input} from '../ivm/operator.js';
+import type {Format, ViewFactory} from '../ivm/view.js';
+import {dnf} from './dnf.js';
+import {
+  and,
+  cmp,
+  expressionBuilder,
+  type ExpressionFactory,
+} from './expression.js';
 import type {AdvancedQuery} from './query-internal.js';
 import type {
   AddSubselect,
@@ -25,15 +39,7 @@ import type {
   QueryType,
   Smash,
 } from './query.js';
-import {
-  isFieldRelationship,
-  isJunctionRelationship,
-  type PullSchemaForRelationship,
-  type TableSchemaToRow,
-  type TableSchema,
-} from '../../../zero-schema/src/table-schema.js';
 import type {TypedView} from './typed-view.js';
-import {and, cmp, type GenericCondition} from './expression.js';
 
 export function newQuery<
   TSchema extends TableSchema,
@@ -254,7 +260,7 @@ export abstract class AbstractQuery<
   }
 
   where(
-    field: string | GenericCondition<TSchema>,
+    fieldOrExpressionFactory: string | ExpressionFactory<TSchema>,
     opOrValue?:
       | Operator
       | GetFieldTypeNoNullOrUndefined<any, any, any>
@@ -264,22 +270,17 @@ export abstract class AbstractQuery<
       | Parameter<any, any, any>,
   ): Query<TSchema, TReturn> {
     let cond: Condition;
-    // If only a single argument is provided, then the user
-    // provided a condition object.
-    if (opOrValue === undefined && value === undefined) {
-      assert(typeof field !== 'string', `Invalid condition: ${field}`);
-      cond = field as Condition;
+
+    if (typeof fieldOrExpressionFactory === 'function') {
+      cond = dnf(fieldOrExpressionFactory(expressionBuilder));
     } else {
-      cond = cmp(field as string, opOrValue as any, value as any) as Condition;
+      assert(opOrValue !== undefined, 'Invalid condition');
+      cond = cmp(fieldOrExpressionFactory, opOrValue, value);
     }
 
     const existingWhere = this.#ast.where;
     if (existingWhere) {
-      // TODO: fix casting once merged with expression builder
-      cond = and(
-        existingWhere as GenericCondition<TSchema>,
-        cond as GenericCondition<TSchema>,
-      ) as Condition;
+      cond = and(existingWhere, cond);
     }
 
     return this._newQuery(

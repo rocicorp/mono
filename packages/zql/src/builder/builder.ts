@@ -229,12 +229,10 @@ function applyOr(
   appliedFilters: boolean,
 ): Input {
   const fanOut = new FanOut(input);
-  const branches: Input[] = [];
-  for (const subCondition of condition.conditions) {
-    branches.push(applyWhere(fanOut, subCondition, appliedFilters));
-  }
-  assert(branches.length > 0, 'Or condition must have at least one branch');
-  return new FanIn(fanOut, branches as [Input, ...Input[]]);
+  const branches = condition.conditions.map(subCondition =>
+    applyWhere(fanOut, subCondition, appliedFilters),
+  );
+  return new FanIn(fanOut, branches);
 }
 
 function applySimpleCondition(

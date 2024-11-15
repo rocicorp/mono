@@ -25,12 +25,12 @@ import type {Stream} from './stream.js';
 export class FanIn implements Operator {
   readonly #inputs: readonly Input[];
   readonly #fanOut: FanOut;
+  readonly #schema: SourceSchema;
   #output: Output | undefined;
-  #schema: SourceSchema | undefined;
 
-  constructor(fanOut: FanOut, inputs: [Input, ...Input[]]) {
+  constructor(fanOut: FanOut, inputs: Input[]) {
     this.#inputs = inputs;
-    this.#schema = inputs[0].getSchema();
+    this.#schema = fanOut.getSchema();
     this.#fanOut = fanOut;
     for (const input of inputs) {
       input.setOutput(this);
@@ -49,7 +49,7 @@ export class FanIn implements Operator {
   }
 
   getSchema() {
-    return this.#inputs[0].getSchema();
+    return this.#schema;
   }
 
   fetch(req: FetchRequest): Stream<Node> {
