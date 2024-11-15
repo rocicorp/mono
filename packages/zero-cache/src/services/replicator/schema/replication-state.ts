@@ -96,17 +96,8 @@ export function updateReplicationWatermark(
   db: StatementRunner,
   watermark: string,
 ) {
-  // The previous `watermark` needs to be set as the next `stateVersion`.
-  // Rather than explicitly looking that up with an additional statement, use an
-  // UPSERT for which the INSERT fails so that the value of `watermark`
-  // from the original row can be used to set the new `stateVersion`.
   db.run(
-    `
-      INSERT INTO "_zero.replicationState" 
-        (lock, watermark, stateVersion) VALUES (1,'','')
-        ON CONFLICT (lock)
-        DO UPDATE SET watermark=?, stateVersion=watermark
-    `,
+    `UPDATE "_zero.replicationState" SET stateVersion=watermark, watermark=?`,
     watermark,
   );
 }
