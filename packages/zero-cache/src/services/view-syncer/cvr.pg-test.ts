@@ -646,10 +646,16 @@ describe('view-syncer/cvr', () => {
             schema: '',
             table: `zero_${SHARD_ID}.clients`,
             where: {
-              field: 'clientGroupID',
+              left: {
+                type: 'column',
+                name: 'clientGroupID',
+              },
               op: '=',
               type: 'simple',
-              value: 'abc123',
+              right: {
+                type: 'literal',
+                value: 'abc123',
+              },
             },
             orderBy: [
               ['clientGroupID', 'asc'],
