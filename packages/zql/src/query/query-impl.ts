@@ -382,7 +382,7 @@ export abstract class AbstractQuery<
           destSchema,
           {
             table: destSchema.tableName,
-            alias: `${SUBQ_PREFIX}_${relationship}`,
+            alias: `${SUBQ_PREFIX}${relationship}`,
           },
           undefined,
         ),
@@ -409,7 +409,7 @@ export abstract class AbstractQuery<
           destSchema,
           {
             table: destSchema.tableName,
-            alias: `${SUBQ_PREFIX}_${relationship}`,
+            alias: `${SUBQ_PREFIX}${relationship}`,
           },
           undefined,
         ),
@@ -425,7 +425,7 @@ export abstract class AbstractQuery<
           },
           subquery: {
             table: junctionSchema.tableName,
-            alias: `${SUBQ_PREFIX}_${relationship}`,
+            alias: `${SUBQ_PREFIX}${relationship}`,
             orderBy: addPrimaryKeys(junctionSchema, undefined),
             where: {
               type: 'correlatedSubquery',
