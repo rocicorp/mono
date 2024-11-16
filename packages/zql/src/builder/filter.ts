@@ -1,6 +1,5 @@
 import {assert} from '../../../shared/src/asserts.js';
 import type {
-  LiteralValue,
   SimpleCondition,
   SimpleOperator,
 } from '../../../zero-protocol/src/ast.js';
@@ -8,13 +7,24 @@ import type {Row, Value} from '../../../zero-protocol/src/data.js';
 import {getLikePredicate} from './like.js';
 
 export type NonNullValue = Exclude<Value, null | undefined>;
-export type SimplePredicate = (rhs: NonNullValue) => boolean;
+export type SimplePredicate = (rhs: Value) => boolean;
+export type SimplePredicateNoNull = (rhs: NonNullValue) => boolean;
 
 export function createPredicate(condition: SimpleCondition) {
-  const impl = createPredicateImpl(
-    condition.value as LiteralValue,
-    condition.op,
-  );
+  switch (condition.op) {
+    case 'IS':
+    case 'IS NOT': {
+      const impl = createIsPredicate(condition.value, condition.op);
+      return (row: Row) => impl(row[condition.field]);
+    }
+  }
+
+  if (condition.value === null || condition.value === undefined) {
+    return (_row: Row) => false;
+  }
+
+  const impl = createPredicateImpl(condition.value, condition.op);
+
   return (row: Row) => {
     const lhs = row[condition.field];
     if (lhs === null || lhs === undefined) {
@@ -24,10 +34,22 @@ export function createPredicate(condition: SimpleCondition) {
   };
 }
 
+function createIsPredicate(
+  rhs: Value | readonly Value[],
+  operator: 'IS' | 'IS NOT',
+): SimplePredicate {
+  switch (operator) {
+    case 'IS':
+      return lhs => lhs === rhs;
+    case 'IS NOT':
+      return lhs => lhs !== rhs;
+  }
+}
+
 function createPredicateImpl(
   rhs: NonNullValue | readonly NonNullValue[],
-  operator: SimpleOperator,
-): SimplePredicate {
+  operator: Exclude<SimpleOperator, 'IS' | 'IS NOT'>,
+): SimplePredicateNoNull {
   switch (operator) {
     case '=':
       return lhs => lhs === rhs;
@@ -42,13 +64,13 @@ function createPredicateImpl(
     case '>=':
       return lhs => lhs >= rhs;
     case 'LIKE':
-      return getLikePredicate(rhs as NonNullValue, '');
+      return getLikePredicate(rhs, '');
     case 'NOT LIKE':
-      return not(getLikePredicate(rhs as NonNullValue, ''));
+      return not(getLikePredicate(rhs, ''));
     case 'ILIKE':
-      return getLikePredicate(rhs as NonNullValue, 'i');
+      return getLikePredicate(rhs, 'i');
     case 'NOT ILIKE':
-      return not(getLikePredicate(rhs as NonNullValue, 'i'));
+      return not(getLikePredicate(rhs, 'i'));
     case 'IN': {
       assert(Array.isArray(rhs));
       const set = new Set(rhs);

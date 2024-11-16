@@ -42,7 +42,7 @@ type SmashOne<T extends QueryType> = Expand<
   }
 >;
 
-export type GetFieldTypeNoNullOrUndefined<
+export type GetFieldTypeNoUndefined<
   TSchema extends TableSchema,
   TColumn extends keyof TSchema['columns'],
   TOperator extends Operator,
@@ -51,7 +51,7 @@ export type GetFieldTypeNoNullOrUndefined<
       SchemaValueToTSType<TSchema['columns'][TColumn]>,
       null | undefined
     >[]
-  : Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null | undefined>;
+  : Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, undefined>;
 
 export type QueryReturnType<T extends Query<TableSchema>> = T extends Query<
   TableSchema,
@@ -114,7 +114,9 @@ export type Operator =
   | 'IN'
   | 'NOT IN'
   | 'LIKE'
-  | 'ILIKE';
+  | 'ILIKE'
+  | 'IS'
+  | 'IS NOT';
 
 export type DefaultQueryResultRow<TSchema extends TableSchema> = {
   row: TableSchemaToRow<TSchema>;
@@ -163,7 +165,7 @@ export interface Query<
     TOperator extends Operator,
     TParamAnchor = never,
     TParamField extends keyof TParamAnchor = never,
-    TParamTypeBound extends GetFieldTypeNoNullOrUndefined<
+    TParamTypeBound extends GetFieldTypeNoUndefined<
       TSchema,
       TSelector,
       TOperator
@@ -172,7 +174,7 @@ export interface Query<
     field: TSelector,
     op: TOperator,
     value:
-      | GetFieldTypeNoNullOrUndefined<TSchema, TSelector, TOperator>
+      | GetFieldTypeNoUndefined<TSchema, TSelector, TOperator>
       | Parameter<TParamAnchor, TParamField, TParamTypeBound>,
   ): Query<TSchema, TReturn>;
 
@@ -180,7 +182,7 @@ export interface Query<
     TSelector extends NoJsonSelector<TSchema>,
     TParamAnchor = never,
     TParamField extends keyof TParamAnchor = never,
-    TParamTypeBound extends GetFieldTypeNoNullOrUndefined<
+    TParamTypeBound extends GetFieldTypeNoUndefined<
       TSchema,
       TSelector,
       '='
@@ -188,7 +190,7 @@ export interface Query<
   >(
     field: TSelector,
     value:
-      | GetFieldTypeNoNullOrUndefined<TSchema, TSelector, '='>
+      | GetFieldTypeNoUndefined<TSchema, TSelector, '='>
       | Parameter<TParamAnchor, TParamField, TParamTypeBound>,
   ): Query<TSchema, TReturn>;
 

@@ -31,7 +31,7 @@ import type {AdvancedQuery} from './query-internal.js';
 import type {
   AddSubselect,
   DefaultQueryResultRow,
-  GetFieldTypeNoNullOrUndefined,
+  GetFieldTypeNoUndefined,
   MakeSingular,
   Operator,
   Parameter,
@@ -287,11 +287,9 @@ export abstract class AbstractQuery<
     fieldOrExpressionFactory: string | ExpressionFactory<TSchema>,
     opOrValue?:
       | Operator
-      | GetFieldTypeNoNullOrUndefined<any, any, any>
+      | GetFieldTypeNoUndefined<any, any, any>
       | Parameter<any, any, any>,
-    value?:
-      | GetFieldTypeNoNullOrUndefined<any, any, any>
-      | Parameter<any, any, any>,
+    value?: GetFieldTypeNoUndefined<any, any, any> | Parameter<any, any, any>,
   ): Query<TSchema, TReturn> {
     let cond: Condition;
 

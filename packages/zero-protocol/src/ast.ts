@@ -27,7 +27,12 @@ export const primitiveSchema = v.union(
   v.null(),
 );
 
-export const equalityOpsSchema = v.union(v.literal('='), v.literal('!='));
+export const equalityOpsSchema = v.union(
+  v.literal('='),
+  v.literal('!='),
+  v.literal('IS'),
+  v.literal('IS NOT'),
+);
 
 export const orderOpsSchema = v.union(
   v.literal('<'),
@@ -60,6 +65,7 @@ export const simpleConditionSchema = v.object({
     v.string(),
     v.number(),
     v.boolean(),
+    v.null(),
     v.readonlyArray(v.union(v.string(), v.number(), v.boolean())),
     v.object({
       type: v.literal('static'),
@@ -146,7 +152,7 @@ export type OrderPart = readonly [field: string, direction: 'asc' | 'desc'];
 export type Ordering = readonly OrderPart[];
 
 export type SimpleOperator = EqualityOps | OrderOps | LikeOps | InOps;
-export type EqualityOps = '=' | '!=';
+export type EqualityOps = '=' | '!=' | 'IS' | 'IS NOT';
 export type OrderOps = '<' | '>' | '<=' | '>=';
 export type LikeOps = 'LIKE' | 'NOT LIKE' | 'ILIKE' | 'NOT ILIKE';
 export type InOps = 'IN' | 'NOT IN';
@@ -205,6 +211,7 @@ export type LiteralValue =
   | string
   | number
   | boolean
+  | null
   | ReadonlyArray<string | number | boolean>;
 
 /**
@@ -228,11 +235,6 @@ export type SimpleCondition = {
    * be a path through the tree in the near future.
    */
   field: string;
-
-  /**
-   * `null` is absent since we do not have an `IS` or `IS NOT`
-   * operator defined and `null != null` in SQL.
-   */
   value: ValuePosition;
 };
 

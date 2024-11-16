@@ -7,7 +7,7 @@ import type {
 } from '../../../zero-schema/src/table-schema.js';
 import type {
   DefaultQueryResultRow,
-  GetFieldTypeNoNullOrUndefined,
+  GetFieldTypeNoUndefined,
   NoJsonSelector,
   Operator,
   Parameter,
@@ -64,7 +64,7 @@ export class ExpressionBuilder<TSchema extends TableSchema> {
     TOperator extends Operator,
     TParamAnchor = never,
     TParamField extends keyof TParamAnchor = never,
-    TParamTypeBound extends GetFieldTypeNoNullOrUndefined<
+    TParamTypeBound extends GetFieldTypeNoUndefined<
       TSchema,
       TSelector,
       TOperator
@@ -73,14 +73,14 @@ export class ExpressionBuilder<TSchema extends TableSchema> {
     field: TSelector,
     op: TOperator,
     value:
-      | GetFieldTypeNoNullOrUndefined<TSchema, TSelector, TOperator>
+      | GetFieldTypeNoUndefined<TSchema, TSelector, TOperator>
       | Parameter<TParamAnchor, TParamField, TParamTypeBound>,
   ): Condition;
   cmp<
     TSelector extends NoJsonSelector<TSchema>,
     TParamAnchor = never,
     TParamField extends keyof TParamAnchor = never,
-    TParamTypeBound extends GetFieldTypeNoNullOrUndefined<
+    TParamTypeBound extends GetFieldTypeNoUndefined<
       TSchema,
       TSelector,
       '='
@@ -88,7 +88,7 @@ export class ExpressionBuilder<TSchema extends TableSchema> {
   >(
     field: TSelector,
     value:
-      | GetFieldTypeNoNullOrUndefined<TSchema, TSelector, '='>
+      | GetFieldTypeNoUndefined<TSchema, TSelector, '='>
       | Parameter<TParamAnchor, TParamField, TParamTypeBound>,
   ): Condition;
   cmp(
@@ -247,6 +247,8 @@ const negateSimpleOperatorMap = {
   ['NOT LIKE']: 'LIKE',
   ['ILIKE']: 'NOT ILIKE',
   ['NOT ILIKE']: 'ILIKE',
+  ['IS']: 'IS NOT',
+  ['IS NOT']: 'IS',
 } as const;
 
 const negateOperatorMap = {
