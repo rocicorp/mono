@@ -47,9 +47,15 @@ test('basics', () => {
 
   let condition: SimpleCondition = {
     type: 'simple',
-    field: 'foo',
+    left: {
+      type: 'column',
+      name: 'foo',
+    },
     op: 'IS',
-    value: null,
+    right: {
+      type: 'literal',
+      value: null,
+    },
   };
   let predicate = createPredicate(condition);
   expect(predicate({foo: null})).toBe(true);
@@ -60,9 +66,15 @@ test('basics', () => {
 
   condition = {
     type: 'simple',
-    field: 'foo',
+    left: {
+      type: 'column',
+      name: 'foo',
+    },
     op: 'IS NOT',
-    value: null,
+    right: {
+      type: 'literal',
+      value: null,
+    },
   };
   predicate = createPredicate(condition);
   expect(predicate({foo: null})).toBe(false);

@@ -206,7 +206,7 @@ function isParameter(
   value: ASTParameter | LiteralValue,
 ): value is ASTParameter {
   return (
-    typeof value === 'object' && (value as {type: string}).type === 'static'
+    typeof value === 'object' && (value as {type: string})?.type === 'static'
   );
 }
 
