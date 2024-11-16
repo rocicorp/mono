@@ -8,7 +8,7 @@ import {createPredicate} from './filter.js';
 import {cases} from './like.test.js';
 
 test('basics', () => {
-  // nulls and undefined are false in all conditions
+  // nulls and undefined are false in all conditions except IS NULL and IS NOT NULL
   fc.assert(
     fc.property(
       fc.oneof(fc.constant(null), fc.constant(undefined)),
@@ -25,7 +25,7 @@ test('basics', () => {
         fc.constant('NOT ILIKE'),
       ),
       // hexastring to avoid sending escape chars to like
-      fc.oneof(fc.hexaString(), fc.double(), fc.boolean()),
+      fc.oneof(fc.hexaString(), fc.double(), fc.boolean(), fc.constant(null)),
       (a, operator, b) => {
         const condition: SimpleCondition = {
           type: 'simple',
@@ -38,6 +38,32 @@ test('basics', () => {
       },
     ),
   );
+
+  let condition: SimpleCondition = {
+    type: 'simple',
+    field: 'foo',
+    op: 'IS',
+    value: null,
+  };
+  let predicate = createPredicate(condition);
+  expect(predicate({foo: null})).toBe(true);
+  expect(predicate({foo: 1})).toBe(false);
+  expect(predicate({foo: 'null'})).toBe(false);
+  expect(predicate({foo: true})).toBe(false);
+  expect(predicate({foo: false})).toBe(false);
+
+  condition = {
+    type: 'simple',
+    field: 'foo',
+    op: 'IS NOT',
+    value: null,
+  };
+  predicate = createPredicate(condition);
+  expect(predicate({foo: null})).toBe(false);
+  expect(predicate({foo: 1})).toBe(true);
+  expect(predicate({foo: 'null'})).toBe(true);
+  expect(predicate({foo: true})).toBe(true);
+  expect(predicate({foo: false})).toBe(true);
 
   // basic operators
   fc.assert(

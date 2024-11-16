@@ -1006,6 +1006,94 @@ const cases = {
       ]),
     );
   },
+
+  'IS and IS NOT comparisons against null': (createSource: SourceFactory) => {
+    const source = createSource(
+      'table',
+      {
+        a: {type: 'number'},
+        s: {type: 'string', optional: true},
+      },
+      ['a'],
+    );
+
+    source.push({type: 'add', row: {a: 1, s: 'foo'}});
+    source.push({type: 'add', row: {a: 2, s: 'bar'}});
+    source.push({type: 'add', row: {a: 3, s: null}});
+
+    // Test:
+    // 1. is null pulls nulls
+    // 2. = null pulls nothing
+    // 3. != null pulls nothing
+    // 4. is not null pulls non-nulls
+    // 5. = 'foo' pulls 'foo'
+    // 6. != 'foo' pulls 'bar'
+    let out = new Catch(
+      source.connect([['a', 'asc']], {
+        type: 'simple',
+        field: 's',
+        op: 'IS',
+        value: null,
+      }),
+    );
+    expect(out.fetch({})).toEqual([
+      {
+        relationships: {},
+        row: {
+          a: 3,
+          s: null,
+        },
+      },
+    ]);
+
+    // nothing `=` null
+    out = new Catch(
+      source.connect([['a', 'asc']], {
+        type: 'simple',
+        field: 's',
+        op: '=',
+        value: null,
+      }),
+    );
+    expect(out.fetch({})).toEqual([]);
+
+    // nothing `!=` null
+    out = new Catch(
+      source.connect([['a', 'asc']], {
+        type: 'simple',
+        field: 's',
+        op: '!=',
+        value: null,
+      }),
+    );
+    expect(out.fetch({})).toEqual([]);
+
+    // all non-nulls match `IS NOT NULL`
+    out = new Catch(
+      source.connect([['a', 'asc']], {
+        type: 'simple',
+        field: 's',
+        op: 'IS NOT',
+        value: null,
+      }),
+    );
+    expect(out.fetch({})).toEqual([
+      {
+        relationships: {},
+        row: {
+          a: 1,
+          s: 'foo',
+        },
+      },
+      {
+        relationships: {},
+        row: {
+          a: 2,
+          s: 'bar',
+        },
+      },
+    ]);
+  },
 };
 
 /**

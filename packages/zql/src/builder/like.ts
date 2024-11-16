@@ -1,10 +1,10 @@
 import {assertString} from '../../../shared/src/asserts.js';
-import type {NonNullValue, SimplePredicate} from './filter.js';
+import type {NonNullValue, SimplePredicateNoNull} from './filter.js';
 
 export function getLikePredicate(
   pattern: NonNullValue,
   flags: 'i' | '',
-): SimplePredicate {
+): SimplePredicateNoNull {
   const op = getLikeOp(String(pattern), flags);
   return (lhs: NonNullValue) => {
     assertString(lhs);
