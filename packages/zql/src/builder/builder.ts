@@ -164,7 +164,7 @@ function buildPipelineInternal(
   }
   const conn = source.connect(must(ast.orderBy), ast.where);
   let end: Input = conn;
-  const {allButSubqueryFiltersApplied: appliedFilters} = conn;
+  const {appliedFilters} = conn;
 
   if (ast.start) {
     end = new Skip(end, ast.start);
