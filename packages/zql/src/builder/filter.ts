@@ -10,7 +10,9 @@ export type NonNullValue = Exclude<Value, null | undefined>;
 export type SimplePredicate = (rhs: Value) => boolean;
 export type SimplePredicateNoNull = (rhs: NonNullValue) => boolean;
 
-export function createPredicate(condition: SimpleCondition) {
+export function createPredicate(
+  condition: SimpleCondition,
+): (row: Row) => boolean {
   const {left} = condition;
   const {right} = condition;
   assert(
@@ -41,7 +43,7 @@ export function createPredicate(condition: SimpleCondition) {
   const impl = createPredicateImpl(right.value, condition.op);
   if (left.type === 'literal') {
     if (left.value === null || left.value === undefined) {
-      return false;
+      return (_row: Row) => false;
     }
     const result = impl(left.value);
     return () => result;

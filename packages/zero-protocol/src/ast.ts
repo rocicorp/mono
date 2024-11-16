@@ -64,6 +64,7 @@ const literalReferenceSchema = v.object({
     v.string(),
     v.number(),
     v.boolean(),
+    v.null(),
     v.readonlyArray(v.union(v.string(), v.number(), v.boolean())),
   ),
 });

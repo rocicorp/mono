@@ -1025,9 +1025,15 @@ const cases = {
     let out = new Catch(
       source.connect([['a', 'asc']], {
         type: 'simple',
-        field: 's',
+        left: {
+          type: 'column',
+          name: 's',
+        },
         op: 'IS',
-        value: null,
+        right: {
+          type: 'literal',
+          value: null,
+        },
       }),
     );
     expect(out.fetch({})).toEqual([
@@ -1044,9 +1050,15 @@ const cases = {
     out = new Catch(
       source.connect([['a', 'asc']], {
         type: 'simple',
-        field: 's',
+        left: {
+          type: 'column',
+          name: 's',
+        },
         op: '=',
-        value: null,
+        right: {
+          type: 'literal',
+          value: null,
+        },
       }),
     );
     expect(out.fetch({})).toEqual([]);
@@ -1055,9 +1067,15 @@ const cases = {
     out = new Catch(
       source.connect([['a', 'asc']], {
         type: 'simple',
-        field: 's',
+        left: {
+          type: 'column',
+          name: 's',
+        },
         op: '!=',
-        value: null,
+        right: {
+          type: 'literal',
+          value: null,
+        },
       }),
     );
     expect(out.fetch({})).toEqual([]);
@@ -1066,9 +1084,15 @@ const cases = {
     out = new Catch(
       source.connect([['a', 'asc']], {
         type: 'simple',
-        field: 's',
+        left: {
+          type: 'column',
+          name: 's',
+        },
         op: 'IS NOT',
-        value: null,
+        right: {
+          type: 'literal',
+          value: null,
+        },
       }),
     );
     expect(out.fetch({})).toEqual([
