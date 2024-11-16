@@ -19,6 +19,7 @@ import {
   type SetOp,
   type UpdateOp,
 } from '../../../../zero-protocol/src/push.js';
+import type {AuthorizationConfig} from '../../../../zero-schema/src/compiled-authorization.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {type ZeroConfig} from '../../config/zero-config.js';
 import {Mode} from '../../db/transaction-pool.js';
@@ -29,7 +30,6 @@ import {unescapedSchema as schema} from '../change-streamer/pg/schema/shard.js';
 import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.js';
 import type {Service} from '../service.js';
 import {WriteAuthorizerImpl, type WriteAuthorizer} from './write-authorizer.js';
-import type {AuthorizationConfig} from '../../../../zero-schema/src/compiled-authorization.js';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
@@ -373,7 +373,8 @@ async function checkSchemaVersionAndIncrementLastMutationID(
   clientID: string,
   receivedMutationID: number,
 ) {
-  const lastMutationIdPromise = tx<{lastMutationID: bigint}[]>`
+  const [[{lastMutationID}], supportedVersionRange] = await Promise.all([
+    tx<{lastMutationID: bigint}[]>`
     INSERT INTO ${tx(
       schema(shardID),
     )}.clients as current ("clientGroupID", "clientID", "lastMutationID")
@@ -381,16 +382,14 @@ async function checkSchemaVersionAndIncrementLastMutationID(
     ON CONFLICT ("clientGroupID", "clientID")
     DO UPDATE SET "lastMutationID" = current."lastMutationID" + 1
     RETURNING "lastMutationID"
-  `.execute();
-
-  const supportedVersionRangePromise = tx<
-    {
-      minSupportedVersion: number;
-      maxSupportedVersion: number;
-    }[]
-  >`SELECT "minSupportedVersion", "maxSupportedVersion" FROM zero."schemaVersions"`.execute();
-
-  const [{lastMutationID}] = await lastMutationIdPromise;
+  `,
+    tx<
+      {
+        minSupportedVersion: number;
+        maxSupportedVersion: number;
+      }[]
+    >`SELECT "minSupportedVersion", "maxSupportedVersion" FROM zero."schemaVersions"`,
+  ]);
 
   // ABORT if the resulting lastMutationID is not equal to the receivedMutationID.
   if (receivedMutationID < lastMutationID) {
@@ -407,7 +406,6 @@ async function checkSchemaVersionAndIncrementLastMutationID(
     ]);
   }
 
-  const supportedVersionRange = await supportedVersionRangePromise;
   assert(supportedVersionRange.length === 1);
   throwErrorForClientIfSchemaVersionNotSupported(
     schemaVersion,
