@@ -16,20 +16,20 @@ export type Queries<TSchema extends Schema> = {
   [K in keyof TSchema['tables']]: Query<TSchema['tables'][K]>;
 };
 
-type InstanceAuthzRule<TAuthDataShape, TSchema extends TableSchema> = (
+type AuthorizationRule<TAuthDataShape, TSchema extends TableSchema> = (
   authData: TAuthDataShape,
   row: TableSchemaToRow<TSchema>,
 ) => Query<TableSchema>;
 
-type InstanceAssetAuthorization<TAuthDataShape, TSchema extends TableSchema> = {
-  [K in Action]?: InstanceAuthzRule<TAuthDataShape, TSchema>[];
+type AssetAuthorization<TAuthDataShape, TSchema extends TableSchema> = {
+  [K in Action]?: AuthorizationRule<TAuthDataShape, TSchema>[];
 };
 
 export type AuthorizationConfig<TAuthDataShape, TSchema extends Schema> = {
   [K in keyof TSchema['tables']]?: {
-    row?: InstanceAssetAuthorization<TAuthDataShape, TSchema['tables'][K]>;
+    row?: AssetAuthorization<TAuthDataShape, TSchema['tables'][K]>;
     cell?: {
-      [C in keyof TSchema['tables'][K]['columns']]?: InstanceAssetAuthorization<
+      [C in keyof TSchema['tables'][K]['columns']]?: AssetAuthorization<
         TAuthDataShape,
         TSchema['tables'][K]
       >;
@@ -76,21 +76,21 @@ function compileAuthorization<TAuthDataShape, TSchema extends Schema>(
 }
 
 function compileRowConfig<TAuthDataShape, TSchema extends TableSchema>(
-  rowRules: InstanceAssetAuthorization<TAuthDataShape, TSchema> | undefined,
+  rowRules: AssetAuthorization<TAuthDataShape, TSchema> | undefined,
 ): CompiledAssetAuthorization | undefined {
   if (!rowRules) {
     return undefined;
   }
   return {
-    select: compileInstanceRules(rowRules.select),
-    insert: compileInstanceRules(rowRules.insert),
-    update: compileInstanceRules(rowRules.update),
-    delete: compileInstanceRules(rowRules.delete),
+    select: compileRules(rowRules.select),
+    insert: compileRules(rowRules.insert),
+    update: compileRules(rowRules.update),
+    delete: compileRules(rowRules.delete),
   };
 }
 
-function compileInstanceRules<TAuthDataShape, TSchema extends TableSchema>(
-  rules: InstanceAuthzRule<TAuthDataShape, TSchema>[] | undefined,
+function compileRules<TAuthDataShape, TSchema extends TableSchema>(
+  rules: AuthorizationRule<TAuthDataShape, TSchema>[] | undefined,
 ): ['allow', AST][] | undefined {
   if (!rules) {
     return undefined;
@@ -112,7 +112,7 @@ function compileInstanceRules<TAuthDataShape, TSchema extends TableSchema>(
 
 function compileCellConfig<TAuthDataShape, TSchema extends TableSchema>(
   cellRules:
-    | Record<string, InstanceAssetAuthorization<TAuthDataShape, TSchema>>
+    | Record<string, AssetAuthorization<TAuthDataShape, TSchema>>
     | undefined,
 ): Record<string, CompiledAssetAuthorization> | undefined {
   if (!cellRules) {
@@ -121,10 +121,10 @@ function compileCellConfig<TAuthDataShape, TSchema extends TableSchema>(
   const ret: Record<string, CompiledAssetAuthorization> = {};
   for (const [columnName, rules] of Object.entries(cellRules)) {
     ret[columnName] = {
-      select: compileInstanceRules(rules.select),
-      insert: compileInstanceRules(rules.insert),
-      update: compileInstanceRules(rules.update),
-      delete: compileInstanceRules(rules.delete),
+      select: compileRules(rules.select),
+      insert: compileRules(rules.insert),
+      update: compileRules(rules.update),
+      delete: compileRules(rules.delete),
     };
   }
   return ret;
