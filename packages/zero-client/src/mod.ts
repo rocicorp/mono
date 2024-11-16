@@ -62,6 +62,7 @@ export {createSchema} from '../../zero-schema/src/schema.js';
 export {
   createTableSchema,
   type TableSchemaToRow,
+  type TableSchema,
 } from '../../zero-schema/src/table-schema.js';
 export {escapeLike} from '../../zql/src/query/escape-like.js';
 export type {
