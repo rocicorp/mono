@@ -8,9 +8,9 @@ import {
 import {Mode} from '../../db/transaction-pool.js';
 import {expectTables, testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
+import {zeroSchema} from './mutagen-test-shared.js';
 import {processMutation} from './mutagen.js';
 import type {WriteAuthorizer} from './write-authorizer.js';
-import {zeroSchema} from './mutagen-test-shared.js';
 
 const SHARD_ID = '0';
 
@@ -68,59 +68,55 @@ describe('processMutation', () => {
     await testDBs.drop(db);
   });
 
-  test(
-    'new client with no last mutation id',
-    async () => {
-      await expectTables(db, {
-        idonly: [],
-        [`zero_${SHARD_ID}.clients`]: [],
-      });
+  test('new client with no last mutation id', async () => {
+    await expectTables(db, {
+      idonly: [],
+      [`zero_${SHARD_ID}.clients`]: [],
+    });
 
-      const error = await processMutation(
-        undefined,
-        {},
-        db,
-        SHARD_ID,
-        'abc',
-        {
-          type: MutationType.CRUD,
-          id: 1,
-          clientID: '123',
-          name: '_zero_crud',
-          args: [
-            {
-              ops: [
-                {
-                  op: 'insert',
-                  tableName: 'idonly',
-                  primaryKey: ['id'],
-                  value: {id: '1'},
-                },
-              ],
-            },
-          ],
-          timestamp: Date.now(),
-        },
-        mockWriteAuthorizer,
-        TEST_SCHEMA_VERSION,
-      );
-
-      expect(error).undefined;
-
-      await expectTables(db, {
-        idonly: [{id: '1'}],
-        [`zero_${SHARD_ID}.clients`]: [
+    const error = await processMutation(
+      undefined,
+      {},
+      db,
+      SHARD_ID,
+      'abc',
+      {
+        type: MutationType.CRUD,
+        id: 1,
+        clientID: '123',
+        name: '_zero_crud',
+        args: [
           {
-            clientGroupID: 'abc',
-            clientID: '123',
-            lastMutationID: 1n,
-            userID: null,
+            ops: [
+              {
+                op: 'insert',
+                tableName: 'idonly',
+                primaryKey: ['id'],
+                value: {id: '1'},
+              },
+            ],
           },
         ],
-      });
-    },
-    {},
-  );
+        timestamp: Date.now(),
+      },
+      mockWriteAuthorizer,
+      TEST_SCHEMA_VERSION,
+    );
+
+    expect(error).undefined;
+
+    await expectTables(db, {
+      idonly: [{id: '1'}],
+      [`zero_${SHARD_ID}.clients`]: [
+        {
+          clientGroupID: 'abc',
+          clientID: '123',
+          lastMutationID: 1n,
+          userID: null,
+        },
+      ],
+    });
+  });
 
   test('next sequential mutation for previously seen client', async () => {
     await db`
@@ -639,7 +635,7 @@ describe('processMutation', () => {
       },
     );
 
-    expect(error).undefined;
+    expect(error).toBeUndefined();
 
     // 3 => 4 should succeed after internally retrying.
     await expectTables(db, {
