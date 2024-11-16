@@ -697,6 +697,21 @@ function toSQLiteType(v: unknown, type: ValueType): unknown {
   }
 }
 
+export function toSQLiteTypeName(type: ValueType) {
+  switch (type) {
+    case 'boolean':
+      return 'INTEGER';
+    case 'number':
+      return 'REAL';
+    case 'string':
+      return 'TEXT';
+    case 'null':
+      return 'NULL';
+    case 'json':
+      return 'TEXT';
+  }
+}
+
 function* mapFromSQLiteTypes(
   valueTypes: Record<string, SchemaValue>,
   rowIterator: IterableIterator<Row>,
