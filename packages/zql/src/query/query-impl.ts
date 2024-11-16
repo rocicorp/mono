@@ -79,8 +79,6 @@ export function staticParam<TAnchor, TField extends keyof TAnchor>(
   };
 }
 
-let subqueryFilterCount = 0;
-
 export const SUBQ_PREFIX = 'zsubq_';
 
 export abstract class AbstractQuery<
@@ -370,7 +368,7 @@ export abstract class AbstractQuery<
       query: Query<TableSchema, QueryType>,
     ) => Query<TableSchema, QueryType> = q => q,
   ): Condition => {
-    ++subqueryFilterCount;
+    //++subqueryFilterCount;
 
     const related = this.#schema.relationships[relationship];
     assert(related, 'Invalid relationship');
@@ -384,7 +382,7 @@ export abstract class AbstractQuery<
           destSchema,
           {
             table: destSchema.tableName,
-            alias: `${SUBQ_PREFIX}${subqueryFilterCount}_${relationship}`,
+            alias: `${SUBQ_PREFIX}${relationship}`,
           },
           undefined,
         ),
@@ -411,7 +409,7 @@ export abstract class AbstractQuery<
           destSchema,
           {
             table: destSchema.tableName,
-            alias: `${SUBQ_PREFIX}${subqueryFilterCount}_${relationship}`,
+            alias: `${SUBQ_PREFIX}${relationship}`,
           },
           undefined,
         ),
@@ -427,7 +425,7 @@ export abstract class AbstractQuery<
           },
           subquery: {
             table: junctionSchema.tableName,
-            alias: `${SUBQ_PREFIX}${subqueryFilterCount}_${relationship}`,
+            alias: `${SUBQ_PREFIX}${relationship}`,
             orderBy: addPrimaryKeys(junctionSchema, undefined),
             where: {
               type: 'correlatedSubquery',

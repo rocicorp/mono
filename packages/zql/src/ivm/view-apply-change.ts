@@ -87,7 +87,11 @@ export function applyChange(
       )) {
         // TODO: Is there a flag to make TypeScript complain that dictionary access might be undefined?
         const childSchema = must(schema.relationships[relationship]);
-        const childFormat = must(childFormats[relationship]);
+        const childFormat = childFormats[relationship];
+        if (childFormat === undefined) {
+          continue;
+        }
+
         const newView = childFormat.singular ? undefined : ([] as EntryList);
         newEntry[relationship] = newView;
         for (const node of children) {

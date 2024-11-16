@@ -165,6 +165,7 @@ function buildPipelineInternal(
   const conn = source.connect(must(ast.orderBy), ast.where);
   let end: Input = conn;
   const {appliedFilters} = conn;
+  ast = uniquifyCorrelatedSubqueryConditionAliases(ast);
 
   if (ast.start) {
     end = new Skip(end, ast.start);
@@ -335,4 +336,64 @@ export function assertOrderingIncludesPK(
       https://www.postgresql.org/docs/current/sql-syntax-lexical.htm`,
     );
   }
+}
+function uniquifyCorrelatedSubqueryConditionAliases(ast: AST): AST {
+  if (!ast.where) {
+    return ast;
+  }
+  const {where} = ast;
+  if (where.type !== 'and' && where.type !== 'or') {
+    return ast;
+  }
+  let count = 0;
+
+  const uniquifyCorrelatedSubquery = (csqc: CorrelatedSubqueryCondition) => ({
+    ...csqc,
+    related: {
+      ...csqc.related,
+      subquery: {
+        ...csqc.related.subquery,
+        alias: (csqc.related.subquery.alias ?? '') + '_' + count++,
+      },
+    },
+  });
+
+  const uniquifyAnd = (and: Conjunction) => {
+    const conds = [];
+    for (const cond of and.conditions) {
+      if (cond.type === 'correlatedSubquery') {
+        conds.push(uniquifyCorrelatedSubquery(cond));
+      } else {
+        conds.push(cond);
+      }
+    }
+    return {
+      ...and,
+      conditions: conds,
+    };
+  };
+  if (where.type === 'and') {
+    return {
+      ...ast,
+      where: uniquifyAnd(where),
+    };
+  }
+  // or
+  const conds = [];
+  for (const cond of where.conditions) {
+    if (cond.type === 'simple') {
+      conds.push(cond);
+    } else if (cond.type === 'correlatedSubquery') {
+      conds.push(uniquifyCorrelatedSubquery(cond));
+    } else if (cond.type === 'and') {
+      conds.push(uniquifyAnd(cond));
+    }
+  }
+  return {
+    ...ast,
+    where: {
+      ...where,
+      conditions: conds,
+    },
+  };
 }
