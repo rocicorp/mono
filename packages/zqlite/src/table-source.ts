@@ -207,7 +207,7 @@ export class TableSource implements Source {
         assert(idx !== -1, 'Connection not found');
         this.#connections.splice(idx, 1);
       },
-      appliedFilters: transformedFilters.allButSubqueryApplied,
+      appliedFilters: !transformedFilters.conditionsRemoved,
     };
 
     const connection: Connection = {
@@ -782,18 +782,26 @@ type NoSubqueryCondition =
       conditions: readonly NoSubqueryCondition[];
     };
 
+/**
+ * Returns a transformed condition which contains no
+ * CorrelatedSubqueryCondition(s) but which will filter a subset of the rows
+ * that would be filtered by the original condition, or undefined
+ * if no such transformation exists.
+ *
+ * Assumes Condition is in DNF.
+ */
 function transformFilters(filters: Condition | undefined): {
   filters: NoSubqueryCondition | undefined;
-  allButSubqueryApplied: boolean;
+  conditionsRemoved: boolean;
 } {
   if (!filters) {
-    return {filters: undefined, allButSubqueryApplied: true};
+    return {filters: undefined, conditionsRemoved: false};
   }
   switch (filters.type) {
     case 'simple':
-      return {filters, allButSubqueryApplied: true};
+      return {filters, conditionsRemoved: false};
     case 'correlatedSubquery':
-      return {filters: undefined, allButSubqueryApplied: true};
+      return {filters: undefined, conditionsRemoved: true};
     case 'and': {
       const transformedConditions = [];
       for (const cond of filters.conditions) {
@@ -802,13 +810,15 @@ function transformFilters(filters: Condition | undefined): {
           transformedConditions.push(cond);
         }
       }
+      const conditionsRemoved =
+        transformedConditions.length !== filters.conditions.length;
       if (transformedConditions.length === 0) {
-        return {filters: undefined, allButSubqueryApplied: true};
+        return {filters: undefined, conditionsRemoved};
       }
       if (transformedConditions.length === 1) {
         return {
           filters: transformedConditions[0],
-          allButSubqueryApplied: true,
+          conditionsRemoved,
         };
       }
       return {
@@ -816,25 +826,24 @@ function transformFilters(filters: Condition | undefined): {
           type: 'and',
           conditions: transformedConditions,
         },
-        allButSubqueryApplied: true,
+        conditionsRemoved,
       };
     }
     case 'or': {
-      if (filters.conditions.length === 1) {
-        return transformFilters(filters.conditions[0]);
-      }
       const transformedConditions: NoSubqueryCondition[] = [];
+      let conditionsRemoved = false;
       for (const cond of filters.conditions) {
         assert(cond.type !== 'or');
-        const transformed = transformFilters(cond).filters;
-        if (transformed === undefined) {
-          return {filters: undefined, allButSubqueryApplied: false};
+        const transformed = transformFilters(cond);
+        if (transformed.filters === undefined) {
+          return {filters: undefined, conditionsRemoved: true};
         }
-        transformedConditions.push(transformed);
+        conditionsRemoved = conditionsRemoved || transformed.conditionsRemoved;
+        transformedConditions.push(transformed.filters);
       }
       return {
         filters: {type: 'or', conditions: transformedConditions},
-        allButSubqueryApplied: true,
+        conditionsRemoved,
       };
     }
     default:

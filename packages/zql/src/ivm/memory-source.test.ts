@@ -5,7 +5,7 @@ import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
 import {Catch} from './catch.js';
 import {compareRowsTest} from './data.test.js';
 import {
-  filteredOptionalFilters,
+  filterOptionalFilters,
   generateWithOverlayInner,
   MemorySource,
   overlaysForConstraintForTest,
@@ -448,13 +448,13 @@ test('overlaysForStartAt', () => {
   ).toEqual({add: undefined, remove: undefined});
 });
 
-describe('filteredOptionalFilters', () => {
+describe('filterOptionalFilters', () => {
   test('no filters', () => {
-    expect(filteredOptionalFilters(undefined).allApplied).toBe(true);
+    expect(filterOptionalFilters(undefined).allApplied).toBe(true);
   });
   test('one simple filter', () => {
     expect(
-      filteredOptionalFilters({
+      filterOptionalFilters({
         type: 'simple',
         field: 'a',
         value: 'b',
@@ -464,7 +464,7 @@ describe('filteredOptionalFilters', () => {
   });
   test('anded simple filters', () => {
     expect(
-      filteredOptionalFilters({
+      filterOptionalFilters({
         type: 'and',
         conditions: [
           {type: 'simple', field: 'a', value: 'b', op: '='},
@@ -475,7 +475,7 @@ describe('filteredOptionalFilters', () => {
   });
   test('or with one simple filter', () => {
     expect(
-      filteredOptionalFilters({
+      filterOptionalFilters({
         type: 'or',
         conditions: [{type: 'simple', field: 'a', value: 'b', op: '='}],
       }).allApplied,
@@ -483,7 +483,7 @@ describe('filteredOptionalFilters', () => {
   });
   test('or with anded simple filters', () => {
     expect(
-      filteredOptionalFilters({
+      filterOptionalFilters({
         type: 'or',
         conditions: [
           {
@@ -499,7 +499,7 @@ describe('filteredOptionalFilters', () => {
   });
   test('many ors', () => {
     expect(
-      filteredOptionalFilters({
+      filterOptionalFilters({
         type: 'or',
         conditions: [
           {type: 'simple', field: 'a', value: 'b', op: '='},
@@ -510,7 +510,7 @@ describe('filteredOptionalFilters', () => {
   });
   test('anded ors', () => {
     expect(
-      filteredOptionalFilters({
+      filterOptionalFilters({
         type: 'and',
         conditions: [
           {
