@@ -21,6 +21,7 @@ import type {Source} from '../../../types/streams.js';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
 import type {
   ChangeSource,
+  ChangeStream,
   ChangeStreamMessage,
 } from '../change-streamer-service.js';
 import type {Commit} from '../change-streamer.js';
@@ -38,6 +39,7 @@ describe('change-source/pg', () => {
   let upstreamURI: string;
   let replicaDbFile: DbFile;
   let source: ChangeSource;
+  let streams: ChangeStream[];
 
   beforeEach(async () => {
     logSink = new TestLogSink();
@@ -77,9 +79,11 @@ describe('change-source/pg', () => {
         replicaDbFile.path,
       )
     ).changeSource;
+    streams = [];
   });
 
   afterEach(async () => {
+    streams.forEach(s => s.changes.cancel());
     await testDBs.drop(upstream);
     replicaDbFile.delete();
   });
@@ -109,6 +113,13 @@ describe('change-source/pg', () => {
     );
   }
 
+  async function startStream(watermark: string) {
+    const stream = await source.startStream(watermark);
+    // cleanup in afterEach() ensures that replication slots are released
+    streams.push(stream);
+    return stream;
+  }
+
   test.each([[withTriggers], [withoutTriggers]])(
     'filtered changes and acks %o',
     async init => {
@@ -117,7 +128,7 @@ describe('change-source/pg', () => {
         new StatementRunner(replicaDbFile.connect(lc)),
       );
 
-      const {initialWatermark, changes, acks} = await source.startStream('00');
+      const {initialWatermark, changes, acks} = await startStream('00');
       const downstream = drainToQueue(changes);
 
       await upstream.begin(async tx => {
@@ -288,7 +299,7 @@ describe('change-source/pg', () => {
       await upstream`INSERT INTO foo(id) VALUES('world')`;
       await upstream`INSERT INTO foo(id) VALUES('foobar')`;
 
-      const stream1 = await source.startStream('00');
+      const stream1 = await startStream('00');
       const changes1 = drainToQueue(stream1.changes);
 
       expect(stream1.initialWatermark).toEqual(oneAfter(replicaVersion));
@@ -322,7 +333,7 @@ describe('change-source/pg', () => {
       stream1.changes.cancel();
 
       // Starting a new stream should replay at the original position since we did not ACK.
-      const stream2 = await source.startStream('00');
+      const stream2 = await startStream('00');
       const changes2 = drainToQueue(stream2.changes);
 
       expect(stream2.initialWatermark).toEqual(oneAfter(replicaVersion));
@@ -333,7 +344,7 @@ describe('change-source/pg', () => {
       stream2.changes.cancel();
 
       // Still with no ACK, start a stream from after the secondCommit.
-      const stream3 = await source.startStream(secondCommit[2].watermark);
+      const stream3 = await startStream(secondCommit[2].watermark);
       const changes3 = drainToQueue(stream3.changes);
 
       expect(stream3.initialWatermark).toEqual(
@@ -348,7 +359,7 @@ describe('change-source/pg', () => {
   );
 
   test('bad schema change error', async () => {
-    const {changes} = await source.startStream('00');
+    const {changes} = await startStream('00');
     try {
       const downstream = drainToQueue(changes);
 
@@ -454,7 +465,7 @@ describe('change-source/pg', () => {
     async (before, after) => {
       await withoutTriggers();
 
-      const {changes} = await source.startStream('00');
+      const {changes} = await startStream('00');
       try {
         const downstream = drainToQueue(changes);
 
@@ -523,7 +534,7 @@ describe('change-source/pg', () => {
 
     let err;
     try {
-      await source.startStream('00');
+      await startStream('00');
     } catch (e) {
       err = e;
     }
@@ -531,7 +542,7 @@ describe('change-source/pg', () => {
   });
 
   test('abort', async () => {
-    const {changes} = await source.startStream('00');
+    const {changes} = await startStream('00');
 
     const results = await upstream<{pid: number}[]>`
       SELECT active_pid as pid from pg_replication_slots WHERE
@@ -552,10 +563,10 @@ describe('change-source/pg', () => {
   });
 
   test('handoff', {retry: 3}, async () => {
-    const {changes} = await source.startStream('00');
+    const {changes} = await startStream('00');
 
     // Starting another stream should stop the first.
-    const {changes: changes2} = await source.startStream('00');
+    const {changes: changes2} = await startStream('00');
 
     let err;
     try {

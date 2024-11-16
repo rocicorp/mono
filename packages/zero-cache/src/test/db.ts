@@ -153,20 +153,26 @@ export async function dropReplicationSlots(db: postgres.Sql): Promise<void> {
 
 async function dropReplicationSlotsFor(db: postgres.Sql, database: string) {
   for (let i = 0; i < 100; i++) {
-    const results = await db<{slotName: string; active: boolean}[]>`
-    SELECT slot_name as "slotName", active FROM pg_replication_slots WHERE database = ${database}`;
+    const results = await db<
+      {slotName: string; active: boolean; pid: number | null}[]
+    >`
+    SELECT slot_name as "slotName", active, active_pid as pid
+      FROM pg_replication_slots WHERE database = ${database}`;
 
     if (results.count === 0) {
       break;
     }
-    for (const {slotName, active} of results) {
+    for (const {slotName, active /*, pid */} of results) {
       if (active) {
         // A replication slot can't be dropped when it is still marked "active" on the upstream
-        // database. The slot becomes inactive when the downstream connection is closed (e.g. the
-        // initial-sync SUBSCRIPTION is disabled, or the incremental-sync connection is closed),
+        // database. The slot becomes inactive when the replication stream  is closed,
         // but because this is a non-transactional process that happens in the internals of Postgres,
-        // we have to poll the status and wait for the slot to be released.
-        await sleep(10);
+        // sometimes it isn't immediate. Send a pg_terminate_backend() to move it along.
+        // console.warn(`terminating backend ${pid} to release replication slot`);
+        await db<{slotName: string; active: boolean}[]>`
+          SELECT pg_terminate_backend(active_pid)
+            FROM pg_replication_slots WHERE database = ${database} and active = true`;
+        await sleep(50);
       } else {
         await db`SELECT pg_drop_replication_slot(${slotName})`;
       }
