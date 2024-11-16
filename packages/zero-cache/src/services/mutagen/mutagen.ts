@@ -13,10 +13,10 @@ import {
 import {
   MutationType,
   type CRUDMutation,
-  type CreateOp,
+  type InsertOp,
   type DeleteOp,
   type Mutation,
-  type SetOp,
+  type UpsertOp,
   type UpdateOp,
 } from '../../../../zero-protocol/src/push.js';
 import type {AuthorizationConfig} from '../../../../zero-schema/src/compiled-authorization.js';
@@ -263,14 +263,14 @@ async function processMutationWithTx(
         break;
       }
       switch (op.op) {
-        case 'create':
+        case 'insert':
           if (authorizer.canInsert(authData, op)) {
-            tasks.push(() => getCreateSQL(tx, op).execute());
+            tasks.push(() => getInsertSQL(tx, op).execute());
           }
           break;
-        case 'set':
+        case 'upsert':
           if (authorizer.canUpsert(authData, op)) {
-            tasks.push(() => getSetSQL(tx, op).execute());
+            tasks.push(() => getUpsertSQL(tx, op).execute());
           }
           break;
         case 'update':
@@ -312,16 +312,16 @@ async function processMutationWithTx(
   await Promise.all(tasks.map(task => task()));
 }
 
-export function getCreateSQL(
+export function getInsertSQL(
   tx: postgres.TransactionSql,
-  create: CreateOp,
+  create: InsertOp,
 ): postgres.PendingQuery<postgres.Row[]> {
   return tx`INSERT INTO ${tx(create.tableName)} ${tx(create.value)}`;
 }
 
-export function getSetSQL(
+export function getUpsertSQL(
   tx: postgres.TransactionSql,
-  set: SetOp,
+  set: UpsertOp,
 ): postgres.PendingQuery<postgres.Row[]> {
   const {tableName, primaryKey, value} = set;
   return tx`

@@ -75,7 +75,7 @@ test('a mutation after a rate limit error causes limited mutations to be resent'
   // reset mock socket messages to clear `initConnection` message
   mockSocket.messages.length = 0;
 
-  await z.mutate.issue.create({id: 'a', value: 1});
+  await z.mutate.issue.insert({id: 'a', value: 1});
   await z.triggerError(ErrorKind.MutationRateLimited, 'Rate limit exceeded');
 
   expect(mockSocket.messages).to.have.lengthOf(1);
@@ -86,7 +86,7 @@ test('a mutation after a rate limit error causes limited mutations to be resent'
   mockSocket.messages.length = 0;
 
   // now send another mutation
-  await z.mutate.issue.create({id: 'b', value: 2});
+  await z.mutate.issue.insert({id: 'b', value: 2});
   await z.triggerError(ErrorKind.MutationRateLimited, 'Rate limit exceeded');
   await tickAFewTimes(clock, 0);
 
@@ -121,7 +121,7 @@ test('previously confirmed mutations are not resent after a rate limit error', a
   // reset mock socket messages to clear `initConnection` message
   mockSocket.messages.length = 0;
 
-  await z.mutate.issue.create({id: 'a', value: 1});
+  await z.mutate.issue.insert({id: 'a', value: 1});
   await tickAFewTimes(clock);
   // confirm the mutation
   await z.triggerPokeStart({
@@ -141,7 +141,7 @@ test('previously confirmed mutations are not resent after a rate limit error', a
   mockSocket.messages.length = 0;
 
   // now send another mutation but rate limit it
-  await z.mutate.issue.create({id: 'b', value: 2});
+  await z.mutate.issue.insert({id: 'b', value: 2});
   await z.triggerError(ErrorKind.MutationRateLimited, 'Rate limit exceeded');
   await tickAFewTimes(clock);
 
@@ -154,7 +154,7 @@ test('previously confirmed mutations are not resent after a rate limit error', a
   mockSocket.messages.length = 0;
 
   // Send another mutation. This and the last rate limited mutation should be sent
-  await z.mutate.issue.create({id: 'c', value: 3});
+  await z.mutate.issue.insert({id: 'c', value: 3});
   await z.triggerError(ErrorKind.MutationRateLimited, 'Rate limit exceeded');
   await tickAFewTimes(clock);
 

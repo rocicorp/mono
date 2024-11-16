@@ -217,7 +217,7 @@ afterEach(async () => {
 
 function procMutation(
   tableName: string,
-  op: 'create' | 'set' | 'update' | 'delete',
+  op: 'insert' | 'upsert' | 'update' | 'delete',
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   value: any,
   uid: string = 'anon',
@@ -259,7 +259,7 @@ test('it is possible to write to a row with a read only column if that column is
 });
 
 test('it is impossible to write to a read-only cell', async () => {
-  await procMutation('roCell', 'create', {id: '2', a: 'a', b: 'b'});
+  await procMutation('roCell', 'insert', {id: '2', a: 'a', b: 'b'});
   let rows = await upstream`SELECT * FROM "roCell" WHERE id = '2'`;
   expect(rows.length).toBe(0);
 
@@ -282,7 +282,7 @@ test('a row with a read-only cell can be updated if the cell is not written to',
 });
 
 test('is is impossible to update a read-only row', async () => {
-  await procMutation('roRow', 'create', {id: '2', a: 'a', b: 'b'});
+  await procMutation('roRow', 'insert', {id: '2', a: 'a', b: 'b'});
   let rows = await upstream`SELECT * FROM "roRow" WHERE id = '2'`;
   expect(rows.length).toBe(0);
 

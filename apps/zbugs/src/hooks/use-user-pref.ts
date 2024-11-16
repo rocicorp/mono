@@ -15,7 +15,7 @@ export async function setUserPref(
   value: string,
   mutate = z.mutate,
 ): Promise<void> {
-  await mutate.userPref.set({key, value, userID: z.userID});
+  await mutate.userPref.upsert({key, value, userID: z.userID});
 }
 
 export function useNumericPref(key: string, defaultValue: number): number {

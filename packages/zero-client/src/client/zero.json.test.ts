@@ -20,12 +20,12 @@ test('we can create rows with json columns and query those rows', async () => {
     },
   });
 
-  await z.mutate.track.create({
+  await z.mutate.track.insert({
     id: 'track-1',
     title: 'track 1',
     artists: ['artist 1', 'artist 2'],
   });
-  await z.mutate.track.create({
+  await z.mutate.track.insert({
     id: 'track-2',
     title: 'track 2',
     artists: ['artist 2', 'artist 3'],

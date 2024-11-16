@@ -10,9 +10,9 @@ import {randInt} from '../../../../shared/src/rand.js';
 import * as v from '../../../../shared/src/valita.js';
 import type {Row} from '../../../../zero-protocol/src/data.js';
 import type {
-  CreateOp,
+  InsertOp,
   DeleteOp,
-  SetOp,
+  UpsertOp,
   UpdateOp,
 } from '../../../../zero-protocol/src/mod.js';
 import {
@@ -38,10 +38,10 @@ import type {
 } from '../../../../zero-schema/src/compiled-authorization.js';
 
 export interface WriteAuthorizer {
-  canInsert(authData: JWTPayload, op: CreateOp): boolean;
+  canInsert(authData: JWTPayload, op: InsertOp): boolean;
   canUpdate(authData: JWTPayload, op: UpdateOp): boolean;
   canDelete(authData: JWTPayload, op: DeleteOp): boolean;
-  canUpsert(authData: JWTPayload, op: SetOp): boolean;
+  canUpsert(authData: JWTPayload, op: UpsertOp): boolean;
 }
 
 export class WriteAuthorizerImpl {
@@ -79,7 +79,7 @@ export class WriteAuthorizerImpl {
     this.#statementCache = new StatementCache(replica);
   }
 
-  canInsert(authData: JWTPayload, op: CreateOp) {
+  canInsert(authData: JWTPayload, op: InsertOp) {
     return this.#timedCanDo('insert', authData, op);
   }
 
@@ -91,7 +91,7 @@ export class WriteAuthorizerImpl {
     return this.#timedCanDo('delete', authData, op);
   }
 
-  canUpsert(authData: JWTPayload, op: SetOp) {
+  canUpsert(authData: JWTPayload, op: UpsertOp) {
     const preMutationRow = this.#getPreMutationRow(op);
     if (preMutationRow) {
       return this.canUpdate(authData, {
@@ -103,7 +103,7 @@ export class WriteAuthorizerImpl {
     }
 
     return this.canInsert(authData, {
-      op: 'create',
+      op: 'insert',
       tableName: op.tableName,
       primaryKey: op.primaryKey,
       value: op.value,
@@ -181,7 +181,7 @@ export class WriteAuthorizerImpl {
     }
 
     let preMutationRow: Row | undefined;
-    if (op.op !== 'create') {
+    if (op.op !== 'insert') {
       preMutationRow = this.#getPreMutationRow(op);
     }
 
@@ -210,7 +210,7 @@ export class WriteAuthorizerImpl {
     return true;
   }
 
-  #getPreMutationRow(op: SetOp | UpdateOp | DeleteOp) {
+  #getPreMutationRow(op: UpsertOp | UpdateOp | DeleteOp) {
     const {value} = op;
     const conditions: SQLQuery[] = [];
     const values: PrimaryKeyValue[] = [];
@@ -281,7 +281,7 @@ export class WriteAuthorizerImpl {
 }
 
 type ActionOpMap = {
-  insert: CreateOp;
+  insert: InsertOp;
   update: UpdateOp;
   delete: DeleteOp;
 };

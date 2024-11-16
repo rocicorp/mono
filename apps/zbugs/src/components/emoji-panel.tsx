@@ -39,7 +39,7 @@ export function EmojiPanel({issueID, commentID}: Props) {
   const addEmoji = useCallback(
     (unicode: string, annotation: string) => {
       const id = nanoid();
-      z.mutate.emoji.create({
+      z.mutate.emoji.insert({
         id,
         value: unicode,
         annotation,
