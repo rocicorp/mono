@@ -208,8 +208,8 @@ export const authorization = defineAuthorization<AuthData, Schema>(
   () => {
     const allowIfLoggedIn = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<TableSchema>,
-    ) => cmp(authData.sub, '!=', undefined);
+      {cmpLit}: ExpressionBuilder<TableSchema>,
+    ) => cmpLit(authData.sub, 'IS NOT', null);
 
     const allowIfIssueCreator = (
       authData: AuthData,
@@ -223,8 +223,8 @@ export const authorization = defineAuthorization<AuthData, Schema>(
 
     const allowIfAdmin = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<TableSchema>,
-    ) => cmp(authData.role, 'crew');
+      {cmpLit}: ExpressionBuilder<TableSchema>,
+    ) => cmpLit(authData.role, '=', 'crew');
 
     return {
       user: {
