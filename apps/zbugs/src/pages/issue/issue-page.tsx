@@ -1,4 +1,4 @@
-import {escapeLike, type TableSchemaToRow} from '@rocicorp/zero';
+import type {TableSchemaToRow} from '@rocicorp/zero';
 import type {Zero} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {nanoid} from 'nanoid';
@@ -388,9 +388,9 @@ function buildListQuery(
   }
   const {
     open,
-    creator,
-    assignee,
-    labels,
+    creatorID,
+    assigneeID,
+    labelIDs,
     textFilter,
     sortField,
     sortDirection,
@@ -406,22 +406,20 @@ function buildListQuery(
     q = q.where('open', open);
   }
 
-  if (creator) {
-    q = q.whereExists('creator', q => q.where('login', creator));
+  if (creatorID) {
+    q = q.where('creatorID', creatorID);
   }
 
-  if (assignee) {
-    q = q.whereExists('assignee', q => q.where('login', assignee));
+  if (assigneeID) {
+    q = q.where('assigneeID', assigneeID);
   }
-
-  if (textFilter) {
-    q = q.where('title', 'ILIKE', `%${escapeLike(textFilter)}%`);
-  }
-
-  if (labels) {
-    for (const label of labels) {
-      q = q.whereExists('labels', q => q.where('name', label));
+  if (labelIDs) {
+    for (const labelID of labelIDs) {
+      q = q.where('labelIDs', 'LIKE', `%${labelID}%`);
     }
+  }
+  if (textFilter) {
+    q = q.where('title', 'ILIKE', `%${textFilter}%`);
   }
   return q;
 }
