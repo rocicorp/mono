@@ -13,11 +13,11 @@ import {
 import {
   MutationType,
   type CRUDMutation,
-  type InsertOp,
   type DeleteOp,
+  type InsertOp,
   type Mutation,
-  type UpsertOp,
   type UpdateOp,
+  type UpsertOp,
 } from '../../../../zero-protocol/src/push.js';
 import type {AuthorizationConfig} from '../../../../zero-schema/src/compiled-authorization.js';
 import {Database} from '../../../../zqlite/src/db.js';
@@ -193,7 +193,7 @@ export async function processMutation(
           // Simulates a concurrent request for testing. In production this is a noop.
           const done = onTxStart?.();
           try {
-            return processMutationWithTx(
+            return await processMutationWithTx(
               tx,
               authData,
               shardID,
