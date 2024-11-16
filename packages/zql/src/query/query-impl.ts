@@ -292,7 +292,7 @@ export abstract class AbstractQuery<
     let cond: Condition;
 
     if (typeof fieldOrExpressionFactory === 'function') {
-      cond = fieldOrExpressionFactory(new ExpressionBuilder(this.#exists));
+      cond = fieldOrExpressionFactory(new ExpressionBuilder(this._exists));
     } else {
       assert(opOrValue !== undefined, 'Invalid condition');
       cond = cmp(fieldOrExpressionFactory, opOrValue, value);
@@ -362,7 +362,7 @@ export abstract class AbstractQuery<
     );
   }
 
-  #exists = (
+  protected _exists = (
     relationship: string,
     cb: (
       query: Query<TableSchema, QueryType>,

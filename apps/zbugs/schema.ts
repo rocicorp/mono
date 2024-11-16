@@ -2,7 +2,9 @@ import {
   createSchema,
   createTableSchema,
   defineAuthorization,
+  type ExpressionBuilder,
   type TableSchemaToRow,
+  type TableSchema,
 } from '@rocicorp/zero';
 
 const userSchema = createTableSchema({
@@ -198,29 +200,31 @@ export type Schema = typeof schema;
 type AuthData = {
   // The logged in userID.
   sub: string;
+  role: 'crew' | 'user';
 };
 
 export const authorization = defineAuthorization<AuthData, Schema>(
   schema,
-  query => {
-    const allowIfLoggedIn = (authData: AuthData) =>
-      query.user.where('id', '=', authData.sub);
+  () => {
+    const allowIfLoggedIn = (
+      authData: AuthData,
+      {cmp}: ExpressionBuilder<TableSchema>,
+    ) => cmp(authData.sub, '!=', undefined);
 
-    const allowIfIssueCreator = (authData: AuthData, row: {id: string}) => {
-      return query.issue
-        .where('id', row.id)
-        .where('creatorID', '=', authData.sub);
-    };
+    const allowIfIssueCreator = (
+      authData: AuthData,
+      {cmp}: ExpressionBuilder<typeof issueSchema>,
+    ) => cmp('creatorID', '=', authData.sub);
 
-    // TODO: It would be nice to share code with above.
-    const allowIfCommentCreator = (authData: AuthData, row: {id: string}) => {
-      return query.comment
-        .where('id', row.id)
-        .where('creatorID', '=', authData.sub);
-    };
+    const allowIfCommentCreator = (
+      authData: AuthData,
+      {cmp}: ExpressionBuilder<typeof commentSchema>,
+    ) => cmp('creatorID', '=', authData.sub);
 
-    const allowIfAdmin = (authData: AuthData) =>
-      query.user.where('id', '=', authData.sub).where('role', '=', 'crew');
+    const allowIfAdmin = (
+      authData: AuthData,
+      {cmp}: ExpressionBuilder<TableSchema>,
+    ) => cmp(authData.role, 'crew');
 
     return {
       user: {
