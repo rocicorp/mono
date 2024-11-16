@@ -77,9 +77,12 @@ fastify.get<{
     )`;
   }
 
+  const userRows = await sql`SELECT * FROM "user" WHERE "id" = ${userId}`;
+
   const jwtPayload = {
     sub: userId,
     iat: Math.floor(Date.now() / 1000),
+    role: userRows[0].role,
     name: userDetails.data.login,
   };
 

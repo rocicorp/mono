@@ -249,6 +249,18 @@ export const authorization = defineAuthorization<AuthData, Schema>(
           delete: [allowIfCommentCreator, allowIfAdmin],
         },
       },
+      label: {
+        row: {
+          insert: [allowIfAdmin],
+          update: [allowIfAdmin],
+          delete: [allowIfAdmin],
+        },
+      },
+      // TODO: issueLabel permissions (only issue creator can set)
+      // TODO: viewState permissions (invariant on userID set to logged in user)
+      // ^-- requires access to _current_ value of the row.
+      // TODO: type errors should be raised if there is a schema mismatch between
+      // 1. the rule and 2. the table it is applied to
     };
   },
 ) as ReturnType<typeof defineAuthorization>;

@@ -8,7 +8,6 @@ import {assert} from '../../../../shared/src/asserts.js';
 import type {JSONValue} from '../../../../shared/src/json.js';
 import {randInt} from '../../../../shared/src/rand.js';
 import * as v from '../../../../shared/src/valita.js';
-import type {Row} from '../../../../zero-protocol/src/data.js';
 import type {
   InsertOp,
   DeleteOp,
@@ -35,6 +34,13 @@ import type {
   Policy,
 } from '../../../../zero-schema/src/compiled-authorization.js';
 import {StatementRunner} from '../../db/statements.js';
+import type {Schema} from '../../../../zero-schema/src/schema.js';
+import {AuthQuery, authQuery} from '../../../../zql/src/query/auth-query.js';
+import {must} from '../../../../shared/src/must.js';
+import type {Query} from '../../../../zql/src/query/query.js';
+import type {TableSchema} from '../../../../zero-schema/src/table-schema.js';
+import type {Condition} from '../../../../zero-protocol/src/ast.js';
+import {dnf} from '../../../../zql/src/query/dnf.js';
 
 export interface WriteAuthorizer {
   canInsert(authData: JWTPayload, op: InsertOp): boolean;
@@ -44,6 +50,7 @@ export interface WriteAuthorizer {
 }
 
 export class WriteAuthorizerImpl {
+  readonly #schema: Schema;
   readonly #authorizationConfig: AuthorizationConfig;
   readonly #replica: Database;
   readonly #builderDelegate: BuilderDelegate;
@@ -55,11 +62,13 @@ export class WriteAuthorizerImpl {
   constructor(
     lc: LogContext,
     config: Pick<ZeroConfig, 'storageDBTmpDir'>,
+    schema: Schema,
     authorization: AuthorizationConfig | undefined,
     replica: Database,
     cgID: string,
   ) {
     this.#lc = lc.withContext('class', 'WriteAuthorizerImpl');
+    this.#schema = schema;
     this.#authorizationConfig = authorization ?? {};
     this.#replica = replica;
     const tmpDir = config.storageDBTmpDir ?? tmpdir();
@@ -179,15 +188,26 @@ export class WriteAuthorizerImpl {
       return true;
     }
 
-    let preMutationRow: Row | undefined;
-    if (op.op !== 'insert') {
-      preMutationRow = this.#getPreMutationRow(op);
+    if (rules.row === undefined && rules.cell === undefined) {
+      return true;
     }
 
     const rowPolicies = rules.row;
+
+    let rowQuery = authQuery(
+      must(
+        this.#schema.tables[op.tableName],
+        'No schema found for table ' + op.tableName,
+      ),
+    );
+    op.primaryKey.forEach(pk => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      rowQuery = rowQuery.where(pk, '=', op.value[pk] as any);
+    });
+
     if (
       rowPolicies &&
-      !this.#passesPolicy(rowPolicies[action], authData, preMutationRow)
+      !this.#passesPolicy(rowPolicies[action], authData, rowQuery)
     ) {
       return false;
     }
@@ -196,11 +216,11 @@ export class WriteAuthorizerImpl {
     if (cellPolicies) {
       for (const [column, policy] of Object.entries(cellPolicies)) {
         if (action === 'update' && op.value[column] === undefined) {
-          // If the column is not being updated, we do not need to check
-          // the column rules.
+          // If the cell is not being updated, we do not need to check
+          // the cell rules.
           continue;
         }
-        if (!this.#passesPolicy(policy[action], authData, preMutationRow)) {
+        if (!this.#passesPolicy(policy[action], authData, rowQuery)) {
           return false;
         }
       }
@@ -232,32 +252,50 @@ export class WriteAuthorizerImpl {
   #passesPolicy(
     policy: Policy | undefined,
     authData: JWTPayload,
-    preMutationRow: Row | undefined,
+    rowQuery: Query<TableSchema>,
   ) {
     if (!policy) {
       return true;
     }
 
-    for (const [_, rule] of policy) {
-      const input = buildPipeline(rule, this.#builderDelegate, {
-        authData: authData as Record<string, JSONValue>,
-        preMutationRow,
-      });
-      try {
-        const res = input.fetch({});
-        for (const _ of res) {
-          // if any row is returned at all, the
-          // rule passes.
-          return true;
-        }
-      } finally {
-        input.destroy();
+    let rowQueryAst = (rowQuery as AuthQuery<TableSchema>).ast;
+    rowQueryAst = {
+      ...rowQueryAst,
+      where: updateWhere(rowQueryAst.where, policy),
+    };
+
+    const input = buildPipeline(rowQueryAst, this.#builderDelegate, {
+      authData: authData as Record<string, JSONValue>,
+      // TODO: We can remove this arg now that the pre-mutation row is got by the
+      // rowQueryAst.
+      preMutationRow: undefined,
+    });
+    try {
+      const res = input.fetch({});
+      for (const _ of res) {
+        // if any row is returned at all, the
+        // rule passes.
+        return true;
       }
+    } finally {
+      input.destroy();
     }
 
     // no rows returned by any rules? The policy fails.
     return false;
   }
+}
+
+function updateWhere(where: Condition | undefined, policy: Policy) {
+  assert(where, 'A where condition must exist for RowQuery');
+
+  return dnf({
+    type: 'and',
+    conditions: [
+      where,
+      {type: 'or', conditions: policy.map(([, rule]) => rule)},
+    ],
+  });
 }
 
 type ActionOpMap = {
