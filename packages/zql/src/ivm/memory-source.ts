@@ -109,6 +109,10 @@ export class MemorySource implements Source {
     sort: Ordering,
     optionalFilters?: Condition | undefined,
   ): SourceInput {
+    const filteredOptionalFilters = filterOptionalFilters(optionalFilters);
+    const predicates: ((row: Row) => boolean)[] =
+      filteredOptionalFilters.filters.map(c => createPredicate(c));
+
     const input: SourceInput = {
       getSchema: () => schema,
       fetch: req => this.#fetch(req, connection),
@@ -119,12 +123,8 @@ export class MemorySource implements Source {
       destroy: () => {
         this.#disconnect(input);
       },
-      appliedFilters: false,
+      appliedFilters: filteredOptionalFilters.allApplied,
     };
-
-    const predicates: ((row: Row) => boolean)[] = filteredOptionalFilters(
-      optionalFilters,
-    ).filters.map(c => createPredicate(c));
 
     const connection: Connection = {
       input,
@@ -668,9 +668,10 @@ function compareBounds(a: Bound, b: Bound): number {
  * The below way of doing things over-fetches as the optional filters
  * are widened to cover all branches of the pipeline.
  */
-export function filteredOptionalFilters(
-  optionalFilters: Condition | undefined,
-): {filters: SimpleCondition[]; allApplied: boolean} {
+export function filterOptionalFilters(optionalFilters: Condition | undefined): {
+  filters: SimpleCondition[];
+  allApplied: boolean;
+} {
   if (optionalFilters) {
     if (
       optionalFilters.type === 'or' &&

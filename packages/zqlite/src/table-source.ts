@@ -45,7 +45,7 @@ type Connection = {
   input: Input;
   output: Output | undefined;
   sort: Ordering;
-  filters: Condition | undefined;
+  filters: NoSubqueryCondition | undefined;
   compareRows: Comparator;
 };
 
@@ -194,6 +194,7 @@ export class TableSource implements Source {
   }
 
   connect(sort: Ordering, optionalFilters?: Condition | undefined) {
+    const transformedFilters = transformFilters(optionalFilters);
     const input: SourceInput = {
       getSchema: () => this.#getSchema(connection),
       fetch: req => this.#fetch(req, connection),
@@ -206,14 +207,14 @@ export class TableSource implements Source {
         assert(idx !== -1, 'Connection not found');
         this.#connections.splice(idx, 1);
       },
-      appliedFilters: true,
+      appliedFilters: !transformedFilters.conditionsRemoved,
     };
 
     const connection: Connection = {
       input,
       output: undefined,
       sort,
-      filters: optionalFilters,
+      filters: transformedFilters.filters,
       compareRows: makeComparator(sort),
     };
     assertOrderingIncludesPK(sort, this.#primaryKey);
@@ -446,7 +447,7 @@ export class TableSource implements Source {
   #requestToSQL(
     constraint: Constraint | undefined,
     cursor: Cursor | undefined,
-    filters: Condition | undefined,
+    filters: NoSubqueryCondition | undefined,
     order: Ordering,
   ): SQLQuery {
     let query = sql`SELECT ${this.#allColumns} FROM ${sql.ident(this.#table)}`;
@@ -507,10 +508,9 @@ export class TableSource implements Source {
  * https://www.notion.so/replicache/Optional-Filters-OR-1303bed895458013a26ee5aafd5725d2
  */
 export function optionalFiltersToSQL(
-  filters: Condition,
+  filters: NoSubqueryCondition,
   columnTypes: Record<string, SchemaValue>,
 ): SQLQuery {
-  assert(filters.type !== 'correlatedSubquery');
   switch (filters.type) {
     case 'simple':
       return simpleConditionToSQL(filters, columnTypes);
@@ -769,4 +769,84 @@ function nonPrimaryKeys(
   primaryKey: PrimaryKey,
 ) {
   return Object.keys(columns).filter(c => !primaryKey.includes(c));
+}
+
+type NoSubqueryCondition =
+  | SimpleCondition
+  | {
+      type: 'and';
+      conditions: readonly NoSubqueryCondition[];
+    }
+  | {
+      type: 'or';
+      conditions: readonly NoSubqueryCondition[];
+    };
+
+/**
+ * Returns a transformed condition which contains no
+ * CorrelatedSubqueryCondition(s) but which will filter a subset of the rows
+ * that would be filtered by the original condition, or undefined
+ * if no such transformation exists.
+ *
+ * Assumes Condition is in DNF.
+ */
+function transformFilters(filters: Condition | undefined): {
+  filters: NoSubqueryCondition | undefined;
+  conditionsRemoved: boolean;
+} {
+  if (!filters) {
+    return {filters: undefined, conditionsRemoved: false};
+  }
+  switch (filters.type) {
+    case 'simple':
+      return {filters, conditionsRemoved: false};
+    case 'correlatedSubquery':
+      return {filters: undefined, conditionsRemoved: true};
+    case 'and': {
+      const transformedConditions = [];
+      for (const cond of filters.conditions) {
+        assert(cond.type === 'simple' || cond.type === 'correlatedSubquery');
+        if (cond.type === 'simple') {
+          transformedConditions.push(cond);
+        }
+      }
+      const conditionsRemoved =
+        transformedConditions.length !== filters.conditions.length;
+      if (transformedConditions.length === 0) {
+        return {filters: undefined, conditionsRemoved};
+      }
+      if (transformedConditions.length === 1) {
+        return {
+          filters: transformedConditions[0],
+          conditionsRemoved,
+        };
+      }
+      return {
+        filters: {
+          type: 'and',
+          conditions: transformedConditions,
+        },
+        conditionsRemoved,
+      };
+    }
+    case 'or': {
+      const transformedConditions: NoSubqueryCondition[] = [];
+      let conditionsRemoved = false;
+      for (const cond of filters.conditions) {
+        assert(cond.type !== 'or');
+        const transformed = transformFilters(cond);
+        if (transformed.filters === undefined) {
+          return {filters: undefined, conditionsRemoved: true};
+        }
+        conditionsRemoved = conditionsRemoved || transformed.conditionsRemoved;
+        transformedConditions.push(transformed.filters);
+      }
+      return {
+        filters: {type: 'or', conditions: transformedConditions},
+        conditionsRemoved,
+      };
+    }
+    default:
+      unreachable(filters);
+  }
 }
