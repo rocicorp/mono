@@ -655,7 +655,7 @@ type TimeoutTasks = {
 };
 
 // Production timeout tasks. Overridden in tests.
-const TIMEOUT_TASKS: TimeoutTasks = {
+export const TIMEOUT_TASKS: TimeoutTasks = {
   forInitialWorkers: {
     timeoutMs: KEEPALIVE_TIMEOUT_MS,
     task: KEEPALIVE_TASK,

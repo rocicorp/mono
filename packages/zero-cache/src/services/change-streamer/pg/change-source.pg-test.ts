@@ -45,6 +45,7 @@ describe('change-source/pg', () => {
   let streams: ChangeStream[];
 
   beforeEach(async () => {
+    streams = [];
     logSink = new TestLogSink();
     lc = new LogContext('error', {}, logSink);
     upstream = await testDBs.create('change_source_pg_test_upstream');
@@ -82,7 +83,6 @@ describe('change-source/pg', () => {
         replicaDbFile.path,
       )
     ).changeSource;
-    streams = [];
   });
 
   afterEach(async () => {
