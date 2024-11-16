@@ -1,9 +1,12 @@
+import {PG_OBJECT_IN_USE} from '@drdgvhbh/postgres-error-codes';
 import {LogContext} from '@rocicorp/logger';
+import {DatabaseError} from 'pg-protocol';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {AbortError} from '../../../../../shared/src/abort-error.js';
 import {TestLogSink} from '../../../../../shared/src/logging-test-utils.js';
 import {Queue} from '../../../../../shared/src/queue.js';
 import {promiseVoid} from '../../../../../shared/src/resolved-promises.js';
+import {sleep} from '../../../../../shared/src/sleep.js';
 import {StatementRunner} from '../../../db/statements.js';
 import {
   dropReplicationSlots,
@@ -113,11 +116,30 @@ describe('change-source/pg', () => {
     );
   }
 
+  const MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE = 5;
+
   async function startStream(watermark: string) {
-    const stream = await source.startStream(watermark);
-    // cleanup in afterEach() ensures that replication slots are released
-    streams.push(stream);
-    return stream;
+    let err;
+    for (let i = 0; i < MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE; i++) {
+      try {
+        const stream = await source.startStream(watermark);
+        // cleanup in afterEach() ensures that replication slots are released
+        streams.push(stream);
+        return stream;
+      } catch (e) {
+        if (e instanceof DatabaseError && e.code === PG_OBJECT_IN_USE) {
+          // Sometimes Postgres still considers the replication slot active
+          // from the previous test, e.g.
+          // error: replication slot "zero_change_source_test_id" is active for PID 388
+          console.warn(e);
+          err = e;
+          await sleep(100);
+          continue; // retry
+        }
+        throw e;
+      }
+    }
+    throw err;
   }
 
   test.each([[withTriggers], [withoutTriggers]])(
