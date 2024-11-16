@@ -72,6 +72,16 @@ function addData(queryDelegate: QueryDelegate) {
       ownerId: '0002',
     },
   });
+  issueSource.push({
+    type: 'add',
+    row: {
+      id: '0003',
+      title: 'issue 3',
+      description: 'description 3',
+      closed: false,
+      ownerId: null,
+    },
+  });
 
   commentSource.push({
     type: 'add',
@@ -485,6 +495,16 @@ describe('joins and filters', () => {
         ownerId: '0002',
         title: 'issue 2',
       },
+      {
+        closed: false,
+        comments: [],
+        description: 'description 3',
+        id: '0003',
+        labels: [],
+        owner: [],
+        ownerId: null,
+        title: 'issue 3',
+      },
     ]);
 
     queryDelegate.getSource('issue').push({
@@ -505,6 +525,16 @@ describe('joins and filters', () => {
         description: 'description 2',
         closed: false,
         ownerId: '0002',
+      },
+    });
+    queryDelegate.getSource('issue').push({
+      type: 'remove',
+      row: {
+        id: '0003',
+        title: 'issue 3',
+        description: 'description 3',
+        closed: false,
+        ownerId: null,
       },
     });
     queryDelegate.commit();
@@ -665,6 +695,16 @@ test('run', () => {
       ownerId: '0002',
       title: 'issue 2',
     },
+    {
+      closed: false,
+      comments: [],
+      description: 'description 3',
+      id: '0003',
+      labels: [],
+      owner: [],
+      ownerId: null,
+      title: 'issue 3',
+    },
   ]);
 });
 
@@ -772,4 +812,56 @@ test('complex expression', () => {
       },
     ]
   `);
+});
+
+test('null compare', () => {
+  const queryDelegate = new QueryDelegateImpl();
+  addData(queryDelegate);
+
+  let rows = newQuery(queryDelegate, issueSchema)
+    .where('ownerId', '=', null)
+    .run();
+
+  expect(rows).toEqual([]);
+
+  rows = newQuery(queryDelegate, issueSchema)
+    .where('ownerId', '!=', null)
+    .run();
+
+  expect(rows).toEqual([]);
+
+  rows = newQuery(queryDelegate, issueSchema)
+    .where('ownerId', 'IS', null)
+    .run();
+
+  expect(rows).toEqual([
+    {
+      closed: false,
+      description: 'description 3',
+      id: '0003',
+      ownerId: null,
+      title: 'issue 3',
+    },
+  ]);
+
+  rows = newQuery(queryDelegate, issueSchema)
+    .where('ownerId', 'IS NOT', null)
+    .run();
+
+  expect(rows).toEqual([
+    {
+      closed: false,
+      description: 'description 1',
+      id: '0001',
+      ownerId: '0001',
+      title: 'issue 1',
+    },
+    {
+      closed: false,
+      description: 'description 2',
+      id: '0002',
+      ownerId: '0002',
+      title: 'issue 2',
+    },
+  ]);
 });

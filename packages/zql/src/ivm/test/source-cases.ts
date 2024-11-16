@@ -1021,13 +1021,6 @@ const cases = {
     source.push({type: 'add', row: {a: 2, s: 'bar'}});
     source.push({type: 'add', row: {a: 3, s: null}});
 
-    // Test:
-    // 1. is null pulls nulls
-    // 2. = null pulls nothing
-    // 3. != null pulls nothing
-    // 4. is not null pulls non-nulls
-    // 5. = 'foo' pulls 'foo'
-    // 6. != 'foo' pulls 'bar'
     let out = new Catch(
       source.connect([['a', 'asc']], {
         type: 'simple',

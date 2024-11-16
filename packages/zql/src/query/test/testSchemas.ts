@@ -5,7 +5,7 @@ export const issueSchema = {
     title: {type: 'string'},
     description: {type: 'string'},
     closed: {type: 'boolean'},
-    ownerId: {type: 'string'},
+    ownerId: {type: 'string', optional: true},
   },
   primaryKey: ['id'],
   relationships: {
@@ -150,4 +150,13 @@ export const userSchema = {
       },
     },
   },
+} as const;
+
+export const schemas = {
+  issue: issueSchema,
+  issueLabel: issueLabelSchema,
+  label: labelSchema,
+  comment: commentSchema,
+  revision: revisionSchema,
+  user: userSchema,
 } as const;
