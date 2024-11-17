@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run --reporter=basic --coverage",
-    "test:watch": "vitest ",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",

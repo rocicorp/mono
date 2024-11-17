@@ -1,26 +1,22 @@
-import {defineConfig, defineWorkspace, mergeConfig} from 'vitest/config';
-import {config} from '../shared/src/tool/vitest-config.js';
+import {defineWorkspace} from 'vitest/config';
 
-const {define, esbuild} = config;
-
-const baseConfig = defineConfig({define, esbuild});
-
-const pgConfigForVersion = (version: number) =>
-  mergeConfig(baseConfig, {
-    test: {
-      name: `pg-${version}`,
-      include: ['src/**/*.pg-test.?(c|m)[jt]s?(x)'],
-      globalSetup: [`./test/pg-${version}.ts`],
-    },
-  });
+const pgConfigForVersion = (version: number) => ({
+  extends: './vitest.config.js',
+  test: {
+    name: `pg-${version}`,
+    include: ['src/**/*.pg-test.?(c|m)[jt]s?(x)'],
+    globalSetup: [`./test/pg-${version}.ts`],
+  },
+});
 
 export default defineWorkspace([
-  mergeConfig(baseConfig, {
+  {
+    extends: './vitest.config.js',
     test: {
       name: 'no-pg',
       include: ['src/**/*.test.?(c|m)[jt]s?(x)'],
     },
-  }),
+  },
   pgConfigForVersion(15),
   pgConfigForVersion(16),
   pgConfigForVersion(17),
