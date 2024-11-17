@@ -92,14 +92,13 @@ export async function initialSync(
       );
     } finally {
       copiers.setDone();
+      await copiers.done();
     }
-
     await setInitialSchema(upstreamDB, shard.id, published);
 
     initReplicationState(tx, publications, toLexiVersion(lsn));
     initChangeLog(tx);
     lc.info?.(`Synced initial data from ${publications} up to ${lsn}`);
-    await copiers.done();
   } finally {
     await replicationSession.end();
     await upstreamDB.end();
