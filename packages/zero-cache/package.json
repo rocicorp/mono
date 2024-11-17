@@ -27,7 +27,7 @@
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.3.0",
     "@rocicorp/resolver": "^1.0.2",
-    "@rocicorp/zero-sqlite3": "^1.0.3",
+    "@rocicorp/zero-sqlite3": "^1.0.4",
     "chalk-template": "^1.1.0",
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
