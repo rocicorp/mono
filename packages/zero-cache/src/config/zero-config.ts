@@ -265,7 +265,7 @@ export const zeroOptions = {
       `{bold replica-file}. This should be the production configuration for the`,
       `{bold replication-manager}. It is okay to run this in development too.`,
       ``,
-      `Note that this flag does actually run {bold litestream}; rather, it `,
+      `Note that this flag does not actually run {bold litestream}; rather, it `,
       `configures the internal replication logic to operate on the DB file in `,
       `a manner that is compatible with {bold litestream}.`,
     ],

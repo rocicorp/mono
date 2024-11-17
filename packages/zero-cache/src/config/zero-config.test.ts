@@ -171,7 +171,7 @@ test('zero-cache --help', () => {
                                                    replica-file. This should be the production configuration for the             
                                                    replication-manager. It is okay to run this in development too.               
                                                                                                                                  
-                                                   Note that this flag does actually run litestream; rather, it                  
+                                                   Note that this flag does not actually run litestream; rather, it              
                                                    configures the internal replication logic to operate on the DB file in        
                                                    a manner that is compatible with litestream.                                  
                                                                                                                                  
