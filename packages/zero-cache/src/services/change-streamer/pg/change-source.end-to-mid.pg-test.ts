@@ -125,8 +125,37 @@ describe('change-source/pg/end-to-mid-test', () => {
   test.each([
     [
       'create table',
-      'CREATE TABLE zero.bar (id INT8 PRIMARY KEY);',
+      'CREATE TABLE zero.baz (id INT8 PRIMARY KEY);',
       [{tag: 'create-table'}],
+      {['zero.baz']: []},
+      [
+        {
+          name: 'zero.baz',
+          columns: {
+            id: {
+              characterMaximumLength: null,
+              dataType: 'int8',
+              dflt: null,
+              notNull: true,
+              pos: 1,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: true,
+              pos: 2,
+            },
+          },
+          primaryKey: ['id'],
+        },
+      ],
+      [],
+    ],
+    [
+      'rename table',
+      'ALTER TABLE zero.baz RENAME TO bar;',
+      [{tag: 'rename-table'}],
       {['zero.bar']: []},
       [
         {
