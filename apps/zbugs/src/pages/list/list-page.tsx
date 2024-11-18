@@ -3,6 +3,7 @@ import classNames from 'classnames';
 import React, {
   type CSSProperties,
   type KeyboardEvent,
+  useEffect,
   useRef,
   useState,
 } from 'react';
@@ -16,7 +17,7 @@ import {useZero} from '../../hooks/use-zero.js';
 import {mark} from '../../perf-log.js';
 import IssueLink from '../../components/issue-link.js';
 import type {ListContext, ZbugsHistoryState} from '../../routes.js';
-import {useThrottledCallback} from 'use-debounce';
+import {useDebouncedCallback, useThrottledCallback} from 'use-debounce';
 import RelativeTime from '../../components/relative-time.js';
 import {useClickOutside} from '../../hooks/use-click-outside.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
@@ -36,7 +37,14 @@ export default function ListPage() {
   const creator = qs.get('creator') ?? undefined;
   const assignee = qs.get('assignee') ?? undefined;
   const labels = qs.getAll('label');
-  const textFilter = qs.get('q');
+
+  // Cannot drive entirely by URL params because we need to debounce the changes
+  // while typing ito input box.
+  const textFilterQuery = qs.get('q');
+  const [textFilter, setTextFilter] = useState(textFilterQuery);
+  useEffect(() => {
+    setTextFilter(textFilterQuery);
+  }, [textFilterQuery]);
 
   const sortField =
     qs.get('sort')?.toLowerCase() === 'created' ? 'created' : 'modified';
@@ -157,6 +165,15 @@ export default function ListPage() {
     setScrollOffset(scrollOffset);
   }, 250);
 
+  const updateTextFilterQueryString = useDebouncedCallback((text: string) => {
+    navigate(addParam(qs, 'q', text, 'exclusive'));
+  }, 500);
+
+  const onTextFilterChange = (text: string) => {
+    setTextFilter(text);
+    updateTextFilterQueryString(text);
+  };
+
   const Row = ({index, style}: {index: number; style: CSSProperties}) => {
     const issue = issues[index];
     if (firstRowRendered === false) {
@@ -238,9 +255,7 @@ export default function ListPage() {
             <input
               type="text"
               value={textFilter ?? ''}
-              onChange={e =>
-                navigate(addParam(qs, 'q', e.target.value, 'exclusive'))
-              }
+              onChange={e => onTextFilterChange(e.target.value)}
               onFocus={() => setForceSearchMode(true)}
               onBlur={() => setForceSearchMode(false)}
               onKeyUp={handleSearchKeyUp}
