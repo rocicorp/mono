@@ -10,6 +10,7 @@ import {useCallback} from 'react';
 import {useQuery} from 'zero-react/src/use-query.js';
 import type {Schema} from '../../schema.js';
 import addEmojiIcon from '../assets/icons/add-emoji.svg';
+import {formatEmojiTooltipText} from '../emoji-utils.js';
 import {useLogin} from '../hooks/use-login.js';
 import {useNumericPref} from '../hooks/use-user-pref.js';
 import {useZero} from '../hooks/use-zero.js';
@@ -18,7 +19,7 @@ import {EmojiPicker, SKIN_TONE_PREF} from './emoji-picker.js';
 
 const loginMessage = 'You need to be logged in to modify emoji reactions.';
 
-type Emoji = TableSchemaToRow<Schema['tables']['emoji']> & {
+export type Emoji = TableSchemaToRow<Schema['tables']['emoji']> & {
   creator: TableSchemaToRow<Schema['tables']['user']> | undefined;
 };
 
@@ -201,7 +202,7 @@ function EmojiPill({
       className="emoji-pill"
       eventName="Add to existing emoji reaction"
       key={normalizedEmoji}
-      title={getTooltipText(emojis, z.userID)}
+      title={formatEmojiTooltipText(emojis, z.userID)}
       loginMessage={loginMessage}
       onAction={() =>
         addOrRemoveEmoji({
@@ -216,29 +217,4 @@ function EmojiPill({
       {' ' + emojis.length}
     </ButtonWithLoginCheck>
   );
-}
-
-function getTooltipNames(emojis: Emoji[], currentUserID: string): string {
-  const names = emojis.map((emoji, i) => {
-    const capitalizeIfFirst = (s: string) =>
-      i === 0 ? s[0].toUpperCase() + s.slice(1) : s;
-
-    const {creator} = emoji;
-    if (!creator) {
-      return capitalizeIfFirst('unknown');
-    }
-    if (emoji.creatorID === currentUserID) {
-      return capitalizeIfFirst('you');
-    }
-    return capitalizeIfFirst(creator.login);
-  });
-  if (names.length === 1) {
-    return names[0];
-  }
-  return names.slice(0, -1).join(', ') + ' and ' + names.slice(-1);
-}
-
-function getTooltipText(emojis: Emoji[], currentUserID: string): string {
-  const names = getTooltipNames(emojis, currentUserID);
-  return `${names} reacted with ${emojis[0].annotation}`;
 }
