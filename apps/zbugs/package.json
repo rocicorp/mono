@@ -12,7 +12,9 @@
     "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "preview": "vite preview",
-    "zero": "tsx ../../packages/zero-cache/src/server/main.ts"
+    "zero": "tsx ../../packages/zero-cache/src/server/main.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@fastify/cookie": "^10.0.0",
@@ -65,7 +67,8 @@
     "universal-user-agent": "^7.0.2",
     "vite": "^5.4.9",
     "vite-plugin-svgr": "^4.2.0",
-    "vite-tsconfig-paths": "^5.0.1"
+    "vite-tsconfig-paths": "^5.0.1",
+    "vitest": "^2.1.5"
   },
   "eslintConfig": {
     "extends": "../../eslint-config.json"
