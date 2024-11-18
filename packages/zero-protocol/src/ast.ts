@@ -15,7 +15,7 @@ import {rowSchema, type Row} from './data.js';
 
 /**
  * Version number that is stored in the CVR indicating the version of the AST
- * schema of the contained queries. Incrementing this constant will invalid
+ * schema of the contained queries. Incrementing this constant will invalidate
  * CVRs with older schema versions and result in sending the `ClientNotFound`
  * error so that clients are reset. This can be done when making
  * backwards-incompatible changes to the schema.
