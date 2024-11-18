@@ -218,7 +218,7 @@ export async function setupTablesAndReplication(
       `Unable to create event triggers for schema change detection:\n\n` +
         `"${e.hint ?? e.message}"\n\n` +
         `Proceeding in degraded mode: schema changes will halt replication,\n` +
-        `after which the operator is responsible for resyncing the replica.`,
+        `requiring the replica to be reset (manually or with --auto-reset).`,
     );
   }
 }
