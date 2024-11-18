@@ -42,7 +42,7 @@
     "sinon": "^13.0.1",
     "tsc-alias": "^1.8.10",
     "typescript": "^5.6.3",
-    "vitest": "^2.0.3"
+    "vitest": "^2.1.5"
   },
   "type": "module",
   "main": "out/replicache.js",
