@@ -53,7 +53,6 @@ export class FanIn implements Operator {
   }
 
   fetch(req: FetchRequest): Stream<Node> {
-    console.log('FAN IN FETCH');
     return this.#fetchOrCleanup(input => input.fetch(req));
   }
 
