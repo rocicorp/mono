@@ -50,15 +50,15 @@ test('conditions are sorted', () => {
       conditions: [
         {
           type: 'simple',
-          field: 'b',
+          left: {type: 'column', name: 'b'},
           op: '=',
-          value: 'value',
+          right: {type: 'literal', value: 'value'},
         },
         {
           type: 'simple',
-          field: 'a',
+          left: {type: 'column', name: 'a'},
           op: '=',
-          value: 'value',
+          right: {type: 'literal', value: 'value'},
         },
       ],
     },
@@ -69,15 +69,15 @@ test('conditions are sorted', () => {
     conditions: [
       {
         type: 'simple',
-        field: 'a',
+        left: {type: 'column', name: 'a'},
         op: '=',
-        value: 'value',
+        right: {type: 'literal', value: 'value'},
       },
       {
         type: 'simple',
-        field: 'b',
+        left: {type: 'column', name: 'b'},
         op: '=',
-        value: 'value',
+        right: {type: 'literal', value: 'value'},
       },
     ],
   });
@@ -89,15 +89,15 @@ test('conditions are sorted', () => {
       conditions: [
         {
           type: 'simple',
-          field: 'a',
+          left: {type: 'column', name: 'a'},
           op: '=',
-          value: 'y',
+          right: {type: 'literal', value: 'y'},
         },
         {
           type: 'simple',
-          field: 'a',
+          left: {type: 'column', name: 'a'},
           op: '=',
-          value: 'x',
+          right: {type: 'literal', value: 'x'},
         },
       ],
     },
@@ -108,15 +108,15 @@ test('conditions are sorted', () => {
     conditions: [
       {
         type: 'simple',
-        field: 'a',
+        left: {type: 'column', name: 'a'},
         op: '=',
-        value: 'x',
+        right: {type: 'literal', value: 'x'},
       },
       {
         type: 'simple',
-        field: 'a',
+        left: {type: 'column', name: 'a'},
         op: '=',
-        value: 'y',
+        right: {type: 'literal', value: 'y'},
       },
     ],
   });
@@ -128,15 +128,15 @@ test('conditions are sorted', () => {
       conditions: [
         {
           type: 'simple',
-          field: 'a',
+          left: {type: 'column', name: 'a'},
           op: '<',
-          value: 'x',
+          right: {type: 'literal', value: 'x'},
         },
         {
           type: 'simple',
-          field: 'a',
+          left: {type: 'column', name: 'a'},
           op: '>',
-          value: 'y',
+          right: {type: 'literal', value: 'y'},
         },
       ],
     },
@@ -147,15 +147,15 @@ test('conditions are sorted', () => {
     conditions: [
       {
         type: 'simple',
-        field: 'a',
+        left: {type: 'column', name: 'a'},
         op: '<',
-        value: 'x',
+        right: {type: 'literal', value: 'x'},
       },
       {
         type: 'simple',
-        field: 'a',
+        left: {type: 'column', name: 'a'},
         op: '>',
-        value: 'y',
+        right: {type: 'literal', value: 'y'},
       },
     ],
   });

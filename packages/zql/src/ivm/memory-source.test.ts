@@ -456,8 +456,8 @@ describe('filterOptionalFilters', () => {
     expect(
       filterOptionalFilters({
         type: 'simple',
-        field: 'a',
-        value: 'b',
+        left: {type: 'column', name: 'a'},
+        right: {type: 'literal', value: 'b'},
         op: '=',
       }).allApplied,
     ).toBe(true);
@@ -467,8 +467,18 @@ describe('filterOptionalFilters', () => {
       filterOptionalFilters({
         type: 'and',
         conditions: [
-          {type: 'simple', field: 'a', value: 'b', op: '='},
-          {type: 'simple', field: 'c', value: 'd', op: '='},
+          {
+            type: 'simple',
+            left: {type: 'column', name: 'a'},
+            right: {type: 'literal', value: 'b'},
+            op: '=',
+          },
+          {
+            type: 'simple',
+            left: {type: 'column', name: 'c'},
+            right: {type: 'literal', value: 'd'},
+            op: '=',
+          },
         ],
       }).allApplied,
     ).toBe(true);
@@ -477,7 +487,14 @@ describe('filterOptionalFilters', () => {
     expect(
       filterOptionalFilters({
         type: 'or',
-        conditions: [{type: 'simple', field: 'a', value: 'b', op: '='}],
+        conditions: [
+          {
+            type: 'simple',
+            left: {type: 'column', name: 'a'},
+            right: {type: 'literal', value: 'b'},
+            op: '=',
+          },
+        ],
       }).allApplied,
     ).toBe(true);
   });
@@ -489,8 +506,18 @@ describe('filterOptionalFilters', () => {
           {
             type: 'and',
             conditions: [
-              {type: 'simple', field: 'a', value: 'b', op: '='},
-              {type: 'simple', field: 'c', value: 'd', op: '='},
+              {
+                type: 'simple',
+                left: {type: 'column', name: 'a'},
+                right: {type: 'literal', value: 'b'},
+                op: '=',
+              },
+              {
+                type: 'simple',
+                left: {type: 'column', name: 'c'},
+                right: {type: 'literal', value: 'd'},
+                op: '=',
+              },
             ],
           },
         ],
@@ -502,8 +529,18 @@ describe('filterOptionalFilters', () => {
       filterOptionalFilters({
         type: 'or',
         conditions: [
-          {type: 'simple', field: 'a', value: 'b', op: '='},
-          {type: 'simple', field: 'c', value: 'd', op: '='},
+          {
+            type: 'simple',
+            left: {type: 'column', name: 'a'},
+            right: {type: 'literal', value: 'b'},
+            op: '=',
+          },
+          {
+            type: 'simple',
+            left: {type: 'column', name: 'c'},
+            right: {type: 'literal', value: 'd'},
+            op: '=',
+          },
         ],
       }).allApplied,
     ).toBe(false);
@@ -516,8 +553,18 @@ describe('filterOptionalFilters', () => {
           {
             type: 'or',
             conditions: [
-              {type: 'simple', field: 'a', value: 'b', op: '='},
-              {type: 'simple', field: 'c', value: 'd', op: '='},
+              {
+                type: 'simple',
+                left: {type: 'column', name: 'a'},
+                right: {type: 'literal', value: 'b'},
+                op: '=',
+              },
+              {
+                type: 'simple',
+                left: {type: 'column', name: 'c'},
+                right: {type: 'literal', value: 'd'},
+                op: '=',
+              },
             ],
           },
         ],

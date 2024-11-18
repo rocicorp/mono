@@ -95,9 +95,15 @@ test('filter', () => {
         orderBy: [['id', 'desc']],
         where: {
           type: 'simple',
-          field: 'name',
+          left: {
+            type: 'column',
+            name: 'name',
+          },
           op: '>=',
-          value: 'c',
+          right: {
+            type: 'literal',
+            value: 'c',
+          },
         },
       },
       {
@@ -467,9 +473,15 @@ test('multi-join', () => {
         orderBy: [['id', 'asc']],
         where: {
           type: 'simple',
-          field: 'id',
+          left: {
+            type: 'column',
+            name: 'id',
+          },
           op: '<=',
-          value: 3,
+          right: {
+            type: 'literal',
+            value: 3,
+          },
         },
         related: [
           {
@@ -1234,9 +1246,12 @@ test('bind static parameters', () => {
     orderBy: [['id', 'asc']],
     where: {
       type: 'simple',
-      field: 'id',
+      left: {
+        type: 'column',
+        name: 'id',
+      },
       op: '=',
-      value: {type: 'static', anchor: 'authData', field: 'userID'},
+      right: {type: 'static', anchor: 'authData', field: 'userID'},
     },
     related: [
       {
@@ -1250,9 +1265,12 @@ test('bind static parameters', () => {
           alias: 'userStates',
           where: {
             type: 'simple',
-            field: 'stateCode',
+            left: {
+              type: 'column',
+              name: 'stateCode',
+            },
             op: '=',
-            value: {
+            right: {
               type: 'static',
               anchor: 'preMutationRow',
               field: 'stateCode',
@@ -1268,7 +1286,55 @@ test('bind static parameters', () => {
     preMutationRow: {stateCode: 'HI'},
   });
 
-  expect(newAst).toMatchSnapshot();
+  expect(newAst).toMatchInlineSnapshot(`
+    {
+      "orderBy": [
+        [
+          "id",
+          "asc",
+        ],
+      ],
+      "related": [
+        {
+          "correlation": {
+            "childField": "userID",
+            "op": "=",
+            "parentField": "id",
+          },
+          "subquery": {
+            "alias": "userStates",
+            "related": undefined,
+            "table": "userStates",
+            "where": {
+              "left": {
+                "name": "stateCode",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "HI",
+              },
+              "type": "simple",
+            },
+          },
+        },
+      ],
+      "table": "users",
+      "where": {
+        "left": {
+          "name": "id",
+          "type": "column",
+        },
+        "op": "=",
+        "right": {
+          "type": "literal",
+          "value": 1,
+        },
+        "type": "simple",
+      },
+    }
+  `);
 });
 
 test('empty or - nothing goes through', () => {
@@ -1295,4 +1361,140 @@ test('empty or - nothing goes through', () => {
 
   sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
   expect(sink.pushes).toEqual([]);
+});
+
+test('always false literal comparison - nothing goes through', () => {
+  const {sources, getSource} = testSources();
+  const sink = new Catch(
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        where: {
+          type: 'simple',
+          left: {
+            type: 'literal',
+            value: true,
+          },
+          op: '=',
+          right: {
+            type: 'literal',
+            value: false,
+          },
+        },
+      },
+      {
+        getSource,
+        createStorage: () => new MemoryStorage(),
+      },
+      undefined,
+    ),
+  );
+
+  expect(sink.fetch()).toEqual([]);
+
+  sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
+  expect(sink.pushes).toEqual([]);
+});
+
+test('always true literal comparison - everything goes through', () => {
+  const {sources, getSource} = testSources();
+  const sink = new Catch(
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        where: {
+          type: 'simple',
+          left: {
+            type: 'literal',
+            value: true,
+          },
+          op: '=',
+          right: {
+            type: 'literal',
+            value: true,
+          },
+        },
+      },
+      {
+        getSource,
+        createStorage: () => new MemoryStorage(),
+      },
+      undefined,
+    ),
+  );
+
+  expect(sink.fetch()).toEqual([
+    {
+      relationships: {},
+      row: {
+        id: 1,
+        name: 'aaron',
+        recruiterID: null,
+      },
+    },
+    {
+      relationships: {},
+      row: {
+        id: 2,
+        name: 'erik',
+        recruiterID: 1,
+      },
+    },
+    {
+      relationships: {},
+      row: {
+        id: 3,
+        name: 'greg',
+        recruiterID: 1,
+      },
+    },
+    {
+      relationships: {},
+      row: {
+        id: 4,
+        name: 'matt',
+        recruiterID: 1,
+      },
+    },
+    {
+      relationships: {},
+      row: {
+        id: 5,
+        name: 'cesar',
+        recruiterID: 3,
+      },
+    },
+    {
+      relationships: {},
+      row: {
+        id: 6,
+        name: 'darick',
+        recruiterID: 3,
+      },
+    },
+    {
+      relationships: {},
+      row: {
+        id: 7,
+        name: 'alex',
+        recruiterID: 1,
+      },
+    },
+  ]);
+
+  sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
+  expect(sink.pushes).toEqual([
+    {
+      node: {
+        relationships: {},
+        row: {
+          id: 8,
+          name: 'sam',
+        },
+      },
+      type: 'add',
+    },
+  ]);
 });

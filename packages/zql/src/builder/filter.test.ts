@@ -29,9 +29,15 @@ test('basics', () => {
       (a, operator, b) => {
         const condition: SimpleCondition = {
           type: 'simple',
-          field: 'foo',
+          left: {
+            type: 'column',
+            name: 'foo',
+          },
           op: operator as SimpleOperator,
-          value: b,
+          right: {
+            type: 'literal',
+            value: b,
+          },
         };
         const predicate = createPredicate(condition);
         expect(predicate({foo: a})).toBe(false);
@@ -41,9 +47,15 @@ test('basics', () => {
 
   let condition: SimpleCondition = {
     type: 'simple',
-    field: 'foo',
+    left: {
+      type: 'column',
+      name: 'foo',
+    },
     op: 'IS',
-    value: null,
+    right: {
+      type: 'literal',
+      value: null,
+    },
   };
   let predicate = createPredicate(condition);
   expect(predicate({foo: null})).toBe(true);
@@ -54,9 +66,15 @@ test('basics', () => {
 
   condition = {
     type: 'simple',
-    field: 'foo',
+    left: {
+      type: 'column',
+      name: 'foo',
+    },
     op: 'IS NOT',
-    value: null,
+    right: {
+      type: 'literal',
+      value: null,
+    },
   };
   predicate = createPredicate(condition);
   expect(predicate({foo: null})).toBe(false);
@@ -81,9 +99,15 @@ test('basics', () => {
       (a, op, b) => {
         const condition: SimpleCondition = {
           type: 'simple',
-          field: 'foo',
+          left: {
+            type: 'column',
+            name: 'foo',
+          },
           op: op as SimpleOperator,
-          value: b,
+          right: {
+            type: 'literal',
+            value: b,
+          },
         };
         const predicate = createPredicate(condition);
         const jsOp = {'=': '===', '!=': '!=='}[op] ?? op;
@@ -98,9 +122,15 @@ test('like', () => {
     for (const [input, expected] of inputs) {
       const condition: SimpleCondition = {
         type: 'simple',
-        field: 'foo',
+        left: {
+          type: 'column',
+          name: 'foo',
+        },
         op: flags ? 'ILIKE' : 'LIKE',
-        value: pattern,
+        right: {
+          type: 'literal',
+          value: pattern,
+        },
       };
       const predicate = createPredicate(condition);
       expect(predicate({foo: input})).toBe(expected);

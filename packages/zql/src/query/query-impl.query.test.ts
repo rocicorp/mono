@@ -2,10 +2,10 @@ import {describe, expect, test} from 'vitest';
 import {deepClone} from '../../../shared/src/deep-clone.js';
 import {must} from '../../../shared/src/must.js';
 import {newQuery, type QueryDelegate, QueryImpl} from './query-impl.js';
+import {issueSchema, userSchema} from './test/testSchemas.js';
 import type {AdvancedQuery} from './query-internal.js';
 import type {DefaultQueryResultRow} from './query.js';
 import {QueryDelegateImpl} from './test/query-delegate.js';
-import {issueSchema, userSchema} from './test/testSchemas.js';
 
 /**
  * Some basic manual tests to get us started.
@@ -793,7 +793,7 @@ test('complex expression', () => {
   `);
 
   rows = newQuery(queryDelegate, issueSchema)
-    .where(({and, or, cmp}) =>
+    .where(({and, cmp, or}) =>
       and(
         cmp('ownerId', '=', '0001'),
         or(cmp('title', '=', 'issue 1'), cmp('title', '=', 'issue 2')),

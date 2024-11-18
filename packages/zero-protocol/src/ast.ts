@@ -11,6 +11,7 @@ import {must} from '../../shared/src/must.js';
 import * as v from '../../shared/src/valita.js';
 import {defined} from '../../shared/src/arrays.js';
 import {rowSchema, type Row} from './data.js';
+import {assert} from '../../shared/src/asserts.js';
 
 export const selectorSchema = v.string();
 
@@ -57,22 +58,36 @@ export const simpleOperatorSchema = v.union(
   inOpsSchema,
 );
 
-export const simpleConditionSchema = v.object({
-  type: v.literal('simple'),
-  op: simpleOperatorSchema,
-  field: selectorSchema,
+const literalReferenceSchema = v.object({
+  type: v.literal('literal'),
   value: v.union(
     v.string(),
     v.number(),
     v.boolean(),
     v.null(),
     v.readonlyArray(v.union(v.string(), v.number(), v.boolean())),
-    v.object({
-      type: v.literal('static'),
-      anchor: v.union(v.literal('authData'), v.literal('preMutationRow')),
-      field: v.string(),
-    }),
   ),
+});
+const columnReferenceSchema = v.object({
+  type: v.literal('column'),
+  name: v.string(),
+});
+const parameterReferenceSchema = v.object({
+  type: v.literal('static'),
+  anchor: v.union(v.literal('authData'), v.literal('preMutationRow')),
+  field: v.string(),
+});
+const conditionValueSchema = v.union(
+  literalReferenceSchema,
+  columnReferenceSchema,
+  parameterReferenceSchema,
+);
+
+export const simpleConditionSchema = v.object({
+  type: v.literal('simple'),
+  op: simpleOperatorSchema,
+  left: conditionValueSchema,
+  right: v.union(parameterReferenceSchema, literalReferenceSchema),
 });
 
 export const correlatedSubqueryConditionOperatorSchema = v.union(
@@ -205,7 +220,22 @@ export type CorrelatedSubquery = {
   readonly hidden?: boolean | undefined;
 };
 
-export type ValuePosition = LiteralValue | Parameter;
+export type ValuePosition = LiteralReference | Parameter | ColumnReference;
+
+export type ColumnReference = {
+  readonly type: 'column';
+  /**
+   * Not a path yet as we're currently not allowing
+   * comparisons across tables. This will need to
+   * be a path through the tree in the near future.
+   */
+  readonly name: string;
+};
+
+type LiteralReference = {
+  readonly type: 'literal';
+  readonly value: LiteralValue;
+};
 
 export type LiteralValue =
   | string
@@ -226,16 +256,22 @@ export type Condition =
   | CorrelatedSubqueryCondition;
 
 export type SimpleCondition = {
-  type: 'simple';
-  op: SimpleOperator;
+  readonly type: 'simple';
+  readonly op: SimpleOperator;
+  readonly left: ValuePosition;
 
   /**
-   * Not a path yet as we're currently not allowing
-   * comparisons across tables. This will need to
-   * be a path through the tree in the near future.
+   * `null` is absent since we do not have an `IS` or `IS NOT`
+   * operator defined and `null != null` in SQL.
    */
-  field: string;
-  value: ValuePosition;
+  readonly right: Exclude<ValuePosition, ColumnReference>;
+};
+
+export type LiteralCondition = {
+  type: 'literal';
+  op: SimpleOperator;
+  leftValue: ValuePosition;
+  rightValue: ValuePosition;
 };
 
 export type Conjunction = {
@@ -275,14 +311,14 @@ export type CorrelatedSubqueryConditionOperator = 'EXISTS' | 'NOT EXISTS';
  */
 export type Parameter = StaticParameter;
 type StaticParameter = {
-  type: 'static';
+  readonly type: 'static';
   // The "namespace" of the injected parameter.
   // Write authorization will send the value of a row
   // prior to the mutation being run (preMutationRow).
   // Read and write authorization will both send the
   // current authentication data (authData).
-  anchor: 'authData' | 'preMutationRow';
-  field: string;
+  readonly anchor: 'authData' | 'preMutationRow';
+  readonly field: string;
 };
 
 const normalizeCache = new WeakMap<AST, Required<AST>>();
@@ -341,20 +377,18 @@ function sortedRelated(
 function cmpCondition(a: Condition, b: Condition): number {
   if (a.type === 'simple') {
     if (b.type !== 'simple') {
-      return -1; // Order SimpleConditions first to simplify logic for invalidation filtering.
+      return -1; // Order SimpleConditions first
     }
+
     return (
-      compareUTF8MaybeNull(a.field, b.field) ||
+      compareValuePosition(a.left, b.left) ||
       compareUTF8MaybeNull(a.op, b.op) ||
-      // Comparing the same field with the same op more than once doesn't make logical
-      // sense, but is technically possible. Assume the values are of the same type and
-      // sort by their String forms.
-      compareUTF8MaybeNull(String(a.value), String(b.value))
+      compareValuePosition(a.right, b.right)
     );
   }
 
   if (b.type === 'simple') {
-    return 1; // Order SimpleConditions first to simplify logic for invalidation filtering.
+    return 1; // Order SimpleConditions first
   }
 
   if (a.type === 'correlatedSubquery') {
@@ -383,6 +417,24 @@ function cmpCondition(a: Condition, b: Condition): number {
   }
   // prefixes first
   return a.conditions.length - b.conditions.length;
+}
+
+function compareValuePosition(a: ValuePosition, b: ValuePosition): number {
+  if (a.type !== b.type) {
+    return compareUTF8(a.type, b.type);
+  }
+  switch (a.type) {
+    case 'literal':
+      assert(b.type === 'literal');
+      return compareUTF8MaybeNull(String(a.value), String(b.value));
+    case 'column':
+      assert(b.type === 'column');
+      return compareUTF8(a.name, b.name);
+    case 'static':
+      throw new Error(
+        'Static parameters should be resolved before normalization',
+      );
+  }
 }
 
 function cmpRelated(a: CorrelatedSubquery, b: CorrelatedSubquery): number {

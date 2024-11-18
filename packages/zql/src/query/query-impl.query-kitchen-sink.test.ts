@@ -312,115 +312,166 @@ describe('kitchen sink query', () => {
 
     const view = issueQuery.materialize();
 
-    expect(queryDelegate.addedServerQueries).toEqual([
-      {
-        limit: 6,
-        orderBy: [
-          ['title', 'asc'],
-          ['id', 'asc'],
-        ],
-        related: [
-          {
-            correlation: {
-              childField: 'id',
-              op: '=',
-              parentField: 'ownerId',
-            },
-            subquery: {
-              alias: 'owner',
-              orderBy: [['id', 'asc']],
-              table: 'user',
-            },
-          },
-          {
-            correlation: {
-              childField: 'issueId',
-              op: '=',
-              parentField: 'id',
-            },
-            subquery: {
-              alias: 'comments',
-              limit: 2,
-              orderBy: [
-                ['createdAt', 'desc'],
-                ['id', 'asc'],
-              ],
-              related: [
-                {
-                  correlation: {
-                    childField: 'commentId',
-                    op: '=',
-                    parentField: 'id',
-                  },
-                  subquery: {
-                    alias: 'revisions',
-                    limit: 1,
-                    orderBy: [['id', 'desc']],
-                    table: 'revision',
-                  },
-                },
-              ],
-              table: 'comment',
-            },
-          },
-          {
-            correlation: {
-              childField: 'issueId',
-              op: '=',
-              parentField: 'id',
-            },
-            subquery: {
-              alias: 'labels',
-              orderBy: [
-                ['issueId', 'asc'],
-                ['labelId', 'asc'],
-              ],
-              related: [
-                {
-                  correlation: {
-                    childField: 'id',
-                    op: '=',
-                    parentField: 'labelId',
-                  },
-                  hidden: true,
-                  subquery: {
-                    alias: 'labels',
-                    orderBy: [['id', 'asc']],
-                    table: 'label',
-                  },
-                },
-              ],
-              table: 'issueLabel',
-            },
-          },
-        ],
-        start: {
-          exclusive: true,
-          row: {
-            id: '101',
-            title: 'Issue 1',
-          },
-        },
-        table: 'issue',
-        where: {
-          type: 'and',
-          conditions: [
+    expect(queryDelegate.addedServerQueries).toMatchInlineSnapshot(`
+      [
+        {
+          "limit": 6,
+          "orderBy": [
+            [
+              "title",
+              "asc",
+            ],
+            [
+              "id",
+              "asc",
+            ],
+          ],
+          "related": [
             {
-              field: 'ownerId',
-              op: 'IN',
-              type: 'simple',
-              value: ['001', '002', '003'],
+              "correlation": {
+                "childField": "id",
+                "op": "=",
+                "parentField": "ownerId",
+              },
+              "subquery": {
+                "alias": "owner",
+                "orderBy": [
+                  [
+                    "id",
+                    "asc",
+                  ],
+                ],
+                "table": "user",
+              },
             },
             {
-              field: 'closed',
-              op: '=',
-              type: 'simple',
-              value: false,
+              "correlation": {
+                "childField": "issueId",
+                "op": "=",
+                "parentField": "id",
+              },
+              "subquery": {
+                "alias": "comments",
+                "limit": 2,
+                "orderBy": [
+                  [
+                    "createdAt",
+                    "desc",
+                  ],
+                  [
+                    "id",
+                    "asc",
+                  ],
+                ],
+                "related": [
+                  {
+                    "correlation": {
+                      "childField": "commentId",
+                      "op": "=",
+                      "parentField": "id",
+                    },
+                    "subquery": {
+                      "alias": "revisions",
+                      "limit": 1,
+                      "orderBy": [
+                        [
+                          "id",
+                          "desc",
+                        ],
+                      ],
+                      "table": "revision",
+                    },
+                  },
+                ],
+                "table": "comment",
+              },
+            },
+            {
+              "correlation": {
+                "childField": "issueId",
+                "op": "=",
+                "parentField": "id",
+              },
+              "subquery": {
+                "alias": "labels",
+                "orderBy": [
+                  [
+                    "issueId",
+                    "asc",
+                  ],
+                  [
+                    "labelId",
+                    "asc",
+                  ],
+                ],
+                "related": [
+                  {
+                    "correlation": {
+                      "childField": "id",
+                      "op": "=",
+                      "parentField": "labelId",
+                    },
+                    "hidden": true,
+                    "subquery": {
+                      "alias": "labels",
+                      "orderBy": [
+                        [
+                          "id",
+                          "asc",
+                        ],
+                      ],
+                      "table": "label",
+                    },
+                  },
+                ],
+                "table": "issueLabel",
+              },
             },
           ],
+          "start": {
+            "exclusive": true,
+            "row": {
+              "id": "101",
+              "title": "Issue 1",
+            },
+          },
+          "table": "issue",
+          "where": {
+            "conditions": [
+              {
+                "left": {
+                  "name": "ownerId",
+                  "type": "column",
+                },
+                "op": "IN",
+                "right": {
+                  "type": "literal",
+                  "value": [
+                    "001",
+                    "002",
+                    "003",
+                  ],
+                },
+                "type": "simple",
+              },
+              {
+                "left": {
+                  "name": "closed",
+                  "type": "column",
+                },
+                "op": "=",
+                "right": {
+                  "type": "literal",
+                  "value": false,
+                },
+                "type": "simple",
+              },
+            ],
+            "type": "and",
+          },
         },
-      },
-    ]);
+      ]
+    `);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let rows: unknown[] = [];

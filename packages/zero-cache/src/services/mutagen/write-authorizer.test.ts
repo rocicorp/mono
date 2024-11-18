@@ -15,9 +15,12 @@ const allowIfSubject = [
     table: 'foo',
     where: {
       type: 'simple',
-      field: 'id',
+      left: {
+        type: 'column',
+        name: 'id',
+      },
       op: '=',
-      value: {anchor: 'authData', field: 'sub', type: 'static'},
+      right: {anchor: 'authData', field: 'sub', type: 'static'},
     },
     orderBy: [['id', 'asc']],
   },

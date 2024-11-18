@@ -600,127 +600,196 @@ describe('optional filters to sql', () => {
   test('simple condition', () => {
     expect(
       format(
-        optionalFiltersToSQL(
-          {
-            type: 'simple',
-            field: 'a',
-            op: '=',
-            value: 1,
-          },
-          {
-            a: {type: 'number'},
-          },
-        ),
+        optionalFiltersToSQL({
+          type: 'simple',
+          left: {type: 'column', name: 'a'},
+          op: '=',
+          right: {type: 'literal', value: 1},
+        }),
       ).text,
     ).toEqual('"a" = ?');
   });
   test('anded conditions', () => {
     expect(
       format(
-        optionalFiltersToSQL(
-          {
-            type: 'and',
-            conditions: [
-              {
-                type: 'simple',
-                field: 'a',
-                op: '=',
-                value: 1,
-              },
-              {
-                type: 'simple',
-                field: 'b',
-                op: '=',
-                value: 2,
-              },
-            ],
-          },
-          {
-            a: {type: 'number'},
-            b: {type: 'number'},
-          },
-        ),
+        optionalFiltersToSQL({
+          type: 'and',
+          conditions: [
+            {
+              type: 'simple',
+              left: {type: 'column', name: 'a'},
+              op: '=',
+              right: {type: 'literal', value: 1},
+            },
+            {
+              type: 'simple',
+              left: {type: 'column', name: 'b'},
+              op: '=',
+              right: {type: 'literal', value: 2},
+            },
+          ],
+        }),
       ).text,
     ).toEqual('("a" = ? AND "b" = ?)');
   });
   test('ored conditions', () => {
     expect(
       format(
-        optionalFiltersToSQL(
-          {
-            type: 'or',
-            conditions: [
-              {
-                type: 'simple',
-                field: 'a',
-                op: '=',
-                value: 1,
-              },
-              {
-                type: 'simple',
-                field: 'b',
-                op: '=',
-                value: 2,
-              },
-            ],
-          },
-          {
-            a: {type: 'number'},
-            b: {type: 'number'},
-          },
-        ),
+        optionalFiltersToSQL({
+          type: 'or',
+          conditions: [
+            {
+              type: 'simple',
+              left: {type: 'column', name: 'a'},
+              op: '=',
+              right: {type: 'literal', value: 1},
+            },
+            {
+              type: 'simple',
+              left: {type: 'column', name: 'b'},
+              op: '=',
+              right: {type: 'literal', value: 2},
+            },
+          ],
+        }),
       ).text,
     ).toEqual('("a" = ? OR "b" = ?)');
   });
   test('dnf conditions', () => {
     expect(
       format(
-        optionalFiltersToSQL(
-          {
-            type: 'or',
-            conditions: [
-              {
-                type: 'and',
-                conditions: [
-                  {
-                    type: 'simple',
-                    field: 'a',
-                    op: '=',
-                    value: 1,
-                  },
-                  {
-                    type: 'simple',
-                    field: 'b',
-                    op: '=',
-                    value: 2,
-                  },
-                ],
-              },
-              {
-                type: 'and',
-                conditions: [
-                  {
-                    type: 'simple',
-                    field: 'a',
-                    op: '=',
-                    value: 3,
-                  },
-                  {
-                    type: 'simple',
-                    field: 'b',
-                    op: '=',
-                    value: 4,
-                  },
-                ],
-              },
-            ],
-          },
-          {
-            a: {type: 'number'},
-            b: {type: 'number'},
-          },
-        ),
+        optionalFiltersToSQL({
+          type: 'or',
+          conditions: [
+            {
+              type: 'and',
+              conditions: [
+                {
+                  type: 'simple',
+                  left: {type: 'column', name: 'a'},
+                  op: '=',
+                  right: {type: 'literal', value: 1},
+                },
+                {
+                  type: 'simple',
+                  left: {type: 'column', name: 'b'},
+                  op: '=',
+                  right: {type: 'literal', value: 2},
+                },
+              ],
+            },
+            {
+              type: 'and',
+              conditions: [
+                {
+                  type: 'simple',
+                  left: {type: 'column', name: 'a'},
+                  op: '=',
+                  right: {type: 'literal', value: 3},
+                },
+                {
+                  type: 'simple',
+                  left: {type: 'column', name: 'b'},
+                  op: '=',
+                  right: {type: 'literal', value: 4},
+                },
+              ],
+            },
+          ],
+        }),
       ).text,
     ).toEqual('(("a" = ? AND "b" = ?) OR ("a" = ? AND "b" = ?))');
+  });
+  test('literal conditions', () => {
+    expect(
+      format(
+        optionalFiltersToSQL({
+          type: 'simple',
+          left: {
+            type: 'literal',
+            value: 'a',
+          },
+          op: '=',
+          right: {
+            type: 'literal',
+            value: 'b',
+          },
+        }),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "text": "? = ?",
+        "values": [
+          "a",
+          "b",
+        ],
+      }
+    `);
+    expect(
+      format(
+        optionalFiltersToSQL({
+          type: 'simple',
+          left: {
+            type: 'literal',
+            value: 1,
+          },
+          op: '=',
+          right: {
+            type: 'literal',
+            value: 2,
+          },
+        }),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "text": "? = ?",
+        "values": [
+          1,
+          2,
+        ],
+      }
+    `);
+    expect(
+      format(
+        optionalFiltersToSQL({
+          type: 'simple',
+          left: {
+            type: 'literal',
+            value: true,
+          },
+          op: '=',
+          right: {
+            type: 'literal',
+            value: false,
+          },
+        }),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "text": "? = ?",
+        "values": [
+          1,
+          0,
+        ],
+      }
+    `);
+    expect(
+      format(
+        optionalFiltersToSQL({
+          type: 'simple',
+          left: {type: 'literal', value: 1},
+          op: '=',
+          right: {type: 'literal', value: [1, 2, 3]},
+        }),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "text": "? = ?",
+        "values": [
+          1,
+          "[1,2,3]",
+        ],
+      }
+    `);
   });
 });

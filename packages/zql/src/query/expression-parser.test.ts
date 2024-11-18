@@ -6,16 +6,28 @@ test('parse', () => {
     {
       "conditions": [
         {
-          "field": "n/a",
+          "left": {
+            "name": "n/a",
+            "type": "column",
+          },
           "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "A",
+          },
           "type": "simple",
-          "value": "A",
         },
         {
-          "field": "n/a",
+          "left": {
+            "name": "n/a",
+            "type": "column",
+          },
           "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "B",
+          },
           "type": "simple",
-          "value": "B",
         },
       ],
       "type": "and",
@@ -25,16 +37,28 @@ test('parse', () => {
     {
       "conditions": [
         {
-          "field": "n/a",
+          "left": {
+            "name": "n/a",
+            "type": "column",
+          },
           "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "A",
+          },
           "type": "simple",
-          "value": "A",
         },
         {
-          "field": "n/a",
+          "left": {
+            "name": "n/a",
+            "type": "column",
+          },
           "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "B",
+          },
           "type": "simple",
-          "value": "B",
         },
       ],
       "type": "or",
@@ -42,26 +66,44 @@ test('parse', () => {
   `);
   expect(parse('A = 2')).toMatchInlineSnapshot(`
     {
-      "field": "A",
+      "left": {
+        "name": "A",
+        "type": "column",
+      },
       "op": "=",
+      "right": {
+        "type": "literal",
+        "value": "2",
+      },
       "type": "simple",
-      "value": "2",
     }
   `);
   expect(parse('A = 2 | B <= abc')).toMatchInlineSnapshot(`
     {
       "conditions": [
         {
-          "field": "A",
+          "left": {
+            "name": "A",
+            "type": "column",
+          },
           "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "2",
+          },
           "type": "simple",
-          "value": "2",
         },
         {
-          "field": "B",
+          "left": {
+            "name": "B",
+            "type": "column",
+          },
           "op": "<=",
+          "right": {
+            "type": "literal",
+            "value": "abc",
+          },
           "type": "simple",
-          "value": "abc",
         },
       ],
       "type": "or",
@@ -71,10 +113,16 @@ test('parse', () => {
     {
       "conditions": [
         {
-          "field": "A",
+          "left": {
+            "name": "A",
+            "type": "column",
+          },
           "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "2",
+          },
           "type": "simple",
-          "value": "2",
         },
         {
           "op": "EXISTS",
@@ -82,10 +130,16 @@ test('parse', () => {
           "type": "correlatedSubquery",
         },
         {
-          "field": "n/a",
+          "left": {
+            "name": "n/a",
+            "type": "column",
+          },
           "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "C",
+          },
           "type": "simple",
-          "value": "C",
         },
       ],
       "type": "or",
@@ -95,10 +149,16 @@ test('parse', () => {
     {
       "conditions": [
         {
-          "field": "A",
+          "left": {
+            "name": "A",
+            "type": "column",
+          },
           "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "2",
+          },
           "type": "simple",
-          "value": "2",
         },
         {
           "op": "NOT EXISTS",
@@ -106,10 +166,16 @@ test('parse', () => {
           "type": "correlatedSubquery",
         },
         {
-          "field": "n/a",
+          "left": {
+            "name": "n/a",
+            "type": "column",
+          },
           "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "C",
+          },
           "type": "simple",
-          "value": "C",
         },
       ],
       "type": "or",
