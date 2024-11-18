@@ -41,7 +41,9 @@ test('authorization rules create query ASTs', async () => {
         user: {
           row: {
             insert: [allowIfAdmin],
-            update: [allowIfAdmin],
+            update: {
+              preMutation: [allowIfAdmin],
+            },
             delete: [allowIfAdmin],
           },
         },

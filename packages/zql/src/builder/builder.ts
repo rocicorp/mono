@@ -147,8 +147,7 @@ export function bindStaticParameters(
     return value;
   };
 
-  const ret = visit(ast);
-  return ret;
+  return visit(ast);
 }
 
 function isParameter(value: ValuePosition): value is Parameter {

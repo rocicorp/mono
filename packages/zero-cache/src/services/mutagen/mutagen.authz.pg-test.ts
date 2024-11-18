@@ -6,7 +6,7 @@ import type {TableSchema} from '../../../../zero-schema/src/table-schema.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {processMutation} from './mutagen.js';
-import {WriteAuthorizerImpl, type WriteAuthorizer} from './write-authorizer.js';
+import {WriteAuthorizerImpl} from './write-authorizer.js';
 import {MutationType} from '../../../../zero-protocol/src/push.js';
 import {zeroSchema} from './mutagen-test-shared.js';
 import {defineAuthorization} from '../../../../zero-schema/src/authorization.js';
@@ -76,6 +76,11 @@ CREATE TABLE "loggedInRow" (
 );
 
 INSERT INTO "loggedInRow" VALUES ('1', 'a');
+
+CREATE TABLE "userMatch" (
+  id text PRIMARY KEY,
+  a text
+);
 `;
 
 async function createUpstreamTables(db: PostgresDB) {
@@ -147,6 +152,15 @@ const schema = createSchema({
       primaryKey: ['id'],
       relationships: {},
     },
+    userMatch: {
+      tableName: 'userMatch',
+      columns: {
+        id: {type: 'string'},
+        a: {type: 'string'},
+      },
+      primaryKey: ['id'],
+      relationships: {},
+    },
   },
 });
 
@@ -175,13 +189,19 @@ const authorizationConfig = await defineAuthorization<AuthData, typeof schema>(
       authData: AuthData,
       {cmpLit}: ExpressionBuilder<TableSchema>,
     ) => cmpLit(authData.sub, 'IS NOT', null);
+    const allowIfPostMutationIDMatchesLoggedInUser = (
+      authData: AuthData,
+      {cmp}: ExpressionBuilder<typeof schema.tables.userMatch>,
+    ) => cmp('id', '=', authData.sub);
 
     return {
       roCell: {
         cell: {
           a: {
             insert: [],
-            update: [],
+            update: {
+              preMutation: [],
+            },
             delete: [],
           },
         },
@@ -189,7 +209,9 @@ const authorizationConfig = await defineAuthorization<AuthData, typeof schema>(
       roRow: {
         row: {
           insert: [],
-          update: [],
+          update: {
+            preMutation: [],
+          },
           delete: [],
         },
       },
@@ -198,7 +220,9 @@ const authorizationConfig = await defineAuthorization<AuthData, typeof schema>(
           a: {
             // insert is always allow since it can't be admin locked on create.
             // TODO (mlaw): this should raise a type error due to schema mismatch between rule and auth def
-            update: [allowIfNotAdminLockedCell, allowIfAdmin],
+            update: {
+              preMutation: [allowIfNotAdminLockedCell, allowIfAdmin],
+            },
             delete: [allowIfNotAdminLockedCell, allowIfAdmin],
           },
         },
@@ -206,15 +230,20 @@ const authorizationConfig = await defineAuthorization<AuthData, typeof schema>(
       adminOnlyRow: {
         row: {
           // insert is always allow since it can't be admin locked on create.
-          update: [allowIfNotAdminLockedRow, allowIfAdmin],
+          update: {preMutation: [allowIfNotAdminLockedRow, allowIfAdmin]},
           delete: [allowIfNotAdminLockedRow, allowIfAdmin],
         },
       },
       loggedInRow: {
         row: {
           insert: [allowIfLoggedIn],
-          update: [allowIfLoggedIn],
+          update: {preMutation: [allowIfLoggedIn]},
           delete: [allowIfLoggedIn],
+        },
+      },
+      userMatch: {
+        row: {
+          insert: [allowIfPostMutationIDMatchesLoggedInUser],
         },
       },
     };
@@ -223,7 +252,7 @@ const authorizationConfig = await defineAuthorization<AuthData, typeof schema>(
 
 let upstream: PostgresDB;
 let replica: Database;
-let authorizer: WriteAuthorizer;
+let authorizer: WriteAuthorizerImpl;
 let lmid = 0;
 const lc = createSilentLogContext();
 beforeEach(async () => {
@@ -452,5 +481,20 @@ test('allows if logged in', async () => {
 
   await procMutation('loggedInRow', 'insert', {id: '2', a: 'a'}, 'usr');
   rows = await upstream`SELECT * FROM "loggedInRow" WHERE id = '2'`;
+  expect(rows.length).toBe(1);
+});
+
+// TODO (mlaw): expand "post mutation" rules to be enabled for update as well.
+test('userMatch postMutation check', async () => {
+  await procMutation('userMatch', 'insert', {id: '1', a: 'a'}, 'usr');
+  let rows = await upstream`SELECT * FROM "userMatch" WHERE id = '1'`;
+  expect(rows.length).toBe(0);
+
+  await procMutation('userMatch', 'insert', {id: '1', a: 'a'}, 'admn');
+  rows = await upstream`SELECT * FROM "userMatch" WHERE id = '1'`;
+  expect(rows.length).toBe(0);
+
+  await procMutation('userMatch', 'insert', {id: '1', a: 'a'}, '1');
+  rows = await upstream`SELECT * FROM "userMatch" WHERE id = '1'`;
   expect(rows.length).toBe(1);
 });

@@ -4,6 +4,8 @@ import {
   ErrorKind,
   MutationType,
   type CRUDMutation,
+  type CRUDOp,
+  type UpsertOp,
 } from '../../../../zero-protocol/src/mod.js';
 import {Mode} from '../../db/transaction-pool.js';
 import {expectTables, testDBs} from '../../test/db.js';
@@ -15,20 +17,15 @@ import type {WriteAuthorizer} from './write-authorizer.js';
 const SHARD_ID = '0';
 
 class MockWriteAuthorizer implements WriteAuthorizer {
-  canInsert() {
+  canPreMutation() {
     return true;
   }
 
-  canUpdate() {
+  canPostMutation() {
     return true;
   }
-
-  canDelete() {
-    return true;
-  }
-
-  canUpsert() {
-    return true;
+  normalizeOps(ops: CRUDOp[]) {
+    return ops as Exclude<CRUDOp, UpsertOp>[];
   }
 }
 const mockWriteAuthorizer = new MockWriteAuthorizer();
