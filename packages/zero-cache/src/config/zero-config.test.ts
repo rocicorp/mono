@@ -151,7 +151,7 @@ test('zero-cache --help', () => {
                                                    Automatically wipe and resync the replica when replication is halted.         
                                                    This situation can occur for configurations in which the upstream database    
                                                    provider prohibits event trigger creation, preventing the zero-cache from     
-                                                   being able to correctly replicating schema changes. For such configurations,  
+                                                   being able to correctly replicate schema changes. For such configurations,    
                                                    an upstream schema change will instead result in halting replication with an  
                                                    error indicating that the replica needs to be reset.                          
                                                                                                                                  

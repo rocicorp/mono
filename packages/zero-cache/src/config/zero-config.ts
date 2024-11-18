@@ -3,7 +3,7 @@
  */
 
 import * as v from '../../../shared/src/valita.js';
-import {parseOptions, type Config} from './config.js';
+import {ExitAfterUsage, parseOptions, type Config} from './config.js';
 
 /**
  * Configures the view of the upstream database replicated to this zero-cache.
@@ -242,7 +242,7 @@ export const zeroOptions = {
       `Automatically wipe and resync the replica when replication is halted.`,
       `This situation can occur for configurations in which the upstream database`,
       `provider prohibits event trigger creation, preventing the zero-cache from`,
-      `being able to correctly replicating schema changes. For such configurations,`,
+      `being able to correctly replicate schema changes. For such configurations,`,
       `an upstream schema change will instead result in halting replication with an`,
       `error indicating that the replica needs to be reset.`,
       ``,
@@ -291,8 +291,15 @@ let loadedConfig: ZeroConfig | undefined;
 
 export function getZeroConfig(argv = process.argv.slice(2)): ZeroConfig {
   if (!loadedConfig) {
-    const config = parseOptions(zeroOptions, argv, ENV_VAR_PREFIX);
-    loadedConfig = config;
+    try {
+      const config = parseOptions(zeroOptions, argv, ENV_VAR_PREFIX);
+      loadedConfig = config;
+    } catch (e) {
+      if (e instanceof ExitAfterUsage) {
+        process.exit(0);
+      }
+      throw e;
+    }
   }
 
   return loadedConfig;

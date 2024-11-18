@@ -238,7 +238,7 @@ describe('change-source/pg', () => {
       "Must be superuser to create an event trigger."
 
       Proceeding in degraded mode: schema changes will halt replication,
-      after which the operator is responsible for resyncing the replica.",
+      requiring the replica to be reset (manually or with --auto-reset).",
         ],
       ]
     `);
