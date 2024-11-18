@@ -254,17 +254,21 @@ const authorization = defineAuthorization<AuthData, Schema>(schema, () => {
         delete: [allowIfAdmin],
       },
     },
-    // TODO: issueLabel permissions (only issue creator can set)
-    // TODO: viewState permissions (invariant on userID set to logged in user)
+    // TODO (mlaw): issueLabel permissions (only issue creator can set)
+    // TODO (mlaw): viewState permissions (invariant on userID set to logged in user)
     // ^-- requires access to _current_ value of the row.
     // TODO: type errors should be raised if there is a schema mismatch between
     // 1. the rule and 2. the table it is applied to
   };
 }) as ReturnType<typeof defineAuthorization>;
 
-// TODO: once we move auth to be defined on the table, there will be a single default export which is
+// TODO (mlaw): once we move auth to be defined on the table, there will be a single default export which is
 // the schema. Working towards this next.
-export default {
+const exported: {
+  schema: typeof schema;
+  authorization: typeof authorization;
+} = {
   schema,
   authorization,
 };
+export default exported;
