@@ -203,64 +203,68 @@ type AuthData = {
   role: 'crew' | 'user';
 };
 
-export const authorization = defineAuthorization<AuthData, Schema>(
+const authorization = defineAuthorization<AuthData, Schema>(schema, () => {
+  const allowIfLoggedIn = (
+    authData: AuthData,
+    {cmpLit}: ExpressionBuilder<TableSchema>,
+  ) => cmpLit(authData.sub, 'IS NOT', null);
+
+  const allowIfIssueCreator = (
+    authData: AuthData,
+    {cmp}: ExpressionBuilder<typeof issueSchema>,
+  ) => cmp('creatorID', '=', authData.sub);
+
+  const allowIfCommentCreator = (
+    authData: AuthData,
+    {cmp}: ExpressionBuilder<typeof commentSchema>,
+  ) => cmp('creatorID', '=', authData.sub);
+
+  const allowIfAdmin = (
+    authData: AuthData,
+    {cmpLit}: ExpressionBuilder<TableSchema>,
+  ) => cmpLit(authData.role, '=', 'crew');
+
+  return {
+    user: {
+      // Only the authentication system can write to the user table.
+      row: {
+        insert: [],
+        update: [],
+        delete: [],
+      },
+    },
+    issue: {
+      row: {
+        insert: [allowIfLoggedIn],
+        update: [allowIfIssueCreator, allowIfAdmin],
+        delete: [allowIfIssueCreator, allowIfAdmin],
+      },
+    },
+    comment: {
+      row: {
+        insert: [allowIfLoggedIn],
+        update: [allowIfCommentCreator, allowIfAdmin],
+        delete: [allowIfCommentCreator, allowIfAdmin],
+      },
+    },
+    label: {
+      row: {
+        insert: [allowIfAdmin],
+        update: [allowIfAdmin],
+        delete: [allowIfAdmin],
+      },
+    },
+    // TODO: issueLabel permissions (only issue creator can set)
+    // TODO: viewState permissions (invariant on userID set to logged in user)
+    // ^-- requires access to _current_ value of the row.
+    // TODO: type errors should be raised if there is a schema mismatch between
+    // 1. the rule and 2. the table it is applied to
+  };
+}) as ReturnType<typeof defineAuthorization>;
+
+// TODO: once we move auth to be defined on the table, there will be a single default export which is
+// the schema. Working towards this next.
+export default {
   schema,
-  () => {
-    const allowIfLoggedIn = (
-      authData: AuthData,
-      {cmpLit}: ExpressionBuilder<TableSchema>,
-    ) => cmpLit(authData.sub, 'IS NOT', null);
-
-    const allowIfIssueCreator = (
-      authData: AuthData,
-      {cmp}: ExpressionBuilder<typeof issueSchema>,
-    ) => cmp('creatorID', '=', authData.sub);
-
-    const allowIfCommentCreator = (
-      authData: AuthData,
-      {cmp}: ExpressionBuilder<typeof commentSchema>,
-    ) => cmp('creatorID', '=', authData.sub);
-
-    const allowIfAdmin = (
-      authData: AuthData,
-      {cmpLit}: ExpressionBuilder<TableSchema>,
-    ) => cmpLit(authData.role, '=', 'crew');
-
-    return {
-      user: {
-        // Only the authentication system can write to the user table.
-        row: {
-          insert: [],
-          update: [],
-          delete: [],
-        },
-      },
-      issue: {
-        row: {
-          insert: [allowIfLoggedIn],
-          update: [allowIfIssueCreator, allowIfAdmin],
-          delete: [allowIfIssueCreator, allowIfAdmin],
-        },
-      },
-      comment: {
-        row: {
-          insert: [allowIfLoggedIn],
-          update: [allowIfCommentCreator, allowIfAdmin],
-          delete: [allowIfCommentCreator, allowIfAdmin],
-        },
-      },
-      label: {
-        row: {
-          insert: [allowIfAdmin],
-          update: [allowIfAdmin],
-          delete: [allowIfAdmin],
-        },
-      },
-      // TODO: issueLabel permissions (only issue creator can set)
-      // TODO: viewState permissions (invariant on userID set to logged in user)
-      // ^-- requires access to _current_ value of the row.
-      // TODO: type errors should be raised if there is a schema mismatch between
-      // 1. the rule and 2. the table it is applied to
-    };
-  },
-) as ReturnType<typeof defineAuthorization>;
+  authorization,
+};
