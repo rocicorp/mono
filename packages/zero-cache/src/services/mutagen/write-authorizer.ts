@@ -21,7 +21,6 @@ import {
 } from '../../../../zero-protocol/src/primary-key.js';
 import type {BuilderDelegate} from '../../../../zql/src/builder/builder.js';
 import {buildPipeline} from '../../../../zql/src/builder/builder.js';
-import {MissingParameterError} from '../../../../zql/src/builder/error.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {compile, sql} from '../../../../zqlite/src/internal/sql.js';
 import {StatementCache} from '../../../../zqlite/src/internal/statement-cache.js';
@@ -240,38 +239,19 @@ export class WriteAuthorizerImpl {
     }
 
     for (const [_, rule] of policy) {
+      const input = buildPipeline(rule, this.#builderDelegate, {
+        authData: authData as Record<string, JSONValue>,
+        preMutationRow,
+      });
       try {
-        const input = buildPipeline(rule, this.#builderDelegate, {
-          authData: authData as Record<string, JSONValue>,
-          preMutationRow,
-        });
-        try {
-          const res = input.fetch({});
-          for (const _ of res) {
-            // if any row is returned at all, the
-            // rule passes.
-            return true;
-          }
-        } finally {
-          input.destroy();
+        const res = input.fetch({});
+        for (const _ of res) {
+          // if any row is returned at all, the
+          // rule passes.
+          return true;
         }
-      } catch (e) {
-        if (!(e instanceof MissingParameterError)) {
-          throw e;
-        }
-
-        // Authorization rules may refer to parameters
-        // that are missing due to the current login context not having
-        // those values. E.g., referring to a claim that user does not have.
-        // In that case, the rule is not applicable. This is ok since
-        // all rules can only `allow` or `skip`. If we supported
-        // `deny` rules this would not work.
-        //
-        // The way to support `deny` would be to allow `null` and `undefined`
-        // into ZQL pipelines. Right now `where` clauses cannot take `null`
-        // or `undefined` values for two reasons:
-        // 1. We do not have `IS` and `IS NOT` operators in ZQL yet.
-        // 2. Our predicates do not compare `NULL` and `UNDEFINED` the same way SQL would.
+      } finally {
+        input.destroy();
       }
     }
 
