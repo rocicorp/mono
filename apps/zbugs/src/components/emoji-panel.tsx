@@ -4,6 +4,7 @@ import {
   PopoverPanel,
   useClose,
 } from '@headlessui/react';
+import * as Tooltip from '@radix-ui/react-tooltip';
 import type {TableSchemaToRow} from '@rocicorp/zero';
 import {nanoid} from 'nanoid';
 import {useCallback} from 'react';
@@ -16,6 +17,7 @@ import {useNumericPref} from '../hooks/use-user-pref.js';
 import {useZero} from '../hooks/use-zero.js';
 import {ButtonWithLoginCheck} from './button-with-login-check.js';
 import {EmojiPicker, SKIN_TONE_PREF} from './emoji-picker.js';
+import './emoji.css';
 
 const loginMessage = 'You need to be logged in to modify emoji reactions.';
 
@@ -91,14 +93,16 @@ export function EmojiPanel({issueID, commentID}: Props) {
 
   return (
     <div className="flex gap-2 items-center emoji-reaction-container">
-      {Object.entries(groups).map(([normalizedEmoji, emojis]) => (
-        <EmojiPill
-          key={normalizedEmoji}
-          normalizedEmoji={normalizedEmoji}
-          emojis={emojis}
-          addOrRemoveEmoji={addOrRemoveEmoji}
-        />
-      ))}
+      <Tooltip.Provider>
+        {Object.entries(groups).map(([normalizedEmoji, emojis]) => (
+          <EmojiPill
+            key={normalizedEmoji}
+            normalizedEmoji={normalizedEmoji}
+            emojis={emojis}
+            addOrRemoveEmoji={addOrRemoveEmoji}
+          />
+        ))}
+      </Tooltip.Provider>
 
       {login.loginState !== undefined ? (
         <Popover>
@@ -195,26 +199,49 @@ function EmojiPill({
   const z = useZero();
   const skinTone = useNumericPref(SKIN_TONE_PREF, 0);
 
-  // TODO: Richer tooltip
-
   return (
-    <ButtonWithLoginCheck
-      className="emoji-pill"
-      eventName="Add to existing emoji reaction"
-      key={normalizedEmoji}
-      title={formatEmojiTooltipText(emojis, z.userID)}
-      loginMessage={loginMessage}
-      onAction={() =>
-        addOrRemoveEmoji({
-          unicode: setSkinTone(normalizedEmoji, skinTone),
-          annotation: emojis[0].annotation ?? '',
-        })
-      }
-    >
-      {unique(emojis).map(value => (
-        <span key={value}>{value}</span>
-      ))}
-      {' ' + emojis.length}
-    </ButtonWithLoginCheck>
+    <Tooltip.Root>
+      <Tooltip.Trigger asChild>
+        <ButtonWithLoginCheck
+          className="emoji-pill"
+          eventName="Add to existing emoji reaction"
+          key={normalizedEmoji}
+          loginMessage={loginMessage}
+          onAction={() =>
+            addOrRemoveEmoji({
+              unicode: setSkinTone(normalizedEmoji, skinTone),
+              annotation: emojis[0].annotation ?? '',
+            })
+          }
+        >
+          {unique(emojis).map(value => (
+            <span key={value}>{value}</span>
+          ))}
+          {' ' + emojis.length}
+        </ButtonWithLoginCheck>
+      </Tooltip.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Content className="tooltip-content">
+          <Tooltip.Arrow className="tooltip-arrow" />
+          <EmojiTooltipContent emojis={emojis} userID={z.userID} />
+        </Tooltip.Content>
+      </Tooltip.Portal>
+    </Tooltip.Root>
+  );
+}
+
+function EmojiTooltipContent({
+  emojis,
+  userID,
+}: {
+  emojis: Emoji[];
+  userID: string;
+}) {
+  const emoji = emojis[0];
+  return (
+    <>
+      <div className="emoji-icon">{emoji.value}</div>
+      <div>{formatEmojiTooltipText(emojis, userID)}</div>
+    </>
   );
 }
