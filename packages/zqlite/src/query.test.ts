@@ -190,3 +190,28 @@ test('null compare', () => {
     ]
   `);
 });
+
+test('or', () => {
+  const query = newQuery(queryDelegate, schemas.issue).where(({or, cmp}) =>
+    or(cmp('ownerId', '=', '0001'), cmp('ownerId', '=', '0002')),
+  );
+  const data = query.run();
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "description": "description 1",
+        "id": "0001",
+        "ownerId": "0001",
+        "title": "issue 1",
+      },
+      {
+        "closed": false,
+        "description": "description 2",
+        "id": "0002",
+        "ownerId": "0002",
+        "title": "issue 2",
+      },
+    ]
+  `);
+});

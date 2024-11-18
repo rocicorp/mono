@@ -197,7 +197,7 @@ export class TableSource implements Source {
   connect(sort: Ordering, optionalFilters?: Condition | undefined) {
     const transformedFilters = transformFilters(optionalFilters);
     const input: SourceInput = {
-      getSchema: () => this.#getSchema(connection),
+      getSchema: () => schema,
       fetch: req => this.#fetch(req, connection),
       cleanup: req => this.#cleanup(req, connection),
       setOutput: output => {
@@ -218,6 +218,7 @@ export class TableSource implements Source {
       filters: transformedFilters.filters,
       compareRows: makeComparator(sort),
     };
+    const schema = this.#getSchema(connection);
     assertOrderingIncludesPK(sort, this.#primaryKey);
 
     this.#connections.push(connection);
