@@ -12,3 +12,4 @@ bin
 src/*/generated/
 web-test-runner.config.js
 perf/index.js
+apps/zbugs/public/um.js
