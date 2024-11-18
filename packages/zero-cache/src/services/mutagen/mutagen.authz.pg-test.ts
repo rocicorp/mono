@@ -2,8 +2,7 @@ import {test, beforeEach, afterEach, expect} from 'vitest';
 import type {PostgresDB} from '../../types/pg.js';
 import {testDBs} from '../../test/db.js';
 import {createSchema} from '../../../../zero-schema/src/schema.js';
-import type {Supertype} from '../../../../zero-schema/src/table-schema.js';
-import type {Query} from '../../../../zql/src/query/query.js';
+import type {TableSchema} from '../../../../zero-schema/src/table-schema.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {processMutation} from './mutagen.js';
@@ -11,6 +10,7 @@ import {WriteAuthorizerImpl, type WriteAuthorizer} from './write-authorizer.js';
 import {MutationType} from '../../../../zero-protocol/src/push.js';
 import {zeroSchema} from './mutagen-test-shared.js';
 import {defineAuthorization} from '../../../../zero-schema/src/authorization.js';
+import {ExpressionBuilder} from '../../../../zql/src/query/expression.js';
 
 const SHARD_ID = '0';
 const CG_ID = 'abc';
@@ -134,62 +134,65 @@ const schema = createSchema({
   },
 });
 
-const authorizationConfig = await defineAuthorization<
-  {sub: string},
-  typeof schema
->(schema, query => {
-  const allowIfNotAdminLocked =
-    (
-      query: Query<
-        Supertype<
-          [
-            (typeof schema)['tables']['adminOnlyCell'],
-            (typeof schema)['tables']['adminOnlyRow'],
-          ]
-        >
-      >,
-    ) =>
-    (_authData: {sub: string}, row: {id: string}) =>
-      query.where('id', '=', row.id).where('adminLocked', '=', false);
+type AuthData = {
+  sub: string;
+  role: string;
+};
 
-  const allowIfAdmin = (authData: {sub: string}) =>
-    query.user.where('id', '=', authData.sub).where('role', '=', 'admin');
+const authorizationConfig = await defineAuthorization<AuthData, typeof schema>(
+  schema,
+  () => {
+    const allowIfAdmin = (
+      authData: AuthData,
+      {cmpLit}: ExpressionBuilder<TableSchema>,
+    ) => cmpLit(authData.role, '=', 'admin');
 
-  return {
-    roCell: {
-      cell: {
-        a: {
+    const allowIfNotAdminLockedRow = (
+      _authData: AuthData,
+      {cmp}: ExpressionBuilder<typeof schema.tables.adminOnlyRow>,
+    ) => cmp('adminLocked', false);
+    const allowIfNotAdminLockedCell = (
+      _authData: AuthData,
+      {cmp}: ExpressionBuilder<typeof schema.tables.adminOnlyCell>,
+    ) => cmp('adminLocked', false);
+
+    return {
+      roCell: {
+        cell: {
+          a: {
+            insert: [],
+            update: [],
+            delete: [],
+          },
+        },
+      },
+      roRow: {
+        row: {
           insert: [],
           update: [],
           delete: [],
         },
       },
-    },
-    roRow: {
-      row: {
-        insert: [],
-        update: [],
-        delete: [],
-      },
-    },
-    adminOnlyCell: {
-      cell: {
-        a: {
-          // insert is always allow since it can't be admin locked on create.
-          update: [allowIfNotAdminLocked(query.adminOnlyCell), allowIfAdmin],
-          delete: [allowIfNotAdminLocked(query.adminOnlyCell), allowIfAdmin],
+      adminOnlyCell: {
+        cell: {
+          a: {
+            // insert is always allow since it can't be admin locked on create.
+            // TODO (mlaw): this should raise a type error due to schema mismatch between rule and auth def
+            update: [allowIfNotAdminLockedCell, allowIfAdmin],
+            delete: [allowIfNotAdminLockedCell, allowIfAdmin],
+          },
         },
       },
-    },
-    adminOnlyRow: {
-      row: {
-        // insert is always allow since it can't be admin locked on create.
-        update: [allowIfNotAdminLocked(query.adminOnlyRow), allowIfAdmin],
-        delete: [allowIfNotAdminLocked(query.adminOnlyRow), allowIfAdmin],
+      adminOnlyRow: {
+        row: {
+          // insert is always allow since it can't be admin locked on create.
+          update: [allowIfNotAdminLockedRow, allowIfAdmin],
+          delete: [allowIfNotAdminLockedRow, allowIfAdmin],
+        },
       },
-    },
-  };
-});
+    };
+  },
+);
 
 let upstream: PostgresDB;
 let replica: Database;
@@ -204,6 +207,7 @@ beforeEach(async () => {
   authorizer = new WriteAuthorizerImpl(
     lc,
     {},
+    schema,
     authorizationConfig,
     replica,
     SHARD_ID,
@@ -224,7 +228,7 @@ function procMutation(
 ) {
   return processMutation(
     undefined,
-    {sub: uid},
+    {sub: uid, role: uid === 'admn' ? 'admin' : 'user'},
     upstream,
     SHARD_ID,
     CG_ID,

@@ -1,7 +1,8 @@
 import {expect, test} from 'vitest';
 import {createSchema} from './schema.js';
-import {createTableSchema} from './table-schema.js';
+import {createTableSchema, type TableSchema} from './table-schema.js';
 import {defineAuthorization} from './authorization.js';
+import type {ExpressionBuilder} from '../../zql/src/query/expression.js';
 
 const userSchema = createTableSchema({
   tableName: 'user',
@@ -24,14 +25,17 @@ const schema = createSchema({
 
 type AuthData = {
   sub: string;
+  role: 'admin' | 'user';
 };
 
 test('authorization rules create query ASTs', async () => {
   const config = await defineAuthorization<AuthData, typeof schema>(
     schema,
-    query => {
-      const allowIfAdmin = (authData: AuthData) =>
-        query.user.where('id', '=', authData.sub).where('role', '=', 'admin');
+    () => {
+      const allowIfAdmin = (
+        authData: AuthData,
+        {cmpLit}: ExpressionBuilder<TableSchema>,
+      ) => cmpLit(authData.role, '=', 'admin');
 
       return {
         user: {
