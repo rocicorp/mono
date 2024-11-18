@@ -26,7 +26,6 @@ import type {Input, Storage} from '../ivm/operator.js';
 import {Skip} from '../ivm/skip.js';
 import type {Source} from '../ivm/source.js';
 import {Take} from '../ivm/take.js';
-import {MissingParameterError} from './error.js';
 import {createPredicate} from './filter.js';
 
 export type StaticQueryParameters = {
@@ -139,12 +138,7 @@ export function bindStaticParameters(
         staticQueryParameters,
         'Static query params do not exist',
       )[value.anchor];
-      assert(anchor !== undefined, `Missing parameter: ${value.anchor}`);
-      const resolvedValue = anchor[value.field];
-      // eslint-disable-next-line eqeqeq
-      if (resolvedValue == null) {
-        throw new MissingParameterError();
-      }
+      const resolvedValue = anchor?.[value.field] ?? null;
       return {
         type: 'literal',
         value: resolvedValue as LiteralValue,
