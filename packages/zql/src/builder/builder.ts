@@ -324,7 +324,7 @@ function gatherCorrelatedSubqueryQueriesFromCondition(
   return csqs;
 }
 
-const EXISTS_LIMIT = 5;
+const EXISTS_LIMIT = 3;
 
 export function assertOrderingIncludesPK(
   ordering: Ordering,

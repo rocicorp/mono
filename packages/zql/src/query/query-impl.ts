@@ -368,8 +368,6 @@ export abstract class AbstractQuery<
       query: Query<TableSchema, QueryType>,
     ) => Query<TableSchema, QueryType> = q => q,
   ): Condition => {
-    //++subqueryFilterCount;
-
     const related = this.#schema.relationships[relationship];
     assert(related, 'Invalid relationship');
     const fieldRelationship = related;
