@@ -1,4 +1,5 @@
 out/
+coverage/
 *.tsbuildinfo
 *.example
 *.sh
