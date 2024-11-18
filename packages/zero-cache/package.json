@@ -70,7 +70,7 @@
     "concurrently": "^8.2.1",
     "shared": "0.0.0",
     "typescript": "^5.6.3",
-    "vitest": "^2.0.3"
+    "vitest": "^2.1.5"
   },
   "eslintConfig": {
     "extends": "../../eslint-config.json"
