@@ -73,7 +73,15 @@ export default function ListPage() {
   }
 
   if (textFilter) {
-    q = q.where('title', 'ILIKE', `%${escapeLike(textFilter)}%`);
+    q = q.where(({or, cmp, exists}) =>
+      or(
+        cmp('title', 'ILIKE', `%${escapeLike(textFilter)}%`),
+        cmp('description', 'ILIKE', `%${escapeLike(textFilter)}%`),
+        exists('comments', q =>
+          q.where('body', 'ILIKE', `%${escapeLike(textFilter)}%`),
+        ),
+      ),
+    );
   }
 
   for (const label of labels) {
