@@ -328,14 +328,14 @@ export class MemorySource implements Source {
       comparator,
     );
 
-    const withFilters = conn.optionalFilters.length
-      ? generateWithFilter(withOverlay, matchesFilters)
-      : withOverlay;
-
-    yield* generateWithConstraint(
-      generateWithStart(withFilters, req, comparator),
+    const withConstraint = generateWithConstraint(
+      generateWithStart(withOverlay, req, comparator),
       req.constraint,
     );
+
+    yield* conn.optionalFilters.length
+      ? generateWithFilter(withConstraint, matchesFilters)
+      : withConstraint;
   }
 
   #cleanup(req: FetchRequest, connection: Connection): Stream<Node> {
