@@ -13,6 +13,18 @@ import {must} from '../../shared/src/must.js';
 import * as v from '../../shared/src/valita.js';
 import {rowSchema, type Row} from './data.js';
 
+/**
+ * Version number that is stored in the CVR indicating the version of the AST
+ * schema of the contained queries. Incrementing this constant will invalid
+ * CVRs with older schema versions and result in sending the `ClientNotFound`
+ * error so that clients are reset. This can be done when making
+ * backwards-incompatible changes to the schema.
+ *
+ * Note that an alternative is to run a migration over the CVR database to
+ * update old ASTs to new ASTs. These two mechanisms can be used together,
+ * e.g. only migrating ASTs from specific versions, leaving earlier ones to be
+ * reset.
+ */
 export const AST_SCHEMA_VERSION = 2;
 
 export const selectorSchema = v.string();
