@@ -7,11 +7,13 @@
  */
 
 import {compareUTF8} from 'compare-utf8';
+import {defined} from '../../shared/src/arrays.js';
+import {assert} from '../../shared/src/asserts.js';
 import {must} from '../../shared/src/must.js';
 import * as v from '../../shared/src/valita.js';
-import {defined} from '../../shared/src/arrays.js';
 import {rowSchema, type Row} from './data.js';
-import {assert} from '../../shared/src/asserts.js';
+
+export const AST_SCHEMA_VERSION = 2;
 
 export const selectorSchema = v.string();
 

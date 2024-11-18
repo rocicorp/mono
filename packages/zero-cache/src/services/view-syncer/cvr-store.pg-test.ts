@@ -1,5 +1,6 @@
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {beforeEach, describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
+import {AST_SCHEMA_VERSION} from '../../../../zero-protocol/src/ast.js';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {CVRStore} from './cvr-store.js';
@@ -18,8 +19,8 @@ describe('view-syncer/cvr-store', () => {
     db = await testDBs.create('view_syncer_cvr_schema');
     await db.begin(tx => setupCVRTables(lc, tx));
     await db.unsafe(`
-    INSERT INTO cvr.instances("clientGroupID", version, "lastActive")
-      VALUES('${CVR_ID}', '01', '2024-09-04');
+    INSERT INTO cvr.instances("clientGroupID", version, "lastActive", "astVersion")
+      VALUES('${CVR_ID}', '01', '2024-09-04', ${AST_SCHEMA_VERSION});
     INSERT INTO cvr.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
       VALUES('${CVR_ID}', '', 'issues', '{"id":"1"}', '01', '01', NULL);
     INSERT INTO cvr.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")

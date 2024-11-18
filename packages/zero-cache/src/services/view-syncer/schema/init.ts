@@ -18,6 +18,7 @@ export async function initViewSyncerSchema(
 ): Promise<void> {
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     2: {migrateSchema: migrateV1toV2},
+    3: {migrateSchema: migrateV2toV3},
   };
 
   await runSchemaMigrations(
@@ -32,4 +33,8 @@ export async function initViewSyncerSchema(
 
 async function migrateV1toV2(_: LogContext, tx: PostgresTransaction) {
   await tx`ALTER TABLE cvr.instances ADD "replicaVersion" TEXT`;
+}
+
+async function migrateV2toV3(_: LogContext, tx: PostgresTransaction) {
+  await tx`ALTER TABLE cvr.instances ADD "astVersion" INT4 NOT NULL DEFAULT 0`;
 }

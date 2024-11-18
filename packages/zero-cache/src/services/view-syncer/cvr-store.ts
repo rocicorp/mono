@@ -8,8 +8,13 @@ import {
   type ReadonlyJSONValue,
 } from '../../../../shared/src/json.js';
 import {must} from '../../../../shared/src/must.js';
-import {astSchema} from '../../../../zero-protocol/src/ast.js';
+import {
+  AST_SCHEMA_VERSION,
+  astSchema,
+} from '../../../../zero-protocol/src/ast.js';
+import {ErrorKind} from '../../../../zero-protocol/src/error.js';
 import type {JSONValue} from '../../types/bigint-json.js';
+import {ErrorForClient} from '../../types/error-for-client.js';
 import {versionToLexi} from '../../types/lexi-version.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import {rowIDHash} from '../../types/row-key.js';
@@ -171,8 +176,11 @@ export class CVRStore {
     const [instance, clientsRows, queryRows, desiresRows] =
       await this.#db.begin(tx => [
         tx<
-          Pick<InstancesRow, 'version' | 'lastActive' | 'replicaVersion'>[]
-        >`SELECT "version", "lastActive", "replicaVersion" FROM cvr.instances WHERE "clientGroupID" = ${id}`,
+          Pick<
+            InstancesRow,
+            'version' | 'lastActive' | 'replicaVersion' | 'astVersion'
+          >[]
+        >`SELECT "version", "lastActive", "replicaVersion", "astVersion" FROM cvr.instances WHERE "clientGroupID" = ${id}`,
         tx<
           Pick<ClientsRow, 'clientID' | 'patchVersion'>[]
         >`SELECT "clientID", "patchVersion" FROM cvr.clients WHERE "clientGroupID" = ${id}`,
@@ -186,7 +194,12 @@ export class CVRStore {
 
     if (instance.length !== 0) {
       assert(instance.length === 1);
-      const {version, lastActive, replicaVersion} = instance[0];
+      const {version, lastActive, replicaVersion, astVersion} = instance[0];
+      if (astVersion !== AST_SCHEMA_VERSION) {
+        const msg = `AST version mismatch: CVR=${astVersion}, CURRENT=${AST_SCHEMA_VERSION}`;
+        this.#lc.info?.(`resetting CVR: ${msg}`);
+        throw new ErrorForClient(['error', ErrorKind.ClientNotFound, msg]);
+      }
       cvr.version = versionFromString(version);
       cvr.lastActive = lastActive;
       cvr.replicaVersion = replicaVersion;
@@ -197,6 +210,7 @@ export class CVRStore {
         version: versionString(cvr.version),
         lastActive: 0,
         replicaVersion: null,
+        astVersion: AST_SCHEMA_VERSION,
       };
       this.#writes.add({
         stats: {instances: 1},
@@ -257,6 +271,7 @@ export class CVRStore {
       version: versionString(version),
       lastActive,
       replicaVersion,
+      astVersion: AST_SCHEMA_VERSION,
     };
     this.#writes.add({
       stats: {instances: 1},

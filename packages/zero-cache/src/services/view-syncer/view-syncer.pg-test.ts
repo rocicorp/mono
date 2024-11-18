@@ -2,7 +2,10 @@ import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {Queue} from '../../../../shared/src/queue.js';
 import {sleep} from '../../../../shared/src/sleep.js';
-import type {AST} from '../../../../zero-protocol/src/ast.js';
+import {
+  type AST,
+  AST_SCHEMA_VERSION,
+} from '../../../../zero-protocol/src/ast.js';
 import {
   type Downstream,
   ErrorKind,
@@ -1705,7 +1708,7 @@ describe('view-syncer/service', () => {
     `);
   });
 
-  test('sends reset for CVR from different replica version up', async () => {
+  test('sends reset for CVR from different replica version', async () => {
     const cvrStore = new CVRStore(lc, cvrDB, serviceID);
     await new CVRQueryDrivenUpdater(
       cvrStore,
@@ -1734,6 +1737,30 @@ describe('view-syncer/service', () => {
       ErrorKind.ClientNotFound,
       'Replica Version mismatch: CVR=101, DB=01',
     ] satisfies ErrorMessage);
+  });
+
+  test('sends reset for CVR from different ast version', async () => {
+    const cvrStore = new CVRStore(lc, cvrDB, serviceID);
+    await new CVRQueryDrivenUpdater(
+      cvrStore,
+      await cvrStore.load(),
+      '07',
+      REPLICA_VERSION,
+    ).flush(lc);
+
+    // Change the astVersion to simulate an old record.
+    await cvrDB`UPDATE cvr.instances SET "astVersion" = ${
+      AST_SCHEMA_VERSION - 1
+    } WHERE "clientGroupID" = ${serviceID}`;
+
+    // Connect the client.
+    await expect(
+      connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+      ]),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: ["error","ClientNotFound","AST version mismatch: CVR=1, CURRENT=2"]]`,
+    );
   });
 
   test('clean up operator storage on close', async () => {
