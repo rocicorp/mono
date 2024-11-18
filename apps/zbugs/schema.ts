@@ -229,28 +229,36 @@ const authorization = defineAuthorization<AuthData, Schema>(schema, () => {
       // Only the authentication system can write to the user table.
       row: {
         insert: [],
-        update: [],
+        update: {
+          preMutation: [],
+        },
         delete: [],
       },
     },
     issue: {
       row: {
         insert: [allowIfLoggedIn],
-        update: [allowIfIssueCreator, allowIfAdmin],
+        update: {
+          preMutation: [allowIfIssueCreator, allowIfAdmin],
+        },
         delete: [allowIfIssueCreator, allowIfAdmin],
       },
     },
     comment: {
       row: {
         insert: [allowIfLoggedIn],
-        update: [allowIfCommentCreator, allowIfAdmin],
+        update: {
+          preMutation: [allowIfCommentCreator, allowIfAdmin],
+        },
         delete: [allowIfCommentCreator, allowIfAdmin],
       },
     },
     label: {
       row: {
         insert: [allowIfAdmin],
-        update: [allowIfAdmin],
+        update: {
+          preMutation: [allowIfAdmin],
+        },
         delete: [allowIfAdmin],
       },
     },

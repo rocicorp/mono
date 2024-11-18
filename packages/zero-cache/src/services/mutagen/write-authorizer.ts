@@ -13,6 +13,7 @@ import type {
   DeleteOp,
   UpsertOp,
   UpdateOp,
+  CRUDOp,
 } from '../../../../zero-protocol/src/mod.js';
 import {
   primaryKeyValueSchema,
@@ -42,14 +43,21 @@ import type {TableSchema} from '../../../../zero-schema/src/table-schema.js';
 import type {Condition} from '../../../../zero-protocol/src/ast.js';
 import {dnf} from '../../../../zql/src/query/dnf.js';
 
+type Phase = 'preMutation' | 'postMutation';
+
 export interface WriteAuthorizer {
-  canInsert(authData: JWTPayload, op: InsertOp): boolean;
-  canUpdate(authData: JWTPayload, op: UpdateOp): boolean;
-  canDelete(authData: JWTPayload, op: DeleteOp): boolean;
-  canUpsert(authData: JWTPayload, op: UpsertOp): boolean;
+  canPreMutation(
+    authData: JWTPayload,
+    ops: Exclude<CRUDOp, UpsertOp>[],
+  ): boolean;
+  canPostMutation(
+    authData: JWTPayload,
+    ops: Exclude<CRUDOp, UpsertOp>[],
+  ): boolean;
+  normalizeOps(ops: CRUDOp[]): Exclude<CRUDOp, UpsertOp>[];
 }
 
-export class WriteAuthorizerImpl {
+export class WriteAuthorizerImpl implements WriteAuthorizer {
   readonly #schema: Schema;
   readonly #authorizationConfig: AuthorizationConfig;
   readonly #replica: Database;
@@ -87,35 +95,116 @@ export class WriteAuthorizerImpl {
     this.#statementRunner = new StatementRunner(replica);
   }
 
-  canInsert(authData: JWTPayload, op: InsertOp) {
-    return this.#timedCanDo('insert', authData, op);
+  canPreMutation(authData: JWTPayload, ops: Exclude<CRUDOp, UpsertOp>[]) {
+    for (const op of ops) {
+      switch (op.op) {
+        case 'insert':
+          // insert does not run pre-mutation checks
+          break;
+        case 'update':
+          if (!this.#canUpdate('preMutation', authData, op)) {
+            return false;
+          }
+          break;
+        case 'delete':
+          if (!this.#canDelete('preMutation', authData, op)) {
+            return false;
+          }
+          break;
+      }
+    }
+    return true;
   }
 
-  canUpdate(authData: JWTPayload, op: UpdateOp) {
-    return this.#timedCanDo('update', authData, op);
-  }
+  canPostMutation(authData: JWTPayload, ops: Exclude<CRUDOp, UpsertOp>[]) {
+    this.#statementRunner.beginConcurrent();
+    try {
+      for (const op of ops) {
+        const source = this.#getSource(op.tableName);
+        switch (op.op) {
+          case 'insert': {
+            source.push({
+              type: 'add',
+              row: op.value,
+            });
+            break;
+          }
+          // TODO (mlaw): what if someone updates the same thing twice?
+          case 'update': {
+            source.push({
+              type: 'edit',
+              oldRow: this.#getPreMutationRow(op),
+              row: op.value,
+            });
+            break;
+          }
+          case 'delete': {
+            source.push({
+              type: 'remove',
+              row: this.#getPreMutationRow(op),
+            });
+            break;
+          }
+        }
+      }
 
-  canDelete(authData: JWTPayload, op: DeleteOp) {
-    return this.#timedCanDo('delete', authData, op);
-  }
-
-  canUpsert(authData: JWTPayload, op: UpsertOp) {
-    const preMutationRow = this.#getPreMutationRow(op);
-    if (preMutationRow) {
-      return this.canUpdate(authData, {
-        op: 'update',
-        tableName: op.tableName,
-        primaryKey: op.primaryKey,
-        value: op.value,
-      });
+      for (const op of ops) {
+        switch (op.op) {
+          case 'insert':
+            if (!this.#canInsert('postMutation', authData, op)) {
+              return false;
+            }
+            break;
+          case 'update':
+            if (!this.#canUpdate('postMutation', authData, op)) {
+              return false;
+            }
+            break;
+          case 'delete':
+            // delete does not run post-mutation checks.
+            break;
+        }
+      }
+    } finally {
+      this.#statementRunner.rollback();
     }
 
-    return this.canInsert(authData, {
-      op: 'insert',
-      tableName: op.tableName,
-      primaryKey: op.primaryKey,
-      value: op.value,
+    return true;
+  }
+
+  normalizeOps(ops: CRUDOp[]): Exclude<CRUDOp, UpsertOp>[] {
+    return ops.map(op => {
+      if (op.op === 'upsert') {
+        const preMutationRow = this.#getPreMutationRow(op);
+        if (preMutationRow) {
+          return {
+            op: 'update',
+            tableName: op.tableName,
+            primaryKey: op.primaryKey,
+            value: op.value,
+          };
+        }
+        return {
+          op: 'insert',
+          tableName: op.tableName,
+          primaryKey: op.primaryKey,
+          value: op.value,
+        };
+      }
+      return op;
     });
+  }
+
+  #canInsert(phase: Phase, authData: JWTPayload, op: InsertOp) {
+    return this.#timedCanDo(phase, 'insert', authData, op);
+  }
+
+  #canUpdate(phase: Phase, authData: JWTPayload, op: UpdateOp) {
+    return this.#timedCanDo(phase, 'update', authData, op);
+  }
+
+  #canDelete(phase: Phase, authData: JWTPayload, op: DeleteOp) {
+    return this.#timedCanDo(phase, 'delete', authData, op);
   }
 
   #getSource(tableName: string) {
@@ -146,13 +235,14 @@ export class WriteAuthorizerImpl {
   }
 
   #timedCanDo<A extends keyof ActionOpMap>(
+    phase: Phase,
     action: A,
     authData: JWTPayload,
     op: ActionOpMap[A],
   ) {
     const start = performance.now();
     try {
-      const ret = this.#canDo(action, authData, op);
+      const ret = this.#canDo(phase, action, authData, op);
       return ret;
     } finally {
       this.#lc.info?.(
@@ -179,21 +269,17 @@ export class WriteAuthorizerImpl {
    * All steps must allow for the operation to be allowed.
    */
   #canDo<A extends keyof ActionOpMap>(
+    phase: Phase,
     action: A,
     authData: JWTPayload,
     op: ActionOpMap[A],
   ) {
     const rules = this.#authorizationConfig[op.tableName];
-    if (!rules) {
-      return true;
-    }
-
-    if (rules.row === undefined && rules.cell === undefined) {
+    if (rules?.row === undefined && rules?.cell === undefined) {
       return true;
     }
 
     const rowPolicies = rules.row;
-
     let rowQuery = authQuery(
       must(
         this.#schema.tables[op.tableName],
@@ -205,14 +291,31 @@ export class WriteAuthorizerImpl {
       rowQuery = rowQuery.where(pk, '=', op.value[pk] as any);
     });
 
-    if (
-      rowPolicies &&
-      !this.#passesPolicy(rowPolicies[action], authData, rowQuery)
-    ) {
-      return false;
+    let applicableRowPolicy: Policy | undefined;
+    switch (action) {
+      case 'insert':
+        if (rowPolicies && rowPolicies.insert && phase === 'postMutation') {
+          applicableRowPolicy = rowPolicies.insert;
+        }
+        break;
+      case 'update':
+        if (rowPolicies && rowPolicies.update) {
+          if (phase === 'preMutation') {
+            applicableRowPolicy = rowPolicies.update.preMutation;
+          } else if (phase === 'postMutation') {
+            applicableRowPolicy = rowPolicies.update.postProposedMutation;
+          }
+        }
+        break;
+      case 'delete':
+        if (rowPolicies && rowPolicies.delete && phase === 'preMutation') {
+          applicableRowPolicy = rowPolicies.delete;
+        }
+        break;
     }
 
     const cellPolicies = rules.cell;
+    const applicableCellPolicies: Policy[] = [];
     if (cellPolicies) {
       for (const [column, policy] of Object.entries(cellPolicies)) {
         if (action === 'update' && op.value[column] === undefined) {
@@ -220,10 +323,41 @@ export class WriteAuthorizerImpl {
           // the cell rules.
           continue;
         }
-        if (!this.#passesPolicy(policy[action], authData, rowQuery)) {
-          return false;
+        switch (action) {
+          case 'insert':
+            if (policy.insert && phase === 'postMutation') {
+              applicableCellPolicies.push(policy.insert);
+            }
+            break;
+          case 'update':
+            if (phase === 'preMutation' && policy.update?.preMutation) {
+              applicableCellPolicies.push(policy.update.preMutation);
+            }
+            if (
+              phase === 'postMutation' &&
+              policy.update?.postProposedMutation
+            ) {
+              applicableCellPolicies.push(policy.update.postProposedMutation);
+            }
+            break;
+          case 'delete':
+            if (policy.delete && phase === 'preMutation') {
+              applicableCellPolicies.push(policy.delete);
+            }
+            break;
         }
       }
+    }
+
+    if (
+      !this.#passesPolicyGroup(
+        applicableRowPolicy,
+        applicableCellPolicies,
+        authData,
+        rowQuery,
+      )
+    ) {
+      return false;
     }
 
     return true;
@@ -249,15 +383,40 @@ export class WriteAuthorizerImpl {
     );
   }
 
-  #passesPolicy(
-    policy: Policy | undefined,
+  #passesPolicyGroup(
+    applicableRowPolicy: Policy | undefined,
+    applicableCellPolicies: Policy[],
     authData: JWTPayload,
     rowQuery: Query<TableSchema>,
   ) {
-    if (!policy) {
+    if (
+      applicableRowPolicy === undefined &&
+      applicableCellPolicies.length === 0
+    ) {
       return true;
     }
 
+    if (
+      applicableRowPolicy &&
+      !this.#passesPolicy(applicableRowPolicy, authData, rowQuery)
+    ) {
+      return false;
+    }
+
+    for (const policy of applicableCellPolicies) {
+      if (!this.#passesPolicy(policy, authData, rowQuery)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  #passesPolicy(
+    policy: Policy,
+    authData: JWTPayload,
+    rowQuery: Query<TableSchema>,
+  ) {
     let rowQueryAst = (rowQuery as AuthQuery<TableSchema>).ast;
     rowQueryAst = {
       ...rowQueryAst,

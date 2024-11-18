@@ -54,7 +54,7 @@ export class MutagenService implements Mutagen, Service {
   readonly #shardID: string;
   readonly #stopped = resolver();
   readonly #replica: Database;
-  readonly #writeAuthorizer: WriteAuthorizer;
+  readonly #writeAuthorizer: WriteAuthorizerImpl;
   readonly #limiter: SlidingWindowLimiter | undefined;
 
   constructor(
@@ -71,7 +71,6 @@ export class MutagenService implements Mutagen, Service {
     this.#upstream = upstream;
     this.#shardID = shardID;
     this.#replica = new Database(this.#lc, config.replicaFile, {
-      readonly: true,
       fileMustExist: true,
     });
     this.#writeAuthorizer = new WriteAuthorizerImpl(
@@ -257,42 +256,29 @@ async function processMutationWithTx(
 
   if (!errorMode) {
     const {ops} = mutation.args[0];
-
-    for (const [i, op] of ops.entries()) {
-      if (tasks.length !== i) {
-        // Some mutation was not allowed. No need to visit the rest.
-        break;
-      }
-      switch (op.op) {
-        case 'insert':
-          if (authorizer.canInsert(authData, op)) {
+    const normalizedOps = authorizer.normalizeOps(ops);
+    if (
+      authorizer.canPreMutation(authData, normalizedOps) &&
+      authorizer.canPostMutation(authData, normalizedOps)
+    ) {
+      for (const op of ops) {
+        switch (op.op) {
+          case 'insert':
             tasks.push(() => getInsertSQL(tx, op).execute());
-          }
-          break;
-        case 'upsert':
-          if (authorizer.canUpsert(authData, op)) {
+            break;
+          case 'upsert':
             tasks.push(() => getUpsertSQL(tx, op).execute());
-          }
-          break;
-        case 'update':
-          if (authorizer.canUpdate(authData, op)) {
+            break;
+          case 'update':
             tasks.push(() => getUpdateSQL(tx, op).execute());
-          }
-          break;
-        case 'delete':
-          if (authorizer.canDelete(authData, op)) {
+            break;
+          case 'delete':
             tasks.push(() => getDeleteSQL(tx, op).execute());
-          }
-          break;
-        default:
-          unreachable(op);
+            break;
+          default:
+            unreachable(op);
+        }
       }
-    }
-
-    // If not all mutations are allowed, don't do any of them.
-    // This is to prevent partial application of mutations.
-    if (tasks.length < ops.length) {
-      tasks.length = 0; // Clear all tasks.
     }
   }
 
