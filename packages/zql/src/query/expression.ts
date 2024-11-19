@@ -101,6 +101,19 @@ export class ExpressionBuilder<TSchema extends TableSchema> {
     return cmp(field, opOrValue, value);
   }
 
+  cmpLit(
+    left: ASTParameter | LiteralValue,
+    op: Operator,
+    right: ASTParameter | LiteralValue,
+  ): Condition {
+    return {
+      type: 'simple',
+      left: isParameter(left) ? left : {type: 'literal', value: left},
+      right: isParameter(right) ? right : {type: 'literal', value: right},
+      op,
+    };
+  }
+
   and = and;
   or = or;
   not = not;
@@ -203,7 +216,7 @@ export function cmp(
 }
 
 function isParameter(
-  value: ASTParameter | LiteralValue,
+  value: ASTParameter | LiteralValue | null,
 ): value is ASTParameter {
   return (
     typeof value === 'object' && (value as {type: string})?.type === 'static'
