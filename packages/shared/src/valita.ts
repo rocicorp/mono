@@ -108,7 +108,7 @@ function getMessage(
 
     case 'invalid_union':
       return schema.name === 'union'
-        ? getDeepestUnionParseError(schema as v.UnionType, v, mode ?? 'strict')
+        ? getDeepestUnionParseError(v, schema as v.UnionType, mode ?? 'strict')
         : `Invalid union value${atPath}`;
 
     case 'custom_error': {
@@ -126,8 +126,8 @@ function getMessage(
 type FailedType = {type: v.Type; err: v.Err};
 
 function getDeepestUnionParseError(
-  schema: v.UnionType,
   value: unknown,
+  schema: v.UnionType,
   mode: ParseOptionsMode,
 ): string {
   const failures: FailedType[] = [];
