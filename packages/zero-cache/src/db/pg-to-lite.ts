@@ -14,7 +14,7 @@ export const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {
   pos: Number.MAX_SAFE_INTEGER, // i.e. last
   characterMaximumLength: null,
   dataType: 'text',
-  notNull: true,
+  notNull: false,
   dflt: null,
 };
 
@@ -77,14 +77,16 @@ export function mapPostgresToLiteColumn(
     pos,
     dataType,
     characterMaximumLength: null,
-    // Note: NOT NULL constraints are also ignored for SQLite (replica) tables.
+    // Note: NOT NULL constraints are always ignored for SQLite (replica) tables.
     // 1. They are enforced by the replication stream.
     // 2. We need nullability for columns with defaults to support
     // write permissions on the "proposed mutation" state. Proposed
     // mutations are written to SQLite in a `BEGIN CONCURRENT` transaction in mutagen.
     // Permission policies are run against that state (to get their ruling) then the
     // transaction is rolled back.
-    notNull: ignoreDefault === 'ignore-default' ? false : notNull,
+    notNull: false,
+    // Note: DEFAULT constraints are ignored when creating new tables, but are
+    //       necessary for adding columns to tables with existing rows.
     dflt:
       ignoreDefault === 'ignore-default'
         ? null

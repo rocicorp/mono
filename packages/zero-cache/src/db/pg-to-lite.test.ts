@@ -67,7 +67,7 @@ test('postgres to lite table spec', () => {
         characterMaximumLength: null,
         dataType: 'text',
         dflt: null,
-        notNull: true,
+        notNull: false,
         pos: 9007199254740991,
       },
       a: {
@@ -146,7 +146,7 @@ test('postgres to lite table spec', () => {
         characterMaximumLength: null,
         dataType: 'text',
         dflt: null,
-        notNull: true,
+        notNull: false,
         pos: 9007199254740991,
       },
       a: {
@@ -167,7 +167,7 @@ test.each([
       pos: 3,
       dataType: 'int8',
       characterMaximumLength: null,
-      notNull: false,
+      notNull: true,
       dflt: '2147483648',
     },
     {
