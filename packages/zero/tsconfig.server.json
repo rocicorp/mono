@@ -3,5 +3,10 @@
   "compilerOptions": {
     "noEmit": false
   },
-  "include": ["src/server/*.ts", "src/cli.ts", "src/config.ts"]
+  "include": [
+    "src/server/*.ts",
+    "src/cli.ts",
+    "src/gen-auth.ts",
+    "src/config.ts"
+  ]
 }
