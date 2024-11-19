@@ -224,6 +224,11 @@ const authorization = defineAuthorization<AuthData, Schema>(schema, () => {
     {cmpLit}: ExpressionBuilder<TableSchema>,
   ) => cmpLit(authData.role, '=', 'crew');
 
+  const allowIfUserIDMatchesLoggedInUser = (
+    authData: AuthData,
+    {cmp}: ExpressionBuilder<typeof viewStateSchema>,
+  ) => cmp('userID', '=', authData.sub);
+
   return {
     user: {
       // Only the authentication system can write to the user table.
@@ -262,19 +267,26 @@ const authorization = defineAuthorization<AuthData, Schema>(schema, () => {
         delete: [allowIfAdmin],
       },
     },
+    viewState: {
+      row: {
+        insert: [allowIfUserIDMatchesLoggedInUser],
+        update: {
+          preMutation: [allowIfUserIDMatchesLoggedInUser],
+          postProposedMutation: [allowIfUserIDMatchesLoggedInUser],
+        },
+        // view state cannot be deleted
+        delete: [],
+      },
+    },
     // TODO (mlaw): issueLabel permissions (only issue creator can set)
-    // TODO (mlaw): viewState permissions (invariant on userID set to logged in user)
-    // ^-- requires access to _current_ value of the row.
-    // TODO: type errors should be raised if there is a schema mismatch between
-    // 1. the rule and 2. the table it is applied to
   };
-}) as ReturnType<typeof defineAuthorization>;
+});
 
 // TODO (mlaw): once we move auth to be defined on the table, there will be a single default export which is
 // the schema. Working towards this next.
 const exported: {
   schema: typeof schema;
-  authorization: typeof authorization;
+  authorization: ReturnType<typeof defineAuthorization>;
 } = {
   schema,
   authorization,
