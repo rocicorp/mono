@@ -1,14 +1,14 @@
 import {beforeEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import {Database} from '../../../../zqlite/src/db.js';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
+import {Database} from '../../../zqlite/src/db.js';
 import {WriteAuthorizerImpl} from './write-authorizer.js';
-import type {Rule} from '../../../../zero-schema/src/compiled-authorization.js';
-import type {Schema} from '../../../../zero-schema/src/schema.js';
+import type {Rule} from '../../../zero-schema/src/compiled-authorization.js';
+import type {Schema} from '../../../zero-schema/src/schema.js';
 import type {
   DeleteOp,
   InsertOp,
   UpdateOp,
-} from '../../../../zero-protocol/src/push.js';
+} from '../../../zero-protocol/src/push.js';
 
 const lc = createSilentLogContext();
 

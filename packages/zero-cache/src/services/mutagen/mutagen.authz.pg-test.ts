@@ -6,7 +6,7 @@ import type {TableSchema} from '../../../../zero-schema/src/table-schema.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {processMutation} from './mutagen.js';
-import {WriteAuthorizerImpl} from './write-authorizer.js';
+import {WriteAuthorizerImpl} from '../../auth/write-authorizer.js';
 import {MutationType} from '../../../../zero-protocol/src/push.js';
 import {zeroSchema} from './mutagen-test-shared.js';
 import {defineAuthorization} from '../../../../zero-schema/src/authorization.js';
