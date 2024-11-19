@@ -72,7 +72,7 @@ export function mapPostgresToLiteColumn(
   column: {name: string; spec: ColumnSpec},
   ignoreDefault?: 'ignore-default',
 ): ColumnSpec {
-  const {pos, dataType, notNull, dflt} = column.spec;
+  const {pos, dataType, dflt} = column.spec;
   return {
     pos,
     dataType,
