@@ -224,9 +224,9 @@ describe('tables/create', () => {
       CREATE TABLE "public"."users" (
          "user_id" int4 NOT NULL,
          "handle" varchar(40),
-         "rank" int8,
-         "admin" bool,
-         "bigint" int8,
+         "rank" int8 DEFAULT 1,
+         "admin" bool DEFAULT false,
+         "bigint" int8 DEFAULT '2147483648'::bigint,
          PRIMARY KEY ("user_id")
       );`,
       dstTableSpec: {
@@ -252,21 +252,21 @@ describe('tables/create', () => {
             characterMaximumLength: null,
             dataType: 'int8',
             notNull: false,
-            dflt: null,
+            dflt: '1',
           },
           admin: {
             pos: 4,
             dataType: 'bool',
             characterMaximumLength: null,
             notNull: false,
-            dflt: null,
+            dflt: 'false',
           },
           bigint: {
             pos: 5,
             characterMaximumLength: null,
             dataType: 'int8',
             notNull: false,
-            dflt: null,
+            dflt: "'2147483648'::bigint",
           },
         },
         primaryKey: ['user_id'],
