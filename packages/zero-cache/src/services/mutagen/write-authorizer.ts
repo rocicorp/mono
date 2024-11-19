@@ -23,7 +23,6 @@ import type {BuilderDelegate} from '../../../../zql/src/builder/builder.js';
 import {buildPipeline} from '../../../../zql/src/builder/builder.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {compile, sql} from '../../../../zqlite/src/internal/sql.js';
-import {StatementCache} from '../../../../zqlite/src/internal/statement-cache.js';
 import {TableSource} from '../../../../zqlite/src/table-source.js';
 import type {ZeroConfig} from '../../config/zero-config.js';
 import {listTables} from '../../db/lite-tables.js';
@@ -35,6 +34,7 @@ import type {
   AuthorizationConfig,
   Policy,
 } from '../../../../zero-schema/src/compiled-authorization.js';
+import {StatementRunner} from '../../db/statements.js';
 
 export interface WriteAuthorizer {
   canInsert(authData: JWTPayload, op: InsertOp): boolean;
@@ -49,7 +49,7 @@ export class WriteAuthorizerImpl {
   readonly #builderDelegate: BuilderDelegate;
   readonly #tableSpecs: Map<string, NormalizedTableSpec>;
   readonly #tables = new Map<string, TableSource>();
-  readonly #statementCache: StatementCache;
+  readonly #statementRunner: StatementRunner;
   readonly #lc: LogContext;
 
   constructor(
@@ -75,7 +75,7 @@ export class WriteAuthorizerImpl {
     this.#tableSpecs = new Map(
       listTables(replica).map(spec => [spec.name, normalize(spec)]),
     );
-    this.#statementCache = new StatementCache(replica);
+    this.#statementRunner = new StatementRunner(replica);
   }
 
   canInsert(authData: JWTPayload, op: InsertOp) {
@@ -218,14 +218,14 @@ export class WriteAuthorizerImpl {
       values.push(v.parse(value[pk], primaryKeyValueSchema));
     }
 
-    return this.#statementCache.use(
+    return this.#statementRunner.get(
       compile(
         sql`SELECT * FROM ${sql.ident(op.tableName)} WHERE ${sql.join(
           conditions,
           sql` AND `,
         )}`,
       ),
-      stmt => stmt.statement.get<Row | undefined>(...values),
+      ...values,
     );
   }
 
