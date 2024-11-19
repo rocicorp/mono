@@ -865,3 +865,42 @@ test('null compare', () => {
     },
   ]);
 });
+
+test('literal filter', () => {
+  const queryDelegate = new QueryDelegateImpl();
+  addData(queryDelegate);
+
+  let rows = newQuery(queryDelegate, issueSchema)
+    .where(({cmpLit}) => cmpLit(true, '=', false))
+    .run();
+
+  expect(rows).toEqual([]);
+
+  rows = newQuery(queryDelegate, issueSchema)
+    .where(({cmpLit}) => cmpLit(true, '=', true))
+    .run();
+
+  expect(rows).toEqual([
+    {
+      closed: false,
+      description: 'description 1',
+      id: '0001',
+      ownerId: '0001',
+      title: 'issue 1',
+    },
+    {
+      closed: false,
+      description: 'description 2',
+      id: '0002',
+      ownerId: '0002',
+      title: 'issue 2',
+    },
+    {
+      closed: false,
+      description: 'description 3',
+      id: '0003',
+      ownerId: null,
+      title: 'issue 3',
+    },
+  ]);
+});
