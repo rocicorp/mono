@@ -24,17 +24,9 @@ export function columnDef(spec: ColumnSpec) {
  * Constructs a `CREATE TABLE` statement for a {@link TableSpec}.
  */
 export function createTableStatement(spec: TableSpec | LiteTableSpec): string {
-  // Note: DEFAULT expressions are ignored for CREATE TABLE statements,
-  // as in that case, row values always come from the replication stream.
   const defs = Object.entries(spec.columns)
     .sort(([_a, {pos: a}], [_b, {pos: b}]) => a - b)
-    .map(
-      ([name, columnSpec]) =>
-        `${id(name)} ${columnDef({
-          ...columnSpec,
-          dflt: null,
-        })}`,
-    );
+    .map(([name, columnSpec]) => `${id(name)} ${columnDef(columnSpec)}`);
   if (spec.primaryKey) {
     defs.push(`PRIMARY KEY (${idList(spec.primaryKey)})`);
   }
