@@ -20,7 +20,7 @@ export const schemaOptions = {
     alias: 'p',
   },
   output: {
-    type: v.string().default('schema.json'),
+    type: v.string().default('zero-schema.json'),
     desc: [
       'Output path for the generated schema file.',
       '',

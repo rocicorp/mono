@@ -31,9 +31,8 @@ function parseAuthConfig(
       schema: config.schema,
     };
   } catch (e) {
-    const error = e instanceof Error ? e : new Error(String(e));
     throw new Error(
-      `Failed to parse authorization config from ${source}: ${error.message}`,
+      `Failed to parse authorization config from ${source}: ${e}`,
     );
   }
 }
@@ -47,20 +46,20 @@ export function getSchema(_config: ZeroConfig): Promise<{
   }
 
   const jsonConfig = process.env[`${ENV_VAR_PREFIX}JSON`];
-  const jsonConfigPath = process.env[`${ENV_VAR_PREFIX}JSON_PATH`];
+  const jsonConfigPath =
+    process.env[`${ENV_VAR_PREFIX}JSON_PATH`] || './zero-schema.json';
 
-  if (!jsonConfig && !jsonConfigPath) {
-    throw new Error(
-      `Either ${ENV_VAR_PREFIX}JSON or ${ENV_VAR_PREFIX}JSON_PATH must be set`,
-    );
+  if (!jsonConfig && !path.isAbsolute(jsonConfigPath)) {
+    const fileContent = await readFile(path.resolve(jsonConfigPath), 'utf-8');
+    return parseAuthConfig(fileContent, jsonConfigPath);
   }
 
   loadedConfig = (async () => {
     if (jsonConfig) {
       return parseAuthConfig(jsonConfig, `${ENV_VAR_PREFIX}JSON`);
     }
-    const fileContent = await readFile(path.resolve(jsonConfigPath!), 'utf-8');
-    return parseAuthConfig(fileContent, jsonConfigPath!);
+    const fileContent = await readFile(path.resolve(jsonConfigPath), 'utf-8');
+    return parseAuthConfig(fileContent, jsonConfigPath);
   })();
 
   return loadedConfig;
