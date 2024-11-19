@@ -77,14 +77,14 @@ describe('tables/create', () => {
             pos: 1,
             dataType: 'varchar',
             characterMaximumLength: null,
-            notNull: true,
+            notNull: false,
             dflt: null,
           },
           lastMutationID: {
             pos: 2,
             dataType: 'int8',
             characterMaximumLength: null,
-            notNull: true,
+            notNull: false,
             dflt: null,
           },
           ['_0_version']: {
@@ -155,14 +155,14 @@ describe('tables/create', () => {
             pos: 1,
             dataType: 'varchar',
             characterMaximumLength: null,
-            notNull: true,
+            notNull: false,
             dflt: null,
           },
           lastMutationID: {
             pos: 2,
             dataType: 'int8',
             characterMaximumLength: null,
-            notNull: true,
+            notNull: false,
             dflt: null,
           },
           ['_0_version']: {
@@ -278,7 +278,7 @@ describe('tables/create', () => {
             pos: 1,
             dataType: 'int4',
             characterMaximumLength: null,
-            notNull: true,
+            notNull: false,
             dflt: null,
           },
           handle: {

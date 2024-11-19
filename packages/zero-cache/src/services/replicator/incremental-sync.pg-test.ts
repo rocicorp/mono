@@ -703,7 +703,7 @@ describe('replicator/incremental-sync', () => {
               characterMaximumLength: null,
               dataType: 'int4',
               dflt: null,
-              notNull: true,
+              notNull: false,
               pos: 4,
             },
             ['_0_version']: {

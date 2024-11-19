@@ -28,7 +28,13 @@ export function createTableStatement(spec: TableSpec | LiteTableSpec): string {
   // as in that case, row values always come from the replication stream.
   const defs = Object.entries(spec.columns)
     .sort(([_a, {pos: a}], [_b, {pos: b}]) => a - b)
-    .map(([name, spec]) => `${id(name)} ${columnDef({...spec, dflt: null})}`);
+    .map(
+      ([name, columnSpec]) =>
+        `${id(name)} ${columnDef({
+          ...columnSpec,
+          dflt: null,
+        })}`,
+    );
   if (spec.primaryKey) {
     defs.push(`PRIMARY KEY (${idList(spec.primaryKey)})`);
   }

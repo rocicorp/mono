@@ -136,7 +136,7 @@ describe('change-source/pg/end-to-mid-test', () => {
               characterMaximumLength: null,
               dataType: 'int8',
               dflt: null,
-              notNull: true,
+              notNull: false,
               pos: 1,
             },
             ['_0_version']: {
@@ -165,7 +165,7 @@ describe('change-source/pg/end-to-mid-test', () => {
               characterMaximumLength: null,
               dataType: 'int8',
               dflt: null,
-              notNull: true,
+              notNull: false,
               pos: 1,
             },
             ['_0_version']: {
@@ -200,7 +200,7 @@ describe('change-source/pg/end-to-mid-test', () => {
               characterMaximumLength: null,
               dataType: 'int8',
               dflt: null,
-              notNull: true,
+              notNull: false,
               pos: 1,
             },
             name: {
@@ -236,7 +236,7 @@ describe('change-source/pg/end-to-mid-test', () => {
               characterMaximumLength: null,
               dataType: 'int8',
               dflt: null,
-              notNull: true,
+              notNull: false,
               pos: 1,
             },
             handle: {
@@ -272,7 +272,7 @@ describe('change-source/pg/end-to-mid-test', () => {
               characterMaximumLength: null,
               dataType: 'int8',
               dflt: null,
-              notNull: true,
+              notNull: false,
               pos: 1,
             },
             handle: {
@@ -308,7 +308,7 @@ describe('change-source/pg/end-to-mid-test', () => {
               characterMaximumLength: null,
               dataType: 'int8',
               dflt: null,
-              notNull: true,
+              notNull: false,
               pos: 1,
             },
             handle: {
@@ -358,7 +358,7 @@ describe('change-source/pg/end-to-mid-test', () => {
               characterMaximumLength: null,
               dataType: 'int8',
               dflt: null,
-              notNull: true,
+              notNull: false,
               pos: 1,
             },
             handle: {
@@ -408,7 +408,7 @@ describe('change-source/pg/end-to-mid-test', () => {
               characterMaximumLength: null,
               dataType: 'int8',
               dflt: null,
-              notNull: true,
+              notNull: false,
               pos: 1,
             },
             handle: {
@@ -458,7 +458,7 @@ describe('change-source/pg/end-to-mid-test', () => {
               characterMaximumLength: null,
               dataType: 'int8',
               dflt: null,
-              notNull: true,
+              notNull: false,
               pos: 1,
             },
             handle: {
@@ -489,7 +489,7 @@ describe('change-source/pg/end-to-mid-test', () => {
               characterMaximumLength: null,
               dataType: 'TEXT',
               dflt: null,
-              notNull: true,
+              notNull: false,
               pos: 1,
             },
             int: {
@@ -537,7 +537,7 @@ describe('change-source/pg/end-to-mid-test', () => {
               characterMaximumLength: null,
               dataType: 'TEXT',
               dflt: null,
-              notNull: true,
+              notNull: false,
               pos: 1,
             },
             ['_0_version']: {
@@ -582,7 +582,7 @@ describe('change-source/pg/end-to-mid-test', () => {
               characterMaximumLength: null,
               dataType: 'TEXT',
               dflt: null,
-              notNull: true,
+              notNull: false,
               pos: 1,
             },
             ['_0_version']: {
@@ -645,7 +645,7 @@ describe('change-source/pg/end-to-mid-test', () => {
               characterMaximumLength: null,
               dataType: 'TEXT',
               dflt: null,
-              notNull: true,
+              notNull: false,
               pos: 1,
             },
             ['_0_version']: {
@@ -672,7 +672,7 @@ describe('change-source/pg/end-to-mid-test', () => {
               characterMaximumLength: null,
               dataType: 'int8',
               dflt: null,
-              notNull: true,
+              notNull: false,
               pos: 1,
             },
             name: {
@@ -812,7 +812,7 @@ describe('change-source/pg/end-to-mid-test', () => {
               characterMaximumLength: null,
               dataType: 'TEXT',
               dflt: null,
-              notNull: true,
+              notNull: false,
               pos: 1,
             },
             flt: {
