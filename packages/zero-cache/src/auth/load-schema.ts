@@ -1,10 +1,14 @@
 import path from 'node:path';
-import type {AuthorizationConfig} from '../../../zero-schema/src/compiled-authorization.js';
-import {fileURLToPath} from 'node:url';
-import {tsImport} from 'tsx/esm/api';
-import type {ZeroConfig} from '../config/zero-config.js';
+import {
+  authorizationConfigSchema,
+  type AuthorizationConfig,
+} from '../../../zero-schema/src/compiled-authorization.js';
 import type {Schema} from '../../../zero-schema/src/schema.js';
 import {readFile} from 'node:fs/promises';
+import * as v from '../../../shared/src/valita.js';
+import type { ZeroConfig } from '../config/zero-config.js';
+
+const ENV_VAR_PREFIX = 'ZERO_SCHEMA_';
 
 let loadedConfig:
   | Promise<{
@@ -13,7 +17,28 @@ let loadedConfig:
     }>
   | undefined;
 
-export function getSchema(config: ZeroConfig): Promise<{
+function parseAuthConfig(
+  input: string,
+  source: string,
+): {
+  schema: Schema;
+  authorization: AuthorizationConfig;
+} {
+  try {
+    const config = JSON.parse(input);
+    return {
+      authorization: v.parse(config, authorizationConfigSchema, 'strict'),
+      schema: config.schema,
+    };
+  } catch (e) {
+    const error = e instanceof Error ? e : new Error(String(e));
+    throw new Error(
+      `Failed to parse authorization config from ${source}: ${error.message}`,
+    );
+  }
+}
+
+export function getSchema(_config: ZeroConfig): Promise<{
   schema: Schema;
   authorization: AuthorizationConfig;
 }> {
@@ -21,44 +46,22 @@ export function getSchema(config: ZeroConfig): Promise<{
     return loadedConfig;
   }
 
-  const dirname = path.dirname(fileURLToPath(import.meta.url));
-  const jsonConfigPath = process.env['ZERO_CONFIG_JSON'];
-  const tsConfigPath = process.env['ZERO_CONFIG_PATH'] ?? './schema.ts';
+  const jsonConfig = process.env[`${ENV_VAR_PREFIX}JSON`];
+  const jsonConfigPath = process.env[`${ENV_VAR_PREFIX}JSON_PATH`];
 
-  if (jsonConfigPath) {
-    const absoluteJsonPath = path.resolve(jsonConfigPath);
-    loadedConfig = readFile(absoluteJsonPath, 'utf-8')
-      .then(data => JSON.parse(data) as AuthorizationConfig)
-      .catch(e => {
-        console.error(
-          `Failed to load zero schema from ${absoluteJsonPath}: ${e}`,
-        );
-        throw e;
-      });
-    return loadedConfig;
+  if (!jsonConfig && !jsonConfigPath) {
+    throw new Error(
+      `Either ${ENV_VAR_PREFIX}JSON or ${ENV_VAR_PREFIX}JSON_PATH must be set`,
+    );
   }
 
-  const absoluteConfigPath = path.resolve(tsConfigPath);
-  const relativePath = path.join(
-    path.relative(dirname, path.dirname(absoluteConfigPath)),
-    path.basename(absoluteConfigPath),
-  );
+  loadedConfig = (async () => {
+    if (jsonConfig) {
+      return parseAuthConfig(jsonConfig, `${ENV_VAR_PREFIX}JSON`);
+    }
+    const fileContent = await readFile(path.resolve(jsonConfigPath!), 'utf-8');
+    return parseAuthConfig(fileContent, jsonConfigPath!);
+  })();
 
-  loadedConfig = tsImport(relativePath, import.meta.url)
-    .then(async module => {
-      const schema = module.default.schema as Schema;
-      const authorization = (await module.default
-        .authorization) as AuthorizationConfig;
-      return {
-        schema,
-        authorization,
-      } as const;
-    })
-    .catch(e => {
-      console.error(
-        `Failed to load zero schema from ${absoluteConfigPath}: ${e}`,
-      );
-      throw e;
-    });
   return loadedConfig;
 }
