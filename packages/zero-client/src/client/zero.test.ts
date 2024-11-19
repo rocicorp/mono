@@ -2073,7 +2073,6 @@ suite('Invalid Downstream message', () => {
       expect(r.online).eq(true);
       expect(r.connectionState).eq(ConnectionState.Connected);
 
-      console.error(r.testLogSink.messages);
       const found = r.testLogSink.messages.some(m =>
         m[2].some(
           v =>
