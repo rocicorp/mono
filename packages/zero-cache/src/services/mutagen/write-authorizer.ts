@@ -184,23 +184,23 @@ export class WriteAuthorizerImpl {
       preMutationRow = this.#getPreMutationRow(op);
     }
 
-    const rowRules = rules.row;
+    const rowPolicies = rules.row;
     if (
-      rowRules &&
-      !this.#passesPolicy(rowRules[action], authData, preMutationRow)
+      rowPolicies &&
+      !this.#passesPolicy(rowPolicies[action], authData, preMutationRow)
     ) {
       return false;
     }
 
-    const cellRules = rules.cell;
-    if (cellRules) {
-      for (const [column, rule] of Object.entries(cellRules)) {
+    const cellPolicies = rules.cell;
+    if (cellPolicies) {
+      for (const [column, policy] of Object.entries(cellPolicies)) {
         if (action === 'update' && op.value[column] === undefined) {
           // If the column is not being updated, we do not need to check
           // the column rules.
           continue;
         }
-        if (!this.#passesPolicy(rule[action], authData, preMutationRow)) {
+        if (!this.#passesPolicy(policy[action], authData, preMutationRow)) {
           return false;
         }
       }
