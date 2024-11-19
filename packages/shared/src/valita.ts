@@ -56,7 +56,12 @@ function displayList<T>(
   return `${expected.slice(0, -2).map(toDisplay).join(', ')}, ${suffix}`;
 }
 
-function getMessage(err: v.Err | v.ValitaError, v: unknown): string {
+function getMessage(
+  err: v.Err | v.ValitaError,
+  v: unknown,
+  schema: v.Type | v.Optional,
+  mode: ParseOptionsMode | undefined,
+): string {
   const firstIssue = err.issues[0];
   const {path} = firstIssue;
   const atPath = path?.length ? ` at ${path.join('.')}` : '';
@@ -102,7 +107,9 @@ function getMessage(err: v.Err | v.ValitaError, v: unknown): string {
       )}${atPath}`;
 
     case 'invalid_union':
-      return `Invalid union value${atPath}`;
+      return schema.name === 'union'
+        ? getDeepestUnionParseError(v, schema as v.UnionType, mode ?? 'strict')
+        : `Invalid union value${atPath}`;
 
     case 'custom_error': {
       const {error} = firstIssue;
@@ -114,6 +121,57 @@ function getMessage(err: v.Err | v.ValitaError, v: unknown): string {
       return `${message}${atPath}. Got ${toDisplayAtPath(v, path)}`;
     }
   }
+}
+
+type FailedType = {type: v.Type; err: v.Err};
+
+function getDeepestUnionParseError(
+  value: unknown,
+  schema: v.UnionType,
+  mode: ParseOptionsMode,
+): string {
+  const failures: FailedType[] = [];
+  for (const type of schema.options) {
+    const r = type.try(value, {mode});
+    if (!r.ok) {
+      failures.push({type, err: r});
+    }
+  }
+  if (failures.length) {
+    // compare the first and second longest-path errors
+    failures.sort(pathCmp);
+    if (failures.length === 1 || pathCmp(failures[0], failures[1]) < 0) {
+      return getMessage(failures[0].err, value, failures[0].type, mode);
+    }
+  }
+  // paths are equivalent
+  try {
+    const str = JSON.stringify(value);
+    return `Invalid union value: ${str}`;
+  } catch (e) {
+    // fallback if the value could not be stringified
+    return `Invalid union value`;
+  }
+}
+
+// Descending-order comparison of Issue paths.
+// * [1, 'a'] sorts before [1]
+// * [1] sorts before [0]  (i.e. errors later in the tuple sort before earlier errors)
+function pathCmp(a: FailedType, b: FailedType) {
+  const aPath = a.err.issues[0].path;
+  const bPath = b.err.issues[0].path;
+  if (aPath.length !== bPath.length) {
+    return bPath.length - aPath.length;
+  }
+  for (let i = 0; i < aPath.length; i++) {
+    if (bPath[i] > aPath[i]) {
+      return -1;
+    }
+    if (bPath[i] < aPath[i]) {
+      return 1;
+    }
+  }
+  return 0;
 }
 
 /**
@@ -160,7 +218,10 @@ export function test<T>(
 ): Result<T> {
   const res = schema.try(value, mode ? {mode} : undefined);
   if (!res.ok) {
-    return {ok: false, error: getMessage(res, value)};
+    return {
+      ok: false,
+      error: getMessage(res, value, schema, mode),
+    };
   }
   return res;
 }
@@ -188,7 +249,7 @@ export function testOptional<T>(
     return res;
   }
   const err = new v.ValitaError(res);
-  return {ok: false, error: getMessage(err, value)};
+  return {ok: false, error: getMessage(err, value, schema, mode)};
 }
 
 /**

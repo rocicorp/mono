@@ -25,6 +25,7 @@ import {
   pushMessageSchema,
 } from '../../../zero-protocol/src/push.js';
 import type {NullableVersion} from '../../../zero-protocol/src/version.js';
+import type {Schema} from '../../../zero-schema/src/mod.js';
 import type {WSString} from './http-string.js';
 import type {ZeroOptions} from './options.js';
 import type {QueryManager} from './query-manager.js';
@@ -48,7 +49,6 @@ import {
   RUN_LOOP_INTERVAL_MS,
   type UpdateNeededReason,
 } from './zero.js';
-import type {Schema} from '../../../zero-schema/src/mod.js';
 
 let realSetTimeout: typeof setTimeout;
 let clock: sinon.SinonFakeTimers;
@@ -2075,7 +2075,8 @@ suite('Invalid Downstream message', () => {
 
       const found = r.testLogSink.messages.some(m =>
         m[2].some(
-          v => v instanceof Error && v.message.includes('Invalid union value.'),
+          v =>
+            v instanceof Error && v.message.includes('Missing property pokeID'),
         ),
       );
       expect(found).true;

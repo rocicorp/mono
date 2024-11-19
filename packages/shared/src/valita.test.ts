@@ -3,38 +3,38 @@ import {assert} from './asserts.js';
 import * as v from './valita.js';
 import {parse} from './valita.js';
 
+const t = <T>(s: v.Type<T>, val: unknown, message?: string) => {
+  const r1 = v.test(val, s);
+  const r2 = v.testOptional(val, s);
+  let ex;
+  try {
+    const parsed = parse(val, s);
+    expect(parsed).toBe(val);
+
+    expect(r1.ok).toBe(true);
+    expect(r1.ok && r1.value).toBe(val);
+
+    expect(r2.ok).toBe(true);
+    expect(r2.ok && r2.value).toBe(val);
+  } catch (err) {
+    ex = err;
+  }
+
+  if (message !== undefined) {
+    assert(ex instanceof TypeError);
+    expect(ex.message).toBe(message);
+
+    expect(r1.ok).toBe(false);
+    expect(!r1.ok && r1.error).toBe(message);
+
+    expect(r2.ok).toBe(false);
+    expect(!r2.ok && r2.error).toBe(message);
+  } else {
+    expect(ex).toBe(undefined);
+  }
+};
+
 test('basic', () => {
-  const t = <T>(s: v.Type<T>, val: unknown, message?: string) => {
-    const r1 = v.test(val, s);
-    const r2 = v.testOptional(val, s);
-    let ex;
-    try {
-      const parsed = parse(val, s);
-      expect(parsed).toBe(val);
-
-      expect(r1.ok).toBe(true);
-      expect(r1.ok && r1.value).toBe(val);
-
-      expect(r2.ok).toBe(true);
-      expect(r2.ok && r2.value).toBe(val);
-    } catch (err) {
-      ex = err;
-    }
-
-    if (message !== undefined) {
-      assert(ex instanceof TypeError);
-      expect(ex.message).toBe(message);
-
-      expect(r1.ok).toBe(false);
-      expect(!r1.ok && r1.error).toBe(message);
-
-      expect(r2.ok).toBe(false);
-      expect(!r2.ok && r2.error).toBe(message);
-    } else {
-      expect(ex).toBe(undefined);
-    }
-  };
-
   {
     const s = v.string();
     t(s, 'ok');
@@ -225,8 +225,8 @@ test('basic', () => {
     t(s, [1, 1]);
     t(s, ['b', 'b']);
     t(s, [true, true]);
-    t(s, ['d', true], 'Invalid union value');
-    t(s, [1, '1'], 'Invalid union value');
+    t(s, ['d', true], 'Invalid union value: ["d",true]');
+    t(s, [1, '1'], 'Invalid union value: [1,"1"]');
     t(s, {}, 'Expected array. Got object');
     t(s, 'a', 'Expected array. Got "a"');
 
@@ -234,6 +234,28 @@ test('basic', () => {
       x: s,
     });
     t(s2, {x: []}, 'Invalid union value at x');
+  }
+});
+
+test('union error message', () => {
+  const type = v.union(
+    v.tuple([v.literal('a'), v.object({a: v.string()})]),
+    v.tuple([v.literal('b'), v.object({b: v.number()})]),
+    v.tuple([v.literal('c'), v.object({c: v.boolean()})]),
+  );
+  // Test once with the union itself, then with union(union) and union(union(union))
+  // to verify recursion.
+  for (const s of [type, v.union(type), v.union(v.union(type))]) {
+    t(s, ['a', {a: 'payload'}]);
+    t(s, ['b', {b: 123}]);
+    t(s, ['c', {c: true}]);
+    t(s, ['a', {b: 'not the right field'}], 'Missing property a at 1');
+    t(
+      s,
+      ['b', {b: 'not a number'}],
+      'Expected number at 1.b. Got "not a number"',
+    );
+    t(s, ['c', {c: 1}], 'Expected boolean at 1.c. Got 1');
   }
 });
 
