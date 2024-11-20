@@ -20,17 +20,26 @@ import {
   type Worker,
 } from '../types/processes.js';
 import {Subscription} from '../types/subscription.js';
+import {replicaFileName, type ReplicaFileMode} from '../workers/replicator.js';
 import {Syncer} from '../workers/syncer.js';
 import {exitAfter, runUntilKilled} from './life-cycle.js';
 import {createLogContext} from './logging.js';
 
-export default async function runWorker(parent: Worker): Promise<void> {
-  const config = getZeroConfig();
+export default async function runWorker(
+  parent: Worker,
+  ...args: string[]
+): Promise<void> {
+  assert(args.length > 0, `replicator mode not specified`);
+  const fileMode = args[0] as ReplicaFileMode;
+
+  const config = getZeroConfig(args.slice(1));
   const authorizationConfig = await getAuthorizationConfig();
   assert(config.cvr.maxConnsPerWorker);
   assert(config.upstream.maxConnsPerWorker);
 
   const lc = createLogContext(config.log, {worker: 'syncer'});
+  const replicaFile = replicaFileName(config.replicaFile, fileMode);
+  lc.debug?.(`running view-syncer on ${replicaFile}`);
 
   const cvrDB = pgClient(lc, config.cvr.db, {
     max: config.cvr.maxConnsPerWorker,
@@ -72,7 +81,7 @@ export default async function runWorker(parent: Worker): Promise<void> {
       cvrDB,
       new PipelineDriver(
         logger,
-        new Snapshotter(logger, config.replicaFile),
+        new Snapshotter(logger, replicaFile),
         operatorStorage.createClientGroupStorage(id),
       ),
       sub,
@@ -105,5 +114,5 @@ export default async function runWorker(parent: Worker): Promise<void> {
 
 // fork()
 if (!singleProcessMode()) {
-  void exitAfter(() => runWorker(must(parentWorker)));
+  void exitAfter(() => runWorker(must(parentWorker), ...process.argv.slice(2)));
 }

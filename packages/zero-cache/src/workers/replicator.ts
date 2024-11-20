@@ -11,6 +11,10 @@ import type {Worker} from '../types/processes.js';
 
 export type ReplicaFileMode = 'serving' | 'serving-copy' | 'backup';
 
+export function replicaFileName(replicaFile: string, mode: ReplicaFileMode) {
+  return mode === 'serving-copy' ? `${replicaFile}-serving-copy` : replicaFile;
+}
+
 function connect(
   lc: LogContext,
   replicaDbFile: string,
@@ -58,7 +62,7 @@ export function setupReplica(
     case 'serving-copy': {
       // In 'serving-copy' mode, the original file is being used for 'backup'
       // mode, so we make a copy for servicing sync requests.
-      const copyLocation = `${replicaDbFile}-serving-copy`;
+      const copyLocation = replicaFileName(replicaDbFile, mode);
       deleteLiteDB(copyLocation);
 
       const start = Date.now();
