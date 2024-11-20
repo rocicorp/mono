@@ -76,6 +76,7 @@ export class Exists implements Operator {
 
   push(change: Change) {
     assert(this.#output, 'Output not set');
+    console.log('exists push', change);
 
     switch (change.type) {
       // add, remove and edit cannot change the size of the
@@ -113,8 +114,12 @@ export class Exists implements Operator {
               size = this.#fetchSize(change.row);
             }
             if (size === 1) {
+              const type = this.#not ? 'remove' : 'add';
+              if (type === 'remove') {
+                this.#output.push(change);
+              }
               this.#output.push({
-                type: this.#not ? 'remove' : 'add',
+                type,
                 node: this.#fetchNodeForRow(change.row),
               });
             } else {
@@ -132,8 +137,12 @@ export class Exists implements Operator {
               size = this.#fetchSize(change.row);
             }
             if (size === 0) {
+              const type = this.#not ? 'add' : 'remove';
+              if (type === 'remove') {
+                this.#output.push(change);
+              }
               this.#output.push({
-                type: this.#not ? 'add' : 'remove',
+                type,
                 node: this.#fetchNodeForRow(change.row),
               });
             } else {

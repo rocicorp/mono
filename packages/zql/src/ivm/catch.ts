@@ -1,7 +1,29 @@
 import {unreachable} from '../../../shared/src/asserts.js';
-import type {Change} from './change.js';
+import type {Row} from '../../../zero-protocol/src/data.js';
+import type {AddChange, Change, RemoveChange} from './change.js';
 import type {Node} from './data.js';
 import type {FetchRequest, Input, Output} from './operator.js';
+
+export type CaughtChildChange = {
+  type: 'child';
+  row: Row;
+  child: {
+    relationshipName: string;
+    change: CaughtChange;
+  };
+};
+
+export type CaughtEditChange = {
+  type: 'edit';
+  oldRow: Row;
+  row: Row;
+};
+
+export type CaughtChange =
+  | AddChange
+  | RemoveChange
+  | CaughtChildChange
+  | CaughtEditChange;
 
 /**
  * Catch is an Output that collects all incoming stream data into arrays. Mainly
@@ -9,7 +31,7 @@ import type {FetchRequest, Input, Output} from './operator.js';
  */
 export class Catch implements Output {
   #input: Input;
-  readonly pushes: Change[] = [];
+  readonly pushes: CaughtChange[] = [];
 
   constructor(input: Input) {
     this.#input = input;
@@ -37,7 +59,7 @@ export class Catch implements Output {
   }
 }
 
-export function expandChange(change: Change): Change {
+export function expandChange(change: Change): CaughtChange {
   switch (change.type) {
     case 'add':
     case 'remove':
@@ -46,8 +68,11 @@ export function expandChange(change: Change): Change {
         node: expandNode(change.node),
       };
     case 'edit':
-      // No generators to expand in edit changes.
-      return change;
+      return {
+        type: 'edit',
+        oldRow: change.oldNode.row,
+        row: change.node.row,
+      };
     case 'child':
       return {
         ...change,

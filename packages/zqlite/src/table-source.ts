@@ -63,8 +63,6 @@ type Statements = {
  * A source that is backed by a SQLite table.
  *
  * Values are written to the backing table _after_ being vended by the source.
- * An overlay index (not yet implemented) is used such that
- * `fetches` made after a `push` will see the new values.
  *
  * This ordering of events is to ensure self joins function properly. That is,
  * we can't reveal a value to an output before it has been pushed to that output.
@@ -312,6 +310,7 @@ export class TableSource implements Source {
           }
         }
 
+        // TODO: apply connection.filters to overlay
         yield* generateWithStart(
           generateWithOverlay(
             req.start?.row,
@@ -365,7 +364,17 @@ export class TableSource implements Source {
 
     const outputChange: Change =
       change.type === 'edit'
-        ? change
+        ? {
+            type: change.type,
+            oldNode: {
+              row: change.oldRow,
+              relationships: {},
+            },
+            node: {
+              row: change.row,
+              relationships: {},
+            },
+          }
         : {
             type: change.type,
             node: {

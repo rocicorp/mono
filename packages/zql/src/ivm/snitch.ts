@@ -86,7 +86,11 @@ function toChangeRecord(change: Change): ChangeRecord {
     case 'remove':
       return {type: change.type, row: change.node.row};
     case 'edit':
-      return change;
+      return {
+        type: change.type,
+        row: change.node.row,
+        oldRow: change.oldNode.row,
+      };
     case 'child':
       return {
         type: 'child',

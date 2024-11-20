@@ -12,29 +12,20 @@ export function maybeSplitAndPushEditChange(
   predicate: (row: Row) => boolean,
   output: Output,
 ) {
-  const oldWasPresent = predicate(change.oldRow);
-  const newIsPresent = predicate(change.row);
+  const oldWasPresent = predicate(change.oldNode.row);
+  const newIsPresent = predicate(change.node.row);
 
   if (oldWasPresent && newIsPresent) {
     output.push(change);
   } else if (oldWasPresent && !newIsPresent) {
-    // The relationships are empty at this point and that is fine since
-    // splitAndPushEditChange is only used by operators that are before the Join
-    // operator.
     output.push({
       type: 'remove',
-      node: {
-        row: change.oldRow,
-        relationships: {},
-      },
+      node: change.oldNode,
     });
   } else if (!oldWasPresent && newIsPresent) {
     output.push({
       type: 'add',
-      node: {
-        row: change.row,
-        relationships: {},
-      },
+      node: change.node,
     });
   }
 }

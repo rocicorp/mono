@@ -1,12 +1,11 @@
 import {assert, unreachable} from '../../../shared/src/asserts.js';
-import {must} from '../../../shared/src/must.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
 import type {Change, ChildChange} from './change.js';
 import {normalizeUndefined, type Node, type NormalizedValue} from './data.js';
 import type {FetchRequest, Input, Output, Storage} from './operator.js';
 import type {SourceSchema} from './schema.js';
-import {first, take, type Stream} from './stream.js';
+import {take, type Stream} from './stream.js';
 
 type Args = {
   parent: Input;
@@ -137,78 +136,40 @@ export class Join implements Input {
         break;
       case 'edit': {
         // When an edit comes in we need to:
-        // - Update the parent node.
-        // - If the value of the join key changed we need to remove the old relation rows and add the new ones.
+        // - If the value of the join key did not change we can forward
+        //   as an edit but with relationships added
+        // - Otherwise we convert to a remove and add
 
-        this.#output.push({
-          type: 'edit',
-          row: change.row,
-          oldRow: change.oldRow,
-        });
-
-        const oldKeyValue = normalizeUndefined(change.oldRow[this.#parentKey]);
-        const newKeyValue = normalizeUndefined(change.row[this.#parentKey]);
-
-        if (newKeyValue !== oldKeyValue) {
-          const childrenToRemoveStream = this.#child.cleanup({
-            constraint: {
-              key: this.#childKey,
-              value: oldKeyValue,
-            },
-          });
-          for (const childNode of childrenToRemoveStream) {
-            this.#output.push({
-              type: 'child',
-              // This is the new row since we already changed it in the edit above.
-              row: change.row,
-              child: {
-                relationshipName: this.#relationshipName,
-                change: {
-                  type: 'remove',
-                  node: childNode,
-                },
-              },
-            });
-          }
-
-          const childrenToAddStream = this.#child.fetch({
-            constraint: {
-              key: this.#childKey,
-              value: newKeyValue,
-            },
-          });
-          for (const childNode of childrenToAddStream) {
-            this.#output.push({
-              type: 'child',
-              row: change.row,
-              child: {
-                relationshipName: this.#relationshipName,
-                change: {
-                  type: 'add',
-                  node: childNode,
-                },
-              },
-            });
-          }
-        }
-
-        const {primaryKey} = this.#parent.getSchema();
-        const oldStorageKey = makeStorageKey(
-          oldKeyValue,
-          primaryKey,
-          change.oldRow,
+        const oldKeyValue = normalizeUndefined(
+          change.oldNode.row[this.#parentKey],
         );
-        const newStorageKey = makeStorageKey(
-          newKeyValue,
-          primaryKey,
-          change.row,
+        const newKeyValue = normalizeUndefined(
+          change.node.row[this.#parentKey],
         );
 
-        // This can be true for both cases. Even if the join key value didn't
-        // change the primary key values might have.
-        if (oldStorageKey !== newStorageKey) {
-          this.#storage.del(oldStorageKey);
-          this.#storage.set(newStorageKey, true);
+        if (oldKeyValue === newKeyValue) {
+          this.#output.push({
+            type: 'edit',
+            oldNode: this.#processParentNode(
+              change.oldNode.row,
+              change.oldNode.relationships,
+              'cleanup',
+            ),
+            node: this.#processParentNode(
+              change.node.row,
+              change.node.relationships,
+              'fetch',
+            ),
+          });
+        } else {
+          this.#pushParent({
+            type: 'remove',
+            node: change.oldNode,
+          });
+          this.#pushParent({
+            type: 'add',
+            node: change.node,
+          });
         }
 
         break;
@@ -251,8 +212,8 @@ export class Join implements Input {
         pushChildChange(change.row, change);
         break;
       case 'edit': {
-        const childRow = change.row;
-        const oldChildRow = change.oldRow;
+        const childRow = change.node.row;
+        const oldChildRow = change.oldNode.row;
         if (
           normalizeUndefined(oldChildRow[this.#childKey]) ===
           normalizeUndefined(childRow[this.#childKey])
@@ -264,31 +225,13 @@ export class Join implements Input {
           // The child row was edited in a way that changes the relationship. We
           // therefore treat this as a remove from the old row followed by an
           // add to the new row.
-
-          const {relationships} = must(
-            first(
-              this.#child.fetch({
-                constraint: {
-                  key: this.#childKey,
-                  value: oldChildRow[this.#childKey],
-                },
-              }),
-            ),
-          );
-
           pushChildChange(oldChildRow, {
             type: 'remove',
-            node: {
-              row: oldChildRow,
-              relationships,
-            },
+            node: change.oldNode,
           });
           pushChildChange(childRow, {
             type: 'add',
-            node: {
-              row: childRow,
-              relationships,
-            },
+            node: change.node,
           });
         }
         break;

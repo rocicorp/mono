@@ -40,18 +40,30 @@ export type ChildChange = {
  * likely the PK stayed the same but there is really no restriction in how it
  * can change.
  *
- * The edit changes flows down in a {@linkcode Output.push}. There are cases
- * where an edit change gets split into a remove and an add change when the
- * presence of the row in the result changes (for example the row is no longer
- * present due to a filter)
+ * The edit changes flows down in a {@linkcode Output.push}.
+ * There are cases where an edit change gets split into a remove and/or an add
+ * change.
+ * 1. when the presence of the row in the result changes (for example the row
+ *    is no longer present due to a filter)
+ * 2. the edit results in the rows relationships changing
+ *
+ * If an edit is not split, the relationships of node and oldNode must
+ * be the same, just the Row has changed.
+ *
+ * NOTE: It would be cleaner to just have the relationships once,
+ * since they must be the same, however relationship Streams are single use
+ * and if an Edit needs to be split into a remove and add a single map
+ * of relationship Streams could not be used for the both the remove and
+ * the add.  This cleanup could be done if we move to multi-use Streams
+ * for relationships.
  */
 export type EditChange = {
   type: 'edit';
-  row: Row;
-  oldRow: Row;
+  node: Node;
+  oldNode: Node;
 };
 
 export function rowForChange(change: Change): Row {
   const {type} = change;
-  return type === 'add' || type === 'remove' ? change.node.row : change.row;
+  return type === 'child' ? change.row : change.node.row;
 }
