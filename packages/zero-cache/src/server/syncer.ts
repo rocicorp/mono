@@ -33,7 +33,7 @@ export default async function runWorker(
   const fileMode = args[0] as ReplicaFileMode;
 
   const config = getZeroConfig(args.slice(1));
-  const authorizationConfig = await getAuthorizationConfig();
+  const authorizationConfig = await getAuthorizationConfig(config);
   assert(config.cvr.maxConnsPerWorker);
   assert(config.upstream.maxConnsPerWorker);
 

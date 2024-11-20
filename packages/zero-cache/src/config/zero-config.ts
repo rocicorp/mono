@@ -173,6 +173,11 @@ export const zeroOptions = {
     ],
   },
 
+  schemaFile: {
+    type: v.string().default('./schema.ts'),
+    desc: [`File path to the Zero client schema definition.`],
+  },
+
   log: logOptions,
 
   shard: shardOptions,
