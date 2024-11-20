@@ -58,8 +58,6 @@ async function main() {
       'strict',
     );
     const rawSchema = await module.default.schema;
-    //const schemaConfig = v.parse(rawSchema, module.schema, 'strict');
-
     const output = {
       authorization: authConfig,
       schema: rawSchema,
