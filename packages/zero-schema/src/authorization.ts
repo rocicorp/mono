@@ -22,18 +22,20 @@ type AuthorizationRule<TAuthDataShape, TSchema extends TableSchema> = (
 ) => Query<TableSchema>;
 
 type AssetAuthorization<TAuthDataShape, TSchema extends TableSchema> = {
-  [K in Action]?: AuthorizationRule<TAuthDataShape, TSchema>[];
+  [K in Action]?: AuthorizationRule<TAuthDataShape, TSchema>[] | undefined;
 };
 
 export type AuthorizationConfig<TAuthDataShape, TSchema extends Schema> = {
   [K in keyof TSchema['tables']]?: {
-    row?: AssetAuthorization<TAuthDataShape, TSchema['tables'][K]>;
-    cell?: {
-      [C in keyof TSchema['tables'][K]['columns']]?: AssetAuthorization<
-        TAuthDataShape,
-        TSchema['tables'][K]
-      >;
-    };
+    row?: AssetAuthorization<TAuthDataShape, TSchema['tables'][K]> | undefined;
+    cell?:
+      | {
+          [C in keyof TSchema['tables'][K]['columns']]?: AssetAuthorization<
+            TAuthDataShape,
+            TSchema['tables'][K]
+          >;
+        }
+      | undefined;
   };
 };
 
