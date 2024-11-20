@@ -494,3 +494,41 @@ test('unknown arguments', () => {
     "
   `);
 });
+
+test('ungrouped config', () => {
+  const ungroupedOptions = {
+    port: {
+      type: v.number().default(4848),
+      desc: ['port description'],
+      alias: 'p',
+    },
+    format: v.union(v.literal('text'), v.literal('json')).default('text'),
+    enabled: v.boolean().optional(),
+    name: v.string(),
+  };
+
+  const result = parseOptions(
+    ungroupedOptions,
+    ['--name', 'test', '--format', 'json', '--enabled', 'true'],
+    'Z_',
+    {},
+  );
+
+  expect(result).toEqual({
+    port: 4848,
+    format: 'json',
+    enabled: true,
+    name: 'test',
+  });
+
+  // Test with environment variables
+  const envResult = parseOptions(ungroupedOptions, ['--name', 'test2'], 'x', {
+    xFORMAT: 'text',
+  });
+
+  expect(envResult).toEqual({
+    port: 4848,
+    format: 'text',
+    name: 'test2',
+  });
+});
