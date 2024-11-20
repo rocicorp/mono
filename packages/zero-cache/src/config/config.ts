@@ -378,7 +378,7 @@ function parseArgs(
     _all,
     _none: ungrouped,
     _unknown: unknown,
-    ...config // initially contains groups only
+    ...config
   } = commandLineArgs(optionDefs, {
     argv,
     partial: true,
@@ -396,21 +396,28 @@ function parseArgs(
     throw new ExitAfterUsage();
   }
 
-  // Remap names for grouped flags.
-  for (const group of Object.values(config ?? {})) {
-    for (const [flagName, value] of Object.entries(group)) {
-      delete group[flagName];
+  const result = {...config};
+
+  // Handle ungrouped flags first
+  if (ungrouped) {
+    for (const [flagName, value] of Object.entries(ungrouped)) {
       const name = must(flagToField.get(flagName));
-      group[name] = normalizeFlagValue(value);
+      result[name] = normalizeFlagValue(value);
     }
   }
 
-  // Normalize and promote ungrouped flags.
-  for (const [flagName, value] of Object.entries(ungrouped ?? {})) {
-    const name = must(flagToField.get(flagName));
-    config[name] = normalizeFlagValue(value);
+  // Then handle grouped flags
+  for (const [groupName, group] of Object.entries(config)) {
+    if (typeof group === 'object' && group !== null) {
+      result[groupName] = {};
+      for (const [flagName, value] of Object.entries(group)) {
+        const name = must(flagToField.get(flagName));
+        result[groupName][name] = normalizeFlagValue(value);
+      }
+    }
   }
-  return config;
+
+  return result;
 }
 
 function showUsage(
