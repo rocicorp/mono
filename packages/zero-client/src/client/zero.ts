@@ -60,6 +60,10 @@ import type {
   PullResponseMessage,
 } from '../../../zero-protocol/src/pull.js';
 import type {Schema} from '../../../zero-schema/src/mod.js';
+import {
+  type NormalizedSchema,
+  normalizeSchema,
+} from '../../../zero-schema/src/normalized-schema.js';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 import {newQuery} from '../../../zql/src/query/query-impl.js';
 import type {Query} from '../../../zql/src/query/query.js';
@@ -90,18 +94,19 @@ import {
   type Series,
   getLastConnectErrorValue,
 } from './metrics.js';
-import {
-  type NormalizedSchema,
-  normalizeSchema,
-} from '../../../zero-schema/src/normalized-schema.js';
 import type {ZeroAdvancedOptions, ZeroOptions} from './options.js';
+import {PROTOCOL_VERSION} from './protocol-version.js';
 import {QueryManager} from './query-manager.js';
-import {reloadWithReason, reportReloadReason} from './reload-error-handler.js';
+import {
+  reloadScheduled,
+  reloadWithReason,
+  reportReloadReason,
+  resetBackoff,
+} from './reload-error-handler.js';
 import {ServerError, isAuthError, isServerError} from './server-error.js';
 import {getServer} from './server-option.js';
 import {version} from './version.js';
 import {PokeHandler} from './zero-poke-handler.js';
-import {PROTOCOL_VERSION} from './protocol-version.js';
 
 export type NoRelations = Record<string, never>;
 
@@ -1093,6 +1098,7 @@ export class Zero<const S extends Schema> {
   }
 
   async #handlePokeStart(_lc: LogContext, pokeMessage: PokeStartMessage) {
+    resetBackoff();
     this.#abortPingTimeout();
     await this.#pokeHandler.handlePokeStart(pokeMessage[1]);
   }
@@ -1283,6 +1289,11 @@ export class Zero<const S extends Schema> {
             // If we got an auth error we try to get a new auth token before reconnecting.
             if (needsReauth) {
               await this.#updateAuthToken(lc, 'invalid-token');
+            }
+
+            // If a reload is pending, do not try to reconnect.
+            if (reloadScheduled()) {
+              break;
             }
 
             await this.#connect(lc);
