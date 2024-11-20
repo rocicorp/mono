@@ -6,7 +6,7 @@
   "include": [
     "src/server/*.ts",
     "src/cli.ts",
-    "src/gen-auth.ts",
+    "src/gen-schema-json.ts",
     "src/config.ts"
   ]
 }

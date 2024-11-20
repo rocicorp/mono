@@ -4,7 +4,7 @@
   "scripts": {
     "build": "rm -rf out && npm run build-server && npm run build-client",
     "build-client": "tsc -p tsconfig.client.json && tsc-alias -p tsconfig.client.json && node tool/build.js",
-    "build-server": "tsc -p tsconfig.server.json && tsc-alias -p tsconfig.server.json && chmod +x out/zero/src/cli.js out/zero/src/gen-auth.js",
+    "build-server": "tsc -p tsconfig.server.json && tsc-alias -p tsconfig.server.json && chmod +x out/zero/src/cli.js out/zero/src/gen-schema-json.js",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
@@ -86,7 +86,7 @@
   },
   "bin": {
     "zero-cache": "./out/zero/src/cli.js",
-    "zero-gen-auth": "./out/zero/src/gen-auth.js"
+    "zero-gen-schema-json": "./out/zero/src/gen-schema-json.js"
   },
   "engines": {
     "node": ">=20"
