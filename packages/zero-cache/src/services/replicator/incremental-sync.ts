@@ -293,8 +293,7 @@ export class MessageProcessor {
       this.#currentTx = null;
 
       assert(watermark);
-      const elapsedMs = tx.processCommit(msg, watermark);
-      lc.debug?.(`Committed tx (${elapsedMs} ms)`);
+      tx.processCommit(msg, watermark);
       return true;
     }
 
@@ -623,7 +622,7 @@ class TransactionProcessor {
     this.#db.commit();
 
     const elapsedMs = Date.now() - this.#startMs;
-    return elapsedMs;
+    this.#lc.debug?.(`Committed tx@${this.#version} (${elapsedMs} ms)`);
   }
 
   abort(lc: LogContext) {
