@@ -6,7 +6,6 @@ import {
 import type {Schema} from '../../../zero-schema/src/schema.js';
 import {readFile} from 'node:fs/promises';
 import * as v from '../../../shared/src/valita.js';
-import type { ZeroConfig } from '../config/zero-config.js';
 
 const ENV_VAR_PREFIX = 'ZERO_SCHEMA_';
 
@@ -27,7 +26,11 @@ function parseAuthConfig(
   try {
     const config = JSON.parse(input);
     return {
-      authorization: v.parse(config.authorization, authorizationConfigSchema, 'strict'),
+      authorization: v.parse(
+        config.authorization,
+        authorizationConfigSchema,
+        'strict',
+      ),
       schema: config.schema,
     };
   } catch (e) {
@@ -37,7 +40,7 @@ function parseAuthConfig(
   }
 }
 
-export async function getSchema(_config: ZeroConfig): Promise<{
+export async function getSchema(): Promise<{
   schema: Schema;
   authorization: AuthorizationConfig;
 }> {

@@ -45,11 +45,13 @@ async function main() {
     path.basename(absoluteConfigPath),
   );
 
-
   try {
     const module = await tsImport(relativePath, import.meta.url);
     assert(module.default.schema, 'Schema file must export "schema"');
-    assert(module.default.authorization, 'Schema file must export "authorization"');
+    assert(
+      module.default.authorization,
+      'Schema file must export "authorization"',
+    );
     assert(module.schema, 'Schema file must export "schema type"');
 
     const authConfig = v.parse(
