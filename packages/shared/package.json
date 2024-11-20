@@ -17,7 +17,7 @@
     "@rocicorp/logger": "^5.3.0",
     "@rocicorp/resolver": "^1.0.2",
     "semver": "^7.5.4",
-    "xxhash-wasm": "^1.0.2"
+    "xxhash-wasm": "^1.1.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20231010.0",
