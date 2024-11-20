@@ -122,7 +122,7 @@ if (numSyncers) {
   ).once('message', () => subscribeTo(lc, replicator));
   const notifier = createNotifierFrom(lc, replicator);
   for (let i = 0; i < numSyncers; i++) {
-    syncers.push(loadWorker('./syncer.ts', 'user-facing', i + 1));
+    syncers.push(loadWorker('./syncer.ts', 'user-facing', i + 1, mode));
   }
   syncers.forEach(syncer => handleSubscriptionsFrom(lc, syncer, notifier));
 }
