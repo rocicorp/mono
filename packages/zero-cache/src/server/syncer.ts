@@ -72,7 +72,7 @@ export default async function runWorker(parent: Worker): Promise<void> {
       cvrDB,
       new PipelineDriver(
         logger,
-        new Snapshotter(lc, config.replicaFile),
+        new Snapshotter(logger, config.replicaFile),
         operatorStorage.createClientGroupStorage(id),
       ),
       sub,
