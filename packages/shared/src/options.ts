@@ -369,6 +369,8 @@ function parseArgs(
   exit: (code?: number) => never,
 ) {
   function normalizeFlagValue(value: unknown) {
+    // A --flag without value is parsed by commandLineArgs() to `null`,
+    // but this is a common convention to set a boolean flag to true.
     return value === null ? true : value;
   }
 
