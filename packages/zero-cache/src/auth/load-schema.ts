@@ -27,7 +27,7 @@ function parseAuthConfig(
   try {
     const config = JSON.parse(input);
     return {
-      authorization: v.parse(config, authorizationConfigSchema, 'strict'),
+      authorization: v.parse(config.authorization, authorizationConfigSchema, 'strict'),
       schema: config.schema,
     };
   } catch (e) {

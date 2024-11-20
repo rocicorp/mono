@@ -45,19 +45,27 @@ async function main() {
     path.basename(absoluteConfigPath),
   );
 
+
   try {
     const module = await tsImport(relativePath, import.meta.url);
-
-    assert(module.schema, 'Schema file must export "schema"');
-    assert(module.authorization, 'Schema file must export "authorization"');
+    assert(module.default.schema, 'Schema file must export "schema"');
+    assert(module.default.authorization, 'Schema file must export "authorization"');
+    assert(module.schema, 'Schema file must export "schema type"');
 
     const authConfig = v.parse(
-      await module.authorization,
+      await module.default.authorization,
       authorizationConfigSchema,
       'strict',
     );
+    const rawSchema = await module.default.schema;
+    //const schemaConfig = v.parse(rawSchema, module.schema, 'strict');
 
-    await writeFile(config.output, JSON.stringify(authConfig, undefined, 2));
+    const output = {
+      authorization: authConfig,
+      schema: rawSchema,
+    };
+
+    await writeFile(config.output, JSON.stringify(output, undefined, 2));
   } catch (e) {
     console.error(
       `Failed to load zero schema from ${absoluteConfigPath}: ${e}`,
