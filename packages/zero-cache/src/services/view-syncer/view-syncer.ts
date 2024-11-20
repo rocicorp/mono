@@ -115,9 +115,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ) {
     this.id = clientGroupID;
     this.#shardID = shardID;
-    this.#lc = lc
-      .withContext('component', 'view-syncer')
-      .withContext('serviceID', this.id);
+    this.#lc = lc;
     this.#pipelines = pipelineDriver;
     this.#stateChanges = versionChanges;
     this.#drainCoordinator = drainCoordinator;
