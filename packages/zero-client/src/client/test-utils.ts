@@ -19,6 +19,7 @@ import {
   type PullResponseMessage,
   upstreamSchema,
 } from '../../../zero-protocol/src/mod.js';
+import type {Schema} from '../../../zero-schema/src/mod.js';
 import type {LogOptions} from './log-options.js';
 import type {ZeroOptions} from './options.js';
 import {
@@ -29,7 +30,6 @@ import {
   exposedToTestingSymbol,
   onSetConnectionStateSymbol,
 } from './zero.js';
-import type {Schema} from '../../../zero-schema/src/mod.js';
 
 export async function tickAFewTimes(clock: SinonFakeTimers, duration = 100) {
   const n = 10;
@@ -251,4 +251,27 @@ export async function waitForUpstreamMessage(
       break;
     }
   }
+}
+export function storageMock(storage: Record<string, string>): Storage {
+  return {
+    setItem: (key, value) => {
+      storage[key] = value || '';
+    },
+    getItem: key => (key in storage ? storage[key] : null),
+    removeItem: key => {
+      delete storage[key];
+    },
+    clear: () => {
+      for (const key of Object.keys(storage)) {
+        delete storage[key];
+      }
+    },
+    get length() {
+      return Object.keys(storage).length;
+    },
+    key: i => {
+      const keys = Object.keys(storage);
+      return keys[i] || null;
+    },
+  };
 }

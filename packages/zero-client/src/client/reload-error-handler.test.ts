@@ -12,30 +12,7 @@ import {
   resetBackoff,
   type BackoffState,
 } from './reload-error-handler.js';
-
-function storageMock(storage: Record<string, string>): Storage {
-  return {
-    setItem: (key, value) => {
-      storage[key] = value || '';
-    },
-    getItem: key => (key in storage ? storage[key] : null),
-    removeItem: key => {
-      delete storage[key];
-    },
-    clear: () => {
-      for (const key of Object.keys(storage)) {
-        delete storage[key];
-      }
-    },
-    get length() {
-      return Object.keys(storage).length;
-    },
-    key: i => {
-      const keys = Object.keys(storage);
-      return keys[i] || null;
-    },
-  };
-}
+import {storageMock} from './test-utils.js';
 
 describe('reloadWithReason', () => {
   let sessionStorageDescriptor: PropertyDescriptor;
