@@ -1,6 +1,7 @@
 import {pid} from 'node:process';
 import {assert} from '../../../shared/src/asserts.js';
 import {must} from '../../../shared/src/must.js';
+import * as v from '../../../shared/src/valita.js';
 import {getZeroConfig} from '../config/zero-config.js';
 import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.js';
 import {
@@ -13,9 +14,9 @@ import {
   type Worker,
 } from '../types/processes.js';
 import {
+  replicaFileModeSchema,
   setUpMessageHandlers,
   setupReplica,
-  type ReplicaFileMode,
 } from '../workers/replicator.js';
 import {exitAfter, runUntilKilled} from './life-cycle.js';
 import {createLogContext} from './logging.js';
@@ -25,8 +26,7 @@ export default async function runWorker(
   ...args: string[]
 ): Promise<void> {
   assert(args.length > 0, `replicator mode not specified`);
-
-  const fileMode = args[0] as ReplicaFileMode;
+  const fileMode = v.parse(args[0], replicaFileModeSchema);
 
   const config = getZeroConfig(args.slice(1));
   const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';

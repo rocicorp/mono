@@ -238,6 +238,17 @@ class Snapshot {
   static create(lc: LogContext, dbFile: string) {
     const conn = new Database(lc, dbFile);
     conn.pragma('synchronous = OFF'); // Applied changes are ephemeral; COMMIT is never called.
+    const [{journal_mode: mode}] = conn.pragma('journal_mode') as [
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      {journal_mode: string},
+    ];
+    // The Snapshotter operates on the replica file with BEGIN CONCURRENT,
+    // which must be used in concert with the replicator using BEGIN CONCURRENT
+    // on a db in the wal2 journal_mode.
+    assert(
+      mode === 'wal2',
+      `replica db must be in wal2 mode (current: ${mode})`,
+    );
 
     const db = new StatementRunner(conn);
     db.beginConcurrent();
