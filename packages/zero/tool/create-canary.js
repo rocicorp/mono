@@ -91,9 +91,21 @@ function bumpCanaryVersion(version, hash) {
   return `${major}.${minor}.${patch}+${hash}`;
 }
 
+// To do a maintenance/cherry-pick release:
+// - create a maintenance release from tag you want to patch, like
+//   `maint/zero/vX.Y`
+// - cherry-pick the commit(s) you want into that branch
+// - push the branch to origin
+// - Run this command with the branch name as the first argument
+
+const buildBranch = process.argv[2] ?? 'main';
+console.log(`Releasing from branch: ${buildBranch}`);
+
 try {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zero-build-'));
-  execute(`git clone --depth 1 git@github.com:rocicorp/mono.git ${tempDir}`);
+  execute(
+    `git clone --branch ${buildBranch} --depth 1 git@github.com:rocicorp/mono.git ${tempDir}`,
+  );
   process.chdir(tempDir);
   //installs turbo and other build dependencies
   execute('npm install');
@@ -107,8 +119,8 @@ try {
   currentPackageData.version = nextCanaryVersion;
 
   const tagName = `zero/v${nextCanaryVersion}`;
-  const branchName = `release_zero/v${nextCanaryVersion}`;
-  execute(`git checkout -b ${branchName} origin/main`);
+  const workBranchName = `release_zero/v${nextCanaryVersion}`;
+  execute(`git checkout -b ${workBranchName} HEAD`);
 
   writePackageData(ZERO_PACKAGE_JSON_PATH, currentPackageData);
 
@@ -136,10 +148,10 @@ try {
 
   execute(`git tag ${tagName}`);
   execute(`git push origin ${tagName}`);
-  execute(`git checkout main`);
+  execute(`git checkout ${buildBranch}`);
   execute(`git pull`);
-  execute(`git merge ${branchName}`);
-  execute(`git push origin main`);
+  execute(`git merge ${tagName}`);
+  execute(`git push origin ${buildBranch}`);
 
   console.log(``);
   console.log(``);
@@ -148,7 +160,9 @@ try {
   console.log(
     `* Published @rocicorp/zero@${nextCanaryVersion} to npm with tag '@canary'.`,
   );
-  console.log(`* Pushed Git tag ${tagName} to origin and merged with main.`);
+  console.log(
+    `* Pushed Git tag ${tagName} to origin and merged with ${buildBranch}.`,
+  );
   console.log(``);
   console.log(``);
   console.log(`Next steps:`);
