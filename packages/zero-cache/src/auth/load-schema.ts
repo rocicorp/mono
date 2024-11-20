@@ -37,7 +37,7 @@ function parseAuthConfig(
   }
 }
 
-export function getSchema(_config: ZeroConfig): Promise<{
+export async function getSchema(_config: ZeroConfig): Promise<{
   schema: Schema;
   authorization: AuthorizationConfig;
 }> {
