@@ -327,59 +327,42 @@ export class Take implements Operator {
         // change is after bound
         return;
       }
-      if (takeState.size === 1) {
-        this.#storage.set(takeStateKey, {
-          size: 0,
-          bound: undefined,
-        });
-        this.#output.push(change);
-        return;
-      }
-      // The bound is removed
-      let beforeBoundNode: Node | undefined;
-      let afterBoundNode: Node | undefined;
-      if (compToBound === 0) {
-        [beforeBoundNode, afterBoundNode] = take(
-          this.#input.fetch({
-            start: {
-              row: takeState.bound,
-              basis: 'before',
-            },
-            constraint,
-          }),
-          2,
-        );
-      } else {
-        [beforeBoundNode, , afterBoundNode] = take(
-          this.#input.fetch({
-            start: {
-              row: takeState.bound,
-              basis: 'before',
-            },
-            constraint,
-          }),
-          3,
-        );
+      let newBound: {node: Node; push: boolean} | undefined = undefined;
+      for (const node of this.#input.fetch({
+        start: {
+          row: takeState.bound,
+          basis: 'before',
+        },
+        constraint,
+      })) {
+        const push = compareRows(node.row, takeState.bound) > 0;
+        newBound = {
+          node,
+          push,
+        };
+        if (push) {
+          break;
+        }
       }
 
-      if (afterBoundNode) {
+      if (newBound?.push) {
         this.#setTakeState(
           takeStateKey,
           takeState.size,
-          afterBoundNode.row,
+          newBound.node.row,
           maxBound,
         );
         this.#output.push(change);
         this.#output.push({
           type: 'add',
-          node: afterBoundNode,
+          node: newBound.node,
         });
         return;
       }
       this.#setTakeState(
         takeStateKey,
         takeState.size - 1,
-        compToBound === 0 ? beforeBoundNode.row : takeState.bound,
+        newBound?.node.row,
         maxBound,
       );
       this.#output.push(change);
@@ -397,7 +380,8 @@ export class Take implements Operator {
 
     if (
       this.#partitionKey &&
-      change.oldRow[this.#partitionKey] !== change.row[this.#partitionKey]
+      change.oldNode.row[this.#partitionKey] !==
+        change.node.row[this.#partitionKey]
     ) {
       // different partition key so fall back to remove/add.
 
@@ -409,37 +393,35 @@ export class Take implements Operator {
       // an edit, as the row is present in the output of this operator before
       // and after applying this push.
 
-      // We do not need the relationships because Take comes before Join
       this.push({
         type: 'remove',
-        node: {
-          row: change.oldRow,
-          relationships: {},
-        },
+        node: change.oldNode,
       });
       this.push({
         type: 'add',
-        node: {
-          row: change.row,
-          relationships: {},
-        },
+        node: change.node,
       });
       return;
     }
 
     const {takeState, takeStateKey, maxBound, constraint} =
-      this.#getStateAndConstraint(change.oldRow);
+      this.#getStateAndConstraint(change.oldNode.row);
     if (!takeState) {
       return;
     }
 
     assert(takeState.bound, 'Bound should be set');
     const {compareRows} = this.getSchema();
-    const oldCmp = compareRows(change.oldRow, takeState.bound);
-    const newCmp = compareRows(change.row, takeState.bound);
+    const oldCmp = compareRows(change.oldNode.row, takeState.bound);
+    const newCmp = compareRows(change.node.row, takeState.bound);
 
     const replaceBoundAndForwardChange = () => {
-      this.#setTakeState(takeStateKey, takeState.size, change.row, maxBound);
+      this.#setTakeState(
+        takeStateKey,
+        takeState.size,
+        change.node.row,
+        maxBound,
+      );
       this.#output!.push(change);
     };
 
@@ -500,7 +482,7 @@ export class Take implements Operator {
 
       // The next row is the new row. We can replace the bounds and keep the
       // edit change.
-      if (compareRows(newBoundNode.row, change.row) === 0) {
+      if (compareRows(newBoundNode.row, change.node.row) === 0) {
         replaceBoundAndForwardChange();
         return;
       }
@@ -515,10 +497,7 @@ export class Take implements Operator {
       );
       this.#output.push({
         type: 'remove',
-        node: {
-          row: change.oldRow,
-          relationships: {},
-        },
+        node: change.oldNode,
       });
       this.#output.push({
         type: 'add',
@@ -561,13 +540,9 @@ export class Take implements Operator {
         node: oldBoundNode,
       });
 
-      // We do not need the relationships because Take comes before Join
       this.#output.push({
         type: 'add',
-        node: {
-          row: change.row,
-          relationships: {},
-        },
+        node: change.node,
       });
 
       return;
@@ -601,7 +576,7 @@ export class Take implements Operator {
       );
 
       // The new row is the new bound. Use an edit change.
-      if (compareRows(afterBoundNode.row, change.row) === 0) {
+      if (compareRows(afterBoundNode.row, change.node.row) === 0) {
         replaceBoundAndForwardChange();
         return;
       }
@@ -613,13 +588,9 @@ export class Take implements Operator {
         maxBound,
       );
 
-      // We do not need the relationships because Take comes before Join
       this.#output.push({
         type: 'remove',
-        node: {
-          row: change.oldRow,
-          relationships: {},
-        },
+        node: change.oldNode,
       });
       this.#output.push({
         type: 'add',

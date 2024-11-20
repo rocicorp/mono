@@ -407,6 +407,26 @@ suite('push one:many', () => {
             row: {id: 'i1', text: 'issue 1 edited'},
           },
         ],
+        [
+          '1',
+          'cleanup',
+          {
+            constraint: {
+              key: 'issueID',
+              value: 'i1',
+            },
+          },
+        ],
+        [
+          '1',
+          'fetch',
+          {
+            constraint: {
+              key: 'issueID',
+              value: 'i1',
+            },
+          },
+        ],
       ],
       expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
       expectedOutput: [
@@ -517,7 +537,6 @@ suite('push one:many', () => {
             row: {id: 'c1', issueID: 'i2', text: 'comment 1.2'},
           },
         ],
-        ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
         ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
         ['0', 'fetch', {constraint: {key: 'id', value: 'i2'}}],
       ],
@@ -618,57 +637,46 @@ suite('push one:many', () => {
       ],
       expectedOutput: [
         {
-          type: 'edit',
-          oldRow: {
-            id: 'i1',
-            text: 'issue 1',
+          node: {
+            relationships: {
+              comments: [
+                {
+                  relationships: {},
+                  row: {
+                    id: 'c1',
+                    issueID: 'i1',
+                    text: 'comment 1',
+                  },
+                },
+              ],
+            },
+            row: {
+              id: 'i1',
+              text: 'issue 1',
+            },
           },
-          row: {
-            id: 'i3',
-            text: 'issue 1.3',
-          },
+          type: 'remove',
         },
         {
-          type: 'child',
-          child: {
-            change: {
-              type: 'remove',
-              node: {
-                row: {
-                  id: 'c1',
-                  issueID: 'i1',
-                  text: 'comment 1',
+          node: {
+            relationships: {
+              comments: [
+                {
+                  relationships: {},
+                  row: {
+                    id: 'c3',
+                    issueID: 'i3',
+                    text: 'comment 3',
+                  },
                 },
-                relationships: {},
-              },
+              ],
             },
-            relationshipName: 'comments',
-          },
-          row: {
-            id: 'i3',
-            text: 'issue 1.3',
-          },
-        },
-        {
-          type: 'child',
-          child: {
-            change: {
-              node: {
-                relationships: {},
-                row: {
-                  id: 'c3',
-                  issueID: 'i3',
-                  text: 'comment 3',
-                },
-              },
-              type: 'add',
+            row: {
+              id: 'i3',
+              text: 'issue 1.3',
             },
-            relationshipName: 'comments',
           },
-          row: {
-            id: 'i3',
-            text: 'issue 1.3',
-          },
+          type: 'add',
         },
       ],
     });
@@ -889,7 +897,8 @@ suite('push many:one', () => {
             oldRow: {id: 'u2', text: 'user 2'},
           },
         ],
-        ['1', 'fetch', {constraint: {key: 'id', value: 'u2'}}],
+        // ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+        // ['1', 'fetch', {constraint: {key: 'id', value: 'u2'}}],
         ['0', 'fetch', {constraint: {key: 'ownerID', value: 'u2'}}],
         ['0', 'fetch', {constraint: {key: 'ownerID', value: 'u1'}}],
       ],
@@ -938,6 +947,128 @@ suite('push many:one', () => {
                   text: 'user 1',
                 },
                 relationships: {},
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    pushTest({
+      columns: [
+        {id: {type: 'string'}, text: {type: 'string'}},
+        {
+          id: {type: 'string'},
+          ownerID: {type: 'string'},
+          text: {type: 'string'},
+        },
+        {
+          id: {type: 'string'},
+          issueID: {type: 'string'},
+        },
+      ],
+      primaryKeys: [['id'], ['id'], ['id']],
+      joins: [
+        {
+          parentKey: 'id',
+          childKey: 'ownerID',
+          relationshipName: 'issues',
+        },
+        {
+          parentKey: 'id',
+          childKey: 'issueID',
+          relationshipName: 'comments',
+        },
+      ],
+      name: 'edit child to make it match to parents, 1 to many to many',
+      sources: [
+        [
+          {id: 'u1', text: 'user 1'},
+          {id: 'u2', text: 'user 2'},
+        ],
+        [
+          {id: 'i1', ownerID: 'u1', text: 'item 1'},
+          {id: 'i2', ownerID: 'u2', text: 'item 2'},
+        ],
+        [
+          {id: 'c1', issueID: 'i1'},
+          {id: 'c2', issueID: 'i2'},
+        ],
+      ],
+      pushes: [
+        [
+          1,
+          {
+            type: 'edit',
+            row: {id: 'i2', ownerID: 'u1', text: 'item 2'},
+            oldRow: {id: 'i2', ownerID: 'u2', text: 'item 2'},
+          },
+        ],
+      ],
+      expectedLog: [
+        [
+          '1',
+          'push',
+          {
+            type: 'edit',
+            row: {id: 'i2', ownerID: 'u1', text: 'item 2'},
+            oldRow: {id: 'i2', ownerID: 'u2', text: 'item 2'},
+          },
+        ],
+        ['2', 'cleanup', {constraint: {key: 'issueID', value: 'i2'}}],
+        ['2', 'fetch', {constraint: {key: 'issueID', value: 'i2'}}],
+        ['0', 'fetch', {constraint: {key: 'id', value: 'u2'}}],
+        ['0', 'fetch', {constraint: {key: 'id', value: 'u1'}}],
+      ],
+      expectedPrimaryKeySetStorageKeys: [
+        [
+          ['u1', 'u1'],
+          ['u2', 'u2'],
+        ],
+        [
+          ['i1', 'i1'],
+          ['i2', 'i2'],
+        ],
+      ],
+      expectedOutput: [
+        {
+          type: 'child',
+          row: {
+            id: 'u2',
+            text: 'user 2',
+          },
+          child: {
+            relationshipName: 'issues',
+            change: {
+              type: 'remove',
+              node: {
+                row: {id: 'i2', ownerID: 'u2', text: 'item 2'},
+                relationships: {
+                  comments: [
+                    {row: {id: 'c2', issueID: 'i2'}, relationships: {}},
+                  ],
+                },
+              },
+            },
+          },
+        },
+        {
+          type: 'child',
+          row: {
+            id: 'u1',
+            text: 'user 1',
+          },
+          child: {
+            relationshipName: 'issues',
+            change: {
+              type: 'add',
+              node: {
+                row: {id: 'i2', ownerID: 'u1', text: 'item 2'},
+                relationships: {
+                  comments: [
+                    {row: {id: 'c2', issueID: 'i2'}, relationships: {}},
+                  ],
+                },
               },
             },
           },
@@ -1614,26 +1745,27 @@ describe('edit assignee', () => {
           },
         ],
         [
-          "creator",
-          "push",
+          "user",
+          "cleanup",
           {
-            "oldRow": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
+            "constraint": {
+              "key": "userID",
+              "value": "u1",
             },
-            "row": {
-              "assigneeID": "u1",
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-            "type": "edit",
           },
         ],
         [
-          "assignee",
+          "user",
+          "fetch",
+          {
+            "constraint": {
+              "key": "userID",
+              "value": "u1",
+            },
+          },
+        ],
+        [
+          "creator",
           "push",
           {
             "oldRow": {
@@ -1662,6 +1794,19 @@ describe('edit assignee', () => {
           },
         ],
         [
+          "assignee",
+          "push",
+          {
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "remove",
+          },
+        ],
+        [
           "user",
           "fetch",
           {
@@ -1675,20 +1820,13 @@ describe('edit assignee', () => {
           "assignee",
           "push",
           {
-            "child": {
-              "row": {
-                "name": "user 1",
-                "userID": "u1",
-              },
-              "type": "add",
-            },
             "row": {
               "assigneeID": "u1",
               "creatorID": "u1",
               "issueID": "i1",
               "text": "first issue",
             },
-            "type": "child",
+            "type": "add",
           },
         ],
       ]
@@ -1697,57 +1835,74 @@ describe('edit assignee', () => {
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
-          "oldRow": {
-            "assigneeID": undefined,
-            "creatorID": "u1",
-            "issueID": "i1",
-            "text": "first issue",
+          "node": {
+            "relationships": {
+              "assignee": [],
+              "creator": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "name": "user 1",
+                    "userID": "u1",
+                  },
+                },
+              ],
+            },
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
           },
-          "row": {
-            "assigneeID": "u1",
-            "creatorID": "u1",
-            "issueID": "i1",
-            "text": "first issue",
-          },
-          "type": "edit",
+          "type": "remove",
         },
         {
-          "child": {
-            "change": {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "name": "user 1",
-                  "userID": "u1",
+          "node": {
+            "relationships": {
+              "assignee": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "name": "user 1",
+                    "userID": "u1",
+                  },
                 },
-              },
-              "type": "add",
+              ],
+              "creator": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "name": "user 1",
+                    "userID": "u1",
+                  },
+                },
+              ],
             },
-            "relationshipName": "assignee",
+            "row": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
           },
-          "row": {
-            "assigneeID": "u1",
-            "creatorID": "u1",
-            "issueID": "i1",
-            "text": "first issue",
-          },
-          "type": "child",
+          "type": "add",
         },
       ]
     `);
 
     expect(actualStorage).toMatchInlineSnapshot(`
-    {
-      "assignee": {
-        ""pKeySet","u1","i1",": true,
-        ""pKeySet","u2","i2",": true,
-      },
-      "creator": {
-        ""pKeySet","u1","i1",": true,
-        ""pKeySet","u2","i2",": true,
-      },
-    }
-  `);
+      {
+        "assignee": {
+          ""pKeySet","u1","i1",": true,
+          ""pKeySet","u2","i2",": true,
+        },
+        "creator": {
+          ""pKeySet","u1","i1",": true,
+          ""pKeySet","u2","i2",": true,
+        },
+      }
+    `);
   });
 
   test('from none to many', () => {
@@ -1875,26 +2030,27 @@ describe('edit assignee', () => {
           },
         ],
         [
-          "creator",
-          "push",
+          "user",
+          "cleanup",
           {
-            "oldRow": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
+            "constraint": {
+              "key": "userID",
+              "value": "u1",
             },
-            "row": {
-              "assigneeID": "u1",
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-            "type": "edit",
           },
         ],
         [
-          "assignee",
+          "user",
+          "fetch",
+          {
+            "constraint": {
+              "key": "userID",
+              "value": "u1",
+            },
+          },
+        ],
+        [
+          "creator",
           "push",
           {
             "oldRow": {
@@ -1923,6 +2079,19 @@ describe('edit assignee', () => {
           },
         ],
         [
+          "assignee",
+          "push",
+          {
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "remove",
+          },
+        ],
+        [
           "user",
           "fetch",
           {
@@ -1936,42 +2105,13 @@ describe('edit assignee', () => {
           "assignee",
           "push",
           {
-            "child": {
-              "row": {
-                "id": 1,
-                "name": "user 1",
-                "userID": "u1",
-              },
-              "type": "add",
-            },
             "row": {
               "assigneeID": "u1",
               "creatorID": "u1",
               "issueID": "i1",
               "text": "first issue",
             },
-            "type": "child",
-          },
-        ],
-        [
-          "assignee",
-          "push",
-          {
-            "child": {
-              "row": {
-                "id": 1.5,
-                "name": "user 1.5",
-                "userID": "u1",
-              },
-              "type": "add",
-            },
-            "row": {
-              "assigneeID": "u1",
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-            "type": "child",
+            "type": "add",
           },
         ],
       ]
@@ -1980,81 +2120,101 @@ describe('edit assignee', () => {
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
-          "oldRow": {
-            "assigneeID": undefined,
-            "creatorID": "u1",
-            "issueID": "i1",
-            "text": "first issue",
+          "node": {
+            "relationships": {
+              "assignee": [],
+              "creator": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": 1,
+                    "name": "user 1",
+                    "userID": "u1",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": 1.5,
+                    "name": "user 1.5",
+                    "userID": "u1",
+                  },
+                },
+              ],
+            },
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
           },
-          "row": {
-            "assigneeID": "u1",
-            "creatorID": "u1",
-            "issueID": "i1",
-            "text": "first issue",
-          },
-          "type": "edit",
+          "type": "remove",
         },
         {
-          "child": {
-            "change": {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "id": 1,
-                  "name": "user 1",
-                  "userID": "u1",
+          "node": {
+            "relationships": {
+              "assignee": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": 1,
+                    "name": "user 1",
+                    "userID": "u1",
+                  },
                 },
-              },
-              "type": "add",
-            },
-            "relationshipName": "assignee",
-          },
-          "row": {
-            "assigneeID": "u1",
-            "creatorID": "u1",
-            "issueID": "i1",
-            "text": "first issue",
-          },
-          "type": "child",
-        },
-        {
-          "child": {
-            "change": {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "id": 1.5,
-                  "name": "user 1.5",
-                  "userID": "u1",
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": 1.5,
+                    "name": "user 1.5",
+                    "userID": "u1",
+                  },
                 },
-              },
-              "type": "add",
+              ],
+              "creator": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": 1,
+                    "name": "user 1",
+                    "userID": "u1",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": 1.5,
+                    "name": "user 1.5",
+                    "userID": "u1",
+                  },
+                },
+              ],
             },
-            "relationshipName": "assignee",
+            "row": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
           },
-          "row": {
-            "assigneeID": "u1",
-            "creatorID": "u1",
-            "issueID": "i1",
-            "text": "first issue",
-          },
-          "type": "child",
+          "type": "add",
         },
       ]
     `);
 
     expect(actualStorage).toMatchInlineSnapshot(`
-    {
-      "assignee": {
-        ""pKeySet","u1","i1",": true,
-        ""pKeySet","u2","i2",": true,
-      },
-      "creator": {
-        ""pKeySet","u1","i1",": true,
-        ""pKeySet","u2","i2",": true,
-      },
-    }
-  `);
+      {
+        "assignee": {
+          ""pKeySet","u1","i1",": true,
+          ""pKeySet","u2","i2",": true,
+        },
+        "creator": {
+          ""pKeySet","u1","i1",": true,
+          ""pKeySet","u2","i2",": true,
+        },
+      }
+    `);
   });
 
   test('from one to none', () => {
@@ -2145,26 +2305,27 @@ describe('edit assignee', () => {
           },
         ],
         [
-          "creator",
-          "push",
+          "user",
+          "cleanup",
           {
-            "oldRow": {
-              "assigneeID": "u1",
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
+            "constraint": {
+              "key": "userID",
+              "value": "u1",
             },
-            "row": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-            "type": "edit",
           },
         ],
         [
-          "assignee",
+          "user",
+          "fetch",
+          {
+            "constraint": {
+              "key": "userID",
+              "value": "u1",
+            },
+          },
+        ],
+        [
+          "creator",
           "push",
           {
             "oldRow": {
@@ -2196,20 +2357,13 @@ describe('edit assignee', () => {
           "assignee",
           "push",
           {
-            "child": {
-              "row": {
-                "name": "user 1",
-                "userID": "u1",
-              },
-              "type": "remove",
-            },
             "row": {
-              "assigneeID": undefined,
+              "assigneeID": "u1",
               "creatorID": "u1",
               "issueID": "i1",
               "text": "first issue",
             },
-            "type": "child",
+            "type": "remove",
           },
         ],
         [
@@ -2222,47 +2376,77 @@ describe('edit assignee', () => {
             },
           },
         ],
+        [
+          "assignee",
+          "push",
+          {
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "add",
+          },
+        ],
       ]
     `);
 
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
-          "oldRow": {
-            "assigneeID": "u1",
-            "creatorID": "u1",
-            "issueID": "i1",
-            "text": "first issue",
+          "node": {
+            "relationships": {
+              "assignee": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "name": "user 1",
+                    "userID": "u1",
+                  },
+                },
+              ],
+              "creator": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "name": "user 1",
+                    "userID": "u1",
+                  },
+                },
+              ],
+            },
+            "row": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
           },
-          "row": {
-            "assigneeID": undefined,
-            "creatorID": "u1",
-            "issueID": "i1",
-            "text": "first issue",
-          },
-          "type": "edit",
+          "type": "remove",
         },
         {
-          "child": {
-            "change": {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "name": "user 1",
-                  "userID": "u1",
+          "node": {
+            "relationships": {
+              "assignee": [],
+              "creator": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "name": "user 1",
+                    "userID": "u1",
+                  },
                 },
-              },
-              "type": "remove",
+              ],
             },
-            "relationshipName": "assignee",
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
           },
-          "row": {
-            "assigneeID": undefined,
-            "creatorID": "u1",
-            "issueID": "i1",
-            "text": "first issue",
-          },
-          "type": "child",
+          "type": "add",
         },
       ]
     `);
@@ -2396,26 +2580,27 @@ describe('edit assignee', () => {
           },
         ],
         [
-          "creator",
-          "push",
+          "user",
+          "cleanup",
           {
-            "oldRow": {
-              "assigneeID": "u1",
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
+            "constraint": {
+              "key": "userID",
+              "value": "u1",
             },
-            "row": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-            "type": "edit",
           },
         ],
         [
-          "assignee",
+          "user",
+          "fetch",
+          {
+            "constraint": {
+              "key": "userID",
+              "value": "u1",
+            },
+          },
+        ],
+        [
+          "creator",
           "push",
           {
             "oldRow": {
@@ -2447,42 +2632,13 @@ describe('edit assignee', () => {
           "assignee",
           "push",
           {
-            "child": {
-              "row": {
-                "id": 1,
-                "name": "user 1",
-                "userID": "u1",
-              },
-              "type": "remove",
-            },
             "row": {
-              "assigneeID": undefined,
+              "assigneeID": "u1",
               "creatorID": "u1",
               "issueID": "i1",
               "text": "first issue",
             },
-            "type": "child",
-          },
-        ],
-        [
-          "assignee",
-          "push",
-          {
-            "child": {
-              "row": {
-                "id": 1.5,
-                "name": "user 1.5",
-                "userID": "u1",
-              },
-              "type": "remove",
-            },
-            "row": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-            "type": "child",
+            "type": "remove",
           },
         ],
         [
@@ -2495,71 +2651,104 @@ describe('edit assignee', () => {
             },
           },
         ],
+        [
+          "assignee",
+          "push",
+          {
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "add",
+          },
+        ],
       ]
     `);
 
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
-          "oldRow": {
-            "assigneeID": "u1",
-            "creatorID": "u1",
-            "issueID": "i1",
-            "text": "first issue",
+          "node": {
+            "relationships": {
+              "assignee": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": 1,
+                    "name": "user 1",
+                    "userID": "u1",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": 1.5,
+                    "name": "user 1.5",
+                    "userID": "u1",
+                  },
+                },
+              ],
+              "creator": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": 1,
+                    "name": "user 1",
+                    "userID": "u1",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": 1.5,
+                    "name": "user 1.5",
+                    "userID": "u1",
+                  },
+                },
+              ],
+            },
+            "row": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
           },
-          "row": {
-            "assigneeID": undefined,
-            "creatorID": "u1",
-            "issueID": "i1",
-            "text": "first issue",
-          },
-          "type": "edit",
+          "type": "remove",
         },
         {
-          "child": {
-            "change": {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "id": 1,
-                  "name": "user 1",
-                  "userID": "u1",
+          "node": {
+            "relationships": {
+              "assignee": [],
+              "creator": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": 1,
+                    "name": "user 1",
+                    "userID": "u1",
+                  },
                 },
-              },
-              "type": "remove",
-            },
-            "relationshipName": "assignee",
-          },
-          "row": {
-            "assigneeID": undefined,
-            "creatorID": "u1",
-            "issueID": "i1",
-            "text": "first issue",
-          },
-          "type": "child",
-        },
-        {
-          "child": {
-            "change": {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "id": 1.5,
-                  "name": "user 1.5",
-                  "userID": "u1",
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": 1.5,
+                    "name": "user 1.5",
+                    "userID": "u1",
+                  },
                 },
-              },
-              "type": "remove",
+              ],
             },
-            "relationshipName": "assignee",
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
           },
-          "row": {
-            "assigneeID": undefined,
-            "creatorID": "u1",
-            "issueID": "i1",
-            "text": "first issue",
-          },
-          "type": "child",
+          "type": "add",
         },
       ]
     `);

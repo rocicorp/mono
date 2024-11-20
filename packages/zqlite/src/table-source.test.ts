@@ -444,8 +444,8 @@ test('pushing values does the correct writes and outputs', () => {
 
     expect(outputted.shift()).toEqual({
       type: 'edit',
-      oldRow: {a: 1, b: 2.123, c: true},
-      row: {a: 1, b: 2.123, c: false},
+      oldNode: {row: {a: 1, b: 2.123, c: true}, relationships: {}},
+      node: {row: {a: 1, b: 2.123, c: false}, relationships: {}},
     });
 
     expect(read.all()).toEqual([
@@ -461,8 +461,8 @@ test('pushing values does the correct writes and outputs', () => {
     });
     expect(outputted.shift()).toEqual({
       type: 'edit',
-      oldRow: {a: 1, b: 2.123, c: false},
-      row: {a: 1, b: 3, c: false},
+      oldNode: {row: {a: 1, b: 2.123, c: false}, relationships: {}},
+      node: {row: {a: 1, b: 3, c: false}, relationships: {}},
     });
     expect(read.all()).toEqual([
       {a: 9007199254740991, b: 3.456, c: 1},

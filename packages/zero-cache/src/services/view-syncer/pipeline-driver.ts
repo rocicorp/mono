@@ -421,7 +421,7 @@ class Streamer {
         }
         case 'edit':
           yield* this.#streamNodes(queryHash, schema, type, [
-            {row: change.row, relationships: {}},
+            {row: change.node.row, relationships: {}},
           ]);
           break;
         default:

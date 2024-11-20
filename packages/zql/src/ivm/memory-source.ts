@@ -250,14 +250,6 @@ export class MemorySource implements Source {
 
     const matchesConstraintAndFilters = (row: Row) =>
       matchesConstraint(row) && matchesFilters(row);
-    // If there is an overlay for this output, does it match the requested
-    // constraints and filters?
-    if (overlay) {
-      // TODO: This looks wrong given that we can have edit changes in the overlay.
-      if (!matchesConstraintAndFilters(overlay.change.row)) {
-        overlay = undefined;
-      }
-    }
     const nextLowerKey = (row: Row | undefined) => {
       if (!row) {
         return undefined;
@@ -368,7 +360,17 @@ export class MemorySource implements Source {
 
     const outputChange: Change =
       change.type === 'edit'
-        ? change
+        ? {
+            type: change.type,
+            oldNode: {
+              row: change.oldRow,
+              relationships: {},
+            },
+            node: {
+              row: change.row,
+              relationships: {},
+            },
+          }
         : {
             type: change.type,
             node: {
