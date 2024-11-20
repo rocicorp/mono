@@ -58,6 +58,10 @@ test('zero-cache --help', () => {
                                                    This can be lost, but if it is, zero-cache will have to re-replicate next     
                                                    time it starts up.                                                            
                                                                                                                                  
+     --schema-file string                          default: "./schema.ts"                                                        
+       ZERO_SCHEMA_FILE env                                                                                                      
+                                                   File path to the Zero client schema definition.                               
+                                                                                                                                 
      --log-level debug,info,warn,error             default: "info"                                                               
        ZERO_LOG_LEVEL env                                                                                                        
                                                                                                                                  
