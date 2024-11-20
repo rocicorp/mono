@@ -65,9 +65,7 @@ export class MutagenService implements Mutagen, Service {
     authorizationConfig: AuthorizationConfig,
   ) {
     this.id = clientGroupID;
-    this.#lc = lc
-      .withContext('component', 'mutagen')
-      .withContext('serviceID', this.id);
+    this.#lc = lc;
     this.#upstream = upstream;
     this.#shardID = shardID;
     this.#replica = new Database(this.#lc, config.replicaFile, {

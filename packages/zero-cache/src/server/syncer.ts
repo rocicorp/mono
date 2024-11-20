@@ -61,24 +61,28 @@ export default async function runWorker(parent: Worker): Promise<void> {
     id: string,
     sub: Subscription<ReplicaState>,
     drainCoordinator: DrainCoordinator,
-  ) =>
-    new ViewSyncerService(
-      lc,
+  ) => {
+    const logger = lc
+      .withContext('component', 'view-syncer')
+      .withContext('clientGroupID', id);
+    return new ViewSyncerService(
+      logger,
       id,
       config.shard.id,
       cvrDB,
       new PipelineDriver(
-        lc,
+        logger,
         new Snapshotter(lc, config.replicaFile),
         operatorStorage.createClientGroupStorage(id),
       ),
       sub,
       drainCoordinator,
     );
+  };
 
   const mutagenFactory = (id: string) =>
     new MutagenService(
-      lc,
+      lc.withContext('component', 'mutagen').withContext('clientGroupID', id),
       config.shard.id,
       id,
       upstreamDB,
