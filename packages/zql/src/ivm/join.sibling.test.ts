@@ -3,8 +3,7 @@ import {assert} from '../../../shared/src/asserts.js';
 import type {Ordering} from '../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
-import {Catch} from './catch.js';
-import type {Change} from './change.js';
+import {Catch, type CaughtChange} from './catch.js';
 import type {NormalizedValue} from './data.js';
 import {Join, createPrimaryKeySetStorageKey} from './join.js';
 import {MemorySource} from './memory-source.js';
@@ -349,6 +348,46 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
             row: {id: 'i1', ownerId: 'o1', text: 'issue 1 changed'},
           },
         ],
+        [
+          '1',
+          'cleanup',
+          {
+            constraint: {
+              key: 'issueId',
+              value: 'i1',
+            },
+          },
+        ],
+        [
+          '1',
+          'fetch',
+          {
+            constraint: {
+              key: 'issueId',
+              value: 'i1',
+            },
+          },
+        ],
+        [
+          '2',
+          'cleanup',
+          {
+            constraint: {
+              key: 'id',
+              value: 'o1',
+            },
+          },
+        ],
+        [
+          '2',
+          'fetch',
+          {
+            constraint: {
+              key: 'id',
+              value: 'o1',
+            },
+          },
+        ],
       ],
       expectedPrimaryKeySetStorageKeys: [
         [
@@ -599,5 +638,5 @@ type PushTestSibling = {
   pushes: [sourceIndex: number, change: SourceChange][];
   expectedLog: SnitchMessage[];
   expectedPrimaryKeySetStorageKeys: NormalizedValue[][][];
-  expectedOutput: Change[];
+  expectedOutput: CaughtChange[];
 };

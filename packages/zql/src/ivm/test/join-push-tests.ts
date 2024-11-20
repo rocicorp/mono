@@ -2,14 +2,13 @@ import {assert, expect, test} from 'vitest';
 import {Snitch, type SnitchMessage} from '../snitch.js';
 import {createPrimaryKeySetStorageKey, Join} from '../join.js';
 import {MemoryStorage} from '../memory-storage.js';
-import {Catch} from '../catch.js';
+import {Catch, type CaughtChange} from '../catch.js';
 import type {SchemaValue} from '../../../../zero-schema/src/table-schema.js';
 import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.js';
 import type {Row} from '../../../../zero-protocol/src/data.js';
 import type {Ordering} from '../../../../zero-protocol/src/ast.js';
 import type {SourceChange} from '../source.js';
 import type {NormalizedValue} from '../data.js';
-import type {Change} from '../change.js';
 import {MemorySource} from '../memory-source.js';
 import type {Format} from '../view.js';
 import type {Storage, Input, Operator} from '../operator.js';
@@ -101,7 +100,7 @@ type PushTest = {
   pushes: [sourceIndex: number, change: SourceChange][];
   expectedLog: SnitchMessage[];
   expectedPrimaryKeySetStorageKeys: NormalizedValue[][][];
-  expectedOutput: Change[];
+  expectedOutput: CaughtChange[];
 };
 
 function makeSource(

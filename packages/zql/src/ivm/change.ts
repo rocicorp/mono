@@ -47,11 +47,11 @@ export type ChildChange = {
  */
 export type EditChange = {
   type: 'edit';
-  row: Row;
-  oldRow: Row;
+  node: Node;
+  oldNode: Node;
 };
 
 export function rowForChange(change: Change): Row {
   const {type} = change;
-  return type === 'add' || type === 'remove' ? change.node.row : change.row;
+  return type === 'child' ? change.row : change.node.row;
 }

@@ -1,7 +1,6 @@
 import {describe, expect, test} from 'vitest';
 import type {Row} from '../../../zero-protocol/src/data.js';
-import {Catch} from './catch.js';
-import type {Change} from './change.js';
+import {Catch, type CaughtChange} from './catch.js';
 import {MemorySource} from './memory-source.js';
 import type {Start} from './operator.js';
 import {type Bound, Skip} from './skip.js';
@@ -239,7 +238,7 @@ describe('push', () => {
     name?: string;
     skipBound: Bound;
     pushes: SourceChange[];
-    expectedPushes: Change[];
+    expectedPushes: CaughtChange[];
   }[] = [
     {
       skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: false},

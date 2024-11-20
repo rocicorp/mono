@@ -404,61 +404,48 @@ test('self-join edit', () => {
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
       {
-        "oldRow": {
-          "id": 3,
-          "name": "greg",
-          "recruiterID": 1,
+        "node": {
+          "relationships": {
+            "recruiter": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": 1,
+                  "name": "aaron",
+                  "recruiterID": null,
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": 3,
+            "name": "greg",
+            "recruiterID": 1,
+          },
         },
-        "row": {
-          "id": 3,
-          "name": "greg",
-          "recruiterID": 2,
-        },
-        "type": "edit",
+        "type": "remove",
       },
       {
-        "child": {
-          "change": {
-            "node": {
-              "relationships": {},
-              "row": {
-                "id": 1,
-                "name": "aaron",
-                "recruiterID": null,
+        "node": {
+          "relationships": {
+            "recruiter": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": 2,
+                  "name": "erik",
+                  "recruiterID": 1,
+                },
               },
-            },
-            "type": "remove",
+            ],
           },
-          "relationshipName": "recruiter",
-        },
-        "row": {
-          "id": 3,
-          "name": "greg",
-          "recruiterID": 2,
-        },
-        "type": "child",
-      },
-      {
-        "child": {
-          "change": {
-            "node": {
-              "relationships": {},
-              "row": {
-                "id": 2,
-                "name": "erik",
-                "recruiterID": 1,
-              },
-            },
-            "type": "add",
+          "row": {
+            "id": 3,
+            "name": "greg",
+            "recruiterID": 2,
           },
-          "relationshipName": "recruiter",
         },
-        "row": {
-          "id": 3,
-          "name": "greg",
-          "recruiterID": 2,
-        },
-        "type": "child",
+        "type": "add",
       },
     ]
   `);
@@ -743,7 +730,7 @@ test('exists junction', () => {
             },
             subquery: {
               table: 'userStates',
-              alias: 'zsubq_0_userStates',
+              alias: 'zsubq_userStates',
               orderBy: [
                 ['userID', 'asc'],
                 ['stateCode', 'asc'],
@@ -758,7 +745,7 @@ test('exists junction', () => {
                   },
                   subquery: {
                     table: 'states',
-                    alias: 'zsubq_1_states',
+                    alias: 'zsubq_states',
                     orderBy: [['code', 'asc']],
                   },
                 },
@@ -781,10 +768,10 @@ test('exists junction', () => {
     [
       {
         "relationships": {
-          "zsubq_0_userStates": [
+          "zsubq_userStates": [
             {
               "relationships": {
-                "zsubq_1_states": [
+                "zsubq_states": [
                   {
                     "relationships": {},
                     "row": {
@@ -808,10 +795,10 @@ test('exists junction', () => {
       },
       {
         "relationships": {
-          "zsubq_0_userStates": [
+          "zsubq_userStates": [
             {
               "relationships": {
-                "zsubq_1_states": [
+                "zsubq_states": [
                   {
                     "relationships": {},
                     "row": {
@@ -827,7 +814,7 @@ test('exists junction', () => {
             },
             {
               "relationships": {
-                "zsubq_1_states": [
+                "zsubq_states": [
                   {
                     "relationships": {},
                     "row": {
@@ -860,10 +847,10 @@ test('exists junction', () => {
       {
         "node": {
           "relationships": {
-            "zsubq_0_userStates": [
+            "zsubq_userStates": [
               {
                 "relationships": {
-                  "zsubq_1_states": [
+                  "zsubq_states": [
                     {
                       "relationships": {},
                       "row": {
@@ -879,7 +866,7 @@ test('exists junction', () => {
               },
               {
                 "relationships": {
-                  "zsubq_1_states": [
+                  "zsubq_states": [
                     {
                       "relationships": {},
                       "row": {
@@ -906,10 +893,10 @@ test('exists junction', () => {
       {
         "node": {
           "relationships": {
-            "zsubq_0_userStates": [
+            "zsubq_userStates": [
               {
                 "relationships": {
-                  "zsubq_1_states": [
+                  "zsubq_states": [
                     {
                       "relationships": {},
                       "row": {
@@ -954,7 +941,7 @@ test('exists self join', () => {
             },
             subquery: {
               table: 'users',
-              alias: 'zsubq_0_recruiter',
+              alias: 'zsubq_recruiter',
               orderBy: [['id', 'asc']],
             },
           },
@@ -974,7 +961,7 @@ test('exists self join', () => {
     [
       {
         "relationships": {
-          "zsubq_0_recruiter": [
+          "zsubq_recruiter": [
             {
               "relationships": {},
               "row": {
@@ -993,7 +980,7 @@ test('exists self join', () => {
       },
       {
         "relationships": {
-          "zsubq_0_recruiter": [
+          "zsubq_recruiter": [
             {
               "relationships": {},
               "row": {
@@ -1031,28 +1018,15 @@ test('exists self join', () => {
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
       {
-        "oldRow": {
-          "id": 3,
-          "name": "greg",
-          "recruiterID": 1,
-        },
-        "row": {
-          "id": 3,
-          "name": "greg",
-          "recruiterID": 2,
-        },
-        "type": "edit",
-      },
-      {
         "node": {
           "relationships": {
-            "zsubq_0_recruiter": [
+            "zsubq_recruiter": [
               {
                 "relationships": {},
                 "row": {
-                  "id": 2,
-                  "name": "erik",
-                  "recruiterID": 1,
+                  "id": 1,
+                  "name": "aaron",
+                  "recruiterID": null,
                 },
               },
             ],
@@ -1060,7 +1034,7 @@ test('exists self join', () => {
           "row": {
             "id": 3,
             "name": "greg",
-            "recruiterID": 2,
+            "recruiterID": 1,
           },
         },
         "type": "remove",
@@ -1068,7 +1042,7 @@ test('exists self join', () => {
       {
         "node": {
           "relationships": {
-            "zsubq_0_recruiter": [
+            "zsubq_recruiter": [
               {
                 "relationships": {},
                 "row": {
@@ -1090,7 +1064,7 @@ test('exists self join', () => {
       {
         "node": {
           "relationships": {
-            "zsubq_0_recruiter": [
+            "zsubq_recruiter": [
               {
                 "relationships": {},
                 "row": {
@@ -1112,7 +1086,7 @@ test('exists self join', () => {
       {
         "node": {
           "relationships": {
-            "zsubq_0_recruiter": [
+            "zsubq_recruiter": [
               {
                 "relationships": {},
                 "row": {
@@ -1152,7 +1126,7 @@ test('not exists self join', () => {
             },
             subquery: {
               table: 'users',
-              alias: 'zsubq_0_recruiter',
+              alias: 'zsubq_recruiter',
               orderBy: [['id', 'asc']],
             },
           },
@@ -1171,7 +1145,7 @@ test('not exists self join', () => {
     [
       {
         "relationships": {
-          "zsubq_0_recruiter": [],
+          "zsubq_recruiter": [],
         },
         "row": {
           "id": 1,
@@ -1200,36 +1174,14 @@ test('not exists self join', () => {
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
       {
-        "oldRow": {
-          "id": 1,
-          "name": "aaron",
-          "recruiterID": null,
-        },
-        "row": {
-          "id": 1,
-          "name": "aaron",
-          "recruiterID": 1,
-        },
-        "type": "edit",
-      },
-      {
         "node": {
           "relationships": {
-            "zsubq_0_recruiter": [
-              {
-                "relationships": {},
-                "row": {
-                  "id": 1,
-                  "name": "aaron",
-                  "recruiterID": null,
-                },
-              },
-            ],
+            "zsubq_recruiter": [],
           },
           "row": {
             "id": 1,
             "name": "aaron",
-            "recruiterID": 1,
+            "recruiterID": null,
           },
         },
         "type": "remove",

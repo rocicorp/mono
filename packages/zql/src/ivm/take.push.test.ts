@@ -3,8 +3,7 @@ import type {JSONValue} from '../../../shared/src/json.js';
 import type {Ordering} from '../../../zero-protocol/src/ast.js';
 import type {Row, Value} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
-import {Catch} from './catch.js';
-import type {Change} from './change.js';
+import {Catch, type CaughtChange} from './catch.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
@@ -401,6 +400,94 @@ suite('take with no partition', () => {
         {
           type: 'add',
           node: {row: {id: 'i4', created: 400}, relationships: {}},
+        },
+      ],
+    });
+
+    takeTest({
+      ...base,
+      name: 'at limit remove row at start with row after, limit 2',
+      sourceRows: [
+        {id: 'i1', created: 100},
+        {id: 'i2', created: 200},
+        {id: 'i3', created: 300},
+        {id: 'i4', created: 400},
+      ],
+      limit: 2,
+      pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+      expectedMessages: [
+        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i1', created: 100}}],
+        [
+          'takeSnitch',
+          'fetch',
+          {start: {basis: 'before', row: {id: 'i2', created: 200}}},
+        ],
+      ],
+      expectedStorage: {
+        '["take",null]': {
+          bound: {
+            created: 300,
+            id: 'i3',
+          },
+          size: 2,
+        },
+        'maxBound': {
+          created: 300,
+          id: 'i3',
+        },
+      },
+      expectedOutput: [
+        {
+          type: 'remove',
+          node: {row: {id: 'i1', created: 100}, relationships: {}},
+        },
+        {
+          type: 'add',
+          node: {row: {id: 'i3', created: 300}, relationships: {}},
+        },
+      ],
+    });
+
+    takeTest({
+      ...base,
+      name: 'at limit remove row at start with row after, limit 1',
+      sourceRows: [
+        {id: 'i1', created: 100},
+        {id: 'i2', created: 200},
+        {id: 'i3', created: 300},
+        {id: 'i4', created: 400},
+      ],
+      limit: 1,
+      pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+      expectedMessages: [
+        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i1', created: 100}}],
+        [
+          'takeSnitch',
+          'fetch',
+          {start: {basis: 'before', row: {id: 'i1', created: 100}}},
+        ],
+      ],
+      expectedStorage: {
+        '["take",null]': {
+          bound: {
+            created: 200,
+            id: 'i2',
+          },
+          size: 1,
+        },
+        'maxBound': {
+          created: 200,
+          id: 'i2',
+        },
+      },
+      expectedOutput: [
+        {
+          type: 'remove',
+          node: {row: {id: 'i1', created: 100}, relationships: {}},
+        },
+        {
+          type: 'add',
+          node: {row: {id: 'i2', created: 200}, relationships: {}},
         },
       ],
     });
@@ -2363,6 +2450,7 @@ function takeTest(t: TakeTest) {
     for (const change of t.pushes) {
       source.push(change);
     }
+
     expect(log).toEqual(t.expectedMessages);
     expect(memoryStorage.cloneData()).toEqual(t.expectedStorage);
     expect(c.pushes).toEqual(t.expectedOutput);
@@ -2385,5 +2473,5 @@ type TakeTest = {
   pushes: SourceChange[];
   expectedMessages: SnitchMessage[];
   expectedStorage: Record<string, JSONValue>;
-  expectedOutput: Change[];
+  expectedOutput: CaughtChange[];
 };

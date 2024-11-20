@@ -12,8 +12,8 @@ export function maybeSplitAndPushEditChange(
   predicate: (row: Row) => boolean,
   output: Output,
 ) {
-  const oldWasPresent = predicate(change.oldRow);
-  const newIsPresent = predicate(change.row);
+  const oldWasPresent = predicate(change.oldNode.row);
+  const newIsPresent = predicate(change.node.row);
 
   if (oldWasPresent && newIsPresent) {
     output.push(change);
@@ -23,18 +23,12 @@ export function maybeSplitAndPushEditChange(
     // operator.
     output.push({
       type: 'remove',
-      node: {
-        row: change.oldRow,
-        relationships: {},
-      },
+      node: change.oldNode,
     });
   } else if (!oldWasPresent && newIsPresent) {
     output.push({
       type: 'add',
-      node: {
-        row: change.row,
-        relationships: {},
-      },
+      node: change.node,
     });
   }
 }
