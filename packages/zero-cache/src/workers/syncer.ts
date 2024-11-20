@@ -22,8 +22,9 @@ import {DrainCoordinator} from '../services/view-syncer/drain-coordinator.js';
 import type {ViewSyncer} from '../services/view-syncer/view-syncer.js';
 import type {Worker} from '../types/processes.js';
 import {Subscription} from '../types/subscription.js';
-import {Connection} from './connection.js';
+import {Connection, sendError} from './connection.js';
 import {createNotifierFrom, subscribeTo} from './replicator.js';
+import {ErrorKind} from '../../../zero-protocol/src/error.js';
 
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;
@@ -99,7 +100,11 @@ export class Syncer implements SingletonService {
           userID,
         );
       } catch (e) {
-        this.#lc.error?.('Failed to decode JWT', e);
+        sendError(this.#lc, ws, [
+          'error',
+          ErrorKind.AuthInvalidated,
+          'Failed to decode auth token',
+        ]);
         ws.close(3000, 'Failed to decode JWT');
       }
     }
