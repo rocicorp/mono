@@ -1,7 +1,7 @@
 import {Zero} from '@rocicorp/zero';
 import {Atom} from './atom.js';
 import {type Schema, schema} from '../schema.js';
-import {getJwt, getRawJwt} from './jwt.js';
+import {clearJwt, getJwt, getRawJwt} from './jwt.js';
 import {mark} from './perf-log.js';
 
 export type LoginState = {
@@ -12,12 +12,12 @@ export type LoginState = {
   };
 };
 
-const zeroRef = new Atom<Zero<Schema>>();
-const authRef = new Atom<LoginState>();
+const zeroAtom = new Atom<Zero<Schema>>();
+const authAtom = new Atom<LoginState>();
 const jwt = getJwt();
 const encodedJwt = getRawJwt();
 
-authRef.value =
+authAtom.value =
   encodedJwt && jwt
     ? {
         encoded: encodedJwt,
@@ -25,17 +25,24 @@ authRef.value =
       }
     : undefined;
 
-authRef.onChange(auth => {
-  zeroRef.value?.close();
+authAtom.onChange(auth => {
+  zeroAtom.value?.close();
   mark('creating new zero');
   const z = new Zero({
     logLevel: 'info',
     server: import.meta.env.VITE_PUBLIC_SERVER,
     userID: auth?.decoded?.sub ?? 'anon',
-    auth: auth?.encoded,
+    auth: (error?: 'invalid-token') => {
+      if (error === 'invalid-token') {
+        clearJwt();
+        authAtom.value = undefined;
+        return undefined;
+      }
+      return auth?.encoded;
+    },
     schema,
   });
-  zeroRef.value = z;
+  zeroAtom.value = z;
 
   exposeDevHooks(z);
 
@@ -67,4 +74,4 @@ function exposeDevHooks(z: Zero<Schema>) {
   casted.z = z;
 }
 
-export {authRef, zeroRef};
+export {authAtom as authRef, zeroAtom as zeroRef};
