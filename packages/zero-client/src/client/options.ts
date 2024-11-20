@@ -36,7 +36,7 @@ export interface ZeroOptions<S extends Schema> {
    */
   auth?:
     | string
-    | ((error?: 'invalid-token') => MaybePromise<string>)
+    | ((error?: 'invalid-token') => MaybePromise<string | undefined>)
     | undefined;
 
   /**
