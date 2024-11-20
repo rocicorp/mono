@@ -181,7 +181,7 @@ describe('reloadWithReason', () => {
             "
       ",
             "reloading",
-            " in 10 seconds",
+            "in 10 seconds",
           ],
         ],
       ]

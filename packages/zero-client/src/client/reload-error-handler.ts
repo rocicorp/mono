@@ -44,7 +44,7 @@ export function reloadWithReason(
     reason,
     '\n',
     'reloading',
-    delay > 0 ? ` in ${delay / 1000} seconds` : '',
+    delay > 0 ? `in ${delay / 1000} seconds` : '',
   );
   reloadTimer = setTimeout(() => {
     reloadTimer = null;
