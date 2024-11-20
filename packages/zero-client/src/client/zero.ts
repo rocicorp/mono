@@ -1225,7 +1225,7 @@ export class Zero<const S extends Schema> {
 
   #getAuthToken = (
     error?: 'invalid-token',
-  ): MaybePromise<string> | undefined => {
+  ): MaybePromise<string | undefined> | undefined => {
     const {auth} = this.#options;
     return typeof auth === 'function' ? auth(error) : auth;
   };
