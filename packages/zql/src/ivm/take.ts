@@ -392,7 +392,6 @@ export class Take implements Operator {
       // newRow is <= the bound of the new partition value, this can be sent as
       // an edit, as the row is present in the output of this operator before
       // and after applying this push.
-      console.log('here');
 
       this.push({
         type: 'remove',
