@@ -28,7 +28,7 @@ describe('view-syncer/snapshotter', () => {
     lc = createSilentLogContext();
     dbFile = new DbFile('snapshotter_test');
     const db = dbFile.connect(lc);
-    db.pragma('journal_mode = WAL');
+    db.pragma('journal_mode = WAL2');
     db.exec(
       `
         CREATE TABLE "zero.schemaVersions" (

@@ -103,7 +103,7 @@ describe('view-syncer/service', () => {
     initChangeLog(replica);
     initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
 
-    replica.pragma('journal_mode = WAL');
+    replica.pragma('journal_mode = WAL2');
     replica.pragma('busy_timeout = 1');
     replica.exec(`
     CREATE TABLE "zero_ABC.clients" (

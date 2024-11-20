@@ -1,4 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
+import * as v from '../../../shared/src/valita.js';
 import {Database} from '../../../zqlite/src/db.js';
 import {deleteLiteDB} from '../db/delete-lite-db.js';
 import {Notifier} from '../services/replicator/notifier.js';
@@ -9,7 +10,13 @@ import type {
 } from '../services/replicator/replicator.js';
 import type {Worker} from '../types/processes.js';
 
-export type ReplicaFileMode = 'serving' | 'serving-copy' | 'backup';
+export const replicaFileModeSchema = v.union(
+  v.literal('serving'),
+  v.literal('serving-copy'),
+  v.literal('backup'),
+);
+
+export type ReplicaFileMode = v.Infer<typeof replicaFileModeSchema>;
 
 export function replicaFileName(replicaFile: string, mode: ReplicaFileMode) {
   return mode === 'serving-copy' ? `${replicaFile}-serving-copy` : replicaFile;

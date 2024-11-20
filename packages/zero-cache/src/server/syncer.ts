@@ -4,6 +4,7 @@ import {pid} from 'node:process';
 import {assert} from '../../../shared/src/asserts.js';
 import {must} from '../../../shared/src/must.js';
 import {randInt} from '../../../shared/src/rand.js';
+import * as v from '../../../shared/src/valita.js';
 import {getAuthorizationConfig} from '../auth/load-authorization.js';
 import {getZeroConfig} from '../config/zero-config.js';
 import {MutagenService} from '../services/mutagen/mutagen.js';
@@ -20,7 +21,7 @@ import {
   type Worker,
 } from '../types/processes.js';
 import {Subscription} from '../types/subscription.js';
-import {replicaFileName, type ReplicaFileMode} from '../workers/replicator.js';
+import {replicaFileModeSchema, replicaFileName} from '../workers/replicator.js';
 import {Syncer} from '../workers/syncer.js';
 import {exitAfter, runUntilKilled} from './life-cycle.js';
 import {createLogContext} from './logging.js';
@@ -30,7 +31,7 @@ export default async function runWorker(
   ...args: string[]
 ): Promise<void> {
   assert(args.length > 0, `replicator mode not specified`);
-  const fileMode = args[0] as ReplicaFileMode;
+  const fileMode = v.parse(args[0], replicaFileModeSchema);
 
   const config = getZeroConfig(args.slice(1));
   const authorizationConfig = await getAuthorizationConfig();

@@ -26,7 +26,7 @@ describe('view-syncer/pipeline-driver', () => {
   beforeEach(() => {
     lc = createSilentLogContext();
     dbFile = new DbFile('pipelines_test');
-    dbFile.connect(lc).pragma('journal_mode = wal');
+    dbFile.connect(lc).pragma('journal_mode = wal2');
 
     const storage = new Database(lc, ':memory:');
     storage.prepare(CREATE_STORAGE_TABLE).run();
