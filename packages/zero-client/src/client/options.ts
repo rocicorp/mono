@@ -34,7 +34,10 @@ export interface ZeroOptions<S extends Schema> {
    * attempt. This provides the application the opportunity to calculate or
    * fetch a fresh token.
    */
-  auth?: string | (() => MaybePromise<string>) | undefined;
+  auth?:
+    | string
+    | ((error?: 'invalid-token') => MaybePromise<string | undefined>)
+    | undefined;
 
   /**
    * A unique identifier for the user. Must be non-empty.

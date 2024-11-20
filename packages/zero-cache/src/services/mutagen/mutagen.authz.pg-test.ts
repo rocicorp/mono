@@ -2,15 +2,15 @@ import {test, beforeEach, afterEach, expect} from 'vitest';
 import type {PostgresDB} from '../../types/pg.js';
 import {testDBs} from '../../test/db.js';
 import {createSchema} from '../../../../zero-schema/src/schema.js';
-import type {Supertype} from '../../../../zero-schema/src/table-schema.js';
-import type {Query} from '../../../../zql/src/query/query.js';
+import type {TableSchema} from '../../../../zero-schema/src/table-schema.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {processMutation} from './mutagen.js';
-import {WriteAuthorizerImpl, type WriteAuthorizer} from './write-authorizer.js';
+import {WriteAuthorizerImpl} from '../../auth/write-authorizer.js';
 import {MutationType} from '../../../../zero-protocol/src/push.js';
 import {zeroSchema} from './mutagen-test-shared.js';
 import {defineAuthorization} from '../../../../zero-schema/src/authorization.js';
+import {ExpressionBuilder} from '../../../../zql/src/query/expression.js';
 
 const SHARD_ID = '0';
 const CG_ID = 'abc';
@@ -69,6 +69,18 @@ CREATE TABLE "adminOnlyRow" (
 
 INSERT INTO "adminOnlyRow" VALUES ('unlocked', 'a', false);
 INSERT INTO "adminOnlyRow" VALUES ('locked', 'a', true);
+
+CREATE TABLE "loggedInRow" (
+  id text PRIMARY KEY,
+  a text
+);
+
+INSERT INTO "loggedInRow" VALUES ('1', 'a');
+
+CREATE TABLE "userMatch" (
+  id text PRIMARY KEY,
+  a text
+);
 `;
 
 async function createUpstreamTables(db: PostgresDB) {
@@ -131,69 +143,116 @@ const schema = createSchema({
       primaryKey: ['id'],
       relationships: {},
     },
+    loggedInRow: {
+      tableName: 'loggedInRow',
+      columns: {
+        id: {type: 'string'},
+        a: {type: 'string'},
+      },
+      primaryKey: ['id'],
+      relationships: {},
+    },
+    userMatch: {
+      tableName: 'userMatch',
+      columns: {
+        id: {type: 'string'},
+        a: {type: 'string'},
+      },
+      primaryKey: ['id'],
+      relationships: {},
+    },
   },
 });
 
-const authorizationConfig = await defineAuthorization<
-  {sub: string},
-  typeof schema
->(schema, query => {
-  const allowIfNotAdminLocked =
-    (
-      query: Query<
-        Supertype<
-          [
-            (typeof schema)['tables']['adminOnlyCell'],
-            (typeof schema)['tables']['adminOnlyRow'],
-          ]
-        >
-      >,
-    ) =>
-    (_authData: {sub: string}, row: {id: string}) =>
-      query.where('id', '=', row.id).where('adminLocked', '=', false);
+type AuthData = {
+  sub: string;
+  role: string;
+};
 
-  const allowIfAdmin = (authData: {sub: string}) =>
-    query.user.where('id', '=', authData.sub).where('role', '=', 'admin');
+const authorizationConfig = await defineAuthorization<AuthData, typeof schema>(
+  schema,
+  () => {
+    const allowIfAdmin = (
+      authData: AuthData,
+      {cmpLit}: ExpressionBuilder<TableSchema>,
+    ) => cmpLit(authData.role, '=', 'admin');
 
-  return {
-    roCell: {
-      cell: {
-        a: {
+    const allowIfNotAdminLockedRow = (
+      _authData: AuthData,
+      {cmp}: ExpressionBuilder<typeof schema.tables.adminOnlyRow>,
+    ) => cmp('adminLocked', false);
+    const allowIfNotAdminLockedCell = (
+      _authData: AuthData,
+      {cmp}: ExpressionBuilder<typeof schema.tables.adminOnlyCell>,
+    ) => cmp('adminLocked', false);
+    const allowIfLoggedIn = (
+      authData: AuthData,
+      {cmpLit}: ExpressionBuilder<TableSchema>,
+    ) => cmpLit(authData.sub, 'IS NOT', null);
+    const allowIfPostMutationIDMatchesLoggedInUser = (
+      authData: AuthData,
+      {cmp}: ExpressionBuilder<typeof schema.tables.userMatch>,
+    ) => cmp('id', '=', authData.sub);
+
+    return {
+      roCell: {
+        cell: {
+          a: {
+            insert: [],
+            update: {
+              preMutation: [],
+            },
+            delete: [],
+          },
+        },
+      },
+      roRow: {
+        row: {
           insert: [],
-          update: [],
+          update: {
+            preMutation: [],
+          },
           delete: [],
         },
       },
-    },
-    roRow: {
-      row: {
-        insert: [],
-        update: [],
-        delete: [],
-      },
-    },
-    adminOnlyCell: {
-      cell: {
-        a: {
-          // insert is always allow since it can't be admin locked on create.
-          update: [allowIfNotAdminLocked(query.adminOnlyCell), allowIfAdmin],
-          delete: [allowIfNotAdminLocked(query.adminOnlyCell), allowIfAdmin],
+      adminOnlyCell: {
+        cell: {
+          a: {
+            // insert is always allow since it can't be admin locked on create.
+            // TODO (mlaw): this should raise a type error due to schema mismatch between rule and auth def
+            update: {
+              preMutation: [allowIfNotAdminLockedCell, allowIfAdmin],
+            },
+            delete: [allowIfNotAdminLockedCell, allowIfAdmin],
+          },
         },
       },
-    },
-    adminOnlyRow: {
-      row: {
-        // insert is always allow since it can't be admin locked on create.
-        update: [allowIfNotAdminLocked(query.adminOnlyRow), allowIfAdmin],
-        delete: [allowIfNotAdminLocked(query.adminOnlyRow), allowIfAdmin],
+      adminOnlyRow: {
+        row: {
+          // insert is always allow since it can't be admin locked on create.
+          update: {preMutation: [allowIfNotAdminLockedRow, allowIfAdmin]},
+          delete: [allowIfNotAdminLockedRow, allowIfAdmin],
+        },
       },
-    },
-  };
-});
+      loggedInRow: {
+        row: {
+          insert: [allowIfLoggedIn],
+          update: {preMutation: [allowIfLoggedIn]},
+          delete: [allowIfLoggedIn],
+        },
+      },
+      userMatch: {
+        row: {
+          insert: [allowIfPostMutationIDMatchesLoggedInUser],
+        },
+      },
+    };
+  },
+);
 
 let upstream: PostgresDB;
 let replica: Database;
-let authorizer: WriteAuthorizer;
+let authorizer: WriteAuthorizerImpl;
 let lmid = 0;
 const lc = createSilentLogContext();
 beforeEach(async () => {
@@ -204,6 +263,7 @@ beforeEach(async () => {
   authorizer = new WriteAuthorizerImpl(
     lc,
     {},
+    schema,
     authorizationConfig,
     replica,
     SHARD_ID,
@@ -220,11 +280,13 @@ function procMutation(
   op: 'insert' | 'upsert' | 'update' | 'delete',
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   value: any,
-  uid: string = 'anon',
+  uid: string | undefined = undefined,
 ) {
   return processMutation(
     undefined,
-    {sub: uid},
+    uid === undefined
+      ? {}
+      : {sub: uid, role: uid === 'admn' ? 'admin' : 'user'},
     upstream,
     SHARD_ID,
     CG_ID,
@@ -387,4 +449,52 @@ test('admins can update locked rows', async () => {
   await procMutation('adminOnlyRow', 'delete', {id: 'locked'}, 'admn');
   rows = await upstream`SELECT * FROM "adminOnlyRow" WHERE id = 'locked'`;
   expect(rows.length).toBe(0);
+});
+
+test('denies if not logged in', async () => {
+  await procMutation(
+    'loggedInRow',
+    'update',
+    {id: '1', a: 'UPDATED'},
+    undefined,
+  );
+  let rows = await upstream`SELECT * FROM "loggedInRow" WHERE id = '1'`;
+  expect(rows).toEqual([{id: '1', a: 'a'}]);
+
+  await procMutation('loggedInRow', 'delete', {id: '1'}, undefined);
+  rows = await upstream`SELECT * FROM "loggedInRow" WHERE id = '1'`;
+  expect(rows.length).toBe(1);
+
+  await procMutation('loggedInRow', 'insert', {id: '2', a: 'a'}, undefined);
+  rows = await upstream`SELECT * FROM "loggedInRow" WHERE id = '2'`;
+  expect(rows.length).toBe(0);
+});
+
+test('allows if logged in', async () => {
+  await procMutation('loggedInRow', 'update', {id: '1', a: 'UPDATED'}, 'usr');
+  let rows = await upstream`SELECT * FROM "loggedInRow" WHERE id = '1'`;
+  expect(rows).toEqual([{id: '1', a: 'UPDATED'}]);
+
+  await procMutation('loggedInRow', 'delete', {id: '1'}, 'usr');
+  rows = await upstream`SELECT * FROM "loggedInRow" WHERE id = '1'`;
+  expect(rows.length).toBe(0);
+
+  await procMutation('loggedInRow', 'insert', {id: '2', a: 'a'}, 'usr');
+  rows = await upstream`SELECT * FROM "loggedInRow" WHERE id = '2'`;
+  expect(rows.length).toBe(1);
+});
+
+// TODO (mlaw): expand "post mutation" rules to be enabled for update as well.
+test('userMatch postMutation check', async () => {
+  await procMutation('userMatch', 'insert', {id: '1', a: 'a'}, 'usr');
+  let rows = await upstream`SELECT * FROM "userMatch" WHERE id = '1'`;
+  expect(rows.length).toBe(0);
+
+  await procMutation('userMatch', 'insert', {id: '1', a: 'a'}, 'admn');
+  rows = await upstream`SELECT * FROM "userMatch" WHERE id = '1'`;
+  expect(rows.length).toBe(0);
+
+  await procMutation('userMatch', 'insert', {id: '1', a: 'a'}, '1');
+  rows = await upstream`SELECT * FROM "userMatch" WHERE id = '1'`;
+  expect(rows.length).toBe(1);
 });

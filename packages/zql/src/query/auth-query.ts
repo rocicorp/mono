@@ -5,11 +5,14 @@ import {
 } from '../../../zero-schema/src/normalize-table-schema.js';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 import type {Format} from '../ivm/view.js';
+import {ExpressionBuilder} from './expression.js';
 import {AbstractQuery} from './query-impl.js';
 import type {DefaultQueryResultRow, Query, QueryType, Smash} from './query.js';
 import type {TypedView} from './typed-view.js';
 
-export function authQuery<TSchema extends TableSchema>(schema: TSchema) {
+export function authQuery<TSchema extends TableSchema>(
+  schema: TSchema,
+): Query<TSchema> {
   return new AuthQuery<TSchema>(normalizeTableSchema(schema));
 }
 
@@ -27,6 +30,10 @@ export class AuthQuery<
     format?: Format | undefined,
   ) {
     super(schema, ast, format);
+  }
+
+  expressionBuilder() {
+    return new ExpressionBuilder(this._exists);
   }
 
   protected _newQuery<TSchema extends TableSchema, TReturn extends QueryType>(

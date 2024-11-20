@@ -1223,13 +1223,18 @@ export class Zero<const S extends Schema> {
     };
   }
 
-  #getAuthToken = (): MaybePromise<string> | undefined => {
+  #getAuthToken = (
+    error?: 'invalid-token',
+  ): MaybePromise<string | undefined> | undefined => {
     const {auth} = this.#options;
-    return typeof auth === 'function' ? auth() : auth;
+    return typeof auth === 'function' ? auth(error) : auth;
   };
 
-  async #updateAuthToken(lc: LogContext): Promise<void> {
-    const auth = await this.#getAuthToken();
+  async #updateAuthToken(
+    lc: LogContext,
+    error?: 'invalid-token',
+  ): Promise<void> {
+    const auth = await this.#getAuthToken(error);
     if (auth) {
       lc.debug?.('Got auth token');
       this.#rep.auth = auth;
@@ -1277,7 +1282,7 @@ export class Zero<const S extends Schema> {
 
             // If we got an auth error we try to get a new auth token before reconnecting.
             if (needsReauth) {
-              await this.#updateAuthToken(lc);
+              await this.#updateAuthToken(lc, 'invalid-token');
             }
 
             await this.#connect(lc);
