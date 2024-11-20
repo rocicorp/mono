@@ -33,6 +33,7 @@ import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.js';
 import {ServerError} from './server-error.js';
 import {
   MockSocket,
+  storageMock,
   TestZero,
   tickAFewTimes,
   waitForUpstreamMessage,
@@ -1643,13 +1644,14 @@ test('puller waits for connection', async () => {
 
 test('VersionNotSupported default handler', async () => {
   const storage: Record<string, string> = {};
-  sinon.replaceGetter(window, 'localStorage', () => storage as Storage);
+  sinon.replaceGetter(window, 'sessionStorage', () => storageMock(storage));
   const {promise, resolve} = resolver();
   const fake = sinon.fake(resolve);
   const r = zeroForTest(undefined, false);
   r.reload = fake;
 
   await r.triggerError(ErrorKind.VersionNotSupported, 'server test message');
+  await clock.nextAsync();
   await promise;
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 
@@ -1685,7 +1687,7 @@ test('VersionNotSupported null onUpdateNeeded handler', async () => {
 
 test('SchemaVersionNotSupported default handler', async () => {
   const storage: Record<string, string> = {};
-  sinon.replaceGetter(window, 'localStorage', () => storage as Storage);
+  sinon.replaceGetter(window, 'sessionStorage', () => storageMock(storage));
   const {promise, resolve} = resolver();
   const fake = sinon.fake(resolve);
   const r = zeroForTest(undefined, false);
@@ -1695,6 +1697,7 @@ test('SchemaVersionNotSupported default handler', async () => {
     ErrorKind.SchemaVersionNotSupported,
     'server test message',
   );
+  await clock.nextAsync();
   await promise;
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 
@@ -1736,15 +1739,14 @@ test('SchemaVersionNotSupported null onUpdateNeeded handler', async () => {
 
 test('ClientNotFound default handler', async () => {
   const storage: Record<string, string> = {};
-  sinon.replaceGetter(window, 'localStorage', () => storage as Storage);
+  sinon.replaceGetter(window, 'sessionStorage', () => storageMock(storage));
   const {promise, resolve} = resolver();
-  const fake = sinon.fake(() => {
-    resolve();
-  });
-  const r = zeroForTest();
+  const fake = sinon.fake(resolve);
+  const r = zeroForTest(undefined, false);
   r.reload = fake;
 
   await r.triggerError(ErrorKind.ClientNotFound, 'server test message');
+  await clock.nextAsync();
   await promise;
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 
@@ -1781,7 +1783,7 @@ test('ClientNotFound null handler', async () => {
 test('server ahead', async () => {
   const {promise, resolve} = resolver();
   const storage: Record<string, string> = {};
-  sinon.replaceGetter(window, 'localStorage', () => storage as Storage);
+  sinon.replaceGetter(window, 'sessionStorage', () => storageMock(storage));
   const r = zeroForTest();
   r.reload = resolve;
 
@@ -1789,6 +1791,11 @@ test('server ahead', async () => {
     ErrorKind.InvalidConnectionRequestBaseCookie,
     'unexpected BaseCookie',
   );
+  // There are a lot of timers that get scheduled before the reload timer
+  // for dropping the database. TODO: Make this more robust.
+  for (let i = 0; i < 6; i++) {
+    await clock.nextAsync();
+  }
   await promise;
 
   expect(storage[RELOAD_REASON_STORAGE_KEY]).to.equal(
