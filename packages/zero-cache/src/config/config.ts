@@ -396,7 +396,7 @@ function parseArgs(
     throw new ExitAfterUsage();
   }
 
-  const result = {...config}; // Create a new object to store results
+  const result = {...config};
 
   // Handle ungrouped flags first
   if (ungrouped) {

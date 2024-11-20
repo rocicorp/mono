@@ -521,7 +521,6 @@ test('ungrouped config', () => {
     name: 'test',
   });
 
-  // Test with environment variables
   const envResult = parseOptions(ungroupedOptions, ['--name', 'test2'], 'x', {
     xFORMAT: 'text',
   });
