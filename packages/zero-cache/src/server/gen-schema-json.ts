@@ -6,6 +6,7 @@ import {assert} from '../../../shared/src/asserts.js';
 import {authorizationConfigSchema} from '../../../zero-schema/src/compiled-authorization.js';
 import * as v from '../../../shared/src/valita.js';
 import {parseOptions} from '../config/config.js';
+import type {Schema} from '../../../zero-schema/src/schema.js';
 
 export const schemaOptions = {
   path: {
@@ -59,7 +60,7 @@ async function main() {
       authorizationConfigSchema,
       'strict',
     );
-    const rawSchema = await module.default.schema;
+    const rawSchema = (await module.default.schema) as Schema;
     const output = {
       authorization: authConfig,
       schema: rawSchema,

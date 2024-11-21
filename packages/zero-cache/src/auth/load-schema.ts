@@ -31,7 +31,7 @@ function parseAuthConfig(
         authorizationConfigSchema,
         'strict',
       ),
-      schema: config.schema,
+      schema: config.schema as Schema,
     };
   } catch (e) {
     throw new Error(
