@@ -5,7 +5,7 @@ import {dnf} from '../../../zql/src/query/dnf.js';
 /**
  * For a given AST, apply the read-auth rules.
  */
-export function augmentQuery(
+export function transformQuery(
   query: AST,
   auth: AuthorizationConfig,
 ): AST | undefined {
@@ -26,7 +26,7 @@ export function augmentQuery(
     where: updatedWhere ? dnf(updatedWhere) : undefined,
     related: query.related
       ?.map(sq => {
-        const subquery = augmentQuery(sq.subquery, auth);
+        const subquery = transformQuery(sq.subquery, auth);
         if (subquery) {
           return {
             ...sq,
@@ -79,7 +79,7 @@ function augmentCondition(
         conditions: cond.conditions.map(c => augmentCondition(c, auth)),
       };
     case 'correlatedSubquery': {
-      const query = augmentQuery(cond.related.subquery, auth);
+      const query = transformQuery(cond.related.subquery, auth);
       const replacement = query
         ? {
             ...cond,
