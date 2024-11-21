@@ -9,10 +9,6 @@ import type {
 } from '../../zero-protocol/src/ast.js';
 import type {Row, Value} from '../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
-import type {
-  SchemaValue,
-  ValueType,
-} from '../../zero-schema/src/table-schema.js';
 import {assertOrderingIncludesPK} from '../../zql/src/builder/builder.js';
 import type {Change} from '../../zql/src/ivm/change.js';
 import type {Constraint} from '../../zql/src/ivm/constraint.js';
@@ -42,12 +38,26 @@ import type {Stream} from '../../zql/src/ivm/stream.js';
 import {Database, Statement} from './db.js';
 import {compile, format, sql} from './internal/sql.js';
 import {StatementCache} from './internal/statement-cache.js';
+import type {
+  SchemaValue,
+  ValueType,
+} from '../../zero-schema/src/table-schema.js';
+import {
+  createPredicate,
+  transformFilters,
+  type NoSubqueryCondition,
+} from '../../zql/src/builder/filter.js';
 
 type Connection = {
   input: Input;
   output: Output | undefined;
   sort: Ordering;
-  filters: NoSubqueryCondition | undefined;
+  filters:
+    | {
+        condition: NoSubqueryCondition;
+        predicate: (row: Row) => boolean;
+      }
+    | undefined;
   compareRows: Comparator;
 };
 
@@ -214,7 +224,12 @@ export class TableSource implements Source {
       input,
       output: undefined,
       sort,
-      filters: transformedFilters.filters,
+      filters: transformedFilters.filters
+        ? {
+            condition: transformedFilters.filters,
+            predicate: createPredicate(transformedFilters.filters),
+          }
+        : undefined,
       compareRows: makeComparator(sort),
     };
     const schema = this.#getSchema(connection);
@@ -260,7 +275,7 @@ export class TableSource implements Source {
               inclusive: req.start.basis === 'at',
             }
           : undefined,
-        connection.filters,
+        connection.filters?.condition,
         sort,
       );
       const sqlAndBindings = format(preSql);
@@ -286,7 +301,7 @@ export class TableSource implements Source {
               inclusive: req.start.basis === 'at',
             }
           : undefined,
-        connection.filters,
+        connection.filters?.condition,
         sort,
       );
       const sqlAndBindings = format(query);
@@ -310,7 +325,6 @@ export class TableSource implements Source {
           }
         }
 
-        // TODO: apply connection.filters to overlay
         yield* generateWithStart(
           generateWithOverlay(
             req.start?.row,
@@ -318,6 +332,7 @@ export class TableSource implements Source {
             req.constraint,
             overlay,
             comparator,
+            connection.filters?.predicate,
           ),
           beforeRequest ?? req,
           comparator,
@@ -824,84 +839,4 @@ function nonPrimaryKeys(
   primaryKey: PrimaryKey,
 ) {
   return Object.keys(columns).filter(c => !primaryKey.includes(c));
-}
-
-type NoSubqueryCondition =
-  | SimpleCondition
-  | {
-      type: 'and';
-      conditions: readonly NoSubqueryCondition[];
-    }
-  | {
-      type: 'or';
-      conditions: readonly NoSubqueryCondition[];
-    };
-
-/**
- * Returns a transformed condition which contains no
- * CorrelatedSubqueryCondition(s) but which will filter a subset of the rows
- * that would be filtered by the original condition, or undefined
- * if no such transformation exists.
- *
- * Assumes Condition is in DNF.
- */
-function transformFilters(filters: Condition | undefined): {
-  filters: NoSubqueryCondition | undefined;
-  conditionsRemoved: boolean;
-} {
-  if (!filters) {
-    return {filters: undefined, conditionsRemoved: false};
-  }
-  switch (filters.type) {
-    case 'simple':
-      return {filters, conditionsRemoved: false};
-    case 'correlatedSubquery':
-      return {filters: undefined, conditionsRemoved: true};
-    case 'and': {
-      const transformedConditions = [];
-      for (const cond of filters.conditions) {
-        assert(cond.type === 'simple' || cond.type === 'correlatedSubquery');
-        if (cond.type === 'simple') {
-          transformedConditions.push(cond);
-        }
-      }
-      const conditionsRemoved =
-        transformedConditions.length !== filters.conditions.length;
-      if (transformedConditions.length === 0) {
-        return {filters: undefined, conditionsRemoved};
-      }
-      if (transformedConditions.length === 1) {
-        return {
-          filters: transformedConditions[0],
-          conditionsRemoved,
-        };
-      }
-      return {
-        filters: {
-          type: 'and',
-          conditions: transformedConditions,
-        },
-        conditionsRemoved,
-      };
-    }
-    case 'or': {
-      const transformedConditions: NoSubqueryCondition[] = [];
-      let conditionsRemoved = false;
-      for (const cond of filters.conditions) {
-        assert(cond.type !== 'or');
-        const transformed = transformFilters(cond);
-        if (transformed.filters === undefined) {
-          return {filters: undefined, conditionsRemoved: true};
-        }
-        conditionsRemoved = conditionsRemoved || transformed.conditionsRemoved;
-        transformedConditions.push(transformed.filters);
-      }
-      return {
-        filters: {type: 'or', conditions: transformedConditions},
-        conditionsRemoved,
-      };
-    }
-    default:
-      unreachable(filters);
-  }
 }
