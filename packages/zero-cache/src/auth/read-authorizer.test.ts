@@ -7,7 +7,7 @@ import {
   QueryImpl,
   type QueryDelegate,
 } from '../../../zql/src/query/query-impl.js';
-import {augmentQuery} from './read-authorizer.js';
+import {transformQuery} from './read-authorizer.js';
 import type {Query, QueryType} from '../../../zql/src/query/query.js';
 import {
   createTableSchema,
@@ -116,7 +116,7 @@ describe('unreadable tables', () => {
     const query = newQuery(mockDelegate, schema.tables.unreadable);
     // If a top-level query tries to query a table that cannot be read,
     // that query is set to `undefined`.
-    expect(augmentQuery(ast(query), auth)).toBe(undefined);
+    expect(transformQuery(ast(query), auth)).toBe(undefined);
   });
 
   test('nuke `related` queries', () => {
@@ -125,7 +125,7 @@ describe('unreadable tables', () => {
       .related('readable');
 
     // any related calls to unreadable tables are removed.
-    expect(augmentQuery(ast(query), auth)).toMatchInlineSnapshot(`
+    expect(transformQuery(ast(query), auth)).toMatchInlineSnapshot(`
       {
         "related": [
           {
@@ -155,7 +155,7 @@ describe('unreadable tables', () => {
 
     // no matter how nested
     expect(
-      augmentQuery(
+      transformQuery(
         ast(
           newQuery(mockDelegate, schema.tables.readable).related(
             'readable',
@@ -214,7 +214,7 @@ describe('unreadable tables', () => {
 
     // also nukes those tables with empty row policies
     expect(
-      augmentQuery(
+      transformQuery(
         ast(
           newQuery(mockDelegate, schema.tables.readable).related('unreadable'),
         ),
@@ -235,7 +235,7 @@ describe('unreadable tables', () => {
     );
 
     // `unreadable` should be replaced by `false` condition.
-    expect(augmentQuery(ast(query), auth)).toMatchInlineSnapshot(`
+    expect(transformQuery(ast(query), auth)).toMatchInlineSnapshot(`
       {
         "related": undefined,
         "table": "readable",
@@ -256,7 +256,7 @@ describe('unreadable tables', () => {
 
     // unreadable whereNotExists should be replaced by a `true` condition
     expect(
-      augmentQuery(
+      transformQuery(
         ast(
           newQuery(mockDelegate, schema.tables.readable).where(
             ({not, exists}) => not(exists('unreadable')),
@@ -285,7 +285,7 @@ describe('unreadable tables', () => {
 
     // works no matter how nested
     expect(
-      augmentQuery(
+      transformQuery(
         ast(
           newQuery(mockDelegate, schema.tables.readable).whereExists(
             'readable',
@@ -337,7 +337,7 @@ describe('unreadable tables', () => {
 
     // having siblings doesn't break it
     expect(
-      augmentQuery(
+      transformQuery(
         ast(
           newQuery(mockDelegate, schema.tables.readable)
             .where(({not, exists}) => not(exists('unreadable')))
@@ -397,38 +397,38 @@ describe('unreadable tables', () => {
 describe('tables with no read policies', () => {
   test('top level query is unmodified', () => {
     const query = newQuery(mockDelegate, schema.tables.readable);
-    expect(augmentQuery(ast(query), auth)).toEqual(ast(query));
+    expect(transformQuery(ast(query), auth)).toEqual(ast(query));
   });
   test('related queries are unmodified', () => {
     let query = newQuery(mockDelegate, schema.tables.readable).related(
       'readable',
     );
-    expect(augmentQuery(ast(query), auth)).toEqual(ast(query));
+    expect(transformQuery(ast(query), auth)).toEqual(ast(query));
 
     query = newQuery(mockDelegate, schema.tables.readable).related(
       'readable',
       q => q.related('readable'),
     );
-    expect(augmentQuery(ast(query), auth)).toEqual(ast(query));
+    expect(transformQuery(ast(query), auth)).toEqual(ast(query));
   });
   test('subqueries in conditions are unmodified', () => {
     let query = newQuery(mockDelegate, schema.tables.readable).whereExists(
       'readable',
     );
-    expect(augmentQuery(ast(query), auth)).toEqual(ast(query));
+    expect(transformQuery(ast(query), auth)).toEqual(ast(query));
 
     query = newQuery(mockDelegate, schema.tables.readable).whereExists(
       'readable',
       q => q.whereExists('readable'),
     );
-    expect(augmentQuery(ast(query), auth)).toEqual(ast(query));
+    expect(transformQuery(ast(query), auth)).toEqual(ast(query));
   });
 });
 
 describe('admin readable', () => {
   test('relationships have the rules applied', () => {
     expect(
-      augmentQuery(
+      transformQuery(
         ast(
           newQuery(mockDelegate, adminReadable)
             .related('self1')
@@ -522,7 +522,7 @@ describe('admin readable', () => {
 
     // all levels of the query have the admin policy applied while preserving existing `wheres`
     expect(
-      augmentQuery(
+      transformQuery(
         ast(
           newQuery(mockDelegate, adminReadable)
             .related('self1', q => q.where('id', '1'))
@@ -719,7 +719,7 @@ describe('admin readable', () => {
 
   test('exists have the rules applied', () => {
     expect(
-      augmentQuery(
+      transformQuery(
         ast(newQuery(mockDelegate, adminReadable).whereExists('self1')),
         auth,
       ),
@@ -784,7 +784,7 @@ describe('admin readable', () => {
     `);
 
     expect(
-      augmentQuery(
+      transformQuery(
         ast(
           newQuery(mockDelegate, adminReadable).whereExists('self1', q =>
             q.where('id', '1'),
@@ -870,7 +870,7 @@ describe('admin readable', () => {
     `);
 
     expect(
-      augmentQuery(
+      transformQuery(
         ast(
           newQuery(mockDelegate, adminReadable).whereExists('self1', q =>
             q.whereExists('self2'),

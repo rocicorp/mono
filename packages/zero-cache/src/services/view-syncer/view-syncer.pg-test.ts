@@ -1736,6 +1736,54 @@ describe('view-syncer/service', () => {
     ] satisfies ErrorMessage);
   });
 
+  test('sends client not found if CVR is not found', async () => {
+    // Connect the client at a non-empty base cookie.
+    const client = await connect({...SYNC_CONTEXT, baseCookie: '00:02'}, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+
+    let result;
+    try {
+      result = await client.dequeue();
+    } catch (e) {
+      result = e;
+    }
+    expect(result).toBeInstanceOf(ErrorForClient);
+    expect((result as ErrorForClient).errorMessage).toEqual([
+      'error',
+      ErrorKind.ClientNotFound,
+      'Client not found',
+    ] satisfies ErrorMessage);
+  });
+
+  test('sends invalid base cookie if client is ahead of CVR', async () => {
+    const cvrStore = new CVRStore(lc, cvrDB, serviceID);
+    await new CVRQueryDrivenUpdater(
+      cvrStore,
+      await cvrStore.load(),
+      '07',
+      REPLICA_VERSION,
+    ).flush(lc);
+
+    // Connect the client with a base cookie from the future.
+    const client = await connect({...SYNC_CONTEXT, baseCookie: '08'}, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+
+    let result;
+    try {
+      result = await client.dequeue();
+    } catch (e) {
+      result = e;
+    }
+    expect(result).toBeInstanceOf(ErrorForClient);
+    expect((result as ErrorForClient).errorMessage).toEqual([
+      'error',
+      ErrorKind.InvalidConnectionRequestBaseCookie,
+      'CVR is at version 07',
+    ] satisfies ErrorMessage);
+  });
+
   test('clean up operator storage on close', async () => {
     const storage = operatorStorage.createStorage();
     storage.set('foo', 'bar');
