@@ -3,13 +3,13 @@ import {assert} from '../../../shared/src/asserts.js';
 import type {Ordering} from '../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {Catch, type CaughtChange} from './catch.js';
 import type {NormalizedValue} from './data.js';
 import {Join, createPrimaryKeySetStorageKey} from './join.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
 import type {Input} from './operator.js';
-import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {Snitch, type SnitchMessage} from './snitch.js';
 import type {SourceChange} from './source.js';
 
@@ -54,10 +54,10 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     pushes: [[0, {type: 'add', row: {id: 'i3', ownerId: 'o2'}}]],
     expectedLog: [
       ['0', 'push', {type: 'add', row: {id: 'i3', ownerId: 'o2'}}],
-      ['1', 'fetch', {constraint: {key: 'issueId', value: 'i3'}}],
-      ['2', 'fetch', {constraint: {key: 'id', value: 'o2'}}],
-      ['1', 'fetchCount', {constraint: {key: 'issueId', value: 'i3'}}, 0],
-      ['2', 'fetchCount', {constraint: {key: 'id', value: 'o2'}}, 1],
+      ['1', 'fetch', {constraint: {issueId: 'i3'}}],
+      ['2', 'fetch', {constraint: {id: 'o2'}}],
+      ['1', 'fetchCount', {constraint: {issueId: 'i3'}}, 0],
+      ['2', 'fetchCount', {constraint: {id: 'o2'}}, 1],
     ],
     expectedPrimaryKeySetStorageKeys: [
       [
@@ -112,9 +112,9 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     pushes: [[2, {type: 'add', row: {id: 'o2'}}]],
     expectedLog: [
       ['2', 'push', {type: 'add', row: {id: 'o2'}}],
-      ['0', 'fetch', {constraint: {key: 'ownerId', value: 'o2'}}],
-      ['1', 'fetch', {constraint: {key: 'issueId', value: 'i2'}}],
-      ['0', 'fetchCount', {constraint: {key: 'ownerId', value: 'o2'}}, 1],
+      ['0', 'fetch', {constraint: {ownerId: 'o2'}}],
+      ['1', 'fetch', {constraint: {issueId: 'i2'}}],
+      ['0', 'fetchCount', {constraint: {ownerId: 'o2'}}, 1],
     ],
     expectedPrimaryKeySetStorageKeys: [
       [
@@ -163,8 +163,8 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     pushes: [[1, {type: 'add', row: {id: 'c5', issueId: 'i1'}}]],
     expectedLog: [
       ['1', 'push', {type: 'add', row: {id: 'c5', issueId: 'i1'}}],
-      ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
-      ['0', 'fetchCount', {constraint: {key: 'id', value: 'i1'}}, 1],
+      ['0', 'fetch', {constraint: {id: 'i1'}}],
+      ['0', 'fetchCount', {constraint: {id: 'i1'}}, 1],
     ],
     expectedPrimaryKeySetStorageKeys: [
       [
@@ -210,9 +210,9 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     pushes: [[2, {type: 'remove', row: {id: 'o2'}}]],
     expectedLog: [
       ['2', 'push', {type: 'remove', row: {id: 'o2'}}],
-      ['0', 'fetch', {constraint: {key: 'ownerId', value: 'o2'}}],
-      ['1', 'fetch', {constraint: {key: 'issueId', value: 'i2'}}],
-      ['0', 'fetchCount', {constraint: {key: 'ownerId', value: 'o2'}}, 1],
+      ['0', 'fetch', {constraint: {ownerId: 'o2'}}],
+      ['1', 'fetch', {constraint: {issueId: 'i2'}}],
+      ['0', 'fetchCount', {constraint: {ownerId: 'o2'}}, 1],
     ],
     expectedPrimaryKeySetStorageKeys: [
       [
@@ -261,8 +261,8 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     pushes: [[1, {type: 'remove', row: {id: 'c4', issueId: 'i2'}}]],
     expectedLog: [
       ['1', 'push', {type: 'remove', row: {id: 'c4', issueId: 'i2'}}],
-      ['0', 'fetch', {constraint: {key: 'id', value: 'i2'}}],
-      ['0', 'fetchCount', {constraint: {key: 'id', value: 'i2'}}, 1],
+      ['0', 'fetch', {constraint: {id: 'i2'}}],
+      ['0', 'fetchCount', {constraint: {id: 'i2'}}, 1],
     ],
     expectedPrimaryKeySetStorageKeys: [
       [
@@ -353,8 +353,7 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
           'cleanup',
           {
             constraint: {
-              key: 'issueId',
-              value: 'i1',
+              issueId: 'i1',
             },
           },
         ],
@@ -363,8 +362,7 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
           'fetch',
           {
             constraint: {
-              key: 'issueId',
-              value: 'i1',
+              issueId: 'i1',
             },
           },
         ],
@@ -373,8 +371,7 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
           'cleanup',
           {
             constraint: {
-              key: 'id',
-              value: 'o1',
+              id: 'o1',
             },
           },
         ],
@@ -383,8 +380,7 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
           'fetch',
           {
             constraint: {
-              key: 'id',
-              value: 'o1',
+              id: 'o1',
             },
           },
         ],
@@ -439,8 +435,8 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
             row: {id: 'c4', issueId: 'i2', text: 'comment 4 changed'},
           },
         ],
-        ['0', 'fetch', {constraint: {key: 'id', value: 'i2'}}],
-        ['0', 'fetchCount', {constraint: {key: 'id', value: 'i2'}}, 1],
+        ['0', 'fetch', {constraint: {id: 'i2'}}],
+        ['0', 'fetchCount', {constraint: {id: 'i2'}}, 1],
       ],
       expectedPrimaryKeySetStorageKeys: [
         [
@@ -503,9 +499,9 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
             row: {id: 'o2', text: 'owner 2 changed'},
           },
         ],
-        ['0', 'fetch', {constraint: {key: 'ownerId', value: 'o2'}}],
-        ['1', 'fetch', {constraint: {key: 'issueId', value: 'i2'}}],
-        ['0', 'fetchCount', {constraint: {key: 'ownerId', value: 'o2'}}, 1],
+        ['0', 'fetch', {constraint: {ownerId: 'o2'}}],
+        ['1', 'fetch', {constraint: {issueId: 'i2'}}],
+        ['0', 'fetchCount', {constraint: {ownerId: 'o2'}}, 1],
       ],
       expectedPrimaryKeySetStorageKeys: [
         [

@@ -4,11 +4,12 @@ import type {JSONValue} from '../../../shared/src/json.js';
 import type {Ordering} from '../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {Catch} from './catch.js';
+import {SetOfConstraint} from './constraint.js';
 import type {Node} from './data.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
-import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {type PushMessage, Snitch, type SnitchMessage} from './snitch.js';
 import {Take} from './take.js';
 
@@ -264,8 +265,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -285,8 +285,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -313,8 +312,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -326,8 +324,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -350,8 +347,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -363,8 +359,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -402,8 +397,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i0',
+                  issueID: 'i0',
                 },
               },
             ],
@@ -415,8 +409,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i0',
+                  issueID: 'i0',
                 },
               },
             ],
@@ -439,8 +432,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -451,8 +443,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -463,8 +454,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -492,8 +482,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -504,8 +493,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -516,8 +504,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -560,8 +547,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -572,8 +558,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -584,8 +569,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -613,8 +597,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -625,8 +608,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -637,8 +619,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -684,8 +665,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -696,8 +676,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -708,8 +687,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -737,8 +715,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -749,8 +726,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -761,8 +737,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -817,8 +792,7 @@ function takeTest(t: TakeTest) {
           partitionKey && partitionValue
             ? {
                 constraint: {
-                  key: partitionKey,
-                  value: partitionValue,
+                  [partitionKey]: partitionValue,
                 },
               }
             : undefined,
@@ -850,15 +824,15 @@ function takeTest(t: TakeTest) {
         } else if (fetchType === 'cleanup') {
           // For cleanup, the last fetch for any constraint should be a cleanup.
           // Others should be fetch.
-          const seen = new Set();
+          const seen = new SetOfConstraint();
           for (let i = expectedMessages.length - 1; i >= 0; i--) {
             const [name, _, req] = expectedMessages[i];
-            if (!seen.has(req.constraint?.value)) {
+            if (!(req.constraint && seen.has(req.constraint))) {
               expectedMessages[i] = [name, 'cleanup', req];
             } else {
               expectedMessages[i] = [name, 'fetch', req];
             }
-            seen.add(req.constraint?.value);
+            req.constraint && seen.add(req.constraint);
           }
         }
         expect(log).toEqual(expectedMessages);

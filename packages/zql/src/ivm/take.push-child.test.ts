@@ -1,8 +1,8 @@
 import {expect, test} from 'vitest';
+import type {Input, Storage} from './operator.js';
+import {Take} from './take.js';
 import {runJoinTest, type Joins, type Sources} from './test/join-push-tests.js';
 import type {Format} from './view.js';
-import {Take} from './take.js';
-import type {Storage, Input} from './operator.js';
 
 const sources: Sources = {
   issue: {
@@ -87,36 +87,36 @@ test('child change, parent is within bound', () => {
   });
 
   expect(data).toMatchInlineSnapshot(`
-        [
+    [
+      {
+        "comments": [
           {
-            "comments": [
-              {
-                "id": "c1",
-                "issueID": "i1",
-                "text": "i1 c1 text",
-              },
-              {
-                "id": "c2",
-                "issueID": "i1",
-                "text": "i1 c2 text",
-              },
-            ],
-            "id": "i1",
-            "text": "first issue",
+            "id": "c1",
+            "issueID": "i1",
+            "text": "i1 c1 text",
           },
           {
-            "comments": [
-              {
-                "id": "c3",
-                "issueID": "i2",
-                "text": "i2 c3 text",
-              },
-            ],
-            "id": "i2",
-            "text": "second issue",
+            "id": "c2",
+            "issueID": "i1",
+            "text": "i1 c2 text",
           },
-        ]
-    `);
+        ],
+        "id": "i1",
+        "text": "first issue",
+      },
+      {
+        "comments": [
+          {
+            "id": "c3",
+            "issueID": "i2",
+            "text": "i2 c3 text",
+          },
+        ],
+        "id": "i2",
+        "text": "second issue",
+      },
+    ]
+  `);
 
   expect(log.filter(msg => msg[0] === 'take')).toMatchInlineSnapshot(`
         [
@@ -206,30 +206,30 @@ test('child change, parent is after bound', () => {
   });
 
   expect(data).toMatchInlineSnapshot(`
-        [
+    [
+      {
+        "comments": [
           {
-            "comments": [
-              {
-                "id": "c1",
-                "issueID": "i1",
-                "text": "i1 c1 text",
-              },
-              {
-                "id": "c2",
-                "issueID": "i1",
-                "text": "i1 c2 text",
-              },
-            ],
-            "id": "i1",
-            "text": "first issue",
+            "id": "c1",
+            "issueID": "i1",
+            "text": "i1 c1 text",
           },
           {
-            "comments": [],
-            "id": "i2",
-            "text": "second issue",
+            "id": "c2",
+            "issueID": "i1",
+            "text": "i1 c2 text",
           },
-        ]
-    `);
+        ],
+        "id": "i1",
+        "text": "first issue",
+      },
+      {
+        "comments": [],
+        "id": "i2",
+        "text": "second issue",
+      },
+    ]
+  `);
 
   expect(log.filter(msg => msg[0] === 'take')).toHaveLength(0);
 

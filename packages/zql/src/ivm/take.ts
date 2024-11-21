@@ -1,4 +1,5 @@
 import {assert, unreachable} from '../../../shared/src/asserts.js';
+import {hasOwn} from '../../../shared/src/has-own.js';
 import {must} from '../../../shared/src/must.js';
 import type {Row, Value} from '../../../zero-protocol/src/data.js';
 import {assertOrderingIncludesPK} from '../builder/builder.js';
@@ -8,9 +9,9 @@ import {
   type EditChange,
   type RemoveChange,
 } from './change.js';
+import type {Constraint} from './constraint.js';
 import {normalizeUndefined, type Node} from './data.js';
 import type {
-  Constraint,
   FetchRequest,
   Input,
   Operator,
@@ -82,7 +83,11 @@ export class Take implements Operator {
   }
 
   *fetch(req: FetchRequest): Stream<Node> {
-    if (!this.#partitionKey || req.constraint?.key === this.#partitionKey) {
+    if (
+      !this.#partitionKey ||
+      (req.constraint &&
+        constraintMatchesPartitionKey(req.constraint, this.#partitionKey))
+    ) {
       const takeStateKey = getTakeStateKeyFromConstraint(
         this.#partitionKey,
         req.constraint,
@@ -135,7 +140,9 @@ export class Take implements Operator {
     assert(req.start === undefined);
     assert(
       !this.#partitionKey ||
-        (req.constraint && req.constraint.key === this.#partitionKey),
+        (req.constraint &&
+          // TODO: Compound keys
+          constraintMatchesPartitionKey(req.constraint, this.#partitionKey)),
     );
 
     if (this.#limit === 0) {
@@ -183,7 +190,9 @@ export class Take implements Operator {
     assert(req.start === undefined);
     assert(
       !this.#partitionKey ||
-        (req.constraint && req.constraint.key === this.#partitionKey),
+        (req.constraint &&
+          // TODO: Compound keys
+          constraintMatchesPartitionKey(req.constraint, this.#partitionKey)),
     );
 
     let takeState: TakeState | undefined;
@@ -193,7 +202,15 @@ export class Take implements Operator {
         req.constraint,
       );
       takeState = this.#storage.get(takeStateKey);
-      assert(takeState !== undefined);
+      assert(
+        takeState !== undefined,
+        'takeStateKey was: ' +
+          takeStateKey +
+          ', partitionKey was: ' +
+          this.#partitionKey +
+          ', constraint was: ' +
+          JSON.stringify(req.constraint),
+      );
       this.#storage.del(takeStateKey);
     }
     for (const inputNode of this.#input.cleanup(req)) {
@@ -216,10 +233,8 @@ export class Take implements Operator {
     if (takeState) {
       maxBound = this.#storage.get(MAX_BOUND_KEY);
       constraint = this.#partitionKey
-        ? {
-            key: this.#partitionKey,
-            value: row[this.#partitionKey],
-          }
+        ? // TODO: Compound keys
+          {[this.#partitionKey]: row[this.#partitionKey]}
         : undefined;
     }
 
@@ -641,5 +656,16 @@ function getTakeStateKeyFromConstraint(
   partitionKey: string | undefined,
   constraint: Constraint | undefined,
 ): string {
-  return getTakeStateKey(partitionKey && constraint?.value);
+  // TODO: Compound keys
+  const partitionValue: Value =
+    partitionKey && constraint && Object.values(constraint)[0];
+
+  return getTakeStateKey(partitionValue);
+}
+
+function constraintMatchesPartitionKey(
+  constraint: Constraint,
+  key: string,
+): boolean {
+  return hasOwn(constraint, key);
 }

@@ -1,15 +1,15 @@
 import {expect, suite, test} from 'vitest';
-import {Snitch, type SnitchMessage} from './snitch.js';
-import {MemorySource} from './memory-source.js';
-import {Join} from './join.js';
-import {MemoryStorage} from './memory-storage.js';
-import {Catch} from './catch.js';
-import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
-import type {Row} from '../../../zero-protocol/src/data.js';
 import type {Ordering} from '../../../zero-protocol/src/ast.js';
+import type {Row} from '../../../zero-protocol/src/data.js';
+import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
+import {Catch} from './catch.js';
 import type {Node} from './data.js';
 import {Exists} from './exists.js';
+import {Join} from './join.js';
+import {MemorySource} from './memory-source.js';
+import {MemoryStorage} from './memory-storage.js';
+import {Snitch, type SnitchMessage} from './snitch.js';
 
 const base = {
   columns: [
@@ -32,17 +32,17 @@ const oneParentWithChildTest: FetchTest = {
   expectedMessages: {
     initialFetch: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
       ['0', 'fetch', {start: {row: {id: 'i1'}, basis: 'at'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
     ],
     fetch: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
     ],
     cleanup: [
       ['0', 'cleanup', {}],
-      ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'cleanup', {constraint: {issueID: 'i1'}}],
     ],
   },
   expectedStorage: {
@@ -66,17 +66,17 @@ const oneParentNoChildTest: FetchTest = {
   expectedMessages: {
     initialFetch: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
       ['0', 'fetch', {start: {row: {id: 'i1'}, basis: 'at'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
     ],
     fetch: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
     ],
     cleanup: [
       ['0', 'cleanup', {}],
-      ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'cleanup', {constraint: {issueID: 'i1'}}],
     ],
   },
   expectedStorage: {
@@ -99,27 +99,27 @@ const threeParentsTwoWithChildrenTest: FetchTest = {
   expectedMessages: {
     initialFetch: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
       ['0', 'fetch', {start: {row: {id: 'i1'}, basis: 'at'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i2'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i2'}}],
       ['0', 'fetch', {start: {row: {id: 'i2'}, basis: 'at'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i2'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i3'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i2'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i3'}}],
       ['0', 'fetch', {start: {row: {id: 'i3'}, basis: 'at'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i3'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i3'}}],
     ],
     fetch: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i2'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i3'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i2'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i3'}}],
     ],
     cleanup: [
       ['0', 'cleanup', {}],
-      ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i2'}}],
-      ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i3'}}],
+      ['1', 'cleanup', {constraint: {issueID: 'i1'}}],
+      ['1', 'cleanup', {constraint: {issueID: 'i2'}}],
+      ['1', 'cleanup', {constraint: {issueID: 'i3'}}],
     ],
   },
   expectedStorage: {
@@ -151,27 +151,27 @@ const threeParentsNoChildrenTest: FetchTest = {
   expectedMessages: {
     initialFetch: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
       ['0', 'fetch', {start: {row: {id: 'i1'}, basis: 'at'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i2'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i2'}}],
       ['0', 'fetch', {start: {row: {id: 'i2'}, basis: 'at'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i2'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i3'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i2'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i3'}}],
       ['0', 'fetch', {start: {row: {id: 'i3'}, basis: 'at'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i3'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i3'}}],
     ],
     fetch: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i2'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i3'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i2'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i3'}}],
     ],
     cleanup: [
       ['0', 'cleanup', {}],
-      ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i2'}}],
-      ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i3'}}],
+      ['1', 'cleanup', {constraint: {issueID: 'i1'}}],
+      ['1', 'cleanup', {constraint: {issueID: 'i2'}}],
+      ['1', 'cleanup', {constraint: {issueID: 'i3'}}],
     ],
   },
   expectedStorage: {

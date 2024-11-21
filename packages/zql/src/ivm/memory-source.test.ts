@@ -2,7 +2,9 @@ import {describe, expect, test} from 'vitest';
 import type {Ordering} from '../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {Catch} from './catch.js';
+import type {Change} from './change.js';
 import {compareRowsTest} from './data.test.js';
 import {
   filterOptionalFilters,
@@ -11,9 +13,7 @@ import {
   overlaysForConstraintForTest,
   overlaysForStartAtForTest,
 } from './memory-source.js';
-import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {runCases} from './test/source-cases.js';
-import type {Change} from './change.js';
 
 runCases(
   (
@@ -381,37 +381,53 @@ describe('generateWithOverlayInner', () => {
 
 test('overlaysForConstraint', () => {
   expect(
-    overlaysForConstraintForTest(
-      {add: undefined, remove: undefined},
-      {key: 'a', value: 'b'},
-    ),
+    overlaysForConstraintForTest({add: undefined, remove: undefined}, {a: 'b'}),
   ).toEqual({add: undefined, remove: undefined});
 
   expect(
-    overlaysForConstraintForTest(
-      {add: {a: 'b'}, remove: undefined},
-      {key: 'a', value: 'b'},
-    ),
+    overlaysForConstraintForTest({add: {a: 'b'}, remove: undefined}, {a: 'b'}),
   ).toEqual({add: {a: 'b'}, remove: undefined});
 
   expect(
-    overlaysForConstraintForTest(
-      {add: undefined, remove: {a: 'b'}},
-      {key: 'a', value: 'b'},
-    ),
+    overlaysForConstraintForTest({add: undefined, remove: {a: 'b'}}, {a: 'b'}),
   ).toEqual({add: undefined, remove: {a: 'b'}});
 
   expect(
     overlaysForConstraintForTest(
       {add: {a: 'b', b: '2'}, remove: {a: 'b', b: '1'}},
-      {key: 'a', value: 'b'},
+      {a: 'b'},
     ),
   ).toEqual({add: {a: 'b', b: '2'}, remove: {a: 'b', b: '1'}});
 
   expect(
     overlaysForConstraintForTest(
       {add: {a: 'c', b: '2'}, remove: {a: 'c', b: '1'}},
-      {key: 'a', value: 'b'},
+      {a: 'b'},
+    ),
+  ).toEqual({add: undefined, remove: undefined});
+
+  // Compound key constraints
+  expect(
+    overlaysForConstraintForTest(
+      {add: {a: 'b', b: '2'}, remove: {a: 'b', b: '1'}},
+
+      {a: 'b', b: '2'},
+    ),
+  ).toEqual({add: {a: 'b', b: '2'}, remove: undefined});
+
+  expect(
+    overlaysForConstraintForTest(
+      {add: {a: 'b', b: '2'}, remove: {a: 'b', b: '1'}},
+
+      {a: 'b', b: '1'},
+    ),
+  ).toEqual({add: undefined, remove: {a: 'b', b: '1'}});
+
+  expect(
+    overlaysForConstraintForTest(
+      {add: {a: 'b', b: '2'}, remove: {a: 'b', b: '1'}},
+
+      {a: 'b', b: '3'},
     ),
   ).toEqual({add: undefined, remove: undefined});
 });

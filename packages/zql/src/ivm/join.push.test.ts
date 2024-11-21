@@ -1,11 +1,11 @@
 import {describe, expect, suite, test} from 'vitest';
-import type {Format} from './view.js';
 import {
   pushTest,
   runJoinTest,
   type Joins,
   type Sources,
 } from './test/join-push-tests.js';
+import type {Format} from './view.js';
 
 suite('push one:many', () => {
   const base = {
@@ -30,7 +30,7 @@ suite('push one:many', () => {
     pushes: [[0, {type: 'remove', row: {id: 'i1'}}]],
     expectedLog: [
       ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
-      ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'cleanup', {constraint: {issueID: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[]],
     expectedOutput: [
@@ -55,7 +55,7 @@ suite('push one:many', () => {
     pushes: [[1, {type: 'remove', row: {id: 'c1', issueID: 'i1'}}]],
     expectedLog: [
       ['1', 'push', {type: 'remove', row: {id: 'c1', issueID: 'i1'}}],
-      ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
+      ['0', 'fetch', {constraint: {id: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[]],
     expectedOutput: [],
@@ -68,7 +68,7 @@ suite('push one:many', () => {
     pushes: [[0, {type: 'add', row: {id: 'i1'}}]],
     expectedLog: [
       ['0', 'push', {type: 'add', row: {id: 'i1'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
     expectedOutput: [
@@ -99,7 +99,7 @@ suite('push one:many', () => {
     pushes: [[0, {type: 'add', row: {id: 'i1'}}]],
     expectedLog: [
       ['0', 'push', {type: 'add', row: {id: 'i1'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
     expectedOutput: [
@@ -127,7 +127,7 @@ suite('push one:many', () => {
     pushes: [[0, {type: 'add', row: {id: 'i2'}}]],
     expectedLog: [
       ['0', 'push', {type: 'add', row: {id: 'i2'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i2'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i2'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i2', 'i2']]],
     expectedOutput: [
@@ -152,7 +152,7 @@ suite('push one:many', () => {
     pushes: [[1, {type: 'add', row: {id: 'c1', issueID: 'i1'}}]],
     expectedLog: [
       ['1', 'push', {type: 'add', row: {id: 'c1', issueID: 'i1'}}],
-      ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
+      ['0', 'fetch', {constraint: {id: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
     expectedOutput: [
@@ -185,7 +185,7 @@ suite('push one:many', () => {
     pushes: [[1, {type: 'add', row: {id: 'c1', issueID: 'i2'}}]],
     expectedLog: [
       ['1', 'push', {type: 'add', row: {id: 'c1', issueID: 'i2'}}],
-      ['0', 'fetch', {constraint: {key: 'id', value: 'i2'}}],
+      ['0', 'fetch', {constraint: {id: 'i2'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
     expectedOutput: [],
@@ -198,7 +198,7 @@ suite('push one:many', () => {
     pushes: [[0, {type: 'remove', row: {id: 'i1'}}]],
     expectedLog: [
       ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
-      ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'cleanup', {constraint: {issueID: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[]],
     expectedOutput: [
@@ -229,7 +229,7 @@ suite('push one:many', () => {
     pushes: [[0, {type: 'remove', row: {id: 'i1'}}]],
     expectedLog: [
       ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
-      ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'cleanup', {constraint: {issueID: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[]],
     expectedOutput: [
@@ -263,15 +263,15 @@ suite('push one:many', () => {
     ],
     expectedLog: [
       ['0', 'push', {type: 'add', row: {id: 'i1'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
       ['1', 'push', {type: 'add', row: {id: 'c1', issueID: 'i1'}}],
-      ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
+      ['0', 'fetch', {constraint: {id: 'i1'}}],
       ['1', 'push', {type: 'add', row: {id: 'c2', issueID: 'i1'}}],
-      ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
+      ['0', 'fetch', {constraint: {id: 'i1'}}],
       ['1', 'push', {type: 'remove', row: {id: 'c1', issueID: 'i1'}}],
-      ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
+      ['0', 'fetch', {constraint: {id: 'i1'}}],
       ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
-      ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'cleanup', {constraint: {issueID: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[], []],
     expectedOutput: [
@@ -412,8 +412,7 @@ suite('push one:many', () => {
           'cleanup',
           {
             constraint: {
-              key: 'issueID',
-              value: 'i1',
+              issueID: 'i1',
             },
           },
         ],
@@ -422,8 +421,7 @@ suite('push one:many', () => {
           'fetch',
           {
             constraint: {
-              key: 'issueID',
-              value: 'i1',
+              issueID: 'i1',
             },
           },
         ],
@@ -474,7 +472,7 @@ suite('push one:many', () => {
             row: {id: 'c1', issueID: 'i1', text: 'comment 1 edited'},
           },
         ],
-        ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
+        ['0', 'fetch', {constraint: {id: 'i1'}}],
       ],
       expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
       expectedOutput: [
@@ -537,8 +535,8 @@ suite('push one:many', () => {
             row: {id: 'c1', issueID: 'i2', text: 'comment 1.2'},
           },
         ],
-        ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
-        ['0', 'fetch', {constraint: {key: 'id', value: 'i2'}}],
+        ['0', 'fetch', {constraint: {id: 'i1'}}],
+        ['0', 'fetch', {constraint: {id: 'i2'}}],
       ],
       expectedPrimaryKeySetStorageKeys: [
         [
@@ -626,8 +624,8 @@ suite('push one:many', () => {
             row: {id: 'i3', text: 'issue 1.3'},
           },
         ],
-        ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
-        ['1', 'fetch', {constraint: {key: 'issueID', value: 'i3'}}],
+        ['1', 'cleanup', {constraint: {issueID: 'i1'}}],
+        ['1', 'fetch', {constraint: {issueID: 'i3'}}],
       ],
       expectedPrimaryKeySetStorageKeys: [
         [
@@ -706,7 +704,7 @@ suite('push many:one', () => {
     pushes: [[0, {type: 'add', row: {id: 'i1', ownerID: 'u1'}}]],
     expectedLog: [
       ['0', 'push', {type: 'add', row: {id: 'i1', ownerID: 'u1'}}],
-      ['1', 'fetch', {constraint: {key: 'id', value: 'u1'}}],
+      ['1', 'fetch', {constraint: {id: 'u1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['u1', 'i1']]],
     expectedOutput: [
@@ -732,7 +730,7 @@ suite('push many:one', () => {
     pushes: [[0, {type: 'add', row: {id: 'i1', ownerID: 'u2'}}]],
     expectedLog: [
       ['0', 'push', {type: 'add', row: {id: 'i1', ownerID: 'u2'}}],
-      ['1', 'fetch', {constraint: {key: 'id', value: 'u2'}}],
+      ['1', 'fetch', {constraint: {id: 'u2'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['u2', 'i1']]],
     expectedOutput: [
@@ -758,7 +756,7 @@ suite('push many:one', () => {
     pushes: [[1, {type: 'add', row: {id: 'u1'}}]],
     expectedLog: [
       ['1', 'push', {type: 'add', row: {id: 'u1'}}],
-      ['0', 'fetch', {constraint: {key: 'ownerID', value: 'u1'}}],
+      ['0', 'fetch', {constraint: {ownerID: 'u1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['u1', 'i1']]],
     expectedOutput: [
@@ -797,7 +795,7 @@ suite('push many:one', () => {
     pushes: [[1, {type: 'add', row: {id: 'u1'}}]],
     expectedLog: [
       ['1', 'push', {type: 'add', row: {id: 'u1'}}],
-      ['0', 'fetch', {constraint: {key: 'ownerID', value: 'u1'}}],
+      ['0', 'fetch', {constraint: {ownerID: 'u1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [
       [
@@ -897,8 +895,8 @@ suite('push many:one', () => {
             oldRow: {id: 'u2', text: 'user 2'},
           },
         ],
-        ['0', 'fetch', {constraint: {key: 'ownerID', value: 'u2'}}],
-        ['0', 'fetch', {constraint: {key: 'ownerID', value: 'u1'}}],
+        ['0', 'fetch', {constraint: {ownerID: 'u2'}}],
+        ['0', 'fetch', {constraint: {ownerID: 'u1'}}],
       ],
       expectedPrimaryKeySetStorageKeys: [
         [
@@ -1013,10 +1011,10 @@ suite('push many:one', () => {
             oldRow: {id: 'i2', ownerID: 'u2', text: 'item 2'},
           },
         ],
-        ['2', 'cleanup', {constraint: {key: 'issueID', value: 'i2'}}],
-        ['2', 'fetch', {constraint: {key: 'issueID', value: 'i2'}}],
-        ['0', 'fetch', {constraint: {key: 'id', value: 'u2'}}],
-        ['0', 'fetch', {constraint: {key: 'id', value: 'u1'}}],
+        ['2', 'cleanup', {constraint: {issueID: 'i2'}}],
+        ['2', 'fetch', {constraint: {issueID: 'i2'}}],
+        ['0', 'fetch', {constraint: {id: 'u2'}}],
+        ['0', 'fetch', {constraint: {id: 'u1'}}],
       ],
       expectedPrimaryKeySetStorageKeys: [
         [
@@ -1104,7 +1102,7 @@ suite('push many:one', () => {
             oldRow: {id: 'u2', text: 'user 2'},
           },
         ],
-        ['0', 'fetch', {constraint: {key: 'ownerID', value: 'u2'}}],
+        ['0', 'fetch', {constraint: {ownerID: 'u2'}}],
       ],
       expectedPrimaryKeySetStorageKeys: [
         [
@@ -1145,7 +1143,7 @@ suite('push many:one', () => {
             oldRow: {id: 'u1', text: 'user 1'},
           },
         ],
-        ['0', 'fetch', {constraint: {key: 'ownerID', value: 'u1'}}],
+        ['0', 'fetch', {constraint: {ownerID: 'u1'}}],
       ],
       expectedPrimaryKeySetStorageKeys: [
         [
@@ -1232,8 +1230,8 @@ suite('push one:many:many', () => {
     pushes: [[2, {type: 'add', row: {id: 'r1', commentID: 'c1'}}]],
     expectedLog: [
       ['2', 'push', {type: 'add', row: {id: 'r1', commentID: 'c1'}}],
-      ['1', 'fetch', {constraint: {key: 'id', value: 'c1'}}],
-      ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {id: 'c1'}}],
+      ['0', 'fetch', {constraint: {id: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['c1', 'c1']]],
     expectedOutput: [
@@ -1276,8 +1274,8 @@ suite('push one:many:many', () => {
     pushes: [[1, {type: 'add', row: {id: 'c1', issueID: 'i1'}}]],
     expectedLog: [
       ['1', 'push', {type: 'add', row: {id: 'c1', issueID: 'i1'}}],
-      ['2', 'fetch', {constraint: {key: 'commentID', value: 'c1'}}],
-      ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
+      ['2', 'fetch', {constraint: {commentID: 'c1'}}],
+      ['0', 'fetch', {constraint: {id: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['c1', 'c1']]],
     expectedOutput: [
@@ -1314,8 +1312,8 @@ suite('push one:many:many', () => {
     pushes: [[0, {type: 'add', row: {id: 'i1'}}]],
     expectedLog: [
       ['0', 'push', {type: 'add', row: {id: 'i1'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['2', 'fetch', {constraint: {key: 'commentID', value: 'c1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
+      ['2', 'fetch', {constraint: {commentID: 'c1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['c1', 'c1']]],
     expectedOutput: [
@@ -1353,8 +1351,8 @@ suite('push one:many:many', () => {
     pushes: [[0, {type: 'remove', row: {id: 'i1'}}]],
     expectedLog: [
       ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
-      ['1', 'cleanup', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['2', 'cleanup', {constraint: {key: 'commentID', value: 'c1'}}],
+      ['1', 'cleanup', {constraint: {issueID: 'i1'}}],
+      ['2', 'cleanup', {constraint: {commentID: 'c1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[], []],
     expectedOutput: [
@@ -1419,8 +1417,8 @@ suite('push one:many:one', () => {
     pushes: [[2, {type: 'add', row: {id: 'l1'}}]],
     expectedLog: [
       ['2', 'push', {type: 'add', row: {id: 'l1'}}],
-      ['1', 'fetch', {constraint: {key: 'labelID', value: 'l1'}}],
-      ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {labelID: 'l1'}}],
+      ['0', 'fetch', {constraint: {id: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['l1', 'i1', 'l1']]],
     expectedOutput: [
@@ -1463,8 +1461,8 @@ suite('push one:many:one', () => {
     pushes: [[1, {type: 'add', row: {issueID: 'i1', labelID: 'l1'}}]],
     expectedLog: [
       ['1', 'push', {type: 'add', row: {issueID: 'i1', labelID: 'l1'}}],
-      ['2', 'fetch', {constraint: {key: 'id', value: 'l1'}}],
-      ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
+      ['2', 'fetch', {constraint: {id: 'l1'}}],
+      ['0', 'fetch', {constraint: {id: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['l1', 'i1', 'l1']]],
     expectedOutput: [
@@ -1507,9 +1505,9 @@ suite('push one:many:one', () => {
     pushes: [[2, {type: 'add', row: {id: 'l1'}}]],
     expectedLog: [
       ['2', 'push', {type: 'add', row: {id: 'l1'}}],
-      ['1', 'fetch', {constraint: {key: 'labelID', value: 'l1'}}],
-      ['0', 'fetch', {constraint: {key: 'id', value: 'i1'}}],
-      ['0', 'fetch', {constraint: {key: 'id', value: 'i2'}}],
+      ['1', 'fetch', {constraint: {labelID: 'l1'}}],
+      ['0', 'fetch', {constraint: {id: 'i1'}}],
+      ['0', 'fetch', {constraint: {id: 'i2'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [
       [
@@ -1747,8 +1745,7 @@ describe('edit assignee', () => {
           "cleanup",
           {
             "constraint": {
-              "key": "userID",
-              "value": "u1",
+              "userID": "u1",
             },
           },
         ],
@@ -1757,8 +1754,7 @@ describe('edit assignee', () => {
           "fetch",
           {
             "constraint": {
-              "key": "userID",
-              "value": "u1",
+              "userID": "u1",
             },
           },
         ],
@@ -1786,8 +1782,7 @@ describe('edit assignee', () => {
           "cleanup",
           {
             "constraint": {
-              "key": "userID",
-              "value": null,
+              "userID": null,
             },
           },
         ],
@@ -1809,8 +1804,7 @@ describe('edit assignee', () => {
           "fetch",
           {
             "constraint": {
-              "key": "userID",
-              "value": "u1",
+              "userID": "u1",
             },
           },
         ],
@@ -2032,8 +2026,7 @@ describe('edit assignee', () => {
           "cleanup",
           {
             "constraint": {
-              "key": "userID",
-              "value": "u1",
+              "userID": "u1",
             },
           },
         ],
@@ -2042,8 +2035,7 @@ describe('edit assignee', () => {
           "fetch",
           {
             "constraint": {
-              "key": "userID",
-              "value": "u1",
+              "userID": "u1",
             },
           },
         ],
@@ -2071,8 +2063,7 @@ describe('edit assignee', () => {
           "cleanup",
           {
             "constraint": {
-              "key": "userID",
-              "value": null,
+              "userID": null,
             },
           },
         ],
@@ -2094,8 +2085,7 @@ describe('edit assignee', () => {
           "fetch",
           {
             "constraint": {
-              "key": "userID",
-              "value": "u1",
+              "userID": "u1",
             },
           },
         ],
@@ -2307,8 +2297,7 @@ describe('edit assignee', () => {
           "cleanup",
           {
             "constraint": {
-              "key": "userID",
-              "value": "u1",
+              "userID": "u1",
             },
           },
         ],
@@ -2317,8 +2306,7 @@ describe('edit assignee', () => {
           "fetch",
           {
             "constraint": {
-              "key": "userID",
-              "value": "u1",
+              "userID": "u1",
             },
           },
         ],
@@ -2346,8 +2334,7 @@ describe('edit assignee', () => {
           "cleanup",
           {
             "constraint": {
-              "key": "userID",
-              "value": "u1",
+              "userID": "u1",
             },
           },
         ],
@@ -2369,8 +2356,7 @@ describe('edit assignee', () => {
           "fetch",
           {
             "constraint": {
-              "key": "userID",
-              "value": null,
+              "userID": null,
             },
           },
         ],
@@ -2582,8 +2568,7 @@ describe('edit assignee', () => {
           "cleanup",
           {
             "constraint": {
-              "key": "userID",
-              "value": "u1",
+              "userID": "u1",
             },
           },
         ],
@@ -2592,8 +2577,7 @@ describe('edit assignee', () => {
           "fetch",
           {
             "constraint": {
-              "key": "userID",
-              "value": "u1",
+              "userID": "u1",
             },
           },
         ],
@@ -2621,8 +2605,7 @@ describe('edit assignee', () => {
           "cleanup",
           {
             "constraint": {
-              "key": "userID",
-              "value": "u1",
+              "userID": "u1",
             },
           },
         ],
@@ -2644,8 +2627,7 @@ describe('edit assignee', () => {
           "fetch",
           {
             "constraint": {
-              "key": "userID",
-              "value": null,
+              "userID": null,
             },
           },
         ],

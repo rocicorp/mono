@@ -3,7 +3,9 @@ import {assert} from '../../../shared/src/asserts.js';
 import type {Ordering} from '../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {Catch} from './catch.js';
+import {SetOfConstraint} from './constraint.js';
 import type {Node, NormalizedValue} from './data.js';
 import {
   Join,
@@ -14,7 +16,6 @@ import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
 import type {SourceSchema} from './schema.js';
 import {type PushMessage, Snitch, type SnitchMessage} from './snitch.js';
-import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 
 suite('fetch one:many', () => {
   const base = {
@@ -56,7 +57,7 @@ suite('fetch one:many', () => {
     sources: [[{id: 'i1'}], []],
     expectedMessages: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
     expectedHydrate: [{row: {id: 'i1'}, relationships: {comments: []}}],
@@ -68,7 +69,7 @@ suite('fetch one:many', () => {
     sources: [[{id: 'i1'}], [{id: 'c1', issueID: 'i1'}]],
     expectedMessages: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
     expectedHydrate: [
@@ -88,7 +89,7 @@ suite('fetch one:many', () => {
     sources: [[{id: 'i1'}], [{id: 'c1', issueID: 'i2'}]],
     expectedMessages: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
     expectedHydrate: [{row: {id: 'i1'}, relationships: {comments: []}}],
@@ -106,7 +107,7 @@ suite('fetch one:many', () => {
     ],
     expectedMessages: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
     expectedHydrate: [
@@ -133,8 +134,8 @@ suite('fetch one:many', () => {
     ],
     expectedMessages: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i2'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i2'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [
       [
@@ -196,7 +197,7 @@ suite('fetch many:one', () => {
     sources: [[{id: 'i1', ownerID: 'u1'}], []],
     expectedMessages: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'id', value: 'u1'}}],
+      ['1', 'fetch', {constraint: {id: 'u1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['u1', 'i1']]],
     expectedHydrate: [
@@ -219,7 +220,7 @@ suite('fetch many:one', () => {
     sources: [[{id: 'i1', ownerID: 'u1'}], [{id: 'u1'}]],
     expectedMessages: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'id', value: 'u1'}}],
+      ['1', 'fetch', {constraint: {id: 'u1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['u1', 'i1']]],
     expectedHydrate: [
@@ -244,8 +245,8 @@ suite('fetch many:one', () => {
     ],
     expectedMessages: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'id', value: 'u1'}}],
-      ['1', 'fetch', {constraint: {key: 'id', value: 'u1'}}],
+      ['1', 'fetch', {constraint: {id: 'u1'}}],
+      ['1', 'fetch', {constraint: {id: 'u1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [
       [
@@ -281,8 +282,8 @@ suite('fetch many:one', () => {
     ],
     expectedMessages: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'id', value: 'u1'}}],
-      ['1', 'fetch', {constraint: {key: 'id', value: 'u2'}}],
+      ['1', 'fetch', {constraint: {id: 'u1'}}],
+      ['1', 'fetch', {constraint: {id: 'u2'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [
       [
@@ -362,7 +363,7 @@ suite('fetch one:many:many', () => {
     sources: [[{id: 'i1'}], [], []],
     expectedMessages: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], []],
     expectedHydrate: [{row: {id: 'i1'}, relationships: {comments: []}}],
@@ -378,8 +379,8 @@ suite('fetch one:many:many', () => {
     ],
     expectedMessages: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['2', 'fetch', {constraint: {key: 'commentID', value: 'c1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
+      ['2', 'fetch', {constraint: {commentID: 'c1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['c1', 'c1']]],
     expectedHydrate: [
@@ -425,12 +426,12 @@ suite('fetch one:many:many', () => {
     ],
     expectedMessages: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['2', 'fetch', {constraint: {key: 'commentID', value: 'c1'}}],
-      ['2', 'fetch', {constraint: {key: 'commentID', value: 'c2'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i2'}}],
-      ['2', 'fetch', {constraint: {key: 'commentID', value: 'c3'}}],
-      ['2', 'fetch', {constraint: {key: 'commentID', value: 'c4'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
+      ['2', 'fetch', {constraint: {commentID: 'c1'}}],
+      ['2', 'fetch', {constraint: {commentID: 'c2'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i2'}}],
+      ['2', 'fetch', {constraint: {commentID: 'c3'}}],
+      ['2', 'fetch', {constraint: {commentID: 'c4'}}],
     ],
 
     expectedPrimaryKeySetStorageKeys: [
@@ -558,7 +559,7 @@ suite('fetch one:many:one', () => {
     sorts,
     expectedMessages: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], []],
     expectedHydrate: [{row: {id: 'i1'}, relationships: {issuelabels: []}}],
@@ -571,8 +572,8 @@ suite('fetch one:many:one', () => {
     sorts,
     expectedMessages: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['2', 'fetch', {constraint: {key: 'id', value: 'l1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
+      ['2', 'fetch', {constraint: {id: 'l1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['l1', 'i1', 'l1']]],
     expectedHydrate: [
@@ -597,8 +598,8 @@ suite('fetch one:many:one', () => {
     sorts,
     expectedMessages: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['2', 'fetch', {constraint: {key: 'id', value: 'l1'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
+      ['2', 'fetch', {constraint: {id: 'l1'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['l1', 'i1', 'l1']]],
     expectedHydrate: [
@@ -632,9 +633,9 @@ suite('fetch one:many:one', () => {
     sorts,
     expectedMessages: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['2', 'fetch', {constraint: {key: 'id', value: 'l1'}}],
-      ['2', 'fetch', {constraint: {key: 'id', value: 'l2'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
+      ['2', 'fetch', {constraint: {id: 'l1'}}],
+      ['2', 'fetch', {constraint: {id: 'l2'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [
       [['i1', 'i1']],
@@ -682,12 +683,12 @@ suite('fetch one:many:one', () => {
     sorts,
     expectedMessages: [
       ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
-      ['2', 'fetch', {constraint: {key: 'id', value: 'l1'}}],
-      ['2', 'fetch', {constraint: {key: 'id', value: 'l2'}}],
-      ['1', 'fetch', {constraint: {key: 'issueID', value: 'i2'}}],
-      ['2', 'fetch', {constraint: {key: 'id', value: 'l1'}}],
-      ['2', 'fetch', {constraint: {key: 'id', value: 'l2'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
+      ['2', 'fetch', {constraint: {id: 'l1'}}],
+      ['2', 'fetch', {constraint: {id: 'l2'}}],
+      ['1', 'fetch', {constraint: {issueID: 'i2'}}],
+      ['2', 'fetch', {constraint: {id: 'l1'}}],
+      ['2', 'fetch', {constraint: {id: 'l2'}}],
     ],
     expectedPrimaryKeySetStorageKeys: [
       [
@@ -841,15 +842,15 @@ function fetchTest(t: FetchTest) {
       } else if (fetchType === 'cleanup') {
         // For cleanup, the last fetch for any constraint should be a cleanup.
         // Others should be fetch.
-        const seen = new Set();
+        const seen = new SetOfConstraint();
         for (let i = expectedMessages.length - 1; i >= 0; i--) {
           const [name, _, req] = expectedMessages[i];
-          if (!seen.has(req.constraint?.value)) {
+          if (!(req.constraint && seen.has(req.constraint))) {
             expectedMessages[i] = [name, 'cleanup', req];
           } else {
             expectedMessages[i] = [name, 'fetch', req];
           }
-          seen.add(req.constraint?.value);
+          req.constraint && seen.add(req.constraint);
         }
       }
       expect(log).toEqual(expectedMessages);
