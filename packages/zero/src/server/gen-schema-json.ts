@@ -1,1 +1,1 @@
-import '../../../zero-cache/src/server/gen-schema-json.js';
+import '../../../zero-schema/src/server/gen-schema-json.js';
