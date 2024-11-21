@@ -14,6 +14,7 @@ import {
   type TableSchema,
 } from '../../../zero-schema/src/table-schema.js';
 import {must} from '../../../shared/src/must.js';
+import type {ExpressionBuilder} from '../../../zql/src/query/expression.js';
 
 const mockDelegate = {} as QueryDelegate;
 
@@ -54,26 +55,60 @@ const readable = {
     },
   },
 } as const;
+const adminReadable = {
+  tableName: 'adminReadable',
+  columns: {
+    id: {type: 'string'},
+  },
+  primaryKey: ['id'],
+  relationships: {
+    self1: {
+      dest: {
+        field: 'id',
+        schema: () => adminReadable,
+      },
+      source: 'id',
+    },
+    self2: {
+      dest: {
+        field: 'id',
+        schema: () => adminReadable,
+      },
+      source: 'id',
+    },
+  },
+} as const;
 
 const schema = createSchema({
   version: 1,
   tables: {
     readable,
     unreadable,
+    adminReadable,
   },
 });
 
+type AuthData = {
+  role: string;
+};
 const auth = must(
-  await defineAuthorization<Record<string, never>, typeof schema>(
-    schema,
-    () => ({
-      unreadable: {
-        row: {
-          select: [],
-        },
+  await defineAuthorization<AuthData, typeof schema>(schema, () => ({
+    unreadable: {
+      row: {
+        select: [],
       },
-    }),
-  ),
+    },
+    adminReadable: {
+      row: {
+        select: [
+          (
+            authData: {role: string},
+            eb: ExpressionBuilder<typeof adminReadable>,
+          ) => eb.cmpLit(authData.role, '=', 'admin'),
+        ],
+      },
+    },
+  })),
 );
 
 describe('unreadable tables', () => {
@@ -387,5 +422,560 @@ describe('tables with no read policies', () => {
       q => q.whereExists('readable'),
     );
     expect(augmentQuery(ast(query), auth)).toEqual(ast(query));
+  });
+});
+
+describe('admin readable', () => {
+  test('relationships have the rules applied', () => {
+    expect(
+      augmentQuery(
+        ast(
+          newQuery(mockDelegate, adminReadable)
+            .related('self1')
+            .related('self2'),
+        ),
+        auth,
+      ),
+      // all levels of the query (root, self1, self2) should have the admin policy applied.
+    ).toMatchInlineSnapshot(`
+      {
+        "related": [
+          {
+            "correlation": {
+              "childField": "id",
+              "op": "=",
+              "parentField": "id",
+            },
+            "subquery": {
+              "alias": "self1",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "related": undefined,
+              "table": "adminReadable",
+              "where": {
+                "left": {
+                  "anchor": "authData",
+                  "field": "role",
+                  "type": "static",
+                },
+                "op": "=",
+                "right": {
+                  "type": "literal",
+                  "value": "admin",
+                },
+                "type": "simple",
+              },
+            },
+          },
+          {
+            "correlation": {
+              "childField": "id",
+              "op": "=",
+              "parentField": "id",
+            },
+            "subquery": {
+              "alias": "self2",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "related": undefined,
+              "table": "adminReadable",
+              "where": {
+                "left": {
+                  "anchor": "authData",
+                  "field": "role",
+                  "type": "static",
+                },
+                "op": "=",
+                "right": {
+                  "type": "literal",
+                  "value": "admin",
+                },
+                "type": "simple",
+              },
+            },
+          },
+        ],
+        "table": "adminReadable",
+        "where": {
+          "left": {
+            "anchor": "authData",
+            "field": "role",
+            "type": "static",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "admin",
+          },
+          "type": "simple",
+        },
+      }
+    `);
+
+    // all levels of the query have the admin policy applied while preserving existing `wheres`
+    expect(
+      augmentQuery(
+        ast(
+          newQuery(mockDelegate, adminReadable)
+            .related('self1', q => q.where('id', '1'))
+            .related('self2', q =>
+              q.where('id', '2').related('self1', q => q.where('id', '3')),
+            )
+            .where('id', '4'),
+        ),
+        auth,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "related": [
+          {
+            "correlation": {
+              "childField": "id",
+              "op": "=",
+              "parentField": "id",
+            },
+            "subquery": {
+              "alias": "self1",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "related": undefined,
+              "table": "adminReadable",
+              "where": {
+                "conditions": [
+                  {
+                    "left": {
+                      "name": "id",
+                      "type": "column",
+                    },
+                    "op": "=",
+                    "right": {
+                      "type": "literal",
+                      "value": "1",
+                    },
+                    "type": "simple",
+                  },
+                  {
+                    "left": {
+                      "anchor": "authData",
+                      "field": "role",
+                      "type": "static",
+                    },
+                    "op": "=",
+                    "right": {
+                      "type": "literal",
+                      "value": "admin",
+                    },
+                    "type": "simple",
+                  },
+                ],
+                "type": "and",
+              },
+            },
+          },
+          {
+            "correlation": {
+              "childField": "id",
+              "op": "=",
+              "parentField": "id",
+            },
+            "subquery": {
+              "alias": "self2",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "related": [
+                {
+                  "correlation": {
+                    "childField": "id",
+                    "op": "=",
+                    "parentField": "id",
+                  },
+                  "subquery": {
+                    "alias": "self1",
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "related": undefined,
+                    "table": "adminReadable",
+                    "where": {
+                      "conditions": [
+                        {
+                          "left": {
+                            "name": "id",
+                            "type": "column",
+                          },
+                          "op": "=",
+                          "right": {
+                            "type": "literal",
+                            "value": "3",
+                          },
+                          "type": "simple",
+                        },
+                        {
+                          "left": {
+                            "anchor": "authData",
+                            "field": "role",
+                            "type": "static",
+                          },
+                          "op": "=",
+                          "right": {
+                            "type": "literal",
+                            "value": "admin",
+                          },
+                          "type": "simple",
+                        },
+                      ],
+                      "type": "and",
+                    },
+                  },
+                },
+              ],
+              "table": "adminReadable",
+              "where": {
+                "conditions": [
+                  {
+                    "left": {
+                      "name": "id",
+                      "type": "column",
+                    },
+                    "op": "=",
+                    "right": {
+                      "type": "literal",
+                      "value": "2",
+                    },
+                    "type": "simple",
+                  },
+                  {
+                    "left": {
+                      "anchor": "authData",
+                      "field": "role",
+                      "type": "static",
+                    },
+                    "op": "=",
+                    "right": {
+                      "type": "literal",
+                      "value": "admin",
+                    },
+                    "type": "simple",
+                  },
+                ],
+                "type": "and",
+              },
+            },
+          },
+        ],
+        "table": "adminReadable",
+        "where": {
+          "conditions": [
+            {
+              "left": {
+                "name": "id",
+                "type": "column",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "4",
+              },
+              "type": "simple",
+            },
+            {
+              "left": {
+                "anchor": "authData",
+                "field": "role",
+                "type": "static",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "admin",
+              },
+              "type": "simple",
+            },
+          ],
+          "type": "and",
+        },
+      }
+    `);
+  });
+
+  test('exists have the rules applied', () => {
+    expect(
+      augmentQuery(
+        ast(newQuery(mockDelegate, adminReadable).whereExists('self1')),
+        auth,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "related": undefined,
+        "table": "adminReadable",
+        "where": {
+          "conditions": [
+            {
+              "op": "EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": "id",
+                  "op": "=",
+                  "parentField": "id",
+                },
+                "subquery": {
+                  "alias": "zsubq_self1",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "related": undefined,
+                  "table": "adminReadable",
+                  "where": {
+                    "left": {
+                      "anchor": "authData",
+                      "field": "role",
+                      "type": "static",
+                    },
+                    "op": "=",
+                    "right": {
+                      "type": "literal",
+                      "value": "admin",
+                    },
+                    "type": "simple",
+                  },
+                },
+              },
+              "type": "correlatedSubquery",
+            },
+            {
+              "left": {
+                "anchor": "authData",
+                "field": "role",
+                "type": "static",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "admin",
+              },
+              "type": "simple",
+            },
+          ],
+          "type": "and",
+        },
+      }
+    `);
+
+    expect(
+      augmentQuery(
+        ast(
+          newQuery(mockDelegate, adminReadable).whereExists('self1', q =>
+            q.where('id', '1'),
+          ),
+        ),
+        auth,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "related": undefined,
+        "table": "adminReadable",
+        "where": {
+          "conditions": [
+            {
+              "op": "EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": "id",
+                  "op": "=",
+                  "parentField": "id",
+                },
+                "subquery": {
+                  "alias": "zsubq_self1",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "related": undefined,
+                  "table": "adminReadable",
+                  "where": {
+                    "conditions": [
+                      {
+                        "left": {
+                          "name": "id",
+                          "type": "column",
+                        },
+                        "op": "=",
+                        "right": {
+                          "type": "literal",
+                          "value": "1",
+                        },
+                        "type": "simple",
+                      },
+                      {
+                        "left": {
+                          "anchor": "authData",
+                          "field": "role",
+                          "type": "static",
+                        },
+                        "op": "=",
+                        "right": {
+                          "type": "literal",
+                          "value": "admin",
+                        },
+                        "type": "simple",
+                      },
+                    ],
+                    "type": "and",
+                  },
+                },
+              },
+              "type": "correlatedSubquery",
+            },
+            {
+              "left": {
+                "anchor": "authData",
+                "field": "role",
+                "type": "static",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "admin",
+              },
+              "type": "simple",
+            },
+          ],
+          "type": "and",
+        },
+      }
+    `);
+
+    expect(
+      augmentQuery(
+        ast(
+          newQuery(mockDelegate, adminReadable).whereExists('self1', q =>
+            q.whereExists('self2'),
+          ),
+        ),
+        auth,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "related": undefined,
+        "table": "adminReadable",
+        "where": {
+          "conditions": [
+            {
+              "op": "EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": "id",
+                  "op": "=",
+                  "parentField": "id",
+                },
+                "subquery": {
+                  "alias": "zsubq_self1",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "related": undefined,
+                  "table": "adminReadable",
+                  "where": {
+                    "conditions": [
+                      {
+                        "op": "EXISTS",
+                        "related": {
+                          "correlation": {
+                            "childField": "id",
+                            "op": "=",
+                            "parentField": "id",
+                          },
+                          "subquery": {
+                            "alias": "zsubq_self2",
+                            "orderBy": [
+                              [
+                                "id",
+                                "asc",
+                              ],
+                            ],
+                            "related": undefined,
+                            "table": "adminReadable",
+                            "where": {
+                              "left": {
+                                "anchor": "authData",
+                                "field": "role",
+                                "type": "static",
+                              },
+                              "op": "=",
+                              "right": {
+                                "type": "literal",
+                                "value": "admin",
+                              },
+                              "type": "simple",
+                            },
+                          },
+                        },
+                        "type": "correlatedSubquery",
+                      },
+                      {
+                        "left": {
+                          "anchor": "authData",
+                          "field": "role",
+                          "type": "static",
+                        },
+                        "op": "=",
+                        "right": {
+                          "type": "literal",
+                          "value": "admin",
+                        },
+                        "type": "simple",
+                      },
+                    ],
+                    "type": "and",
+                  },
+                },
+              },
+              "type": "correlatedSubquery",
+            },
+            {
+              "left": {
+                "anchor": "authData",
+                "field": "role",
+                "type": "static",
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": "admin",
+              },
+              "type": "simple",
+            },
+          ],
+          "type": "and",
+        },
+      }
+    `);
   });
 });

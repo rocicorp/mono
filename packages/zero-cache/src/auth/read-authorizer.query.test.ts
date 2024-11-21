@@ -31,6 +31,7 @@ import {augmentQuery} from './read-authorizer.js';
 import type {Query, QueryType} from '../../../zql/src/query/query.js';
 import {Catch} from '../../../zql/src/ivm/catch.js';
 import {buildPipeline} from '../../../zql/src/builder/builder.js';
+import type {Node} from '../../../zql/src/ivm/data.js';
 
 const schema = {
   version: 1,
@@ -57,6 +58,30 @@ const schema = {
             schema: () => schema.tables.issue,
           },
           source: 'id',
+        },
+        viewedIssues: {
+          source: 'id',
+          junction: {
+            schema: () => schema.tables.viewState,
+            destField: 'issueId',
+            sourceField: 'userId',
+          },
+          dest: {
+            field: 'id',
+            schema: () => schema.tables.issue,
+          },
+        },
+        projects: {
+          source: 'id',
+          junction: {
+            schema: () => schema.tables.projectMember,
+            destField: 'projectId',
+            sourceField: 'userId',
+          },
+          dest: {
+            field: 'id',
+            schema: () => schema.tables.project,
+          },
         },
       },
     },
@@ -112,6 +137,13 @@ const schema = {
             schema: () => schema.tables.project,
           },
           source: 'projectId',
+        },
+        viewState: {
+          dest: {
+            field: 'issueId',
+            schema: () => schema.tables.viewState,
+          },
+          source: 'id',
         },
       },
     },
@@ -1144,5 +1176,315 @@ test('can only insert a viewState if you are the owner', () => {
   }
 });
 
-// TODO (mlaw): test read auth is correctly applied down nested
-// branches of `related` and `exists` calls. E.g., `read-authorizer.test.ts`
+describe('read permissions against nested paths', () => {
+  beforeEach(() => {
+    addUser({id: 'owner-creator', name: 'Alice', role: 'user'});
+    addUser({id: 'project-member', name: 'Bob', role: 'user'});
+    addUser({id: 'not-project-member', name: 'Charlie', role: 'user'});
+
+    addIssue({
+      id: '001',
+      title: 'Issue 1',
+      description: 'This is the first issue',
+      closed: false,
+      ownerId: 'owner-creator',
+      creatorId: 'owner-creator',
+      projectId: '001',
+    });
+    addIssue({
+      id: '002',
+      title: 'Issue 2',
+      description: 'This is the second issue',
+      closed: false,
+      ownerId: 'owner-creator',
+      creatorId: 'owner-creator',
+      projectId: '001',
+    });
+
+    addProject({id: '001', name: 'Project 1'});
+    addProjectMember({projectId: '001', userId: 'project-member'});
+
+    addViewState({
+      userId: 'owner-creator',
+      issueId: '001',
+      lastRead: 1234,
+    });
+    addViewState({
+      userId: 'owner-creator',
+      issueId: '002',
+      lastRead: 1234,
+    });
+    addViewState({
+      userId: 'project-member',
+      issueId: '001',
+      lastRead: 1234,
+    });
+    addViewState({
+      userId: 'project-member',
+      issueId: '002',
+      lastRead: 1234,
+    });
+    addViewState({
+      userId: 'not-project-member',
+      issueId: '001',
+      lastRead: 1234,
+    });
+    addViewState({
+      userId: 'not-project-member',
+      issueId: '002',
+      lastRead: 1234,
+    });
+
+    addComment({
+      id: '001',
+      issueId: '001',
+      authorId: 'owner-creator',
+      text: 'Comment 1',
+    });
+    addComment({
+      id: '002',
+      issueId: '001',
+      authorId: 'project-member',
+      text: 'Comment 2',
+    });
+    addComment({
+      id: '003',
+      issueId: '001',
+      authorId: 'not-project-member',
+      text: 'Comment 3',
+    });
+    addComment({
+      id: '004',
+      issueId: '002',
+      authorId: 'owner-creator',
+      text: 'Comment 1',
+    });
+    addComment({
+      id: '005',
+      issueId: '002',
+      authorId: 'project-member',
+      text: 'Comment 2',
+    });
+    addComment({
+      id: '006',
+      issueId: '002',
+      authorId: 'not-project-member',
+      text: 'Comment 3',
+    });
+
+    addLabel({
+      id: '001',
+      name: 'Label 1',
+    });
+    addIssueLabel({
+      issueId: '001',
+      labelId: '001',
+    });
+    addIssueLabel({
+      issueId: '002',
+      labelId: '001',
+    });
+  });
+
+  test.each([
+    {
+      name: 'User can view everything they are attached to through owner/creator relationships',
+      sub: 'owner-creator',
+      query: newQuery(queryDelegate, schema.tables.user)
+        .where('id', '=', 'owner-creator')
+        .related('createdIssues', q => q.related('comments', q => q.limit(1)))
+        .related('ownedIssues', q => q.related('comments', q => q.limit(1))),
+      expected: [
+        {
+          id: 'owner-creator',
+          createdIssues: [
+            {
+              id: '001',
+              comments: [
+                {
+                  id: '001',
+                },
+              ],
+            },
+            {
+              id: '002',
+              comments: [
+                {
+                  id: '004',
+                },
+              ],
+            },
+          ],
+          ownedIssues: [
+            {
+              id: '001',
+              comments: [
+                {
+                  id: '001',
+                },
+              ],
+            },
+            {
+              id: '002',
+              comments: [
+                {
+                  id: '004',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: 'User cannot see previously viewed issues if they were moved out of the project and are not the owner/creator',
+      sub: 'not-project-member',
+      query: newQuery(queryDelegate, schema.tables.user)
+        .where('id', '=', 'not-project-member')
+        .related('viewedIssues', q => q.related('comments')),
+      expected: [
+        {
+          id: 'not-project-member',
+          viewedIssues: [
+            {
+              viewedIssues: [],
+            },
+            {
+              viewedIssues: [],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: 'User can see previously viewed issues (even if they are not in the project) if they are the owner/creator',
+      sub: 'owner-creator',
+      query: newQuery(queryDelegate, schema.tables.user)
+        .where('id', 'owner-creator')
+        .related('viewedIssues', q => q.related('comments', q => q.limit(2))),
+      expected: [
+        {
+          id: 'owner-creator',
+          viewedIssues: [
+            {
+              viewedIssues: [
+                {
+                  id: '001',
+                  comments: [
+                    {
+                      id: '001',
+                    },
+                    {
+                      id: '002',
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              viewedIssues: [
+                {
+                  id: '002',
+                  comments: [
+                    {
+                      id: '004',
+                    },
+                    {
+                      id: '005',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: 'User can see everything they are attached to through project membership',
+      sub: 'project-member',
+      query: newQuery(queryDelegate, schema.tables.user).related(
+        'projects',
+        q => q.related('issues', q => q.related('comments')),
+      ),
+      expected: [
+        {
+          id: 'not-project-member',
+          projects: [],
+        },
+        {
+          id: 'owner-creator',
+          projects: [],
+        },
+        {
+          id: 'project-member',
+          projects: [
+            {
+              projects: [
+                {
+                  id: '001',
+                  issues: [
+                    {
+                      id: '001',
+                      comments: [
+                        {
+                          id: '001',
+                        },
+                        {
+                          id: '002',
+                        },
+                        {
+                          id: '003',
+                        },
+                      ],
+                    },
+                    {
+                      id: '002',
+                      comments: [
+                        {
+                          id: '004',
+                        },
+                        {
+                          id: '005',
+                        },
+                        {
+                          id: '006',
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ])('$name', ({sub, query, expected}) => {
+    const actual = runReadQueryWithPermissions(
+      {
+        sub,
+        role: sub === 'admin' ? 'admin' : 'user',
+      },
+      query,
+    );
+    expect(toIdsOnly(actual)).toEqual(expected);
+  });
+});
+
+// maps over nodes, drops all information from `row` except the id
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toIdsOnly(nodes: Node[]): any[] {
+  return nodes.map(node => {
+    return {
+      id: node.row.id,
+      ...Object.fromEntries(
+        Object.entries(node.relationships)
+          .filter(([k]) => !k.startsWith('zsubq_'))
+          .map(([k, v]) => [k, toIdsOnly(Array.isArray(v) ? v : [...v])]),
+      ),
+    };
+  });
+}
+
+// TODO (mlaw): test that `exists` does not provide an oracle
