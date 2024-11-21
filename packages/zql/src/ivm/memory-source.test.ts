@@ -410,7 +410,6 @@ test('overlaysForConstraint', () => {
   expect(
     overlaysForConstraintForTest(
       {add: {a: 'b', b: '2'}, remove: {a: 'b', b: '1'}},
-
       {a: 'b', b: '2'},
     ),
   ).toEqual({add: {a: 'b', b: '2'}, remove: undefined});
@@ -418,7 +417,6 @@ test('overlaysForConstraint', () => {
   expect(
     overlaysForConstraintForTest(
       {add: {a: 'b', b: '2'}, remove: {a: 'b', b: '1'}},
-
       {a: 'b', b: '1'},
     ),
   ).toEqual({add: undefined, remove: {a: 'b', b: '1'}});
@@ -426,7 +424,6 @@ test('overlaysForConstraint', () => {
   expect(
     overlaysForConstraintForTest(
       {add: {a: 'b', b: '2'}, remove: {a: 'b', b: '1'}},
-
       {a: 'b', b: '3'},
     ),
   ).toEqual({add: undefined, remove: undefined});
