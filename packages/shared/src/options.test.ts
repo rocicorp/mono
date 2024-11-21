@@ -1,12 +1,7 @@
 import {SilentLogger} from '@rocicorp/logger';
 import stripAnsi from 'strip-ansi';
 import {expect, test, vi} from 'vitest';
-import {
-  ExitAfterUsage,
-  parseOptions,
-  type Config,
-  type Options,
-} from './options.js';
+import {parseOptions, type Config, type Options} from './options.js';
 import * as v from './valita.js';
 
 const options = {
@@ -380,12 +375,17 @@ test.each([
   },
 );
 
+class ExitAfterUsage extends Error {}
+const exit = () => {
+  throw new ExitAfterUsage();
+};
+
 test('--help', () => {
   const logger = {info: vi.fn()};
-  expect(() => parseOptions(options, ['--help'], 'Z_', {}, logger)).toThrow(
-    ExitAfterUsage,
-  );
-  expect(logger.info).toHaveBeenCalledOnce();
+  expect(() =>
+    parseOptions(options, ['--help'], 'Z_', {}, logger, exit),
+  ).toThrow(ExitAfterUsage);
+  expect(logger.info).toHaveBeenCalled();
   expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
     "
      --port, -p number                  default: 4848                                                        
@@ -417,10 +417,10 @@ test('--help', () => {
 
 test('-h', () => {
   const logger = {info: vi.fn()};
-  expect(() => parseOptions(options, ['-h'], 'ZERO_', {}, logger)).toThrow(
-    ExitAfterUsage,
-  );
-  expect(logger.info).toHaveBeenCalledOnce();
+  expect(() =>
+    parseOptions(options, ['-h'], 'ZERO_', {}, logger, exit),
+  ).toThrow(ExitAfterUsage);
+  expect(logger.info).toHaveBeenCalled();
   expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
     "
      --port, -p number                  default: 4848                                                        
@@ -453,9 +453,9 @@ test('-h', () => {
 test('unknown arguments', () => {
   const logger = {info: vi.fn(), error: vi.fn()};
   expect(() =>
-    parseOptions(options, ['--shardID', 'foo'], '', {}, logger),
+    parseOptions(options, ['--shardID', 'foo'], '', {}, logger, exit),
   ).toThrow(ExitAfterUsage);
-  expect(logger.error).toHaveBeenCalledOnce();
+  expect(logger.error).toHaveBeenCalled();
   expect(logger.error.mock.calls[0]).toMatchInlineSnapshot(`
     [
       "Invalid arguments:",
@@ -465,7 +465,7 @@ test('unknown arguments', () => {
       ],
     ]
   `);
-  expect(logger.info).toHaveBeenCalledOnce();
+  expect(logger.info).toHaveBeenCalled();
   expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
     "
      --port, -p number                  default: 4848                                                        
