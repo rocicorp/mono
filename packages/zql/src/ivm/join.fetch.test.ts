@@ -16,6 +16,7 @@ import {MemoryStorage} from './memory-storage.js';
 import type {SourceSchema} from './schema.js';
 import {Snitch, type SnitchMessage} from './snitch.js';
 import type {JSONValue} from '../../../shared/src/json.js';
+import {SetOfConstraint} from './constraint.js';
 
 suite('fetch one:many', () => {
   const base = {
@@ -40,25 +41,7 @@ suite('fetch one:many', () => {
     });
 
     expect(results.hydrate).toMatchInlineSnapshot(`[]`);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -81,25 +64,7 @@ suite('fetch one:many', () => {
     });
 
     expect(results.hydrate).toMatchInlineSnapshot(`[]`);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -133,43 +98,7 @@ suite('fetch one:many', () => {
         },
       ]
     `);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -222,43 +151,7 @@ suite('fetch one:many', () => {
         },
       ]
     `);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -303,43 +196,7 @@ suite('fetch one:many', () => {
         },
       ]
     `);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -398,43 +255,7 @@ suite('fetch one:many', () => {
         },
       ]
     `);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -525,61 +346,7 @@ suite('fetch one:many', () => {
         },
       ]
     `);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i2",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i2",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -640,25 +407,7 @@ suite('fetch many:one', () => {
     });
 
     expect(results.hydrate).toMatchInlineSnapshot(`[]`);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -693,43 +442,7 @@ suite('fetch many:one', () => {
         },
       ]
     `);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "u1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "u1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -763,25 +476,7 @@ suite('fetch many:one', () => {
     });
 
     expect(results.hydrate).toMatchInlineSnapshot(`[]`);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -823,43 +518,7 @@ suite('fetch many:one', () => {
         },
       ]
     `);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "u1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "u1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -934,61 +593,7 @@ suite('fetch many:one', () => {
         },
       ]
     `);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "u1",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "u1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "u1",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "u1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -1073,61 +678,7 @@ suite('fetch many:one', () => {
         },
       ]
     `);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "u1",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "u2",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "u1",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "u2",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -1194,25 +745,7 @@ suite('fetch one:many:many', () => {
     });
 
     expect(results.hydrate).toMatchInlineSnapshot(`[]`);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -1236,25 +769,7 @@ suite('fetch one:many:many', () => {
     });
 
     expect(results.hydrate).toMatchInlineSnapshot(`[]`);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -1278,25 +793,7 @@ suite('fetch one:many:many', () => {
     });
 
     expect(results.hydrate).toMatchInlineSnapshot(`[]`);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -1331,43 +828,7 @@ suite('fetch one:many:many', () => {
         },
       ]
     `);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -1435,61 +896,7 @@ suite('fetch one:many:many', () => {
         },
       ]
     `);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "commentID": "c1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "commentID": "c1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -1670,133 +1077,7 @@ suite('fetch one:many:many', () => {
         },
       ]
     `);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "commentID": "c1",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "commentID": "c2",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i2",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "commentID": "c3",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "commentID": "c4",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "commentID": "c1",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "commentID": "c2",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i2",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "commentID": "c3",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "commentID": "c4",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -1914,25 +1195,7 @@ suite('fetch one:many:one', () => {
     });
 
     expect(results.hydrate).toMatchInlineSnapshot(`[]`);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -1957,25 +1220,7 @@ suite('fetch one:many:one', () => {
     });
 
     expect(results.hydrate).toMatchInlineSnapshot(`[]`);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -2011,43 +1256,7 @@ suite('fetch one:many:one', () => {
         },
       ]
     `);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -2104,61 +1313,7 @@ suite('fetch one:many:one', () => {
         },
       ]
     `);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "id": "l1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "id": "l1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -2233,61 +1388,7 @@ suite('fetch one:many:one', () => {
         },
       ]
     `);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "id": "l1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "id": "l1",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -2385,79 +1486,7 @@ suite('fetch one:many:one', () => {
         },
       ]
     `);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "id": "l1",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "id": "l2",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "id": "l1",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "id": "l2",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -2608,133 +1637,7 @@ suite('fetch one:many:one', () => {
         },
       ]
     `);
-    expect(results.messages.hydrate).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "id": "l1",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "id": "l2",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i2",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "id": "l1",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "id": "l2",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.fetch).toMatchInlineSnapshot(`
-      [
-        [
-          "0",
-          "fetch",
-          {},
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "id": "l1",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "id": "l2",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i2",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "id": "l1",
-            },
-          },
-        ],
-        [
-          "2",
-          "fetch",
-          {
-            "constraint": {
-              "id": "l2",
-            },
-          },
-        ],
-      ]
-    `);
-    expect(results.messages.cleanup).toMatchInlineSnapshot(`
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
       [
         [
           "0",
@@ -2863,11 +1766,7 @@ function fetchTest(t: FetchTest): FetchTestResults {
   const results: FetchTestResults = {
     hydrate: [],
     storage: [],
-    messages: {
-      hydrate: [],
-      fetch: [],
-      cleanup: [],
-    },
+    fetchMessages: [],
   };
   for (const [phase, fetchType] of [
     ['hydrate', 'fetch'],
@@ -2915,7 +1814,31 @@ function fetchTest(t: FetchTest): FetchTestResults {
         expect(storage.cloneData()).toEqual({});
       }
     }
-    results.messages[phase].push(...log);
+
+    if (phase === 'hydrate') {
+      results.fetchMessages = log;
+    } else if (phase === 'fetch') {
+      // should be the same as for hydrate
+      expect(log).toEqual(results.fetchMessages);
+    } else {
+      // For cleanup, the last fetch for any constraint should be a cleanup.
+      // Others should be fetch.
+      phase satisfies 'cleanup';
+      const expectedMessages = [];
+      const seen = new SetOfConstraint();
+      for (let i = results.fetchMessages.length - 1; i >= 0; i--) {
+        const [name, type, req] = results.fetchMessages[i];
+        expect(type).toSatisfy(t => t === 'fetch' || t === 'cleanup');
+        assert(type !== 'push');
+        if (!(req.constraint && seen.has(req.constraint))) {
+          expectedMessages[i] = [name, 'cleanup', req];
+        } else {
+          expectedMessages[i] = [name, 'fetch', req];
+        }
+        req.constraint && seen.add(req.constraint);
+      }
+      expect(log).toEqual(expectedMessages);
+    }
   }
 
   return results;
@@ -2934,11 +1857,7 @@ type FetchTest = {
 };
 
 type FetchTestResults = {
-  messages: {
-    hydrate: SnitchMessage[];
-    fetch: SnitchMessage[];
-    cleanup: SnitchMessage[];
-  };
+  fetchMessages: SnitchMessage[];
   hydrate: Node[];
   storage: Record<string, JSONValue>[];
 };
