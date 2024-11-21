@@ -1,7 +1,8 @@
 import type {JSONValue} from '../../../shared/src/json.js';
-import type {Row, Value} from '../../../zero-protocol/src/data.js';
+import type {Row} from '../../../zero-protocol/src/data.js';
 import type {Change} from './change.js';
-import type {Node} from './data.js';
+import type {Constraint} from './constraint.js';
+import {type Node} from './data.js';
 import type {SourceSchema} from './schema.js';
 import type {Stream} from './stream.js';
 
@@ -42,20 +43,15 @@ export interface Input {
   destroy(): void;
 }
 
-export type Constraint = {
-  key: string;
-  value: Value;
-};
-
 export type FetchRequest = {
-  constraint?: Constraint | undefined;
+  readonly constraint?: Constraint | undefined;
   /** If supplied, `start.row` must have previously been output by fetch or push. */
-  start?: Start | undefined;
+  readonly start?: Start | undefined;
 };
 
 export type Start = {
-  row: Row;
-  basis: 'before' | 'at' | 'after';
+  readonly row: Row;
+  readonly basis: 'before' | 'at' | 'after';
 };
 
 /**

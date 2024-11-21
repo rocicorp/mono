@@ -1,12 +1,13 @@
 import {expect, test} from 'vitest';
 import type {ReadonlyJSONValue} from '../../../../shared/src/json.js';
-import type {Row, Value} from '../../../../zero-protocol/src/data.js';
+import type {SimpleOperator} from '../../../../zero-protocol/src/ast.js';
+import type {Row} from '../../../../zero-protocol/src/data.js';
 import type {SchemaValue} from '../../../../zero-schema/src/table-schema.js';
 import {Catch, expandNode} from '../catch.js';
+import type {Constraint} from '../constraint.js';
 import type {Node} from '../data.js';
 import type {FetchRequest, Input, Output, Start} from '../operator.js';
 import type {Source, SourceChange} from '../source.js';
-import type {SimpleOperator} from '../../../../zero-protocol/src/ast.js';
 
 type SourceFactory = (
   name: string,
@@ -90,41 +91,33 @@ const cases = {
     ms.push({type: 'add', row: {a: 1, b: true, c: 2, d: null}});
     ms.push({type: 'add', row: {a: 2, b: false, c: null, d: null}});
 
-    expect(out.fetch({constraint: {key: 'b', value: true}})).toEqual(
+    expect(out.fetch({constraint: {b: true}})).toEqual(
       asNodes([
         {a: 1, b: true, c: 2, d: null},
         {a: 3, b: true, c: 1, d: null},
       ]),
     );
 
-    expect(out.fetch({constraint: {key: 'b', value: false}})).toEqual(
+    expect(out.fetch({constraint: {b: false}})).toEqual(
       asNodes([{a: 2, b: false, c: null, d: null}]),
     );
 
-    expect(out.fetch({constraint: {key: 'c', value: 1}})).toEqual(
+    expect(out.fetch({constraint: {c: 1}})).toEqual(
       asNodes([{a: 3, b: true, c: 1, d: null}]),
     );
 
-    expect(out.fetch({constraint: {key: 'c', value: 0}})).toEqual(asNodes([]));
+    expect(out.fetch({constraint: {c: 0}})).toEqual(asNodes([]));
 
     // Constraints are used to implement joins and so should use join
     // semantics for equality. null !== null.
-    expect(out.fetch({constraint: {key: 'c', value: null}})).toEqual(
-      asNodes([]),
-    );
-    expect(out.fetch({constraint: {key: 'c', value: undefined}})).toEqual(
-      asNodes([]),
-    );
+    expect(out.fetch({constraint: {c: null}})).toEqual(asNodes([]));
+    expect(out.fetch({constraint: {c: undefined}})).toEqual(asNodes([]));
 
     // Not really a feature, but because of loose typing of joins and how we
     // accept undefined we can't really tell when constraining on a field that
     // doesn't exist.
-    expect(out.fetch({constraint: {key: 'd', value: null}})).toEqual(
-      asNodes([]),
-    );
-    expect(out.fetch({constraint: {key: 'd', value: undefined}})).toEqual(
-      asNodes([]),
-    );
+    expect(out.fetch({constraint: {d: null}})).toEqual(asNodes([]));
+    expect(out.fetch({constraint: {d: undefined}})).toEqual(asNodes([]));
   },
 
   'fetch-start': (createSource: SourceFactory) => {
@@ -184,7 +177,7 @@ const cases = {
     const cases: {
       startData: Row[];
       start: Start;
-      constraint: {key: string; value: Value};
+      constraint: Constraint;
       expected: Row[];
     }[] = [
       {
@@ -199,7 +192,7 @@ const cases = {
           row: {a: 6, b: false},
           basis: 'before',
         },
-        constraint: {key: 'b', value: false},
+        constraint: {b: false},
         expected: [
           {a: 3, b: false},
           {a: 6, b: false},
@@ -218,7 +211,7 @@ const cases = {
           row: {a: 6, b: false},
           basis: 'at',
         },
-        constraint: {key: 'b', value: false},
+        constraint: {b: false},
         expected: [
           {a: 6, b: false},
           {a: 7, b: false},
@@ -238,7 +231,7 @@ const cases = {
           row: {a: 6, b: false},
           basis: 'after',
         },
-        constraint: {key: 'b', value: false},
+        constraint: {b: false},
         expected: [
           {a: 7, b: false},
           {a: 9, b: false},
@@ -649,7 +642,7 @@ const cases = {
   'overlay-vs-constraint': (createSource: SourceFactory) => {
     const cases: {
       startData: Row[];
-      constraint: {key: string; value: Value};
+      constraint: Constraint;
       change: SourceChange;
       expected: Row[] | string;
     }[] = [
@@ -658,7 +651,7 @@ const cases = {
           {a: 2, b: false},
           {a: 4, b: true},
         ],
-        constraint: {key: 'b', value: true},
+        constraint: {b: true},
         change: {type: 'add', row: {a: 1, b: true}},
         expected: [
           {a: 1, b: true},
@@ -670,7 +663,7 @@ const cases = {
           {a: 2, b: false},
           {a: 4, b: true},
         ],
-        constraint: {key: 'b', value: true},
+        constraint: {b: true},
         change: {type: 'add', row: {a: 1, b: false}},
         expected: [{a: 4, b: true}],
       },
@@ -707,7 +700,7 @@ const cases = {
     const cases: {
       startData: Row[];
       start: Start;
-      constraint: {key: string; value: Value};
+      constraint: Constraint;
       change: SourceChange;
       expected: Row[] | string;
     }[] = [
@@ -723,7 +716,7 @@ const cases = {
           row: {a: 6, b: false},
           basis: 'before',
         },
-        constraint: {key: 'b', value: false},
+        constraint: {b: false},
         change: {type: 'add', row: {a: 4, b: false}},
         expected: [
           {a: 4, b: false},
@@ -743,7 +736,7 @@ const cases = {
           row: {a: 6, b: false},
           basis: 'before',
         },
-        constraint: {key: 'b', value: false},
+        constraint: {b: false},
         change: {type: 'add', row: {a: 2.5, b: false}},
         expected: [
           {a: 3, b: false},
@@ -763,7 +756,7 @@ const cases = {
           row: {a: 5.5, b: false},
           basis: 'at',
         },
-        constraint: {key: 'b', value: false},
+        constraint: {b: false},
         change: {type: 'add', row: {a: 5.75, b: false}},
         expected: [
           {a: 5.75, b: false},
@@ -783,7 +776,7 @@ const cases = {
           row: {a: 5.5, b: false},
           basis: 'at',
         },
-        constraint: {key: 'b', value: false},
+        constraint: {b: false},
         change: {type: 'add', row: {a: 4, b: false}},
         expected: [
           {a: 6, b: false},
@@ -802,7 +795,7 @@ const cases = {
           row: {a: 5.5, b: false},
           basis: 'at',
         },
-        constraint: {key: 'b', value: false},
+        constraint: {b: false},
         change: {type: 'add', row: {a: 8, b: false}},
         expected: [
           {a: 6, b: false},
@@ -822,7 +815,7 @@ const cases = {
           row: {a: 5.5, b: false},
           basis: 'after',
         },
-        constraint: {key: 'b', value: false},
+        constraint: {b: false},
         change: {type: 'add', row: {a: 6.5, b: false}},
         expected: [
           {a: 6, b: false},

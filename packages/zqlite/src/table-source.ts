@@ -9,8 +9,13 @@ import type {
 } from '../../zero-protocol/src/ast.js';
 import type {Row, Value} from '../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
+import type {
+  SchemaValue,
+  ValueType,
+} from '../../zero-schema/src/table-schema.js';
 import {assertOrderingIncludesPK} from '../../zql/src/builder/builder.js';
 import type {Change} from '../../zql/src/ivm/change.js';
+import type {Constraint} from '../../zql/src/ivm/constraint.js';
 import {
   makeComparator,
   type Comparator,
@@ -22,10 +27,10 @@ import {
   type Overlay,
 } from '../../zql/src/ivm/memory-source.js';
 import type {
-  Constraint,
   FetchRequest,
   Input,
   Output,
+  Start,
 } from '../../zql/src/ivm/operator.js';
 import type {SourceSchema} from '../../zql/src/ivm/schema.js';
 import type {
@@ -37,10 +42,6 @@ import type {Stream} from '../../zql/src/ivm/stream.js';
 import {Database, Statement} from './db.js';
 import {compile, format, sql} from './internal/sql.js';
 import {StatementCache} from './internal/statement-cache.js';
-import type {
-  SchemaValue,
-  ValueType,
-} from '../../zero-schema/src/table-schema.js';
 
 type Connection = {
   input: Input;
@@ -233,7 +234,6 @@ export class TableSource implements Source {
     beforeRequest?: FetchRequest | undefined,
   ): Stream<Node> {
     const {start} = req;
-    let newReq = req;
     const {sort} = connection;
 
     /**
@@ -265,17 +265,17 @@ export class TableSource implements Source {
       );
       const sqlAndBindings = format(preSql);
 
-      newReq = {...req, start: undefined};
+      let start: Start | undefined;
       this.#stmts.cache.use(sqlAndBindings.text, cachedStatement => {
         for (const beforeRow of cachedStatement.statement.iterate<Row>(
           ...sqlAndBindings.values,
         )) {
-          newReq.start = {row: beforeRow, basis: 'at'};
+          start = {row: beforeRow, basis: 'at'};
           break;
         }
       });
 
-      yield* this.#fetch(newReq, connection, req);
+      yield* this.#fetch({...req, start}, connection, req);
     } else {
       const query = this.#requestToSQL(
         req.constraint,
@@ -465,12 +465,14 @@ export class TableSource implements Source {
     const constraints: SQLQuery[] = [];
 
     if (constraint) {
-      constraints.push(
-        sql`${sql.ident(constraint.key)} = ${toSQLiteType(
-          constraint.value,
-          this.#columns[constraint.key].type,
-        )}`,
-      );
+      for (const [key, value] of Object.entries(constraint)) {
+        constraints.push(
+          sql`${sql.ident(key)} = ${toSQLiteType(
+            value,
+            this.#columns[key].type,
+          )}`,
+        );
+      }
     }
 
     if (cursor) {

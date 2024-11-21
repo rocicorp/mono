@@ -185,8 +185,7 @@ export class Join implements Input {
 
       const parentNodes = this.#parent.fetch({
         constraint: {
-          key: this.#parentKey,
-          value: childRow[this.#childKey],
+          [this.#parentKey]: childRow[this.#childKey],
         },
       });
 
@@ -270,8 +269,7 @@ export class Join implements Input {
 
     const childStream = this.#child[method]({
       constraint: {
-        key: this.#childKey,
-        value: parentKeyValue,
+        [this.#childKey]: parentKeyValue,
       },
     });
 

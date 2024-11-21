@@ -1,5 +1,6 @@
 import {BTree} from '../../../btree/src/mod.js';
 import {assert, unreachable} from '../../../shared/src/asserts.js';
+import {hasOwn} from '../../../shared/src/has-own.js';
 import type {
   Condition,
   Ordering,
@@ -8,20 +9,24 @@ import type {
 } from '../../../zero-protocol/src/ast.js';
 import type {Row, Value} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {assertOrderingIncludesPK} from '../builder/builder.js';
 import {createPredicate} from '../builder/filter.js';
 import type {Change} from './change.js';
 import {
-  type Comparator,
+  constraintMatchesPrimaryKey,
+  constraintMatchesRow,
+  type Constraint,
+} from './constraint.js';
+import {
   compareValues,
   makeComparator,
+  type Comparator,
   type Node,
-  valuesEqual,
 } from './data.js';
 import {LookaheadIterator} from './lookahead-iterator.js';
-import type {Constraint, FetchRequest, Input, Output} from './operator.js';
+import {type FetchRequest, type Input, type Output} from './operator.js';
 import type {SourceSchema} from './schema.js';
-import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import type {Source, SourceChange, SourceInput} from './source.js';
 import type {Stream} from './stream.js';
 
@@ -212,7 +217,9 @@ export class MemorySource implements Source {
     // If there is a constraint, we need an index sorted by it first.
     const indexSort: OrderPart[] = [];
     if (req.constraint) {
-      indexSort.push([req.constraint.key, 'asc']);
+      for (const key of Object.keys(req.constraint)) {
+        indexSort.push([key, 'asc']);
+      }
     }
 
     // For the special case of constraining by PK, we don't need to worry about
@@ -220,7 +227,8 @@ export class MemorySource implements Source {
     // need the index sorted by the requested sort.
     if (
       this.#primaryKey.length > 1 ||
-      req.constraint?.key !== this.#primaryKey[0]
+      !req.constraint ||
+      !constraintMatchesPrimaryKey(req.constraint, this.#primaryKey)
     ) {
       indexSort.push(...requestedSort);
     }
@@ -237,13 +245,9 @@ export class MemorySource implements Source {
       }
     }
 
-    const matchesConstraint = (row: Row) => {
-      if (!req.constraint) {
-        return true;
-      }
-      const {key, value} = req.constraint;
-      return valuesEqual(row[key], value);
-    };
+    const matchesConstraint = req.constraint
+      ? (row: Row) => constraintMatchesRow(req.constraint!, row)
+      : (_: Row) => true;
 
     const matchesFilters = (row: Row) =>
       conn.optionalFilters.every(f => f(row));
@@ -300,8 +304,8 @@ export class MemorySource implements Source {
     if (req.constraint) {
       scanStart = {};
       for (const [key, dir] of indexSort) {
-        if (key === req.constraint.key) {
-          scanStart[key] = req.constraint.value;
+        if (hasOwn(req.constraint, key)) {
+          scanStart[key] = req.constraint[key];
         } else {
           scanStart[key] = dir === 'asc' ? minValue : maxValue;
         }
@@ -423,10 +427,7 @@ function* generateWithConstraint(
   constraint: Constraint | undefined,
 ) {
   for (const node of it) {
-    if (
-      constraint &&
-      !valuesEqual(node.row[constraint.key], constraint.value)
-    ) {
+    if (constraint && !constraintMatchesRow(constraint, node.row)) {
       break;
     }
     yield node;
@@ -570,7 +571,7 @@ function overlaysForConstraint(
   constraint: Constraint,
 ): Overlays {
   const undefinedIfDoesntMatchConstraint = (row: Row | undefined) =>
-    row === undefined || !valuesEqual(row[constraint.key], constraint.value)
+    row === undefined || !constraintMatchesRow(constraint, row)
       ? undefined
       : row;
 
