@@ -2,11 +2,7 @@
  * These types represent the _compiled_ config whereas `define-config` types represent the _source_ config.
  */
 
-import {
-  ExitAfterUsage,
-  parseOptions,
-  type Config,
-} from '../../../shared/src/options.js';
+import {parseOptions, type Config} from '../../../shared/src/options.js';
 import * as v from '../../../shared/src/valita.js';
 
 /**
@@ -300,15 +296,8 @@ let loadedConfig: ZeroConfig | undefined;
 
 export function getZeroConfig(argv = process.argv.slice(2)): ZeroConfig {
   if (!loadedConfig) {
-    try {
-      const config = parseOptions(zeroOptions, argv, ENV_VAR_PREFIX);
-      loadedConfig = config;
-    } catch (e) {
-      if (e instanceof ExitAfterUsage) {
-        process.exit(0);
-      }
-      throw e;
-    }
+    const config = parseOptions(zeroOptions, argv, ENV_VAR_PREFIX);
+    loadedConfig = config;
   }
 
   return loadedConfig;

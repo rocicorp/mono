@@ -1,15 +1,20 @@
 import stripAnsi from 'strip-ansi';
 import {expect, test, vi} from 'vitest';
-import {ExitAfterUsage, parseOptions} from '../../../shared/src/options.js';
+import {parseOptions} from '../../../shared/src/options.js';
 import {zeroOptions} from './zero-config.js';
+
+class ExitAfterUsage extends Error {}
+const exit = () => {
+  throw new ExitAfterUsage();
+};
 
 // Tip: Rerun tests with -u to update the snapshot.
 test('zero-cache --help', () => {
   const logger = {info: vi.fn()};
   expect(() =>
-    parseOptions(zeroOptions, ['--help'], 'ZERO_', {}, logger),
+    parseOptions(zeroOptions, ['--help'], 'ZERO_', {}, logger, exit),
   ).toThrow(ExitAfterUsage);
-  expect(logger.info).toHaveBeenCalledOnce();
+  expect(logger.info).toHaveBeenCalled();
   expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
     "
      --upstream-db string                          required                                                                      

@@ -202,6 +202,7 @@ export function parseOptions<T extends Options>(
   envNamePrefix = '',
   processEnv = process.env,
   logger: OptionalLogger = console,
+  exit = process.exit,
 ): Config<T> {
   // The main logic for converting a valita Type spec to an Option (i.e. flag) spec.
   function addOption(name: string, option: WrappedOptionType, group?: string) {
@@ -316,18 +317,16 @@ export function parseOptions<T extends Options>(
     }
 
     const parsedArgs = merge(
-      parseArgs(optsWithDefaults, argv, flagToField, logger),
-      parseArgs(optsWithoutDefaults, envArgv, flagToField, logger),
-      parseArgs(optsWithoutDefaults, argv, flagToField, logger),
+      parseArgs(optsWithDefaults, argv, flagToField, logger, exit),
+      parseArgs(optsWithoutDefaults, envArgv, flagToField, logger, exit),
+      parseArgs(optsWithoutDefaults, argv, flagToField, logger, exit),
     );
 
     const schema = configSchema(options);
     return v.parse(parsedArgs, schema);
   } catch (e) {
-    if (!(e instanceof ExitAfterUsage)) {
-      logger.error?.(String(e));
-      showUsage(optsWithDefaults, logger);
-    }
+    logger.error?.(String(e));
+    showUsage(optsWithDefaults, logger);
     throw e;
   }
 }
@@ -367,6 +366,7 @@ function parseArgs(
   argv: string[],
   flagToField: Map<string, string>,
   logger: OptionalLogger,
+  exit: (code?: number) => never,
 ) {
   function normalizeFlagValue(value: unknown) {
     // A --flag without value is parsed by commandLineArgs() to `null`,
@@ -393,7 +393,7 @@ function parseArgs(
         logger.error?.('Invalid arguments:', unknown);
     }
     showUsage(optionDefs, logger);
-    throw new ExitAfterUsage();
+    exit(0);
   }
 
   const result = {...config};
@@ -464,5 +464,3 @@ type DescribedOptionDefinition = OptionDefinition & {
   typeLabel?: string | undefined;
   hidden?: boolean | undefined;
 };
-
-export class ExitAfterUsage extends Error {}
