@@ -196,6 +196,19 @@ describe('fetching from a table source', () => {
         .filter(r => r.b === 2)
         .sort(compoundComparator),
     },
+
+    {
+      name: 'with compound key constraint',
+      sourceArgs: ['foo', columns, [['id', 'asc']]],
+      fetchArgs: {constraint: {a: 1, b: 2}, start: undefined},
+      expectedRows: allRows.filter(r => r.a === 1 && r.b === 2),
+    },
+    {
+      name: 'with compound key constraint (order should not matter)',
+      sourceArgs: ['foo', columns, [['id', 'asc']]],
+      fetchArgs: {constraint: {b: 2, a: 1}, start: undefined},
+      expectedRows: allRows.filter(r => r.a === 1 && r.b === 2),
+    },
   ] as const)('$name', ({sourceArgs, fetchArgs, expectedRows}) => {
     const source = new TableSource(db, sourceArgs[0], sourceArgs[1], ['id']);
     const c = source.connect(sourceArgs[2]);
