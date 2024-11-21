@@ -897,8 +897,6 @@ suite('push many:one', () => {
             oldRow: {id: 'u2', text: 'user 2'},
           },
         ],
-        // ['1', 'fetch', {constraint: {key: 'issueID', value: 'i1'}}],
-        // ['1', 'fetch', {constraint: {key: 'id', value: 'u2'}}],
         ['0', 'fetch', {constraint: {key: 'ownerID', value: 'u2'}}],
         ['0', 'fetch', {constraint: {key: 'ownerID', value: 'u1'}}],
       ],
