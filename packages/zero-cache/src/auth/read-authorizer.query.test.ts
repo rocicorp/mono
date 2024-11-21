@@ -27,7 +27,7 @@ import type {
   UpdateOp,
 } from '../../../zero-protocol/src/push.js';
 import {assert} from '../../../shared/src/asserts.js';
-import {augmentQuery} from './read-authorizer.js';
+import {transformQuery} from './read-authorizer.js';
 import type {Query, QueryType} from '../../../zql/src/query/query.js';
 import {Catch} from '../../../zql/src/ivm/catch.js';
 import {buildPipeline} from '../../../zql/src/builder/builder.js';
@@ -896,7 +896,7 @@ function runReadQueryWithPermissions(
   authData: AuthData,
   query: Query<TableSchema, QueryType>,
 ) {
-  const updatedAst = must(augmentQuery(ast(query), permissions));
+  const updatedAst = must(transformQuery(ast(query), permissions));
   const pipeline = buildPipeline(updatedAst, queryDelegate, {
     authData,
     preMutationRow: undefined,
