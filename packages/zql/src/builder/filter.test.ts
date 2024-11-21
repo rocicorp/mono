@@ -137,3 +137,103 @@ test('like', () => {
     }
   }
 });
+
+test('and', () => {
+  const predicate = createPredicate({
+    type: 'and',
+    conditions: [
+      {
+        type: 'simple',
+        op: '=',
+        left: {type: 'column', name: 'a'},
+        right: {type: 'literal', value: 4},
+      },
+      {
+        type: 'simple',
+        op: '=',
+        left: {type: 'column', name: 'b'},
+        right: {type: 'literal', value: false},
+      },
+    ],
+  });
+  expect(predicate({a: 4, b: true})).false;
+  expect(predicate({a: 3, b: false})).false;
+  expect(predicate({a: 3, b: true})).false;
+  expect(predicate({a: 4, b: false})).true;
+});
+
+test('or', () => {
+  const predicate = createPredicate({
+    type: 'or',
+    conditions: [
+      {
+        type: 'simple',
+        op: '=',
+        left: {type: 'column', name: 'a'},
+        right: {type: 'literal', value: 4},
+      },
+      {
+        type: 'simple',
+        op: '=',
+        left: {type: 'column', name: 'b'},
+        right: {type: 'literal', value: false},
+      },
+    ],
+  });
+  expect(predicate({a: 4, b: true})).true;
+  expect(predicate({a: 3, b: false})).true;
+  expect(predicate({a: 3, b: true})).false;
+  expect(predicate({a: 4, b: false})).true;
+});
+
+test('empty and', () => {
+  const predicate = createPredicate({
+    type: 'and',
+    conditions: [],
+  });
+  expect(predicate({a: 4, b: true})).false;
+});
+
+test('empty or', () => {
+  const predicate = createPredicate({
+    type: 'or',
+    conditions: [],
+  });
+  expect(predicate({a: 4, b: true})).false;
+});
+
+test('nested', () => {
+  const predicate = createPredicate({
+    type: 'or',
+    conditions: [
+      {
+        type: 'simple',
+        op: '=',
+        left: {type: 'column', name: 'a'},
+        right: {type: 'literal', value: 4},
+      },
+      {
+        type: 'and',
+        conditions: [
+          {
+            type: 'simple',
+            op: '=',
+            left: {type: 'column', name: 'a'},
+            right: {type: 'literal', value: 3},
+          },
+          {
+            type: 'simple',
+            op: '=',
+            left: {type: 'column', name: 'b'},
+            right: {type: 'literal', value: false},
+          },
+        ],
+      },
+    ],
+  });
+  expect(predicate({a: 4, b: true})).true;
+  expect(predicate({a: 4, b: false})).true;
+  expect(predicate({a: 3, b: false})).true;
+  expect(predicate({a: 3, b: true})).false;
+  expect(predicate({a: 5, b: false})).false;
+});

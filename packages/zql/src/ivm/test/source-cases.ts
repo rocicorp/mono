@@ -1,6 +1,9 @@
 import {expect, test} from 'vitest';
 import type {ReadonlyJSONValue} from '../../../../shared/src/json.js';
-import type {SimpleOperator} from '../../../../zero-protocol/src/ast.js';
+import type {
+  Condition,
+  SimpleOperator,
+} from '../../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../../zero-protocol/src/data.js';
 import type {SchemaValue} from '../../../../zero-schema/src/table-schema.js';
 import {Catch, expandNode} from '../catch.js';
@@ -667,6 +670,29 @@ const cases = {
         change: {type: 'add', row: {a: 1, b: false}},
         expected: [{a: 4, b: true}],
       },
+      {
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+          {a: 5, b: true},
+        ],
+        constraint: {key: 'b', value: true},
+        change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
+        expected: [{a: 5, b: true}],
+      },
+      {
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+          {a: 5, b: true},
+        ],
+        constraint: {key: 'b', value: false},
+        change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
+        expected: [
+          {a: 2, b: false},
+          {a: 4, b: false},
+        ],
+      },
     ];
 
     for (const c of cases) {
@@ -687,6 +713,239 @@ const cases = {
         out.fetch({
           constraint: c.constraint,
         });
+      if (typeof c.expected === 'string') {
+        expect(() => ms.push(c.change), JSON.stringify(c)).toThrow(c.expected);
+      } else {
+        ms.push(c.change);
+        expect(out.fetches, JSON.stringify(c)).toEqual([asNodes(c.expected)]);
+      }
+    }
+  },
+
+  'overlay-vs-filter': (createSource: SourceFactory) => {
+    const cases: {
+      startData: Row[];
+      filter: Condition;
+      change: SourceChange;
+      expected: Row[] | string;
+      appliedFilters?: false;
+    }[] = [
+      {
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+        ],
+        filter: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'b'},
+          right: {type: 'literal', value: true},
+        },
+        change: {type: 'add', row: {a: 1, b: true}},
+        expected: [
+          {a: 1, b: true},
+          {a: 4, b: true},
+        ],
+      },
+      {
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+        ],
+        filter: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'b'},
+          right: {type: 'literal', value: true},
+        },
+        change: {type: 'add', row: {a: 1, b: false}},
+        expected: [{a: 4, b: true}],
+      },
+      {
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+          {a: 5, b: true},
+        ],
+        filter: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'b'},
+          right: {type: 'literal', value: true},
+        },
+        change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
+        expected: [{a: 5, b: true}],
+      },
+      {
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+          {a: 5, b: true},
+        ],
+        filter: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'b'},
+          right: {type: 'literal', value: false},
+        },
+        change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
+        expected: [
+          {a: 2, b: false},
+          {a: 4, b: false},
+        ],
+      },
+      {
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+        ],
+        filter: {
+          type: 'or',
+          conditions: [
+            {
+              type: 'simple',
+              op: '=',
+              left: {type: 'column', name: 'a'},
+              right: {type: 'literal', value: 4},
+            },
+            {
+              type: 'simple',
+              op: '=',
+              left: {type: 'column', name: 'b'},
+              right: {type: 'literal', value: false},
+            },
+          ],
+        },
+        change: {type: 'add', row: {a: 1, b: true}},
+        expected: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+        ],
+      },
+      {
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+        ],
+        filter: {
+          type: 'or',
+          conditions: [
+            {
+              type: 'simple',
+              op: '=',
+              left: {type: 'column', name: 'a'},
+              right: {type: 'literal', value: 4},
+            },
+            {
+              type: 'simple',
+              op: '=',
+              left: {type: 'column', name: 'b'},
+              right: {type: 'literal', value: false},
+            },
+          ],
+        },
+        change: {type: 'add', row: {a: 1, b: false}},
+        expected: [
+          {a: 1, b: false},
+          {a: 2, b: false},
+          {a: 4, b: true},
+        ],
+      },
+      {
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+        ],
+        filter: {
+          type: 'or',
+          conditions: [
+            {
+              type: 'simple',
+              op: '=',
+              left: {type: 'column', name: 'a'},
+              right: {type: 'literal', value: 4},
+            },
+            {
+              type: 'correlatedSubquery',
+              related: {
+                correlation: {
+                  parentField: 'a',
+                  op: '=',
+                  childField: 'b',
+                },
+                subquery: {
+                  table: 't',
+                  alias: 'zsubq_ts',
+                  orderBy: [['id', 'asc']],
+                },
+              },
+              op: 'EXISTS',
+            },
+          ],
+        },
+        change: {type: 'add', row: {a: 1, b: false}},
+        expected: [
+          {a: 1, b: false},
+          {a: 2, b: false},
+          {a: 4, b: true},
+        ],
+        appliedFilters: false,
+      },
+      {
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+        ],
+        filter: {
+          type: 'and',
+          conditions: [
+            {
+              type: 'simple',
+              op: '=',
+              left: {type: 'column', name: 'a'},
+              right: {type: 'literal', value: 4},
+            },
+            {
+              type: 'correlatedSubquery',
+              related: {
+                correlation: {
+                  parentField: 'a',
+                  op: '=',
+                  childField: 'b',
+                },
+                subquery: {
+                  table: 't',
+                  alias: 'zsubq_ts',
+                  orderBy: [['id', 'asc']],
+                },
+              },
+              op: 'EXISTS',
+            },
+          ],
+        },
+        change: {type: 'add', row: {a: 1, b: false}},
+        expected: [{a: 4, b: true}],
+        appliedFilters: false,
+      },
+    ];
+
+    for (const c of cases) {
+      const sort = [['a', 'asc']] as const;
+      const ms = createSource(
+        'table',
+        {
+          a: {type: 'number'},
+          b: {type: 'boolean'},
+        },
+        ['a'],
+      );
+      for (const row of c.startData) {
+        ms.push({type: 'add', row});
+      }
+      const sourceInput = ms.connect(sort, c.filter);
+      expect(sourceInput.appliedFilters).toEqual(c.appliedFilters !== false);
+      const out = new OverlaySpy(sourceInput);
+      out.onPush = () => out.fetch({});
       if (typeof c.expected === 'string') {
         expect(() => ms.push(c.change), JSON.stringify(c)).toThrow(c.expected);
       } else {

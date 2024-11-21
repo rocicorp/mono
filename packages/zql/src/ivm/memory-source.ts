@@ -5,13 +5,16 @@ import type {
   Condition,
   Ordering,
   OrderPart,
-  SimpleCondition,
 } from '../../../zero-protocol/src/ast.js';
 import type {Row, Value} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {assertOrderingIncludesPK} from '../builder/builder.js';
-import {createPredicate} from '../builder/filter.js';
+import {
+  createPredicate,
+  transformFilters,
+  type NoSubqueryCondition,
+} from '../builder/filter.js';
 import type {Change} from './change.js';
 import {
   constraintMatchesPrimaryKey,
@@ -51,7 +54,12 @@ type Connection = {
   output: Output | undefined;
   sort: Ordering;
   compareRows: Comparator;
-  optionalFilters: ((row: Row) => boolean)[];
+  filters:
+    | {
+        condition: NoSubqueryCondition;
+        predicate: (row: Row) => boolean;
+      }
+    | undefined;
 };
 
 /**
@@ -114,9 +122,7 @@ export class MemorySource implements Source {
     sort: Ordering,
     optionalFilters?: Condition | undefined,
   ): SourceInput {
-    const filteredOptionalFilters = filterOptionalFilters(optionalFilters);
-    const predicates: ((row: Row) => boolean)[] =
-      filteredOptionalFilters.filters.map(c => createPredicate(c));
+    const transformedFilters = transformFilters(optionalFilters);
 
     const input: SourceInput = {
       getSchema: () => schema,
@@ -128,7 +134,7 @@ export class MemorySource implements Source {
       destroy: () => {
         this.#disconnect(input);
       },
-      appliedFilters: filteredOptionalFilters.allApplied,
+      appliedFilters: !transformedFilters.conditionsRemoved,
     };
 
     const connection: Connection = {
@@ -136,7 +142,12 @@ export class MemorySource implements Source {
       output: undefined,
       sort,
       compareRows: makeComparator(sort),
-      optionalFilters: predicates,
+      filters: transformedFilters.filters
+        ? {
+            condition: transformedFilters.filters,
+            predicate: createPredicate(transformedFilters.filters),
+          }
+        : undefined,
     };
     const schema = this.#getSchema(connection);
     assertOrderingIncludesPK(sort, this.#primaryKey);
@@ -249,11 +260,8 @@ export class MemorySource implements Source {
       ? (row: Row) => constraintMatchesRow(req.constraint!, row)
       : (_: Row) => true;
 
-    const matchesFilters = (row: Row) =>
-      conn.optionalFilters.every(f => f(row));
-
     const matchesConstraintAndFilters = (row: Row) =>
-      matchesConstraint(row) && matchesFilters(row);
+      matchesConstraint(row) && (conn.filters?.predicate(row) ?? true);
     const nextLowerKey = (row: Row | undefined) => {
       if (!row) {
         return undefined;
@@ -322,6 +330,7 @@ export class MemorySource implements Source {
       req.constraint,
       overlay,
       comparator,
+      conn.filters?.predicate,
     );
 
     const withConstraint = generateWithConstraint(
@@ -329,8 +338,8 @@ export class MemorySource implements Source {
       req.constraint,
     );
 
-    yield* conn.optionalFilters.length
-      ? generateWithFilter(withConstraint, matchesFilters)
+    yield* conn.filters
+      ? generateWithFilter(withConstraint, conn.filters.predicate)
       : withConstraint;
   }
 
@@ -502,8 +511,15 @@ export function* generateWithOverlay(
   constraint: Constraint | undefined,
   overlay: Overlay | undefined,
   compare: Comparator,
+  filterPredicate?: (row: Row) => boolean | undefined,
 ) {
-  const overlays = computeOverlays(startAt, constraint, overlay, compare);
+  const overlays = computeOverlays(
+    startAt,
+    constraint,
+    overlay,
+    compare,
+    filterPredicate,
+  );
   yield* generateWithOverlayInner(rows, overlays, compare);
 }
 
@@ -512,6 +528,7 @@ function computeOverlays(
   constraint: Constraint | undefined,
   overlay: Overlay | undefined,
   compare: Comparator,
+  filterPredicate?: (row: Row) => boolean | undefined,
 ): Overlays {
   let overlays: Overlays = {
     add: undefined,
@@ -546,6 +563,10 @@ function computeOverlays(
     overlays = overlaysForConstraint(overlays, constraint);
   }
 
+  if (filterPredicate) {
+    overlays = overlaysForFilterPredicate(overlays, filterPredicate);
+  }
+
   return overlays;
 }
 
@@ -578,6 +599,19 @@ function overlaysForConstraint(
   return {
     add: undefinedIfDoesntMatchConstraint(add),
     remove: undefinedIfDoesntMatchConstraint(remove),
+  };
+}
+
+function overlaysForFilterPredicate(
+  {add, remove}: Overlays,
+  filterPredicate: (row: Row) => boolean | undefined,
+): Overlays {
+  const undefinedIfDoesntMatchFilter = (row: Row | undefined) =>
+    row === undefined || !filterPredicate(row) ? undefined : row;
+
+  return {
+    add: undefinedIfDoesntMatchFilter(add),
+    remove: undefinedIfDoesntMatchFilter(remove),
   };
 }
 
@@ -655,56 +689,4 @@ function compareBounds(a: Bound, b: Bound): number {
     return -1;
   }
   return compareValues(a, b);
-}
-
-/**
- * Only returns optional filters if:
- * 1. It's a simple condition
- * 2. It's an `and` condition with only simple conditions inside of it
- * 3. It's an `or` that is a no-op.
- *
- * Otherwise the filters are dropped.
- *
- * This is a short term solution until we update `fetch` to pass
- * the constraints rather than making them static in `connect`.
- *
- * The below way of doing things over-fetches as the optional filters
- * are widened to cover all branches of the pipeline.
- */
-export function filterOptionalFilters(optionalFilters: Condition | undefined): {
-  filters: SimpleCondition[];
-  allApplied: boolean;
-} {
-  if (optionalFilters) {
-    if (
-      optionalFilters.type === 'or' &&
-      optionalFilters.conditions.length === 1
-    ) {
-      optionalFilters = optionalFilters.conditions[0];
-    }
-
-    if (optionalFilters.type === 'and') {
-      const filters = optionalFilters.conditions.filter(
-        c => c.type === 'simple',
-      );
-      return {
-        filters,
-        allApplied: filters.length === optionalFilters.conditions.length,
-      };
-    }
-
-    if (optionalFilters.type === 'simple') {
-      return {
-        filters: [optionalFilters],
-        allApplied: true,
-      };
-    }
-
-    return {filters: [], allApplied: false};
-  }
-
-  return {
-    filters: [],
-    allApplied: true,
-  };
 }
