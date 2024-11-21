@@ -485,6 +485,7 @@ export abstract class AbstractQuery<
 }
 
 export const astForTestingSymbol = Symbol();
+export const completedAstSymbol = Symbol();
 
 export class QueryImpl<
   TSchema extends TableSchema,
@@ -507,6 +508,10 @@ export class QueryImpl<
   // Not part of Query or QueryInternal interface
   get [astForTestingSymbol](): AST {
     return this.#ast;
+  }
+
+  get [completedAstSymbol](): AST {
+    return this._completeAst();
   }
 
   protected _newQuery<TSchema extends TableSchema, TReturn extends QueryType>(

@@ -1,5 +1,6 @@
 import type {AST, Condition} from '../../../zero-protocol/src/ast.js';
 import type {AuthorizationConfig} from '../../../zero-schema/src/compiled-authorization.js';
+import {dnf} from '../../../zql/src/query/dnf.js';
 
 /**
  * For a given AST, apply the read-auth rules.
@@ -16,9 +17,13 @@ export function augmentQuery(
     return undefined;
   }
 
+  const updatedWhere = addRulesToWhere(
+    query.where ? augmentCondition(query.where, auth) : undefined,
+    rowSelectRules,
+  );
   return {
     ...query,
-    where: query.where ? augmentCondition(query.where, auth) : undefined,
+    where: updatedWhere ? dnf(updatedWhere) : undefined,
     related: query.related
       ?.map(sq => {
         const subquery = augmentQuery(sq.subquery, auth);
@@ -31,6 +36,26 @@ export function augmentQuery(
         return undefined;
       })
       .filter(q => q !== undefined),
+  };
+}
+
+function addRulesToWhere(
+  where: Condition | undefined,
+  rowSelectRules: ['allow', Condition][] | undefined,
+): Condition | undefined {
+  if (rowSelectRules === undefined) {
+    return where;
+  }
+
+  return {
+    type: 'and',
+    conditions: [
+      ...(where ? [where] : []),
+      {
+        type: 'or',
+        conditions: rowSelectRules.map(([_, condition]) => condition),
+      },
+    ],
   };
 }
 

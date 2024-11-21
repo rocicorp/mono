@@ -1,8 +1,8 @@
 import {expect, suite, test} from 'vitest';
+import {Exists} from './exists.js';
+import type {Input, Storage} from './operator.js';
 import {runJoinTest, type Joins, type Sources} from './test/join-push-tests.js';
 import type {Format} from './view.js';
-import type {Storage, Input} from './operator.js';
-import {Exists} from './exists.js';
 
 const sources: Sources = {
   issue: {
@@ -648,46 +648,46 @@ suite('EXISTS', () => {
     `);
 
     expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`
-    [
       [
-        "exists",
-        "push",
+        [
+          "exists",
+          "push",
+          {
+            "row": {
+              "id": "i2",
+              "text": "second issue",
+            },
+            "type": "add",
+          },
+        ],
+      ]
+    `);
+
+    expect(pushes).toMatchInlineSnapshot(`
+      [
         {
-          "row": {
-            "id": "i2",
-            "text": "second issue",
+          "node": {
+            "relationships": {
+              "comments": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": "c4",
+                    "issueID": "i2",
+                    "text": "i2 c4 text",
+                  },
+                },
+              ],
+            },
+            "row": {
+              "id": "i2",
+              "text": "second issue",
+            },
           },
           "type": "add",
         },
-      ],
-    ]
-  `);
-
-    expect(pushes).toMatchInlineSnapshot(`
-    [
-      {
-        "node": {
-          "relationships": {
-            "comments": [
-              {
-                "relationships": {},
-                "row": {
-                  "id": "c4",
-                  "issueID": "i2",
-                  "text": "i2 c4 text",
-                },
-              },
-            ],
-          },
-          "row": {
-            "id": "i2",
-            "text": "second issue",
-          },
-        },
-        "type": "add",
-      },
-    ]
-  `);
+      ]
+    `);
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {

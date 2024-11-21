@@ -103,10 +103,18 @@ console.log(`Releasing from branch: ${buildBranch}`);
 
 try {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zero-build-'));
-  execute(
-    `git clone --branch ${buildBranch} --depth 1 git@github.com:rocicorp/mono.git ${tempDir}`,
-  );
+  // In order to merge the tag on the release branch back into main, we have to
+  // have the shared history so alas a shallow clone won't do it in that case.
+  // Only do the deep clone in this case though since in the common case we can
+  // do releases way faster with a shallow clone.
+  const shallow = buildBranch === 'main' ? '--depth 1' : '';
+  execute(`git clone ${shallow} git@github.com:rocicorp/mono.git ${tempDir}`);
   process.chdir(tempDir);
+
+  if (buildBranch !== 'main') {
+    execute(`git checkout origin/${buildBranch}`);
+  }
+
   //installs turbo and other build dependencies
   execute('npm install');
   const ZERO_PACKAGE_JSON_PATH = basePath('packages', 'zero', 'package.json');
@@ -148,10 +156,15 @@ try {
 
   execute(`git tag ${tagName}`);
   execute(`git push origin ${tagName}`);
-  execute(`git checkout ${buildBranch}`);
+
+  if (buildBranch !== 'main') {
+    execute(`git push origin HEAD:${buildBranch}`);
+  }
+
+  execute(`git checkout main`);
   execute(`git pull`);
   execute(`git merge ${tagName}`);
-  execute(`git push origin ${buildBranch}`);
+  execute(`git push origin main`);
 
   console.log(``);
   console.log(``);
@@ -160,9 +173,7 @@ try {
   console.log(
     `* Published @rocicorp/zero@${nextCanaryVersion} to npm with tag '@canary'.`,
   );
-  console.log(
-    `* Pushed Git tag ${tagName} to origin and merged with ${buildBranch}.`,
-  );
+  console.log(`* Pushed Git tag ${tagName} to origin and merged with main.`);
   console.log(``);
   console.log(``);
   console.log(`Next steps:`);

@@ -2,15 +2,16 @@ import {expect, suite, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.js';
 import type {JSONValue} from '../../../shared/src/json.js';
 import type {Ordering} from '../../../zero-protocol/src/ast.js';
-import type {Row} from '../../../zero-protocol/src/data.js';
+import type {Row, Value} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {Catch} from './catch.js';
+import {SetOfConstraint} from './constraint.js';
 import type {Node} from './data.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
-import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
-import {type PushMessage, Snitch, type SnitchMessage} from './snitch.js';
-import {Take} from './take.js';
+import {Snitch, type PushMessage, type SnitchMessage} from './snitch.js';
+import {Take, type PartitionKey} from './take.js';
 
 suite('take with no partition', () => {
   const base = {
@@ -56,7 +57,7 @@ suite('take with no partition', () => {
           [['takeSnitch', 'cleanup', {}]],
         ],
         expectedStorage: {
-          '["take",null]': {
+          '["take"]': {
             bound: undefined,
             size: 0,
           },
@@ -84,7 +85,7 @@ suite('take with no partition', () => {
           [['takeSnitch', 'cleanup', {}]],
         ],
         expectedStorage: {
-          '["take",null]': {
+          '["take"]': {
             bound: {
               created: 300,
               id: 'i3',
@@ -125,7 +126,7 @@ suite('take with no partition', () => {
           [['takeSnitch', 'cleanup', {}]],
         ],
         expectedStorage: {
-          '["take",null]': {
+          '["take"]': {
             bound: {
               created: 500,
               id: 'i5',
@@ -169,7 +170,7 @@ suite('take with no partition', () => {
           [['takeSnitch', 'cleanup', {}]],
         ],
         expectedStorage: {
-          '["take",null]': {
+          '["take"]': {
             bound: {
               created: 500,
               id: 'i5',
@@ -210,7 +211,7 @@ suite('take with no partition', () => {
           [['takeSnitch', 'cleanup', {}]],
         ],
         expectedStorage: {
-          '["take",null]': {
+          '["take"]': {
             bound: {
               created: 100,
               id: 'i1',
@@ -240,7 +241,7 @@ suite('take with partition', () => {
       ['created', 'asc'],
       ['id', 'asc'],
     ],
-    partitionKey: 'issueID',
+    partitionKey: ['issueID'],
   } as const;
 
   takeTest({
@@ -254,7 +255,7 @@ suite('take with partition', () => {
     limit: 0,
     partitions: [
       {
-        partitionValue: 'i1',
+        partitionValue: ['i1'],
         expectedMessages: [
           [],
           [],
@@ -264,8 +265,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -275,7 +275,7 @@ suite('take with partition', () => {
         expectedHydrate: [],
       },
       {
-        partitionValue: 'i2',
+        partitionValue: ['i2'],
         expectedMessages: [
           [],
           [],
@@ -285,8 +285,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -305,7 +304,7 @@ suite('take with partition', () => {
     limit: 5,
     partitions: [
       {
-        partitionValue: 'i1',
+        partitionValue: ['i1'],
         expectedMessages: [
           [
             [
@@ -313,8 +312,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -326,8 +324,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -342,7 +339,7 @@ suite('take with partition', () => {
         expectedHydrate: [],
       },
       {
-        partitionValue: 'i2',
+        partitionValue: ['i2'],
         expectedMessages: [
           [
             [
@@ -350,8 +347,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -363,8 +359,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -394,7 +389,7 @@ suite('take with partition', () => {
     limit: 5,
     partitions: [
       {
-        partitionValue: 'i0',
+        partitionValue: ['i0'],
         expectedMessages: [
           [
             [
@@ -402,8 +397,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i0',
+                  issueID: 'i0',
                 },
               },
             ],
@@ -415,8 +409,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i0',
+                  issueID: 'i0',
                 },
               },
             ],
@@ -431,7 +424,7 @@ suite('take with partition', () => {
         expectedHydrate: [],
       },
       {
-        partitionValue: 'i1',
+        partitionValue: ['i1'],
         expectedMessages: [
           [
             [
@@ -439,8 +432,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -451,8 +443,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -463,8 +454,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -484,7 +474,7 @@ suite('take with partition', () => {
         ],
       },
       {
-        partitionValue: 'i2',
+        partitionValue: ['i2'],
         expectedMessages: [
           [
             [
@@ -492,8 +482,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -504,8 +493,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -516,8 +504,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -552,7 +539,7 @@ suite('take with partition', () => {
     limit: 3,
     partitions: [
       {
-        partitionValue: 'i1',
+        partitionValue: ['i1'],
         expectedMessages: [
           [
             [
@@ -560,8 +547,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -572,8 +558,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -584,8 +569,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -605,7 +589,7 @@ suite('take with partition', () => {
         ],
       },
       {
-        partitionValue: 'i2',
+        partitionValue: ['i2'],
         expectedMessages: [
           [
             [
@@ -613,8 +597,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -625,8 +608,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -637,8 +619,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -676,7 +657,7 @@ suite('take with partition', () => {
     limit: 3,
     partitions: [
       {
-        partitionValue: 'i1',
+        partitionValue: ['i1'],
         expectedMessages: [
           [
             [
@@ -684,8 +665,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -696,8 +676,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -708,8 +687,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i1',
+                  issueID: 'i1',
                 },
               },
             ],
@@ -729,7 +707,7 @@ suite('take with partition', () => {
         ],
       },
       {
-        partitionValue: 'i2',
+        partitionValue: ['i2'],
         expectedMessages: [
           [
             [
@@ -737,8 +715,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -749,8 +726,7 @@ suite('take with partition', () => {
               'fetch',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -761,8 +737,7 @@ suite('take with partition', () => {
               'cleanup',
               {
                 constraint: {
-                  key: 'issueID',
-                  value: 'i2',
+                  issueID: 'i2',
                 },
               },
             ],
@@ -779,6 +754,264 @@ suite('take with partition', () => {
           {row: {id: 'c4', issueID: 'i2', created: 400}, relationships: {}},
           {row: {id: 'c5', issueID: 'i2', created: 500}, relationships: {}},
           {row: {id: 'c6', issueID: 'i2', created: 600}, relationships: {}},
+        ],
+      },
+    ],
+  });
+
+  takeTest({
+    ...base,
+    name: 'more data than limit',
+    sourceRows: [
+      {id: 'c1', issueID: 'i1', created: 100},
+      {id: 'c2', issueID: 'i1', created: 100},
+      {id: 'c3', issueID: 'i1', created: 100},
+      {id: 'c4', issueID: 'i1', created: 200},
+      {id: 'c5', issueID: 'i2', created: 100},
+      {id: 'c6', issueID: 'i2', created: 100},
+      {id: 'c7', issueID: 'i2', created: 200},
+      {id: 'c8', issueID: 'i2', created: 200},
+    ],
+    limit: 2,
+    partitionKey: ['issueID', 'created'],
+    partitions: [
+      {
+        partitionValue: ['i1', 100],
+        expectedMessages: [
+          [
+            [
+              'takeSnitch',
+              'fetch',
+              {
+                constraint: {
+                  issueID: 'i1',
+                  created: 100,
+                },
+              },
+            ],
+          ],
+          [
+            [
+              'takeSnitch',
+              'fetch',
+              {
+                constraint: {
+                  issueID: 'i1',
+                  created: 100,
+                },
+              },
+            ],
+          ],
+          [
+            [
+              'takeSnitch',
+              'cleanup',
+              {
+                constraint: {
+                  issueID: 'i1',
+                  created: 100,
+                },
+              },
+            ],
+          ],
+        ],
+        expectedStorage: {
+          '["take","i1",100]': {
+            bound: {
+              created: 100,
+              id: 'c2',
+              issueID: 'i1',
+            },
+            size: 2,
+          },
+          'maxBound': {
+            created: 100,
+            id: 'c2',
+            issueID: 'i1',
+          },
+        },
+        expectedHydrate: [
+          {row: {id: 'c1', issueID: 'i1', created: 100}, relationships: {}},
+          {row: {id: 'c2', issueID: 'i1', created: 100}, relationships: {}},
+        ],
+      },
+      {
+        partitionValue: ['i1', 200],
+        expectedMessages: [
+          [
+            [
+              'takeSnitch',
+              'fetch',
+              {
+                constraint: {
+                  issueID: 'i1',
+                  created: 200,
+                },
+              },
+            ],
+          ],
+          [
+            [
+              'takeSnitch',
+              'fetch',
+              {
+                constraint: {
+                  issueID: 'i1',
+                  created: 200,
+                },
+              },
+            ],
+          ],
+          [
+            [
+              'takeSnitch',
+              'cleanup',
+              {
+                constraint: {
+                  issueID: 'i1',
+                  created: 200,
+                },
+              },
+            ],
+          ],
+        ],
+        expectedStorage: {
+          '["take","i1",200]': {
+            bound: {
+              created: 200,
+              id: 'c4',
+              issueID: 'i1',
+            },
+            size: 1,
+          },
+          'maxBound': {
+            created: 200,
+            id: 'c4',
+            issueID: 'i1',
+          },
+        },
+        expectedHydrate: [
+          {row: {id: 'c4', issueID: 'i1', created: 200}, relationships: {}},
+        ],
+      },
+      {
+        partitionValue: ['i2', 100],
+        expectedMessages: [
+          [
+            [
+              'takeSnitch',
+              'fetch',
+              {
+                constraint: {
+                  issueID: 'i2',
+                  created: 100,
+                },
+              },
+            ],
+          ],
+          [
+            [
+              'takeSnitch',
+              'fetch',
+              {
+                constraint: {
+                  issueID: 'i2',
+                  created: 100,
+                },
+              },
+            ],
+          ],
+          [
+            [
+              'takeSnitch',
+              'cleanup',
+              {
+                constraint: {
+                  issueID: 'i2',
+                  created: 100,
+                },
+              },
+            ],
+          ],
+        ],
+        expectedStorage: {
+          '["take","i2",100]': {
+            bound: {
+              created: 100,
+              id: 'c6',
+              issueID: 'i2',
+            },
+            size: 2,
+          },
+          'maxBound': {
+            created: 200,
+            id: 'c4',
+            issueID: 'i1',
+          },
+        },
+        expectedHydrate: [
+          {row: {id: 'c5', issueID: 'i2', created: 100}, relationships: {}},
+          {row: {id: 'c6', issueID: 'i2', created: 100}, relationships: {}},
+        ],
+      },
+      {
+        partitionValue: ['i2', 200],
+        expectedMessages: [
+          [
+            [
+              'takeSnitch',
+              'fetch',
+              {
+                constraint: {
+                  issueID: 'i2',
+                  created: 200,
+                },
+              },
+            ],
+          ],
+          [
+            [
+              'takeSnitch',
+              'fetch',
+              {
+                constraint: {
+                  issueID: 'i2',
+                  created: 200,
+                },
+              },
+            ],
+          ],
+          [
+            [
+              'takeSnitch',
+              'cleanup',
+              {
+                constraint: {
+                  issueID: 'i2',
+                  created: 200,
+                },
+              },
+            ],
+          ],
+        ],
+        expectedStorage: {
+          '["take","i2",200]': {
+            bound: {
+              created: 200,
+              id: 'c8',
+              issueID: 'i2',
+            },
+            size: 2,
+          },
+          'maxBound': {
+            created: 200,
+            id: 'c8',
+            issueID: 'i2',
+          },
+        },
+        expectedHydrate: [
+          {row: {id: 'c7', issueID: 'i2', created: 200}, relationships: {}},
+          {row: {id: 'c8', issueID: 'i2', created: 200}, relationships: {}},
         ],
       },
     ],
@@ -814,14 +1047,12 @@ function takeTest(t: TakeTest) {
 
         const c = new Catch(take);
         const r = c[fetchType](
-          partitionKey && partitionValue
-            ? {
-                constraint: {
-                  key: partitionKey,
-                  value: partitionValue,
-                },
-              }
-            : undefined,
+          partitionKey &&
+            partitionValue && {
+              constraint: Object.fromEntries(
+                partitionKey.map((k, i) => [k, partitionValue[i]]),
+              ),
+            },
         );
 
         expect(r).toEqual(partition.expectedHydrate);
@@ -850,15 +1081,15 @@ function takeTest(t: TakeTest) {
         } else if (fetchType === 'cleanup') {
           // For cleanup, the last fetch for any constraint should be a cleanup.
           // Others should be fetch.
-          const seen = new Set();
+          const seen = new SetOfConstraint();
           for (let i = expectedMessages.length - 1; i >= 0; i--) {
             const [name, _, req] = expectedMessages[i];
-            if (!seen.has(req.constraint?.value)) {
+            if (!(req.constraint && seen.has(req.constraint))) {
               expectedMessages[i] = [name, 'cleanup', req];
             } else {
               expectedMessages[i] = [name, 'fetch', req];
             }
-            seen.add(req.constraint?.value);
+            req.constraint && seen.add(req.constraint);
           }
         }
         expect(log).toEqual(expectedMessages);
@@ -874,9 +1105,9 @@ type TakeTest = {
   sourceRows: Row[];
   sort?: Ordering | undefined;
   limit: number;
-  partitionKey: string | undefined;
+  partitionKey: PartitionKey | undefined;
   partitions: {
-    partitionValue: string | undefined;
+    partitionValue: [Value, ...Value[]] | undefined;
     expectedMessages: [SnitchMessage[], SnitchMessage[], SnitchMessage[]];
     expectedStorage: Record<string, JSONValue>;
     expectedHydrate: Node[];

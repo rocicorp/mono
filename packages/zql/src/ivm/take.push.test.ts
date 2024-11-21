@@ -1,15 +1,16 @@
 import {describe, expect, suite, test} from 'vitest';
+import {assert} from '../../../shared/src/asserts.js';
 import type {JSONValue} from '../../../shared/src/json.js';
 import type {Ordering} from '../../../zero-protocol/src/ast.js';
 import type {Row, Value} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {Catch, type CaughtChange} from './catch.js';
 import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
-import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {Snitch, type SnitchMessage} from './snitch.js';
 import type {SourceChange} from './source.js';
-import {Take} from './take.js';
+import {Take, type PartitionKey} from './take.js';
 
 suite('take with no partition', () => {
   const base = {
@@ -57,7 +58,7 @@ suite('take with no partition', () => {
         ['takeSnitch', 'push', {type: 'add', row: {id: 'i4', created: 50}}],
       ],
       expectedStorage: {
-        '["take",null]': {
+        '["take"]': {
           bound: {
             created: 300,
             id: 'i3',
@@ -88,7 +89,7 @@ suite('take with no partition', () => {
         ['takeSnitch', 'push', {type: 'add', row: {id: 'i4', created: 350}}],
       ],
       expectedStorage: {
-        '["take",null]': {
+        '["take"]': {
           bound: {
             created: 350,
             id: 'i4',
@@ -120,7 +121,7 @@ suite('take with no partition', () => {
         ['takeSnitch', 'push', {type: 'add', row: {id: 'i5', created: 350}}],
       ],
       expectedStorage: {
-        '["take",null]': {
+        '["take"]': {
           bound: {
             created: 300,
             id: 'i3',
@@ -155,7 +156,7 @@ suite('take with no partition', () => {
         ],
       ],
       expectedStorage: {
-        '["take",null]': {
+        '["take"]': {
           bound: {
             created: 200,
             id: 'i2',
@@ -196,7 +197,7 @@ suite('take with no partition', () => {
         ],
       ],
       expectedStorage: {
-        '["take",null]': {
+        '["take"]': {
           bound: {
             created: 250,
             id: 'i5',
@@ -263,7 +264,7 @@ suite('take with no partition', () => {
         ],
       ],
       expectedStorage: {
-        '["take",null]': {
+        '["take"]': {
           bound: {
             created: 300,
             id: 'i3',
@@ -310,7 +311,7 @@ suite('take with no partition', () => {
         ],
       ],
       expectedStorage: {
-        '["take",null]': {
+        '["take"]': {
           bound: {
             created: 200,
             id: 'i2',
@@ -345,7 +346,7 @@ suite('take with no partition', () => {
         ['takeSnitch', 'push', {type: 'remove', row: {id: 'i4', created: 400}}],
       ],
       expectedStorage: {
-        '["take",null]': {
+        '["take"]': {
           bound: {
             created: 300,
             id: 'i3',
@@ -380,7 +381,7 @@ suite('take with no partition', () => {
         ],
       ],
       expectedStorage: {
-        '["take",null]': {
+        '["take"]': {
           bound: {
             created: 400,
             id: 'i4',
@@ -424,7 +425,7 @@ suite('take with no partition', () => {
         ],
       ],
       expectedStorage: {
-        '["take",null]': {
+        '["take"]': {
           bound: {
             created: 300,
             id: 'i3',
@@ -468,7 +469,7 @@ suite('take with no partition', () => {
         ],
       ],
       expectedStorage: {
-        '["take",null]': {
+        '["take"]': {
           bound: {
             created: 200,
             id: 'i2',
@@ -511,7 +512,7 @@ suite('take with no partition', () => {
         ],
       ],
       expectedStorage: {
-        '["take",null]': {
+        '["take"]': {
           bound: {
             created: 300,
             id: 'i3',
@@ -551,7 +552,7 @@ suite('take with no partition', () => {
         ],
       ],
       expectedStorage: {
-        '["take",null]': {
+        '["take"]': {
           bound: {
             created: 400,
             id: 'i4',
@@ -594,7 +595,7 @@ suite('take with no partition', () => {
         ],
       ],
       expectedStorage: {
-        '["take",null]': {
+        '["take"]': {
           bound: {
             created: 200,
             id: 'i2',
@@ -686,7 +687,7 @@ suite('take with no partition', () => {
           ],
         ],
         expectedStorage: {
-          '["take",null]': {
+          '["take"]': {
             bound: {
               created: 400,
               id: 'i4',
@@ -732,7 +733,7 @@ suite('take with no partition', () => {
           ],
         ],
         expectedStorage: {
-          '["take",null]': {
+          '["take"]': {
             bound: {
               created: 400,
               id: 'i4',
@@ -780,7 +781,7 @@ suite('take with no partition', () => {
           ],
         ],
         expectedStorage: {
-          '["take",null]': {
+          '["take"]': {
             bound: {
               created: 300,
               id: 'i3',
@@ -820,7 +821,7 @@ suite('take with no partition', () => {
           ],
         ],
         expectedStorage: {
-          '["take",null]': {
+          '["take"]': {
             bound: {
               created: 300,
               id: 'i3',
@@ -866,7 +867,7 @@ suite('take with no partition', () => {
           ],
         ],
         expectedStorage: {
-          '["take",null]': {
+          '["take"]': {
             bound: {
               created: 300,
               id: 'i3',
@@ -912,7 +913,7 @@ suite('take with no partition', () => {
           ],
         ],
         expectedStorage: {
-          '["take",null]': {
+          '["take"]': {
             bound: {
               created: 300,
               id: 'i3',
@@ -973,7 +974,7 @@ suite('take with no partition', () => {
           ],
         ],
         expectedStorage: {
-          '["take",null]': {
+          '["take"]': {
             bound: {
               created: 250,
               id: 'i4',
@@ -1040,7 +1041,7 @@ suite('take with no partition', () => {
           ],
         ],
         expectedStorage: {
-          '["take",null]': {
+          '["take"]': {
             bound: {
               created: 350,
               id: 'i2',
@@ -1101,7 +1102,7 @@ suite('take with no partition', () => {
           ],
         ],
         expectedStorage: {
-          '["take",null]': {
+          '["take"]': {
             bound: {
               created: 400,
               id: 'i4',
@@ -1157,7 +1158,7 @@ suite('take with no partition', () => {
         ],
       ],
       expectedStorage: {
-        '["take",null]': {
+        '["take"]': {
           bound: {
             created: 50,
             id: 'i1',
@@ -1208,8 +1209,8 @@ suite('take with partition', () => {
     takeTest({
       ...base,
       partition: {
-        key: 'issueID',
-        values: ['i1', 'i2'],
+        key: ['issueID'],
+        values: [['i1'], ['i2']],
       },
       name: 'limit 0',
       sourceRows: [
@@ -1233,8 +1234,8 @@ suite('take with partition', () => {
     takeTest({
       ...base,
       partition: {
-        key: 'issueID',
-        values: ['i1', 'i2'],
+        key: ['issueID'],
+        values: [['i1'], ['i2']],
       },
       name: 'less than limit add row at start',
       sourceRows: [
@@ -1279,8 +1280,8 @@ suite('take with partition', () => {
       ...base,
       name: 'at limit add row at end',
       partition: {
-        key: 'issueID',
-        values: ['i1', 'i2'],
+        key: ['issueID'],
+        values: [['i1'], ['i2']],
       },
       sourceRows: [
         {id: 'c1', issueID: 'i1', created: 100},
@@ -1306,8 +1307,7 @@ suite('take with partition', () => {
           'fetch',
           {
             constraint: {
-              key: 'issueID',
-              value: 'i2',
+              issueID: 'i2',
             },
             start: {
               basis: 'before',
@@ -1349,8 +1349,8 @@ suite('take with partition', () => {
       ...base,
       name: 'add with non-fetched partition value',
       partition: {
-        key: 'issueID',
-        values: ['i1', 'i2'],
+        key: ['issueID'],
+        values: [['i1'], ['i2']],
       },
       sourceRows: [
         {id: 'c1', issueID: 'i1', created: 100},
@@ -1387,8 +1387,8 @@ suite('take with partition', () => {
     takeTest({
       ...base,
       partition: {
-        key: 'issueID',
-        values: ['i1', 'i2'],
+        key: ['issueID'],
+        values: [['i1'], ['i2']],
       },
       name: 'limit 0',
       sourceRows: [
@@ -1412,8 +1412,8 @@ suite('take with partition', () => {
     takeTest({
       ...base,
       partition: {
-        key: 'issueID',
-        values: ['i1', 'i2'],
+        key: ['issueID'],
+        values: [['i1'], ['i2']],
       },
       name: 'less than limit remove row at start',
       sourceRows: [
@@ -1435,10 +1435,7 @@ suite('take with partition', () => {
           'takeSnitch',
           'fetch',
           {
-            constraint: {
-              key: 'issueID',
-              value: 'i1',
-            },
+            constraint: {issueID: 'i1'},
             start: {
               basis: 'before',
               row: {id: 'c3', issueID: 'i1', created: 300},
@@ -1471,8 +1468,8 @@ suite('take with partition', () => {
     takeTest({
       ...base,
       partition: {
-        key: 'issueID',
-        values: ['i1', 'i2'],
+        key: ['issueID'],
+        values: [['i1'], ['i2']],
       },
       name: 'remove row unfetched partition',
       sourceRows: [
@@ -1527,8 +1524,8 @@ suite('take with partition', () => {
         {id: 'c5', issueID: 'i2', created: 500, text: 'e'},
       ],
       partition: {
-        key: 'issueID',
-        values: ['i1', 'i2'],
+        key: ['issueID'],
+        values: [['i1'], ['i2']],
       },
     } as const;
 
@@ -1536,8 +1533,8 @@ suite('take with partition', () => {
       ...base,
       name: 'limit 0',
       partition: {
-        key: 'issueID',
-        values: ['i1', 'i2'],
+        key: ['issueID'],
+        values: [['i1'], ['i2']],
       },
       limit: 0,
       pushes: [
@@ -1870,8 +1867,7 @@ suite('take with partition', () => {
             'fetch',
             {
               constraint: {
-                key: 'issueID',
-                value: 'i1',
+                issueID: 'i1',
               },
               start: {
                 basis: 'before',
@@ -1941,8 +1937,7 @@ suite('take with partition', () => {
             'fetch',
             {
               constraint: {
-                key: 'issueID',
-                value: 'i1',
+                issueID: 'i1',
               },
               start: {
                 basis: 'at',
@@ -2078,8 +2073,7 @@ suite('take with partition', () => {
             'fetch',
             {
               constraint: {
-                key: 'issueID',
-                value: 'i1',
+                issueID: 'i1',
               },
               start: {
                 basis: 'before',
@@ -2158,8 +2152,7 @@ suite('take with partition', () => {
             'fetch',
             {
               constraint: {
-                key: 'issueID',
-                value: 'i1',
+                issueID: 'i1',
               },
               start: {
                 basis: 'after',
@@ -2229,8 +2222,7 @@ suite('take with partition', () => {
             'fetch',
             {
               constraint: {
-                key: 'issueID',
-                value: 'i1',
+                issueID: 'i1',
               },
               start: {
                 basis: 'after',
@@ -2311,8 +2303,7 @@ suite('take with partition', () => {
             'fetch',
             {
               constraint: {
-                key: 'issueID',
-                value: 'i1',
+                issueID: 'i1',
               },
               start: {
                 basis: 'before',
@@ -2325,8 +2316,7 @@ suite('take with partition', () => {
             'fetch',
             {
               constraint: {
-                key: 'issueID',
-                value: 'i2',
+                issueID: 'i2',
               },
               start: {
                 basis: 'before',
@@ -2433,19 +2423,19 @@ function takeTest(t: TakeTest) {
 
     const take = new Take(snitch, memoryStorage, t.limit, partitionKey);
     const c = new Catch(take);
-    for (const partitionValue of t.partition?.values || [undefined]) {
-      c.fetch(
-        partitionKey && partitionValue
-          ? {
-              constraint: {
-                key: partitionKey,
-                value: partitionValue,
-              },
-            }
-          : undefined,
-      );
-      expect(c.pushes).toEqual([]);
+    if (t.partition === undefined) {
+      c.fetch();
+    } else {
+      assert(partitionKey);
+      for (const partitionValue of t.partition.values) {
+        c.fetch({
+          constraint: Object.fromEntries(
+            partitionKey.map((k, i) => [k, partitionValue[i]]),
+          ),
+        });
+      }
     }
+    expect(c.pushes).toEqual([]);
     log.length = 0;
     for (const change of t.pushes) {
       source.push(change);
@@ -2466,8 +2456,8 @@ type TakeTest = {
   limit: number;
   partition:
     | {
-        key: string;
-        values: readonly Value[];
+        key: PartitionKey;
+        values: readonly (readonly Value[])[];
       }
     | undefined;
   pushes: SourceChange[];

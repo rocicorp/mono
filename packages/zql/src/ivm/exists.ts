@@ -76,7 +76,6 @@ export class Exists implements Operator {
 
   push(change: Change) {
     assert(this.#output, 'Output not set');
-    console.log('exists push', change);
 
     switch (change.type) {
       // add, remove and edit cannot change the size of the
@@ -115,6 +114,11 @@ export class Exists implements Operator {
             }
             if (size === 1) {
               const type = this.#not ? 'remove' : 'add';
+              // The node for the remove pushed below will contain the child
+              // added by this change in its
+              // relationships[this.#relationshipName],
+              // so this child add needs to be sent first.  This balance
+              // is important for outputs doing ref counting,
               if (type === 'remove') {
                 this.#output.push(change);
               }
@@ -138,6 +142,10 @@ export class Exists implements Operator {
             }
             if (size === 0) {
               const type = this.#not ? 'add' : 'remove';
+              // The node for the remove pushed below will not contain the child
+              // removed by this change in its
+              // relationships[this.#relationshipName],
+              // so this child remove needs to be sent.
               if (type === 'remove') {
                 this.#output.push(change);
               }
