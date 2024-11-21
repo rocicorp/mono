@@ -42,6 +42,8 @@ import {
   versionFromString,
   versionString,
   versionToCookie,
+  type CVRVersion,
+  type NullableCVRVersion,
   type RowID,
 } from './schema/types.js';
 import {SchemaChangeError} from './snapshotter.js';
@@ -360,6 +362,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           this.#clients.get(clientID)?.close();
           this.#clients.set(clientID, newClient);
           client = newClient;
+
+          checkClientAndCVRVersions(client.version(), cvr.version);
         } else {
           client = this.#clients.get(clientID);
           if (client?.wsID !== wsID) {
@@ -810,4 +814,32 @@ function contentsAndVersion(row: Row) {
     throw new Error(`Invalid _0_version in ${stringify(row)}`);
   }
   return {contents, version};
+}
+
+const NEW_CVR_VERSION = {stateVersion: '00'};
+
+function checkClientAndCVRVersions(
+  client: NullableCVRVersion,
+  cvr: CVRVersion,
+) {
+  if (
+    cmpVersions(cvr, NEW_CVR_VERSION) === 0 &&
+    cmpVersions(client, NEW_CVR_VERSION) > 0
+  ) {
+    // CVR is empty but client is not.
+    throw new ErrorForClient([
+      'error',
+      ErrorKind.ClientNotFound,
+      'Client not found',
+    ]);
+  }
+
+  if (cmpVersions(client, cvr) > 0) {
+    // Client is ahead of a non-empty CVR.
+    throw new ErrorForClient([
+      'error',
+      ErrorKind.InvalidConnectionRequestBaseCookie,
+      `CVR is at version ${versionString(cvr)}`,
+    ]);
+  }
 }
