@@ -490,6 +490,7 @@ export class Zero<const S extends Schema> {
     };
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
+      enableMutationRecovery: false,
     };
 
     const rep = new ReplicacheImpl(replicacheOptions, replicacheImplOptions);
