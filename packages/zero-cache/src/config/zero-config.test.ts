@@ -1,6 +1,6 @@
 import stripAnsi from 'strip-ansi';
 import {expect, test, vi} from 'vitest';
-import {ExitAfterUsage, parseOptions} from './config.js';
+import {ExitAfterUsage, parseOptions} from '../../../shared/src/options.js';
 import {zeroOptions} from './zero-config.js';
 
 // Tip: Rerun tests with -u to update the snapshot.

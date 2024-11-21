@@ -1,13 +1,13 @@
 import {SilentLogger} from '@rocicorp/logger';
 import stripAnsi from 'strip-ansi';
 import {expect, test, vi} from 'vitest';
-import * as v from '../../../shared/src/valita.js';
 import {
   ExitAfterUsage,
   parseOptions,
   type Config,
   type Options,
-} from './config.js';
+} from './options.js';
+import * as v from './valita.js';
 
 const options = {
   port: {

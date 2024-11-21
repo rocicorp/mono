@@ -2,8 +2,12 @@
  * These types represent the _compiled_ config whereas `define-config` types represent the _source_ config.
  */
 
+import {
+  ExitAfterUsage,
+  parseOptions,
+  type Config,
+} from '../../../shared/src/options.js';
 import * as v from '../../../shared/src/valita.js';
-import {ExitAfterUsage, parseOptions, type Config} from './config.js';
 
 /**
  * Configures the view of the upstream database replicated to this zero-cache.
