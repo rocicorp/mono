@@ -11,7 +11,7 @@ import {Snitch, type SnitchMessage} from './snitch.js';
 import type {SourceChange} from './source.js';
 import {Take} from './take.js';
 
-suite.skip('take with no partition', () => {
+suite('take with no partition', () => {
   const base = {
     columns: {
       id: {type: 'string'},
