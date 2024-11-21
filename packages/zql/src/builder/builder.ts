@@ -93,16 +93,14 @@ export function bindStaticParameters(
   staticQueryParameters: StaticQueryParameters | undefined,
 ) {
   const visit = (node: AST): AST => {
-    if (node.where) {
-      return {
-        ...node,
-        where: bindCondition(node.where),
-        related: node.related?.map(sq => ({
-          ...sq,
-          subquery: visit(sq.subquery),
-        })),
-      };
-    }
+    return {
+      ...node,
+      where: node.where ? bindCondition(node.where) : undefined,
+      related: node.related?.map(sq => ({
+        ...sq,
+        subquery: visit(sq.subquery),
+      })),
+    };
     return node;
   };
 
