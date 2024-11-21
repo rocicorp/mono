@@ -9,7 +9,7 @@ import * as v from '../../../shared/src/valita.js';
 
 const ENV_VAR_PREFIX = 'ZERO_SCHEMA_';
 
-let loadedConfig:
+let loadedSchema:
   | Promise<{
       schema: Schema;
       authorization: AuthorizationConfig;
@@ -44,15 +44,15 @@ export function getSchema(): Promise<{
   schema: Schema;
   authorization: AuthorizationConfig;
 }> {
-  if (loadedConfig) {
-    return loadedConfig;
+  if (loadedSchema) {
+    return loadedSchema;
   }
 
   const jsonConfig = process.env[`${ENV_VAR_PREFIX}JSON`];
   const jsonConfigPath =
     process.env[`${ENV_VAR_PREFIX}JSON_PATH`] || './zero-schema.json';
 
-  loadedConfig = (async () => {
+  loadedSchema = (async () => {
     if (jsonConfig) {
       return parseAuthConfig(jsonConfig, `${ENV_VAR_PREFIX}JSON`);
     }
@@ -60,5 +60,5 @@ export function getSchema(): Promise<{
     return parseAuthConfig(fileContent, jsonConfigPath);
   })();
 
-  return loadedConfig;
+  return loadedSchema;
 }
