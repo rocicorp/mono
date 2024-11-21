@@ -45,7 +45,7 @@ suite('fetch one:many', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
       ]
@@ -68,7 +68,7 @@ suite('fetch one:many', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
       ]
@@ -102,12 +102,12 @@ suite('fetch one:many', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -155,12 +155,12 @@ suite('fetch one:many', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -200,12 +200,12 @@ suite('fetch one:many', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -259,12 +259,12 @@ suite('fetch one:many', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -350,12 +350,12 @@ suite('fetch one:many', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -364,7 +364,7 @@ suite('fetch one:many', () => {
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i2",
@@ -411,7 +411,7 @@ suite('fetch many:one', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
       ]
@@ -446,12 +446,12 @@ suite('fetch many:one', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "id": "u1",
@@ -480,7 +480,7 @@ suite('fetch many:one', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
       ]
@@ -522,12 +522,12 @@ suite('fetch many:one', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "id": "u1",
@@ -597,7 +597,7 @@ suite('fetch many:one', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
         [
@@ -611,7 +611,7 @@ suite('fetch many:one', () => {
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "id": "u1",
@@ -682,12 +682,12 @@ suite('fetch many:one', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "id": "u1",
@@ -696,7 +696,7 @@ suite('fetch many:one', () => {
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "id": "u2",
@@ -749,7 +749,7 @@ suite('fetch one:many:many', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
       ]
@@ -773,7 +773,7 @@ suite('fetch one:many:many', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
       ]
@@ -797,7 +797,7 @@ suite('fetch one:many:many', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
       ]
@@ -832,12 +832,12 @@ suite('fetch one:many:many', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -900,12 +900,12 @@ suite('fetch one:many:many', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -914,7 +914,7 @@ suite('fetch one:many:many', () => {
         ],
         [
           "2",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "commentID": "c1",
@@ -1081,12 +1081,12 @@ suite('fetch one:many:many', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -1095,7 +1095,7 @@ suite('fetch one:many:many', () => {
         ],
         [
           "2",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "commentID": "c1",
@@ -1104,7 +1104,7 @@ suite('fetch one:many:many', () => {
         ],
         [
           "2",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "commentID": "c2",
@@ -1113,7 +1113,7 @@ suite('fetch one:many:many', () => {
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i2",
@@ -1122,7 +1122,7 @@ suite('fetch one:many:many', () => {
         ],
         [
           "2",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "commentID": "c3",
@@ -1131,7 +1131,7 @@ suite('fetch one:many:many', () => {
         ],
         [
           "2",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "commentID": "c4",
@@ -1199,7 +1199,7 @@ suite('fetch one:many:one', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
       ]
@@ -1224,7 +1224,7 @@ suite('fetch one:many:one', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
       ]
@@ -1260,12 +1260,12 @@ suite('fetch one:many:one', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -1317,12 +1317,12 @@ suite('fetch one:many:one', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -1331,7 +1331,7 @@ suite('fetch one:many:one', () => {
         ],
         [
           "2",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "id": "l1",
@@ -1392,12 +1392,12 @@ suite('fetch one:many:one', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -1406,7 +1406,7 @@ suite('fetch one:many:one', () => {
         ],
         [
           "2",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "id": "l1",
@@ -1490,12 +1490,12 @@ suite('fetch one:many:one', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -1504,7 +1504,7 @@ suite('fetch one:many:one', () => {
         ],
         [
           "2",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "id": "l1",
@@ -1513,7 +1513,7 @@ suite('fetch one:many:one', () => {
         ],
         [
           "2",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "id": "l2",
@@ -1641,12 +1641,12 @@ suite('fetch one:many:one', () => {
       [
         [
           "0",
-          "cleanup",
+          "fetch",
           {},
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -1673,7 +1673,7 @@ suite('fetch one:many:one', () => {
         ],
         [
           "1",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i2",
@@ -1682,7 +1682,7 @@ suite('fetch one:many:one', () => {
         ],
         [
           "2",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "id": "l1",
@@ -1691,7 +1691,7 @@ suite('fetch one:many:one', () => {
         ],
         [
           "2",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "id": "l2",
@@ -1816,7 +1816,7 @@ function fetchTest(t: FetchTest): FetchTestResults {
     }
 
     if (phase === 'hydrate') {
-      results.fetchMessages = log;
+      results.fetchMessages = [...log];
     } else if (phase === 'fetch') {
       // should be the same as for hydrate
       expect(log).toEqual(results.fetchMessages);
