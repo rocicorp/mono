@@ -191,7 +191,7 @@ test('empty and', () => {
     type: 'and',
     conditions: [],
   });
-  expect(predicate({a: 4, b: true})).false;
+  expect(predicate({a: 4, b: true})).true;
 });
 
 test('empty or', () => {

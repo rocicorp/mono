@@ -26,9 +26,6 @@ export function createPredicate(
   condition: NoSubqueryCondition,
 ): (row: Row) => boolean {
   if (condition.type !== 'simple') {
-    if (condition.conditions.length === 0) {
-      return () => false;
-    }
     const predicates = condition.conditions.map(c => createPredicate(c));
     return condition.type === 'and'
       ? (row: Row) => {
@@ -153,10 +150,14 @@ function not<T>(f: (lhs: T) => boolean) {
 }
 
 /**
- * Returns a transformed condition which contains no
- * CorrelatedSubqueryCondition(s) but which will filter a subset of the rows
- * that would be filtered by the original condition, or undefined
- * if no such transformation exists.
+ * If the condition contains any CorrelatedSubqueryConditions, returns a
+ * transformed condition which contains no CorrelatedSubqueryCondition(s) but
+ * which will filter a subset of the rows that would be filtered by the original
+ * condition, or undefined if no such transformation exists.
+ *
+ * If the condition does not contain any CorrelatedSubqueryConditions
+ * returns the condition unmodified and `conditionsRemoved: false`.
+ *
  *
  * Assumes Condition is in DNF.
  */
