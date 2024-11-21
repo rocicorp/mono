@@ -182,7 +182,12 @@ function buildPipelineInternal(
   }
 
   if (ast.limit) {
-    end = new Take(end, delegate.createStorage(), ast.limit, partitionKey);
+    end = new Take(
+      end,
+      delegate.createStorage(),
+      ast.limit,
+      partitionKey === undefined ? undefined : [partitionKey],
+    );
   }
 
   if (ast.related) {
