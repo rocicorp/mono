@@ -170,7 +170,7 @@ test('child change, parent is within bound', () => {
 
   expect(actualStorage['take']).toMatchInlineSnapshot(`
         {
-          "["take",null]": {
+          "["take"]": {
             "bound": {
               "id": "i2",
               "text": "second issue",
@@ -237,7 +237,7 @@ test('child change, parent is after bound', () => {
 
   expect(actualStorage['take']).toMatchInlineSnapshot(`
         {
-          "["take",null]": {
+          "["take"]": {
             "bound": {
               "id": "i2",
               "text": "second issue",
