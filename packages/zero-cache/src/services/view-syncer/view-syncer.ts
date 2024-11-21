@@ -622,22 +622,22 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       .map(c => c.version())
       .reduce((a, b) => (cmpVersions(a, b) < 0 ? a : b), cvr.version);
 
+    // This is an AsyncGenerator which won't execute until awaited.
     const rowPatches = this.#cvrStore.catchupRowPatches(
       lc,
       catchupFrom,
       cvr,
       excludeQueryHashes,
     );
+
+    // This is a plain async function that kicks off immediately.
     const configPatches = this.#cvrStore.catchupConfigPatches(
       lc,
       catchupFrom,
       cvr,
     );
 
-    for (const patch of await configPatches) {
-      pokers.forEach(poker => poker.addPatch(patch));
-    }
-
+    // await the rowPatches first so that the AsyncGenerator kicks off.
     let rowPatchCount = 0;
     for await (const rows of rowPatches) {
       for (const row of rows) {
@@ -663,6 +663,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
     }
     lc.debug?.(`sent ${rowPatchCount} row patches`);
+
+    // Then await the config patches which were fetched in parallel.
+    for (const patch of await configPatches) {
+      pokers.forEach(poker => poker.addPatch(patch));
+    }
 
     if (!usePokers) {
       pokers.forEach(poker => poker.end());
