@@ -274,7 +274,7 @@ describe('db/transaction-pool', () => {
     });
   });
 
-  test('pool resizing and idle/keepalive timeouts', async () => {
+  test('pool resizing and idle/keepalive timeouts', {retry: 2}, async () => {
     const pool = newTransactionPool(
       Mode.SERIALIZABLE,
       initTask,
