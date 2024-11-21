@@ -33,8 +33,7 @@ const logSilenceMessages = [
   'Not indexing value',
   'Zero starting up with no server URL',
 ];
-
-export const config = {
+export default {
   // https://github.com/vitest-dev/vitest/issues/5332#issuecomment-1977785593
   optimizeDeps: {
     include: ['vitest > @vitest/expect > chai'],

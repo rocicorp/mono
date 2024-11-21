@@ -7,9 +7,9 @@ import kebabcase from 'lodash.kebabcase';
 import merge from 'lodash.merge';
 import snakeCase from 'lodash.snakecase';
 import stripAnsi from 'strip-ansi';
-import {assert} from '../../../shared/src/asserts.js';
-import {must} from '../../../shared/src/must.js';
-import * as v from '../../../shared/src/valita.js';
+import {assert} from './asserts.js';
+import {must} from './must.js';
+import * as v from './valita.js';
 
 type Primitive = number | string | boolean;
 type Value = Primitive | Array<Primitive>;
