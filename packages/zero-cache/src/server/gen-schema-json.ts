@@ -12,18 +12,19 @@ export const schemaOptions = {
   path: {
     type: v.string().default('schema.ts'),
     desc: [
-      'Path to the authorization schema file.',
-      '',
-      'This file must export two items:',
-      '- "schema": The schema definition for your tables',
-      '- "authorization": The authorization rules for your tables',
+      'Relative path to the file containing the schema definition.',
+      'The file must have a default export of type:',
+      '{',
+      '  schema: Schema,',
+      '  authorization?: CompiledAuthorizationConfig | undefined',
+      '}',
     ],
     alias: 'p',
   },
   output: {
     type: v.string().default('zero-schema.json'),
     desc: [
-      'Output path for the generated schema file.',
+      'Output path for the generated schema JSON file.',
       '',
       'The schema will be written as a JSON file containing the compiled',
       'authorization rules derived from your schema definition.',
