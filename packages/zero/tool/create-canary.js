@@ -156,6 +156,14 @@ try {
 
   execute(`git tag ${tagName}`);
   execute(`git push origin ${tagName}`);
+<<<<<<< Updated upstream
+=======
+
+  if (buildBranch !== 'main') {
+    execute(`git push origin HEAD:${buildBranch}`);
+  }
+
+>>>>>>> Stashed changes
   execute(`git checkout main`);
   execute(`git pull`);
   execute(`git merge ${tagName}`);
