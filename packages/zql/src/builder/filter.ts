@@ -11,6 +11,17 @@ export type NonNullValue = Exclude<Value, null | undefined>;
 export type SimplePredicate = (rhs: Value) => boolean;
 export type SimplePredicateNoNull = (rhs: NonNullValue) => boolean;
 
+export type NoSubqueryCondition =
+  | SimpleCondition
+  | {
+      type: 'and';
+      conditions: readonly NoSubqueryCondition[];
+    }
+  | {
+      type: 'or';
+      conditions: readonly NoSubqueryCondition[];
+    };
+
 export function createPredicate(
   condition: NoSubqueryCondition,
 ): (row: Row) => boolean {
@@ -140,17 +151,6 @@ function createPredicateImpl(
 function not<T>(f: (lhs: T) => boolean) {
   return (lhs: T) => !f(lhs);
 }
-
-export type NoSubqueryCondition =
-  | SimpleCondition
-  | {
-      type: 'and';
-      conditions: readonly NoSubqueryCondition[];
-    }
-  | {
-      type: 'or';
-      conditions: readonly NoSubqueryCondition[];
-    };
 
 /**
  * Returns a transformed condition which contains no
