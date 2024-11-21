@@ -327,7 +327,7 @@ export class Take implements Operator {
         // change is after bound
         return;
       }
-      let newBound: {node: Node; push: boolean} | undefined = undefined;
+      let newBound: {node: Node; push: boolean} | undefined;
       for (const node of this.#input.fetch({
         start: {
           row: takeState.bound,
