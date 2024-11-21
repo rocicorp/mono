@@ -296,8 +296,7 @@ let loadedConfig: ZeroConfig | undefined;
 
 export function getZeroConfig(argv = process.argv.slice(2)): ZeroConfig {
   if (!loadedConfig) {
-    const config = parseOptions(zeroOptions, argv, ENV_VAR_PREFIX);
-    loadedConfig = config;
+    loadedConfig = parseOptions(zeroOptions, argv, ENV_VAR_PREFIX);
   }
 
   return loadedConfig;
