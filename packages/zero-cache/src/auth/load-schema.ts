@@ -40,7 +40,7 @@ function parseAuthConfig(
   }
 }
 
-export async function getSchema(): Promise<{
+export function getSchema(): Promise<{
   schema: Schema;
   authorization: AuthorizationConfig;
 }> {
@@ -51,11 +51,6 @@ export async function getSchema(): Promise<{
   const jsonConfig = process.env[`${ENV_VAR_PREFIX}JSON`];
   const jsonConfigPath =
     process.env[`${ENV_VAR_PREFIX}JSON_PATH`] || './zero-schema.json';
-
-  if (!jsonConfig && !path.isAbsolute(jsonConfigPath)) {
-    const fileContent = await readFile(path.resolve(jsonConfigPath), 'utf-8');
-    return parseAuthConfig(fileContent, jsonConfigPath);
-  }
 
   loadedConfig = (async () => {
     if (jsonConfig) {
