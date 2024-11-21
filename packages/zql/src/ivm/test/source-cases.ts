@@ -676,7 +676,7 @@ const cases = {
           {a: 4, b: true},
           {a: 5, b: true},
         ],
-        constraint: {key: 'b', value: true},
+        constraint: {b: true},
         change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
         expected: [{a: 5, b: true}],
       },
@@ -686,7 +686,7 @@ const cases = {
           {a: 4, b: true},
           {a: 5, b: true},
         ],
-        constraint: {key: 'b', value: false},
+        constraint: {b: false},
         change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
         expected: [
           {a: 2, b: false},
