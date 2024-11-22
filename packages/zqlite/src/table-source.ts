@@ -775,11 +775,7 @@ function* mapFromSQLiteTypes(
 
 function fromSQLiteTypes(valueTypes: Record<string, SchemaValue>, row: Row) {
   for (const key in row) {
-    try {
-      row[key] = fromSQLiteType(valueTypes[key].type, row[key]);
-    } catch (e) {
-      throw key;
-    }
+    row[key] = fromSQLiteType(valueTypes[key].type, row[key]);
   }
 }
 
