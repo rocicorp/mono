@@ -1,17 +1,15 @@
 import {expect, test} from 'vitest';
-import {MemorySource} from './memory-source.js';
 import {Snitch} from './snitch.js';
 import {Filter} from './filter.js';
 import {FanOut} from './fan-out.js';
 import {FanIn} from './fan-in.js';
 import {Catch} from './catch.js';
+import {createSource} from './test/source-factory.js';
 
 test('destroy source connections', () => {
-  const ms = new MemorySource(
-    'table',
-    {a: {type: 'string'}, b: {type: 'string'}},
-    ['a'],
-  );
+  const ms = createSource('table', {a: {type: 'string'}, b: {type: 'string'}}, [
+    'a',
+  ]);
   const connection1 = ms.connect([['a', 'asc']]);
   const connection2 = ms.connect([['a', 'asc']]);
 
@@ -58,11 +56,9 @@ test('destroy source connections', () => {
 });
 
 test('destroy a pipeline that has forking', () => {
-  const ms = new MemorySource(
-    'table',
-    {a: {type: 'number'}, b: {type: 'string'}},
-    ['a'],
-  );
+  const ms = createSource('table', {a: {type: 'number'}, b: {type: 'string'}}, [
+    'a',
+  ]);
   const connector = ms.connect([['a', 'asc']]);
   const fanOut = new FanOut(connector);
   const filter1 = new Filter(fanOut, 'all', () => true);

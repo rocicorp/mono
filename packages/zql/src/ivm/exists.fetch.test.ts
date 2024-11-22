@@ -7,9 +7,9 @@ import {Catch} from './catch.js';
 import type {Node} from './data.js';
 import {Exists} from './exists.js';
 import {Join} from './join.js';
-import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
 import {Snitch, type SnitchMessage} from './snitch.js';
+import {createSource} from './test/source-factory.js';
 
 const base = {
   columns: [
@@ -243,7 +243,7 @@ function fetchTest(t: FetchTest) {
 
     const sources = t.sources.map((rows, i) => {
       const ordering = t.sorts?.[i] ?? [['id', 'asc']];
-      const source = new MemorySource(`t${i}`, t.columns[i], t.primaryKeys[i]);
+      const source = createSource(`t${i}`, t.columns[i], t.primaryKeys[i]);
       for (const row of rows) {
         source.push({type: 'add', row});
       }

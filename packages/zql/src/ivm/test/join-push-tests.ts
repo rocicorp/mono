@@ -7,14 +7,14 @@ import type {SchemaValue} from '../../../../zero-schema/src/table-schema.js';
 import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.js';
 import type {Row} from '../../../../zero-protocol/src/data.js';
 import type {Ordering} from '../../../../zero-protocol/src/ast.js';
-import type {SourceChange} from '../source.js';
+import type {Source, SourceChange} from '../source.js';
 import type {NormalizedValue} from '../data.js';
-import {MemorySource} from '../memory-source.js';
 import type {Format} from '../view.js';
 import type {Storage, Input, Operator} from '../operator.js';
 import {must} from '../../../../shared/src/must.js';
 import type {JSONObject} from '../../../../shared/src/json.js';
 import {ArrayView} from '../array-view.js';
+import {createSource} from './source-factory.js';
 
 export function pushTest(t: PushTest) {
   test(t.name, () => {
@@ -110,8 +110,8 @@ function makeSource(
   primaryKeys: PrimaryKey,
   snitchName: string,
   log: SnitchMessage[],
-): {source: MemorySource; snitch: Snitch} {
-  const source = new MemorySource('test', columns, primaryKeys);
+): {source: Source; snitch: Snitch} {
+  const source = createSource('test', columns, primaryKeys);
   for (const row of rows) {
     source.push({type: 'add', row});
   }
@@ -162,7 +162,7 @@ export function runJoinTest(t: NewPushTest) {
     const sources: Record<
       string,
       {
-        source: MemorySource;
+        source: Source;
         snitch: Snitch;
       }
     > = Object.fromEntries(

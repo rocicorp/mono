@@ -8,10 +8,10 @@ import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {Catch} from './catch.js';
 import {SetOfConstraint} from './constraint.js';
 import type {Node} from './data.js';
-import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
 import {Snitch, type PushMessage, type SnitchMessage} from './snitch.js';
 import {Take, type PartitionKey} from './take.js';
+import {createSource} from './test/source-factory.js';
 
 suite('take with no partition', () => {
   const base = {
@@ -1021,7 +1021,7 @@ suite('take with partition', () => {
 function takeTest(t: TakeTest) {
   test(t.name, () => {
     const log: SnitchMessage[] = [];
-    const source = new MemorySource('table', t.columns, t.primaryKey);
+    const source = createSource('table', t.columns, t.primaryKey);
     for (const row of t.sourceRows) {
       source.push({type: 'add', row});
     }

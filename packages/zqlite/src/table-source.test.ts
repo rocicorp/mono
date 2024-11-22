@@ -1,13 +1,11 @@
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.js';
 import type {Row, Value} from '../../zero-protocol/src/data.js';
-import type {SchemaValue} from '../../zero-schema/src/table-schema.js';
 import {Catch} from '../../zql/src/ivm/catch.js';
 import type {Change} from '../../zql/src/ivm/change.js';
 import {makeComparator} from '../../zql/src/ivm/data.js';
-import {runCases} from '../../zql/src/ivm/test/source-cases.js';
 import {Database} from './db.js';
-import {compile, format, sql} from './internal/sql.js';
+import {format} from './internal/sql.js';
 import {
   optionalFiltersToSQL,
   TableSource,
@@ -581,32 +579,6 @@ test('getByKey', () => {
       a: (BigInt(Number.MAX_SAFE_INTEGER) + 1n) as unknown as Value,
     }),
   ).toBeUndefined;
-});
-
-describe('shared test cases', () => {
-  runCases(
-    (
-      name: string,
-      columns: Record<string, SchemaValue>,
-      primaryKey: readonly [string, ...string[]],
-    ) => {
-      const db = new Database(createSilentLogContext(), ':memory:');
-      // create a table with desired columns and primary keys
-      const query = compile(
-        sql`CREATE TABLE ${sql.ident(name)} (${sql.join(
-          Object.keys(columns).map(c => sql.ident(c)),
-          sql`, `,
-        )}, PRIMARY KEY (${sql.join(
-          primaryKey.map(p => sql.ident(p)),
-          sql`, `,
-        )}));`,
-      );
-      db.exec(query);
-      return new TableSource(db, name, columns, primaryKey);
-    },
-    new Set(),
-    new Set(),
-  );
 });
 
 describe('optional filters to sql', () => {

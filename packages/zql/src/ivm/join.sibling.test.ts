@@ -7,11 +7,11 @@ import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {Catch, type CaughtChange} from './catch.js';
 import type {NormalizedValue} from './data.js';
 import {Join, createPrimaryKeySetStorageKey} from './join.js';
-import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
 import type {Input} from './operator.js';
 import {Snitch, type SnitchMessage} from './snitch.js';
 import type {SourceChange} from './source.js';
+import {createSource} from './test/source-factory.js';
 
 suite('sibling relationships tests with issues, comments, and owners', () => {
   const base = {
@@ -550,7 +550,7 @@ function pushSiblingTest(t: PushTestSibling) {
 
     const sources = t.sources.map((rows, i) => {
       const ordering = t.sorts?.[i] ?? [['id', 'asc']];
-      const source = new MemorySource('test', t.columns[i], t.primaryKeys[i]);
+      const source = createSource('test', t.columns[i], t.primaryKeys[i]);
       for (const row of rows) {
         source.push({type: 'add', row});
       }

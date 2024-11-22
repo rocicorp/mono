@@ -11,12 +11,12 @@ import {
   createPrimaryKeySetStorageKey,
   createPrimaryKeySetStorageKeyPrefix,
 } from './join.js';
-import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
 import type {SourceSchema} from './schema.js';
 import {Snitch, type SnitchMessage} from './snitch.js';
 import type {JSONValue} from '../../../shared/src/json.js';
 import {SetOfConstraint} from './constraint.js';
+import {createSource} from './test/source-factory.js';
 
 suite('fetch one:many', () => {
   const base = {
@@ -1727,7 +1727,7 @@ function fetchTest(t: FetchTest): FetchTestResults {
 
   const sources = t.sources.map((rows, i) => {
     const ordering = t.sorts?.[i] ?? [['id', 'asc']];
-    const source = new MemorySource(`t${i}`, t.columns[i], t.primaryKeys[i]);
+    const source = createSource(`t${i}`, t.columns[i], t.primaryKeys[i]);
     for (const row of rows) {
       source.push({type: 'add', row});
     }

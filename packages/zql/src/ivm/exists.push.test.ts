@@ -35,7 +35,7 @@ const sources: Sources = {
     columns: {
       id: {type: 'string'},
       issueID: {type: 'string'},
-      test: {type: 'string'},
+      text: {type: 'string'},
     },
     primaryKeys: ['id'],
     sorts: [['id', 'asc']],

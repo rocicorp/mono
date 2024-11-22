@@ -1,14 +1,12 @@
 import {expect, test} from 'vitest';
 import {Catch} from './catch.js';
 import {Filter} from './filter.js';
-import {MemorySource} from './memory-source.js';
+import {createSource} from './test/source-factory.js';
 
 test('basics', () => {
-  const ms = new MemorySource(
-    'table',
-    {a: {type: 'number'}, b: {type: 'string'}},
-    ['a'],
-  );
+  const ms = createSource('table', {a: {type: 'number'}, b: {type: 'string'}}, [
+    'a',
+  ]);
   ms.push({type: 'add', row: {a: 3, b: 'foo'}});
   ms.push({type: 'add', row: {a: 2, b: 'bar'}});
   ms.push({type: 'add', row: {a: 1, b: 'foo'}});
@@ -51,11 +49,9 @@ test('basics', () => {
 });
 
 test('edit', () => {
-  const ms = new MemorySource(
-    'table',
-    {a: {type: 'number'}, x: {type: 'number'}},
-    ['a'],
-  );
+  const ms = createSource('table', {a: {type: 'number'}, x: {type: 'number'}}, [
+    'a',
+  ]);
   for (const row of [
     {a: 1, x: 1},
     {a: 2, x: 2},

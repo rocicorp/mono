@@ -1,8 +1,6 @@
 import {describe, expect, test} from 'vitest';
 import type {Ordering} from '../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
-import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {Catch} from './catch.js';
 import type {Change} from './change.js';
 import {compareRowsTest} from './data.test.js';
@@ -12,19 +10,11 @@ import {
   overlaysForConstraintForTest,
   overlaysForStartAtForTest,
 } from './memory-source.js';
-import {runCases} from './test/source-cases.js';
-
-runCases(
-  (
-    name: string,
-    columns: Record<string, SchemaValue>,
-    primaryKey: PrimaryKey,
-  ) => new MemorySource(name, columns, primaryKey),
-);
+import {createSource} from './test/source-factory.js';
 
 test('schema', () => {
   compareRowsTest((order: Ordering) => {
-    const ms = new MemorySource('table', {a: {type: 'string'}}, ['a']);
+    const ms = createSource('table', {a: {type: 'string'}}, ['a']);
     return ms.connect(order).getSchema().compareRows;
   });
 });
@@ -106,7 +96,7 @@ test('indexes get cleaned up when not needed', () => {
 });
 
 test('push edit change', () => {
-  const ms = new MemorySource(
+  const ms = createSource(
     'table',
     {a: {type: 'string'}, b: {type: 'string'}, c: {type: 'string'}},
     ['a'],
@@ -143,7 +133,7 @@ test('push edit change', () => {
 });
 
 test('fetch during push edit change', () => {
-  const ms = new MemorySource(
+  const ms = createSource(
     'table',
     {a: {type: 'string'}, b: {type: 'string'}, c: {type: 'string'}},
     ['a'],

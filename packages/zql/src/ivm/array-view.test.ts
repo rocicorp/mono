@@ -4,19 +4,17 @@ import {stringCompare} from '../../../shared/src/string-compare.js';
 import {ArrayView} from './array-view.js';
 import type {Change} from './change.js';
 import {Join} from './join.js';
-import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
 import type {Input} from './operator.js';
 import type {SourceSchema} from './schema.js';
 import {Take} from './take.js';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
+import {createSource} from './test/source-factory.js';
 
 test('basics', () => {
-  const ms = new MemorySource(
-    'table',
-    {a: {type: 'number'}, b: {type: 'string'}},
-    ['a'],
-  );
+  const ms = createSource('table', {a: {type: 'number'}, b: {type: 'string'}}, [
+    'a',
+  ]);
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
   ms.push({row: {a: 2, b: 'b'}, type: 'add'});
 
@@ -76,11 +74,9 @@ test('basics', () => {
 });
 
 test('single-format', () => {
-  const ms = new MemorySource(
-    'table',
-    {a: {type: 'number'}, b: {type: 'string'}},
-    ['a'],
-  );
+  const ms = createSource('table', {a: {type: 'number'}, b: {type: 'string'}}, [
+    'a',
+  ]);
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
 
   const view = new ArrayView(
@@ -121,11 +117,9 @@ test('single-format', () => {
 });
 
 test('hydrate-empty', () => {
-  const ms = new MemorySource(
-    'table',
-    {a: {type: 'number'}, b: {type: 'string'}},
-    ['a'],
-  );
+  const ms = createSource('table', {a: {type: 'number'}, b: {type: 'string'}}, [
+    'a',
+  ]);
 
   const view = new ArrayView(
     ms.connect([
@@ -147,9 +141,9 @@ test('hydrate-empty', () => {
 });
 
 test('tree', () => {
-  const ms = new MemorySource(
+  const ms = createSource(
     'table',
-    {id: {type: 'number'}, name: {type: 'string'}},
+    {id: {type: 'number'}, name: {type: 'string'}, childID: {type: 'number'}},
     ['id'],
   );
   ms.push({
@@ -418,9 +412,9 @@ test('tree', () => {
 });
 
 test('tree-single', () => {
-  const ms = new MemorySource(
+  const ms = createSource(
     'table',
-    {id: {type: 'number'}, name: {type: 'string'}},
+    {id: {type: 'number'}, name: {type: 'string'}, childID: {type: 'number'}},
     ['id'],
   );
   ms.push({
@@ -906,11 +900,9 @@ test('collapse-single', () => {
 });
 
 test('basic with edit pushes', () => {
-  const ms = new MemorySource(
-    'table',
-    {a: {type: 'number'}, b: {type: 'string'}},
-    ['a'],
-  );
+  const ms = createSource('table', {a: {type: 'number'}, b: {type: 'string'}}, [
+    'a',
+  ]);
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
   ms.push({row: {a: 2, b: 'b'}, type: 'add'});
 
@@ -956,9 +948,14 @@ test('basic with edit pushes', () => {
 });
 
 test('tree edit', () => {
-  const ms = new MemorySource(
+  const ms = createSource(
     'table',
-    {id: {type: 'number'}, name: {type: 'string'}, data: {type: 'string'}},
+    {
+      id: {type: 'number'},
+      name: {type: 'string'},
+      data: {type: 'string'},
+      childID: {type: 'number'},
+    },
     ['id'],
   );
   for (const row of [
@@ -1095,11 +1092,9 @@ test('tree edit', () => {
 });
 
 test('edit to change the order', () => {
-  const ms = new MemorySource(
-    'table',
-    {a: {type: 'number'}, b: {type: 'string'}},
-    ['a'],
-  );
+  const ms = createSource('table', {a: {type: 'number'}, b: {type: 'string'}}, [
+    'a',
+  ]);
   for (const row of [
     {a: 10, b: 'a'},
     {a: 20, b: 'b'},

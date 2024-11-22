@@ -1,25 +1,23 @@
 import {expect, test, vi} from 'vitest';
-import {MemorySource} from './memory-source.js';
 import {FanOut} from './fan-out.js';
 import {Catch} from './catch.js';
 import {Filter} from './filter.js';
 import {FanIn} from './fan-in.js';
+import {createSource} from './test/source-factory.js';
 
 test('fan-out pushes along all paths', () => {
-  const ms = new MemorySource(
-    'table',
-    {a: {type: 'number'}, b: {type: 'string'}},
-    ['a'],
-  );
-  const connector = ms.connect([['a', 'asc']]);
+  const s = createSource('table', {a: {type: 'number'}, b: {type: 'string'}}, [
+    'a',
+  ]);
+  const connector = s.connect([['a', 'asc']]);
   const fanOut = new FanOut(connector);
   const catch1 = new Catch(fanOut);
   const catch2 = new Catch(fanOut);
   const catch3 = new Catch(fanOut);
 
-  ms.push({type: 'add', row: {a: 1, b: 'foo'}});
-  ms.push({type: 'edit', oldRow: {a: 1, b: 'foo'}, row: {a: 1, b: 'bar'}});
-  ms.push({type: 'remove', row: {a: 1, b: 'bar'}});
+  s.push({type: 'add', row: {a: 1, b: 'foo'}});
+  s.push({type: 'edit', oldRow: {a: 1, b: 'foo'}, row: {a: 1, b: 'bar'}});
+  s.push({type: 'remove', row: {a: 1, b: 'bar'}});
 
   const expected = [
     {
@@ -49,12 +47,10 @@ test('fan-out pushes along all paths', () => {
 });
 
 test('fan-out,fan-in pairing does not duplicate pushes', () => {
-  const ms = new MemorySource(
-    'table',
-    {a: {type: 'number'}, b: {type: 'string'}},
-    ['a'],
-  );
-  const connector = ms.connect([['a', 'asc']]);
+  const s = createSource('table', {a: {type: 'number'}, b: {type: 'string'}}, [
+    'a',
+  ]);
+  const connector = s.connect([['a', 'asc']]);
   const fanOut = new FanOut(connector);
   const filter1 = new Filter(fanOut, 'all', () => true);
   const filter2 = new Filter(fanOut, 'all', () => true);
@@ -63,9 +59,9 @@ test('fan-out,fan-in pairing does not duplicate pushes', () => {
   const fanIn = new FanIn(fanOut, [filter1, filter2, filter3]);
   const out = new Catch(fanIn);
 
-  ms.push({type: 'add', row: {a: 1, b: 'foo'}});
-  ms.push({type: 'add', row: {a: 2, b: 'foo'}});
-  ms.push({type: 'add', row: {a: 3, b: 'foo'}});
+  s.push({type: 'add', row: {a: 1, b: 'foo'}});
+  s.push({type: 'add', row: {a: 2, b: 'foo'}});
+  s.push({type: 'add', row: {a: 3, b: 'foo'}});
 
   expect(out.pushes).toEqual([
     {
@@ -102,18 +98,18 @@ test('fan-out,fan-in pairing does not duplicate pushes', () => {
 });
 
 test('fan-in fetch', () => {
-  const ms = new MemorySource(
+  const s = createSource(
     'table',
     {a: {type: 'boolean'}, b: {type: 'boolean'}},
     ['a', 'b'],
   );
 
-  ms.push({type: 'add', row: {a: false, b: false}});
-  ms.push({type: 'add', row: {a: false, b: true}});
-  ms.push({type: 'add', row: {a: true, b: false}});
-  ms.push({type: 'add', row: {a: true, b: true}});
+  s.push({type: 'add', row: {a: false, b: false}});
+  s.push({type: 'add', row: {a: false, b: true}});
+  s.push({type: 'add', row: {a: true, b: false}});
+  s.push({type: 'add', row: {a: true, b: true}});
 
-  const connector = ms.connect([
+  const connector = s.connect([
     ['a', 'asc'],
     ['b', 'asc'],
   ]);
@@ -161,12 +157,10 @@ test('fan-in fetch', () => {
 });
 
 test('cleanup called once per branch', () => {
-  const ms = new MemorySource(
-    'table',
-    {a: {type: 'number'}, b: {type: 'string'}},
-    ['a'],
-  );
-  const connector = ms.connect([['a', 'asc']]);
+  const s = createSource('table', {a: {type: 'number'}, b: {type: 'string'}}, [
+    'a',
+  ]);
+  const connector = s.connect([['a', 'asc']]);
   const fanOut = new FanOut(connector);
   const filter1 = new Filter(fanOut, 'all', () => true);
   const filter2 = new Filter(fanOut, 'all', () => true);

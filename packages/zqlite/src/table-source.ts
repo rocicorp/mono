@@ -346,7 +346,7 @@ export class TableSource implements Source {
   push(change: SourceChange) {
     const exists = (row: Row) =>
       this.#stmts.checkExists.get<{exists: number}>(
-        ...pickColumns(this.#primaryKey, row),
+        ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
       )?.exists === 1;
 
     // need to check for the existence of the row before modifying
@@ -735,10 +735,6 @@ function toSQLiteTypes(
   return columns.map(col => toSQLiteType(row[col], columnTypes[col].type));
 }
 
-function pickColumns(columns: readonly string[], row: Row): readonly Value[] {
-  return columns.map(col => row[col]);
-}
-
 function toSQLiteType(v: unknown, type: ValueType): unknown {
   switch (type) {
     case 'boolean':
@@ -779,7 +775,11 @@ function* mapFromSQLiteTypes(
 
 function fromSQLiteTypes(valueTypes: Record<string, SchemaValue>, row: Row) {
   for (const key in row) {
-    row[key] = fromSQLiteType(valueTypes[key].type, row[key]);
+    try {
+      row[key] = fromSQLiteType(valueTypes[key].type, row[key]);
+    } catch (e) {
+      throw key;
+    }
   }
 }
 

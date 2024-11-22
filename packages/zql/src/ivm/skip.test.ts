@@ -1,10 +1,10 @@
 import {describe, expect, test} from 'vitest';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import {Catch, type CaughtChange} from './catch.js';
-import {MemorySource} from './memory-source.js';
 import type {Start} from './operator.js';
 import {type Bound, Skip} from './skip.js';
 import type {SourceChange} from './source.js';
+import {createSource} from './test/source-factory.js';
 
 test('fetch', () => {
   const cases: {
@@ -181,7 +181,7 @@ test('fetch', () => {
   ];
 
   for (const c of cases) {
-    const ms = new MemorySource(
+    const ms = createSource(
       'users',
       {
         id: {type: 'number'},
@@ -455,7 +455,7 @@ describe('push', () => {
 
   for (const c of cases) {
     test(c.name ?? 'Add', () => {
-      const ms = new MemorySource(
+      const ms = createSource(
         'users',
         {
           id: {type: 'number'},

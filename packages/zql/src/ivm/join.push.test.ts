@@ -1206,7 +1206,7 @@ suite('push one:many:many', () => {
     columns: [
       {id: {type: 'string'}},
       {id: {type: 'string'}, issueID: {type: 'string'}},
-      {id: {type: 'string'}, labelID: {type: 'string'}},
+      {id: {type: 'string'}, commentID: {type: 'string'}},
     ],
     primaryKeys: [['id'], ['id'], ['id']],
     joins: [

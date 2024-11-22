@@ -6,11 +6,11 @@ import type {Row, Value} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {Catch, type CaughtChange} from './catch.js';
-import {MemorySource} from './memory-source.js';
 import {MemoryStorage} from './memory-storage.js';
 import {Snitch, type SnitchMessage} from './snitch.js';
 import type {SourceChange} from './source.js';
 import {Take, type PartitionKey} from './take.js';
+import {createSource} from './test/source-factory.js';
 
 suite('take with no partition', () => {
   const base = {
@@ -1509,6 +1509,7 @@ suite('take with partition', () => {
       columns: {
         id: {type: 'string'},
         created: {type: 'number'},
+        issueID: {type: 'string'},
         text: {type: 'string'},
       },
       primaryKey: ['id'],
@@ -2409,7 +2410,7 @@ suite('take with partition', () => {
 function takeTest(t: TakeTest) {
   test(t.name, () => {
     const log: SnitchMessage[] = [];
-    const source = new MemorySource('table', t.columns, t.primaryKey);
+    const source = createSource('table', t.columns, t.primaryKey);
     for (const row of t.sourceRows) {
       source.push({type: 'add', row});
     }
