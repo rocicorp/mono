@@ -65,6 +65,10 @@ class RowRecordCache {
       return this.#cache;
     }
     const r = resolver<CustomKeyMap<RowID, RowRecord>>();
+    // Set this.#cache immediately (before await) so that only one db
+    // query is made even if there are multiple callers.
+    this.#cache = r.promise;
+
     const cache: CustomKeyMap<RowID, RowRecord> = new CustomKeyMap(rowIDHash);
     for await (const rows of this.#db<
       RowsRow[]
@@ -79,7 +83,6 @@ class RowRecordCache {
       }
     }
     r.resolve(cache);
-    this.#cache = r.promise;
     return this.#cache;
   }
 
@@ -535,24 +538,22 @@ export class CVRStore {
         this.#abortIfNotVersion(tx, expectedCurrentVersion),
       ];
 
-      if (this.#pendingRowRecordPuts.size > 0) {
-        const rowRecordRows = rowRecordsToFlush.map(r =>
-          rowRecordToRowsRow(this.#id, r),
-        );
-        let i = 0;
-        while (i < rowRecordRows.length) {
-          pipelined.push(
-            tx`INSERT INTO cvr.rows ${tx(
-              rowRecordRows.slice(i, i + ROW_RECORD_UPSERT_BATCH_SIZE),
-            )} 
+      const rowRecordRows = rowRecordsToFlush.map(r =>
+        rowRecordToRowsRow(this.#id, r),
+      );
+      let i = 0;
+      while (i < rowRecordRows.length) {
+        pipelined.push(
+          tx`INSERT INTO cvr.rows ${tx(
+            rowRecordRows.slice(i, i + ROW_RECORD_UPSERT_BATCH_SIZE),
+          )} 
             ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
             DO UPDATE SET "rowVersion" = excluded."rowVersion",
               "patchVersion" = excluded."patchVersion",
               "refCounts" = excluded."refCounts"`.execute(),
-          );
-          i += ROW_RECORD_UPSERT_BATCH_SIZE;
-          stats.statements++;
-        }
+        );
+        i += ROW_RECORD_UPSERT_BATCH_SIZE;
+        stats.statements++;
       }
       for (const write of this.#writes) {
         stats.instances += write.stats.instances ?? 0;
