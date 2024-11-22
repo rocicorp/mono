@@ -45,7 +45,7 @@ export type MutationError = [
 export interface Mutagen {
   processMutation(
     mutation: Mutation,
-    authData: JWTPayload,
+    authData: JWTPayload | undefined,
     schemaVersion: number,
   ): Promise<MutationError | undefined>;
 }
@@ -95,7 +95,7 @@ export class MutagenService implements Mutagen, Service {
 
   processMutation(
     mutation: Mutation,
-    authData: JWTPayload,
+    authData: JWTPayload | undefined,
     schemaVersion: number,
   ): Promise<MutationError | undefined> {
     if (this.#limiter?.canDo() === false) {
@@ -130,7 +130,7 @@ const MAX_SERIALIZATION_ATTEMPTS = 3;
 
 export async function processMutation(
   lc: LogContext | undefined,
-  authData: JWTPayload,
+  authData: JWTPayload | undefined,
   db: PostgresDB,
   shardID: string,
   clientGroupID: string,
@@ -247,7 +247,7 @@ export async function processMutation(
 
 async function processMutationWithTx(
   tx: PostgresTransaction,
-  authData: JWTPayload,
+  authData: JWTPayload | undefined,
   shardID: string,
   clientGroupID: string,
   schemaVersion: number,

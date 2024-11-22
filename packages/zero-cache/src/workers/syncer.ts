@@ -112,7 +112,7 @@ export class Syncer implements SingletonService {
     const connection = new Connection(
       this.#lc,
       this.#config,
-      decodedToken ?? {},
+      decodedToken,
       this.#viewSyncers.getService(clientGroupID),
       this.#mutagens.getService(clientGroupID),
       params,
