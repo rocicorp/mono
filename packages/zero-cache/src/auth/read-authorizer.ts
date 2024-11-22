@@ -1,15 +1,66 @@
+import type {JWTPayload} from 'jose';
+import {hashOfAST} from '../../../zero-protocol/src/ast-hash.js';
 import type {AST, Condition} from '../../../zero-protocol/src/ast.js';
 import type {AuthorizationConfig} from '../../../zero-schema/src/compiled-authorization.js';
+import {bindStaticParameters} from '../../../zql/src/builder/builder.js';
 import {dnf} from '../../../zql/src/query/dnf.js';
+import type {JSONValue} from '../../../shared/src/json.js';
 
 /**
- * For a given AST, apply the read-auth rules.
+ * Adds permission rules to the given query so it only returns rows that the
+ * user is allowed to read.
+ *
+ * If the returned query is `undefined` that means that user cannot run
+ * the query at all. This is only the case if we can infer that all rows
+ * would be excluded without running the query.
+ * E.g., the user is trying to query a table that is not readable.
+ */
+export function transformAndHashQuery(
+  query: AST,
+  permissionRules: AuthorizationConfig,
+  authData: JWTPayload | undefined,
+):
+  | {
+      query: AST;
+      hash: string;
+    }
+  | {
+      query: undefined;
+      hash: undefined;
+    } {
+  const transformed = transformQuery(query, permissionRules, authData);
+  return transformed
+    ? {
+        query: transformed,
+        hash: hashOfAST(transformed),
+      }
+    : {
+        query: undefined,
+        hash: undefined,
+      };
+}
+
+/**
+ * For a given AST, apply the read-auth rules and bind static auth data.
  */
 export function transformQuery(
   query: AST,
-  auth: AuthorizationConfig,
+  permissionRules: AuthorizationConfig,
+  authData: JWTPayload | undefined,
 ): AST | undefined {
-  const rowSelectRules = auth[query.table]?.row?.select;
+  const queryWithPermissions = transformQueryInternal(query, permissionRules);
+  return queryWithPermissions !== undefined
+    ? bindStaticParameters(queryWithPermissions, {
+        authData: authData as Record<string, JSONValue>,
+      })
+    : undefined;
+}
+
+function transformQueryInternal(
+  query: AST,
+  permissionRules: AuthorizationConfig,
+): AST | undefined {
+  const rowSelectRules = permissionRules[query.table]?.row?.select;
 
   if (rowSelectRules && rowSelectRules.length === 0) {
     // The table cannot be read, ever. Nuke the query since
@@ -18,7 +69,7 @@ export function transformQuery(
   }
 
   const updatedWhere = addRulesToWhere(
-    query.where ? augmentCondition(query.where, auth) : undefined,
+    query.where ? transformCondition(query.where, permissionRules) : undefined,
     rowSelectRules,
   );
   return {
@@ -26,7 +77,7 @@ export function transformQuery(
     where: updatedWhere ? dnf(updatedWhere) : undefined,
     related: query.related
       ?.map(sq => {
-        const subquery = transformQuery(sq.subquery, auth);
+        const subquery = transformQueryInternal(sq.subquery, permissionRules);
         if (subquery) {
           return {
             ...sq,
@@ -65,7 +116,7 @@ function addRulesToWhere(
 // Not applying read policies to subqueries in the where position
 // would allow users to infer the existence of rows, and their contents,
 // that they cannot read.
-function augmentCondition(
+function transformCondition(
   cond: Condition,
   auth: AuthorizationConfig,
 ): Condition {
@@ -76,10 +127,10 @@ function augmentCondition(
     case 'or':
       return {
         ...cond,
-        conditions: cond.conditions.map(c => augmentCondition(c, auth)),
+        conditions: cond.conditions.map(c => transformCondition(c, auth)),
       };
     case 'correlatedSubquery': {
-      const query = transformQuery(cond.related.subquery, auth);
+      const query = transformQueryInternal(cond.related.subquery, auth);
       const replacement = query
         ? {
             ...cond,
