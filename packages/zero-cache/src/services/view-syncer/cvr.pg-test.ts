@@ -1229,6 +1229,7 @@ describe('view-syncer/cvr', () => {
       lc,
       [{id: 'oneHash', transformationHash: 'serverOneHash'}],
       [],
+      [],
     );
     expect(newVersion).toEqual({stateVersion: '1aa', minorVersion: 1});
     expect(queryPatches).toMatchInlineSnapshot(`
@@ -1689,6 +1690,7 @@ describe('view-syncer/cvr', () => {
       lc,
       [{id: 'oneHash', transformationHash: 'serverTwoHash'}],
       [],
+      [],
     );
     expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
     expect(queryPatches).toHaveLength(0);
@@ -2125,6 +2127,7 @@ describe('view-syncer/cvr', () => {
         {id: 'oneHash', transformationHash: 'updatedServerOneHash'},
         {id: 'twoHash', transformationHash: 'updatedServerTwoHash'},
       ],
+      [],
       [],
     );
     expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
@@ -2612,6 +2615,7 @@ describe('view-syncer/cvr', () => {
       lc,
       [],
       ['oneHash'],
+      [],
     );
     expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
     expect(queryPatches).toMatchInlineSnapshot(`
@@ -3037,6 +3041,7 @@ describe('view-syncer/cvr', () => {
         {id: 'oneHash', transformationHash: 'serverOneHash'},
         {id: 'twoHash', transformationHash: 'serverTwoHash'},
       ],
+      [],
       [],
     );
     expect(newVersion).toEqual({stateVersion: '1ba'});

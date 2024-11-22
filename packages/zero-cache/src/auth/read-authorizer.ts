@@ -6,6 +6,15 @@ import {bindStaticParameters} from '../../../zql/src/builder/builder.js';
 import {dnf} from '../../../zql/src/query/dnf.js';
 import type {JSONValue} from '../../../shared/src/json.js';
 
+export type TransformedAndHashed =
+  | {
+      query: AST;
+      hash: string;
+    }
+  | {
+      query: undefined;
+      hash: undefined;
+    };
 /**
  * Adds permission rules to the given query so it only returns rows that the
  * user is allowed to read.
@@ -19,15 +28,7 @@ export function transformAndHashQuery(
   query: AST,
   permissionRules: AuthorizationConfig,
   authData: JWTPayload | undefined,
-):
-  | {
-      query: AST;
-      hash: string;
-    }
-  | {
-      query: undefined;
-      hash: undefined;
-    } {
+): TransformedAndHashed {
   const transformed = transformQuery(query, permissionRules, authData);
   return transformed
     ? {

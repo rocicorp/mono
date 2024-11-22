@@ -86,6 +86,7 @@ describe('view-syncer/service', () => {
     wsID: 'ws1',
     baseCookie: null,
     schemaVersion: 2,
+    tokenData: undefined,
   };
   const ON_FAILURE = (e: unknown) => {
     throw e;
@@ -178,6 +179,7 @@ describe('view-syncer/service', () => {
       ),
       stateChanges,
       drainCoordinator,
+      {},
     );
     viewSyncerDone = vs.run();
   });
@@ -1838,6 +1840,7 @@ describe('view-syncer/service', () => {
         wsID: '9382',
         baseCookie: preAdvancement.cookie,
         schemaVersion: 2,
+        tokenData: undefined,
       },
       [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
     );
