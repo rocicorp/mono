@@ -31,6 +31,10 @@ export const cvrVersionSchema = v.object({
 
 export type CVRVersion = v.Infer<typeof cvrVersionSchema>;
 
+export const EMPTY_CVR_VERSION: CVRVersion = {
+  stateVersion: versionToLexi(0),
+} as const;
+
 export function oneAfter(v: NullableCVRVersion): CVRVersion {
   return v === null
     ? {stateVersion: versionToLexi(0)}

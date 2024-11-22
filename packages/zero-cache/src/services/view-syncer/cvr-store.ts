@@ -10,7 +10,6 @@ import {
 import {must} from '../../../../shared/src/must.js';
 import {astSchema} from '../../../../zero-protocol/src/ast.js';
 import type {JSONValue} from '../../types/bigint-json.js';
-import {versionToLexi} from '../../types/lexi-version.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import {rowIDHash} from '../../types/row-key.js';
 import type {Patch, PatchToVersion} from './client-handler.js';
@@ -29,6 +28,7 @@ import {
   type ClientRecord,
   cmpVersions,
   type CVRVersion,
+  EMPTY_CVR_VERSION,
   type InternalQueryRecord,
   type NullableCVRVersion,
   type QueryPatch,
@@ -161,7 +161,7 @@ export class CVRStore {
     const id = this.#id;
     const cvr: CVR = {
       id,
-      version: {stateVersion: versionToLexi(0)},
+      version: EMPTY_CVR_VERSION,
       lastActive: 0,
       replicaVersion: null,
       clients: {},
@@ -500,7 +500,7 @@ export class CVRStore {
       this.#id
     }`.execute(); // Note: execute() immediately to send the query before others.
     const currVersion =
-      result.length === 0 ? versionToLexi(0) : result[0].version;
+      result.length === 0 ? EMPTY_CVR_VERSION.stateVersion : result[0].version;
     if (currVersion !== expected) {
       throw new ConcurrentModificationException(expected, currVersion);
     }
