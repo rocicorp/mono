@@ -8,8 +8,11 @@ import {
   type ReadonlyJSONValue,
 } from '../../../../shared/src/json.js';
 import {must} from '../../../../shared/src/must.js';
+import {sleep} from '../../../../shared/src/sleep.js';
 import {astSchema} from '../../../../zero-protocol/src/ast.js';
+import {ErrorKind} from '../../../../zero-protocol/src/error.js';
 import type {JSONValue} from '../../types/bigint-json.js';
+import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import {rowIDHash} from '../../types/row-key.js';
 import type {Patch, PatchToVersion} from './client-handler.js';
@@ -141,12 +144,21 @@ class RowRecordCache {
 
   executeRowUpdates(
     tx: PostgresTransaction,
+    version: CVRVersion,
     rowRecordsToFlush: RowRecord[],
   ): PendingQuery<Row[]>[] {
     const rowRecordRows = rowRecordsToFlush.map(r =>
       rowRecordToRowsRow(this.#cvrID, r),
     );
-    const pending: PendingQuery<Row[]>[] = [];
+    const rowsVersion = {
+      clientGroupID: this.#cvrID,
+      version: versionString(version),
+    };
+    const pending: PendingQuery<Row[]>[] = [
+      tx`INSERT INTO cvr."rowsVersion" ${tx(rowsVersion)}
+           ON CONFLICT ("clientGroupID") 
+           DO UPDATE SET ${tx(rowsVersion)}`.execute(),
+    ];
     let i = 0;
     while (i < rowRecordRows.length) {
       pending.push(
@@ -196,6 +208,16 @@ function asQuery(row: QueryRow): QueryRecord {
       } satisfies ClientQueryRecord);
 }
 
+// The time to wait between load attempts.
+const LOAD_ATTEMPT_INTERVAL_MS = 500;
+// The maximum number of load() attempts if the rowsVersion is behind.
+// This currently results in a maximum catchup time of ~5 seconds, after
+// which we give up and consider the CVR invalid.
+//
+// TODO: Make this configurable with something like --max-catchup-wait-ms,
+//       as it is technically application specific.
+const MAX_LOAD_ATTEMPTS = 10;
+
 export class CVRStore {
   readonly #lc: LogContext;
   readonly #id: string;
@@ -208,15 +230,50 @@ export class CVRStore {
     rowIDHash,
   );
   readonly #rowCache: RowRecordCache;
+  readonly #loadAttemptIntervalMs: number;
+  readonly #maxLoadAttempts: number;
 
-  constructor(lc: LogContext, db: PostgresDB, cvrID: string) {
+  constructor(
+    lc: LogContext,
+    db: PostgresDB,
+    cvrID: string,
+    loadAttemptIntervalMs = LOAD_ATTEMPT_INTERVAL_MS,
+    maxLoadAttempts = MAX_LOAD_ATTEMPTS,
+  ) {
     this.#lc = lc;
     this.#db = db;
     this.#id = cvrID;
     this.#rowCache = new RowRecordCache(db, cvrID);
+    this.#loadAttemptIntervalMs = loadAttemptIntervalMs;
+    this.#maxLoadAttempts = maxLoadAttempts;
   }
 
   async load(): Promise<CVR> {
+    let err: RowsVersionBehindError | undefined;
+    for (let i = 0; i < this.#maxLoadAttempts; i++) {
+      if (i > 0) {
+        await sleep(this.#loadAttemptIntervalMs);
+      }
+      try {
+        return await this.#load();
+      } catch (e) {
+        if (e instanceof RowsVersionBehindError) {
+          err = e;
+          this.#lc.info?.(`attempt ${i + 1}: ${String(e)}`);
+          continue;
+        }
+        throw e;
+      }
+    }
+    assert(err);
+    throw new ErrorForClient([
+      'error',
+      ErrorKind.ClientNotFound,
+      `max attempts exceeded waiting for CVR@${err.cvrVersion} to catch up from ${err.rowsVersion}`,
+    ]);
+  }
+
+  async #load(): Promise<CVR> {
     const start = Date.now();
 
     const id = this.#id;
@@ -232,8 +289,12 @@ export class CVRStore {
     const [instance, clientsRows, queryRows, desiresRows] =
       await this.#db.begin(tx => [
         tx<
-          Pick<InstancesRow, 'version' | 'lastActive' | 'replicaVersion'>[]
-        >`SELECT "version", "lastActive", "replicaVersion" FROM cvr.instances WHERE "clientGroupID" = ${id}`,
+          (Omit<InstancesRow, 'clientGroupID'> & {rowsVersion: string | null})[]
+        >`SELECT cvr."version", "lastActive", "replicaVersion", rows."version" as "rowsVersion"
+            FROM cvr.instances AS cvr
+            LEFT JOIN cvr."rowsVersion" AS rows 
+            ON cvr."clientGroupID" = rows."clientGroupID"
+            WHERE cvr."clientGroupID" = ${id}`,
         tx<
           Pick<ClientsRow, 'clientID' | 'patchVersion'>[]
         >`SELECT "clientID", "patchVersion" FROM cvr.clients WHERE "clientGroupID" = ${id}`,
@@ -247,7 +308,13 @@ export class CVRStore {
 
     if (instance.length !== 0) {
       assert(instance.length === 1);
-      const {version, lastActive, replicaVersion} = instance[0];
+      const {version, lastActive, replicaVersion, rowsVersion} = instance[0];
+      if (version !== (rowsVersion ?? EMPTY_CVR_VERSION.stateVersion)) {
+        // TODO: Add ownership / takeover logic here to bound the time it
+        //       takes to catch up. Otherwise, the current owner can continue
+        //       updating the cvr and the rows can be behind indefinitely.
+        throw new RowsVersionBehindError(version, rowsVersion);
+      }
       cvr.version = versionFromString(version);
       cvr.lastActive = lastActive;
       cvr.replicaVersion = replicaVersion;
@@ -546,7 +613,10 @@ export class CVRStore {
     }
   }
 
-  async #flush(expectedCurrentVersion: CVRVersion): Promise<CVRFlushStats> {
+  async #flush(
+    expectedCurrentVersion: CVRVersion,
+    newVersion: CVRVersion,
+  ): Promise<CVRFlushStats> {
     const stats: CVRFlushStats = {
       instances: 0,
       queries: 0,
@@ -576,13 +646,6 @@ export class CVRStore {
         this.#abortIfNotVersion(tx, expectedCurrentVersion),
       ];
 
-      const rowUpdates = this.#rowCache.executeRowUpdates(
-        tx,
-        rowRecordsToFlush,
-      );
-      pipelined.push(...rowUpdates);
-      stats.statements += rowUpdates.length;
-
       for (const write of this.#writes) {
         stats.instances += write.stats.instances ?? 0;
         stats.queries += write.stats.queries ?? 0;
@@ -593,6 +656,14 @@ export class CVRStore {
         stats.statements++;
       }
 
+      const rowUpdates = this.#rowCache.executeRowUpdates(
+        tx,
+        newVersion,
+        rowRecordsToFlush,
+      );
+      pipelined.push(...rowUpdates);
+      stats.statements += rowUpdates.length;
+
       // Make sure Errors thrown by pipelined statements
       // are propagated up the stack.
       return Promise.all(pipelined);
@@ -601,9 +672,12 @@ export class CVRStore {
     return stats;
   }
 
-  async flush(expectedCurrentVersion: CVRVersion): Promise<CVRFlushStats> {
+  async flush(
+    expectedCurrentVersion: CVRVersion,
+    newVersion: CVRVersion,
+  ): Promise<CVRFlushStats> {
     try {
-      return await this.#flush(expectedCurrentVersion);
+      return await this.#flush(expectedCurrentVersion, newVersion);
     } catch (e) {
       // Clear cached state if an error (e.g. ConcurrentModificationException) is encountered.
       this.#rowCache.clear();
@@ -627,5 +701,17 @@ export class ConcurrentModificationException extends Error {
     super(
       `CVR has been concurrently modified. Expected ${expectedVersion}, got ${actualVersion}`,
     );
+  }
+}
+
+export class RowsVersionBehindError extends Error {
+  readonly name = 'RowsVersionBehindError';
+  readonly cvrVersion: string;
+  readonly rowsVersion: string | null;
+
+  constructor(cvrVersion: string, rowsVersion: string | null) {
+    super(`rowsVersion (${rowsVersion}) is behind CVR ${cvrVersion}`);
+    this.cvrVersion = cvrVersion;
+    this.rowsVersion = rowsVersion;
   }
 }

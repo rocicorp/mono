@@ -22,6 +22,7 @@ import {
   type InstancesRow,
   type QueriesRow,
   type RowsRow,
+  type RowsVersionRow,
   setupCVRTables,
 } from './schema/cvr.js';
 import type {CVRVersion, RowID} from './schema/types.js';
@@ -35,6 +36,7 @@ describe('view-syncer/cvr', () => {
     queries: QueriesRow[];
     desires: DesiresRow[];
     rows: RowsRow[];
+    rowsVersion?: RowsVersionRow[];
   };
 
   function setInitialState(
@@ -42,6 +44,16 @@ describe('view-syncer/cvr', () => {
     state: Partial<DBState>,
   ): Promise<void> {
     return db.begin(async tx => {
+      const {instances, rowsVersion} = state;
+      if (instances && !rowsVersion) {
+        state = {
+          ...state,
+          rowsVersion: instances.map(({clientGroupID, version}) => ({
+            clientGroupID,
+            version,
+          })),
+        };
+      }
       for (const [table, rows] of Object.entries(state)) {
         for (const row of rows) {
           await tx`INSERT INTO ${tx('cvr.' + table)} ${tx(row)}`;
@@ -302,14 +314,16 @@ describe('view-syncer/cvr', () => {
       lc,
       Date.UTC(2024, 3, 24),
     );
-    expect(stats).toEqual({
-      instances: 1,
-      queries: 0,
-      desires: 0,
-      clients: 0,
-      rows: 0,
-      statements: 1,
-    });
+    expect(stats).toMatchInlineSnapshot(`
+      {
+        "clients": 0,
+        "desires": 0,
+        "instances": 1,
+        "queries": 0,
+        "rows": 0,
+        "statements": 2,
+      }
+    `);
 
     expect(cvr).toEqual({
       id: 'abc123',
@@ -637,7 +651,7 @@ describe('view-syncer/cvr', () => {
         "instances": 2,
         "queries": 7,
         "rows": 0,
-        "statements": 19,
+        "statements": 20,
       }
     `);
     expect(updated).toEqual({
@@ -959,14 +973,17 @@ describe('view-syncer/cvr', () => {
       lc,
       Date.UTC(2024, 3, 23, 1),
     );
-    expect(stats).toEqual({
-      instances: 1,
-      queries: 0,
-      desires: 0,
-      clients: 0,
-      rows: 0,
-      statements: 1,
-    });
+    expect(stats).toMatchInlineSnapshot(`
+      {
+        "clients": 0,
+        "desires": 0,
+        "instances": 1,
+        "queries": 0,
+        "rows": 0,
+        "statements": 2,
+      }
+    `);
+
     expect(updated).toEqual({
       ...cvr,
       lastActive: 1713834000000,
@@ -1247,14 +1264,16 @@ describe('view-syncer/cvr', () => {
       lc,
       Date.UTC(2024, 3, 23, 1),
     );
-    expect(stats).toEqual({
-      instances: 2,
-      queries: 1,
-      desires: 0,
-      clients: 0,
-      rows: 3,
-      statements: 4,
-    });
+    expect(stats).toMatchInlineSnapshot(`
+      {
+        "clients": 0,
+        "desires": 0,
+        "instances": 2,
+        "queries": 1,
+        "rows": 3,
+        "statements": 5,
+      }
+    `);
 
     expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
       .toMatchInlineSnapshot(`
@@ -1653,14 +1672,16 @@ describe('view-syncer/cvr', () => {
       lc,
       Date.UTC(2024, 3, 23, 1),
     );
-    expect(stats).toEqual({
-      instances: 2,
-      queries: 1,
-      desires: 0,
-      clients: 0,
-      rows: 2,
-      statements: 4,
-    });
+    expect(stats).toMatchInlineSnapshot(`
+      {
+        "clients": 0,
+        "desires": 0,
+        "instances": 2,
+        "queries": 1,
+        "rows": 2,
+        "statements": 5,
+      }
+    `);
 
     expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
       .toMatchInlineSnapshot(`
@@ -2108,14 +2129,16 @@ describe('view-syncer/cvr', () => {
       lc,
       Date.UTC(2024, 3, 23, 1),
     );
-    expect(stats).toEqual({
-      instances: 2,
-      queries: 2,
-      desires: 0,
-      clients: 0,
-      rows: 2,
-      statements: 5,
-    });
+    expect(stats).toMatchInlineSnapshot(`
+      {
+        "clients": 0,
+        "desires": 0,
+        "instances": 2,
+        "queries": 2,
+        "rows": 2,
+        "statements": 6,
+      }
+    `);
 
     expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
       .toMatchInlineSnapshot(`
@@ -2521,14 +2544,16 @@ describe('view-syncer/cvr', () => {
       lc,
       Date.UTC(2024, 3, 23, 1),
     );
-    expect(stats).toEqual({
-      instances: 2,
-      queries: 1,
-      desires: 0,
-      clients: 0,
-      rows: 2,
-      statements: 4,
-    });
+    expect(stats).toMatchInlineSnapshot(`
+      {
+        "clients": 0,
+        "desires": 0,
+        "instances": 2,
+        "queries": 1,
+        "rows": 2,
+        "statements": 5,
+      }
+    `);
 
     expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
       .toMatchInlineSnapshot(`
@@ -3002,14 +3027,16 @@ describe('view-syncer/cvr', () => {
       lc,
       Date.UTC(2024, 3, 23, 1),
     );
-    expect(stats).toEqual({
-      instances: 1,
-      queries: 0,
-      desires: 0,
-      clients: 0,
-      rows: 0,
-      statements: 1,
-    });
+    expect(stats).toMatchInlineSnapshot(`
+      {
+        "clients": 0,
+        "desires": 0,
+        "instances": 1,
+        "queries": 0,
+        "rows": 0,
+        "statements": 2,
+      }
+    `);
 
     expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
       .toMatchInlineSnapshot(`
@@ -3246,14 +3273,16 @@ describe('view-syncer/cvr', () => {
       lc,
       Date.UTC(2024, 3, 23, 1),
     );
-    expect(stats).toEqual({
-      instances: 2,
-      queries: 0,
-      desires: 0,
-      clients: 0,
-      rows: 1,
-      statements: 3,
-    });
+    expect(stats).toMatchInlineSnapshot(`
+      {
+        "clients": 0,
+        "desires": 0,
+        "instances": 2,
+        "queries": 0,
+        "rows": 1,
+        "statements": 4,
+      }
+    `);
 
     // Verify round tripping.
     const cvrStore2 = new CVRStore(lc, db, 'abc123');

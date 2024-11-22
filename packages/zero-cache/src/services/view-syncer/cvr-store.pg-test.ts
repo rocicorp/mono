@@ -1,5 +1,6 @@
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {beforeEach, describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
+import {sleep} from '../../../../shared/src/sleep.js';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {CVRStore} from './cvr-store.js';
@@ -20,6 +21,8 @@ describe('view-syncer/cvr-store', () => {
     await db.unsafe(`
     INSERT INTO cvr.instances("clientGroupID", version, "lastActive")
       VALUES('${CVR_ID}', '01', '2024-09-04');
+    INSERT INTO cvr."rowsVersion"("clientGroupID", version)
+      VALUES('${CVR_ID}', '01');
     INSERT INTO cvr.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
       VALUES('${CVR_ID}', '', 'issues', '{"id":"1"}', '01', '01', NULL);
     INSERT INTO cvr.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
@@ -47,7 +50,38 @@ describe('view-syncer/cvr-store', () => {
     INSERT INTO cvr.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
       VALUES('${CVR_ID}', '', 'issues', '{"id":"12"}', '01', '03', '{"foo":2,"bar":3}');
       `);
-    store = new CVRStore(lc, db, CVR_ID);
+    store = new CVRStore(lc, db, CVR_ID, 10, 5);
+  });
+
+  test('wait for row catchup', async () => {
+    // Simulate the CVR being ahead of the rows.
+    await db`UPDATE cvr.instances SET version = '02'`;
+
+    // start a CVR load.
+    const loading = store.load();
+
+    await sleep(1);
+
+    // Simulate catching up.
+    await db`
+    UPDATE cvr.instances SET version = '03:01';
+    UPDATE cvr."rowsVersion" SET version = '03:01';
+    `.simple();
+
+    const cvr = await loading;
+    expect(cvr.version).toEqual({
+      stateVersion: '03',
+      minorVersion: 1,
+    });
+  });
+
+  test('fail after max attempts if rows behind', async () => {
+    // Simulate the CVR being ahead of the rows.
+    await db`UPDATE cvr.instances SET version = '02'`;
+
+    await expect(store.load()).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: ["error","ClientNotFound","max attempts exceeded waiting for CVR@02 to catch up from 01"]]`,
+    );
   });
 
   async function catchupRows(

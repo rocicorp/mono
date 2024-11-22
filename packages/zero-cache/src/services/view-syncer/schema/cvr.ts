@@ -242,13 +242,40 @@ CREATE INDEX row_patch_version ON cvr.rows ("patchVersion");
 CREATE INDEX row_ref_counts ON cvr.rows USING GIN ("refCounts");
 `;
 
+/**
+ * The version of the data in the `cvr.rows` table. This may lag
+ * `version` in `cvr.instances` but eventually catches up, modulo
+ * exceptional circumstances like a server crash.
+ *
+ * The `rowsVersion` is tracked in a separate table (as opposed to
+ * a column in the `cvr.instances` table) so that general `cvr` updates
+ * and `row` updates can be executed independently without serialization
+ * conflicts.
+ */
+export const CREATE_CVR_ROWS_VERSION_TABLE = `
+CREATE TABLE cvr."rowsVersion" (
+  "clientGroupID" TEXT PRIMARY KEY,
+  "version"       TEXT NOT NULL,
+
+  CONSTRAINT fk_rows_version_client_group
+    FOREIGN KEY("clientGroupID")
+    REFERENCES cvr.instances("clientGroupID")
+);
+`;
+
+export type RowsVersionRow = {
+  clientGroupID: string;
+  version: string;
+};
+
 const CREATE_CVR_TABLES =
   CREATE_CVR_SCHEMA +
   CREATE_CVR_INSTANCES_TABLE +
   CREATE_CVR_CLIENTS_TABLE +
   CREATE_CVR_QUERIES_TABLE +
   CREATE_CVR_DESIRES_TABLE +
-  CREATE_CVR_ROWS_TABLE;
+  CREATE_CVR_ROWS_TABLE +
+  CREATE_CVR_ROWS_VERSION_TABLE;
 
 export async function setupCVRTables(
   lc: LogContext,
