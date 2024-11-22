@@ -8,7 +8,7 @@ import {
 import {must} from '../../../shared/src/must.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import type {Change} from './change.js';
-import type {Comparator} from './data.js';
+import type {Node, Comparator} from './data.js';
 import type {SourceSchema} from './schema.js';
 import type {Entry, EntryList, Format} from './view.js';
 
@@ -121,6 +121,8 @@ export function applyChange(
         assert(found, 'node does not exist');
         view.splice(pos, 1);
       }
+      // Needed to ensure cleanup of operator state is done.
+      expandNode(change.node);
       break;
     }
     case 'child': {
@@ -241,4 +243,11 @@ function makeEntryPreserveRelationships(
     result[relationship] = entry[relationship];
   }
   return result;
+}
+
+function expandNode(node: Node) {
+  Object.entries(node.relationships).map(([k, v]) => [
+    k,
+    [...v].map(expandNode),
+  ]);
 }
