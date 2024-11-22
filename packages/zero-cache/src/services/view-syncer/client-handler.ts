@@ -10,6 +10,7 @@ import {rowSchema} from '../../../../zero-protocol/src/data.js';
 import type {
   Downstream,
   PokePartBody,
+  PokeStartBody,
   RowPatchOp,
 } from '../../../../zero-protocol/src/mod.js';
 import {primaryKeyValueRecordSchema} from '../../../../zero-protocol/src/primary-key.js';
@@ -122,19 +123,21 @@ export class ClientHandler {
 
   startPoke(
     finalVersion: CVRVersion,
-    schemaVersions: SchemaVersions,
+    schemaVersions?: SchemaVersions, // absent for config-only pokes
   ): PokeHandler {
     const pokeID = versionToCookie(finalVersion);
     const lc = this.#lc.withContext('pokeID', pokeID);
 
-    const schemaVersionError = getErrorForClientIfSchemaVersionNotSupported(
-      this.#schemaVersion,
-      schemaVersions,
-    );
+    if (schemaVersions) {
+      const schemaVersionError = getErrorForClientIfSchemaVersionNotSupported(
+        this.#schemaVersion,
+        schemaVersions,
+      );
 
-    if (schemaVersionError) {
-      this.fail(schemaVersionError);
-      return NOOP;
+      if (schemaVersionError) {
+        this.fail(schemaVersionError);
+        return NOOP;
+      }
     }
 
     if (cmpVersions(this.#baseVersion, finalVersion) >= 0) {
@@ -146,10 +149,11 @@ export class ClientHandler {
     const cookie = versionToCookie(finalVersion);
     lc.info?.(`starting poke from ${baseCookie} to ${cookie}`);
 
-    this.#pokes.push([
-      'pokeStart',
-      {pokeID, baseCookie, cookie, schemaVersions},
-    ]);
+    const pokeStart: PokeStartBody = {pokeID, baseCookie, cookie};
+    if (schemaVersions) {
+      pokeStart.schemaVersions = schemaVersions;
+    }
+    this.#pokes.push(['pokeStart', pokeStart]);
 
     let body: PokePartBody | undefined;
     let partCount = 0;

@@ -153,10 +153,13 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     this.#shardID = shardID;
   }
 
-  #ensureClient(id: string): ClientRecord {
+  #ensureClient(id: string): {
+    client: ClientRecord;
+    patches?: PatchToVersion[];
+  } {
     let client = this._cvr.clients[id];
     if (client) {
-      return client;
+      return {client};
     }
     // Add the ClientRecord and PutPatch
     const newVersion = this._ensureNewVersion();
@@ -193,24 +196,28 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       this._cvr.queries[CLIENT_LMID_QUERY_ID] = lmidsQuery;
       this._cvrStore.putQuery(lmidsQuery);
     }
-    return client;
+    return {
+      client,
+      patches: [
+        {toVersion: newVersion, patch: {type: 'client', op: 'put', id}},
+      ],
+    };
   }
 
   putDesiredQueries(
     clientID: string,
     queries: {[id: string]: AST},
-  ): {id: string; ast: AST}[] {
-    const client = this.#ensureClient(clientID);
+  ): PatchToVersion[] {
+    const {client, patches = []} = this.#ensureClient(clientID);
     const current = new Set(client.desiredQueryIDs);
     const additional = new Set(Object.keys(queries));
     const needed = difference(additional, current);
     if (needed.size === 0) {
-      return [];
+      return patches;
     }
     const newVersion = this._ensureNewVersion();
     client.desiredQueryIDs = [...union(current, needed)].sort(compareUTF8);
 
-    const added: {id: string; ast: AST}[] = [];
     for (const id of needed) {
       const ast = queries[id];
       const query = this._cvr.queries[id] ?? {id, ast, desiredBy: {}};
@@ -218,21 +225,24 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
       query.desiredBy[clientID] = newVersion;
       this._cvr.queries[id] = query;
-      added.push({id, ast});
+      patches.push({
+        toVersion: newVersion,
+        patch: {type: 'query', op: 'put', id, ast, clientID},
+      });
 
       this._cvrStore.putQuery(query);
       this._cvrStore.insertDesiredQuery(newVersion, query, client, false);
     }
-    return added;
+    return patches;
   }
 
-  deleteDesiredQueries(clientID: string, queries: string[]) {
-    const client = this.#ensureClient(clientID);
+  deleteDesiredQueries(clientID: string, queries: string[]): PatchToVersion[] {
+    const {client, patches = []} = this.#ensureClient(clientID);
     const current = new Set(client.desiredQueryIDs);
     const unwanted = new Set(queries);
     const remove = intersection(unwanted, current);
     if (remove.size === 0) {
-      return;
+      return patches;
     }
     const newVersion = this._ensureNewVersion();
     client.desiredQueryIDs = [...difference(current, remove)].sort(compareUTF8);
@@ -248,12 +258,20 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       delete query.desiredBy[clientID];
       this._cvrStore.putQuery(query);
       this._cvrStore.insertDesiredQuery(newVersion, query, client, true);
+      patches.push({
+        toVersion: newVersion,
+        patch: {type: 'query', op: 'del', id, clientID},
+      });
     }
+    return patches;
   }
 
-  clearDesiredQueries(clientID: string) {
-    const client = this.#ensureClient(clientID);
-    this.deleteDesiredQueries(clientID, client.desiredQueryIDs);
+  clearDesiredQueries(clientID: string): PatchToVersion[] {
+    const {client, patches = []} = this.#ensureClient(clientID);
+    return [
+      ...patches,
+      ...this.deleteDesiredQueries(clientID, client.desiredQueryIDs),
+    ];
   }
 
   flush(lc: LogContext, lastActive = Date.now()) {

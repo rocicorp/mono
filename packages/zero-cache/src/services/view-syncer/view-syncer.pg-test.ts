@@ -336,20 +336,14 @@ describe('view-syncer/service', () => {
     const client = await connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
-
-    stateChanges.push({state: 'version-ready'});
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
       [
         [
           "pokeStart",
           {
             "baseCookie": null,
-            "cookie": "00:02",
-            "pokeID": "00:02",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
+            "cookie": "00:01",
+            "pokeID": "00:01",
           },
         ],
         [
@@ -395,6 +389,36 @@ describe('view-syncer/service', () => {
                 },
               ],
             },
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "00:01",
+          },
+        ],
+      ]
+    `);
+
+    stateChanges.push({state: 'version-ready'});
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "00:01",
+            "cookie": "00:02",
+            "pokeID": "00:02",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
             "gotQueriesPatch": [
               {
                 "ast": {
@@ -569,6 +593,83 @@ describe('view-syncer/service', () => {
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
       {op: 'put', hash: 'query-hash2', ast: ISSUES_QUERY2},
     ]);
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": null,
+            "cookie": "00:01",
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "clientsPatch": [
+              {
+                "clientID": "foo",
+                "op": "put",
+              },
+            ],
+            "desiredQueriesPatches": {
+              "foo": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": {
+                      "left": {
+                        "name": "id",
+                        "type": "column",
+                      },
+                      "op": "IN",
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                      "type": "simple",
+                    },
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                  },
+                  "hash": "query-hash2",
+                  "op": "put",
+                },
+              ],
+            },
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "00:01",
+          },
+        ],
+      ]
+    `);
 
     stateChanges.push({state: 'version-ready'});
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
@@ -576,7 +677,7 @@ describe('view-syncer/service', () => {
       [
         "pokeStart",
         {
-          "baseCookie": null,
+          "baseCookie": "00:01",
           "cookie": "00:02",
           "pokeID": "00:02",
           "schemaVersions": {
@@ -588,59 +689,6 @@ describe('view-syncer/service', () => {
       [
         "pokePart",
         {
-          "clientsPatch": [
-            {
-              "clientID": "foo",
-              "op": "put",
-            },
-          ],
-          "desiredQueriesPatches": {
-            "foo": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
-                "hash": "query-hash1",
-                "op": "put",
-              },
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                },
-                "hash": "query-hash2",
-                "op": "put",
-              },
-            ],
-          },
           "gotQueriesPatch": [
             {
               "ast": {
@@ -863,6 +911,70 @@ describe('view-syncer/service', () => {
     const client = await connect({...SYNC_CONTEXT, schemaVersion: 1}, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": null,
+            "cookie": "00:01",
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "clientsPatch": [
+              {
+                "clientID": "foo",
+                "op": "put",
+              },
+            ],
+            "desiredQueriesPatches": {
+              "foo": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": {
+                      "left": {
+                        "name": "id",
+                        "type": "column",
+                      },
+                      "op": "IN",
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                      "type": "simple",
+                    },
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+            },
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "00:01",
+          },
+        ],
+      ]
+    `);
     stateChanges.push({state: 'version-ready'});
 
     const dequeuePromise = client.dequeue();
@@ -907,17 +1019,99 @@ describe('view-syncer/service', () => {
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
       {op: 'put', hash: 'query-hash2', ast: ISSUES_QUERY2},
     ]);
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": null,
+            "cookie": "00:01",
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "clientsPatch": [
+              {
+                "clientID": "foo",
+                "op": "put",
+              },
+            ],
+            "desiredQueriesPatches": {
+              "foo": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": {
+                      "left": {
+                        "name": "id",
+                        "type": "column",
+                      },
+                      "op": "IN",
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                      "type": "simple",
+                    },
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                  },
+                  "hash": "query-hash2",
+                  "op": "put",
+                },
+              ],
+            },
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "00:01",
+          },
+        ],
+      ]
+    `);
 
     stateChanges.push({state: 'version-ready'});
-    expect((await nextPoke(client))[0]).toEqual([
-      'pokeStart',
-      {
-        baseCookie: null,
-        cookie: '00:02',
-        pokeID: '00:02',
-        schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
-      },
-    ]);
+    expect((await nextPoke(client))[0]).toMatchInlineSnapshot(`
+      [
+        "pokeStart",
+        {
+          "baseCookie": "00:01",
+          "cookie": "00:02",
+          "pokeID": "00:02",
+          "schemaVersions": {
+            "maxSupportedVersion": 3,
+            "minSupportedVersion": 2,
+          },
+        },
+      ]
+    `);
 
     replicator.processTransaction(
       '123',
@@ -1072,30 +1266,172 @@ describe('view-syncer/service', () => {
     const client1 = await connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
+    expect(await nextPoke(client1)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": null,
+            "cookie": "00:01",
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "clientsPatch": [
+              {
+                "clientID": "foo",
+                "op": "put",
+              },
+            ],
+            "desiredQueriesPatches": {
+              "foo": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": {
+                      "left": {
+                        "name": "id",
+                        "type": "column",
+                      },
+                      "op": "IN",
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                      "type": "simple",
+                    },
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+            },
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "00:01",
+          },
+        ],
+      ]
+    `);
+
+    // Note: client2 is behind, so it does not get an immediate update on connect.
+    //       It has to wait until a hydrate to catchup. However, client1 will get
+    //       updated about client2.
     const client2 = await connect(
       {...SYNC_CONTEXT, clientID: 'bar', schemaVersion: 3},
       [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
     );
+    expect(await nextPoke(client1)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "00:01",
+            "cookie": "00:02",
+            "pokeID": "00:02",
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "clientsPatch": [
+              {
+                "clientID": "bar",
+                "op": "put",
+              },
+            ],
+            "desiredQueriesPatches": {
+              "bar": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": {
+                      "left": {
+                        "name": "id",
+                        "type": "column",
+                      },
+                      "op": "IN",
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                      "type": "simple",
+                    },
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+            },
+            "pokeID": "00:02",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "00:02",
+          },
+        ],
+      ]
+    `);
 
     stateChanges.push({state: 'version-ready'});
-    expect((await nextPoke(client1))[0]).toEqual([
-      'pokeStart',
-      {
-        baseCookie: null,
-        cookie: '00:03',
-        pokeID: '00:03',
-        schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
-      },
-    ]);
-    expect((await nextPoke(client2))[0]).toEqual([
-      'pokeStart',
-      {
-        baseCookie: null,
-        cookie: '00:03',
-        pokeID: '00:03',
-        schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
-      },
-    ]);
+    expect((await nextPoke(client1))[0]).toMatchInlineSnapshot(`
+      [
+        "pokeStart",
+        {
+          "baseCookie": "00:02",
+          "cookie": "00:03",
+          "pokeID": "00:03",
+          "schemaVersions": {
+            "maxSupportedVersion": 3,
+            "minSupportedVersion": 2,
+          },
+        },
+      ]
+    `);
+    expect((await nextPoke(client2))[0]).toMatchInlineSnapshot(`
+      [
+        "pokeStart",
+        {
+          "baseCookie": null,
+          "cookie": "00:03",
+          "pokeID": "00:03",
+          "schemaVersions": {
+            "maxSupportedVersion": 3,
+            "minSupportedVersion": 2,
+          },
+        },
+      ]
+    `);
 
     replicator.processTransaction(
       '123',
@@ -1181,12 +1517,76 @@ describe('view-syncer/service', () => {
     const client = await connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": null,
+            "cookie": "00:01",
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "clientsPatch": [
+              {
+                "clientID": "foo",
+                "op": "put",
+              },
+            ],
+            "desiredQueriesPatches": {
+              "foo": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": {
+                      "left": {
+                        "name": "id",
+                        "type": "column",
+                      },
+                      "op": "IN",
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                      "type": "simple",
+                    },
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+            },
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "00:01",
+          },
+        ],
+      ]
+    `);
 
     stateChanges.push({state: 'version-ready'});
     expect((await nextPoke(client))[0]).toEqual([
       'pokeStart',
       {
-        baseCookie: null,
+        baseCookie: '00:01',
         cookie: '00:02',
         pokeID: '00:02',
         schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
@@ -1314,11 +1714,75 @@ describe('view-syncer/service', () => {
     const client1 = await connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
+    expect(await nextPoke(client1)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": null,
+            "cookie": "00:01",
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "clientsPatch": [
+              {
+                "clientID": "foo",
+                "op": "put",
+              },
+            ],
+            "desiredQueriesPatches": {
+              "foo": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": {
+                      "left": {
+                        "name": "id",
+                        "type": "column",
+                      },
+                      "op": "IN",
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                      "type": "simple",
+                    },
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+            },
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "00:01",
+          },
+        ],
+      ]
+    `);
 
     stateChanges.push({state: 'version-ready'});
     const preAdvancement = (await nextPoke(client1))[0][1] as PokeStartBody;
     expect(preAdvancement).toEqual({
-      baseCookie: null,
+      baseCookie: '00:01',
       cookie: '00:02',
       pokeID: '00:02',
       schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
@@ -1480,10 +1944,6 @@ describe('view-syncer/service', () => {
                             "baseCookie": "01",
                             "cookie": "01:01",
                             "pokeID": "01:01",
-                            "schemaVersions": {
-                              "maxSupportedVersion": 3,
-                              "minSupportedVersion": 2,
-                            },
                           },
                         ],
                         [

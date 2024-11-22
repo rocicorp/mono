@@ -6,7 +6,6 @@ import {assert, unreachable} from '../../../../shared/src/asserts.js';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.js';
 import {must} from '../../../../shared/src/must.js';
 import {difference} from '../../../../shared/src/set-utils.js';
-import type {AST} from '../../../../zero-protocol/src/ast.js';
 import {
   ErrorKind,
   type ChangeDesiredQueriesBody,
@@ -25,6 +24,7 @@ import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication-state.j
 import type {ActivityBasedService} from '../service.js';
 import {
   ClientHandler,
+  type PatchToVersion,
   type PokeHandler,
   type RowPatch,
 } from './client-handler.js';
@@ -39,6 +39,7 @@ import type {DrainCoordinator} from './drain-coordinator.js';
 import {PipelineDriver, type RowChange} from './pipeline-driver.js';
 import {
   cmpVersions,
+  EMPTY_CVR_VERSION,
   versionFromString,
   versionString,
   versionToCookie,
@@ -404,24 +405,45 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#shardID,
       );
 
-      const added: {id: string; ast: AST}[] = [];
+      const patches: PatchToVersion[] = [];
       for (const patch of desiredQueriesPatch) {
         switch (patch.op) {
           case 'put':
-            added.push(
+            patches.push(
               ...updater.putDesiredQueries(clientID, {[patch.hash]: patch.ast}),
             );
             break;
           case 'del':
-            updater.deleteDesiredQueries(clientID, [patch.hash]);
+            patches.push(
+              ...updater.deleteDesiredQueries(clientID, [patch.hash]),
+            );
             break;
           case 'clear':
-            updater.clearDesiredQueries(clientID);
+            patches.push(...updater.clearDesiredQueries(clientID));
             break;
         }
       }
 
       this.#cvr = (await updater.flush(lc)).cvr;
+
+      if (cmpVersions(cvr.version, this.#cvr.version) < 0) {
+        // Send pokes to catch up clients that are up to date.
+        // (Clients that are behind the cvr.version need to be caught up in
+        //  #syncQueryPipelineSet(), as row data may be needed for catchup)
+        const newCVR = this.#cvr;
+        const pokers = [...this.#clients.values()]
+          .filter(
+            c =>
+              // i.e. only clients that were caught up with the previous cvr
+              cmpVersions(c.version() ?? EMPTY_CVR_VERSION, cvr.version) === 0,
+          )
+          .map(c => c.startPoke(newCVR.version));
+        for (const patch of patches) {
+          pokers.forEach(poker => poker.addPatch(patch));
+        }
+        pokers.forEach(poker => poker.end());
+      }
+
       cvr = this.#cvr; // For #syncQueryPipelineSet().
     }
 

@@ -480,29 +480,150 @@ describe('view-syncer/cvr', () => {
     const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
 
     // This removes and adds desired queries to the existing fooClient.
-    updater.deleteDesiredQueries('fooClient', ['oneHash', 'twoHash']);
+    expect(updater.deleteDesiredQueries('fooClient', ['oneHash', 'twoHash']))
+      .toMatchInlineSnapshot(`
+        [
+          {
+            "patch": {
+              "clientID": "fooClient",
+              "id": "oneHash",
+              "op": "del",
+              "type": "query",
+            },
+            "toVersion": {
+              "minorVersion": 1,
+              "stateVersion": "1aa",
+            },
+          },
+        ]
+      `);
+
     expect(
       updater.putDesiredQueries('fooClient', {
         fourHash: {table: 'users'},
         threeHash: {table: 'comments'},
       }),
-    ).toEqual([
-      {id: 'fourHash', ast: {table: 'users'}},
-      {id: 'threeHash', ast: {table: 'comments'}},
-    ]);
+    ).toMatchInlineSnapshot(`
+        [
+          {
+            "patch": {
+              "ast": {
+                "table": "users",
+              },
+              "clientID": "fooClient",
+              "id": "fourHash",
+              "op": "put",
+              "type": "query",
+            },
+            "toVersion": {
+              "minorVersion": 1,
+              "stateVersion": "1aa",
+            },
+          },
+          {
+            "patch": {
+              "ast": {
+                "table": "comments",
+              },
+              "clientID": "fooClient",
+              "id": "threeHash",
+              "op": "put",
+              "type": "query",
+            },
+            "toVersion": {
+              "minorVersion": 1,
+              "stateVersion": "1aa",
+            },
+          },
+        ]
+      `);
+
     // This adds a new barClient with desired queries.
     expect(
       updater.putDesiredQueries('barClient', {
         oneHash: {table: 'issues'},
         threeHash: {table: 'comments'},
       }),
-    ).toEqual([
-      {id: 'oneHash', ast: {table: 'issues'}},
-      {id: 'threeHash', ast: {table: 'comments'}},
-    ]);
+    ).toMatchInlineSnapshot(`
+          [
+            {
+              "patch": {
+                "id": "barClient",
+                "op": "put",
+                "type": "client",
+              },
+              "toVersion": {
+                "minorVersion": 1,
+                "stateVersion": "1aa",
+              },
+            },
+            {
+              "patch": {
+                "ast": {
+                  "table": "issues",
+                },
+                "clientID": "barClient",
+                "id": "oneHash",
+                "op": "put",
+                "type": "query",
+              },
+              "toVersion": {
+                "minorVersion": 1,
+                "stateVersion": "1aa",
+              },
+            },
+            {
+              "patch": {
+                "ast": {
+                  "table": "comments",
+                },
+                "clientID": "barClient",
+                "id": "threeHash",
+                "op": "put",
+                "type": "query",
+              },
+              "toVersion": {
+                "minorVersion": 1,
+                "stateVersion": "1aa",
+              },
+            },
+          ]
+        `);
+
     // Adds a new client with no desired queries.
-    expect(updater.putDesiredQueries('bonkClient', {})).toEqual([]);
-    updater.clearDesiredQueries('dooClient');
+    expect(updater.putDesiredQueries('bonkClient', {})).toMatchInlineSnapshot(
+      `
+                [
+                  {
+                    "patch": {
+                      "id": "bonkClient",
+                      "op": "put",
+                      "type": "client",
+                    },
+                    "toVersion": {
+                      "minorVersion": 1,
+                      "stateVersion": "1aa",
+                    },
+                  },
+                ]
+              `,
+    );
+    expect(updater.clearDesiredQueries('dooClient')).toMatchInlineSnapshot(`
+                  [
+                    {
+                      "patch": {
+                        "clientID": "dooClient",
+                        "id": "oneHash",
+                        "op": "del",
+                        "type": "query",
+                      },
+                      "toVersion": {
+                        "minorVersion": 1,
+                        "stateVersion": "1aa",
+                      },
+                    },
+                  ]
+                `);
 
     const {cvr: updated, stats} = await updater.flush(
       lc,
@@ -757,7 +878,25 @@ describe('view-syncer/cvr', () => {
       updater2.putDesiredQueries('fooClient', {
         oneHash: {table: 'issues'},
       }),
-    ).toEqual([{id: 'oneHash', ast: {table: 'issues'}}]);
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "patch": {
+            "ast": {
+              "table": "issues",
+            },
+            "clientID": "fooClient",
+            "id": "oneHash",
+            "op": "put",
+            "type": "query",
+          },
+          "toVersion": {
+            "minorVersion": 2,
+            "stateVersion": "1aa",
+          },
+        },
+      ]
+    `);
 
     const {cvr: updated2} = await updater2.flush(lc, Date.UTC(2024, 3, 24, 1));
     expect(updated2.clients.fooClient.desiredQueryIDs).toContain('oneHash');
@@ -813,7 +952,7 @@ describe('view-syncer/cvr', () => {
     // Same desired query set. Nothing should change except last active time.
     expect(
       updater.putDesiredQueries('fooClient', {oneHash: {table: 'issues'}}),
-    ).toEqual([]);
+    ).toMatchInlineSnapshot(`[]`);
 
     // Same last active day (no index change), but different hour.
     const {cvr: updated, stats} = await updater.flush(
