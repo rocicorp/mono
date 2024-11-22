@@ -1,6 +1,6 @@
 {
   "name": "zqlite-zql-test",
-  "description": "zql tests against zql-lite TableSource",
+  "description": "zql tests against zqlite TableSource",
   "version": "0.0.0",
   "private": true,
   "type": "module",
