@@ -14,7 +14,7 @@ export const createSource: SourceFactory = (
   primaryKey: readonly [string, ...string[]],
 ): Source => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const {sourceFactory} = global as any;
+  const {sourceFactory} = globalThis as any;
   if (sourceFactory) {
     return sourceFactory(tableName, columns, primaryKey);
   }
