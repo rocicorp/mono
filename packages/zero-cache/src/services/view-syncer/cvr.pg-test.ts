@@ -509,14 +509,16 @@ describe('view-syncer/cvr', () => {
       Date.UTC(2024, 3, 24),
     );
 
-    expect(stats).toEqual({
-      instances: 2,
-      queries: 7,
-      desires: 8,
-      clients: 4,
-      rows: 0,
-      statements: 21,
-    });
+    expect(stats).toMatchInlineSnapshot(`
+      {
+        "clients": 4,
+        "desires": 6,
+        "instances": 2,
+        "queries": 7,
+        "rows": 0,
+        "statements": 19,
+      }
+    `);
     expect(updated).toEqual({
       id: 'abc123',
       version: {stateVersion: '1aa', minorVersion: 1}, // minorVersion bump

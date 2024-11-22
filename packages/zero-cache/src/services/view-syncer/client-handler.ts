@@ -122,19 +122,21 @@ export class ClientHandler {
 
   startPoke(
     finalVersion: CVRVersion,
-    schemaVersions: SchemaVersions,
+    schemaVersions?: SchemaVersions, // absent for config-only pokes.
   ): PokeHandler {
     const pokeID = versionToCookie(finalVersion);
     const lc = this.#lc.withContext('pokeID', pokeID);
 
-    const schemaVersionError = getErrorForClientIfSchemaVersionNotSupported(
-      this.#schemaVersion,
-      schemaVersions,
-    );
+    if (schemaVersions) {
+      const schemaVersionError = getErrorForClientIfSchemaVersionNotSupported(
+        this.#schemaVersion,
+        schemaVersions,
+      );
 
-    if (schemaVersionError) {
-      this.fail(schemaVersionError);
-      return NOOP;
+      if (schemaVersionError) {
+        this.fail(schemaVersionError);
+        return NOOP;
+      }
     }
 
     if (cmpVersions(this.#baseVersion, finalVersion) >= 0) {

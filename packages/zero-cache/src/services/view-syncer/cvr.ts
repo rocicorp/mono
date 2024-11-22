@@ -245,11 +245,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       }
       assertNotInternal(query);
 
-      // Delete the old put-desired-patch
-      const oldPutVersion = query.desiredBy[clientID];
       delete query.desiredBy[clientID];
-      this._cvrStore.delDesiredQuery(oldPutVersion, query, client);
-
       this._cvrStore.putQuery(query);
       this._cvrStore.insertDesiredQuery(newVersion, query, client, true);
     }
