@@ -6,8 +6,7 @@ import {
 import type {Schema} from '../../../zero-schema/src/schema.js';
 import {readFile} from 'node:fs/promises';
 import * as v from '../../../shared/src/valita.js';
-
-const ENV_VAR_PREFIX = 'ZERO_SCHEMA_';
+import type {ZeroConfig} from '../config/zero-config.js';
 
 let loadedSchema:
   | Promise<{
@@ -34,13 +33,11 @@ function parseAuthConfig(
       schema: config.schema as Schema,
     };
   } catch (e) {
-    throw new Error(
-      `Failed to parse authorization config from ${source}: ${e}`,
-    );
+    throw new Error(`Failed to parse schema config from ${source}: ${e}`);
   }
 }
 
-export function getSchema(): Promise<{
+export function getSchema(config: ZeroConfig): Promise<{
   schema: Schema;
   authorization: AuthorizationConfig;
 }> {
@@ -48,16 +45,18 @@ export function getSchema(): Promise<{
     return loadedSchema;
   }
 
-  const jsonConfig = process.env[`${ENV_VAR_PREFIX}JSON`];
-  const jsonConfigPath =
-    process.env[`${ENV_VAR_PREFIX}JSON_PATH`] || './zero-schema.json';
-
   loadedSchema = (async () => {
-    if (jsonConfig) {
-      return parseAuthConfig(jsonConfig, `${ENV_VAR_PREFIX}JSON`);
+    if (config.schema.json) {
+      console.log?.('Loading schema from JSON ENV');
+      return parseAuthConfig(config.schema.json, 'config.schema.json');
     }
-    const fileContent = await readFile(path.resolve(jsonConfigPath), 'utf-8');
-    return parseAuthConfig(fileContent, jsonConfigPath);
+    console.log?.('Loading schema from file: ', config.schema.file);
+
+    const fileContent = await readFile(
+      path.resolve(config.schema.file),
+      'utf-8',
+    );
+    return parseAuthConfig(fileContent, config.schema.file);
   })();
 
   return loadedSchema;

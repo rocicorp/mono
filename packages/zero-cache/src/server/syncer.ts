@@ -34,7 +34,7 @@ export default async function runWorker(
   const fileMode = v.parse(args[0], replicaFileModeSchema);
 
   const config = getZeroConfig(args.slice(1));
-  const {schema, authorization} = await getSchema();
+  const {schema, authorization} = await getSchema(config);
   assert(config.cvr.maxConnsPerWorker);
   assert(config.upstream.maxConnsPerWorker);
 

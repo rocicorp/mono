@@ -69,9 +69,7 @@ async function main() {
 
     await writeFile(config.output, JSON.stringify(output, undefined, 2));
   } catch (e) {
-    console.error(
-      `Failed to load zero schema from ${absoluteConfigPath}: ${e}`,
-    );
+    console.error(`Failed to load zero schema from ${absoluteConfigPath}:`, e);
     process.exit(1);
   }
 }
