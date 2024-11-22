@@ -20,7 +20,10 @@ import {
   type PrimaryKeyValue,
 } from '../../../zero-protocol/src/primary-key.js';
 import type {BuilderDelegate} from '../../../zql/src/builder/builder.js';
-import {buildPipeline} from '../../../zql/src/builder/builder.js';
+import {
+  bindStaticParameters,
+  buildPipeline,
+} from '../../../zql/src/builder/builder.js';
 import {Database} from '../../../zqlite/src/db.js';
 import {compile, sql} from '../../../zqlite/src/internal/sql.js';
 import {TableSource} from '../../../zqlite/src/table-source.js';
@@ -424,17 +427,18 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     rowQuery: Query<TableSchema>,
   ) {
     let rowQueryAst = (rowQuery as AuthQuery<TableSchema>).ast;
-    rowQueryAst = {
-      ...rowQueryAst,
-      where: updateWhere(rowQueryAst.where, policy),
-    };
+    rowQueryAst = bindStaticParameters(
+      {
+        ...rowQueryAst,
+        where: updateWhere(rowQueryAst.where, policy),
+      },
+      {
+        authData: authData as Record<string, JSONValue>,
+        preMutationRow: undefined,
+      },
+    );
 
-    const input = buildPipeline(rowQueryAst, this.#builderDelegate, {
-      authData: authData as Record<string, JSONValue>,
-      // TODO (mlaw): we need to resurrect `preMutationRow` and `postMutationRow`
-      // to allow writing rules to prevent mutation of a column.
-      preMutationRow: undefined,
-    });
+    const input = buildPipeline(rowQueryAst, this.#builderDelegate);
     try {
       const res = input.fetch({});
       for (const _ of res) {

@@ -76,16 +76,8 @@ export interface BuilderDelegate {
  * const sink = new MySink(input);
  * ```
  */
-export function buildPipeline(
-  ast: AST,
-  delegate: BuilderDelegate,
-  staticQueryParameters: StaticQueryParameters | undefined,
-): Input {
-  return buildPipelineInternal(
-    bindStaticParameters(ast, staticQueryParameters),
-    delegate,
-    staticQueryParameters,
-  );
+export function buildPipeline(ast: AST, delegate: BuilderDelegate): Input {
+  return buildPipelineInternal(ast, delegate);
 }
 
 export function bindStaticParameters(
@@ -155,7 +147,6 @@ function isParameter(value: ValuePosition): value is Parameter {
 function buildPipelineInternal(
   ast: AST,
   delegate: BuilderDelegate,
-  staticQueryParameters: StaticQueryParameters | undefined,
   partitionKey?: string | undefined,
 ): Input {
   const source = delegate.getSource(ast.table);
@@ -172,7 +163,7 @@ function buildPipelineInternal(
   }
 
   for (const csq of gatherCorrelatedSubqueryQueriesFromCondition(ast.where)) {
-    end = applyCorrelatedSubQuery(csq, delegate, staticQueryParameters, end);
+    end = applyCorrelatedSubQuery(csq, delegate, end);
   }
 
   if (ast.where) {
@@ -190,7 +181,7 @@ function buildPipelineInternal(
 
   if (ast.related) {
     for (const csq of ast.related) {
-      end = applyCorrelatedSubQuery(csq, delegate, staticQueryParameters, end);
+      end = applyCorrelatedSubQuery(csq, delegate, end);
     }
   }
 
@@ -259,14 +250,12 @@ function applySimpleCondition(
 function applyCorrelatedSubQuery(
   sq: CorrelatedSubquery,
   delegate: BuilderDelegate,
-  staticQueryParameters: StaticQueryParameters | undefined,
   end: Input,
 ) {
   assert(sq.subquery.alias, 'Subquery must have an alias');
   const child = buildPipelineInternal(
     sq.subquery,
     delegate,
-    staticQueryParameters,
     sq.correlation.childField,
   );
   end = new Join({
