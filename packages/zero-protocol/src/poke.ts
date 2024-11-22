@@ -36,10 +36,16 @@ export const pokeStartBodySchema = v.object({
   // able to send a base cookie with value `null` to match that state.
   baseCookie: nullableVersionSchema,
   cookie: versionSchema,
-  schemaVersions: v.object({
-    minSupportedVersion: v.number(),
-    maxSupportedVersion: v.number(),
-  }),
+  /**
+   * This field is always set if the poke contains a `rowsPatch`.
+   * It may be absent for patches that only update clients and queries.
+   */
+  schemaVersions: v
+    .object({
+      minSupportedVersion: v.number(),
+      maxSupportedVersion: v.number(),
+    })
+    .optional(),
   timestamp: v.number().optional(),
 });
 
