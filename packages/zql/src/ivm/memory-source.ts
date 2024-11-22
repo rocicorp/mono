@@ -256,12 +256,15 @@ export class MemorySource implements Source {
       }
     }
 
-    const matchesConstraint = req.constraint
-      ? (row: Row) => constraintMatchesRow(req.constraint!, row)
+    const {constraint} = req;
+    const matchesConstraint = constraint
+      ? (row: Row) => constraintMatchesRow(constraint, row)
       : (_: Row) => true;
 
-    const matchesConstraintAndFilters = (row: Row) =>
-      matchesConstraint(row) && (conn.filters?.predicate(row) ?? true);
+    const predicate = conn.filters?.predicate;
+    const matchesConstraintAndFilters = predicate
+      ? (row: Row) => matchesConstraint(row) && predicate(row)
+      : (row: Row) => matchesConstraint(row);
     const nextLowerKey = (row: Row | undefined) => {
       if (!row) {
         return undefined;
@@ -289,9 +292,7 @@ export class MemorySource implements Source {
         // There's no problem supporting startAt outside of constraints, but I
         // don't think we have a use case for this – if we see it, it's probably
         // a bug.
-        if (!matchesConstraint(startAt)) {
-          assert(false, 'Start row must match constraint');
-        }
+        assert(matchesConstraint(startAt), 'Start row must match constraint');
       }
       if (req.start!.basis === 'before') {
         startAt = nextLowerKey(startAt);

@@ -2747,3 +2747,409 @@ describe('edit assignee', () => {
     `);
   });
 });
+
+describe('joins with compound join keys', () => {
+  const sources: Sources = {
+    a: {
+      columns: {
+        id: {type: 'number'},
+        a1: {type: 'number'},
+        a2: {type: 'number'},
+        a3: {type: 'number'},
+      },
+      primaryKeys: ['id'],
+      rows: [
+        {id: 0, a1: 1, a2: 2, a3: 3},
+        {id: 1, a1: 4, a2: 5, a3: 6},
+      ],
+      sorts: [['id', 'asc']],
+    },
+    b: {
+      columns: {
+        id: {type: 'number'},
+        b1: {type: 'number'},
+        b2: {type: 'number'},
+        b3: {type: 'number'},
+      },
+      primaryKeys: ['id'],
+      rows: [
+        {id: 0, b1: 2, b2: 1, b3: 3},
+        {id: 1, b1: 5, b2: 4, b3: 6},
+      ],
+      sorts: [['id', 'asc']],
+    },
+  };
+
+  const joins: Joins = {
+    ab: {
+      parentSource: 'a',
+      parentKey: ['a1', 'a2'],
+      childSource: 'b',
+      childKey: ['b2', 'b1'], // not the same order as parentKey
+      relationshipName: 'ab',
+    },
+  };
+
+  const format: Format = {
+    singular: false,
+    relationships: {
+      ab: {
+        singular: false,
+        relationships: {},
+      },
+    },
+  };
+
+  test('add parent and child', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      joins,
+      pushes: [
+        [
+          'a',
+          {
+            type: 'add',
+            row: {id: 2, a1: 7, a2: 8, a3: 9},
+          },
+        ],
+        [
+          'b',
+          {
+            type: 'add',
+            row: {id: 2, b1: 8, b2: 7, b3: 9},
+          },
+        ],
+      ],
+      format,
+    });
+
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "a1": 1,
+          "a2": 2,
+          "a3": 3,
+          "ab": [
+            {
+              "b1": 2,
+              "b2": 1,
+              "b3": 3,
+              "id": 0,
+            },
+          ],
+          "id": 0,
+        },
+        {
+          "a1": 4,
+          "a2": 5,
+          "a3": 6,
+          "ab": [
+            {
+              "b1": 5,
+              "b2": 4,
+              "b3": 6,
+              "id": 1,
+            },
+          ],
+          "id": 1,
+        },
+        {
+          "a1": 7,
+          "a2": 8,
+          "a3": 9,
+          "ab": [
+            {
+              "b1": 8,
+              "b2": 7,
+              "b3": 9,
+              "id": 2,
+            },
+          ],
+          "id": 2,
+        },
+      ]
+    `);
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "a",
+          "push",
+          {
+            "row": {
+              "a1": 7,
+              "a2": 8,
+              "a3": 9,
+              "id": 2,
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "b",
+          "fetch",
+          {
+            "constraint": {
+              "b1": 8,
+              "b2": 7,
+            },
+          },
+        ],
+        [
+          "ab",
+          "push",
+          {
+            "row": {
+              "a1": 7,
+              "a2": 8,
+              "a3": 9,
+              "id": 2,
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "b",
+          "push",
+          {
+            "row": {
+              "b1": 8,
+              "b2": 7,
+              "b3": 9,
+              "id": 2,
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "a",
+          "fetch",
+          {
+            "constraint": {
+              "a1": 7,
+              "a2": 8,
+            },
+          },
+        ],
+        [
+          "ab",
+          "push",
+          {
+            "child": {
+              "row": {
+                "b1": 8,
+                "b2": 7,
+                "b3": 9,
+                "id": 2,
+              },
+              "type": "add",
+            },
+            "row": {
+              "a1": 7,
+              "a2": 8,
+              "a3": 9,
+              "id": 2,
+            },
+            "type": "child",
+          },
+        ],
+      ]
+    `);
+
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "node": {
+            "relationships": {
+              "ab": [],
+            },
+            "row": {
+              "a1": 7,
+              "a2": 8,
+              "a3": 9,
+              "id": 2,
+            },
+          },
+          "type": "add",
+        },
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "b1": 8,
+                  "b2": 7,
+                  "b3": 9,
+                  "id": 2,
+                },
+              },
+              "type": "add",
+            },
+            "relationshipName": "ab",
+          },
+          "row": {
+            "a1": 7,
+            "a2": 8,
+            "a3": 9,
+            "id": 2,
+          },
+          "type": "child",
+        },
+      ]
+    `);
+
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "ab": {
+          ""pKeySet",1,2,0,": true,
+          ""pKeySet",4,5,1,": true,
+          ""pKeySet",7,8,2,": true,
+        },
+      }
+    `);
+  });
+
+  test('edit child with moving it', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      joins,
+      pushes: [
+        [
+          'a',
+          {
+            type: 'edit',
+            oldRow: {id: 0, a1: 1, a2: 2, a3: 3},
+            row: {id: 0, a1: 1, a2: 2, a3: 33},
+          },
+        ],
+      ],
+      format,
+    });
+
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "a1": 1,
+          "a2": 2,
+          "a3": 33,
+          "ab": [
+            {
+              "b1": 2,
+              "b2": 1,
+              "b3": 3,
+              "id": 0,
+            },
+          ],
+          "id": 0,
+        },
+        {
+          "a1": 4,
+          "a2": 5,
+          "a3": 6,
+          "ab": [
+            {
+              "b1": 5,
+              "b2": 4,
+              "b3": 6,
+              "id": 1,
+            },
+          ],
+          "id": 1,
+        },
+      ]
+    `);
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "a",
+          "push",
+          {
+            "oldRow": {
+              "a1": 1,
+              "a2": 2,
+              "a3": 3,
+              "id": 0,
+            },
+            "row": {
+              "a1": 1,
+              "a2": 2,
+              "a3": 33,
+              "id": 0,
+            },
+            "type": "edit",
+          },
+        ],
+        [
+          "b",
+          "cleanup",
+          {
+            "constraint": {
+              "b1": 2,
+              "b2": 1,
+            },
+          },
+        ],
+        [
+          "b",
+          "fetch",
+          {
+            "constraint": {
+              "b1": 2,
+              "b2": 1,
+            },
+          },
+        ],
+        [
+          "ab",
+          "push",
+          {
+            "oldRow": {
+              "a1": 1,
+              "a2": 2,
+              "a3": 3,
+              "id": 0,
+            },
+            "row": {
+              "a1": 1,
+              "a2": 2,
+              "a3": 33,
+              "id": 0,
+            },
+            "type": "edit",
+          },
+        ],
+      ]
+    `);
+
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "oldRow": {
+            "a1": 1,
+            "a2": 2,
+            "a3": 3,
+            "id": 0,
+          },
+          "row": {
+            "a1": 1,
+            "a2": 2,
+            "a3": 33,
+            "id": 0,
+          },
+          "type": "edit",
+        },
+      ]
+    `);
+
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "ab": {
+          ""pKeySet",1,2,0,": true,
+          ""pKeySet",4,5,1,": true,
+        },
+      }
+    `);
+  });
+});

@@ -9,8 +9,8 @@ import {Catch, expandNode} from './catch.js';
 import type {Constraint} from './constraint.js';
 import type {Node} from './data.js';
 import type {FetchRequest, Input, Output, Start} from './operator.js';
-import {createSource} from './test/source-factory.js';
 import type {SourceChange} from './source.js';
+import {createSource} from './test/source-factory.js';
 
 function asNodes(rows: Row[]) {
   return rows.map(row => ({
@@ -114,6 +114,16 @@ test('fetch-with-constraint', () => {
   // doesn't exist.
   expect(out.fetch({constraint: {d: null}})).toEqual(asNodes([]));
   expect(out.fetch({constraint: {d: undefined}})).toEqual(asNodes([]));
+
+  expect(out.fetch({constraint: {b: true, c: 1}})).toEqual(
+    asNodes([{a: 3, b: true, c: 1, d: null}]),
+  );
+  expect(out.fetch({constraint: {b: true, c: 2}})).toEqual(
+    asNodes([{a: 1, b: true, c: 2, d: null}]),
+  );
+
+  // nulls are not equal to each other
+  expect(out.fetch({constraint: {b: true, d: null}})).toEqual([]);
 });
 
 test('fetch-start', () => {

@@ -1718,6 +1718,422 @@ suite('fetch one:many:one', () => {
   });
 });
 
+suite('compound join keys', () => {
+  const base = {
+    columns: [
+      {
+        id: {type: 'number'},
+        a1: {type: 'number'},
+        a2: {type: 'number'},
+        a3: {type: 'number'},
+      },
+      {
+        id: {type: 'number'},
+        b1: {type: 'number'},
+        b2: {type: 'number'},
+        b3: {type: 'number'},
+      },
+    ],
+    primaryKeys: [['id'], ['id']],
+    joins: [
+      {
+        parentKey: ['a1', 'a2'],
+        childKey: ['b2', 'b1'],
+        relationshipName: 'ab',
+      },
+    ],
+  } as const;
+
+  test('no data', () => {
+    const results = fetchTest({
+      ...base,
+      sources: [[], []],
+    });
+
+    expect(results.hydrate).toMatchInlineSnapshot(`[]`);
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
+      [
+        [
+          "0",
+          "fetch",
+          {},
+        ],
+      ]
+    `);
+    expect(results.storage).toMatchInlineSnapshot(`
+      [
+        {},
+      ]
+    `);
+  });
+
+  test('no parent', () => {
+    const results = fetchTest({
+      ...base,
+      sources: [[], [{id: 0, b1: 1, b2: 2, b3: 3}]],
+    });
+
+    expect(results.hydrate).toMatchInlineSnapshot(`[]`);
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
+      [
+        [
+          "0",
+          "fetch",
+          {},
+        ],
+      ]
+    `);
+    expect(results.storage).toMatchInlineSnapshot(`
+      [
+        {},
+      ]
+    `);
+  });
+
+  test('parent, no children', () => {
+    const results = fetchTest({
+      ...base,
+      sources: [[{id: 0, a1: 1, a2: 2, a3: 3}], []],
+    });
+
+    expect(results.hydrate).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {
+            "ab": [],
+          },
+          "row": {
+            "a1": 1,
+            "a2": 2,
+            "a3": 3,
+            "id": 0,
+          },
+        },
+      ]
+    `);
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
+      [
+        [
+          "0",
+          "fetch",
+          {},
+        ],
+        [
+          "1",
+          "fetch",
+          {
+            "constraint": {
+              "b1": 2,
+              "b2": 1,
+            },
+          },
+        ],
+      ]
+    `);
+    expect(results.storage).toMatchInlineSnapshot(`
+      [
+        {
+          ""pKeySet",1,2,0,": true,
+        },
+      ]
+    `);
+  });
+
+  test('one parent, one child', () => {
+    const results = fetchTest({
+      ...base,
+      sources: [[{id: 0, a1: 1, a2: 2, a3: 3}], [{id: 0, b1: 2, b2: 1, b3: 3}]],
+    });
+
+    expect(results.hydrate).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {
+            "ab": [
+              {
+                "relationships": {},
+                "row": {
+                  "b1": 2,
+                  "b2": 1,
+                  "b3": 3,
+                  "id": 0,
+                },
+              },
+            ],
+          },
+          "row": {
+            "a1": 1,
+            "a2": 2,
+            "a3": 3,
+            "id": 0,
+          },
+        },
+      ]
+    `);
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
+      [
+        [
+          "0",
+          "fetch",
+          {},
+        ],
+        [
+          "1",
+          "fetch",
+          {
+            "constraint": {
+              "b1": 2,
+              "b2": 1,
+            },
+          },
+        ],
+      ]
+    `);
+    expect(results.storage).toMatchInlineSnapshot(`
+      [
+        {
+          ""pKeySet",1,2,0,": true,
+        },
+      ]
+    `);
+  });
+
+  test('one parent, wrong child', () => {
+    const results = fetchTest({
+      ...base,
+      // join is on a1 = b2 and a2 = b1 so this will not match
+      sources: [[{id: 0, a1: 1, a2: 2, a3: 3}], [{id: 0, b1: 1, b2: 2, b3: 3}]],
+    });
+
+    expect(results.hydrate).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {
+            "ab": [],
+          },
+          "row": {
+            "a1": 1,
+            "a2": 2,
+            "a3": 3,
+            "id": 0,
+          },
+        },
+      ]
+    `);
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
+      [
+        [
+          "0",
+          "fetch",
+          {},
+        ],
+        [
+          "1",
+          "fetch",
+          {
+            "constraint": {
+              "b1": 2,
+              "b2": 1,
+            },
+          },
+        ],
+      ]
+    `);
+    expect(results.storage).toMatchInlineSnapshot(`
+      [
+        {
+          ""pKeySet",1,2,0,": true,
+        },
+      ]
+    `);
+  });
+
+  test('one parent, one child + one wrong child', () => {
+    const results = fetchTest({
+      ...base,
+      sources: [
+        [{id: 0, a1: 1, a2: 2, a3: 3}],
+        [
+          {id: 0, b1: 2, b2: 1, b3: 3},
+          {id: 1, b1: 4, b2: 5, b3: 6},
+        ],
+      ],
+    });
+
+    expect(results.hydrate).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {
+            "ab": [
+              {
+                "relationships": {},
+                "row": {
+                  "b1": 2,
+                  "b2": 1,
+                  "b3": 3,
+                  "id": 0,
+                },
+              },
+            ],
+          },
+          "row": {
+            "a1": 1,
+            "a2": 2,
+            "a3": 3,
+            "id": 0,
+          },
+        },
+      ]
+    `);
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
+      [
+        [
+          "0",
+          "fetch",
+          {},
+        ],
+        [
+          "1",
+          "fetch",
+          {
+            "constraint": {
+              "b1": 2,
+              "b2": 1,
+            },
+          },
+        ],
+      ]
+    `);
+    expect(results.storage).toMatchInlineSnapshot(`
+      [
+        {
+          ""pKeySet",1,2,0,": true,
+        },
+      ]
+    `);
+  });
+
+  test('two parents, each with two children', () => {
+    const results = fetchTest({
+      ...base,
+      sources: [
+        [
+          {id: 0, a1: 1, a2: 2, a3: 3},
+          {id: 1, a1: 4, a2: 5, a3: 6},
+        ],
+        [
+          {id: 0, b1: 2, b2: 1, b3: 3},
+          {id: 1, b1: 2, b2: 1, b3: 4},
+          {id: 2, b1: 5, b2: 4, b3: 6},
+          {id: 3, b1: 5, b2: 4, b3: 7},
+        ],
+      ],
+    });
+
+    expect(results.hydrate).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {
+            "ab": [
+              {
+                "relationships": {},
+                "row": {
+                  "b1": 2,
+                  "b2": 1,
+                  "b3": 3,
+                  "id": 0,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "b1": 2,
+                  "b2": 1,
+                  "b3": 4,
+                  "id": 1,
+                },
+              },
+            ],
+          },
+          "row": {
+            "a1": 1,
+            "a2": 2,
+            "a3": 3,
+            "id": 0,
+          },
+        },
+        {
+          "relationships": {
+            "ab": [
+              {
+                "relationships": {},
+                "row": {
+                  "b1": 5,
+                  "b2": 4,
+                  "b3": 6,
+                  "id": 2,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "b1": 5,
+                  "b2": 4,
+                  "b3": 7,
+                  "id": 3,
+                },
+              },
+            ],
+          },
+          "row": {
+            "a1": 4,
+            "a2": 5,
+            "a3": 6,
+            "id": 1,
+          },
+        },
+      ]
+    `);
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
+      [
+        [
+          "0",
+          "fetch",
+          {},
+        ],
+        [
+          "1",
+          "fetch",
+          {
+            "constraint": {
+              "b1": 2,
+              "b2": 1,
+            },
+          },
+        ],
+        [
+          "1",
+          "fetch",
+          {
+            "constraint": {
+              "b1": 5,
+              "b2": 4,
+            },
+          },
+        ],
+      ]
+    `);
+    expect(results.storage).toMatchInlineSnapshot(`
+      [
+        {
+          ""pKeySet",1,2,0,": true,
+          ""pKeySet",4,5,1,": true,
+        },
+      ]
+    `);
+  });
+});
+
 // Despite the name, this test runs the join through all three phases:
 // initial fetch, fetch, and cleanup.
 function fetchTest(t: FetchTest): FetchTestResults {
