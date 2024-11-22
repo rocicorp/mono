@@ -526,7 +526,7 @@ export class QueryImpl<
     const ast = this._completeAst();
     const removeServerQuery = this.#delegate.addServerQuery(ast);
 
-    const input = buildPipeline(ast, this.#delegate, undefined);
+    const input = buildPipeline(ast, this.#delegate);
     let removeCommitObserver: (() => void) | undefined;
 
     const onDestroy = () => {

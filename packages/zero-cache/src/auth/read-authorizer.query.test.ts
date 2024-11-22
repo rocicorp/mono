@@ -30,7 +30,10 @@ import {assert} from '../../../shared/src/asserts.js';
 import {transformQuery} from './read-authorizer.js';
 import type {Query, QueryType} from '../../../zql/src/query/query.js';
 import {Catch} from '../../../zql/src/ivm/catch.js';
-import {buildPipeline} from '../../../zql/src/builder/builder.js';
+import {
+  bindStaticParameters,
+  buildPipeline,
+} from '../../../zql/src/builder/builder.js';
 import type {Node} from '../../../zql/src/ivm/data.js';
 
 const schema = {
@@ -896,11 +899,14 @@ function runReadQueryWithPermissions(
   authData: AuthData,
   query: Query<TableSchema, QueryType>,
 ) {
-  const updatedAst = must(transformQuery(ast(query), permissions));
-  const pipeline = buildPipeline(updatedAst, queryDelegate, {
-    authData,
-    preMutationRow: undefined,
-  });
+  const updatedAst = bindStaticParameters(
+    must(transformQuery(ast(query), permissions)),
+    {
+      authData,
+      preMutationRow: undefined,
+    },
+  );
+  const pipeline = buildPipeline(updatedAst, queryDelegate);
   const out = new Catch(pipeline);
   return out.fetch({});
 }

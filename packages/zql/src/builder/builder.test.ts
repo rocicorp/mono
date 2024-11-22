@@ -68,7 +68,6 @@ test('source-only', () => {
         getSource,
         createStorage: () => new MemoryStorage(),
       },
-      undefined,
     ),
   );
 
@@ -115,7 +114,6 @@ test('filter', () => {
         getSource,
         createStorage: () => new MemoryStorage(),
       },
-      undefined,
     ),
   );
 
@@ -168,7 +166,6 @@ test('self-join', () => {
         getSource,
         createStorage: () => new MemoryStorage(),
       },
-      undefined,
     ),
   );
 
@@ -334,7 +331,6 @@ test('self-join edit', () => {
         getSource,
         createStorage: () => new MemoryStorage(),
       },
-      undefined,
     ),
   );
 
@@ -511,7 +507,6 @@ test('multi-join', () => {
         getSource,
         createStorage: () => new MemoryStorage(),
       },
-      undefined,
     ),
   );
 
@@ -623,7 +618,6 @@ test('join with limit', () => {
         getSource,
         createStorage: () => new MemoryStorage(),
       },
-      undefined,
     ),
   );
 
@@ -697,7 +691,6 @@ test('skip', () => {
         getSource,
         createStorage: () => new MemoryStorage(),
       },
-      undefined,
     ),
   );
 
@@ -765,7 +758,6 @@ test('exists junction', () => {
         getSource,
         createStorage: () => new MemoryStorage(),
       },
-      undefined,
     ),
   );
 
@@ -958,7 +950,6 @@ test('exists self join', () => {
         getSource,
         createStorage: () => new MemoryStorage(),
       },
-      undefined,
     ),
   );
 
@@ -1142,7 +1133,6 @@ test('not exists self join', () => {
         getSource,
         createStorage: () => new MemoryStorage(),
       },
-      undefined,
     ),
   );
 
@@ -1310,7 +1300,6 @@ test('empty or - nothing goes through', () => {
         getSource,
         createStorage: () => new MemoryStorage(),
       },
-      undefined,
     ),
   );
 
@@ -1344,7 +1333,6 @@ test('always false literal comparison - nothing goes through', () => {
         getSource,
         createStorage: () => new MemoryStorage(),
       },
-      undefined,
     ),
   );
 
@@ -1378,7 +1366,6 @@ test('always true literal comparison - everything goes through', () => {
         getSource,
         createStorage: () => new MemoryStorage(),
       },
-      undefined,
     ),
   );
 
