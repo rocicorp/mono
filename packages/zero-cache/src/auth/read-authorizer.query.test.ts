@@ -900,7 +900,7 @@ function runReadQueryWithPermissions(
   query: Query<TableSchema, QueryType>,
 ) {
   const updatedAst = bindStaticParameters(
-    must(transformQuery(ast(query), permissions)),
+    must(transformQuery(ast(query), permissions, authData)),
     {
       authData,
       preMutationRow: undefined,

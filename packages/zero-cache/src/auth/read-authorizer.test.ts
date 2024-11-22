@@ -89,9 +89,15 @@ const schema = createSchema({
 });
 
 type AuthData = {
+  sub: string;
   role: string;
 };
-const auth = must(
+
+const authData: AuthData = {
+  sub: '001',
+  role: 'user',
+};
+const permissionRules = must(
   await defineAuthorization<AuthData, typeof schema>(schema, () => ({
     unreadable: {
       row: {
@@ -116,7 +122,12 @@ describe('unreadable tables', () => {
     const query = newQuery(mockDelegate, schema.tables.unreadable);
     // If a top-level query tries to query a table that cannot be read,
     // that query is set to `undefined`.
-    expect(transformQuery(ast(query), auth)).toBe(undefined);
+    expect(transformQuery(ast(query), permissionRules, authData)).toBe(
+      undefined,
+    );
+    expect(transformQuery(ast(query), permissionRules, undefined)).toBe(
+      undefined,
+    );
   });
 
   test('nuke `related` queries', () => {
@@ -125,7 +136,36 @@ describe('unreadable tables', () => {
       .related('readable');
 
     // any related calls to unreadable tables are removed.
-    expect(transformQuery(ast(query), auth)).toMatchInlineSnapshot(`
+    expect(transformQuery(ast(query), permissionRules, authData))
+      .toMatchInlineSnapshot(`
+      {
+        "related": [
+          {
+            "correlation": {
+              "childField": "id",
+              "op": "=",
+              "parentField": "readableId",
+            },
+            "subquery": {
+              "alias": "readable",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "related": undefined,
+              "table": "readable",
+              "where": undefined,
+            },
+          },
+        ],
+        "table": "readable",
+        "where": undefined,
+      }
+    `);
+    expect(transformQuery(ast(query), permissionRules, undefined))
+      .toMatchInlineSnapshot(`
       {
         "related": [
           {
@@ -162,7 +202,67 @@ describe('unreadable tables', () => {
             q => q.related('readable', q => q.related('unreadable')),
           ),
         ),
-        auth,
+        permissionRules,
+        authData,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "related": [
+          {
+            "correlation": {
+              "childField": "id",
+              "op": "=",
+              "parentField": "readableId",
+            },
+            "subquery": {
+              "alias": "readable",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "related": [
+                {
+                  "correlation": {
+                    "childField": "id",
+                    "op": "=",
+                    "parentField": "readableId",
+                  },
+                  "subquery": {
+                    "alias": "readable",
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "related": [],
+                    "table": "readable",
+                    "where": undefined,
+                  },
+                },
+              ],
+              "table": "readable",
+              "where": undefined,
+            },
+          },
+        ],
+        "table": "readable",
+        "where": undefined,
+      }
+    `);
+
+    expect(
+      transformQuery(
+        ast(
+          newQuery(mockDelegate, schema.tables.readable).related(
+            'readable',
+            q => q.related('readable', q => q.related('unreadable')),
+          ),
+        ),
+        permissionRules,
+        undefined,
       ),
     ).toMatchInlineSnapshot(`
       {
@@ -218,7 +318,8 @@ describe('unreadable tables', () => {
         ast(
           newQuery(mockDelegate, schema.tables.readable).related('unreadable'),
         ),
-        auth,
+        permissionRules,
+        authData,
       ),
     ).toMatchInlineSnapshot(`
       {
@@ -235,7 +336,27 @@ describe('unreadable tables', () => {
     );
 
     // `unreadable` should be replaced by `false` condition.
-    expect(transformQuery(ast(query), auth)).toMatchInlineSnapshot(`
+    expect(transformQuery(ast(query), permissionRules, undefined))
+      .toMatchInlineSnapshot(`
+      {
+        "related": undefined,
+        "table": "readable",
+        "where": {
+          "left": {
+            "type": "literal",
+            "value": true,
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": false,
+          },
+          "type": "simple",
+        },
+      }
+    `);
+    expect(transformQuery(ast(query), permissionRules, authData))
+      .toMatchInlineSnapshot(`
       {
         "related": undefined,
         "table": "readable",
@@ -262,7 +383,36 @@ describe('unreadable tables', () => {
             ({not, exists}) => not(exists('unreadable')),
           ),
         ),
-        auth,
+        permissionRules,
+        authData,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "related": undefined,
+        "table": "readable",
+        "where": {
+          "left": {
+            "type": "literal",
+            "value": true,
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": true,
+          },
+          "type": "simple",
+        },
+      }
+    `);
+    expect(
+      transformQuery(
+        ast(
+          newQuery(mockDelegate, schema.tables.readable).where(
+            ({not, exists}) => not(exists('unreadable')),
+          ),
+        ),
+        permissionRules,
+        undefined,
       ),
     ).toMatchInlineSnapshot(`
       {
@@ -292,7 +442,60 @@ describe('unreadable tables', () => {
             q => q.whereExists('unreadable', q => q.where('id', '1')),
           ),
         ),
-        auth,
+        permissionRules,
+        authData,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "related": undefined,
+        "table": "readable",
+        "where": {
+          "op": "EXISTS",
+          "related": {
+            "correlation": {
+              "childField": "id",
+              "op": "=",
+              "parentField": "readableId",
+            },
+            "subquery": {
+              "alias": "zsubq_readable",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "related": undefined,
+              "table": "readable",
+              "where": {
+                "left": {
+                  "type": "literal",
+                  "value": true,
+                },
+                "op": "=",
+                "right": {
+                  "type": "literal",
+                  "value": false,
+                },
+                "type": "simple",
+              },
+            },
+          },
+          "type": "correlatedSubquery",
+        },
+      }
+    `);
+
+    expect(
+      transformQuery(
+        ast(
+          newQuery(mockDelegate, schema.tables.readable).whereExists(
+            'readable',
+            q => q.whereExists('unreadable', q => q.where('id', '1')),
+          ),
+        ),
+        permissionRules,
+        undefined,
       ),
     ).toMatchInlineSnapshot(`
       {
@@ -343,7 +546,65 @@ describe('unreadable tables', () => {
             .where(({not, exists}) => not(exists('unreadable')))
             .whereExists('readable'),
         ),
-        auth,
+        permissionRules,
+        authData,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "related": undefined,
+        "table": "readable",
+        "where": {
+          "conditions": [
+            {
+              "left": {
+                "type": "literal",
+                "value": true,
+              },
+              "op": "=",
+              "right": {
+                "type": "literal",
+                "value": true,
+              },
+              "type": "simple",
+            },
+            {
+              "op": "EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": "id",
+                  "op": "=",
+                  "parentField": "readableId",
+                },
+                "subquery": {
+                  "alias": "zsubq_readable",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "related": undefined,
+                  "table": "readable",
+                  "where": undefined,
+                },
+              },
+              "type": "correlatedSubquery",
+            },
+          ],
+          "type": "and",
+        },
+      }
+    `);
+
+    expect(
+      transformQuery(
+        ast(
+          newQuery(mockDelegate, schema.tables.readable)
+            .where(({not, exists}) => not(exists('unreadable')))
+            .whereExists('readable'),
+        ),
+        permissionRules,
+        undefined,
       ),
     ).toMatchInlineSnapshot(`
       {
@@ -395,33 +656,55 @@ describe('unreadable tables', () => {
 });
 
 describe('tables with no read policies', () => {
+  function checkWithAndWithoutAuthData(
+    cb: (authData: AuthData | undefined) => void,
+  ) {
+    cb(authData);
+    cb(undefined);
+  }
   test('top level query is unmodified', () => {
-    const query = newQuery(mockDelegate, schema.tables.readable);
-    expect(transformQuery(ast(query), auth)).toEqual(ast(query));
+    checkWithAndWithoutAuthData(authData => {
+      const query = newQuery(mockDelegate, schema.tables.readable);
+      expect(transformQuery(ast(query), permissionRules, authData)).toEqual(
+        ast(query),
+      );
+    });
   });
   test('related queries are unmodified', () => {
-    let query = newQuery(mockDelegate, schema.tables.readable).related(
-      'readable',
-    );
-    expect(transformQuery(ast(query), auth)).toEqual(ast(query));
+    checkWithAndWithoutAuthData(authData => {
+      let query = newQuery(mockDelegate, schema.tables.readable).related(
+        'readable',
+      );
+      expect(transformQuery(ast(query), permissionRules, authData)).toEqual(
+        ast(query),
+      );
 
-    query = newQuery(mockDelegate, schema.tables.readable).related(
-      'readable',
-      q => q.related('readable'),
-    );
-    expect(transformQuery(ast(query), auth)).toEqual(ast(query));
+      query = newQuery(mockDelegate, schema.tables.readable).related(
+        'readable',
+        q => q.related('readable'),
+      );
+      expect(transformQuery(ast(query), permissionRules, authData)).toEqual(
+        ast(query),
+      );
+    });
   });
   test('subqueries in conditions are unmodified', () => {
-    let query = newQuery(mockDelegate, schema.tables.readable).whereExists(
-      'readable',
-    );
-    expect(transformQuery(ast(query), auth)).toEqual(ast(query));
+    checkWithAndWithoutAuthData(authData => {
+      let query = newQuery(mockDelegate, schema.tables.readable).whereExists(
+        'readable',
+      );
+      expect(transformQuery(ast(query), permissionRules, authData)).toEqual(
+        ast(query),
+      );
 
-    query = newQuery(mockDelegate, schema.tables.readable).whereExists(
-      'readable',
-      q => q.whereExists('readable'),
-    );
-    expect(transformQuery(ast(query), auth)).toEqual(ast(query));
+      query = newQuery(mockDelegate, schema.tables.readable).whereExists(
+        'readable',
+        q => q.whereExists('readable'),
+      );
+      expect(transformQuery(ast(query), permissionRules, authData)).toEqual(
+        ast(query),
+      );
+    });
   });
 });
 
@@ -434,7 +717,8 @@ describe('admin readable', () => {
             .related('self1')
             .related('self2'),
         ),
-        auth,
+        permissionRules,
+        authData,
       ),
       // all levels of the query (root, self1, self2) should have the admin policy applied.
     ).toMatchInlineSnapshot(`
@@ -458,9 +742,8 @@ describe('admin readable', () => {
               "table": "adminReadable",
               "where": {
                 "left": {
-                  "anchor": "authData",
-                  "field": "role",
-                  "type": "static",
+                  "type": "literal",
+                  "value": "user",
                 },
                 "op": "=",
                 "right": {
@@ -489,9 +772,8 @@ describe('admin readable', () => {
               "table": "adminReadable",
               "where": {
                 "left": {
-                  "anchor": "authData",
-                  "field": "role",
-                  "type": "static",
+                  "type": "literal",
+                  "value": "user",
                 },
                 "op": "=",
                 "right": {
@@ -506,9 +788,8 @@ describe('admin readable', () => {
         "table": "adminReadable",
         "where": {
           "left": {
-            "anchor": "authData",
-            "field": "role",
-            "type": "static",
+            "type": "literal",
+            "value": "user",
           },
           "op": "=",
           "right": {
@@ -531,7 +812,8 @@ describe('admin readable', () => {
             )
             .where('id', '4'),
         ),
-        auth,
+        permissionRules,
+        authData,
       ),
     ).toMatchInlineSnapshot(`
       {
@@ -568,9 +850,8 @@ describe('admin readable', () => {
                   },
                   {
                     "left": {
-                      "anchor": "authData",
-                      "field": "role",
-                      "type": "static",
+                      "type": "literal",
+                      "value": "user",
                     },
                     "op": "=",
                     "right": {
@@ -631,9 +912,8 @@ describe('admin readable', () => {
                         },
                         {
                           "left": {
-                            "anchor": "authData",
-                            "field": "role",
-                            "type": "static",
+                            "type": "literal",
+                            "value": "user",
                           },
                           "op": "=",
                           "right": {
@@ -665,9 +945,8 @@ describe('admin readable', () => {
                   },
                   {
                     "left": {
-                      "anchor": "authData",
-                      "field": "role",
-                      "type": "static",
+                      "type": "literal",
+                      "value": "user",
                     },
                     "op": "=",
                     "right": {
@@ -699,9 +978,8 @@ describe('admin readable', () => {
             },
             {
               "left": {
-                "anchor": "authData",
-                "field": "role",
-                "type": "static",
+                "type": "literal",
+                "value": "user",
               },
               "op": "=",
               "right": {
@@ -721,7 +999,8 @@ describe('admin readable', () => {
     expect(
       transformQuery(
         ast(newQuery(mockDelegate, adminReadable).whereExists('self1')),
-        auth,
+        permissionRules,
+        authData,
       ),
     ).toMatchInlineSnapshot(`
       {
@@ -749,9 +1028,8 @@ describe('admin readable', () => {
                   "table": "adminReadable",
                   "where": {
                     "left": {
-                      "anchor": "authData",
-                      "field": "role",
-                      "type": "static",
+                      "type": "literal",
+                      "value": "user",
                     },
                     "op": "=",
                     "right": {
@@ -766,9 +1044,8 @@ describe('admin readable', () => {
             },
             {
               "left": {
-                "anchor": "authData",
-                "field": "role",
-                "type": "static",
+                "type": "literal",
+                "value": "user",
               },
               "op": "=",
               "right": {
@@ -790,7 +1067,8 @@ describe('admin readable', () => {
             q.where('id', '1'),
           ),
         ),
-        auth,
+        permissionRules,
+        authData,
       ),
     ).toMatchInlineSnapshot(`
       {
@@ -832,9 +1110,8 @@ describe('admin readable', () => {
                       },
                       {
                         "left": {
-                          "anchor": "authData",
-                          "field": "role",
-                          "type": "static",
+                          "type": "literal",
+                          "value": "user",
                         },
                         "op": "=",
                         "right": {
@@ -852,9 +1129,8 @@ describe('admin readable', () => {
             },
             {
               "left": {
-                "anchor": "authData",
-                "field": "role",
-                "type": "static",
+                "type": "literal",
+                "value": "user",
               },
               "op": "=",
               "right": {
@@ -876,7 +1152,8 @@ describe('admin readable', () => {
             q.whereExists('self2'),
           ),
         ),
-        auth,
+        permissionRules,
+        authData,
       ),
     ).toMatchInlineSnapshot(`
       {
@@ -924,9 +1201,8 @@ describe('admin readable', () => {
                             "table": "adminReadable",
                             "where": {
                               "left": {
-                                "anchor": "authData",
-                                "field": "role",
-                                "type": "static",
+                                "type": "literal",
+                                "value": "user",
                               },
                               "op": "=",
                               "right": {
@@ -941,9 +1217,8 @@ describe('admin readable', () => {
                       },
                       {
                         "left": {
-                          "anchor": "authData",
-                          "field": "role",
-                          "type": "static",
+                          "type": "literal",
+                          "value": "user",
                         },
                         "op": "=",
                         "right": {
@@ -961,9 +1236,8 @@ describe('admin readable', () => {
             },
             {
               "left": {
-                "anchor": "authData",
-                "field": "role",
-                "type": "static",
+                "type": "literal",
+                "value": "user",
               },
               "op": "=",
               "right": {
