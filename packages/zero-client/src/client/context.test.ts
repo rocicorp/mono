@@ -220,8 +220,8 @@ test('transactions', () => {
     parent: servers.connect([['id', 'asc']]),
     child: flair.connect([['id', 'asc']]),
     storage: new MemoryStorage(),
-    parentKey: 'id',
-    childKey: 'serverID',
+    parentKey: ['id'],
+    childKey: ['serverID'],
     hidden: false,
     relationshipName: 'flair',
   });
