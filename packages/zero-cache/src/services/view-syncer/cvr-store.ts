@@ -390,22 +390,6 @@ export class CVRStore {
     });
   }
 
-  delDesiredQuery(
-    oldPutVersion: CVRVersion,
-    query: {id: string},
-    client: {id: string},
-  ): void {
-    this.#writes.add({
-      stats: {desires: 1},
-      write: tx =>
-        tx`DELETE FROM cvr.desires WHERE "clientGroupID" = ${
-          this.#id
-        } AND "clientID" = ${client.id} AND "queryHash" = ${
-          query.id
-        } AND "patchVersion" = ${versionString(oldPutVersion)}`,
-    });
-  }
-
   async *catchupRowPatches(
     lc: LogContext,
     afterVersion: NullableCVRVersion,
