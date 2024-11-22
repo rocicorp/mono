@@ -128,7 +128,10 @@ export class CVRUpdater {
     const start = Date.now();
 
     this.#setLastActive(lastActive);
-    const stats = await this._cvrStore.flush(this._orig.version);
+    const stats = await this._cvrStore.flush(
+      this._orig.version,
+      this._cvr.version,
+    );
 
     lc.debug?.(
       `flushed CVR ${JSON.stringify(stats)} in (${Date.now() - start} ms)`,
