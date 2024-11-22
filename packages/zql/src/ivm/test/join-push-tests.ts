@@ -1,4 +1,4 @@
-import {assert, expect, test} from 'vitest';
+import {expect} from 'vitest';
 import type {JSONObject} from '../../../../shared/src/json.js';
 import {must} from '../../../../shared/src/must.js';
 import type {Ordering} from '../../../../zero-protocol/src/ast.js';
@@ -6,102 +6,14 @@ import type {Row} from '../../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.js';
 import type {SchemaValue} from '../../../../zero-schema/src/table-schema.js';
 import {ArrayView} from '../array-view.js';
-import {Catch, type CaughtChange} from '../catch.js';
-import type {NormalizedValue} from '../data.js';
-import {Join, makeStorageKeyForValues, type CompoundKey} from '../join.js';
+import {Catch} from '../catch.js';
+import {Join, type CompoundKey} from '../join.js';
 import {MemoryStorage} from '../memory-storage.js';
 import type {Input, Operator, Storage} from '../operator.js';
 import {Snitch, type SnitchMessage} from '../snitch.js';
 import type {Source, SourceChange} from '../source.js';
 import type {Format} from '../view.js';
 import {createSource} from './source-factory.js';
-
-export function pushTest(t: PushTest) {
-  test(t.name, () => {
-    assert(t.sources.length > 0);
-    assert(t.joins.length === t.sources.length - 1);
-
-    const log: SnitchMessage[] = [];
-
-    const sources = t.sources.map((rows, i) =>
-      makeSource(
-        rows,
-        t.sorts?.[i] ?? [['id', 'asc']],
-        t.columns[i],
-        t.primaryKeys[i],
-        String(i),
-        log,
-      ),
-    );
-
-    const joins: {
-      join: Join;
-      storage: MemoryStorage;
-    }[] = [];
-    // Although we tend to think of the joins from left to right, we need to
-    // build them from right to left.
-    for (let i = t.joins.length - 1; i >= 0; i--) {
-      const info = t.joins[i];
-      const parent = sources[i].snitch;
-      const child =
-        i === t.joins.length - 1 ? sources[i + 1].snitch : joins[i + 1].join;
-      const storage = new MemoryStorage();
-      const join = new Join({
-        parent,
-        child,
-        storage,
-        ...info,
-        hidden: false,
-      });
-      joins[i] = {
-        join,
-        storage,
-      };
-    }
-
-    // By convention we put them in the test bottom up. Why? Easier to think
-    // left-to-right.
-    const finalJoin = joins[0];
-    const c = new Catch(finalJoin.join);
-
-    c.fetch();
-    log.length = 0;
-
-    for (const [sourceIndex, change] of t.pushes) {
-      sources[sourceIndex].source.push(change);
-    }
-
-    for (const [i, j] of joins.entries()) {
-      const {storage} = j;
-      const expectedStorageKeys = t.expectedPrimaryKeySetStorageKeys[i];
-      const expectedStorage: Record<string, boolean> = {};
-      for (const k of expectedStorageKeys) {
-        expectedStorage[makeStorageKeyForValues(k)] = true;
-      }
-      expect(storage.cloneData()).toEqual(expectedStorage);
-    }
-
-    expect(log).toEqual(t.expectedLog);
-    expect(c.pushes).toEqual(t.expectedOutput);
-  });
-}
-
-type PushTest = {
-  name: string;
-  columns: readonly Record<string, SchemaValue>[];
-  primaryKeys: readonly PrimaryKey[];
-  sources: Row[][];
-  sorts?: Record<number, Ordering> | undefined;
-  joins: readonly {
-    parentKey: CompoundKey;
-    childKey: CompoundKey;
-    relationshipName: string;
-  }[];
-  pushes: [sourceIndex: number, change: SourceChange][];
-  expectedLog: SnitchMessage[];
-  expectedPrimaryKeySetStorageKeys: NormalizedValue[][][];
-  expectedOutput: CaughtChange[];
-};
 
 function makeSource(
   rows: Row[],

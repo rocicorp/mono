@@ -1,6 +1,5 @@
 import {describe, expect, suite, test} from 'vitest';
 import {
-  pushTest,
   runJoinTest,
   type Joins,
   type SourceContents,
@@ -3570,34 +3569,6 @@ suite('push one:many:one', () => {
       },
     },
   } as const;
-
-  const base = {
-    columns: [
-      {id: {type: 'string'}},
-      {issueID: {type: 'string'}, labelID: {type: 'string'}},
-      {id: {type: 'string'}},
-    ],
-    primaryKeys: [['id'], ['issueID', 'labelID'], ['id']],
-    joins: [
-      {
-        parentKey: ['id'],
-        childKey: ['issueID'],
-        relationshipName: 'issuelabels',
-      },
-      {
-        parentKey: ['labelID'],
-        childKey: ['id'],
-        relationshipName: 'labels',
-      },
-    ],
-  } as const;
-
-  const sorts = {
-    1: [
-      ['issueID', 'asc'],
-      ['labelID', 'asc'],
-    ] as const,
-  };
 
   test('fetch one parent, one child, add grandchild', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
