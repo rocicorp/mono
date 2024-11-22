@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import type {MaybeRow, PendingQuery} from 'postgres';
+import type {MaybeRow, PendingQuery, Row} from 'postgres';
 import {assert} from '../../../../shared/src/asserts.js';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.js';
 import {
@@ -103,6 +103,64 @@ class RowRecordCache {
 
   clear() {
     this.#cache = undefined;
+  }
+
+  async *catchupRowPatches(
+    lc: LogContext,
+    afterVersion: NullableCVRVersion,
+    upToCVR: CVRSnapshot,
+    excludeQueryHashes: string[] = [],
+  ): AsyncGenerator<RowsRow[], void, undefined> {
+    if (cmpVersions(afterVersion, upToCVR.version) >= 0) {
+      return;
+    }
+
+    const startMs = Date.now();
+    const sql = this.#db;
+    const start = afterVersion ? versionString(afterVersion) : '';
+    const end = versionString(upToCVR.version);
+    lc.debug?.(`scanning row patches for clients from ${start}`);
+
+    const query =
+      excludeQueryHashes.length === 0
+        ? sql<RowsRow[]>`SELECT * FROM cvr.rows
+        WHERE "clientGroupID" = ${this.#cvrID}
+          AND "patchVersion" > ${start}
+          AND "patchVersion" <= ${end}`
+        : // Exclude rows that were already sent as part of query hydration.
+          sql<RowsRow[]>`SELECT * FROM cvr.rows
+        WHERE "clientGroupID" = ${this.#cvrID}
+          AND "patchVersion" > ${start}
+          AND "patchVersion" <= ${end}
+          AND ("refCounts" IS NULL OR NOT "refCounts" ?| ${excludeQueryHashes})`;
+
+    yield* query.cursor(10000);
+
+    lc.debug?.(`finished row catchup (${Date.now() - startMs} ms)`);
+  }
+
+  executeRowUpdates(
+    tx: PostgresTransaction,
+    rowRecordsToFlush: RowRecord[],
+  ): PendingQuery<Row[]>[] {
+    const rowRecordRows = rowRecordsToFlush.map(r =>
+      rowRecordToRowsRow(this.#cvrID, r),
+    );
+    const pending: PendingQuery<Row[]>[] = [];
+    let i = 0;
+    while (i < rowRecordRows.length) {
+      pending.push(
+        tx`INSERT INTO cvr.rows ${tx(
+          rowRecordRows.slice(i, i + ROW_RECORD_UPSERT_BATCH_SIZE),
+        )} 
+          ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
+          DO UPDATE SET "rowVersion" = excluded."rowVersion",
+            "patchVersion" = excluded."patchVersion",
+            "refCounts" = excluded."refCounts"`.execute(),
+      );
+      i += ROW_RECORD_UPSERT_BATCH_SIZE;
+    }
+    return pending;
   }
 }
 
@@ -393,38 +451,18 @@ export class CVRStore {
     });
   }
 
-  async *catchupRowPatches(
+  catchupRowPatches(
     lc: LogContext,
     afterVersion: NullableCVRVersion,
     upToCVR: CVRSnapshot,
     excludeQueryHashes: string[] = [],
   ): AsyncGenerator<RowsRow[], void, undefined> {
-    if (cmpVersions(afterVersion, upToCVR.version) >= 0) {
-      return;
-    }
-
-    const startMs = Date.now();
-    const sql = this.#db;
-    const start = afterVersion ? versionString(afterVersion) : '';
-    const end = versionString(upToCVR.version);
-    lc.debug?.(`scanning row patches for clients from ${start}`);
-
-    const query =
-      excludeQueryHashes.length === 0
-        ? sql<RowsRow[]>`SELECT * FROM cvr.rows
-        WHERE "clientGroupID" = ${this.#id}
-          AND "patchVersion" > ${start}
-          AND "patchVersion" <= ${end}`
-        : // Exclude rows that were already sent as part of query hydration.
-          sql<RowsRow[]>`SELECT * FROM cvr.rows
-        WHERE "clientGroupID" = ${this.#id}
-          AND "patchVersion" > ${start}
-          AND "patchVersion" <= ${end}
-          AND ("refCounts" IS NULL OR NOT "refCounts" ?| ${excludeQueryHashes})`;
-
-    yield* query.cursor(10000);
-
-    lc.debug?.(`finished row catchup (${Date.now() - startMs} ms)`);
+    return this.#rowCache.catchupRowPatches(
+      lc,
+      afterVersion,
+      upToCVR,
+      excludeQueryHashes,
+    );
   }
 
   async catchupConfigPatches(
@@ -538,23 +576,13 @@ export class CVRStore {
         this.#abortIfNotVersion(tx, expectedCurrentVersion),
       ];
 
-      const rowRecordRows = rowRecordsToFlush.map(r =>
-        rowRecordToRowsRow(this.#id, r),
+      const rowUpdates = this.#rowCache.executeRowUpdates(
+        tx,
+        rowRecordsToFlush,
       );
-      let i = 0;
-      while (i < rowRecordRows.length) {
-        pipelined.push(
-          tx`INSERT INTO cvr.rows ${tx(
-            rowRecordRows.slice(i, i + ROW_RECORD_UPSERT_BATCH_SIZE),
-          )} 
-            ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
-            DO UPDATE SET "rowVersion" = excluded."rowVersion",
-              "patchVersion" = excluded."patchVersion",
-              "refCounts" = excluded."refCounts"`.execute(),
-        );
-        i += ROW_RECORD_UPSERT_BATCH_SIZE;
-        stats.statements++;
-      }
+      pipelined.push(...rowUpdates);
+      stats.statements += rowUpdates.length;
+
       for (const write of this.#writes) {
         stats.instances += write.stats.instances ?? 0;
         stats.queries += write.stats.queries ?? 0;
