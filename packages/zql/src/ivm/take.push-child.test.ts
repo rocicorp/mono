@@ -1,7 +1,12 @@
 import {expect, test} from 'vitest';
 import type {Input, Storage} from './operator.js';
 import {Take} from './take.js';
-import {runJoinTest, type Joins, type Sources} from './test/join-push-tests.js';
+import {
+  runJoinTest,
+  type Joins,
+  type SourceContents,
+  type Sources,
+} from './test/join-push-tests.js';
 import type {Format} from './view.js';
 
 const sources: Sources = {
@@ -12,24 +17,6 @@ const sources: Sources = {
     },
     primaryKeys: ['id'],
     sorts: [['id', 'asc']],
-    rows: [
-      {
-        id: 'i1',
-        text: 'first issue',
-      },
-      {
-        id: 'i2',
-        text: 'second issue',
-      },
-      {
-        id: 'i3',
-        text: 'third issue',
-      },
-      {
-        id: 'i4',
-        text: 'fourth issue',
-      },
-    ],
   },
   comment: {
     columns: {
@@ -39,11 +26,32 @@ const sources: Sources = {
     },
     primaryKeys: ['id'],
     sorts: [['id', 'asc']],
-    rows: [
-      {id: 'c1', issueID: 'i1', text: 'i1 c1 text'},
-      {id: 'c2', issueID: 'i1', text: 'i1 c2 text'},
-    ],
   },
+};
+
+const sourceContents: SourceContents = {
+  issue: [
+    {
+      id: 'i1',
+      text: 'first issue',
+    },
+    {
+      id: 'i2',
+      text: 'second issue',
+    },
+    {
+      id: 'i3',
+      text: 'third issue',
+    },
+    {
+      id: 'i4',
+      text: 'fourth issue',
+    },
+  ],
+  comment: [
+    {id: 'c1', issueID: 'i1', text: 'i1 c1 text'},
+    {id: 'c2', issueID: 'i1', text: 'i1 c2 text'},
+  ],
 };
 
 const joins: Joins = {
@@ -69,6 +77,7 @@ const format: Format = {
 test('child change, parent is within bound', () => {
   const {log, data, actualStorage, pushes} = runJoinTest({
     sources,
+    sourceContents,
     joins,
     pushes: [
       [
@@ -188,6 +197,7 @@ test('child change, parent is within bound', () => {
 test('child change, parent is after bound', () => {
   const {log, data, actualStorage, pushes} = runJoinTest({
     sources,
+    sourceContents,
     joins,
     pushes: [
       [

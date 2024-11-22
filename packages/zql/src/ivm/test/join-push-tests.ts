@@ -128,9 +128,10 @@ export type Sources = Record<
     columns: Record<string, SchemaValue>;
     primaryKeys: PrimaryKey;
     sorts: Ordering;
-    rows: Row[];
   }
 >;
+
+export type SourceContents = Record<string, Row[]>;
 
 export type Joins = Record<
   string,
@@ -147,6 +148,7 @@ export type Pushes = [sourceName: string, change: SourceChange][];
 
 export type NewPushTest = {
   sources: Sources;
+  sourceContents: SourceContents;
   format: Format;
   joins: Joins;
   pushes: Pushes;
@@ -166,12 +168,17 @@ export function runJoinTest(t: NewPushTest) {
         snitch: Snitch;
       }
     > = Object.fromEntries(
-      Object.entries(t.sources).map(
-        ([name, {columns, primaryKeys, sorts, rows}]) => [
+      Object.entries(t.sources).map(([name, {columns, primaryKeys, sorts}]) => [
+        name,
+        makeSource(
+          t.sourceContents[name] ?? [],
+          sorts,
+          columns,
+          primaryKeys,
           name,
-          makeSource(rows, sorts, columns, primaryKeys, name, log),
-        ],
-      ),
+          log,
+        ),
+      ]),
     );
 
     const joins: Record<

@@ -3,1384 +3,3574 @@ import {
   pushTest,
   runJoinTest,
   type Joins,
+  type SourceContents,
   type Sources,
 } from './test/join-push-tests.js';
 import type {Format} from './view.js';
 
 suite('push one:many', () => {
-  const base = {
-    columns: [
-      {id: {type: 'string'}},
-      {id: {type: 'string'}, issueID: {type: 'string'}},
-    ],
-    primaryKeys: [['id'], ['id']],
-    joins: [
-      {
-        parentKey: ['id'],
-        childKey: ['issueID'],
-        relationshipName: 'comments',
+  const sources: Sources = {
+    issue: {
+      columns: {
+        id: {type: 'string'},
       },
-    ],
+      primaryKeys: ['id'],
+      sorts: [['id', 'asc']],
+    },
+    comment: {
+      columns: {
+        id: {type: 'string'},
+        issueID: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+      sorts: [['id', 'asc']],
+    },
   } as const;
 
-  pushTest({
-    ...base,
-    name: 'fetch one parent, remove parent',
-    sources: [[{id: 'i1'}], []],
-    pushes: [[0, {type: 'remove', row: {id: 'i1'}}]],
-    expectedLog: [
-      ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
-      ['1', 'cleanup', {constraint: {issueID: 'i1'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [[]],
-    expectedOutput: [
-      {
-        type: 'remove',
-        node: {
-          row: {
-            id: 'i1',
-          },
-          relationships: {
-            comments: [],
-          },
-        },
+  const joins: Joins = {
+    comments: {
+      parentKey: ['id'],
+      parentSource: 'issue',
+      childKey: ['issueID'],
+      childSource: 'comment',
+      relationshipName: 'comments',
+    },
+  } as const;
+
+  const format: Format = {
+    singular: false,
+    relationships: {
+      comments: {
+        singular: false,
+        relationships: {},
       },
-    ],
-  });
+    },
+  } as const;
 
-  pushTest({
-    ...base,
-    name: 'fetch one child, remove child',
-    sources: [[], [{id: 'c1', issueID: 'i1'}]],
-    pushes: [[1, {type: 'remove', row: {id: 'c1', issueID: 'i1'}}]],
-    expectedLog: [
-      ['1', 'push', {type: 'remove', row: {id: 'c1', issueID: 'i1'}}],
-      ['0', 'fetch', {constraint: {id: 'i1'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [[]],
-    expectedOutput: [],
-  });
-
-  pushTest({
-    ...base,
-    name: 'fetch one child, add parent',
-    sources: [[], [{id: 'c1', issueID: 'i1'}]],
-    pushes: [[0, {type: 'add', row: {id: 'i1'}}]],
-    expectedLog: [
-      ['0', 'push', {type: 'add', row: {id: 'i1'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
-    expectedOutput: [
-      {
-        type: 'add',
-        node: {
-          row: {
-            id: 'i1',
-          },
-          relationships: {
-            comments: [{row: {id: 'c1', issueID: 'i1'}, relationships: {}}],
-          },
-        },
+  test('fetch one parent, remove parent', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [{id: 'i1'}],
+        comments: [],
       },
-    ],
-  });
+      joins,
+      format,
+      pushes: [['issue', {type: 'remove', row: {id: 'i1'}}]],
+    });
 
-  pushTest({
-    ...base,
-    name: 'fetch two children, add parent',
-    sources: [
-      [],
+    expect(log).toMatchInlineSnapshot(`
       [
-        {id: 'c1', issueID: 'i1'},
-        {id: 'c2', issueID: 'i1'},
-      ],
-    ],
-    pushes: [[0, {type: 'add', row: {id: 'i1'}}]],
-    expectedLog: [
-      ['0', 'push', {type: 'add', row: {id: 'i1'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
-    expectedOutput: [
-      {
-        type: 'add',
-        node: {
-          row: {
-            id: 'i1',
+        [
+          "issue",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+            },
+            "type": "remove",
           },
-          relationships: {
-            comments: [
-              {row: {id: 'c1', issueID: 'i1'}, relationships: {}},
-              {row: {id: 'c2', issueID: 'i1'}, relationships: {}},
-            ],
-          },
-        },
-      },
-    ],
-  });
-
-  pushTest({
-    ...base,
-    name: 'fetch one child, add wrong parent',
-    sources: [[], [{id: 'c1', issueID: 'i1'}]],
-    pushes: [[0, {type: 'add', row: {id: 'i2'}}]],
-    expectedLog: [
-      ['0', 'push', {type: 'add', row: {id: 'i2'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i2'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [[['i2', 'i2']]],
-    expectedOutput: [
-      {
-        type: 'add',
-        node: {
-          row: {
-            id: 'i2',
-          },
-          relationships: {
-            comments: [],
-          },
-        },
-      },
-    ],
-  });
-
-  pushTest({
-    ...base,
-    name: 'fetch one parent, add child',
-    sources: [[{id: 'i1'}], []],
-    pushes: [[1, {type: 'add', row: {id: 'c1', issueID: 'i1'}}]],
-    expectedLog: [
-      ['1', 'push', {type: 'add', row: {id: 'c1', issueID: 'i1'}}],
-      ['0', 'fetch', {constraint: {id: 'i1'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
-    expectedOutput: [
-      {
-        type: 'child',
-        row: {
-          id: 'i1',
-        },
-        child: {
-          relationshipName: 'comments',
-          change: {
-            type: 'add',
-            node: {
-              row: {
-                id: 'c1',
-                issueID: 'i1',
-              },
-              relationships: {},
+        ],
+        [
+          "comment",
+          "cleanup",
+          {
+            "constraint": {
+              "issueID": "i1",
             },
           },
-        },
-      },
-    ],
-  });
-
-  pushTest({
-    ...base,
-    name: 'fetch one parent, add wrong child',
-    sources: [[{id: 'i1'}], []],
-    pushes: [[1, {type: 'add', row: {id: 'c1', issueID: 'i2'}}]],
-    expectedLog: [
-      ['1', 'push', {type: 'add', row: {id: 'c1', issueID: 'i2'}}],
-      ['0', 'fetch', {constraint: {id: 'i2'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
-    expectedOutput: [],
-  });
-
-  pushTest({
-    ...base,
-    name: 'fetch one parent, one child, remove parent',
-    sources: [[{id: 'i1'}], [{id: 'c1', issueID: 'i1'}]],
-    pushes: [[0, {type: 'remove', row: {id: 'i1'}}]],
-    expectedLog: [
-      ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
-      ['1', 'cleanup', {constraint: {issueID: 'i1'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [[]],
-    expectedOutput: [
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+            },
+            "type": "remove",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`[]`);
+    expect(actualStorage).toMatchInlineSnapshot(`
       {
-        type: 'remove',
-        node: {
-          row: {
-            id: 'i1',
-          },
-          relationships: {
-            comments: [{row: {id: 'c1', issueID: 'i1'}, relationships: {}}],
-          },
-        },
-      },
-    ],
-  });
-
-  pushTest({
-    ...base,
-    name: 'fetch one parent, two children, remove parent',
-    sources: [
-      [{id: 'i1'}],
+        "comments": {},
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`
       [
-        {id: 'c1', issueID: 'i1'},
-        {id: 'c2', issueID: 'i1'},
-      ],
-    ],
-    pushes: [[0, {type: 'remove', row: {id: 'i1'}}]],
-    expectedLog: [
-      ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
-      ['1', 'cleanup', {constraint: {issueID: 'i1'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [[]],
-    expectedOutput: [
-      {
-        type: 'remove',
-        node: {
-          row: {
-            id: 'i1',
+        {
+          "node": {
+            "relationships": {
+              "comments": [],
+            },
+            "row": {
+              "id": "i1",
+            },
           },
-          relationships: {
-            comments: [
-              {row: {id: 'c1', issueID: 'i1'}, relationships: {}},
-              {row: {id: 'c2', issueID: 'i1'}, relationships: {}},
-            ],
-          },
+          "type": "remove",
         },
-      },
-    ],
+      ]
+    `);
   });
 
-  pushTest({
-    ...base,
-    name: 'no fetch, add parent, add child, add child, remove child, remove parent',
-    sources: [[], []],
-    pushes: [
-      [0, {type: 'add', row: {id: 'i1'}}],
-      [1, {type: 'add', row: {id: 'c1', issueID: 'i1'}}],
-      [1, {type: 'add', row: {id: 'c2', issueID: 'i1'}}],
-      [1, {type: 'remove', row: {id: 'c1', issueID: 'i1'}}],
-      [0, {type: 'remove', row: {id: 'i1'}}],
-    ],
-    expectedLog: [
-      ['0', 'push', {type: 'add', row: {id: 'i1'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
-      ['1', 'push', {type: 'add', row: {id: 'c1', issueID: 'i1'}}],
-      ['0', 'fetch', {constraint: {id: 'i1'}}],
-      ['1', 'push', {type: 'add', row: {id: 'c2', issueID: 'i1'}}],
-      ['0', 'fetch', {constraint: {id: 'i1'}}],
-      ['1', 'push', {type: 'remove', row: {id: 'c1', issueID: 'i1'}}],
-      ['0', 'fetch', {constraint: {id: 'i1'}}],
-      ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
-      ['1', 'cleanup', {constraint: {issueID: 'i1'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [[], []],
-    expectedOutput: [
-      {
-        type: 'add',
-        node: {
-          row: {
-            id: 'i1',
-          },
-          relationships: {
-            comments: [],
-          },
-        },
+  test('fetch one child, remove child', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [],
+        comment: [{id: 'c1', issueID: 'i1'}],
       },
-      {
-        type: 'child',
-        row: {
-          id: 'i1',
-        },
-        child: {
-          relationshipName: 'comments',
-          change: {
-            type: 'add',
-            node: {
-              row: {
-                id: 'c1',
-                issueID: 'i1',
-              },
-              relationships: {},
+      joins,
+      format,
+      pushes: [['comment', {type: 'remove', row: {id: 'c1', issueID: 'i1'}}]],
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "comment",
+          "push",
+          {
+            "row": {
+              "id": "c1",
+              "issueID": "i1",
+            },
+            "type": "remove",
+          },
+        ],
+        [
+          "issue",
+          "fetch",
+          {
+            "constraint": {
+              "id": "i1",
             },
           },
-        },
-      },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`[]`);
+    expect(actualStorage).toMatchInlineSnapshot(`
       {
-        type: 'child',
-        row: {
-          id: 'i1',
-        },
-        child: {
-          relationshipName: 'comments',
-          change: {
-            type: 'add',
-            node: {
-              row: {
-                id: 'c2',
-                issueID: 'i1',
-              },
-              relationships: {},
+        "comments": {},
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`[]`);
+  });
+
+  test('fetch one child, add parent', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [],
+        comment: [{id: 'c1', issueID: 'i1'}],
+      },
+      joins,
+      format,
+      pushes: [['issue', {type: 'add', row: {id: 'i1'}}]],
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "issue",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "comment",
+          "fetch",
+          {
+            "constraint": {
+              "issueID": "i1",
             },
           },
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+            },
+            "type": "add",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "comments": [
+            {
+              "id": "c1",
+              "issueID": "i1",
+            },
+          ],
+          "id": "i1",
         },
-      },
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
       {
-        type: 'child',
-        row: {
-          id: 'i1',
+        "comments": {
+          ""pKeySet","i1","i1",": true,
         },
-        child: {
-          relationshipName: 'comments',
-          change: {
-            type: 'remove',
-            node: {
-              row: {
-                id: 'c1',
-                issueID: 'i1',
-              },
-              relationships: {},
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "node": {
+            "relationships": {
+              "comments": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": "c1",
+                    "issueID": "i1",
+                  },
+                },
+              ],
+            },
+            "row": {
+              "id": "i1",
             },
           },
+          "type": "add",
         },
+      ]
+    `);
+  });
+
+  test('fetch two children, add parent', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [],
+        comment: [
+          {id: 'c1', issueID: 'i1'},
+          {id: 'c2', issueID: 'i1'},
+        ],
       },
+      joins,
+      format,
+      pushes: [['issue', {type: 'add', row: {id: 'i1'}}]],
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "issue",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "comment",
+          "fetch",
+          {
+            "constraint": {
+              "issueID": "i1",
+            },
+          },
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+            },
+            "type": "add",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "comments": [
+            {
+              "id": "c1",
+              "issueID": "i1",
+            },
+            {
+              "id": "c2",
+              "issueID": "i1",
+            },
+          ],
+          "id": "i1",
+        },
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
       {
-        type: 'remove',
-        node: {
-          row: {
-            id: 'i1',
-          },
-          relationships: {
-            comments: [{row: {id: 'c2', issueID: 'i1'}, relationships: {}}],
-          },
+        "comments": {
+          ""pKeySet","i1","i1",": true,
         },
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "node": {
+            "relationships": {
+              "comments": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": "c1",
+                    "issueID": "i1",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": "c2",
+                    "issueID": "i1",
+                  },
+                },
+              ],
+            },
+            "row": {
+              "id": "i1",
+            },
+          },
+          "type": "add",
+        },
+      ]
+    `);
+  });
+
+  test('fetch one child, add wrong parent', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [],
+        comment: [{id: 'c1', issueID: 'i1'}],
       },
-    ],
+      joins,
+      format,
+      pushes: [['issue', {type: 'add', row: {id: 'i2'}}]],
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "issue",
+          "push",
+          {
+            "row": {
+              "id": "i2",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "comment",
+          "fetch",
+          {
+            "constraint": {
+              "issueID": "i2",
+            },
+          },
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "row": {
+              "id": "i2",
+            },
+            "type": "add",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "comments": [],
+          "id": "i2",
+        },
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "comments": {
+          ""pKeySet","i2","i2",": true,
+        },
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "node": {
+            "relationships": {
+              "comments": [],
+            },
+            "row": {
+              "id": "i2",
+            },
+          },
+          "type": "add",
+        },
+      ]
+    `);
+  });
+
+  test('fetch one parent, add child', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [{id: 'i1'}],
+        comment: [],
+      },
+      joins,
+      format,
+      pushes: [['comment', {type: 'add', row: {id: 'c1', issueID: 'i1'}}]],
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "comment",
+          "push",
+          {
+            "row": {
+              "id": "c1",
+              "issueID": "i1",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "issue",
+          "fetch",
+          {
+            "constraint": {
+              "id": "i1",
+            },
+          },
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "c1",
+                "issueID": "i1",
+              },
+              "type": "add",
+            },
+            "row": {
+              "id": "i1",
+            },
+            "type": "child",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "comments": [
+            {
+              "id": "c1",
+              "issueID": "i1",
+            },
+          ],
+          "id": "i1",
+        },
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "comments": {
+          ""pKeySet","i1","i1",": true,
+        },
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "id": "c1",
+                  "issueID": "i1",
+                },
+              },
+              "type": "add",
+            },
+            "relationshipName": "comments",
+          },
+          "row": {
+            "id": "i1",
+          },
+          "type": "child",
+        },
+      ]
+    `);
+  });
+
+  test('fetch one parent, add wrong child', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [{id: 'i1'}],
+        comment: [],
+      },
+      joins,
+      format,
+      pushes: [['comment', {type: 'add', row: {id: 'c1', issueID: 'i2'}}]],
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "comment",
+          "push",
+          {
+            "row": {
+              "id": "c1",
+              "issueID": "i2",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "issue",
+          "fetch",
+          {
+            "constraint": {
+              "id": "i2",
+            },
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "comments": [],
+          "id": "i1",
+        },
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "comments": {
+          ""pKeySet","i1","i1",": true,
+        },
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`[]`);
+  });
+
+  test('fetch one parent, one child, remove parent', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [{id: 'i1'}],
+        comment: [{id: 'c1', issueID: 'i1'}],
+      },
+      joins,
+      format,
+      pushes: [['issue', {type: 'remove', row: {id: 'i1'}}]],
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "issue",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+            },
+            "type": "remove",
+          },
+        ],
+        [
+          "comment",
+          "cleanup",
+          {
+            "constraint": {
+              "issueID": "i1",
+            },
+          },
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+            },
+            "type": "remove",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`[]`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "comments": {},
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "node": {
+            "relationships": {
+              "comments": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": "c1",
+                    "issueID": "i1",
+                  },
+                },
+              ],
+            },
+            "row": {
+              "id": "i1",
+            },
+          },
+          "type": "remove",
+        },
+      ]
+    `);
+  });
+
+  test('fetch one parent, two children, remove parent', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [{id: 'i1'}],
+        comment: [
+          {id: 'c1', issueID: 'i1'},
+          {id: 'c2', issueID: 'i1'},
+        ],
+      },
+      joins,
+      format,
+      pushes: [['issue', {type: 'remove', row: {id: 'i1'}}]],
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "issue",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+            },
+            "type": "remove",
+          },
+        ],
+        [
+          "comment",
+          "cleanup",
+          {
+            "constraint": {
+              "issueID": "i1",
+            },
+          },
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+            },
+            "type": "remove",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`[]`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "comments": {},
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "node": {
+            "relationships": {
+              "comments": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": "c1",
+                    "issueID": "i1",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": "c2",
+                    "issueID": "i1",
+                  },
+                },
+              ],
+            },
+            "row": {
+              "id": "i1",
+            },
+          },
+          "type": "remove",
+        },
+      ]
+    `);
+  });
+
+  test('no fetch, add parent, add child, add child, remove child, remove parent', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [],
+        comment: [],
+      },
+      joins,
+      format,
+      pushes: [
+        ['issue', {type: 'add', row: {id: 'i1'}}],
+        ['comment', {type: 'add', row: {id: 'c1', issueID: 'i1'}}],
+        ['comment', {type: 'add', row: {id: 'c2', issueID: 'i1'}}],
+        ['comment', {type: 'remove', row: {id: 'c1', issueID: 'i1'}}],
+        ['issue', {type: 'remove', row: {id: 'i1'}}],
+      ],
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "issue",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "comment",
+          "fetch",
+          {
+            "constraint": {
+              "issueID": "i1",
+            },
+          },
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "comment",
+          "push",
+          {
+            "row": {
+              "id": "c1",
+              "issueID": "i1",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "issue",
+          "fetch",
+          {
+            "constraint": {
+              "id": "i1",
+            },
+          },
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "c1",
+                "issueID": "i1",
+              },
+              "type": "add",
+            },
+            "row": {
+              "id": "i1",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          "comment",
+          "push",
+          {
+            "row": {
+              "id": "c2",
+              "issueID": "i1",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "issue",
+          "fetch",
+          {
+            "constraint": {
+              "id": "i1",
+            },
+          },
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "c2",
+                "issueID": "i1",
+              },
+              "type": "add",
+            },
+            "row": {
+              "id": "i1",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          "comment",
+          "push",
+          {
+            "row": {
+              "id": "c1",
+              "issueID": "i1",
+            },
+            "type": "remove",
+          },
+        ],
+        [
+          "issue",
+          "fetch",
+          {
+            "constraint": {
+              "id": "i1",
+            },
+          },
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "c1",
+                "issueID": "i1",
+              },
+              "type": "remove",
+            },
+            "row": {
+              "id": "i1",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          "issue",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+            },
+            "type": "remove",
+          },
+        ],
+        [
+          "comment",
+          "cleanup",
+          {
+            "constraint": {
+              "issueID": "i1",
+            },
+          },
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+            },
+            "type": "remove",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`[]`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "comments": {},
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "node": {
+            "relationships": {
+              "comments": [],
+            },
+            "row": {
+              "id": "i1",
+            },
+          },
+          "type": "add",
+        },
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "id": "c1",
+                  "issueID": "i1",
+                },
+              },
+              "type": "add",
+            },
+            "relationshipName": "comments",
+          },
+          "row": {
+            "id": "i1",
+          },
+          "type": "child",
+        },
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "id": "c2",
+                  "issueID": "i1",
+                },
+              },
+              "type": "add",
+            },
+            "relationshipName": "comments",
+          },
+          "row": {
+            "id": "i1",
+          },
+          "type": "child",
+        },
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "id": "c1",
+                  "issueID": "i1",
+                },
+              },
+              "type": "remove",
+            },
+            "relationshipName": "comments",
+          },
+          "row": {
+            "id": "i1",
+          },
+          "type": "child",
+        },
+        {
+          "node": {
+            "relationships": {
+              "comments": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": "c2",
+                    "issueID": "i1",
+                  },
+                },
+              ],
+            },
+            "row": {
+              "id": "i1",
+            },
+          },
+          "type": "remove",
+        },
+      ]
+    `);
   });
 
   suite('edit', () => {
-    const base = {
-      columns: [
-        {id: {type: 'string'}, text: {type: 'string'}},
-        {
+    const sources: Sources = {
+      issue: {
+        columns: {
+          id: {type: 'string'},
+          text: {type: 'string'},
+        },
+        primaryKeys: ['id'],
+        sorts: [['id', 'asc']],
+      },
+      comment: {
+        columns: {
           id: {type: 'string'},
           issueID: {type: 'string'},
           text: {type: 'string'},
         },
-      ],
-      primaryKeys: [['id'], ['id']],
-      joins: [
-        {
-          parentKey: ['id'],
-          childKey: ['issueID'],
-          relationshipName: 'comments',
-        },
-      ],
+        primaryKeys: ['id'],
+        sorts: [['id', 'asc']],
+      },
     } as const;
 
-    pushTest({
-      ...base,
-      name: 'edit issue text',
-      sources: [
-        [{id: 'i1', text: 'issue 1'}],
-        [
-          {id: 'c1', issueID: 'i1', text: 'comment 1'},
-          {id: 'c2', issueID: 'i1', text: 'comment 2'},
-        ],
-      ],
-      pushes: [
-        [
-          0,
-          {
-            type: 'edit',
-            oldRow: {id: 'i1', text: 'issue 1'},
-            row: {id: 'i1', text: 'issue 1 edited'},
-          },
-        ],
-      ],
-      expectedLog: [
-        [
-          '0',
-          'push',
-          {
-            type: 'edit',
-            oldRow: {id: 'i1', text: 'issue 1'},
-            row: {id: 'i1', text: 'issue 1 edited'},
-          },
-        ],
-        [
-          '1',
-          'cleanup',
-          {
-            constraint: {
-              issueID: 'i1',
-            },
-          },
-        ],
-        [
-          '1',
-          'fetch',
-          {
-            constraint: {
-              issueID: 'i1',
-            },
-          },
-        ],
-      ],
-      expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
-      expectedOutput: [
-        {
-          type: 'edit',
-          row: {
-            id: 'i1',
-            text: 'issue 1 edited',
-          },
-          oldRow: {
-            id: 'i1',
-            text: 'issue 1',
-          },
-        },
-      ],
-    });
+    const joins: Joins = {
+      comments: {
+        parentKey: ['id'],
+        parentSource: 'issue',
+        childKey: ['issueID'],
+        childSource: 'comment',
+        relationshipName: 'comments',
+      },
+    } as const;
 
-    pushTest({
-      ...base,
-      name: 'edit comment text',
-      sources: [
-        [{id: 'i1', text: 'issue 1'}],
-        [
-          {id: 'c1', issueID: 'i1', text: 'comment 1'},
-          {id: 'c2', issueID: 'i1', text: 'comment 2'},
-        ],
-      ],
-      pushes: [
-        [
-          1,
-          {
-            type: 'edit',
-            oldRow: {id: 'c1', issueID: 'i1', text: 'comment 1'},
-            row: {id: 'c1', issueID: 'i1', text: 'comment 1 edited'},
-          },
-        ],
-      ],
-      expectedLog: [
-        [
-          '1',
-          'push',
-          {
-            type: 'edit',
-            oldRow: {id: 'c1', issueID: 'i1', text: 'comment 1'},
-            row: {id: 'c1', issueID: 'i1', text: 'comment 1 edited'},
-          },
-        ],
-        ['0', 'fetch', {constraint: {id: 'i1'}}],
-      ],
-      expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']]],
-      expectedOutput: [
-        {
-          type: 'child',
-          row: {
-            id: 'i1',
-            text: 'issue 1',
-          },
-          child: {
-            change: {
-              oldRow: {
-                id: 'c1',
-                issueID: 'i1',
-                text: 'comment 1',
-              },
-              row: {
-                id: 'c1',
-                issueID: 'i1',
-                text: 'comment 1 edited',
-              },
+    const format: Format = {
+      singular: false,
+      relationships: {
+        comments: {
+          singular: false,
+          relationships: {},
+        },
+      },
+    } as const;
+
+    test('edit issue text', () => {
+      const {log, data, actualStorage, pushes} = runJoinTest({
+        sources,
+        sourceContents: {
+          issue: [{id: 'i1', text: 'issue 1'}],
+          comment: [
+            {id: 'c1', issueID: 'i1', text: 'comment 1'},
+            {id: 'c2', issueID: 'i1', text: 'comment 2'},
+          ],
+        },
+        joins,
+        format,
+        pushes: [
+          [
+            'issue',
+            {
               type: 'edit',
+              oldRow: {id: 'i1', text: 'issue 1'},
+              row: {id: 'i1', text: 'issue 1 edited'},
             },
-            relationshipName: 'comments',
-          },
-        },
-      ],
-    });
+          ],
+        ],
+      });
 
-    pushTest({
-      ...base,
-      name: 'edit issueID of comment',
-      sources: [
+      expect(log).toMatchInlineSnapshot(`
         [
-          {id: 'i1', text: 'issue 1'},
-          {id: 'i2', text: 'issue 2'},
-        ],
-        [
-          {id: 'c1', issueID: 'i1', text: 'comment 1'},
-          {id: 'c2', issueID: 'i1', text: 'comment 2'},
-        ],
-      ],
-      pushes: [
-        [
-          1,
-          {
-            type: 'edit',
-            oldRow: {id: 'c1', issueID: 'i1', text: 'comment 1'},
-            row: {id: 'c1', issueID: 'i2', text: 'comment 1.2'},
-          },
-        ],
-      ],
-      expectedLog: [
-        [
-          '1',
-          'push',
-          {
-            type: 'edit',
-            oldRow: {id: 'c1', issueID: 'i1', text: 'comment 1'},
-            row: {id: 'c1', issueID: 'i2', text: 'comment 1.2'},
-          },
-        ],
-        ['0', 'fetch', {constraint: {id: 'i1'}}],
-        ['0', 'fetch', {constraint: {id: 'i2'}}],
-      ],
-      expectedPrimaryKeySetStorageKeys: [
-        [
-          ['i1', 'i1'],
-          ['i2', 'i2'],
-        ],
-      ],
-      expectedOutput: [
-        {
-          type: 'child',
-          row: {
-            id: 'i1',
-            text: 'issue 1',
-          },
-          child: {
-            change: {
-              type: 'remove',
-              node: {
-                row: {
-                  id: 'c1',
-                  issueID: 'i1',
-                  text: 'comment 1',
-                },
-                relationships: {},
+          [
+            "issue",
+            "push",
+            {
+              "oldRow": {
+                "id": "i1",
+                "text": "issue 1",
+              },
+              "row": {
+                "id": "i1",
+                "text": "issue 1 edited",
+              },
+              "type": "edit",
+            },
+          ],
+          [
+            "comment",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i1",
               },
             },
-            relationshipName: 'comments',
-          },
-        },
-        {
-          type: 'child',
-          row: {
-            id: 'i2',
-            text: 'issue 2',
-          },
-          child: {
-            change: {
-              type: 'add',
-              node: {
-                row: {
-                  id: 'c1',
-                  issueID: 'i2',
-                  text: 'comment 1.2',
-                },
-                relationships: {},
+          ],
+          [
+            "comment",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i1",
               },
             },
-            relationshipName: 'comments',
+          ],
+          [
+            "comments",
+            "push",
+            {
+              "oldRow": {
+                "id": "i1",
+                "text": "issue 1",
+              },
+              "row": {
+                "id": "i1",
+                "text": "issue 1 edited",
+              },
+              "type": "edit",
+            },
+          ],
+        ]
+      `);
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "comments": [
+              {
+                "id": "c1",
+                "issueID": "i1",
+                "text": "comment 1",
+              },
+              {
+                "id": "c2",
+                "issueID": "i1",
+                "text": "comment 2",
+              },
+            ],
+            "id": "i1",
+            "text": "issue 1 edited",
           },
-        },
-      ],
+        ]
+      `);
+      expect(actualStorage).toMatchInlineSnapshot(`
+        {
+          "comments": {
+            ""pKeySet","i1","i1",": true,
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "oldRow": {
+              "id": "i1",
+              "text": "issue 1",
+            },
+            "row": {
+              "id": "i1",
+              "text": "issue 1 edited",
+            },
+            "type": "edit",
+          },
+        ]
+      `);
     });
 
-    pushTest({
-      ...base,
-      name: 'edit id of issue',
-      sources: [
-        [
-          {id: 'i1', text: 'issue 1'},
-          {id: 'i2', text: 'issue 2'},
+    test('edit comment text', () => {
+      const {log, data, actualStorage, pushes} = runJoinTest({
+        sources,
+        sourceContents: {
+          issue: [{id: 'i1', text: 'issue 1'}],
+          comment: [
+            {id: 'c1', issueID: 'i1', text: 'comment 1'},
+            {id: 'c2', issueID: 'i1', text: 'comment 2'},
+          ],
+        },
+        joins,
+        format,
+        pushes: [
+          [
+            'comment',
+            {
+              type: 'edit',
+              oldRow: {id: 'c1', issueID: 'i1', text: 'comment 1'},
+              row: {id: 'c1', issueID: 'i1', text: 'comment 1 edited'},
+            },
+          ],
         ],
+      });
+
+      expect(log).toMatchInlineSnapshot(`
         [
-          {id: 'c1', issueID: 'i1', text: 'comment 1'},
-          {id: 'c2', issueID: 'i2', text: 'comment 2'},
-          {id: 'c3', issueID: 'i3', text: 'comment 3'},
-        ],
-      ],
-      pushes: [
+          [
+            "comment",
+            "push",
+            {
+              "oldRow": {
+                "id": "c1",
+                "issueID": "i1",
+                "text": "comment 1",
+              },
+              "row": {
+                "id": "c1",
+                "issueID": "i1",
+                "text": "comment 1 edited",
+              },
+              "type": "edit",
+            },
+          ],
+          [
+            "issue",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            "comments",
+            "push",
+            {
+              "child": {
+                "oldRow": {
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "comment 1",
+                },
+                "row": {
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "comment 1 edited",
+                },
+                "type": "edit",
+              },
+              "row": {
+                "id": "i1",
+                "text": "issue 1",
+              },
+              "type": "child",
+            },
+          ],
+        ]
+      `);
+      expect(data).toMatchInlineSnapshot(`
         [
-          0,
           {
-            type: 'edit',
-            oldRow: {id: 'i1', text: 'issue 1'},
-            row: {id: 'i3', text: 'issue 1.3'},
+            "comments": [
+              {
+                "id": "c1",
+                "issueID": "i1",
+                "text": "comment 1 edited",
+              },
+              {
+                "id": "c2",
+                "issueID": "i1",
+                "text": "comment 2",
+              },
+            ],
+            "id": "i1",
+            "text": "issue 1",
           },
-        ],
-      ],
-      expectedLog: [
-        [
-          '0',
-          'push',
-          {
-            type: 'edit',
-            oldRow: {id: 'i1', text: 'issue 1'},
-            row: {id: 'i3', text: 'issue 1.3'},
-          },
-        ],
-        ['1', 'cleanup', {constraint: {issueID: 'i1'}}],
-        ['1', 'fetch', {constraint: {issueID: 'i3'}}],
-      ],
-      expectedPrimaryKeySetStorageKeys: [
-        [
-          ['i2', 'i2'],
-          ['i3', 'i3'],
-        ],
-      ],
-      expectedOutput: [
+        ]
+      `);
+      expect(actualStorage).toMatchInlineSnapshot(`
         {
-          node: {
-            relationships: {
-              comments: [
-                {
-                  relationships: {},
-                  row: {
-                    id: 'c1',
-                    issueID: 'i1',
-                    text: 'comment 1',
+          "comments": {
+            ""pKeySet","i1","i1",": true,
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "child": {
+              "change": {
+                "oldRow": {
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "comment 1",
+                },
+                "row": {
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "comment 1 edited",
+                },
+                "type": "edit",
+              },
+              "relationshipName": "comments",
+            },
+            "row": {
+              "id": "i1",
+              "text": "issue 1",
+            },
+            "type": "child",
+          },
+        ]
+      `);
+    });
+
+    test('edit issueID of comment', () => {
+      const {log, data, actualStorage, pushes} = runJoinTest({
+        sources,
+        sourceContents: {
+          issue: [
+            {id: 'i1', text: 'issue 1'},
+            {id: 'i2', text: 'issue 2'},
+          ],
+          comment: [
+            {id: 'c1', issueID: 'i1', text: 'comment 1'},
+            {id: 'c2', issueID: 'i1', text: 'comment 2'},
+          ],
+        },
+        joins,
+        format,
+        pushes: [
+          [
+            'comment',
+            {
+              type: 'edit',
+              oldRow: {id: 'c1', issueID: 'i1', text: 'comment 1'},
+              row: {id: 'c1', issueID: 'i2', text: 'comment 1.2'},
+            },
+          ],
+        ],
+      });
+
+      expect(log).toMatchInlineSnapshot(`
+        [
+          [
+            "comment",
+            "push",
+            {
+              "oldRow": {
+                "id": "c1",
+                "issueID": "i1",
+                "text": "comment 1",
+              },
+              "row": {
+                "id": "c1",
+                "issueID": "i2",
+                "text": "comment 1.2",
+              },
+              "type": "edit",
+            },
+          ],
+          [
+            "issue",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            "comments",
+            "push",
+            {
+              "child": {
+                "row": {
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "comment 1",
+                },
+                "type": "remove",
+              },
+              "row": {
+                "id": "i1",
+                "text": "issue 1",
+              },
+              "type": "child",
+            },
+          ],
+          [
+            "issue",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i2",
+              },
+            },
+          ],
+          [
+            "comments",
+            "push",
+            {
+              "child": {
+                "row": {
+                  "id": "c1",
+                  "issueID": "i2",
+                  "text": "comment 1.2",
+                },
+                "type": "add",
+              },
+              "row": {
+                "id": "i2",
+                "text": "issue 2",
+              },
+              "type": "child",
+            },
+          ],
+        ]
+      `);
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "comments": [
+              {
+                "id": "c2",
+                "issueID": "i1",
+                "text": "comment 2",
+              },
+            ],
+            "id": "i1",
+            "text": "issue 1",
+          },
+          {
+            "comments": [
+              {
+                "id": "c1",
+                "issueID": "i2",
+                "text": "comment 1.2",
+              },
+            ],
+            "id": "i2",
+            "text": "issue 2",
+          },
+        ]
+      `);
+      expect(actualStorage).toMatchInlineSnapshot(`
+        {
+          "comments": {
+            ""pKeySet","i1","i1",": true,
+            ""pKeySet","i2","i2",": true,
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "child": {
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "id": "c1",
+                    "issueID": "i1",
+                    "text": "comment 1",
                   },
                 },
-              ],
+                "type": "remove",
+              },
+              "relationshipName": "comments",
             },
-            row: {
-              id: 'i1',
-              text: 'issue 1',
+            "row": {
+              "id": "i1",
+              "text": "issue 1",
             },
+            "type": "child",
           },
-          type: 'remove',
-        },
-        {
-          node: {
-            relationships: {
-              comments: [
-                {
-                  relationships: {},
-                  row: {
-                    id: 'c3',
-                    issueID: 'i3',
-                    text: 'comment 3',
+          {
+            "child": {
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "id": "c1",
+                    "issueID": "i2",
+                    "text": "comment 1.2",
                   },
                 },
-              ],
+                "type": "add",
+              },
+              "relationshipName": "comments",
             },
-            row: {
-              id: 'i3',
-              text: 'issue 1.3',
+            "row": {
+              "id": "i2",
+              "text": "issue 2",
             },
+            "type": "child",
           },
-          type: 'add',
+        ]
+      `);
+    });
+
+    test('edit id of issue', () => {
+      const {log, data, actualStorage, pushes} = runJoinTest({
+        sources,
+        sourceContents: {
+          issue: [
+            {id: 'i1', text: 'issue 1'},
+            {id: 'i2', text: 'issue 2'},
+          ],
+          comment: [
+            {id: 'c1', issueID: 'i1', text: 'comment 1'},
+            {id: 'c2', issueID: 'i2', text: 'comment 2'},
+            {id: 'c3', issueID: 'i3', text: 'comment 3'},
+          ],
         },
-      ],
+        joins,
+        format,
+        pushes: [
+          [
+            'issue',
+            {
+              type: 'edit',
+              oldRow: {id: 'i1', text: 'issue 1'},
+              row: {id: 'i3', text: 'issue 1.3'},
+            },
+          ],
+        ],
+      });
+
+      expect(log).toMatchInlineSnapshot(`
+        [
+          [
+            "issue",
+            "push",
+            {
+              "oldRow": {
+                "id": "i1",
+                "text": "issue 1",
+              },
+              "row": {
+                "id": "i3",
+                "text": "issue 1.3",
+              },
+              "type": "edit",
+            },
+          ],
+          [
+            "comment",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
+          ],
+          [
+            "comments",
+            "push",
+            {
+              "row": {
+                "id": "i1",
+                "text": "issue 1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            "comment",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i3",
+              },
+            },
+          ],
+          [
+            "comments",
+            "push",
+            {
+              "row": {
+                "id": "i3",
+                "text": "issue 1.3",
+              },
+              "type": "add",
+            },
+          ],
+        ]
+      `);
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "comments": [
+              {
+                "id": "c2",
+                "issueID": "i2",
+                "text": "comment 2",
+              },
+            ],
+            "id": "i2",
+            "text": "issue 2",
+          },
+          {
+            "comments": [
+              {
+                "id": "c3",
+                "issueID": "i3",
+                "text": "comment 3",
+              },
+            ],
+            "id": "i3",
+            "text": "issue 1.3",
+          },
+        ]
+      `);
+      expect(actualStorage).toMatchInlineSnapshot(`
+        {
+          "comments": {
+            ""pKeySet","i2","i2",": true,
+            ""pKeySet","i3","i3",": true,
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "node": {
+              "relationships": {
+                "comments": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "c1",
+                      "issueID": "i1",
+                      "text": "comment 1",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i1",
+                "text": "issue 1",
+              },
+            },
+            "type": "remove",
+          },
+          {
+            "node": {
+              "relationships": {
+                "comments": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "c3",
+                      "issueID": "i3",
+                      "text": "comment 3",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "text": "issue 1.3",
+              },
+            },
+            "type": "add",
+          },
+        ]
+      `);
     });
   });
 });
 
 suite('push many:one', () => {
-  const base = {
-    columns: [
-      {id: {type: 'string'}, ownerID: {type: 'string'}},
-      {id: {type: 'string'}},
-    ],
-    primaryKeys: [['id'], ['id']],
-    joins: [
-      {
-        parentKey: ['ownerID'],
-        childKey: ['id'],
-        relationshipName: 'owner',
+  const sources: Sources = {
+    issue: {
+      columns: {
+        id: {type: 'string'},
+        ownerID: {type: 'string'},
       },
-    ],
+      primaryKeys: ['id'],
+      sorts: [['id', 'asc']],
+    },
+    user: {
+      columns: {
+        id: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+      sorts: [['id', 'asc']],
+    },
   } as const;
 
-  pushTest({
-    ...base,
-    name: 'fetch one child, add parent',
-    sources: [[], [{id: 'u1'}]],
-    pushes: [[0, {type: 'add', row: {id: 'i1', ownerID: 'u1'}}]],
-    expectedLog: [
-      ['0', 'push', {type: 'add', row: {id: 'i1', ownerID: 'u1'}}],
-      ['1', 'fetch', {constraint: {id: 'u1'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [[['u1', 'i1']]],
-    expectedOutput: [
-      {
-        type: 'add',
-        node: {
-          row: {
-            id: 'i1',
-            ownerID: 'u1',
-          },
-          relationships: {
-            owner: [{row: {id: 'u1'}, relationships: {}}],
-          },
-        },
-      },
-    ],
-  });
+  const joins: Joins = {
+    comments: {
+      parentKey: ['ownerID'],
+      parentSource: 'issue',
+      childKey: ['id'],
+      childSource: 'user',
+      relationshipName: 'owner',
+    },
+  } as const;
 
-  pushTest({
-    ...base,
-    name: 'fetch one child, add wrong parent',
-    sources: [[], [{id: 'u1'}]],
-    pushes: [[0, {type: 'add', row: {id: 'i1', ownerID: 'u2'}}]],
-    expectedLog: [
-      ['0', 'push', {type: 'add', row: {id: 'i1', ownerID: 'u2'}}],
-      ['1', 'fetch', {constraint: {id: 'u2'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [[['u2', 'i1']]],
-    expectedOutput: [
-      {
-        type: 'add',
-        node: {
-          row: {
-            id: 'i1',
-            ownerID: 'u2',
-          },
-          relationships: {
-            owner: [],
-          },
-        },
+  const format: Format = {
+    singular: false,
+    relationships: {
+      owner: {
+        singular: true,
+        relationships: {},
       },
-    ],
-  });
+    },
+  } as const;
 
-  pushTest({
-    ...base,
-    name: 'fetch one parent, add child',
-    sources: [[{id: 'i1', ownerID: 'u1'}], []],
-    pushes: [[1, {type: 'add', row: {id: 'u1'}}]],
-    expectedLog: [
-      ['1', 'push', {type: 'add', row: {id: 'u1'}}],
-      ['0', 'fetch', {constraint: {ownerID: 'u1'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [[['u1', 'i1']]],
-    expectedOutput: [
-      {
-        type: 'child',
-        row: {
-          id: 'i1',
-          ownerID: 'u1',
-        },
-        child: {
-          relationshipName: 'owner',
-          change: {
-            type: 'add',
-            node: {
-              row: {
-                id: 'u1',
-              },
-              relationships: {},
-            },
-          },
-        },
+  test('fetch one child, add parent', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [],
+        user: [{id: 'u1'}],
       },
-    ],
-  });
+      joins,
+      format,
+      pushes: [['issue', {type: 'add', row: {id: 'i1', ownerID: 'u1'}}]],
+    });
 
-  pushTest({
-    ...base,
-    name: 'fetch two parents, add one child',
-    sources: [
+    expect(log).toMatchInlineSnapshot(`
       [
-        {id: 'i1', ownerID: 'u1'},
-        {id: 'i2', ownerID: 'u1'},
-      ],
-      [],
-    ],
-    pushes: [[1, {type: 'add', row: {id: 'u1'}}]],
-    expectedLog: [
-      ['1', 'push', {type: 'add', row: {id: 'u1'}}],
-      ['0', 'fetch', {constraint: {ownerID: 'u1'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [
+        [
+          "issue",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+              "ownerID": "u1",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "user",
+          "fetch",
+          {
+            "constraint": {
+              "id": "u1",
+            },
+          },
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+              "ownerID": "u1",
+            },
+            "type": "add",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
       [
-        ['u1', 'i1'],
-        ['u1', 'i2'],
-      ],
-    ],
-    expectedOutput: [
-      {
-        type: 'child',
-        row: {
-          id: 'i1',
-          ownerID: 'u1',
+        {
+          "id": "i1",
+          "owner": {
+            "id": "u1",
+          },
+          "ownerID": "u1",
         },
-        child: {
-          relationshipName: 'owner',
-          change: {
-            type: 'add',
-            node: {
-              row: {
-                id: 'u1',
-              },
-              relationships: {},
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "comments": {
+          ""pKeySet","u1","i1",": true,
+        },
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "node": {
+            "relationships": {
+              "owner": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": "u1",
+                  },
+                },
+              ],
+            },
+            "row": {
+              "id": "i1",
+              "ownerID": "u1",
             },
           },
+          "type": "add",
         },
+      ]
+    `);
+  });
+
+  test('fetch one child, add wrong parent', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [],
+        user: [{id: 'u1'}],
       },
-      {
-        type: 'child',
-        row: {
-          id: 'i2',
-          ownerID: 'u1',
-        },
-        child: {
-          relationshipName: 'owner',
-          change: {
-            type: 'add',
-            node: {
-              row: {
-                id: 'u1',
-              },
-              relationships: {},
+      joins,
+      format,
+      pushes: [['issue', {type: 'add', row: {id: 'i1', ownerID: 'u2'}}]],
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "issue",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+              "ownerID": "u2",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "user",
+          "fetch",
+          {
+            "constraint": {
+              "id": "u2",
             },
           },
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+              "ownerID": "u2",
+            },
+            "type": "add",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "i1",
+          "owner": undefined,
+          "ownerID": "u2",
         },
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "comments": {
+          ""pKeySet","u2","i1",": true,
+        },
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "node": {
+            "relationships": {
+              "owner": [],
+            },
+            "row": {
+              "id": "i1",
+              "ownerID": "u2",
+            },
+          },
+          "type": "add",
+        },
+      ]
+    `);
+  });
+
+  test('fetch one parent, add child', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [{id: 'i1', ownerID: 'u1'}],
+        user: [],
       },
-    ],
+      joins,
+      format,
+      pushes: [['user', {type: 'add', row: {id: 'u1'}}]],
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "user",
+          "push",
+          {
+            "row": {
+              "id": "u1",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "issue",
+          "fetch",
+          {
+            "constraint": {
+              "ownerID": "u1",
+            },
+          },
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "u1",
+              },
+              "type": "add",
+            },
+            "row": {
+              "id": "i1",
+              "ownerID": "u1",
+            },
+            "type": "child",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "i1",
+          "owner": {
+            "id": "u1",
+          },
+          "ownerID": "u1",
+        },
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "comments": {
+          ""pKeySet","u1","i1",": true,
+        },
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "id": "u1",
+                },
+              },
+              "type": "add",
+            },
+            "relationshipName": "owner",
+          },
+          "row": {
+            "id": "i1",
+            "ownerID": "u1",
+          },
+          "type": "child",
+        },
+      ]
+    `);
+  });
+
+  test('fetch two parents, add one child', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [
+          {id: 'i1', ownerID: 'u1'},
+          {id: 'i2', ownerID: 'u1'},
+        ],
+        user: [],
+      },
+      joins,
+      format,
+      pushes: [['user', {type: 'add', row: {id: 'u1'}}]],
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "user",
+          "push",
+          {
+            "row": {
+              "id": "u1",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "issue",
+          "fetch",
+          {
+            "constraint": {
+              "ownerID": "u1",
+            },
+          },
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "u1",
+              },
+              "type": "add",
+            },
+            "row": {
+              "id": "i1",
+              "ownerID": "u1",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "u1",
+              },
+              "type": "add",
+            },
+            "row": {
+              "id": "i2",
+              "ownerID": "u1",
+            },
+            "type": "child",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "i1",
+          "owner": {
+            "id": "u1",
+          },
+          "ownerID": "u1",
+        },
+        {
+          "id": "i2",
+          "owner": {
+            "id": "u1",
+          },
+          "ownerID": "u1",
+        },
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "comments": {
+          ""pKeySet","u1","i1",": true,
+          ""pKeySet","u1","i2",": true,
+        },
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "id": "u1",
+                },
+              },
+              "type": "add",
+            },
+            "relationshipName": "owner",
+          },
+          "row": {
+            "id": "i1",
+            "ownerID": "u1",
+          },
+          "type": "child",
+        },
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "id": "u1",
+                },
+              },
+              "type": "add",
+            },
+            "relationshipName": "owner",
+          },
+          "row": {
+            "id": "i2",
+            "ownerID": "u1",
+          },
+          "type": "child",
+        },
+      ]
+    `);
   });
 
   suite('edit', () => {
-    const base = {
-      columns: [
-        {
+    const sources: Sources = {
+      issue: {
+        columns: {
           id: {type: 'string'},
           ownerID: {type: 'string'},
           text: {type: 'string'},
         },
-        {id: {type: 'string'}, text: {type: 'string'}},
-      ],
-      primaryKeys: [['id'], ['id']],
-      joins: [
-        {
-          parentKey: ['ownerID'],
-          childKey: ['id'],
-          relationshipName: 'owner',
+        primaryKeys: ['id'],
+        sorts: [['id', 'asc']],
+      },
+      user: {
+        columns: {
+          id: {type: 'string'},
+          text: {type: 'string'},
         },
-      ],
+        primaryKeys: ['id'],
+        sorts: [['id', 'asc']],
+      },
     } as const;
 
-    pushTest({
-      ...base,
-      name: 'edit child to make it match to parents',
-      sources: [
-        [
-          {id: 'i1', ownerID: 'u1', text: 'item 1'},
-          {id: 'i2', ownerID: 'u1', text: 'item 2'},
-        ],
-        [{id: 'u2', text: 'user 2'}],
-      ],
-      pushes: [
-        [
-          1,
-          {
-            type: 'edit',
-            row: {id: 'u1', text: 'user 1'},
-            oldRow: {id: 'u2', text: 'user 2'},
-          },
-        ],
-      ],
-      expectedLog: [
-        [
-          '1',
-          'push',
-          {
-            type: 'edit',
-            row: {id: 'u1', text: 'user 1'},
-            oldRow: {id: 'u2', text: 'user 2'},
-          },
-        ],
-        ['0', 'fetch', {constraint: {ownerID: 'u2'}}],
-        ['0', 'fetch', {constraint: {ownerID: 'u1'}}],
-      ],
-      expectedPrimaryKeySetStorageKeys: [
-        [
-          ['u1', 'i1'],
-          ['u1', 'i2'],
-        ],
-      ],
-      expectedOutput: [
-        {
-          type: 'child',
-          row: {
-            id: 'i1',
-            ownerID: 'u1',
-            text: 'item 1',
-          },
-          child: {
-            relationshipName: 'owner',
-            change: {
-              type: 'add',
-              node: {
-                row: {
-                  id: 'u1',
-                  text: 'user 1',
-                },
-                relationships: {},
-              },
-            },
-          },
-        },
-        {
-          type: 'child',
-          row: {
-            id: 'i2',
-            ownerID: 'u1',
-            text: 'item 2',
-          },
-          child: {
-            relationshipName: 'owner',
-            change: {
-              type: 'add',
-              node: {
-                row: {
-                  id: 'u1',
-                  text: 'user 1',
-                },
-                relationships: {},
-              },
-            },
-          },
-        },
-      ],
-    });
-
-    pushTest({
-      columns: [
-        {id: {type: 'string'}, text: {type: 'string'}},
-        {
-          id: {type: 'string'},
-          ownerID: {type: 'string'},
-          text: {type: 'string'},
-        },
-        {
-          id: {type: 'string'},
-          issueID: {type: 'string'},
-        },
-      ],
-      primaryKeys: [['id'], ['id'], ['id']],
-      joins: [
-        {
-          parentKey: ['id'],
-          childKey: ['ownerID'],
-          relationshipName: 'issues',
-        },
-        {
-          parentKey: ['id'],
-          childKey: ['issueID'],
-          relationshipName: 'comments',
-        },
-      ],
-      name: 'edit child to make it match to parents, 1 to many to many',
-      sources: [
-        [
-          {id: 'u1', text: 'user 1'},
-          {id: 'u2', text: 'user 2'},
-        ],
-        [
-          {id: 'i1', ownerID: 'u1', text: 'item 1'},
-          {id: 'i2', ownerID: 'u2', text: 'item 2'},
-        ],
-        [
-          {id: 'c1', issueID: 'i1'},
-          {id: 'c2', issueID: 'i2'},
-        ],
-      ],
-      pushes: [
-        [
-          1,
-          {
-            type: 'edit',
-            row: {id: 'i2', ownerID: 'u1', text: 'item 2'},
-            oldRow: {id: 'i2', ownerID: 'u2', text: 'item 2'},
-          },
-        ],
-      ],
-      expectedLog: [
-        [
-          '1',
-          'push',
-          {
-            type: 'edit',
-            row: {id: 'i2', ownerID: 'u1', text: 'item 2'},
-            oldRow: {id: 'i2', ownerID: 'u2', text: 'item 2'},
-          },
-        ],
-        ['2', 'cleanup', {constraint: {issueID: 'i2'}}],
-        ['2', 'fetch', {constraint: {issueID: 'i2'}}],
-        ['0', 'fetch', {constraint: {id: 'u2'}}],
-        ['0', 'fetch', {constraint: {id: 'u1'}}],
-      ],
-      expectedPrimaryKeySetStorageKeys: [
-        [
-          ['u1', 'u1'],
-          ['u2', 'u2'],
-        ],
-        [
-          ['i1', 'i1'],
-          ['i2', 'i2'],
-        ],
-      ],
-      expectedOutput: [
-        {
-          type: 'child',
-          row: {
-            id: 'u2',
-            text: 'user 2',
-          },
-          child: {
-            relationshipName: 'issues',
-            change: {
-              type: 'remove',
-              node: {
-                row: {id: 'i2', ownerID: 'u2', text: 'item 2'},
-                relationships: {
-                  comments: [
-                    {row: {id: 'c2', issueID: 'i2'}, relationships: {}},
-                  ],
-                },
-              },
-            },
-          },
-        },
-        {
-          type: 'child',
-          row: {
-            id: 'u1',
-            text: 'user 1',
-          },
-          child: {
-            relationshipName: 'issues',
-            change: {
-              type: 'add',
-              node: {
-                row: {id: 'i2', ownerID: 'u1', text: 'item 2'},
-                relationships: {
-                  comments: [
-                    {row: {id: 'c2', issueID: 'i2'}, relationships: {}},
-                  ],
-                },
-              },
-            },
-          },
-        },
-      ],
-    });
-
-    pushTest({
-      ...base,
-      name: 'edit non matching child',
-      sources: [
-        [
-          {id: 'i1', ownerID: 'u1', text: 'item 1'},
-          {id: 'i2', ownerID: 'u1', text: 'item 2'},
-        ],
-        [{id: 'u2', text: 'user 2'}],
-      ],
-      pushes: [
-        [
-          1,
-          {
-            type: 'edit',
-            row: {id: 'u2', text: 'user 2 changed'},
-            oldRow: {id: 'u2', text: 'user 2'},
-          },
-        ],
-      ],
-      expectedLog: [
-        [
-          '1',
-          'push',
-          {
-            type: 'edit',
-            row: {id: 'u2', text: 'user 2 changed'},
-            oldRow: {id: 'u2', text: 'user 2'},
-          },
-        ],
-        ['0', 'fetch', {constraint: {ownerID: 'u2'}}],
-      ],
-      expectedPrimaryKeySetStorageKeys: [
-        [
-          ['u1', 'i1'],
-          ['u1', 'i2'],
-        ],
-      ],
-      expectedOutput: [],
-    });
-
-    pushTest({
-      ...base,
-      name: 'edit matching child',
-      sources: [
-        [
-          {id: 'i1', ownerID: 'u1', text: 'item 1'},
-          {id: 'i2', ownerID: 'u1', text: 'item 2'},
-        ],
-        [{id: 'u1', text: 'user 1'}],
-      ],
-      pushes: [
-        [
-          1,
-          {
-            type: 'edit',
-            row: {id: 'u1', text: 'user 1 changed'},
-            oldRow: {id: 'u1', text: 'user 1'},
-          },
-        ],
-      ],
-      expectedLog: [
-        [
-          '1',
-          'push',
-          {
-            type: 'edit',
-            row: {id: 'u1', text: 'user 1 changed'},
-            oldRow: {id: 'u1', text: 'user 1'},
-          },
-        ],
-        ['0', 'fetch', {constraint: {ownerID: 'u1'}}],
-      ],
-      expectedPrimaryKeySetStorageKeys: [
-        [
-          ['u1', 'i1'],
-          ['u1', 'i2'],
-        ],
-      ],
-      expectedOutput: [
-        {
-          type: 'child',
-          row: {
-            id: 'i1',
-            ownerID: 'u1',
-            text: 'item 1',
-          },
-          child: {
-            change: {
-              type: 'edit',
-              oldRow: {
-                id: 'u1',
-                text: 'user 1',
-              },
-              row: {
-                id: 'u1',
-                text: 'user 1 changed',
-              },
-            },
-            relationshipName: 'owner',
-          },
-        },
-        {
-          type: 'child',
-          row: {
-            id: 'i2',
-            ownerID: 'u1',
-            text: 'item 2',
-          },
-          child: {
-            change: {
-              type: 'edit',
-              oldRow: {
-                id: 'u1',
-                text: 'user 1',
-              },
-              row: {
-                id: 'u1',
-                text: 'user 1 changed',
-              },
-            },
-            relationshipName: 'owner',
-          },
-        },
-      ],
-    });
-  });
-});
-
-suite('push one:many:many', () => {
-  const base = {
-    columns: [
-      {id: {type: 'string'}},
-      {id: {type: 'string'}, issueID: {type: 'string'}},
-      {id: {type: 'string'}, commentID: {type: 'string'}},
-    ],
-    primaryKeys: [['id'], ['id'], ['id']],
-    joins: [
-      {
-        parentKey: ['id'],
-        childKey: ['issueID'],
-        relationshipName: 'comments',
+    const joins: Joins = {
+      comments: {
+        parentKey: ['ownerID'],
+        parentSource: 'issue',
+        childKey: ['id'],
+        childSource: 'user',
+        relationshipName: 'owner',
       },
-      {
-        parentKey: ['id'],
-        childKey: ['commentID'],
-        relationshipName: 'revisions',
-      },
-    ],
-  } as const;
+    } as const;
 
-  pushTest({
-    ...base,
-    name: 'fetch one parent, one child, add grandchild',
-    sources: [[{id: 'i1'}], [{id: 'c1', issueID: 'i1'}], []],
-    pushes: [[2, {type: 'add', row: {id: 'r1', commentID: 'c1'}}]],
-    expectedLog: [
-      ['2', 'push', {type: 'add', row: {id: 'r1', commentID: 'c1'}}],
-      ['1', 'fetch', {constraint: {id: 'c1'}}],
-      ['0', 'fetch', {constraint: {id: 'i1'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['c1', 'c1']]],
-    expectedOutput: [
-      {
-        type: 'child',
-        row: {
-          id: 'i1',
+    const format: Format = {
+      singular: false,
+      relationships: {
+        owner: {
+          singular: true,
+          relationships: {},
         },
-        child: {
-          relationshipName: 'comments',
-          change: {
-            type: 'child',
-            row: {
-              id: 'c1',
-              issueID: 'i1',
+      },
+    } as const;
+
+    test('edit child to make it match to parents', () => {
+      const {log, data, actualStorage, pushes} = runJoinTest({
+        sources,
+        sourceContents: {
+          issue: [
+            {id: 'i1', ownerID: 'u1', text: 'item 1'},
+            {id: 'i2', ownerID: 'u1', text: 'item 2'},
+          ],
+          user: [{id: 'u2', text: 'user 2'}],
+        },
+        joins,
+        format,
+        pushes: [
+          [
+            'user',
+            {
+              type: 'edit',
+              row: {id: 'u1', text: 'user 1'},
+              oldRow: {id: 'u2', text: 'user 2'},
             },
-            child: {
-              relationshipName: 'revisions',
-              change: {
-                type: 'add',
-                node: {
-                  row: {
-                    id: 'r1',
-                    commentID: 'c1',
+          ],
+        ],
+      });
+
+      expect(log).toMatchInlineSnapshot(`
+        [
+          [
+            "user",
+            "push",
+            {
+              "oldRow": {
+                "id": "u2",
+                "text": "user 2",
+              },
+              "row": {
+                "id": "u1",
+                "text": "user 1",
+              },
+              "type": "edit",
+            },
+          ],
+          [
+            "issue",
+            "fetch",
+            {
+              "constraint": {
+                "ownerID": "u2",
+              },
+            },
+          ],
+          [
+            "issue",
+            "fetch",
+            {
+              "constraint": {
+                "ownerID": "u1",
+              },
+            },
+          ],
+          [
+            "comments",
+            "push",
+            {
+              "child": {
+                "row": {
+                  "id": "u1",
+                  "text": "user 1",
+                },
+                "type": "add",
+              },
+              "row": {
+                "id": "i1",
+                "ownerID": "u1",
+                "text": "item 1",
+              },
+              "type": "child",
+            },
+          ],
+          [
+            "comments",
+            "push",
+            {
+              "child": {
+                "row": {
+                  "id": "u1",
+                  "text": "user 1",
+                },
+                "type": "add",
+              },
+              "row": {
+                "id": "i2",
+                "ownerID": "u1",
+                "text": "item 2",
+              },
+              "type": "child",
+            },
+          ],
+        ]
+      `);
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "id": "i1",
+            "owner": {
+              "id": "u1",
+              "text": "user 1",
+            },
+            "ownerID": "u1",
+            "text": "item 1",
+          },
+          {
+            "id": "i2",
+            "owner": {
+              "id": "u1",
+              "text": "user 1",
+            },
+            "ownerID": "u1",
+            "text": "item 2",
+          },
+        ]
+      `);
+      expect(actualStorage).toMatchInlineSnapshot(`
+        {
+          "comments": {
+            ""pKeySet","u1","i1",": true,
+            ""pKeySet","u1","i2",": true,
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "child": {
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "id": "u1",
+                    "text": "user 1",
                   },
+                },
+                "type": "add",
+              },
+              "relationshipName": "owner",
+            },
+            "row": {
+              "id": "i1",
+              "ownerID": "u1",
+              "text": "item 1",
+            },
+            "type": "child",
+          },
+          {
+            "child": {
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "id": "u1",
+                    "text": "user 1",
+                  },
+                },
+                "type": "add",
+              },
+              "relationshipName": "owner",
+            },
+            "row": {
+              "id": "i2",
+              "ownerID": "u1",
+              "text": "item 2",
+            },
+            "type": "child",
+          },
+        ]
+      `);
+    });
+
+    test('edit child to make it match to parents, 1:many:many', () => {
+      const {log, data, actualStorage, pushes} = runJoinTest({
+        sources: {
+          user: {
+            columns: {
+              id: {type: 'string'},
+              text: {type: 'string'},
+            },
+            primaryKeys: ['id'],
+            sorts: [['id', 'asc']],
+          },
+          issue: {
+            columns: {
+              id: {type: 'string'},
+              ownerID: {type: 'string'},
+              text: {type: 'string'},
+            },
+            primaryKeys: ['id'],
+            sorts: [['id', 'asc']],
+          },
+          comment: {
+            columns: {
+              id: {type: 'string'},
+              issueID: {type: 'string'},
+            },
+            primaryKeys: ['id'],
+            sorts: [['id', 'asc']],
+          },
+        },
+        sourceContents: {
+          user: [
+            {id: 'u1', text: 'user 1'},
+            {id: 'u2', text: 'user 2'},
+          ],
+          issue: [
+            {id: 'i1', ownerID: 'u1', text: 'item 1'},
+            {id: 'i2', ownerID: 'u2', text: 'item 2'},
+          ],
+          comment: [
+            {id: 'c1', issueID: 'i1'},
+            {id: 'c2', issueID: 'i2'},
+          ],
+        },
+        joins: {
+          comments: {
+            parentKey: ['id'],
+            parentSource: 'issue',
+            childKey: ['issueID'],
+            childSource: 'comment',
+            relationshipName: 'comments',
+          },
+          issues: {
+            parentKey: ['id'],
+            parentSource: 'user',
+            childKey: ['ownerID'],
+            childSource: 'comments',
+            relationshipName: 'issues',
+          },
+        },
+        format: {
+          singular: false,
+          relationships: {
+            issues: {
+              singular: false,
+              relationships: {
+                comments: {
+                  singular: false,
                   relationships: {},
                 },
               },
             },
           },
         },
-      },
-    ],
-  });
+        pushes: [
+          [
+            'issue',
+            {
+              type: 'edit',
+              row: {id: 'i2', ownerID: 'u1', text: 'item 2'},
+              oldRow: {id: 'i2', ownerID: 'u2', text: 'item 2'},
+            },
+          ],
+        ],
+      });
 
-  pushTest({
-    ...base,
-    name: 'fetch one parent, one grandchild, add child',
-    sources: [[{id: 'i1'}], [], [{id: 'r1', commentID: 'c1'}]],
-    pushes: [[1, {type: 'add', row: {id: 'c1', issueID: 'i1'}}]],
-    expectedLog: [
-      ['1', 'push', {type: 'add', row: {id: 'c1', issueID: 'i1'}}],
-      ['2', 'fetch', {constraint: {commentID: 'c1'}}],
-      ['0', 'fetch', {constraint: {id: 'i1'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['c1', 'c1']]],
-    expectedOutput: [
-      {
-        type: 'child',
-        row: {
-          id: 'i1',
-        },
-        child: {
-          relationshipName: 'comments',
-          change: {
-            type: 'add',
-            node: {
-              row: {
-                id: 'c1',
-                issueID: 'i1',
+      expect(log).toMatchInlineSnapshot(`
+        [
+          [
+            "issue",
+            "push",
+            {
+              "oldRow": {
+                "id": "i2",
+                "ownerID": "u2",
+                "text": "item 2",
               },
-              relationships: {
-                revisions: [
-                  {row: {id: 'r1', commentID: 'c1'}, relationships: {}},
-                ],
+              "row": {
+                "id": "i2",
+                "ownerID": "u1",
+                "text": "item 2",
+              },
+              "type": "edit",
+            },
+          ],
+          [
+            "comment",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i2",
               },
             },
-          },
-        },
-      },
-    ],
-  });
-
-  pushTest({
-    ...base,
-    name: 'fetch one child, one grandchild, add parent',
-    sources: [[], [{id: 'c1', issueID: 'i1'}], [{id: 'r1', commentID: 'c1'}]],
-    pushes: [[0, {type: 'add', row: {id: 'i1'}}]],
-    expectedLog: [
-      ['0', 'push', {type: 'add', row: {id: 'i1'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
-      ['2', 'fetch', {constraint: {commentID: 'c1'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['c1', 'c1']]],
-    expectedOutput: [
-      {
-        type: 'add',
-        node: {
-          row: {
-            id: 'i1',
-          },
-          relationships: {
-            comments: [
-              {
-                row: {id: 'c1', issueID: 'i1'},
-                relationships: {
-                  revisions: [
-                    {row: {id: 'r1', commentID: 'c1'}, relationships: {}},
-                  ],
+          ],
+          [
+            "comment",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i2",
+              },
+            },
+          ],
+          [
+            "comments",
+            "push",
+            {
+              "oldRow": {
+                "id": "i2",
+                "ownerID": "u2",
+                "text": "item 2",
+              },
+              "row": {
+                "id": "i2",
+                "ownerID": "u1",
+                "text": "item 2",
+              },
+              "type": "edit",
+            },
+          ],
+          [
+            "user",
+            "fetch",
+            {
+              "constraint": {
+                "id": "u2",
+              },
+            },
+          ],
+          [
+            "issues",
+            "push",
+            {
+              "child": {
+                "row": {
+                  "id": "i2",
+                  "ownerID": "u2",
+                  "text": "item 2",
                 },
+                "type": "remove",
+              },
+              "row": {
+                "id": "u2",
+                "text": "user 2",
+              },
+              "type": "child",
+            },
+          ],
+          [
+            "user",
+            "fetch",
+            {
+              "constraint": {
+                "id": "u1",
+              },
+            },
+          ],
+          [
+            "issues",
+            "push",
+            {
+              "child": {
+                "row": {
+                  "id": "i2",
+                  "ownerID": "u1",
+                  "text": "item 2",
+                },
+                "type": "add",
+              },
+              "row": {
+                "id": "u1",
+                "text": "user 1",
+              },
+              "type": "child",
+            },
+          ],
+        ]
+      `);
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "id": "u1",
+            "issues": [
+              {
+                "comments": [
+                  {
+                    "id": "c1",
+                    "issueID": "i1",
+                  },
+                ],
+                "id": "i1",
+                "ownerID": "u1",
+                "text": "item 1",
+              },
+              {
+                "comments": [
+                  {
+                    "id": "c2",
+                    "issueID": "i2",
+                  },
+                ],
+                "id": "i2",
+                "ownerID": "u1",
+                "text": "item 2",
               },
             ],
+            "text": "user 1",
+          },
+          {
+            "id": "u2",
+            "issues": [],
+            "text": "user 2",
+          },
+        ]
+      `);
+      expect(actualStorage).toMatchInlineSnapshot(`
+        {
+          "comments": {
+            ""pKeySet","i1","i1",": true,
+            ""pKeySet","i2","i2",": true,
+          },
+          "issues": {
+            ""pKeySet","u1","u1",": true,
+            ""pKeySet","u2","u2",": true,
+          },
+        }
+      `);
+
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "child": {
+              "change": {
+                "node": {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "id": "c2",
+                          "issueID": "i2",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i2",
+                    "ownerID": "u2",
+                    "text": "item 2",
+                  },
+                },
+                "type": "remove",
+              },
+              "relationshipName": "issues",
+            },
+            "row": {
+              "id": "u2",
+              "text": "user 2",
+            },
+            "type": "child",
+          },
+          {
+            "child": {
+              "change": {
+                "node": {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "id": "c2",
+                          "issueID": "i2",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i2",
+                    "ownerID": "u1",
+                    "text": "item 2",
+                  },
+                },
+                "type": "add",
+              },
+              "relationshipName": "issues",
+            },
+            "row": {
+              "id": "u1",
+              "text": "user 1",
+            },
+            "type": "child",
+          },
+        ]
+      `);
+    });
+
+    test('edit non matching child', () => {
+      const {log, data, actualStorage, pushes} = runJoinTest({
+        sources,
+        sourceContents: {
+          issue: [
+            {id: 'i1', ownerID: 'u1', text: 'item 1'},
+            {id: 'i2', ownerID: 'u1', text: 'item 2'},
+          ],
+          user: [{id: 'u2', text: 'user 2'}],
+        },
+        joins,
+        format,
+        pushes: [
+          [
+            'user',
+            {
+              type: 'edit',
+              row: {id: 'u2', text: 'user 2 changed'},
+              oldRow: {id: 'u2', text: 'user 2'},
+            },
+          ],
+        ],
+      });
+
+      expect(log).toMatchInlineSnapshot(`
+        [
+          [
+            "user",
+            "push",
+            {
+              "oldRow": {
+                "id": "u2",
+                "text": "user 2",
+              },
+              "row": {
+                "id": "u2",
+                "text": "user 2 changed",
+              },
+              "type": "edit",
+            },
+          ],
+          [
+            "issue",
+            "fetch",
+            {
+              "constraint": {
+                "ownerID": "u2",
+              },
+            },
+          ],
+        ]
+      `);
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "id": "i1",
+            "owner": undefined,
+            "ownerID": "u1",
+            "text": "item 1",
+          },
+          {
+            "id": "i2",
+            "owner": undefined,
+            "ownerID": "u1",
+            "text": "item 2",
+          },
+        ]
+      `);
+      expect(actualStorage).toMatchInlineSnapshot(`
+        {
+          "comments": {
+            ""pKeySet","u1","i1",": true,
+            ""pKeySet","u1","i2",": true,
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`[]`);
+    });
+
+    test('edit matching child', () => {
+      const {log, data, actualStorage, pushes} = runJoinTest({
+        sources,
+        sourceContents: {
+          issue: [
+            {id: 'i1', ownerID: 'u1', text: 'item 1'},
+            {id: 'i2', ownerID: 'u1', text: 'item 2'},
+          ],
+          user: [{id: 'u1', text: 'user 1'}],
+        },
+        joins,
+        format,
+        pushes: [
+          [
+            'user',
+            {
+              type: 'edit',
+              row: {id: 'u1', text: 'user 1 changed'},
+              oldRow: {id: 'u1', text: 'user 1'},
+            },
+          ],
+        ],
+      });
+
+      expect(log).toMatchInlineSnapshot(`
+        [
+          [
+            "user",
+            "push",
+            {
+              "oldRow": {
+                "id": "u1",
+                "text": "user 1",
+              },
+              "row": {
+                "id": "u1",
+                "text": "user 1 changed",
+              },
+              "type": "edit",
+            },
+          ],
+          [
+            "issue",
+            "fetch",
+            {
+              "constraint": {
+                "ownerID": "u1",
+              },
+            },
+          ],
+          [
+            "comments",
+            "push",
+            {
+              "child": {
+                "oldRow": {
+                  "id": "u1",
+                  "text": "user 1",
+                },
+                "row": {
+                  "id": "u1",
+                  "text": "user 1 changed",
+                },
+                "type": "edit",
+              },
+              "row": {
+                "id": "i1",
+                "ownerID": "u1",
+                "text": "item 1",
+              },
+              "type": "child",
+            },
+          ],
+          [
+            "comments",
+            "push",
+            {
+              "child": {
+                "oldRow": {
+                  "id": "u1",
+                  "text": "user 1",
+                },
+                "row": {
+                  "id": "u1",
+                  "text": "user 1 changed",
+                },
+                "type": "edit",
+              },
+              "row": {
+                "id": "i2",
+                "ownerID": "u1",
+                "text": "item 2",
+              },
+              "type": "child",
+            },
+          ],
+        ]
+      `);
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "id": "i1",
+            "owner": {
+              "id": "u1",
+              "text": "user 1 changed",
+            },
+            "ownerID": "u1",
+            "text": "item 1",
+          },
+          {
+            "id": "i2",
+            "owner": {
+              "id": "u1",
+              "text": "user 1 changed",
+            },
+            "ownerID": "u1",
+            "text": "item 2",
+          },
+        ]
+      `);
+      expect(actualStorage).toMatchInlineSnapshot(`
+        {
+          "comments": {
+            ""pKeySet","u1","i1",": true,
+            ""pKeySet","u1","i2",": true,
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "child": {
+              "change": {
+                "oldRow": {
+                  "id": "u1",
+                  "text": "user 1",
+                },
+                "row": {
+                  "id": "u1",
+                  "text": "user 1 changed",
+                },
+                "type": "edit",
+              },
+              "relationshipName": "owner",
+            },
+            "row": {
+              "id": "i1",
+              "ownerID": "u1",
+              "text": "item 1",
+            },
+            "type": "child",
+          },
+          {
+            "child": {
+              "change": {
+                "oldRow": {
+                  "id": "u1",
+                  "text": "user 1",
+                },
+                "row": {
+                  "id": "u1",
+                  "text": "user 1 changed",
+                },
+                "type": "edit",
+              },
+              "relationshipName": "owner",
+            },
+            "row": {
+              "id": "i2",
+              "ownerID": "u1",
+              "text": "item 2",
+            },
+            "type": "child",
+          },
+        ]
+      `);
+    });
+  });
+});
+
+suite('push one:many:many', () => {
+  const sources: Sources = {
+    issue: {
+      columns: {
+        id: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+      sorts: [['id', 'asc']],
+    },
+    comment: {
+      columns: {
+        id: {type: 'string'},
+        issueID: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+      sorts: [['id', 'asc']],
+    },
+    revision: {
+      columns: {
+        id: {type: 'string'},
+        commentID: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+      sorts: [['id', 'asc']],
+    },
+  } as const;
+
+  const joins: Joins = {
+    revisions: {
+      parentKey: ['id'],
+      parentSource: 'comment',
+      childKey: ['commentID'],
+      childSource: 'revision',
+      relationshipName: 'revisions',
+    },
+    comments: {
+      parentKey: ['id'],
+      parentSource: 'issue',
+      childKey: ['issueID'],
+      childSource: 'revisions',
+      relationshipName: 'comments',
+    },
+  } as const;
+
+  const format: Format = {
+    singular: false,
+    relationships: {
+      comments: {
+        singular: false,
+        relationships: {
+          revisions: {
+            singular: false,
+            relationships: {},
           },
         },
       },
-    ],
+    },
+  } as const;
+
+  test('fetch one parent, one child, add grandchild', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [{id: 'i1'}],
+        comment: [{id: 'c1', issueID: 'i1'}],
+        revision: [],
+      },
+      joins,
+      format,
+      pushes: [['revision', {type: 'add', row: {id: 'r1', commentID: 'c1'}}]],
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "revision",
+          "push",
+          {
+            "row": {
+              "commentID": "c1",
+              "id": "r1",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "comment",
+          "fetch",
+          {
+            "constraint": {
+              "id": "c1",
+            },
+          },
+        ],
+        [
+          "revisions",
+          "push",
+          {
+            "child": {
+              "row": {
+                "commentID": "c1",
+                "id": "r1",
+              },
+              "type": "add",
+            },
+            "row": {
+              "id": "c1",
+              "issueID": "i1",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          "issue",
+          "fetch",
+          {
+            "constraint": {
+              "id": "i1",
+            },
+          },
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "child": {
+              "child": {
+                "row": {
+                  "commentID": "c1",
+                  "id": "r1",
+                },
+                "type": "add",
+              },
+              "row": {
+                "id": "c1",
+                "issueID": "i1",
+              },
+              "type": "child",
+            },
+            "row": {
+              "id": "i1",
+            },
+            "type": "child",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "comments": [
+            {
+              "id": "c1",
+              "issueID": "i1",
+              "revisions": [
+                {
+                  "commentID": "c1",
+                  "id": "r1",
+                },
+              ],
+            },
+          ],
+          "id": "i1",
+        },
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "comments": {
+          ""pKeySet","i1","i1",": true,
+        },
+        "revisions": {
+          ""pKeySet","c1","c1",": true,
+        },
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "child": {
+            "change": {
+              "child": {
+                "change": {
+                  "node": {
+                    "relationships": {},
+                    "row": {
+                      "commentID": "c1",
+                      "id": "r1",
+                    },
+                  },
+                  "type": "add",
+                },
+                "relationshipName": "revisions",
+              },
+              "row": {
+                "id": "c1",
+                "issueID": "i1",
+              },
+              "type": "child",
+            },
+            "relationshipName": "comments",
+          },
+          "row": {
+            "id": "i1",
+          },
+          "type": "child",
+        },
+      ]
+    `);
   });
 
-  pushTest({
-    ...base,
-    name: 'fetch one parent, one child, one grandchild, remove parent',
-    sources: [
-      [{id: 'i1'}],
-      [{id: 'c1', issueID: 'i1'}],
-      [{id: 'r1', commentID: 'c1'}],
-    ],
-    pushes: [[0, {type: 'remove', row: {id: 'i1'}}]],
-    expectedLog: [
-      ['0', 'push', {type: 'remove', row: {id: 'i1'}}],
-      ['1', 'cleanup', {constraint: {issueID: 'i1'}}],
-      ['2', 'cleanup', {constraint: {commentID: 'c1'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [[], []],
-    expectedOutput: [
-      {
-        type: 'remove',
-        node: {
-          row: {
-            id: 'i1',
+  test('fetch one parent, one grandchild, add child', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [{id: 'i1'}],
+        comment: [],
+        revision: [{id: 'r1', commentID: 'c1'}],
+      },
+      joins,
+      format,
+      pushes: [['comment', {type: 'add', row: {id: 'c1', issueID: 'i1'}}]],
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "comment",
+          "push",
+          {
+            "row": {
+              "id": "c1",
+              "issueID": "i1",
+            },
+            "type": "add",
           },
-          relationships: {
-            comments: [
-              {
-                row: {id: 'c1', issueID: 'i1'},
-                relationships: {
-                  revisions: [
-                    {row: {id: 'r1', commentID: 'c1'}, relationships: {}},
+        ],
+        [
+          "revision",
+          "fetch",
+          {
+            "constraint": {
+              "commentID": "c1",
+            },
+          },
+        ],
+        [
+          "revisions",
+          "push",
+          {
+            "row": {
+              "id": "c1",
+              "issueID": "i1",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "issue",
+          "fetch",
+          {
+            "constraint": {
+              "id": "i1",
+            },
+          },
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "c1",
+                "issueID": "i1",
+              },
+              "type": "add",
+            },
+            "row": {
+              "id": "i1",
+            },
+            "type": "child",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "comments": [
+            {
+              "id": "c1",
+              "issueID": "i1",
+              "revisions": [
+                {
+                  "commentID": "c1",
+                  "id": "r1",
+                },
+              ],
+            },
+          ],
+          "id": "i1",
+        },
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "comments": {
+          ""pKeySet","i1","i1",": true,
+        },
+        "revisions": {
+          ""pKeySet","c1","c1",": true,
+        },
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {
+                  "revisions": [
+                    {
+                      "relationships": {},
+                      "row": {
+                        "commentID": "c1",
+                        "id": "r1",
+                      },
+                    },
                   ],
                 },
+                "row": {
+                  "id": "c1",
+                  "issueID": "i1",
+                },
               },
-            ],
+              "type": "add",
+            },
+            "relationshipName": "comments",
           },
+          "row": {
+            "id": "i1",
+          },
+          "type": "child",
         },
+      ]
+    `);
+  });
+
+  test('fetch one child, one grandchild, add parent', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [],
+        comment: [{id: 'c1', issueID: 'i1'}],
+        revision: [{id: 'r1', commentID: 'c1'}],
       },
-    ],
+      joins,
+      format,
+      pushes: [['issue', {type: 'add', row: {id: 'i1'}}]],
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "issue",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "revisions",
+          "fetch",
+          {
+            "constraint": {
+              "issueID": "i1",
+            },
+          },
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "comment",
+          "fetch",
+          {
+            "constraint": {
+              "issueID": "i1",
+            },
+          },
+        ],
+        [
+          "revision",
+          "fetch",
+          {
+            "constraint": {
+              "commentID": "c1",
+            },
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "comments": [
+            {
+              "id": "c1",
+              "issueID": "i1",
+              "revisions": [
+                {
+                  "commentID": "c1",
+                  "id": "r1",
+                },
+              ],
+            },
+          ],
+          "id": "i1",
+        },
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "comments": {
+          ""pKeySet","i1","i1",": true,
+        },
+        "revisions": {
+          ""pKeySet","c1","c1",": true,
+        },
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "node": {
+            "relationships": {
+              "comments": [
+                {
+                  "relationships": {
+                    "revisions": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "commentID": "c1",
+                          "id": "r1",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "c1",
+                    "issueID": "i1",
+                  },
+                },
+              ],
+            },
+            "row": {
+              "id": "i1",
+            },
+          },
+          "type": "add",
+        },
+      ]
+    `);
+  });
+
+  test('fetch one parent, one child, one grandchild, remove parent', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [{id: 'i1'}],
+        comment: [{id: 'c1', issueID: 'i1'}],
+        revision: [{id: 'r1', commentID: 'c1'}],
+      },
+      joins,
+      format,
+      pushes: [['issue', {type: 'remove', row: {id: 'i1'}}]],
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "issue",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+            },
+            "type": "remove",
+          },
+        ],
+        [
+          "revisions",
+          "cleanup",
+          {
+            "constraint": {
+              "issueID": "i1",
+            },
+          },
+        ],
+        [
+          "comments",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+            },
+            "type": "remove",
+          },
+        ],
+        [
+          "comment",
+          "cleanup",
+          {
+            "constraint": {
+              "issueID": "i1",
+            },
+          },
+        ],
+        [
+          "revision",
+          "cleanup",
+          {
+            "constraint": {
+              "commentID": "c1",
+            },
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`[]`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "comments": {},
+        "revisions": {},
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "node": {
+            "relationships": {
+              "comments": [
+                {
+                  "relationships": {
+                    "revisions": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "commentID": "c1",
+                          "id": "r1",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "c1",
+                    "issueID": "i1",
+                  },
+                },
+              ],
+            },
+            "row": {
+              "id": "i1",
+            },
+          },
+          "type": "remove",
+        },
+      ]
+    `);
   });
 });
 
 suite('push one:many:one', () => {
+  const sources: Sources = {
+    issue: {
+      columns: {
+        id: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+      sorts: [['id', 'asc']],
+    },
+    issueLabel: {
+      columns: {
+        issueID: {type: 'string'},
+        labelID: {type: 'string'},
+      },
+      primaryKeys: ['issueID', 'labelID'],
+      sorts: [
+        ['issueID', 'asc'],
+        ['labelID', 'asc'],
+      ],
+    },
+    label: {
+      columns: {
+        id: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+      sorts: [['id', 'asc']],
+    },
+  } as const;
+
+  const joins: Joins = {
+    labels: {
+      parentKey: ['labelID'],
+      parentSource: 'issueLabel',
+      childKey: ['id'],
+      childSource: 'label',
+      relationshipName: 'labels',
+    },
+    issueLabels: {
+      parentKey: ['id'],
+      parentSource: 'issue',
+      childKey: ['issueID'],
+      childSource: 'labels',
+      relationshipName: 'issueLabels',
+    },
+  } as const;
+
+  const format: Format = {
+    singular: false,
+    relationships: {
+      issueLabels: {
+        singular: false,
+        relationships: {
+          labels: {
+            singular: true,
+            relationships: {},
+          },
+        },
+      },
+    },
+  } as const;
+
   const base = {
     columns: [
       {id: {type: 'string'}},
@@ -1409,174 +3599,524 @@ suite('push one:many:one', () => {
     ] as const,
   };
 
-  pushTest({
-    ...base,
-    name: 'fetch one parent, one child, add grandchild',
-    sources: [[{id: 'i1'}], [{issueID: 'i1', labelID: 'l1'}], []],
-    sorts,
-    pushes: [[2, {type: 'add', row: {id: 'l1'}}]],
-    expectedLog: [
-      ['2', 'push', {type: 'add', row: {id: 'l1'}}],
-      ['1', 'fetch', {constraint: {labelID: 'l1'}}],
-      ['0', 'fetch', {constraint: {id: 'i1'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['l1', 'i1', 'l1']]],
-    expectedOutput: [
-      {
-        type: 'child',
-        row: {
-          id: 'i1',
-        },
-        child: {
-          relationshipName: 'issuelabels',
-          change: {
-            type: 'child',
-            row: {
-              issueID: 'i1',
-              labelID: 'l1',
+  test('fetch one parent, one child, add grandchild', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [{id: 'i1'}],
+        issueLabel: [{issueID: 'i1', labelID: 'l1'}],
+        label: [],
+      },
+      joins,
+      format,
+      pushes: [['label', {type: 'add', row: {id: 'l1'}}]],
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "label",
+          "push",
+          {
+            "row": {
+              "id": "l1",
             },
-            child: {
-              relationshipName: 'labels',
-              change: {
-                type: 'add',
-                node: {
-                  row: {
-                    id: 'l1',
-                  },
-                  relationships: {},
-                },
-              },
+            "type": "add",
+          },
+        ],
+        [
+          "issueLabel",
+          "fetch",
+          {
+            "constraint": {
+              "labelID": "l1",
             },
           },
+        ],
+        [
+          "labels",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "l1",
+              },
+              "type": "add",
+            },
+            "row": {
+              "issueID": "i1",
+              "labelID": "l1",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          "issue",
+          "fetch",
+          {
+            "constraint": {
+              "id": "i1",
+            },
+          },
+        ],
+        [
+          "issueLabels",
+          "push",
+          {
+            "child": {
+              "child": {
+                "row": {
+                  "id": "l1",
+                },
+                "type": "add",
+              },
+              "row": {
+                "issueID": "i1",
+                "labelID": "l1",
+              },
+              "type": "child",
+            },
+            "row": {
+              "id": "i1",
+            },
+            "type": "child",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "i1",
+          "issueLabels": [
+            {
+              "issueID": "i1",
+              "labelID": "l1",
+              "labels": {
+                "id": "l1",
+              },
+            },
+          ],
         },
-      },
-    ],
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "issueLabels": {
+          ""pKeySet","i1","i1",": true,
+        },
+        "labels": {
+          ""pKeySet","l1","i1","l1",": true,
+        },
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "child": {
+            "change": {
+              "child": {
+                "change": {
+                  "node": {
+                    "relationships": {},
+                    "row": {
+                      "id": "l1",
+                    },
+                  },
+                  "type": "add",
+                },
+                "relationshipName": "labels",
+              },
+              "row": {
+                "issueID": "i1",
+                "labelID": "l1",
+              },
+              "type": "child",
+            },
+            "relationshipName": "issueLabels",
+          },
+          "row": {
+            "id": "i1",
+          },
+          "type": "child",
+        },
+      ]
+    `);
   });
 
-  pushTest({
-    ...base,
-    name: 'fetch one parent, one grandchild, add child',
-    sources: [[{id: 'i1'}], [], [{id: 'l1'}]],
-    sorts,
-    pushes: [[1, {type: 'add', row: {issueID: 'i1', labelID: 'l1'}}]],
-    expectedLog: [
-      ['1', 'push', {type: 'add', row: {issueID: 'i1', labelID: 'l1'}}],
-      ['2', 'fetch', {constraint: {id: 'l1'}}],
-      ['0', 'fetch', {constraint: {id: 'i1'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [[['i1', 'i1']], [['l1', 'i1', 'l1']]],
-    expectedOutput: [
-      {
-        type: 'child',
-        row: {
-          id: 'i1',
-        },
-        child: {
-          relationshipName: 'issuelabels',
-          change: {
-            type: 'add',
-            node: {
-              row: {
-                issueID: 'i1',
-                labelID: 'l1',
-              },
-              relationships: {
-                labels: [{row: {id: 'l1'}, relationships: {}}],
-              },
+  test('fetch one parent, one grandchild, add child', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [{id: 'i1'}],
+        issueLabel: [],
+        label: [{id: 'l1'}],
+      },
+      joins,
+      format,
+      pushes: [
+        ['issueLabel', {type: 'add', row: {issueID: 'i1', labelID: 'l1'}}],
+      ],
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          "issueLabel",
+          "push",
+          {
+            "row": {
+              "issueID": "i1",
+              "labelID": "l1",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "label",
+          "fetch",
+          {
+            "constraint": {
+              "id": "l1",
             },
           },
+        ],
+        [
+          "labels",
+          "push",
+          {
+            "row": {
+              "issueID": "i1",
+              "labelID": "l1",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "issue",
+          "fetch",
+          {
+            "constraint": {
+              "id": "i1",
+            },
+          },
+        ],
+        [
+          "issueLabels",
+          "push",
+          {
+            "child": {
+              "row": {
+                "issueID": "i1",
+                "labelID": "l1",
+              },
+              "type": "add",
+            },
+            "row": {
+              "id": "i1",
+            },
+            "type": "child",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "i1",
+          "issueLabels": [
+            {
+              "issueID": "i1",
+              "labelID": "l1",
+              "labels": {
+                "id": "l1",
+              },
+            },
+          ],
         },
-      },
-    ],
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "issueLabels": {
+          ""pKeySet","i1","i1",": true,
+        },
+        "labels": {
+          ""pKeySet","l1","i1","l1",": true,
+        },
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {
+                  "labels": [
+                    {
+                      "relationships": {},
+                      "row": {
+                        "id": "l1",
+                      },
+                    },
+                  ],
+                },
+                "row": {
+                  "issueID": "i1",
+                  "labelID": "l1",
+                },
+              },
+              "type": "add",
+            },
+            "relationshipName": "issueLabels",
+          },
+          "row": {
+            "id": "i1",
+          },
+          "type": "child",
+        },
+      ]
+    `);
   });
 
-  pushTest({
-    ...base,
-    name: 'fetch two parents, two children, add one grandchild',
-    sources: [
-      [{id: 'i1'}, {id: 'i2'}],
+  test('fetch two parents, two children, add one grandchild', () => {
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents: {
+        issue: [{id: 'i1'}, {id: 'i2'}],
+        issueLabel: [
+          {issueID: 'i1', labelID: 'l1'},
+          {issueID: 'i2', labelID: 'l1'},
+        ],
+        label: [],
+      },
+      joins,
+      format,
+      pushes: [['label', {type: 'add', row: {id: 'l1'}}]],
+    });
+
+    expect(log).toMatchInlineSnapshot(`
       [
-        {issueID: 'i1', labelID: 'l1'},
-        {issueID: 'i2', labelID: 'l1'},
-      ],
-      [],
-    ],
-    sorts,
-    pushes: [[2, {type: 'add', row: {id: 'l1'}}]],
-    expectedLog: [
-      ['2', 'push', {type: 'add', row: {id: 'l1'}}],
-      ['1', 'fetch', {constraint: {labelID: 'l1'}}],
-      ['0', 'fetch', {constraint: {id: 'i1'}}],
-      ['0', 'fetch', {constraint: {id: 'i2'}}],
-    ],
-    expectedPrimaryKeySetStorageKeys: [
-      [
-        ['i1', 'i1'],
-        ['i2', 'i2'],
-      ],
-      [
-        ['l1', 'i1', 'l1'],
-        ['l1', 'i2', 'l1'],
-      ],
-    ],
-    expectedOutput: [
-      {
-        type: 'child',
-        row: {
-          id: 'i1',
-        },
-        child: {
-          relationshipName: 'issuelabels',
-          change: {
-            type: 'child',
-            row: {
-              issueID: 'i1',
-              labelID: 'l1',
+        [
+          "label",
+          "push",
+          {
+            "row": {
+              "id": "l1",
             },
-            child: {
-              relationshipName: 'labels',
-              change: {
-                type: 'add',
-                node: {
-                  row: {
-                    id: 'l1',
-                  },
-                  relationships: {},
-                },
-              },
+            "type": "add",
+          },
+        ],
+        [
+          "issueLabel",
+          "fetch",
+          {
+            "constraint": {
+              "labelID": "l1",
             },
           },
-        },
-      },
-      {
-        type: 'child',
-        row: {
-          id: 'i2',
-        },
-        child: {
-          relationshipName: 'issuelabels',
-          change: {
-            type: 'child',
-            row: {
-              issueID: 'i2',
-              labelID: 'l1',
-            },
-            child: {
-              relationshipName: 'labels',
-              change: {
-                type: 'add',
-                node: {
-                  row: {
-                    id: 'l1',
-                  },
-                  relationships: {},
-                },
+        ],
+        [
+          "labels",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "l1",
               },
+              "type": "add",
+            },
+            "row": {
+              "issueID": "i1",
+              "labelID": "l1",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          "issue",
+          "fetch",
+          {
+            "constraint": {
+              "id": "i1",
             },
           },
+        ],
+        [
+          "issueLabels",
+          "push",
+          {
+            "child": {
+              "child": {
+                "row": {
+                  "id": "l1",
+                },
+                "type": "add",
+              },
+              "row": {
+                "issueID": "i1",
+                "labelID": "l1",
+              },
+              "type": "child",
+            },
+            "row": {
+              "id": "i1",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          "labels",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "l1",
+              },
+              "type": "add",
+            },
+            "row": {
+              "issueID": "i2",
+              "labelID": "l1",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          "issue",
+          "fetch",
+          {
+            "constraint": {
+              "id": "i2",
+            },
+          },
+        ],
+        [
+          "issueLabels",
+          "push",
+          {
+            "child": {
+              "child": {
+                "row": {
+                  "id": "l1",
+                },
+                "type": "add",
+              },
+              "row": {
+                "issueID": "i2",
+                "labelID": "l1",
+              },
+              "type": "child",
+            },
+            "row": {
+              "id": "i2",
+            },
+            "type": "child",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "i1",
+          "issueLabels": [
+            {
+              "issueID": "i1",
+              "labelID": "l1",
+              "labels": {
+                "id": "l1",
+              },
+            },
+          ],
         },
-      },
-    ],
+        {
+          "id": "i2",
+          "issueLabels": [
+            {
+              "issueID": "i2",
+              "labelID": "l1",
+              "labels": {
+                "id": "l1",
+              },
+            },
+          ],
+        },
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        "issueLabels": {
+          ""pKeySet","i1","i1",": true,
+          ""pKeySet","i2","i2",": true,
+        },
+        "labels": {
+          ""pKeySet","l1","i1","l1",": true,
+          ""pKeySet","l1","i2","l1",": true,
+        },
+      }
+    `);
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "child": {
+            "change": {
+              "child": {
+                "change": {
+                  "node": {
+                    "relationships": {},
+                    "row": {
+                      "id": "l1",
+                    },
+                  },
+                  "type": "add",
+                },
+                "relationshipName": "labels",
+              },
+              "row": {
+                "issueID": "i1",
+                "labelID": "l1",
+              },
+              "type": "child",
+            },
+            "relationshipName": "issueLabels",
+          },
+          "row": {
+            "id": "i1",
+          },
+          "type": "child",
+        },
+        {
+          "child": {
+            "change": {
+              "child": {
+                "change": {
+                  "node": {
+                    "relationships": {},
+                    "row": {
+                      "id": "l1",
+                    },
+                  },
+                  "type": "add",
+                },
+                "relationshipName": "labels",
+              },
+              "row": {
+                "issueID": "i2",
+                "labelID": "l1",
+              },
+              "type": "child",
+            },
+            "relationshipName": "issueLabels",
+          },
+          "row": {
+            "id": "i2",
+          },
+          "type": "child",
+        },
+      ]
+    `);
   });
 });
 
@@ -1591,20 +4131,6 @@ describe('edit assignee', () => {
       },
       primaryKeys: ['issueID'],
       sorts: [['issueID', 'asc']],
-      rows: [
-        {
-          issueID: 'i1',
-          text: 'first issue',
-          assigneeID: undefined,
-          creatorID: 'u1',
-        },
-        {
-          issueID: 'i2',
-          text: 'second issue',
-          assigneeID: 'u2',
-          creatorID: 'u2',
-        },
-      ],
     },
     user: {
       columns: {
@@ -1613,11 +4139,28 @@ describe('edit assignee', () => {
       },
       primaryKeys: ['userID'],
       sorts: [['userID', 'asc']],
-      rows: [
-        {userID: 'u1', name: 'user 1'},
-        {userID: 'u2', name: 'user 2'},
-      ],
     },
+  };
+
+  const sourceContents: SourceContents = {
+    issue: [
+      {
+        issueID: 'i1',
+        text: 'first issue',
+        assigneeID: undefined,
+        creatorID: 'u1',
+      },
+      {
+        issueID: 'i2',
+        text: 'second issue',
+        assigneeID: 'u2',
+        creatorID: 'u2',
+      },
+    ],
+    user: [
+      {userID: 'u1', name: 'user 1'},
+      {userID: 'u2', name: 'user 2'},
+    ],
   };
 
   const joins: Joins = {
@@ -1654,6 +4197,7 @@ describe('edit assignee', () => {
   test('from none to one', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -1911,16 +4455,21 @@ describe('edit assignee', () => {
           ['userID', 'asc'],
           ['id', 'asc'],
         ],
-        rows: [
-          {userID: 'u1', id: 1, name: 'user 1'},
-          {userID: 'u1', id: 1.5, name: 'user 1.5'},
-          {userID: 'u2', id: 2, name: 'user 2'},
-        ],
       },
+    };
+
+    const localSourceContents = {
+      ...sourceContents,
+      user: [
+        {userID: 'u1', id: 1, name: 'user 1'},
+        {userID: 'u1', id: 1.5, name: 'user 1.5'},
+        {userID: 'u2', id: 2, name: 'user 2'},
+      ],
     };
 
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources: localSources,
+      sourceContents: localSourceContents,
       joins,
       pushes: [
         [
@@ -2206,11 +4755,12 @@ describe('edit assignee', () => {
   });
 
   test('from one to none', () => {
-    const localSources = structuredClone(sources);
-    localSources.issue.rows[0].assigneeID = 'u1';
+    const localSourceContents = structuredClone(sourceContents);
+    localSourceContents.issue[0].assigneeID = 'u1';
 
     const {log, data, actualStorage, pushes} = runJoinTest({
-      sources: localSources,
+      sources,
+      sourceContents: localSourceContents,
       joins,
       pushes: [
         [
@@ -2450,10 +5000,10 @@ describe('edit assignee', () => {
   });
 
   test('from many to none', () => {
-    const issue = structuredClone(sources.issue);
-    issue.rows[0].assigneeID = 'u1';
+    const issue = structuredClone(sourceContents.issue);
+    issue[0].assigneeID = 'u1';
     const localSources: Sources = {
-      issue,
+      issue: sources.issue,
       user: {
         columns: {
           userID: {type: 'string'},
@@ -2465,15 +5015,19 @@ describe('edit assignee', () => {
           ['userID', 'asc'],
           ['id', 'asc'],
         ],
-        rows: [
-          {userID: 'u1', id: 1, name: 'user 1'},
-          {userID: 'u1', id: 1.5, name: 'user 1.5'},
-          {userID: 'u2', id: 2, name: 'user 2'},
-        ],
       },
+    };
+    const localSourceContents: SourceContents = {
+      issue,
+      user: [
+        {userID: 'u1', id: 1, name: 'user 1'},
+        {userID: 'u1', id: 1.5, name: 'user 1.5'},
+        {userID: 'u2', id: 2, name: 'user 2'},
+      ],
     };
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources: localSources,
+      sourceContents: localSourceContents,
       joins,
       pushes: [
         [
@@ -2758,10 +5312,6 @@ describe('joins with compound join keys', () => {
         a3: {type: 'number'},
       },
       primaryKeys: ['id'],
-      rows: [
-        {id: 0, a1: 1, a2: 2, a3: 3},
-        {id: 1, a1: 4, a2: 5, a3: 6},
-      ],
       sorts: [['id', 'asc']],
     },
     b: {
@@ -2772,12 +5322,19 @@ describe('joins with compound join keys', () => {
         b3: {type: 'number'},
       },
       primaryKeys: ['id'],
-      rows: [
-        {id: 0, b1: 2, b2: 1, b3: 3},
-        {id: 1, b1: 5, b2: 4, b3: 6},
-      ],
       sorts: [['id', 'asc']],
     },
+  };
+
+  const sourceContents: SourceContents = {
+    a: [
+      {id: 0, a1: 1, a2: 2, a3: 3},
+      {id: 1, a1: 4, a2: 5, a3: 6},
+    ],
+    b: [
+      {id: 0, b1: 2, b2: 1, b3: 3},
+      {id: 1, b1: 5, b2: 4, b3: 6},
+    ],
   };
 
   const joins: Joins = {
@@ -2803,6 +5360,7 @@ describe('joins with compound join keys', () => {
   test('add parent and child', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -3013,6 +5571,7 @@ describe('joins with compound join keys', () => {
   test('edit child with moving it', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [

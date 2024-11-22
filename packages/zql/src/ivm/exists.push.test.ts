@@ -1,7 +1,12 @@
 import {expect, suite, test} from 'vitest';
 import {Exists} from './exists.js';
 import type {Input, Storage} from './operator.js';
-import {runJoinTest, type Joins, type Sources} from './test/join-push-tests.js';
+import {
+  runJoinTest,
+  type Joins,
+  type SourceContents,
+  type Sources,
+} from './test/join-push-tests.js';
 import type {Format} from './view.js';
 
 const sources: Sources = {
@@ -12,24 +17,6 @@ const sources: Sources = {
     },
     primaryKeys: ['id'],
     sorts: [['id', 'asc']],
-    rows: [
-      {
-        id: 'i1',
-        text: 'first issue',
-      },
-      {
-        id: 'i2',
-        text: 'second issue',
-      },
-      {
-        id: 'i3',
-        text: 'third issue',
-      },
-      {
-        id: 'i4',
-        text: 'fourth issue',
-      },
-    ],
   },
   comment: {
     columns: {
@@ -39,12 +26,33 @@ const sources: Sources = {
     },
     primaryKeys: ['id'],
     sorts: [['id', 'asc']],
-    rows: [
-      {id: 'c1', issueID: 'i1', text: 'i1 c1 text'},
-      {id: 'c2', issueID: 'i3', text: 'i3 c2 text'},
-      {id: 'c3', issueID: 'i3', text: 'i3 c3 text'},
-    ],
   },
+};
+
+const sourceContents: SourceContents = {
+  issue: [
+    {
+      id: 'i1',
+      text: 'first issue',
+    },
+    {
+      id: 'i2',
+      text: 'second issue',
+    },
+    {
+      id: 'i3',
+      text: 'third issue',
+    },
+    {
+      id: 'i4',
+      text: 'fourth issue',
+    },
+  ],
+  comment: [
+    {id: 'c1', issueID: 'i1', text: 'i1 c1 text'},
+    {id: 'c2', issueID: 'i3', text: 'i3 c2 text'},
+    {id: 'c3', issueID: 'i3', text: 'i3 c3 text'},
+  ],
 };
 
 const joins: Joins = {
@@ -72,6 +80,7 @@ suite('EXISTS', () => {
   test('parent add that has no children is not pushed', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -139,6 +148,7 @@ suite('EXISTS', () => {
   test('parent add that has children is pushed', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -262,6 +272,7 @@ suite('EXISTS', () => {
   test('parent remove that has no children is not pushed', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -328,6 +339,7 @@ suite('EXISTS', () => {
   test('parent remove that has children is pushed', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -421,6 +433,7 @@ suite('EXISTS', () => {
   test('parent edit that has no children is not pushed', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -488,6 +501,7 @@ suite('EXISTS', () => {
   test('parent edit that has children is pushed', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -587,6 +601,7 @@ suite('EXISTS', () => {
   test('child add resulting in one child causes push of parent add', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -702,6 +717,7 @@ suite('EXISTS', () => {
   test('child add resulting in > 1 child is pushed', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -819,6 +835,7 @@ suite('EXISTS', () => {
   test('child remove resulting in no children causes push of parent remove', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -943,6 +960,7 @@ suite('EXISTS', () => {
   test('child remove resulting in > 0 children is pushed', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -1050,6 +1068,7 @@ suite('EXISTS', () => {
   test('child edit is pushed', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -1170,6 +1189,7 @@ suite('EXISTS', () => {
   test('child edit changes correlation', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -1346,6 +1366,7 @@ suite('NOT EXISTS', () => {
   test('parent add that has no children is pushed', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -1430,6 +1451,7 @@ suite('NOT EXISTS', () => {
   test('parent add that has children is not pushed', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -1487,6 +1509,7 @@ suite('NOT EXISTS', () => {
   test('parent remove that has no children is pushed', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -1560,6 +1583,7 @@ suite('NOT EXISTS', () => {
   test('parent remove that has children is not pushed', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -1609,6 +1633,7 @@ suite('NOT EXISTS', () => {
   test('parent edit that has no children is pushed', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -1691,6 +1716,7 @@ suite('NOT EXISTS', () => {
   test('parent edit that has children is not pushed', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -1741,6 +1767,7 @@ suite('NOT EXISTS', () => {
   test('child add resulting in one child causes push of parent remove', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -1863,6 +1890,7 @@ suite('NOT EXISTS', () => {
   test('child add resulting in > 1 child is not pushed', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -1912,6 +1940,7 @@ suite('NOT EXISTS', () => {
   test('child remove resulting in no children causes push of parent add', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -1995,6 +2024,7 @@ suite('NOT EXISTS', () => {
   test('child remove resulting in > 0 children is not pushed', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -2044,6 +2074,7 @@ suite('NOT EXISTS', () => {
   test('child edit is not pushed', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
@@ -2094,6 +2125,7 @@ suite('NOT EXISTS', () => {
   test('child edit changes correlation', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
+      sourceContents,
       joins,
       pushes: [
         [
