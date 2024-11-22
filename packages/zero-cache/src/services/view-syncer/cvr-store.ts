@@ -538,24 +538,22 @@ export class CVRStore {
         this.#abortIfNotVersion(tx, expectedCurrentVersion),
       ];
 
-      if (this.#pendingRowRecordPuts.size > 0) {
-        const rowRecordRows = rowRecordsToFlush.map(r =>
-          rowRecordToRowsRow(this.#id, r),
-        );
-        let i = 0;
-        while (i < rowRecordRows.length) {
-          pipelined.push(
-            tx`INSERT INTO cvr.rows ${tx(
-              rowRecordRows.slice(i, i + ROW_RECORD_UPSERT_BATCH_SIZE),
-            )} 
+      const rowRecordRows = rowRecordsToFlush.map(r =>
+        rowRecordToRowsRow(this.#id, r),
+      );
+      let i = 0;
+      while (i < rowRecordRows.length) {
+        pipelined.push(
+          tx`INSERT INTO cvr.rows ${tx(
+            rowRecordRows.slice(i, i + ROW_RECORD_UPSERT_BATCH_SIZE),
+          )} 
             ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
             DO UPDATE SET "rowVersion" = excluded."rowVersion",
               "patchVersion" = excluded."patchVersion",
               "refCounts" = excluded."refCounts"`.execute(),
-          );
-          i += ROW_RECORD_UPSERT_BATCH_SIZE;
-          stats.statements++;
-        }
+        );
+        i += ROW_RECORD_UPSERT_BATCH_SIZE;
+        stats.statements++;
       }
       for (const write of this.#writes) {
         stats.instances += write.stats.instances ?? 0;
