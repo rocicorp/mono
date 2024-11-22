@@ -155,11 +155,11 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
   #ensureClient(id: string): {
     client: ClientRecord;
-    patches?: PatchToVersion[];
+    patches: PatchToVersion[];
   } {
     let client = this._cvr.clients[id];
     if (client) {
-      return {client};
+      return {client, patches: []};
     }
     // Add the ClientRecord and PutPatch
     const newVersion = this._ensureNewVersion();
@@ -208,7 +208,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     clientID: string,
     queries: {[id: string]: AST},
   ): PatchToVersion[] {
-    const {client, patches = []} = this.#ensureClient(clientID);
+    const {client, patches} = this.#ensureClient(clientID);
     const current = new Set(client.desiredQueryIDs);
     const additional = new Set(Object.keys(queries));
     const needed = difference(additional, current);
@@ -237,7 +237,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
   }
 
   deleteDesiredQueries(clientID: string, queries: string[]): PatchToVersion[] {
-    const {client, patches = []} = this.#ensureClient(clientID);
+    const {client, patches} = this.#ensureClient(clientID);
     const current = new Set(client.desiredQueryIDs);
     const unwanted = new Set(queries);
     const remove = intersection(unwanted, current);
@@ -267,7 +267,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
   }
 
   clearDesiredQueries(clientID: string): PatchToVersion[] {
-    const {client, patches = []} = this.#ensureClient(clientID);
+    const {client, patches} = this.#ensureClient(clientID);
     return [
       ...patches,
       ...this.deleteDesiredQueries(clientID, client.desiredQueryIDs),
