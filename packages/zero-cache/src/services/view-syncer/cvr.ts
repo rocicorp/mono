@@ -339,12 +339,18 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * with those queries, which will be used to reconcile the rows to keep
    * after all rows have been {@link received()}.
    *
+   * "transformed" queries are queries that are currently
+   * gotten and running in the pipeline driver but
+   * received a new transformation hash due to an auth token
+   * update.
+   *
    * @returns The new CVRVersion to be used when all changes are committed.
    */
   trackQueries(
     lc: LogContext,
     executed: {id: string; transformationHash: string}[],
     removed: string[],
+    transformed: {id: string; transformationHash: string}[],
   ): {newVersion: CVRVersion; queryPatches: PatchToVersion[]} {
     assert(this.#existingRows === undefined, `trackQueries already called`);
 
@@ -352,6 +358,12 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       executed.map(q => this.#trackExecuted(q.id, q.transformationHash)),
       removed.map(id => this.#trackRemoved(id)),
     ].flat(2);
+
+    // Transformed queries are already running in the pipeline driver.
+    // There should be no patches in terms of query state (desired -> gotten).
+    transformed.map(q =>
+      this.#trackGotAndTransformed(q.id, q.transformationHash),
+    );
 
     this.#existingRows = this.#lookupRowsForExecutedAndRemovedQueries(lc);
 
@@ -429,6 +441,18 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       this._cvrStore.updateQuery(query);
     }
     return gotQueryPatch ? [gotQueryPatch] : [];
+  }
+
+  #trackGotAndTransformed(queryID: string, transformationHash: string) {
+    assert(this.#removedOrExecutedQueryIDs.has(queryID));
+
+    const query = this._cvr.queries[queryID];
+    assert(query.transformationHash !== transformationHash);
+    const transformationVersion = this._ensureNewVersion();
+
+    query.transformationHash = transformationHash;
+    query.transformationVersion = transformationVersion;
+    this._cvrStore.updateQuery(query);
   }
 
   /**

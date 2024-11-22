@@ -88,6 +88,7 @@ export default async function runWorker(
       ),
       sub,
       drainCoordinator,
+      authorization,
     );
   };
 

@@ -19,6 +19,7 @@ import type {ConnectParams} from '../services/dispatcher/connect-params.js';
 import type {Mutagen} from '../services/mutagen/mutagen.js';
 import type {
   SyncContext,
+  TokenData,
   ViewSyncer,
 } from '../services/view-syncer/view-syncer.js';
 import {findErrorForClient} from '../types/error-for-client.js';
@@ -50,7 +51,7 @@ export class Connection {
   constructor(
     lc: LogContext,
     config: ZeroConfig,
-    authData: JWTPayload | undefined,
+    tokenData: TokenData | undefined,
     viewSyncer: ViewSyncer,
     mutagen: Mutagen,
     connectParams: ConnectParams,
@@ -58,11 +59,11 @@ export class Connection {
     onClose: () => void,
   ) {
     this.#ws = ws;
-    this.#authData = authData;
+    this.#authData = tokenData?.decoded;
     const {clientGroupID, clientID, wsID, baseCookie, schemaVersion} =
       connectParams;
     this.#clientGroupID = clientGroupID;
-    this.#syncContext = {clientID, wsID, baseCookie, schemaVersion};
+    this.#syncContext = {clientID, wsID, baseCookie, schemaVersion, tokenData};
     this.#lc = lc
       .withContext('connection')
       .withContext('clientID', clientID)
@@ -184,6 +185,7 @@ export class Connection {
           lc.error?.('TODO: implement deleteClients');
           break;
         case 'initConnection': {
+          // TODO (mlaw): tell mutagens about the new token too
           this.#outboundStream = await viewSyncer.initConnection(
             this.#syncContext,
             msg,
