@@ -600,8 +600,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     // a single generator in order to maximize de-duping.
     await this.#processChanges(lc, generateRowChanges(), updater, pokers);
 
-    lc.debug?.(`generating delete patches`);
-    for (const patch of await updater.deleteUnreferencedRows()) {
+    for (const patch of await updater.deleteUnreferencedRows(lc)) {
       pokers.forEach(poker => poker.addPatch(patch));
     }
 
@@ -684,7 +683,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         rowPatchCount++;
       }
     }
-    lc.debug?.(`sent ${rowPatchCount} row patches`);
+    if (rowPatchCount) {
+      lc.debug?.(`sent ${rowPatchCount} row patches`);
+    }
 
     // Then await the config patches which were fetched in parallel.
     for (const patch of await configPatches) {

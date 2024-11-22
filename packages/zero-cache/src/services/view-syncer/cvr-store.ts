@@ -397,7 +397,6 @@ export class CVRStore {
     excludeQueryHashes: string[] = [],
   ): AsyncGenerator<RowsRow[], void, undefined> {
     if (cmpVersions(afterVersion, upToCVR.version) >= 0) {
-      lc.debug?.('all clients up to date. no config catchup.');
       return;
     }
 
@@ -405,7 +404,7 @@ export class CVRStore {
     const sql = this.#db;
     const start = afterVersion ? versionString(afterVersion) : '';
     const end = versionString(upToCVR.version);
-    lc.debug?.(`catching up clients from ${start}`);
+    lc.debug?.(`scanning row patches for clients from ${start}`);
 
     const query =
       excludeQueryHashes.length === 0
@@ -431,7 +430,6 @@ export class CVRStore {
     upToCVR: CVRSnapshot,
   ): Promise<PatchToVersion[]> {
     if (cmpVersions(afterVersion, upToCVR.version) >= 0) {
-      lc.debug?.('all clients up to date. no config catchup.');
       return [];
     }
 
@@ -439,6 +437,7 @@ export class CVRStore {
     const sql = this.#db;
     const start = afterVersion ? versionString(afterVersion) : '';
     const end = versionString(upToCVR.version);
+    lc.debug?.(`scanning config patches for clients from ${start}`);
 
     const [allDesires, clientRows, queryRows] = await Promise.all([
       sql<DesiresRow[]>`SELECT * FROM cvr.desires

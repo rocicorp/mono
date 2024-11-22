@@ -552,7 +552,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * This is Step [5] of the
    * [CVR Sync Algorithm](https://www.notion.so/replicache/Sync-and-Client-View-Records-CVR-a18e02ec3ec543449ea22070855ff33d?pvs=4#7874f9b80a514be2b8cd5cf538b88d37).
    */
-  async deleteUnreferencedRows(): Promise<PatchToVersion[]> {
+  async deleteUnreferencedRows(lc?: LogContext): Promise<PatchToVersion[]> {
     if (this.#removedOrExecutedQueryIDs.size === 0) {
       // Query-less update. This can happen for config-only changes.
       assert(this.#receivedRows.size === 0);
@@ -562,6 +562,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     // patches to send to the client.
     const patches: PatchToVersion[] = [];
 
+    const start = Date.now();
     assert(this.#existingRows, `trackQueries() was not called`);
     for (const existing of await this.#existingRows) {
       const deletedID = this.#deleteUnreferencedRow(existing);
@@ -573,6 +574,9 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         patch: {type: 'row', op: 'del', id: deletedID},
       });
     }
+    lc?.debug?.(
+      `computed ${patches.length} delete patches (${Date.now() - start} ms)`,
+    );
 
     return patches;
   }
