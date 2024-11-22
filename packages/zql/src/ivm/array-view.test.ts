@@ -1,5 +1,6 @@
 import {expect, test} from 'vitest';
 import {assertArray, unreachable} from '../../../shared/src/asserts.js';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 import {stringCompare} from '../../../shared/src/string-compare.js';
 import {ArrayView} from './array-view.js';
 import type {Change} from './change.js';
@@ -8,7 +9,6 @@ import {MemoryStorage} from './memory-storage.js';
 import type {Input} from './operator.js';
 import type {SourceSchema} from './schema.js';
 import {Take} from './take.js';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 import {createSource} from './test/source-factory.js';
 
 test('basics', () => {
@@ -173,8 +173,8 @@ test('tree', () => {
       ['id', 'desc'],
     ]),
     storage: new MemoryStorage(),
-    parentKey: 'childID',
-    childKey: 'id',
+    parentKey: ['childID'],
+    childKey: ['id'],
     relationshipName: 'children',
     hidden: false,
   });
@@ -442,8 +442,8 @@ test('tree-single', () => {
       ['id', 'desc'],
     ]),
     storage: new MemoryStorage(),
-    parentKey: 'childID',
-    childKey: 'id',
+    parentKey: ['childID'],
+    childKey: ['id'],
     relationshipName: 'child',
     hidden: false,
   });
@@ -977,8 +977,8 @@ test('tree edit', () => {
       ['id', 'desc'],
     ]),
     storage: new MemoryStorage(),
-    parentKey: 'childID',
-    childKey: 'id',
+    parentKey: ['childID'],
+    childKey: ['id'],
     relationshipName: 'children',
     hidden: false,
   });

@@ -6,7 +6,7 @@ import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {Catch} from './catch.js';
 import type {Node} from './data.js';
 import {Exists} from './exists.js';
-import {Join} from './join.js';
+import {Join, type CompoundKey} from './join.js';
 import {MemoryStorage} from './memory-storage.js';
 import {Snitch, type SnitchMessage} from './snitch.js';
 import {createSource} from './test/source-factory.js';
@@ -18,8 +18,8 @@ const base = {
   ],
   primaryKeys: [['id'], ['id']],
   join: {
-    parentKey: 'id',
-    childKey: 'issueID',
+    parentKey: ['id'],
+    childKey: ['issueID'],
     relationshipName: 'comments',
   },
 } as const;
@@ -301,8 +301,8 @@ type FetchTest = {
   sources: readonly Row[][];
   sorts?: (Ordering | undefined)[] | undefined;
   join: {
-    parentKey: string;
-    childKey: string;
+    parentKey: CompoundKey;
+    childKey: CompoundKey;
     relationshipName: string;
   };
   existsType: 'EXISTS' | 'NOT EXISTS';

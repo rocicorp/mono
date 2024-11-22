@@ -16,8 +16,8 @@ suite('push one:many', () => {
     primaryKeys: [['id'], ['id']],
     joins: [
       {
-        parentKey: 'id',
-        childKey: 'issueID',
+        parentKey: ['id'],
+        childKey: ['issueID'],
         relationshipName: 'comments',
       },
     ],
@@ -370,8 +370,8 @@ suite('push one:many', () => {
       primaryKeys: [['id'], ['id']],
       joins: [
         {
-          parentKey: 'id',
-          childKey: 'issueID',
+          parentKey: ['id'],
+          childKey: ['issueID'],
           relationshipName: 'comments',
         },
       ],
@@ -690,8 +690,8 @@ suite('push many:one', () => {
     primaryKeys: [['id'], ['id']],
     joins: [
       {
-        parentKey: 'ownerID',
-        childKey: 'id',
+        parentKey: ['ownerID'],
+        childKey: ['id'],
         relationshipName: 'owner',
       },
     ],
@@ -858,8 +858,8 @@ suite('push many:one', () => {
       primaryKeys: [['id'], ['id']],
       joins: [
         {
-          parentKey: 'ownerID',
-          childKey: 'id',
+          parentKey: ['ownerID'],
+          childKey: ['id'],
           relationshipName: 'owner',
         },
       ],
@@ -966,13 +966,13 @@ suite('push many:one', () => {
       primaryKeys: [['id'], ['id'], ['id']],
       joins: [
         {
-          parentKey: 'id',
-          childKey: 'ownerID',
+          parentKey: ['id'],
+          childKey: ['ownerID'],
           relationshipName: 'issues',
         },
         {
-          parentKey: 'id',
-          childKey: 'issueID',
+          parentKey: ['id'],
+          childKey: ['issueID'],
           relationshipName: 'comments',
         },
       ],
@@ -1211,13 +1211,13 @@ suite('push one:many:many', () => {
     primaryKeys: [['id'], ['id'], ['id']],
     joins: [
       {
-        parentKey: 'id',
-        childKey: 'issueID',
+        parentKey: ['id'],
+        childKey: ['issueID'],
         relationshipName: 'comments',
       },
       {
-        parentKey: 'id',
-        childKey: 'commentID',
+        parentKey: ['id'],
+        childKey: ['commentID'],
         relationshipName: 'revisions',
       },
     ],
@@ -1390,13 +1390,13 @@ suite('push one:many:one', () => {
     primaryKeys: [['id'], ['issueID', 'labelID'], ['id']],
     joins: [
       {
-        parentKey: 'id',
-        childKey: 'issueID',
+        parentKey: ['id'],
+        childKey: ['issueID'],
         relationshipName: 'issuelabels',
       },
       {
-        parentKey: 'labelID',
-        childKey: 'id',
+        parentKey: ['labelID'],
+        childKey: ['id'],
         relationshipName: 'labels',
       },
     ],
@@ -1622,16 +1622,16 @@ describe('edit assignee', () => {
 
   const joins: Joins = {
     creator: {
-      parentKey: 'creatorID',
+      parentKey: ['creatorID'],
       parentSource: 'issue',
-      childKey: 'userID',
+      childKey: ['userID'],
       childSource: 'user',
       relationshipName: 'creator',
     },
     assignee: {
-      parentKey: 'assigneeID',
+      parentKey: ['assigneeID'],
       parentSource: 'creator',
-      childKey: 'userID',
+      childKey: ['userID'],
       childSource: 'user',
       relationshipName: 'assignee',
     },
@@ -1782,7 +1782,7 @@ describe('edit assignee', () => {
           "cleanup",
           {
             "constraint": {
-              "userID": null,
+              "userID": undefined,
             },
           },
         ],
@@ -2063,7 +2063,7 @@ describe('edit assignee', () => {
           "cleanup",
           {
             "constraint": {
-              "userID": null,
+              "userID": undefined,
             },
           },
         ],
@@ -2356,7 +2356,7 @@ describe('edit assignee', () => {
           "fetch",
           {
             "constraint": {
-              "userID": null,
+              "userID": undefined,
             },
           },
         ],
@@ -2627,7 +2627,7 @@ describe('edit assignee', () => {
           "fetch",
           {
             "constraint": {
-              "userID": null,
+              "userID": undefined,
             },
           },
         ],

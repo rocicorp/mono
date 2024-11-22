@@ -6,7 +6,7 @@ import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {Catch, type CaughtChange} from './catch.js';
 import type {NormalizedValue} from './data.js';
-import {Join, createPrimaryKeySetStorageKey} from './join.js';
+import {Join, makeStorageKeyForValues, type CompoundKey} from './join.js';
 import {MemoryStorage} from './memory-storage.js';
 import type {Input} from './operator.js';
 import {Snitch, type SnitchMessage} from './snitch.js';
@@ -23,13 +23,13 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     primaryKeys: [['id'], ['id'], ['id']],
     joins: [
       {
-        parentKey: 'id',
-        childKey: 'issueId',
+        parentKey: ['id'],
+        childKey: ['issueId'],
         relationshipName: 'comments',
       },
       {
-        parentKey: 'ownerId',
-        childKey: 'id',
+        parentKey: ['ownerId'],
+        childKey: ['id'],
         relationshipName: 'owners',
       },
     ],
@@ -610,7 +610,7 @@ function pushSiblingTest(t: PushTestSibling) {
       const expectedStorageKeys = t.expectedPrimaryKeySetStorageKeys[i];
       const expectedStorage: Record<string, boolean> = {};
       for (const k of expectedStorageKeys) {
-        expectedStorage[createPrimaryKeySetStorageKey(k)] = true;
+        expectedStorage[makeStorageKeyForValues(k)] = true;
       }
       expect(storage.cloneData()).toEqual(expectedStorage);
     }
@@ -627,8 +627,8 @@ type PushTestSibling = {
   sources: readonly (readonly Row[])[];
   sorts?: Record<number, Ordering> | undefined;
   joins: readonly {
-    parentKey: string;
-    childKey: string;
+    parentKey: CompoundKey;
+    childKey: CompoundKey;
     relationshipName: string;
   }[];
   pushes: [sourceIndex: number, change: SourceChange][];

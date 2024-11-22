@@ -273,8 +273,9 @@ function applyCorrelatedSubQuery(
     parent: end,
     child,
     storage: delegate.createStorage(),
-    parentKey: sq.correlation.parentField,
-    childKey: sq.correlation.childField,
+    // TODO: Compound keys in the AST
+    parentKey: [sq.correlation.parentField],
+    childKey: [sq.correlation.childField],
     relationshipName: sq.subquery.alias,
     hidden: sq.hidden ?? false,
   });

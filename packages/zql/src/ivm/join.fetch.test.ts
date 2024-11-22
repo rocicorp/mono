@@ -1,21 +1,22 @@
 import {expect, suite, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.js';
+import type {JSONValue} from '../../../shared/src/json.js';
 import type {Ordering} from '../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {Catch} from './catch.js';
+import {SetOfConstraint} from './constraint.js';
 import type {Node} from './data.js';
 import {
   Join,
-  createPrimaryKeySetStorageKey,
-  createPrimaryKeySetStorageKeyPrefix,
+  makeStorageKey,
+  makeStorageKeyPrefix,
+  type CompoundKey,
 } from './join.js';
 import {MemoryStorage} from './memory-storage.js';
 import type {SourceSchema} from './schema.js';
 import {Snitch, type SnitchMessage} from './snitch.js';
-import type {JSONValue} from '../../../shared/src/json.js';
-import {SetOfConstraint} from './constraint.js';
 import {createSource} from './test/source-factory.js';
 
 suite('fetch one:many', () => {
@@ -27,8 +28,8 @@ suite('fetch one:many', () => {
     primaryKeys: [['id'], ['id']],
     joins: [
       {
-        parentKey: 'id',
-        childKey: 'issueID',
+        parentKey: ['id'],
+        childKey: ['issueID'],
         relationshipName: 'comments',
       },
     ],
@@ -393,8 +394,8 @@ suite('fetch many:one', () => {
     primaryKeys: [['id'], ['id']],
     joins: [
       {
-        parentKey: 'ownerID',
-        childKey: 'id',
+        parentKey: ['ownerID'],
+        childKey: ['id'],
         relationshipName: 'owner',
       },
     ],
@@ -726,13 +727,13 @@ suite('fetch one:many:many', () => {
     primaryKeys: [['id'], ['id'], ['id']],
     joins: [
       {
-        parentKey: 'id',
-        childKey: 'issueID',
+        parentKey: ['id'],
+        childKey: ['issueID'],
         relationshipName: 'comments',
       },
       {
-        parentKey: 'id',
-        childKey: 'commentID',
+        parentKey: ['id'],
+        childKey: ['commentID'],
         relationshipName: 'revisions',
       },
     ],
@@ -1167,13 +1168,13 @@ suite('fetch one:many:one', () => {
     primaryKeys: [['id'], ['issueID', 'labelID'], ['id']],
     joins: [
       {
-        parentKey: 'id',
-        childKey: 'issueID',
+        parentKey: ['id'],
+        childKey: ['issueID'],
         relationshipName: 'issuelabels',
       },
       {
-        parentKey: 'labelID',
-        childKey: 'id',
+        parentKey: ['labelID'],
+        childKey: ['id'],
         relationshipName: 'labels',
       },
     ],
@@ -1850,8 +1851,8 @@ type FetchTest = {
   sources: Row[][];
   sorts?: (Ordering | undefined)[] | undefined;
   joins: readonly {
-    parentKey: string;
-    childKey: string;
+    parentKey: CompoundKey;
+    childKey: CompoundKey;
     relationshipName: string;
   }[];
 };
@@ -1863,12 +1864,39 @@ type FetchTestResults = {
 };
 
 test('createPrimaryKeySetStorageKey', () => {
-  const k123 = createPrimaryKeySetStorageKey([123, 'id1']);
-  const k1234 = createPrimaryKeySetStorageKey([1234, 'id1']);
+  const row123 = {a: 123, b: true, id: 'id1'};
+  const row1234 = {a: 1234, b: true, id: 'id1'};
+  const k123 = makeStorageKey(['a'], ['id'], row123);
+  const kp123 = makeStorageKeyPrefix(row123, ['a']);
+  const k1234 = makeStorageKey(['a'], ['id'], row1234);
+  const kp1234 = makeStorageKeyPrefix(row1234, ['a']);
 
-  expect(k123.startsWith(createPrimaryKeySetStorageKeyPrefix(123))).true;
-  expect(k123.startsWith(createPrimaryKeySetStorageKeyPrefix(124))).false;
+  expect(k123).toEqual('"pKeySet",123,"id1",');
+  expect(kp123).toEqual('"pKeySet",123,');
+  expect(k123.startsWith(kp123)).true;
 
-  expect(k1234.startsWith(createPrimaryKeySetStorageKeyPrefix(123))).false;
-  expect(k1234.startsWith(createPrimaryKeySetStorageKeyPrefix(1234))).true;
+  expect(k1234).toEqual('"pKeySet",1234,"id1",');
+  expect(kp1234).toEqual('"pKeySet",1234,');
+  expect(k1234.startsWith(kp1234)).true;
+
+  expect(k123.startsWith(kp1234)).false;
+  expect(k1234.startsWith(kp123)).false;
+
+  const row456 = {a: 456, b: true, id: 'id1', id2: 'id2'};
+  const row4567 = {a: 4567, b: true, id: 'id1', id2: 'id2'};
+  const k456 = makeStorageKey(['b', 'a'], ['id', 'id2'], row456);
+  const kp456 = makeStorageKeyPrefix(row456, ['b', 'a']);
+  const k4567 = makeStorageKey(['b', 'a'], ['id', 'id2'], row4567);
+  const kp4567 = makeStorageKeyPrefix(row4567, ['b', 'a']);
+
+  expect(k456).toEqual('"pKeySet",true,456,"id1","id2",');
+  expect(kp456).toEqual('"pKeySet",true,456,');
+  expect(k456.startsWith(kp456)).true;
+
+  expect(k4567).toEqual('"pKeySet",true,4567,"id1","id2",');
+  expect(kp4567).toEqual('"pKeySet",true,4567,');
+  expect(k4567.startsWith(kp4567)).true;
+
+  expect(k456.startsWith(kp4567)).false;
+  expect(k4567.startsWith(kp456)).false;
 });

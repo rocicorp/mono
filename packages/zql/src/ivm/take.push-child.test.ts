@@ -48,9 +48,9 @@ const sources: Sources = {
 
 const joins: Joins = {
   comments: {
-    parentKey: 'id',
+    parentKey: ['id'],
     parentSource: 'issue',
-    childKey: 'issueID',
+    childKey: ['issueID'],
     childSource: 'comment',
     relationshipName: 'comments',
   },

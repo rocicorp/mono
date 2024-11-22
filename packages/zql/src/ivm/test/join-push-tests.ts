@@ -1,19 +1,19 @@
 import {assert, expect, test} from 'vitest';
-import {Snitch, type SnitchMessage} from '../snitch.js';
-import {createPrimaryKeySetStorageKey, Join} from '../join.js';
-import {MemoryStorage} from '../memory-storage.js';
-import {Catch, type CaughtChange} from '../catch.js';
-import type {SchemaValue} from '../../../../zero-schema/src/table-schema.js';
-import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.js';
-import type {Row} from '../../../../zero-protocol/src/data.js';
-import type {Ordering} from '../../../../zero-protocol/src/ast.js';
-import type {Source, SourceChange} from '../source.js';
-import type {NormalizedValue} from '../data.js';
-import type {Format} from '../view.js';
-import type {Storage, Input, Operator} from '../operator.js';
-import {must} from '../../../../shared/src/must.js';
 import type {JSONObject} from '../../../../shared/src/json.js';
+import {must} from '../../../../shared/src/must.js';
+import type {Ordering} from '../../../../zero-protocol/src/ast.js';
+import type {Row} from '../../../../zero-protocol/src/data.js';
+import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.js';
+import type {SchemaValue} from '../../../../zero-schema/src/table-schema.js';
 import {ArrayView} from '../array-view.js';
+import {Catch, type CaughtChange} from '../catch.js';
+import type {NormalizedValue} from '../data.js';
+import {Join, makeStorageKeyForValues, type CompoundKey} from '../join.js';
+import {MemoryStorage} from '../memory-storage.js';
+import type {Input, Operator, Storage} from '../operator.js';
+import {Snitch, type SnitchMessage} from '../snitch.js';
+import type {Source, SourceChange} from '../source.js';
+import type {Format} from '../view.js';
 import {createSource} from './source-factory.js';
 
 export function pushTest(t: PushTest) {
@@ -76,7 +76,7 @@ export function pushTest(t: PushTest) {
       const expectedStorageKeys = t.expectedPrimaryKeySetStorageKeys[i];
       const expectedStorage: Record<string, boolean> = {};
       for (const k of expectedStorageKeys) {
-        expectedStorage[createPrimaryKeySetStorageKey(k)] = true;
+        expectedStorage[makeStorageKeyForValues(k)] = true;
       }
       expect(storage.cloneData()).toEqual(expectedStorage);
     }
@@ -93,8 +93,8 @@ type PushTest = {
   sources: Row[][];
   sorts?: Record<number, Ordering> | undefined;
   joins: readonly {
-    parentKey: string;
-    childKey: string;
+    parentKey: CompoundKey;
+    childKey: CompoundKey;
     relationshipName: string;
   }[];
   pushes: [sourceIndex: number, change: SourceChange][];
@@ -135,9 +135,9 @@ export type Sources = Record<
 export type Joins = Record<
   string,
   {
-    parentKey: string;
+    parentKey: CompoundKey;
     parentSource: string;
-    childKey: string;
+    childKey: CompoundKey;
     childSource: string;
     relationshipName: string;
   }

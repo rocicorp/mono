@@ -1,18 +1,23 @@
 import {assert, unreachable} from '../../../shared/src/asserts.js';
-import type {Row} from '../../../zero-protocol/src/data.js';
+import type {Row, Value} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
 import type {Change, ChildChange} from './change.js';
-import {normalizeUndefined, type Node, type NormalizedValue} from './data.js';
+import {valuesEqual, type Node} from './data.js';
 import type {FetchRequest, Input, Output, Storage} from './operator.js';
 import type {SourceSchema} from './schema.js';
 import {take, type Stream} from './stream.js';
+
+export type CompoundKey = PrimaryKey;
 
 type Args = {
   parent: Input;
   child: Input;
   storage: Storage;
-  parentKey: string;
-  childKey: string;
+  // The order of the keys does not have to match but the length must match.
+  // The nth key in parentKey corresponds to the nth key in childKey.
+  parentKey: CompoundKey;
+  childKey: CompoundKey;
+
   relationshipName: string;
   hidden: boolean;
 };
@@ -30,8 +35,8 @@ export class Join implements Input {
   readonly #parent: Input;
   readonly #child: Input;
   readonly #storage: Storage;
-  readonly #parentKey: string;
-  readonly #childKey: string;
+  readonly #parentKey: CompoundKey;
+  readonly #childKey: CompoundKey;
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
 
@@ -47,7 +52,10 @@ export class Join implements Input {
     hidden,
   }: Args) {
     assert(parent !== child, 'Parent and child must be different operators');
-
+    assert(
+      parentKey.length === childKey.length,
+      'The parentKey and childKey keys must have same length',
+    );
     this.#parent = parent;
     this.#child = child;
     this.#storage = storage;
@@ -140,14 +148,13 @@ export class Join implements Input {
         //   as an edit but with relationships added
         // - Otherwise we convert to a remove and add
 
-        const oldKeyValue = normalizeUndefined(
-          change.oldNode.row[this.#parentKey],
-        );
-        const newKeyValue = normalizeUndefined(
-          change.node.row[this.#parentKey],
-        );
-
-        if (oldKeyValue === newKeyValue) {
+        if (
+          rowEqualsForCompoundKey(
+            change.oldNode.row,
+            change.node.row,
+            this.#parentKey,
+          )
+        ) {
           this.#output.push({
             type: 'edit',
             oldNode: this.#processParentNode(
@@ -184,9 +191,9 @@ export class Join implements Input {
       assert(this.#output, 'Output not set');
 
       const parentNodes = this.#parent.fetch({
-        constraint: {
-          [this.#parentKey]: childRow[this.#childKey],
-        },
+        constraint: Object.fromEntries(
+          this.#parentKey.map((key, i) => [key, childRow[this.#childKey[i]]]),
+        ),
       });
 
       for (const parentNode of parentNodes) {
@@ -213,10 +220,7 @@ export class Join implements Input {
       case 'edit': {
         const childRow = change.node.row;
         const oldChildRow = change.oldNode.row;
-        if (
-          normalizeUndefined(oldChildRow[this.#childKey]) ===
-          normalizeUndefined(childRow[this.#childKey])
-        ) {
+        if (rowEqualsForCompoundKey(oldChildRow, childRow, this.#childKey)) {
           // The child row was edited in a way that does not change the relationship.
           // We can therefore just push the change down (wrapped in a child change).
           pushChildChange(childRow, change);
@@ -246,12 +250,10 @@ export class Join implements Input {
     parentNodeRelations: Record<string, Stream<Node>>,
     mode: ProcessParentMode,
   ): Node {
-    const parentKeyValue = normalizeUndefined(parentNodeRow[this.#parentKey]);
-
     // This storage key tracks the primary keys seen for each unique
     // value joined on. This is used to know when to cleanup a child's state.
     const storageKey = makeStorageKey(
-      parentKeyValue,
+      this.#parentKey,
       this.#parent.getSchema().primaryKey,
       parentNodeRow,
     );
@@ -260,7 +262,7 @@ export class Join implements Input {
     if (mode === 'cleanup') {
       const [, second] = take(
         this.#storage.scan({
-          prefix: createPrimaryKeySetStorageKeyPrefix(parentKeyValue),
+          prefix: makeStorageKeyPrefix(parentNodeRow, this.#parentKey),
         }),
         2,
       );
@@ -268,9 +270,12 @@ export class Join implements Input {
     }
 
     const childStream = this.#child[method]({
-      constraint: {
-        [this.#childKey]: parentKeyValue,
-      },
+      constraint: Object.fromEntries(
+        this.#childKey.map((key, i) => [
+          key,
+          parentNodeRow[this.#parentKey[i]],
+        ]),
+      ),
     });
 
     if (mode === 'fetch') {
@@ -293,27 +298,34 @@ export class Join implements Input {
 type ProcessParentMode = 'fetch' | 'cleanup';
 
 /** Exported for testing. */
-export function createPrimaryKeySetStorageKey(
-  values: readonly NormalizedValue[],
-): string {
+export function makeStorageKeyForValues(values: readonly Value[]): string {
   const json = JSON.stringify(['pKeySet', ...values]);
   return json.substring(1, json.length - 1) + ',';
 }
 
-export function createPrimaryKeySetStorageKeyPrefix(
-  value: NormalizedValue,
-): string {
-  return createPrimaryKeySetStorageKey([value]);
+/** Exported for testing. */
+export function makeStorageKeyPrefix(row: Row, key: CompoundKey): string {
+  return makeStorageKeyForValues(key.map(k => row[k]));
 }
 
-function makeStorageKey(
-  keyValue: NormalizedValue,
+/** Exported for testing. */
+export function makeStorageKey(
+  key: CompoundKey,
   primaryKey: PrimaryKey,
   row: Row,
 ): string {
-  const parentPrimaryKey: NormalizedValue[] = [keyValue];
+  const values: Value[] = key.map(k => row[k]);
   for (const key of primaryKey) {
-    parentPrimaryKey.push(normalizeUndefined(row[key]));
+    values.push(row[key]);
   }
-  return createPrimaryKeySetStorageKey(parentPrimaryKey);
+  return makeStorageKeyForValues(values);
+}
+
+function rowEqualsForCompoundKey(a: Row, b: Row, key: CompoundKey): boolean {
+  for (let i = 0; i < key.length; i++) {
+    if (!valuesEqual(a[key[i]], b[key[i]])) {
+      return false;
+    }
+  }
+  return true;
 }
