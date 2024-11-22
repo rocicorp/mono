@@ -65,6 +65,10 @@ class RowRecordCache {
       return this.#cache;
     }
     const r = resolver<CustomKeyMap<RowID, RowRecord>>();
+    // Set this.#cache immediately (before await) so that only one db
+    // query is made even if there are multiple callers.
+    this.#cache = r.promise;
+
     const cache: CustomKeyMap<RowID, RowRecord> = new CustomKeyMap(rowIDHash);
     for await (const rows of this.#db<
       RowsRow[]
@@ -79,7 +83,6 @@ class RowRecordCache {
       }
     }
     r.resolve(cache);
-    this.#cache = r.promise;
     return this.#cache;
   }
 
