@@ -73,7 +73,7 @@ describe('processMutation', () => {
 
     const error = await processMutation(
       undefined,
-      {},
+      undefined,
       db,
       SHARD_ID,
       'abc',
@@ -175,7 +175,7 @@ describe('processMutation', () => {
 
     const error = await processMutation(
       undefined,
-      {},
+      undefined,
       db,
       SHARD_ID,
       'abc',
@@ -227,7 +227,7 @@ describe('processMutation', () => {
 
     const error = await processMutation(
       undefined,
-      {},
+      undefined,
       db,
       SHARD_ID,
       'abc',
@@ -279,7 +279,7 @@ describe('processMutation', () => {
     await expect(
       processMutation(
         undefined,
-        {},
+        undefined,
         db,
         SHARD_ID,
         'abc',
@@ -334,7 +334,7 @@ describe('processMutation', () => {
     await expect(
       processMutation(
         undefined,
-        {},
+        undefined,
         db,
         SHARD_ID,
         'abc',

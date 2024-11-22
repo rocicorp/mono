@@ -42,7 +42,7 @@ export class Connection {
   readonly #viewSyncer: ViewSyncer;
   readonly #mutagen: Mutagen;
   readonly #mutationLock = new Lock();
-  readonly #authData: JWTPayload;
+  readonly #authData: JWTPayload | undefined;
 
   #outboundStream: Source<Downstream> | undefined;
   #closed = false;
@@ -50,7 +50,7 @@ export class Connection {
   constructor(
     lc: LogContext,
     config: ZeroConfig,
-    authData: JWTPayload,
+    authData: JWTPayload | undefined,
     viewSyncer: ViewSyncer,
     mutagen: Mutagen,
     connectParams: ConnectParams,

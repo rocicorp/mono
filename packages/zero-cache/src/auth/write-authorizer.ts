@@ -47,11 +47,11 @@ type Phase = 'preMutation' | 'postMutation';
 
 export interface WriteAuthorizer {
   canPreMutation(
-    authData: JWTPayload,
+    authData: JWTPayload | undefined,
     ops: Exclude<CRUDOp, UpsertOp>[],
   ): boolean;
   canPostMutation(
-    authData: JWTPayload,
+    authData: JWTPayload | undefined,
     ops: Exclude<CRUDOp, UpsertOp>[],
   ): boolean;
   normalizeOps(ops: CRUDOp[]): Exclude<CRUDOp, UpsertOp>[];
@@ -95,7 +95,10 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     this.#statementRunner = new StatementRunner(replica);
   }
 
-  canPreMutation(authData: JWTPayload, ops: Exclude<CRUDOp, UpsertOp>[]) {
+  canPreMutation(
+    authData: JWTPayload | undefined,
+    ops: Exclude<CRUDOp, UpsertOp>[],
+  ) {
     for (const op of ops) {
       switch (op.op) {
         case 'insert':
@@ -116,7 +119,10 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     return true;
   }
 
-  canPostMutation(authData: JWTPayload, ops: Exclude<CRUDOp, UpsertOp>[]) {
+  canPostMutation(
+    authData: JWTPayload | undefined,
+    ops: Exclude<CRUDOp, UpsertOp>[],
+  ) {
     this.#statementRunner.beginConcurrent();
     try {
       for (const op of ops) {
@@ -195,15 +201,15 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     });
   }
 
-  #canInsert(phase: Phase, authData: JWTPayload, op: InsertOp) {
+  #canInsert(phase: Phase, authData: JWTPayload | undefined, op: InsertOp) {
     return this.#timedCanDo(phase, 'insert', authData, op);
   }
 
-  #canUpdate(phase: Phase, authData: JWTPayload, op: UpdateOp) {
+  #canUpdate(phase: Phase, authData: JWTPayload | undefined, op: UpdateOp) {
     return this.#timedCanDo(phase, 'update', authData, op);
   }
 
-  #canDelete(phase: Phase, authData: JWTPayload, op: DeleteOp) {
+  #canDelete(phase: Phase, authData: JWTPayload | undefined, op: DeleteOp) {
     return this.#timedCanDo(phase, 'delete', authData, op);
   }
 
@@ -237,7 +243,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   #timedCanDo<A extends keyof ActionOpMap>(
     phase: Phase,
     action: A,
-    authData: JWTPayload,
+    authData: JWTPayload | undefined,
     op: ActionOpMap[A],
   ) {
     const start = performance.now();
@@ -271,7 +277,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   #canDo<A extends keyof ActionOpMap>(
     phase: Phase,
     action: A,
-    authData: JWTPayload,
+    authData: JWTPayload | undefined,
     op: ActionOpMap[A],
   ) {
     const rules = this.#authorizationConfig[op.tableName];
@@ -386,7 +392,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   #passesPolicyGroup(
     applicableRowPolicy: Policy | undefined,
     applicableCellPolicies: Policy[],
-    authData: JWTPayload,
+    authData: JWTPayload | undefined,
     rowQuery: Query<TableSchema>,
   ) {
     if (
@@ -414,7 +420,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
 
   #passesPolicy(
     policy: Policy,
-    authData: JWTPayload,
+    authData: JWTPayload | undefined,
     rowQuery: Query<TableSchema>,
   ) {
     let rowQueryAst = (rowQuery as AuthQuery<TableSchema>).ast;
@@ -425,8 +431,8 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
 
     const input = buildPipeline(rowQueryAst, this.#builderDelegate, {
       authData: authData as Record<string, JSONValue>,
-      // TODO: We can remove this arg now that the pre-mutation row is got by the
-      // rowQueryAst.
+      // TODO (mlaw): we need to resurrect `preMutationRow` and `postMutationRow`
+      // to allow writing rules to prevent mutation of a column.
       preMutationRow: undefined,
     });
     try {

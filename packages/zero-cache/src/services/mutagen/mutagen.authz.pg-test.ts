@@ -285,7 +285,7 @@ function procMutation(
   return processMutation(
     undefined,
     uid === undefined
-      ? {}
+      ? undefined
       : {sub: uid, role: uid === 'admn' ? 'admin' : 'user'},
     upstream,
     SHARD_ID,
