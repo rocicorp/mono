@@ -5,11 +5,12 @@ import type {SourceFactory} from '../../../zql/src/ivm/test/source-factory.js';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {compile, sql} from '../internal/sql.js';
 import {TableSource} from '../table-source.js';
+import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
 
 export const createSource: SourceFactory = (
   tableName: string,
   columns: Record<string, SchemaValue>,
-  primaryKey: readonly [string, ...string[]],
+  primaryKey: PrimaryKey,
 ): Source => {
   const db = new Database(createSilentLogContext(), ':memory:');
   // create a table with desired columns and primary keys
