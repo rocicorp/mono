@@ -6,6 +6,10 @@
   position: relative;
 }
 
+.permalinked {
+  background-color: rgb(50, 35, 24);
+}
+
 .commentItem:last-child {
   margin-bottom: 0;
 }
@@ -28,7 +32,6 @@
   font-size: var(--typo-label-size);
   font-weight: var(--typo-label-weight);
   opacity: 0.6;
-  cursor: help;
 }
 
 .commentActions button {
