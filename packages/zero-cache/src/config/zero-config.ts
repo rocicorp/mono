@@ -219,6 +219,17 @@ export const zeroOptions = {
     desc: [`JWT secret for verifying authentication tokens.`],
   },
 
+  taskID: {
+    type: v.string().optional(),
+    desc: [
+      `Globally unique identifier for the zero-cache instance.`,
+      ``,
+      `Setting this to a platform specific task identifier can be useful for debugging.`,
+      `If unspecified, zero-cache will attempt to extract the TaskARN if run from within`,
+      `an AWS ECS container, and otherwise use a random string.`,
+    ],
+  },
+
   perUserMutationLimit,
 
   numSyncWorkers: {

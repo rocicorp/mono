@@ -42,6 +42,7 @@ export default async function runWorker(
 
   const replicator = new ReplicatorService(
     lc,
+    must(config.taskID, `main must set --task-id`),
     `${workerName}-${pid}`,
     mode,
     changeStreamer,
