@@ -36,6 +36,7 @@
     "lodash.kebabcase": "^4.1.1",
     "lodash.merge": "^4.6.2",
     "lodash.snakecase": "^4.1.1",
+    "nanoid": "^5.0.8",
     "pg": "^8.11.3",
     "pg-format": "npm:pg-format-fix@^1.0.5",
     "pg-logical-replication": "^2.0.7",

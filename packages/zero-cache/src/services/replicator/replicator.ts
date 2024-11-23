@@ -58,6 +58,7 @@ export class ReplicatorService implements Replicator, Service {
 
   constructor(
     lc: LogContext,
+    taskID: string,
     id: string,
     mode: ReplicatorMode,
     changeStreamer: ChangeStreamer,
@@ -69,7 +70,7 @@ export class ReplicatorService implements Replicator, Service {
       .withContext('serviceID', this.id);
 
     this.#incrementalSyncer = new IncrementalSyncer(
-      id,
+      `${taskID}/${id}`,
       changeStreamer,
       replica,
       mode === 'serving' ? 'CONCURRENT' : 'IMMEDIATE',

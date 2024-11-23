@@ -22,6 +22,7 @@ import {
   type WorkerType,
 } from './life-cycle.js';
 import {createLogContext} from './logging.js';
+import {getTaskID} from './runtime.js';
 
 const startMs = Date.now();
 const config = getZeroConfig();
@@ -56,6 +57,13 @@ const internalFlags: string[] =
         '--cvr-max-conns-per-worker',
         String(Math.floor(config.cvr.maxConns / numSyncers)),
       ];
+
+let {taskID} = config;
+if (!taskID) {
+  taskID = await getTaskID(lc);
+  internalFlags.push('--task-id', taskID);
+}
+lc.info?.(`starting task ${taskID}`);
 
 function loadWorker(
   modulePath: string,
