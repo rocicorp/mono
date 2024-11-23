@@ -47,7 +47,6 @@ export function getSchema(config: ZeroConfig): Promise<{
 
   loadedSchema = (async () => {
     if (config.schema.json) {
-      console.log?.('Loading schema from JSON ENV');
       return parseAuthConfig(config.schema.json, 'config.schema.json');
     }
     console.log?.('Loading schema from file: ', config.schema.file);

@@ -15,7 +15,6 @@ test('zero-cache --help', () => {
     parseOptions(zeroOptions, ['--help'], 'ZERO_', {}, logger, exit),
   ).toThrow(ExitAfterUsage);
   expect(logger.info).toHaveBeenCalled();
-  console.log(logger.info.mock.calls[0][0]);
   expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
     "
      --upstream-db string                          required                                                                          
@@ -63,17 +62,17 @@ test('zero-cache --help', () => {
                                                    File path to the SQLite replica that zero-cache maintains.                        
                                                    This can be lost, but if it is, zero-cache will have to re-replicate next         
                                                    time it starts up.                                                                
-                                                                                                                                 
-     --schema-file string                          default: "zero-schema.json"                                                   
-       ZERO_SCHEMA_FILE env                                                                                                      
-                                                   File path to the JSON schema file that defines the database structure         
-                                                   and access control rules.                                                     
-                                                                                                                                 
-     --schema-json string                          optional                                                                      
-       ZERO_SCHEMA_JSON env                                                                                                      
-                                                   The JSON schema as a string, containing the same database structure           
-                                                   and access control rules as would be in the schema file.                      
-                                                                                                                                                                                                                                                                      
+                                                                                                                                     
+     --schema-file string                          default: "zero-schema.json"                                                       
+       ZERO_SCHEMA_FILE env                                                                                                          
+                                                   File path to the JSON schema file that defines the database structure             
+                                                   and access control rules.                                                         
+                                                                                                                                     
+     --schema-json string                          optional                                                                          
+       ZERO_SCHEMA_JSON env                                                                                                          
+                                                   The JSON schema as a string, containing the same database structure               
+                                                   and access control rules as would be in the schema file.                          
+                                                                                                                                     
      --log-level debug,info,warn,error             default: "info"                                                                   
        ZERO_LOG_LEVEL env                                                                                                            
                                                                                                                                      

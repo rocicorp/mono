@@ -59,7 +59,6 @@ async function main() {
     const authConfig = v.parse(
       await module.default.authorization,
       authorizationConfigSchema,
-      'strict',
     );
     const rawSchema = (await module.default.schema) as Schema;
     const output = {

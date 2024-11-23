@@ -13,7 +13,7 @@
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "preview": "vite preview",
     "zero": "tsx ../../packages/zero-cache/src/server/main.ts",
-    "zero-gen-schema-json": "tsx ../../packages/zero-schema/src/gen-schema-json.ts",
+    "zero-build-schema": "tsx ../../packages/zero-schema/src/build-schema.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
