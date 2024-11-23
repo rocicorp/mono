@@ -1,5 +1,5 @@
 import {useQuery} from '@rocicorp/zero/react';
-import {useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {Button} from '../../components/button.js';
 import {CanEdit} from '../../components/can-edit.js';
 import {Confirm} from '../../components/confirm.js';
@@ -10,6 +10,9 @@ import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
 import CommentComposer from './comment-composer.js';
 import style from './comment.module.css';
+import {Link} from '../../components/link.js';
+import {useHash} from '../../hooks/use-hash.js';
+import classNames from 'classnames';
 
 export default function Comment({id, issueID}: {id: string; issueID: string}) {
   const z = useZero();
@@ -20,23 +23,37 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
   const comment = useQuery(q);
   const [editing, setEditing] = useState(false);
   const login = useLogin();
-
   const [deleteConfirmationShown, setDeleteConfirmationShown] = useState(false);
 
-  if (!comment) {
-    return null;
-  }
+  const hash = useHash();
+  const permalink = comment ? `comment-${comment.id}` : undefined;
+  const isPermalinked = hash === permalink;
+  const ref = useRef<HTMLDivElement>(null);
 
   const edit = () => setEditing(true);
   const remove = () => z.mutate.comment.delete({id});
 
+  useEffect(() => {
+    if (ref.current && isPermalinked) {
+      ref.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }
+  }, [ref, isPermalinked]);
+
+  if (!comment) {
+    return null;
+  }
   return (
     <div
-      className={`${style.commentItem} ${
-        comment.creatorID == login.loginState?.decoded.sub
-          ? style.authorComment
-          : ''
-      }`}
+      ref={ref}
+      className={classNames({
+        [style.commentItem]: true,
+        [style.authorComment]:
+          comment.creatorID == login.loginState?.decoded.sub,
+        [style.permalinked]: isPermalinked,
+      })}
     >
       <p className={style.commentAuthor}>
         <img
@@ -52,8 +69,10 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
         />{' '}
         {comment.creator?.login}
       </p>
-      <span className={style.commentTimestamp}>
-        <RelativeTime timestamp={comment.created} />
+      <span id={permalink} className={style.commentTimestamp}>
+        <Link href={`#${permalink}`}>
+          <RelativeTime timestamp={comment.created} />
+        </Link>
       </span>
       {editing ? (
         <CommentComposer
