@@ -23,6 +23,8 @@ export type InstancesRow = {
   version: string;
   lastActive: number;
   replicaVersion: string | null;
+  owner: string | null;
+  grantedAt: number | null;
 };
 
 const CREATE_CVR_INSTANCES_TABLE = `
@@ -30,7 +32,9 @@ CREATE TABLE cvr.instances (
   "clientGroupID"  TEXT PRIMARY KEY,
   "version"        TEXT NOT NULL,        -- Sortable representation of CVRVersion, e.g. "5nbqa2w:09"
   "lastActive"     TIMESTAMPTZ NOT NULL, -- For garbage collection
-  "replicaVersion" TEXT                  -- Identifies the replica (i.e. initial-sync point) from which the CVR data comes.
+  "replicaVersion" TEXT,                 -- Identifies the replica (i.e. initial-sync point) from which the CVR data comes.
+  "owner"          TEXT,                 -- The ID of the task / server that has been granted ownership of the CVR.
+  "grantedAt"      TIMESTAMPTZ           -- The time at which the current owner was last granted ownership (most recent connection time).
 );
 `;
 

@@ -24,6 +24,7 @@ export async function initViewSyncerSchema(
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     2: migrateV1toV2,
     3: migrateV2ToV3,
+    4: migrateV3ToV4,
   };
 
   await runSchemaMigrations(
@@ -62,5 +63,12 @@ const migrateV2ToV3: Migration = {
     }
     lc.info?.(`initializing rowsVersion for ${pending.length} cvrs`);
     await Promise.all(pending);
+  },
+};
+
+const migrateV3ToV4: Migration = {
+  migrateSchema: async (_, tx) => {
+    await tx`ALTER TABLE cvr.instances ADD "owner" TEXT`;
+    await tx`ALTER TABLE cvr.instances ADD "grantedAt" TIMESTAMPTZ`;
   },
 };

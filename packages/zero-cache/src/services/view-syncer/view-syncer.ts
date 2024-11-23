@@ -90,6 +90,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #keepaliveMs: number;
   readonly #idleTimeoutMs: number;
 
+  // Note: It is fine to update this variable outside of the lock.
+  #lastConnectTime = 0;
+
   // Serialize on this lock for:
   // (1) storage or database-dependent operations
   // (2) updating member variables.
@@ -107,6 +110,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   constructor(
     lc: LogContext,
+    taskID: string,
     clientGroupID: string,
     shardID: string,
     db: PostgresDB,
@@ -124,13 +128,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#drainCoordinator = drainCoordinator;
     this.#keepaliveMs = keepaliveMs;
     this.#idleTimeoutMs = idleTimeoutMs;
-    this.#cvrStore = new CVRStore(lc, db, clientGroupID);
+    this.#cvrStore = new CVRStore(lc, db, taskID, clientGroupID);
   }
 
   #runInLockWithCVR<T>(fn: (cvr: CVRSnapshot) => Promise<T> | T): Promise<T> {
     return this.#lock.withLock(async () => {
       if (!this.#cvr) {
-        this.#cvr = await this.#cvrStore.load();
+        this.#cvr = await this.#cvrStore.load(this.#lastConnectTime);
       }
       try {
         return await fn(this.#cvr);
@@ -282,6 +286,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     ctx: SyncContext,
     initConnectionMessage: InitConnectionMessage,
   ): Promise<Source<Downstream>> {
+    this.#lastConnectTime = Date.now();
+
     const {clientID, wsID, baseCookie, schemaVersion} = ctx;
     const lc = this.#lc
       .withContext('clientID', clientID)
@@ -424,7 +430,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
       }
 
-      this.#cvr = (await updater.flush(lc)).cvr;
+      this.#cvr = (await updater.flush(lc, this.#lastConnectTime)).cvr;
 
       if (cmpVersions(cvr.version, this.#cvr.version) < 0) {
         // Send pokes to catch up clients that are up to date.
@@ -605,7 +611,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
 
     // Commit the changes and update the CVR snapshot.
-    this.#cvr = (await updater.flush(lc)).cvr;
+    this.#cvr = (await updater.flush(lc, this.#lastConnectTime)).cvr;
 
     // Before ending the poke, catch up clients that were behind the old CVR.
     await this.#catchupClients(lc, cvr, addQueries, pokers);
@@ -807,7 +813,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
 
     // Commit the changes and update the CVR snapshot.
-    this.#cvr = (await updater.flush(lc)).cvr;
+    this.#cvr = (await updater.flush(lc, this.#lastConnectTime)).cvr;
 
     // Signal clients to commit.
     pokers.forEach(poker => poker.end());
