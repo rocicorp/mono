@@ -3,7 +3,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {sleep} from '../../../../shared/src/sleep.js';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
-import {CVRStore} from './cvr-store.js';
+import {CVRStore, OwnershipError} from './cvr-store.js';
 import type {CVRSnapshot} from './cvr.js';
 import {type RowsRow, setupCVRTables} from './schema/cvr.js';
 import type {CVRVersion} from './schema/types.js';
@@ -13,7 +13,9 @@ describe('view-syncer/cvr-store', () => {
   let db: PostgresDB;
   let store: CVRStore;
 
+  const TASK_ID = 'my-task';
   const CVR_ID = 'my-cvr';
+  const CONNECT_TIME = Date.UTC(2024, 10, 22);
 
   beforeEach(async () => {
     db = await testDBs.create('view_syncer_cvr_schema');
@@ -50,7 +52,7 @@ describe('view-syncer/cvr-store', () => {
     INSERT INTO cvr.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
       VALUES('${CVR_ID}', '', 'issues', '{"id":"12"}', '01', '03', '{"foo":2,"bar":3}');
       `);
-    store = new CVRStore(lc, db, CVR_ID, 10, 5);
+    store = new CVRStore(lc, db, TASK_ID, CVR_ID, 10, 5);
   });
 
   test('wait for row catchup', async () => {
@@ -58,7 +60,7 @@ describe('view-syncer/cvr-store', () => {
     await db`UPDATE cvr.instances SET version = '02'`;
 
     // start a CVR load.
-    const loading = store.load();
+    const loading = store.load(CONNECT_TIME);
 
     await sleep(1);
 
@@ -79,9 +81,48 @@ describe('view-syncer/cvr-store', () => {
     // Simulate the CVR being ahead of the rows.
     await db`UPDATE cvr.instances SET version = '02'`;
 
-    await expect(store.load()).rejects.toThrowErrorMatchingInlineSnapshot(
+    await expect(
+      store.load(CONNECT_TIME),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
       `[Error: ["error","ClientNotFound","max attempts exceeded waiting for CVR@02 to catch up from 01"]]`,
     );
+
+    // Verify that the store signaled an ownership change to 'my-task' at CONNECT_TIME.
+    expect(await db`SELECT * FROM cvr.instances`).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientGroupID": "my-cvr",
+          "grantedAt": 1732233600000,
+          "lastActive": 1725408000000,
+          "owner": "my-task",
+          "replicaVersion": null,
+          "version": "02",
+        },
+      ]
+    `);
+  });
+
+  test('wrong owner', async () => {
+    // Simulate the CVR being owned by someone else.
+    await db`UPDATE cvr.instances SET owner = 'other-task', "grantedAt" = ${
+      CONNECT_TIME + 1
+    }`;
+
+    await expect(store.load(CONNECT_TIME)).rejects.toThrow(OwnershipError);
+
+    // Verify that no ownership change was signaled.
+    expect(await db`SELECT * FROM cvr.instances`).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientGroupID": "my-cvr",
+          "grantedAt": 1732233600001,
+          "lastActive": 1725408000000,
+          "owner": "other-task",
+          "replicaVersion": null,
+          "version": "01",
+        },
+      ]
+    `);
   });
 
   async function catchupRows(

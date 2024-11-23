@@ -164,6 +164,7 @@ describe('view-syncer/service', () => {
     );
     vs = new ViewSyncerService(
       lc,
+      TASK_ID,
       serviceID,
       SHARD_ID,
       cvrDB,
@@ -223,6 +224,7 @@ describe('view-syncer/service', () => {
     replicaDbFile.delete();
   });
 
+  const TASK_ID = 'foo-task';
   const serviceID = '9876';
 
   const ISSUES_QUERY: AST = {
@@ -257,8 +259,8 @@ describe('view-syncer/service', () => {
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
 
-    const cvrStore = new CVRStore(lc, cvrDB, serviceID);
-    const cvr = await cvrStore.load();
+    const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID);
+    const cvr = await cvrStore.load(Date.now());
     expect(cvr).toMatchObject({
       clients: {
         foo: {
@@ -305,8 +307,8 @@ describe('view-syncer/service', () => {
       },
     ]);
 
-    const cvrStore = new CVRStore(lc, cvrDB, serviceID);
-    const cvr = await cvrStore.load();
+    const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID);
+    const cvr = await cvrStore.load(Date.now());
     expect(cvr).toMatchObject({
       clients: {
         foo: {
@@ -2005,13 +2007,13 @@ describe('view-syncer/service', () => {
   test('waits for replica to catch up', async () => {
     // Before connecting, artificially set the CVR version to '07',
     // which is ahead of the current replica version '00'.
-    const cvrStore = new CVRStore(lc, cvrDB, serviceID);
+    const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID);
     await new CVRQueryDrivenUpdater(
       cvrStore,
-      await cvrStore.load(),
+      await cvrStore.load(Date.now()),
       '07',
       REPLICA_VERSION,
-    ).flush(lc);
+    ).flush(lc, Date.now());
 
     // Connect the client.
     const client = await connect(SYNC_CONTEXT, [
@@ -2166,13 +2168,13 @@ describe('view-syncer/service', () => {
   });
 
   test('sends reset for CVR from different replica version up', async () => {
-    const cvrStore = new CVRStore(lc, cvrDB, serviceID);
+    const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID);
     await new CVRQueryDrivenUpdater(
       cvrStore,
-      await cvrStore.load(),
+      await cvrStore.load(Date.now()),
       '07',
       '1' + REPLICA_VERSION, // Different replica version.
-    ).flush(lc);
+    ).flush(lc, Date.now());
 
     // Connect the client.
     const client = await connect(SYNC_CONTEXT, [
@@ -2217,13 +2219,13 @@ describe('view-syncer/service', () => {
   });
 
   test('sends invalid base cookie if client is ahead of CVR', async () => {
-    const cvrStore = new CVRStore(lc, cvrDB, serviceID);
+    const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID);
     await new CVRQueryDrivenUpdater(
       cvrStore,
-      await cvrStore.load(),
+      await cvrStore.load(Date.now()),
       '07',
       REPLICA_VERSION,
-    ).flush(lc);
+    ).flush(lc, Date.now());
 
     // Connect the client with a base cookie from the future.
     const client = await connect({...SYNC_CONTEXT, baseCookie: '08'}, [
