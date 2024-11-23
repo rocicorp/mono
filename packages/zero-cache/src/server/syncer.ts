@@ -77,6 +77,7 @@ export default async function runWorker(
       .withContext('clientGroupID', id);
     return new ViewSyncerService(
       logger,
+      must(config.taskID, 'main must set --task-id'),
       id,
       config.shard.id,
       cvrDB,

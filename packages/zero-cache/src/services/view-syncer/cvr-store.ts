@@ -220,11 +220,15 @@ const MAX_LOAD_ATTEMPTS = 10;
 
 export class CVRStore {
   readonly #lc: LogContext;
+  readonly #taskID: string;
   readonly #id: string;
   readonly #db: PostgresDB;
   readonly #writes: Set<{
     stats: Partial<CVRFlushStats>;
-    write: (tx: PostgresTransaction) => PendingQuery<MaybeRow[]>;
+    write: (
+      tx: PostgresTransaction,
+      lastConnectTime: number,
+    ) => PendingQuery<MaybeRow[]>;
   }> = new Set();
   readonly #pendingRowRecordPuts = new CustomKeyMap<RowID, RowRecord>(
     rowIDHash,
@@ -236,26 +240,28 @@ export class CVRStore {
   constructor(
     lc: LogContext,
     db: PostgresDB,
+    taskID: string,
     cvrID: string,
     loadAttemptIntervalMs = LOAD_ATTEMPT_INTERVAL_MS,
     maxLoadAttempts = MAX_LOAD_ATTEMPTS,
   ) {
     this.#lc = lc;
     this.#db = db;
+    this.#taskID = taskID;
     this.#id = cvrID;
     this.#rowCache = new RowRecordCache(db, cvrID);
     this.#loadAttemptIntervalMs = loadAttemptIntervalMs;
     this.#maxLoadAttempts = maxLoadAttempts;
   }
 
-  async load(): Promise<CVR> {
+  async load(lastConnectTime: number): Promise<CVR> {
     let err: RowsVersionBehindError | undefined;
     for (let i = 0; i < this.#maxLoadAttempts; i++) {
       if (i > 0) {
         await sleep(this.#loadAttemptIntervalMs);
       }
       try {
-        return await this.#load();
+        return await this.#load(lastConnectTime);
       } catch (e) {
         if (e instanceof RowsVersionBehindError) {
           err = e;
@@ -273,7 +279,7 @@ export class CVRStore {
     ]);
   }
 
-  async #load(): Promise<CVR> {
+  async #load(lastConnectTime: number): Promise<CVR> {
     const start = Date.now();
 
     const id = this.#id;
@@ -290,7 +296,12 @@ export class CVRStore {
       await this.#db.begin(tx => [
         tx<
           (Omit<InstancesRow, 'clientGroupID'> & {rowsVersion: string | null})[]
-        >`SELECT cvr."version", "lastActive", "replicaVersion", rows."version" as "rowsVersion"
+        >`SELECT cvr."version", 
+                 "lastActive", 
+                 "replicaVersion", 
+                 "owner", 
+                 "grantedAt", 
+                 rows."version" as "rowsVersion"
             FROM cvr.instances AS cvr
             LEFT JOIN cvr."rowsVersion" AS rows 
             ON cvr."clientGroupID" = rows."clientGroupID"
@@ -306,30 +317,51 @@ export class CVRStore {
         >`SELECT * FROM cvr.desires WHERE "clientGroupID" = ${id} AND (deleted IS NULL OR deleted = FALSE)`,
       ]);
 
-    if (instance.length !== 0) {
+    if (instance.length === 0) {
+      // This is the first time we see this CVR.
+      this.putInstance({
+        version: cvr.version,
+        lastActive: 0,
+        replicaVersion: null,
+      });
+    } else {
       assert(instance.length === 1);
-      const {version, lastActive, replicaVersion, rowsVersion} = instance[0];
+      const {
+        version,
+        lastActive,
+        replicaVersion,
+        owner,
+        grantedAt,
+        rowsVersion,
+      } = instance[0];
+
+      if (owner !== this.#taskID) {
+        if ((grantedAt ?? 0) > lastConnectTime) {
+          throw new OwnershipError(owner, grantedAt);
+        } else {
+          // Fire-and-forget an ownership change to signal the current owner.
+          // Note that the query is structured such that it only succeeds in the
+          // correct conditions (i.e. gated on `grantedAt`).
+          void this.#db`
+            UPDATE cvr.instances SET "owner"     = ${this.#taskID}, 
+                                     "grantedAt" = ${lastConnectTime}
+              WHERE "clientGroupID" = ${this.#id} AND
+                    ("grantedAt" IS NULL OR
+                     "grantedAt" <= to_timestamp(${lastConnectTime / 1000}))
+        `.execute();
+        }
+      }
+
       if (version !== (rowsVersion ?? EMPTY_CVR_VERSION.stateVersion)) {
-        // TODO: Add ownership / takeover logic here to bound the time it
-        //       takes to catch up. Otherwise, the current owner can continue
-        //       updating the cvr and the rows can be behind indefinitely.
+        // This will cause the load() method to wait for row catchup and retry.
+        // Assuming the ownership signal succeeds, the current owner will stop
+        // modifying the CVR and flush its pending row changes.
         throw new RowsVersionBehindError(version, rowsVersion);
       }
+
       cvr.version = versionFromString(version);
       cvr.lastActive = lastActive;
       cvr.replicaVersion = replicaVersion;
-    } else {
-      // This is the first time we see this CVR.
-      const change: InstancesRow = {
-        clientGroupID: id,
-        version: versionString(cvr.version),
-        lastActive: 0,
-        replicaVersion: null,
-      };
-      this.#writes.add({
-        stats: {instances: 1},
-        write: tx => tx`INSERT INTO cvr.instances ${tx(change)}`,
-      });
     }
 
     for (const row of clientsRows) {
@@ -380,18 +412,21 @@ export class CVRStore {
     replicaVersion,
     lastActive,
   }: Pick<CVRSnapshot, 'version' | 'replicaVersion' | 'lastActive'>): void {
-    const change: InstancesRow = {
-      clientGroupID: this.#id,
-      version: versionString(version),
-      lastActive,
-      replicaVersion,
-    };
     this.#writes.add({
       stats: {instances: 1},
-      write: tx =>
-        tx`INSERT INTO cvr.instances ${tx(
-          change,
-        )} ON CONFLICT ("clientGroupID") DO UPDATE SET ${tx(change)}`,
+      write: (tx, lastConnectTime) => {
+        const change: InstancesRow = {
+          clientGroupID: this.#id,
+          version: versionString(version),
+          lastActive,
+          replicaVersion,
+          owner: this.#taskID,
+          grantedAt: lastConnectTime,
+        };
+        return tx`
+        INSERT INTO cvr.instances ${tx(change)} 
+          ON CONFLICT ("clientGroupID") DO UPDATE SET ${tx(change)}`;
+      },
     });
   }
 
@@ -596,26 +631,36 @@ export class CVRStore {
     return patches;
   }
 
-  async #abortIfNotVersion(
+  async #checkVersionAndOwnership(
     tx: PostgresTransaction,
     expectedCurrentVersion: CVRVersion,
+    lastConnectTime: number,
   ): Promise<void> {
     const expected = versionString(expectedCurrentVersion);
     const result = await tx<
-      {version: string}[]
-    >`SELECT version FROM cvr.instances WHERE "clientGroupID" = ${
-      this.#id
-    }`.execute(); // Note: execute() immediately to send the query before others.
-    const currVersion =
-      result.length === 0 ? EMPTY_CVR_VERSION.stateVersion : result[0].version;
-    if (currVersion !== expected) {
-      throw new ConcurrentModificationException(expected, currVersion);
+      Pick<InstancesRow, 'version' | 'owner' | 'grantedAt'>[]
+    >`SELECT "version", "owner", "grantedAt" FROM cvr.instances 
+        WHERE "clientGroupID" = ${this.#id}`.execute(); // Note: execute() immediately to send the query before others.
+    const {version, owner, grantedAt} =
+      result.length > 0
+        ? result[0]
+        : {
+            version: EMPTY_CVR_VERSION.stateVersion,
+            owner: null,
+            grantedAt: null,
+          };
+    if (version !== expected) {
+      throw new ConcurrentModificationException(expected, version);
+    }
+    if (owner !== this.#taskID && (grantedAt ?? 0) > lastConnectTime) {
+      throw new OwnershipError(owner, grantedAt);
     }
   }
 
   async #flush(
     expectedCurrentVersion: CVRVersion,
     newVersion: CVRVersion,
+    lastConnectTime: number,
   ): Promise<CVRFlushStats> {
     const stats: CVRFlushStats = {
       instances: 0,
@@ -641,9 +686,12 @@ export class CVRStore {
     stats.rows = rowRecordsToFlush.length;
     await this.#db.begin(tx => {
       const pipelined: Promise<unknown>[] = [
-        // Test-and-set the version to guard against concurrent writes.
-        // TODO: Add homing logic.
-        this.#abortIfNotVersion(tx, expectedCurrentVersion),
+        // Read the version and ownership to detect concurrent writes.
+        this.#checkVersionAndOwnership(
+          tx,
+          expectedCurrentVersion,
+          lastConnectTime,
+        ),
       ];
 
       for (const write of this.#writes) {
@@ -652,7 +700,7 @@ export class CVRStore {
         stats.desires += write.stats.desires ?? 0;
         stats.clients += write.stats.clients ?? 0;
 
-        pipelined.push(write.write(tx).execute());
+        pipelined.push(write.write(tx, lastConnectTime).execute());
         stats.statements++;
       }
 
@@ -675,9 +723,14 @@ export class CVRStore {
   async flush(
     expectedCurrentVersion: CVRVersion,
     newVersion: CVRVersion,
+    lastConnectTime: number,
   ): Promise<CVRFlushStats> {
     try {
-      return await this.#flush(expectedCurrentVersion, newVersion);
+      return await this.#flush(
+        expectedCurrentVersion,
+        newVersion,
+        lastConnectTime,
+      );
     } catch (e) {
       // Clear cached state if an error (e.g. ConcurrentModificationException) is encountered.
       this.#rowCache.clear();
@@ -700,6 +753,18 @@ export class ConcurrentModificationException extends Error {
   constructor(expectedVersion: string, actualVersion: string) {
     super(
       `CVR has been concurrently modified. Expected ${expectedVersion}, got ${actualVersion}`,
+    );
+  }
+}
+
+export class OwnershipError extends Error {
+  readonly name = 'OwnershipError';
+
+  constructor(owner: string | null, grantedAt: number | null) {
+    super(
+      `CVR ownership was transferred to ${owner} at ${new Date(
+        grantedAt ?? 0,
+      ).toISOString()}`,
     );
   }
 }

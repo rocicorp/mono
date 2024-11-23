@@ -4,7 +4,11 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {PatchToVersion} from './client-handler.js';
-import {ConcurrentModificationException, CVRStore} from './cvr-store.js';
+import {
+  ConcurrentModificationException,
+  CVRStore,
+  OwnershipError,
+} from './cvr-store.js';
 import {
   CVRConfigDrivenUpdater,
   CVRQueryDrivenUpdater,
@@ -29,9 +33,12 @@ import type {CVRVersion, RowID} from './schema/types.js';
 
 const SHARD_ID = 'jkl';
 
+const LAST_CONNECT = Date.UTC(2024, 2, 1);
+
 describe('view-syncer/cvr', () => {
   type DBState = {
-    instances: InstancesRow[];
+    instances: (Partial<InstancesRow> &
+      Pick<InstancesRow, 'clientGroupID' | 'version'>)[];
     clients: ClientsRow[];
     queries: QueriesRow[];
     desires: DesiresRow[];
@@ -148,9 +155,9 @@ describe('view-syncer/cvr', () => {
   }
 
   test('load first time cvr', async () => {
-    const pgStore = new CVRStore(lc, db, 'abc123');
+    const pgStore = new CVRStore(lc, db, 'my-task', 'abc123');
 
-    const cvr = await pgStore.load();
+    const cvr = await pgStore.load(LAST_CONNECT);
     expect(cvr).toEqual({
       id: 'abc123',
       version: {stateVersion: '00'},
@@ -162,6 +169,7 @@ describe('view-syncer/cvr', () => {
     const flushed = (
       await new CVRUpdater(pgStore, cvr, cvr.replicaVersion).flush(
         lc,
+        LAST_CONNECT,
         Date.UTC(2024, 3, 20),
       )
     ).cvr;
@@ -172,8 +180,8 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const pgStore2 = new CVRStore(lc, db, 'abc123');
-    const reloaded = await pgStore2.load();
+    const pgStore2 = new CVRStore(lc, db, 'my-task', 'abc123');
+    const reloaded = await pgStore2.load(LAST_CONNECT);
     expect(reloaded).toEqual(flushed);
 
     await expectState(db, {
@@ -183,6 +191,8 @@ describe('view-syncer/cvr', () => {
           version: '00',
           lastActive: 1713571200000,
           replicaVersion: null,
+          owner: 'my-task',
+          grantedAt: 1709251200000,
         },
       ],
       clients: [],
@@ -234,9 +244,9 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'abc123');
+    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123');
 
-    const cvr = await cvrStore.load();
+    const cvr = await cvrStore.load(LAST_CONNECT);
     expect(cvr).toEqual({
       id: 'abc123',
       version: {stateVersion: '1a9', minorVersion: 2},
@@ -260,7 +270,16 @@ describe('view-syncer/cvr', () => {
       },
     } satisfies CVRSnapshot);
 
-    await expectState(db, initialState);
+    await expectState(db, {
+      ...initialState,
+      instances: [
+        {
+          ...initialState.instances[0],
+          owner: 'my-task',
+          grantedAt: 1709251200000,
+        },
+      ],
+    });
   });
 
   test('update active time', async () => {
@@ -306,12 +325,13 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'abc123');
-    const cvr = await cvrStore.load();
+    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123');
+    const cvr = await cvrStore.load(LAST_CONNECT);
     const updater = new CVRUpdater(cvrStore, cvr, cvr.replicaVersion);
 
     const {cvr: updated, stats} = await updater.flush(
       lc,
+      LAST_CONNECT,
       Date.UTC(2024, 3, 24),
     );
     expect(stats).toMatchInlineSnapshot(`
@@ -354,13 +374,21 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const cvrStore2 = new CVRStore(lc, db, 'abc123');
-    const reloaded = await cvrStore2.load();
+    const cvrStore2 = new CVRStore(lc, db, 'my-task', 'abc123');
+    const reloaded = await cvrStore2.load(LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
-    const updatedState = structuredClone(initialState);
-    updatedState.instances[0].lastActive = Date.UTC(2024, 3, 24);
-    await expectState(db, updatedState);
+    await expectState(db, {
+      ...initialState,
+      instances: [
+        {
+          ...initialState.instances[0],
+          lastActive: Date.UTC(2024, 3, 24),
+          owner: 'my-task',
+          grantedAt: 1709251200000,
+        },
+      ],
+    });
   });
 
   test('detects concurrent modification', async () => {
@@ -380,20 +408,55 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'abc123');
-    const cvr = await cvrStore.load();
+    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123');
+    const cvr = await cvrStore.load(LAST_CONNECT);
     const updater = new CVRUpdater(cvrStore, cvr, cvr.replicaVersion);
 
     // Simulate an external modification, incrementing the patch version.
     await db`UPDATE cvr.instances SET version = '1a9:03' WHERE "clientGroupID" = 'abc123'`;
 
-    let err;
-    try {
-      await updater.flush(lc, Date.UTC(2024, 4, 19));
-    } catch (e) {
-      err = e;
-    }
-    expect(err).toBeInstanceOf(ConcurrentModificationException);
+    await expect(
+      updater.flush(lc, LAST_CONNECT, Date.UTC(2024, 4, 19)),
+    ).rejects.toThrow(ConcurrentModificationException);
+
+    // The last active time should not have been modified.
+    expect(
+      await db`SELECT "lastActive" FROM cvr.instances WHERE "clientGroupID" = 'abc123'`,
+    ).toEqual([{lastActive: Date.UTC(2024, 3, 23)}]);
+  });
+
+  test('detects ownership change', async () => {
+    const initialState: DBState = {
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          version: '1a9:02',
+          replicaVersion: '100',
+          lastActive: Date.UTC(2024, 3, 23),
+          owner: 'my-task',
+          grantedAt: LAST_CONNECT,
+        },
+      ],
+      clients: [],
+      queries: [],
+      desires: [],
+      rows: [],
+    };
+    await setInitialState(db, initialState);
+
+    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123');
+    const cvr = await cvrStore.load(LAST_CONNECT);
+    const updater = new CVRUpdater(cvrStore, cvr, cvr.replicaVersion);
+
+    // Simulate an ownership change.
+    await db`
+    UPDATE cvr.instances SET "owner"     = 'other-task', 
+                             "grantedAt" = ${LAST_CONNECT + 1}
+    WHERE "clientGroupID" = 'abc123'`;
+
+    await expect(
+      updater.flush(lc, LAST_CONNECT, Date.UTC(2024, 4, 19)),
+    ).rejects.toThrow(OwnershipError);
 
     // The last active time should not have been modified.
     expect(
@@ -457,8 +520,8 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'abc123');
-    const cvr = await cvrStore.load();
+    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123');
+    const cvr = await cvrStore.load(LAST_CONNECT);
     expect(cvr).toEqual({
       id: 'abc123',
       version: {stateVersion: '1aa'},
@@ -641,6 +704,7 @@ describe('view-syncer/cvr', () => {
 
     const {cvr: updated, stats} = await updater.flush(
       lc,
+      LAST_CONNECT,
       Date.UTC(2024, 3, 24),
     );
 
@@ -737,6 +801,8 @@ describe('view-syncer/cvr', () => {
           lastActive: new Date('2024-04-24T00:00:00.000Z').getTime(),
           version: '1aa:01',
           replicaVersion: '101',
+          owner: 'my-task',
+          grantedAt: 1709251200000,
         },
       ],
       clients: [
@@ -881,8 +947,8 @@ describe('view-syncer/cvr', () => {
     });
 
     // Verify round tripping.
-    const cvrStore2 = new CVRStore(lc, db, 'abc123');
-    const reloaded = await cvrStore2.load();
+    const cvrStore2 = new CVRStore(lc, db, 'my-task', 'abc123');
+    const reloaded = await cvrStore2.load(LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
     // Add the deleted desired query back. This ensures that the
@@ -912,7 +978,11 @@ describe('view-syncer/cvr', () => {
       ]
     `);
 
-    const {cvr: updated2} = await updater2.flush(lc, Date.UTC(2024, 3, 24, 1));
+    const {cvr: updated2} = await updater2.flush(
+      lc,
+      LAST_CONNECT,
+      Date.UTC(2024, 3, 24, 1),
+    );
     expect(updated2.clients.fooClient.desiredQueryIDs).toContain('oneHash');
   });
 
@@ -959,8 +1029,8 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'abc123');
-    const cvr = await cvrStore.load();
+    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123');
+    const cvr = await cvrStore.load(LAST_CONNECT);
     const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
 
     // Same desired query set. Nothing should change except last active time.
@@ -971,6 +1041,7 @@ describe('view-syncer/cvr', () => {
     // Same last active day (no index change), but different hour.
     const {cvr: updated, stats} = await updater.flush(
       lc,
+      LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
     expect(stats).toMatchInlineSnapshot(`
@@ -990,13 +1061,21 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const doCVRStore2 = new CVRStore(lc, db, 'abc123');
-    const reloaded = await doCVRStore2.load();
+    const doCVRStore2 = new CVRStore(lc, db, 'my-task', 'abc123');
+    const reloaded = await doCVRStore2.load(LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
-    const updatedState = structuredClone(initialState);
-    updatedState.instances[0].lastActive = Date.UTC(2024, 3, 23, 1);
-    await expectState(db, updatedState);
+    await expectState(db, {
+      ...initialState,
+      instances: [
+        {
+          ...initialState.instances[0],
+          lastActive: Date.UTC(2024, 3, 23, 1),
+          owner: 'my-task',
+          grantedAt: 1709251200000,
+        },
+      ],
+    });
   });
 
   const ROW_KEY1 = {id: '123'};
@@ -1134,8 +1213,8 @@ describe('view-syncer/cvr', () => {
 
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'abc123');
-    const cvr = await cvrStore.load();
+    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123');
+    const cvr = await cvrStore.load(LAST_CONNECT);
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1aa', '123');
 
     const {newVersion, queryPatches} = updater.trackQueries(
@@ -1262,6 +1341,7 @@ describe('view-syncer/cvr', () => {
     // Same last active day (no index change), but different hour.
     const {cvr: updated, stats} = await updater.flush(
       lc,
+      LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
     expect(stats).toMatchInlineSnapshot(`
@@ -1352,8 +1432,8 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const cvrStore2 = new CVRStore(lc, db, 'abc123');
-    const reloaded = await cvrStore2.load();
+    const cvrStore2 = new CVRStore(lc, db, 'my-task', 'abc123');
+    const reloaded = await cvrStore2.load(LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
     await expectState(db, {
@@ -1363,6 +1443,8 @@ describe('view-syncer/cvr', () => {
           lastActive: new Date('2024-04-23T01:00:00Z').getTime(),
           version: '1aa:01',
           replicaVersion: '123',
+          owner: 'my-task',
+          grantedAt: 1709251200000,
         },
       ],
       clients: [
@@ -1590,8 +1672,8 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'abc123');
-    const cvr = await cvrStore.load();
+    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123');
+    const cvr = await cvrStore.load(LAST_CONNECT);
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '123');
 
     const {newVersion, queryPatches} = updater.trackQueries(
@@ -1670,6 +1752,7 @@ describe('view-syncer/cvr', () => {
     // Same last active day (no index change), but different hour.
     const {cvr: updated, stats} = await updater.flush(
       lc,
+      LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
     expect(stats).toMatchInlineSnapshot(`
@@ -1773,8 +1856,8 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const doCVRStore2 = new CVRStore(lc, db, 'abc123');
-    const reloaded = await doCVRStore2.load();
+    const doCVRStore2 = new CVRStore(lc, db, 'my-task', 'abc123');
+    const reloaded = await doCVRStore2.load(LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
     expect(await getAllState(db)).toEqual({
@@ -1784,6 +1867,8 @@ describe('view-syncer/cvr', () => {
           lastActive: new Date('2024-04-23T01:00:00Z').getTime(),
           version: '1ba:01',
           replicaVersion: '123',
+          owner: 'my-task',
+          grantedAt: 1709251200000,
         },
       ],
       clients: initialState.clients,
@@ -2020,8 +2105,8 @@ describe('view-syncer/cvr', () => {
 
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'abc123');
-    const cvr = await cvrStore.load();
+    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123');
+    const cvr = await cvrStore.load(LAST_CONNECT);
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '123');
 
     const {newVersion, queryPatches} = updater.trackQueries(
@@ -2127,6 +2212,7 @@ describe('view-syncer/cvr', () => {
     // Same last active day (no index change), but different hour.
     const {cvr: updated, stats} = await updater.flush(
       lc,
+      LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
     expect(stats).toMatchInlineSnapshot(`
@@ -2271,8 +2357,8 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const doCVRStore2 = new CVRStore(lc, db, 'abc123');
-    const reloaded = await doCVRStore2.load();
+    const doCVRStore2 = new CVRStore(lc, db, 'my-task', 'abc123');
+    const reloaded = await doCVRStore2.load(LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
     await expectState(db, {
@@ -2282,6 +2368,8 @@ describe('view-syncer/cvr', () => {
           lastActive: new Date('2024-04-23T01:00:00Z').getTime(),
           version: '1ba:01',
           replicaVersion: '123',
+          owner: 'my-task',
+          grantedAt: 1709251200000,
         },
       ],
       clients: initialState.clients,
@@ -2505,8 +2593,8 @@ describe('view-syncer/cvr', () => {
 
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'abc123');
-    const cvr = await cvrStore.load();
+    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123');
+    const cvr = await cvrStore.load(LAST_CONNECT);
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '123');
 
     const {newVersion, queryPatches} = updater.trackQueries(
@@ -2542,6 +2630,7 @@ describe('view-syncer/cvr', () => {
     // Note: Must flush before generating config patches.
     const {cvr: updated, stats} = await updater.flush(
       lc,
+      LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
     expect(stats).toMatchInlineSnapshot(`
@@ -2622,8 +2711,8 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const doCVRStore2 = new CVRStore(lc, db, 'abc123');
-    const reloaded = await doCVRStore2.load();
+    const doCVRStore2 = new CVRStore(lc, db, 'my-task', 'abc123');
+    const reloaded = await doCVRStore2.load(LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
     await expectState(db, {
@@ -2633,6 +2722,8 @@ describe('view-syncer/cvr', () => {
           lastActive: new Date('2024-04-23T01:00:00Z').getTime(),
           version: '1ba:01',
           replicaVersion: '123',
+          owner: 'my-task',
+          grantedAt: 1709251200000,
         },
       ],
       clients: [],
@@ -2859,8 +2950,8 @@ describe('view-syncer/cvr', () => {
 
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'abc123');
-    const cvr = await cvrStore.load();
+    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123');
+    const cvr = await cvrStore.load(LAST_CONNECT);
     expect(cvr).toMatchInlineSnapshot(`
       {
         "clients": {
@@ -3025,6 +3116,7 @@ describe('view-syncer/cvr', () => {
     // Only the last active time should change.
     const {cvr: updated, stats} = await updater.flush(
       lc,
+      LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
     expect(stats).toMatchInlineSnapshot(`
@@ -3150,8 +3242,8 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const doCVRStore2 = new CVRStore(lc, db, 'abc123');
-    const reloaded = await doCVRStore2.load();
+    const doCVRStore2 = new CVRStore(lc, db, 'my-task', 'abc123');
+    const reloaded = await doCVRStore2.load(LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
     // await expectStorage(storage, {
@@ -3225,12 +3317,12 @@ describe('view-syncer/cvr', () => {
 
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'abc123');
-    const cvr = await cvrStore.load();
+    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123');
+    const cvr = await cvrStore.load(LAST_CONNECT);
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '120');
 
-    const newVerison = updater.updatedVersion();
-    expect(newVerison).toEqual({
+    const newVersion = updater.updatedVersion();
+    expect(newVersion).toEqual({
       stateVersion: '1ba',
     });
 
@@ -3271,6 +3363,7 @@ describe('view-syncer/cvr', () => {
     // Same last active day (no index change), but different hour.
     const {cvr: updated, stats} = await updater.flush(
       lc,
+      LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
     expect(stats).toMatchInlineSnapshot(`
@@ -3285,8 +3378,8 @@ describe('view-syncer/cvr', () => {
     `);
 
     // Verify round tripping.
-    const cvrStore2 = new CVRStore(lc, db, 'abc123');
-    const reloaded = await cvrStore2.load();
+    const cvrStore2 = new CVRStore(lc, db, 'my-task', 'abc123');
+    const reloaded = await cvrStore2.load(LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
     await expectState(db, {
@@ -3296,6 +3389,8 @@ describe('view-syncer/cvr', () => {
           version: '1ba',
           replicaVersion: '120',
           lastActive: Date.UTC(2024, 3, 23, 1),
+          owner: 'my-task',
+          grantedAt: 1709251200000,
         },
       ],
       clients: [
