@@ -138,60 +138,64 @@ describe('unreadable tables', () => {
     // any related calls to unreadable tables are removed.
     expect(transformQuery(ast(query), permissionRules, authData))
       .toMatchInlineSnapshot(`
-      {
-        "related": [
-          {
-            "correlations": {
-              "childField": "id",
-              "op": "=",
-              "parentField": "readableId",
-            },
-            "subquery": {
-              "alias": "readable",
-              "orderBy": [
-                [
-                  "id",
-                  "asc",
-                ],
+        {
+          "related": [
+            {
+              "correlations": [
+                {
+                  "childField": "id",
+                  "op": "=",
+                  "parentField": "readableId",
+                },
               ],
-              "related": undefined,
-              "table": "readable",
-              "where": undefined,
+              "subquery": {
+                "alias": "readable",
+                "orderBy": [
+                  [
+                    "id",
+                    "asc",
+                  ],
+                ],
+                "related": undefined,
+                "table": "readable",
+                "where": undefined,
+              },
             },
-          },
-        ],
-        "table": "readable",
-        "where": undefined,
-      }
-    `);
+          ],
+          "table": "readable",
+          "where": undefined,
+        }
+      `);
     expect(transformQuery(ast(query), permissionRules, undefined))
       .toMatchInlineSnapshot(`
-      {
-        "related": [
-          {
-            "correlations": {
-              "childField": "id",
-              "op": "=",
-              "parentField": "readableId",
-            },
-            "subquery": {
-              "alias": "readable",
-              "orderBy": [
-                [
-                  "id",
-                  "asc",
-                ],
+        {
+          "related": [
+            {
+              "correlations": [
+                {
+                  "childField": "id",
+                  "op": "=",
+                  "parentField": "readableId",
+                },
               ],
-              "related": undefined,
-              "table": "readable",
-              "where": undefined,
+              "subquery": {
+                "alias": "readable",
+                "orderBy": [
+                  [
+                    "id",
+                    "asc",
+                  ],
+                ],
+                "related": undefined,
+                "table": "readable",
+                "where": undefined,
+              },
             },
-          },
-        ],
-        "table": "readable",
-        "where": undefined,
-      }
-    `);
+          ],
+          "table": "readable",
+          "where": undefined,
+        }
+      `);
 
     // no matter how nested
     expect(
@@ -209,11 +213,13 @@ describe('unreadable tables', () => {
       {
         "related": [
           {
-            "correlations": {
-              "childField": "id",
-              "op": "=",
-              "parentField": "readableId",
-            },
+            "correlations": [
+              {
+                "childField": "id",
+                "op": "=",
+                "parentField": "readableId",
+              },
+            ],
             "subquery": {
               "alias": "readable",
               "orderBy": [
@@ -224,11 +230,13 @@ describe('unreadable tables', () => {
               ],
               "related": [
                 {
-                  "correlations": {
-                    "childField": "id",
-                    "op": "=",
-                    "parentField": "readableId",
-                  },
+                  "correlations": [
+                    {
+                      "childField": "id",
+                      "op": "=",
+                      "parentField": "readableId",
+                    },
+                  ],
                   "subquery": {
                     "alias": "readable",
                     "orderBy": [
@@ -268,11 +276,13 @@ describe('unreadable tables', () => {
       {
         "related": [
           {
-            "correlations": {
-              "childField": "id",
-              "op": "=",
-              "parentField": "readableId",
-            },
+            "correlations": [
+              {
+                "childField": "id",
+                "op": "=",
+                "parentField": "readableId",
+              },
+            ],
             "subquery": {
               "alias": "readable",
               "orderBy": [
@@ -283,11 +293,13 @@ describe('unreadable tables', () => {
               ],
               "related": [
                 {
-                  "correlations": {
-                    "childField": "id",
-                    "op": "=",
-                    "parentField": "readableId",
-                  },
+                  "correlations": [
+                    {
+                      "childField": "id",
+                      "op": "=",
+                      "parentField": "readableId",
+                    },
+                  ],
                   "subquery": {
                     "alias": "readable",
                     "orderBy": [
@@ -452,11 +464,13 @@ describe('unreadable tables', () => {
         "where": {
           "op": "EXISTS",
           "related": {
-            "correlations": {
-              "childField": "id",
-              "op": "=",
-              "parentField": "readableId",
-            },
+            "correlations": [
+              {
+                "childField": "id",
+                "op": "=",
+                "parentField": "readableId",
+              },
+            ],
             "subquery": {
               "alias": "zsubq_readable",
               "orderBy": [
@@ -504,11 +518,13 @@ describe('unreadable tables', () => {
         "where": {
           "op": "EXISTS",
           "related": {
-            "correlations": {
-              "childField": "id",
-              "op": "=",
-              "parentField": "readableId",
-            },
+            "correlations": [
+              {
+                "childField": "id",
+                "op": "=",
+                "parentField": "readableId",
+              },
+            ],
             "subquery": {
               "alias": "zsubq_readable",
               "orderBy": [
@@ -570,11 +586,13 @@ describe('unreadable tables', () => {
             {
               "op": "EXISTS",
               "related": {
-                "correlations": {
-                  "childField": "id",
-                  "op": "=",
-                  "parentField": "readableId",
-                },
+                "correlations": [
+                  {
+                    "childField": "id",
+                    "op": "=",
+                    "parentField": "readableId",
+                  },
+                ],
                 "subquery": {
                   "alias": "zsubq_readable",
                   "orderBy": [
@@ -627,11 +645,13 @@ describe('unreadable tables', () => {
             {
               "op": "EXISTS",
               "related": {
-                "correlations": {
-                  "childField": "id",
-                  "op": "=",
-                  "parentField": "readableId",
-                },
+                "correlations": [
+                  {
+                    "childField": "id",
+                    "op": "=",
+                    "parentField": "readableId",
+                  },
+                ],
                 "subquery": {
                   "alias": "zsubq_readable",
                   "orderBy": [
@@ -725,11 +745,13 @@ describe('admin readable', () => {
       {
         "related": [
           {
-            "correlations": {
-              "childField": "id",
-              "op": "=",
-              "parentField": "id",
-            },
+            "correlations": [
+              {
+                "childField": "id",
+                "op": "=",
+                "parentField": "id",
+              },
+            ],
             "subquery": {
               "alias": "self1",
               "orderBy": [
@@ -755,11 +777,13 @@ describe('admin readable', () => {
             },
           },
           {
-            "correlations": {
-              "childField": "id",
-              "op": "=",
-              "parentField": "id",
-            },
+            "correlations": [
+              {
+                "childField": "id",
+                "op": "=",
+                "parentField": "id",
+              },
+            ],
             "subquery": {
               "alias": "self2",
               "orderBy": [
@@ -819,11 +843,13 @@ describe('admin readable', () => {
       {
         "related": [
           {
-            "correlations": {
-              "childField": "id",
-              "op": "=",
-              "parentField": "id",
-            },
+            "correlations": [
+              {
+                "childField": "id",
+                "op": "=",
+                "parentField": "id",
+              },
+            ],
             "subquery": {
               "alias": "self1",
               "orderBy": [
@@ -866,11 +892,13 @@ describe('admin readable', () => {
             },
           },
           {
-            "correlations": {
-              "childField": "id",
-              "op": "=",
-              "parentField": "id",
-            },
+            "correlations": [
+              {
+                "childField": "id",
+                "op": "=",
+                "parentField": "id",
+              },
+            ],
             "subquery": {
               "alias": "self2",
               "orderBy": [
@@ -881,11 +909,13 @@ describe('admin readable', () => {
               ],
               "related": [
                 {
-                  "correlations": {
-                    "childField": "id",
-                    "op": "=",
-                    "parentField": "id",
-                  },
+                  "correlations": [
+                    {
+                      "childField": "id",
+                      "op": "=",
+                      "parentField": "id",
+                    },
+                  ],
                   "subquery": {
                     "alias": "self1",
                     "orderBy": [
@@ -1011,11 +1041,13 @@ describe('admin readable', () => {
             {
               "op": "EXISTS",
               "related": {
-                "correlations": {
-                  "childField": "id",
-                  "op": "=",
-                  "parentField": "id",
-                },
+                "correlations": [
+                  {
+                    "childField": "id",
+                    "op": "=",
+                    "parentField": "id",
+                  },
+                ],
                 "subquery": {
                   "alias": "zsubq_self1",
                   "orderBy": [
@@ -1079,11 +1111,13 @@ describe('admin readable', () => {
             {
               "op": "EXISTS",
               "related": {
-                "correlations": {
-                  "childField": "id",
-                  "op": "=",
-                  "parentField": "id",
-                },
+                "correlations": [
+                  {
+                    "childField": "id",
+                    "op": "=",
+                    "parentField": "id",
+                  },
+                ],
                 "subquery": {
                   "alias": "zsubq_self1",
                   "orderBy": [
@@ -1164,11 +1198,13 @@ describe('admin readable', () => {
             {
               "op": "EXISTS",
               "related": {
-                "correlations": {
-                  "childField": "id",
-                  "op": "=",
-                  "parentField": "id",
-                },
+                "correlations": [
+                  {
+                    "childField": "id",
+                    "op": "=",
+                    "parentField": "id",
+                  },
+                ],
                 "subquery": {
                   "alias": "zsubq_self1",
                   "orderBy": [
@@ -1184,11 +1220,13 @@ describe('admin readable', () => {
                       {
                         "op": "EXISTS",
                         "related": {
-                          "correlations": {
-                            "childField": "id",
-                            "op": "=",
-                            "parentField": "id",
-                          },
+                          "correlations": [
+                            {
+                              "childField": "id",
+                              "op": "=",
+                              "parentField": "id",
+                            },
+                          ],
                           "subquery": {
                             "alias": "zsubq_self2",
                             "orderBy": [
