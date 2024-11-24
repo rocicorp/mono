@@ -14,10 +14,8 @@ export const schemaOptions = {
     desc: [
       'Relative path to the file containing the schema definition.',
       'The file must have a default export of type:',
-      '{',
       '  schema: Schema,',
       '  authorization?: CompiledAuthorizationConfig | undefined',
-      '}',
     ],
     alias: 'p',
   },
