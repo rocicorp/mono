@@ -1,20 +1,20 @@
 import {describe, expect, test} from 'vitest';
+import {must} from '../../../shared/src/must.js';
 import {defineAuthorization} from '../../../zero-schema/src/authorization.js';
 import {createSchema} from '../../../zero-schema/src/schema.js';
+import {
+  createTableSchema,
+  type TableSchema,
+} from '../../../zero-schema/src/table-schema.js';
+import type {ExpressionBuilder} from '../../../zql/src/query/expression.js';
 import {
   astForTestingSymbol,
   newQuery,
   QueryImpl,
   type QueryDelegate,
 } from '../../../zql/src/query/query-impl.js';
-import {transformQuery} from './read-authorizer.js';
 import type {Query, QueryType} from '../../../zql/src/query/query.js';
-import {
-  createTableSchema,
-  type TableSchema,
-} from '../../../zero-schema/src/table-schema.js';
-import {must} from '../../../shared/src/must.js';
-import type {ExpressionBuilder} from '../../../zql/src/query/expression.js';
+import {transformQuery} from './read-authorizer.js';
 
 const mockDelegate = {} as QueryDelegate;
 
@@ -41,17 +41,17 @@ const readable = {
   relationships: {
     readable: {
       dest: {
-        field: 'id',
+        field: ['id'],
         schema: () => readable,
       },
-      source: 'readableId',
+      source: ['readableId'],
     },
     unreadable: {
       dest: {
-        field: 'id',
+        field: ['id'],
         schema: unreadable,
       },
-      source: 'unreadableId',
+      source: ['unreadableId'],
     },
   },
 } as const;
@@ -64,17 +64,17 @@ const adminReadable = {
   relationships: {
     self1: {
       dest: {
-        field: 'id',
+        field: ['id'],
         schema: () => adminReadable,
       },
-      source: 'id',
+      source: ['id'],
     },
     self2: {
       dest: {
-        field: 'id',
+        field: ['id'],
         schema: () => adminReadable,
       },
-      source: 'id',
+      source: ['id'],
     },
   },
 } as const;
@@ -141,7 +141,7 @@ describe('unreadable tables', () => {
       {
         "related": [
           {
-            "correlation": {
+            "correlations": {
               "childField": "id",
               "op": "=",
               "parentField": "readableId",
@@ -169,7 +169,7 @@ describe('unreadable tables', () => {
       {
         "related": [
           {
-            "correlation": {
+            "correlations": {
               "childField": "id",
               "op": "=",
               "parentField": "readableId",
@@ -209,7 +209,7 @@ describe('unreadable tables', () => {
       {
         "related": [
           {
-            "correlation": {
+            "correlations": {
               "childField": "id",
               "op": "=",
               "parentField": "readableId",
@@ -224,7 +224,7 @@ describe('unreadable tables', () => {
               ],
               "related": [
                 {
-                  "correlation": {
+                  "correlations": {
                     "childField": "id",
                     "op": "=",
                     "parentField": "readableId",
@@ -268,7 +268,7 @@ describe('unreadable tables', () => {
       {
         "related": [
           {
-            "correlation": {
+            "correlations": {
               "childField": "id",
               "op": "=",
               "parentField": "readableId",
@@ -283,7 +283,7 @@ describe('unreadable tables', () => {
               ],
               "related": [
                 {
-                  "correlation": {
+                  "correlations": {
                     "childField": "id",
                     "op": "=",
                     "parentField": "readableId",
@@ -452,7 +452,7 @@ describe('unreadable tables', () => {
         "where": {
           "op": "EXISTS",
           "related": {
-            "correlation": {
+            "correlations": {
               "childField": "id",
               "op": "=",
               "parentField": "readableId",
@@ -504,7 +504,7 @@ describe('unreadable tables', () => {
         "where": {
           "op": "EXISTS",
           "related": {
-            "correlation": {
+            "correlations": {
               "childField": "id",
               "op": "=",
               "parentField": "readableId",
@@ -570,7 +570,7 @@ describe('unreadable tables', () => {
             {
               "op": "EXISTS",
               "related": {
-                "correlation": {
+                "correlations": {
                   "childField": "id",
                   "op": "=",
                   "parentField": "readableId",
@@ -627,7 +627,7 @@ describe('unreadable tables', () => {
             {
               "op": "EXISTS",
               "related": {
-                "correlation": {
+                "correlations": {
                   "childField": "id",
                   "op": "=",
                   "parentField": "readableId",
@@ -725,7 +725,7 @@ describe('admin readable', () => {
       {
         "related": [
           {
-            "correlation": {
+            "correlations": {
               "childField": "id",
               "op": "=",
               "parentField": "id",
@@ -755,7 +755,7 @@ describe('admin readable', () => {
             },
           },
           {
-            "correlation": {
+            "correlations": {
               "childField": "id",
               "op": "=",
               "parentField": "id",
@@ -819,7 +819,7 @@ describe('admin readable', () => {
       {
         "related": [
           {
-            "correlation": {
+            "correlations": {
               "childField": "id",
               "op": "=",
               "parentField": "id",
@@ -866,7 +866,7 @@ describe('admin readable', () => {
             },
           },
           {
-            "correlation": {
+            "correlations": {
               "childField": "id",
               "op": "=",
               "parentField": "id",
@@ -881,7 +881,7 @@ describe('admin readable', () => {
               ],
               "related": [
                 {
-                  "correlation": {
+                  "correlations": {
                     "childField": "id",
                     "op": "=",
                     "parentField": "id",
@@ -1011,7 +1011,7 @@ describe('admin readable', () => {
             {
               "op": "EXISTS",
               "related": {
-                "correlation": {
+                "correlations": {
                   "childField": "id",
                   "op": "=",
                   "parentField": "id",
@@ -1079,7 +1079,7 @@ describe('admin readable', () => {
             {
               "op": "EXISTS",
               "related": {
-                "correlation": {
+                "correlations": {
                   "childField": "id",
                   "op": "=",
                   "parentField": "id",
@@ -1164,7 +1164,7 @@ describe('admin readable', () => {
             {
               "op": "EXISTS",
               "related": {
-                "correlation": {
+                "correlations": {
                   "childField": "id",
                   "op": "=",
                   "parentField": "id",
@@ -1184,7 +1184,7 @@ describe('admin readable', () => {
                       {
                         "op": "EXISTS",
                         "related": {
-                          "correlation": {
+                          "correlations": {
                             "childField": "id",
                             "op": "=",
                             "parentField": "id",

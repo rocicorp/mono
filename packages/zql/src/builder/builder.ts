@@ -21,7 +21,7 @@ import {Exists} from '../ivm/exists.js';
 import {FanIn} from '../ivm/fan-in.js';
 import {FanOut} from '../ivm/fan-out.js';
 import {Filter} from '../ivm/filter.js';
-import {Join} from '../ivm/join.js';
+import {Join, type CompoundKey} from '../ivm/join.js';
 import type {Input, Storage} from '../ivm/operator.js';
 import {Skip} from '../ivm/skip.js';
 import type {Source} from '../ivm/source.js';
@@ -147,7 +147,7 @@ function isParameter(value: ValuePosition): value is Parameter {
 function buildPipelineInternal(
   ast: AST,
   delegate: BuilderDelegate,
-  partitionKey?: string | undefined,
+  partitionKey?: CompoundKey | undefined,
 ): Input {
   const source = delegate.getSource(ast.table);
   if (!source) {
@@ -171,12 +171,7 @@ function buildPipelineInternal(
   }
 
   if (ast.limit) {
-    end = new Take(
-      end,
-      delegate.createStorage(),
-      ast.limit,
-      partitionKey === undefined ? undefined : [partitionKey],
-    );
+    end = new Take(end, delegate.createStorage(), ast.limit, partitionKey);
   }
 
   if (ast.related) {
@@ -256,15 +251,18 @@ function applyCorrelatedSubQuery(
   const child = buildPipelineInternal(
     sq.subquery,
     delegate,
-    sq.correlation.childField,
+    sq.correlations.map(c => c.childField) as readonly string[] as CompoundKey,
   );
   end = new Join({
     parent: end,
     child,
     storage: delegate.createStorage(),
-    // TODO: Compound keys in the AST
-    parentKey: [sq.correlation.parentField],
-    childKey: [sq.correlation.childField],
+    parentKey: sq.correlations.map(
+      c => c.parentField,
+    ) as readonly string[] as CompoundKey,
+    childKey: sq.correlations.map(
+      c => c.childField,
+    ) as readonly string[] as CompoundKey,
     relationshipName: sq.subquery.alias,
     hidden: sq.hidden ?? false,
   });

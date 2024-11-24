@@ -139,10 +139,10 @@ test('Mutually resolving relationships should be supported', () => {
     relationships: {
       bar: {
         dest: {
-          field: 'field',
+          field: ['field'],
           schema: () => barTableSchema,
         },
-        source: 'bar-source',
+        source: ['bar-source'],
       },
     },
   };
@@ -156,10 +156,10 @@ test('Mutually resolving relationships should be supported', () => {
     relationships: {
       foo: {
         dest: {
-          field: 'field',
+          field: ['field'],
           schema: () => fooTableSchema,
         },
-        source: 'foo-source',
+        source: ['foo-source'],
       },
     },
   };

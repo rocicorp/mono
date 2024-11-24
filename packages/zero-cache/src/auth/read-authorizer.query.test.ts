@@ -1,40 +1,40 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 /* eslint-disable arrow-body-style */
 import {beforeEach, describe, expect, test} from 'vitest';
+import {assert} from '../../../shared/src/asserts.js';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
+import {must} from '../../../shared/src/must.js';
+import type {
+  DeleteOp,
+  InsertOp,
+  UpdateOp,
+} from '../../../zero-protocol/src/push.js';
+import {defineAuthorization} from '../../../zero-schema/src/authorization.js';
+import type {
+  TableSchema,
+  TableSchemaToRow,
+  ValueType,
+} from '../../../zero-schema/src/table-schema.js';
+import {
+  bindStaticParameters,
+  buildPipeline,
+} from '../../../zql/src/builder/builder.js';
+import {Catch} from '../../../zql/src/ivm/catch.js';
+import type {Node} from '../../../zql/src/ivm/data.js';
+import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.js';
+import type {Source} from '../../../zql/src/ivm/source.js';
+import type {ExpressionBuilder} from '../../../zql/src/query/expression.js';
 import {
   completedAstSymbol,
   newQuery,
   QueryImpl,
   type QueryDelegate,
 } from '../../../zql/src/query/query-impl.js';
-import {Database} from '../../../zqlite/src/db.js';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
-import type {Source} from '../../../zql/src/ivm/source.js';
-import type {
-  TableSchema,
-  TableSchemaToRow,
-  ValueType,
-} from '../../../zero-schema/src/table-schema.js';
-import {TableSource} from '../../../zqlite/src/table-source.js';
-import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.js';
-import {must} from '../../../shared/src/must.js';
-import {defineAuthorization} from '../../../zero-schema/src/authorization.js';
-import type {ExpressionBuilder} from '../../../zql/src/query/expression.js';
-import {WriteAuthorizerImpl} from './write-authorizer.js';
-import type {
-  DeleteOp,
-  InsertOp,
-  UpdateOp,
-} from '../../../zero-protocol/src/push.js';
-import {assert} from '../../../shared/src/asserts.js';
-import {transformQuery} from './read-authorizer.js';
 import type {Query, QueryType} from '../../../zql/src/query/query.js';
-import {Catch} from '../../../zql/src/ivm/catch.js';
-import {
-  bindStaticParameters,
-  buildPipeline,
-} from '../../../zql/src/builder/builder.js';
-import type {Node} from '../../../zql/src/ivm/data.js';
+import {Database} from '../../../zqlite/src/db.js';
+import {TableSource} from '../../../zqlite/src/table-source.js';
+import {transformQuery} from './read-authorizer.js';
+import {WriteAuthorizerImpl} from './write-authorizer.js';
 
 const schema = {
   version: 1,
@@ -50,39 +50,39 @@ const schema = {
       relationships: {
         ownedIssues: {
           dest: {
-            field: 'ownerId',
+            field: ['ownerId'],
             schema: () => schema.tables.issue,
           },
-          source: 'id',
+          source: ['id'],
         },
         createdIssues: {
           dest: {
-            field: 'creatorId',
+            field: ['creatorId'],
             schema: () => schema.tables.issue,
           },
-          source: 'id',
+          source: ['id'],
         },
         viewedIssues: {
-          source: 'id',
+          source: ['id'],
           junction: {
             schema: () => schema.tables.viewState,
-            destField: 'issueId',
-            sourceField: 'userId',
+            destField: ['issueId'],
+            sourceField: ['userId'],
           },
           dest: {
-            field: 'id',
+            field: ['id'],
             schema: () => schema.tables.issue,
           },
         },
         projects: {
-          source: 'id',
+          source: ['id'],
           junction: {
             schema: () => schema.tables.projectMember,
-            destField: 'projectId',
-            sourceField: 'userId',
+            destField: ['projectId'],
+            sourceField: ['userId'],
           },
           dest: {
-            field: 'id',
+            field: ['id'],
             schema: () => schema.tables.project,
           },
         },
@@ -103,50 +103,50 @@ const schema = {
       relationships: {
         owner: {
           dest: {
-            field: 'id',
+            field: ['id'],
             schema: () => schema.tables.user,
           },
-          source: 'ownerId',
+          source: ['ownerId'],
         },
         creator: {
           dest: {
-            field: 'id',
+            field: ['id'],
             schema: () => schema.tables.user,
           },
-          source: 'creatorId',
+          source: ['creatorId'],
         },
         comments: {
           dest: {
-            field: 'issueId',
+            field: ['issueId'],
             schema: () => schema.tables.comment,
           },
-          source: 'id',
+          source: ['id'],
         },
         labels: {
           junction: {
             schema: () => schema.tables.issueLabel,
-            destField: 'labelId',
-            sourceField: 'issueId',
+            destField: ['labelId'],
+            sourceField: ['issueId'],
           },
           dest: {
-            field: 'id',
+            field: ['id'],
             schema: () => schema.tables.label,
           },
-          source: 'id',
+          source: ['id'],
         },
         project: {
           dest: {
-            field: 'id',
+            field: ['id'],
             schema: () => schema.tables.project,
           },
-          source: 'projectId',
+          source: ['projectId'],
         },
         viewState: {
           dest: {
-            field: 'issueId',
+            field: ['issueId'],
             schema: () => schema.tables.viewState,
           },
-          source: 'id',
+          source: ['id'],
         },
       },
     },
@@ -162,17 +162,17 @@ const schema = {
       relationships: {
         issue: {
           dest: {
-            field: 'id',
+            field: ['id'],
             schema: () => schema.tables.issue,
           },
-          source: 'issueId',
+          source: ['issueId'],
         },
         user: {
           dest: {
-            field: 'id',
+            field: ['id'],
             schema: () => schema.tables.user,
           },
-          source: 'authorId',
+          source: ['authorId'],
         },
       },
     },
@@ -186,17 +186,17 @@ const schema = {
       relationships: {
         issue: {
           dest: {
-            field: 'id',
+            field: ['id'],
             schema: () => schema.tables.issue,
           },
-          source: 'issueId',
+          source: ['issueId'],
         },
         label: {
           dest: {
-            field: 'id',
+            field: ['id'],
             schema: () => schema.tables.label,
           },
-          source: 'labelId',
+          source: ['labelId'],
         },
       },
     },
@@ -220,17 +220,17 @@ const schema = {
       relationships: {
         user: {
           dest: {
-            field: 'id',
+            field: ['id'],
             schema: () => schema.tables.user,
           },
-          source: 'userId',
+          source: ['userId'],
         },
         issue: {
           dest: {
-            field: 'id',
+            field: ['id'],
             schema: () => schema.tables.issue,
           },
-          source: 'issueId',
+          source: ['issueId'],
         },
       },
     },
@@ -244,22 +244,22 @@ const schema = {
       relationships: {
         issues: {
           dest: {
-            field: 'projectId',
+            field: ['projectId'],
             schema: () => schema.tables.issue,
           },
-          source: 'id',
+          source: ['id'],
         },
         members: {
           junction: {
             schema: () => schema.tables.projectMember,
-            destField: 'userId',
-            sourceField: 'projectId',
+            destField: ['userId'],
+            sourceField: ['projectId'],
           },
           dest: {
-            field: 'id',
+            field: ['id'],
             schema: () => schema.tables.user,
           },
-          source: 'id',
+          source: ['id'],
         },
       },
     },
@@ -273,17 +273,17 @@ const schema = {
       relationships: {
         project: {
           dest: {
-            field: 'id',
+            field: ['id'],
             schema: () => schema.tables.project,
           },
-          source: 'projectId',
+          source: ['projectId'],
         },
         user: {
           dest: {
-            field: 'id',
+            field: ['id'],
             schema: () => schema.tables.user,
           },
-          source: 'userId',
+          source: ['userId'],
         },
       },
     },

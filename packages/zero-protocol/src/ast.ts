@@ -7,11 +7,11 @@
  */
 
 import {compareUTF8} from 'compare-utf8';
+import {defined} from '../../shared/src/arrays.js';
+import {assert} from '../../shared/src/asserts.js';
 import {must} from '../../shared/src/must.js';
 import * as v from '../../shared/src/valita.js';
-import {defined} from '../../shared/src/arrays.js';
 import {rowSchema, type Row} from './data.js';
-import {assert} from '../../shared/src/asserts.js';
 
 export const selectorSchema = v.string();
 
@@ -119,17 +119,19 @@ const disjunctionSchema: v.Type<Disjunction> = v.readonlyObject({
 });
 
 // Split out so that its inferred type can be checked against
-// Omit<CorrelatedSubquery, 'correlation'> in ast-type-test.ts.
+// Omit<CorrelatedSubquery, 'correlations'> in ast-type-test.ts.
 // The mutually-recursive reference of the 'other' field to astSchema
 // is the only thing added in v.lazy.  The v.lazy is necessary due to the
 // mutually-recursive types, but v.lazy prevents inference of the resulting
 // type.
 export const correlatedSubquerySchemaOmitSubquery = v.readonlyObject({
-  correlation: v.object({
-    parentField: v.string(),
-    childField: v.string(),
-    op: v.literal('='),
-  }),
+  correlations: v.readonlyArray(
+    v.readonlyObject({
+      parentField: v.string(),
+      childField: v.string(),
+      op: v.literal('='),
+    }),
+  ),
   hidden: v.boolean().optional(),
 });
 
@@ -205,11 +207,11 @@ export type CorrelatedSubquery = {
    * Only equality correlations are supported for now.
    * E.g., direct foreign key relationships.
    */
-  readonly correlation: {
+  readonly correlations: readonly {
     readonly parentField: string;
     readonly childField: string;
     readonly op: '=';
-  };
+  }[];
   readonly subquery: AST;
   // If a hop in the subquery chain should be hidden from the output view.
   // A common example is junction edges. The query API provides the illusion
@@ -338,11 +340,7 @@ export function normalizeAST(ast: AST): Required<AST> {
           ast.related.map(
             r =>
               ({
-                correlation: {
-                  parentField: r.correlation.parentField,
-                  childField: r.correlation.childField,
-                  op: r.correlation.op,
-                },
+                correlations: r.correlations,
                 hidden: r.hidden,
                 subquery: normalizeAST(r.subquery),
               }) satisfies Required<CorrelatedSubquery>,

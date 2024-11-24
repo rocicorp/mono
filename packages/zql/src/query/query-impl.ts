@@ -199,6 +199,10 @@ export abstract class AbstractQuery<
           undefined,
         ),
       ) as unknown as QueryImpl<any, any>;
+      assert(
+        fieldRelationship.source.length === fieldRelationship.dest.field.length,
+        'Invalid relationship',
+      );
       return this._newQuery(
         this.#schema,
         {
@@ -206,11 +210,11 @@ export abstract class AbstractQuery<
           related: [
             ...(this.#ast.related ?? []),
             {
-              correlation: {
-                parentField: fieldRelationship.source,
-                childField: fieldRelationship.dest.field,
+              correlations: fieldRelationship.source.map((field, i) => ({
+                parentField: field,
+                childField: fieldRelationship.dest.field[i],
                 op: '=',
-              },
+              })),
               subquery: addPrimaryKeysToAst(destSchema, sq.#ast),
             },
           ],
@@ -238,6 +242,16 @@ export abstract class AbstractQuery<
           undefined,
         ),
       ) as unknown as QueryImpl<any, any>;
+      assert(
+        junctionRelationship.source.length ===
+          junctionRelationship.junction.sourceField.length,
+        'Invalid relationship',
+      );
+      assert(
+        junctionRelationship.junction.destField.length ===
+          junctionRelationship.dest.field.length,
+        'Invalid relationship',
+      );
       return this._newQuery(
         this.#schema,
         {
@@ -245,22 +259,24 @@ export abstract class AbstractQuery<
           related: [
             ...(this.#ast.related ?? []),
             {
-              correlation: {
-                parentField: junctionRelationship.source,
-                childField: junctionRelationship.junction.sourceField,
+              correlations: junctionRelationship.source.map((field, i) => ({
+                parentField: field,
+                childField: junctionRelationship.junction.sourceField[i],
                 op: '=',
-              },
+              })),
               subquery: {
                 table: junctionSchema.tableName,
                 alias: relationship as string,
                 orderBy: addPrimaryKeys(junctionSchema, undefined),
                 related: [
                   {
-                    correlation: {
-                      parentField: junctionRelationship.junction.destField,
-                      childField: junctionRelationship.dest.field,
-                      op: '=',
-                    },
+                    correlations: junctionRelationship.junction.destField.map(
+                      (field, i) => ({
+                        parentField: field,
+                        childField: junctionRelationship.dest.field[i],
+                        op: '=',
+                      }),
+                    ),
                     hidden: true,
                     subquery: addPrimaryKeysToAst(destSchema, sq.#ast),
                   },
@@ -385,14 +401,18 @@ export abstract class AbstractQuery<
           undefined,
         ),
       ) as unknown as QueryImpl<any, any>;
+      assert(
+        fieldRelationship.source.length === fieldRelationship.dest.field.length,
+        'Invalid relationship',
+      );
       return {
         type: 'correlatedSubquery',
         related: {
-          correlation: {
-            parentField: fieldRelationship.source,
-            childField: fieldRelationship.dest.field,
+          correlations: fieldRelationship.source.map((field, i) => ({
+            parentField: field,
+            childField: fieldRelationship.dest.field[i],
             op: '=',
-          },
+          })),
           subquery: addPrimaryKeysToAst(destSchema, sq.#ast),
         },
         op: 'EXISTS',
@@ -413,14 +433,25 @@ export abstract class AbstractQuery<
         ),
       ) as unknown as QueryImpl<any, any>;
 
+      assert(
+        junctionRelationship.source.length ===
+          junctionRelationship.junction.sourceField.length,
+        'Invalid relationship',
+      );
+      assert(
+        junctionRelationship.junction.destField.length ===
+          junctionRelationship.dest.field.length,
+        'Invalid relationship',
+      );
+
       return {
         type: 'correlatedSubquery',
         related: {
-          correlation: {
-            parentField: junctionRelationship.source,
-            childField: junctionRelationship.junction.sourceField,
+          correlations: junctionRelationship.source.map((field, i) => ({
+            parentField: field,
+            childField: junctionRelationship.junction.sourceField[i],
             op: '=',
-          },
+          })),
           subquery: {
             table: junctionSchema.tableName,
             alias: `${SUBQ_PREFIX}${relationship}`,
@@ -428,11 +459,14 @@ export abstract class AbstractQuery<
             where: {
               type: 'correlatedSubquery',
               related: {
-                correlation: {
-                  parentField: junctionRelationship.junction.destField,
-                  childField: junctionRelationship.dest.field,
-                  op: '=',
-                },
+                correlations: junctionRelationship.junction.destField.map(
+                  (field, i) => ({
+                    parentField: field,
+                    childField: junctionRelationship.dest.field[i],
+                    op: '=',
+                  }),
+                ),
+
                 subquery: addPrimaryKeysToAst(destSchema, queryToDest.#ast),
               },
               op: 'EXISTS',

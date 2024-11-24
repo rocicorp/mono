@@ -87,6 +87,12 @@ export type Relationship =
   | FieldRelationship<TableSchema, TableSchema>
   | JunctionRelationship<TableSchema, TableSchema, TableSchema>;
 
+type AtLeastOne<T> = readonly [T, ...T[]];
+
+type FieldName<TSchema extends TableSchema> = AtLeastOne<
+  keyof TSchema['columns']
+>;
+
 /**
  * A relationship between two entities where
  * that relationship is defined via fields on both entities.
@@ -95,9 +101,9 @@ export type FieldRelationship<
   TSourceSchema extends TableSchema,
   TDestSchema extends TableSchema,
 > = {
-  source: keyof TSourceSchema['columns'];
+  source: FieldName<TSourceSchema>;
   dest: {
-    field: keyof TDestSchema['columns'];
+    field: FieldName<TDestSchema>;
     schema: TDestSchema | Lazy<TDestSchema>;
   };
 };
@@ -111,14 +117,14 @@ export type JunctionRelationship<
   TJunctionSchema extends TableSchema,
   TDestSchema extends TableSchema,
 > = {
-  source: keyof TSourceSchema['columns'];
+  source: FieldName<TSourceSchema>;
   junction: {
-    sourceField: keyof TJunctionSchema['columns'];
-    destField: keyof TJunctionSchema['columns'];
+    sourceField: FieldName<TJunctionSchema>;
+    destField: FieldName<TJunctionSchema>;
     schema: TDestSchema | Lazy<TJunctionSchema>;
   };
   dest: {
-    field: keyof TDestSchema['columns'];
+    field: FieldName<TDestSchema>;
     schema: TDestSchema | Lazy<TJunctionSchema>;
   };
 };

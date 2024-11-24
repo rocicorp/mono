@@ -10,28 +10,28 @@ export const issueSchema = {
   primaryKey: ['id'],
   relationships: {
     owner: {
-      source: 'ownerId',
+      source: ['ownerId'],
       dest: {
-        field: 'id',
+        field: ['id'],
         schema: () => userSchema,
       },
     },
     comments: {
-      source: 'id',
+      source: ['id'],
       dest: {
-        field: 'issueId',
+        field: ['issueId'],
         schema: () => commentSchema,
       },
     },
     labels: {
-      source: 'id',
+      source: ['id'],
       junction: {
-        sourceField: 'issueId',
-        destField: 'labelId',
+        sourceField: ['issueId'],
+        destField: ['labelId'],
         schema: () => issueLabelSchema,
       },
       dest: {
-        field: 'id',
+        field: ['id'],
         schema: () => labelSchema,
       },
     },
@@ -57,14 +57,14 @@ export const labelSchema = {
   primaryKey: ['id'],
   relationships: {
     issues: {
-      source: 'id',
+      source: ['id'],
       junction: {
-        sourceField: 'labelId',
-        destField: 'issueId',
+        sourceField: ['labelId'],
+        destField: ['issueId'],
         schema: issueLabelSchema,
       },
       dest: {
-        field: 'id',
+        field: ['id'],
         schema: issueSchema,
       },
     },
@@ -83,23 +83,23 @@ export const commentSchema = {
   primaryKey: ['id'],
   relationships: {
     issue: {
-      source: 'issueId',
+      source: ['issueId'],
       dest: {
-        field: 'id',
+        field: ['id'],
         schema: issueSchema,
       },
     },
     revisions: {
-      source: 'id',
+      source: ['id'],
       dest: {
-        field: 'commentId',
+        field: ['commentId'],
         schema: () => revisionSchema,
       },
     },
     author: {
-      source: 'authorId',
+      source: ['authorId'],
       dest: {
-        field: 'id',
+        field: ['id'],
         schema: () => userSchema,
       },
     },
@@ -117,16 +117,16 @@ export const revisionSchema = {
   primaryKey: ['id'],
   relationships: {
     comment: {
-      source: 'commentId',
+      source: ['commentId'],
       dest: {
-        field: 'id',
+        field: ['id'],
         schema: commentSchema,
       },
     },
     author: {
-      source: 'authorId',
+      source: ['authorId'],
       dest: {
-        field: 'id',
+        field: ['id'],
         schema: () => userSchema,
       },
     },
@@ -143,9 +143,9 @@ export const userSchema = {
   primaryKey: ['id'],
   relationships: {
     issues: {
-      source: 'id',
+      source: ['id'],
       dest: {
-        field: 'ownerId',
+        field: ['ownerId'],
         schema: issueSchema,
       },
     },

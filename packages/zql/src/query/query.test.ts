@@ -70,9 +70,9 @@ type TestSchemaWithRelationships = {
   };
   relationships: {
     test: {
-      source: 's';
+      source: ['s'];
       dest: {
-        field: 's';
+        field: ['s'];
         schema: TestSchema;
       };
     };
@@ -89,23 +89,23 @@ type TestSchemaWithMoreRelationships = {
   };
   relationships: {
     testWithRelationships: {
-      source: 'a';
+      source: ['a'];
       dest: {
-        field: 'a';
+        field: ['a'];
         schema: TestSchemaWithRelationships;
       };
     };
     test: {
-      source: 's';
+      source: ['s'];
       dest: {
-        field: 's';
+        field: ['s'];
         schema: TestSchema;
       };
     };
     self: {
-      source: 's';
+      source: ['s'];
       dest: {
-        field: 's';
+        field: ['s'];
         schema: TestSchemaWithMoreRelationships;
       };
     };
@@ -415,9 +415,9 @@ describe('schema structure', () => {
       },
       relationships: {
         comments: {
-          source: 'id',
+          source: ['id'],
           dest: {
-            field: 'issueId',
+            field: ['issueId'],
             schema: commentSchema,
           },
         },
@@ -439,9 +439,9 @@ describe('schema structure', () => {
       },
       relationships: {
         issue: {
-          source: 'issueId',
+          source: ['issueId'],
           dest: {
-            field: 'id',
+            field: ['id'],
             schema: () => issueSchema,
           },
         },
@@ -458,16 +458,16 @@ describe('schema structure', () => {
       },
       relationships: {
         comments: {
-          source: 'id',
+          source: ['id'],
           dest: {
-            field: 'issueId',
+            field: ['issueId'],
             schema: commentSchema,
           },
         },
         parent: {
-          source: 'parentId',
+          source: ['parentId'],
           dest: {
-            field: 'id',
+            field: ['id'],
             schema: () => issueSchema,
           },
         },

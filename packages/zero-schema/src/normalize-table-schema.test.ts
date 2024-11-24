@@ -161,17 +161,17 @@ test('relationships should be sorted', () => {
     relationships: {
       b: {
         dest: {
-          field: 'field',
+          field: ['field'],
           schema: barSchema,
         },
-        source: 'bar-source',
+        source: ['bar-source'],
       },
       a: {
         dest: {
-          field: 'field',
+          field: ['field'],
           schema: () => barSchema,
         },
-        source: 'bar-source',
+        source: ['bar-source'],
       },
     },
   };
@@ -244,11 +244,11 @@ test('Cyclic relationship should be supported', () => {
     relationships: {
       bar: {
         dest: {
-          field: 'field',
+          field: ['field'],
 
           schema: () => fooTableSchema,
         },
-        source: 'bar-source',
+        source: ['bar-source'],
       },
     },
   };
@@ -270,10 +270,10 @@ test('Mutually resolving relationships should be supported', () => {
     relationships: {
       bar: {
         dest: {
-          field: 'field',
+          field: ['field'],
           schema: () => barTableSchema,
         },
-        source: 'bar-source',
+        source: ['bar-source'],
       },
     },
   };
@@ -287,10 +287,10 @@ test('Mutually resolving relationships should be supported', () => {
     relationships: {
       foo: {
         dest: {
-          field: 'field',
+          field: ['field'],
           schema: () => fooTableSchema,
         },
-        source: 'foo-source',
+        source: ['foo-source'],
       },
     },
   };

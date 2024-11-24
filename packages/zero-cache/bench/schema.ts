@@ -28,28 +28,28 @@ const issueSchema: TableSchema = {
   primaryKey: ['id'],
   relationships: {
     labels: {
-      source: 'id',
+      source: ['id'],
       junction: {
         schema: () => issueLabelSchema,
-        sourceField: 'issueID',
-        destField: 'labelID',
+        sourceField: ['issueID'],
+        destField: ['labelID'],
       },
       dest: {
-        field: 'id',
+        field: ['id'],
         schema: () => labelSchema,
       },
     },
     comments: {
-      source: 'id',
+      source: ['id'],
       dest: {
-        field: 'issueID',
+        field: ['issueID'],
         schema: () => commentSchema,
       },
     },
     creator: {
-      source: 'creatorID',
+      source: ['creatorID'],
       dest: {
-        field: 'id',
+        field: ['id'],
         schema: () => memberSchema,
       },
     },
@@ -68,9 +68,9 @@ const commentSchema: TableSchema = {
   primaryKey: ['id'],
   relationships: {
     creator: {
-      source: 'creatorID',
+      source: ['creatorID'],
       dest: {
-        field: 'id',
+        field: ['id'],
         schema: () => memberSchema,
       },
     },

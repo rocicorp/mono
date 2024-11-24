@@ -1186,7 +1186,7 @@ suite('EXISTS', () => {
     `);
   });
 
-  test('child edit changes correlation', () => {
+  test('child edit changes correlations', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
       sourceContents,
@@ -2122,7 +2122,7 @@ suite('NOT EXISTS', () => {
     `);
   });
 
-  test('child edit changes correlation', () => {
+  test('child edit changes correlations', () => {
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
       sourceContents,

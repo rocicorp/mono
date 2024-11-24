@@ -1,8 +1,8 @@
 import {describe, expect, test} from 'vitest';
 import {must} from '../../../shared/src/must.js';
 import {newQuery, type QueryDelegate} from './query-impl.js';
-import {issueSchema} from './test/testSchemas.js';
 import {QueryDelegateImpl} from './test/query-delegate.js';
+import {issueSchema} from './test/testSchemas.js';
 
 function addData(queryDelegate: QueryDelegate) {
   const userSource = must(queryDelegate.getSource('user'));
@@ -328,11 +328,13 @@ describe('kitchen sink query', () => {
           ],
           "related": [
             {
-              "correlation": {
-                "childField": "id",
-                "op": "=",
-                "parentField": "ownerId",
-              },
+              "correlations": [
+                {
+                  "childField": "id",
+                  "op": "=",
+                  "parentField": "ownerId",
+                },
+              ],
               "subquery": {
                 "alias": "owner",
                 "orderBy": [
@@ -345,11 +347,13 @@ describe('kitchen sink query', () => {
               },
             },
             {
-              "correlation": {
-                "childField": "issueId",
-                "op": "=",
-                "parentField": "id",
-              },
+              "correlations": [
+                {
+                  "childField": "issueId",
+                  "op": "=",
+                  "parentField": "id",
+                },
+              ],
               "subquery": {
                 "alias": "comments",
                 "limit": 2,
@@ -365,11 +369,13 @@ describe('kitchen sink query', () => {
                 ],
                 "related": [
                   {
-                    "correlation": {
-                      "childField": "commentId",
-                      "op": "=",
-                      "parentField": "id",
-                    },
+                    "correlations": [
+                      {
+                        "childField": "commentId",
+                        "op": "=",
+                        "parentField": "id",
+                      },
+                    ],
                     "subquery": {
                       "alias": "revisions",
                       "limit": 1,
@@ -387,11 +393,13 @@ describe('kitchen sink query', () => {
               },
             },
             {
-              "correlation": {
-                "childField": "issueId",
-                "op": "=",
-                "parentField": "id",
-              },
+              "correlations": [
+                {
+                  "childField": "issueId",
+                  "op": "=",
+                  "parentField": "id",
+                },
+              ],
               "subquery": {
                 "alias": "labels",
                 "orderBy": [
@@ -406,11 +414,13 @@ describe('kitchen sink query', () => {
                 ],
                 "related": [
                   {
-                    "correlation": {
-                      "childField": "id",
-                      "op": "=",
-                      "parentField": "labelId",
-                    },
+                    "correlations": [
+                      {
+                        "childField": "id",
+                        "op": "=",
+                        "parentField": "labelId",
+                      },
+                    ],
                     "hidden": true,
                     "subquery": {
                       "alias": "labels",

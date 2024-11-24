@@ -3,10 +3,10 @@ import {sortedEntries} from '../../shared/src/sorted-entries.js';
 import type {Writable} from '../../shared/src/writable.js';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
 import {
-  type SchemaValue,
   isFieldRelationship,
   type FieldRelationship,
   type JunctionRelationship,
+  type SchemaValue,
   type TableSchema,
 } from './table-schema.js';
 
@@ -164,10 +164,12 @@ function normalizeRelationship(
   return normalizeJunctionRelationship(relationship, tableSchemaCache);
 }
 
+type CompoundKey = PrimaryKey;
+
 type NormalizedFieldRelationship = {
-  source: string;
+  source: CompoundKey;
   dest: {
-    field: string;
+    field: CompoundKey;
     schema: NormalizedTableSchema;
   };
 };
@@ -189,14 +191,14 @@ function normalizeFieldRelationship(
 }
 
 type NormalizedJunctionRelationship = {
-  source: string;
+  source: CompoundKey;
   junction: {
-    sourceField: string;
-    destField: string;
+    sourceField: CompoundKey;
+    destField: CompoundKey;
     schema: NormalizedTableSchema;
   };
   dest: {
-    field: string;
+    field: CompoundKey;
     schema: NormalizedTableSchema;
   };
 };
