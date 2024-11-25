@@ -14,7 +14,7 @@ import {ErrorKind} from '../../../../zero-protocol/src/error.js';
 import type {JSONValue} from '../../types/bigint-json.js';
 import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
-import {rowIDHash} from '../../types/row-key.js';
+import {rowIDString} from '../../types/row-key.js';
 import type {Patch, PatchToVersion} from './client-handler.js';
 import type {CVR, CVRSnapshot} from './cvr.js';
 import {
@@ -72,7 +72,7 @@ class RowRecordCache {
     // query is made even if there are multiple callers.
     this.#cache = r.promise;
 
-    const cache: CustomKeyMap<RowID, RowRecord> = new CustomKeyMap(rowIDHash);
+    const cache: CustomKeyMap<RowID, RowRecord> = new CustomKeyMap(rowIDString);
     for await (const rows of this.#db<
       RowsRow[]
     >`SELECT * FROM cvr.rows WHERE "clientGroupID" = ${
@@ -231,7 +231,7 @@ export class CVRStore {
     ) => PendingQuery<MaybeRow[]>;
   }> = new Set();
   readonly #pendingRowRecordPuts = new CustomKeyMap<RowID, RowRecord>(
-    rowIDHash,
+    rowIDString,
   );
   readonly #rowCache: RowRecordCache;
   readonly #loadAttemptIntervalMs: number;

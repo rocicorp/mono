@@ -16,7 +16,7 @@ import {
 import {stringify} from '../../types/bigint-json.js';
 import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB} from '../../types/pg.js';
-import {rowIDHash, type RowKey} from '../../types/row-key.js';
+import {rowIDString} from '../../types/row-key.js';
 import type {Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import type {ReplicaState} from '../replicator/replicator.js';
@@ -710,7 +710,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     pokers: PokeHandler[],
   ) {
     const start = Date.now();
-    const rows = new CustomKeyMap<RowID, RowUpdate>(rowIDHash);
+    const rows = new CustomKeyMap<RowID, RowUpdate>(rowIDString);
     let total = 0;
 
     const processBatch = async () => {

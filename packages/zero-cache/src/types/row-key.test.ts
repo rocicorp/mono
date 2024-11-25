@@ -3,6 +3,7 @@ import {
   type RowKey,
   normalizedKeyOrder,
   rowIDHash,
+  rowIDString,
   rowKeyString,
 } from './row-key.js';
 
@@ -12,6 +13,7 @@ describe('types/row-key', () => {
     table?: string;
     keys: RowKey[];
     rowKeyString: string;
+    rowIDString: string;
     rowIDHash: string;
   };
 
@@ -19,12 +21,14 @@ describe('types/row-key', () => {
     {
       keys: [{foo: 'bar'}, {foo: 'bar'}],
       rowKeyString: '["foo","bar"]',
+      rowIDString: '["public","issue","foo","bar"]',
       rowIDHash: '3z7dbf9d35nybsu0u6j0qdduu',
     },
     {
       table: 'clients',
       keys: [{foo: 'bar'}, {foo: 'bar'}],
       rowKeyString: '["foo","bar"]',
+      rowIDString: '["public","clients","foo","bar"]',
       rowIDHash: '369s9ujkm8cshq8maksagrk4z',
     },
     {
@@ -32,6 +36,7 @@ describe('types/row-key', () => {
       table: 'clients',
       keys: [{foo: 'bar'}, {foo: 'bar'}],
       rowKeyString: '["foo","bar"]',
+      rowIDString: '["zero","clients","foo","bar"]',
       rowIDHash: 'bdi7ujkjhk018p49qckqpjs59',
     },
     {
@@ -39,22 +44,26 @@ describe('types/row-key', () => {
       table: 'zero',
       keys: [{foo: 'bar'}, {foo: 'bar'}],
       rowKeyString: '["foo","bar"]',
+      rowIDString: '["clients","zero","foo","bar"]',
       rowIDHash: '83rna1e2y74s7ik5skigv9223',
     },
     {
       table: 'issues',
       keys: [{foo: ['bar']}, {foo: ['bar']}],
       rowKeyString: '["foo",["bar"]]',
+      rowIDString: '["public","issues","foo",["bar"]]',
       rowIDHash: 'c8pu7tydek3r9wopx9c4o64nl',
     },
     {
       keys: [{foo: 1}, {foo: 1}],
       rowKeyString: '["foo",1]',
+      rowIDString: '["public","issue","foo",1]',
       rowIDHash: 'gjssbmsl6avdktnaq8an52jg',
     },
     {
       keys: [{foo: '1'}, {foo: '1'}],
       rowKeyString: '["foo","1"]',
+      rowIDString: '["public","issue","foo","1"]',
       rowIDHash: 'cr6zlx3dei78jpjv8qecv5b63',
     },
     {
@@ -64,6 +73,7 @@ describe('types/row-key', () => {
         {bar: ['foo'], foo: 'bar'},
       ],
       rowKeyString: '["bar",["foo"],"foo","bar"]',
+      rowIDString: '["public","issue","bar",["foo"],"foo","bar"]',
       rowIDHash: '73vrcw1djlz99hvz4lqjyt2bw',
     },
     {
@@ -74,11 +84,13 @@ describe('types/row-key', () => {
         {bar: ['foo'], foo: 'bar', baz: 2},
       ],
       rowKeyString: '["bar",["foo"],"baz",2,"foo","bar"]',
+      rowIDString: '["public","issue","bar",["foo"],"baz",2,"foo","bar"]',
       rowIDHash: '802jgj2gmrqy0khigiknxueof',
     },
     {
       keys: [{id: 'HhCx1Vi3js'}],
       rowKeyString: '["id","HhCx1Vi3js"]',
+      rowIDString: '["public","issue","id","HhCx1Vi3js"]',
       rowIDHash: 'd9wwy0a6s1olyhxq8vkvw7kln',
     },
   ];
@@ -88,6 +100,7 @@ describe('types/row-key', () => {
     test(`RowKey: ${schema}.${table}: ${JSON.stringify(c.keys)}`, () => {
       for (const keys of c.keys) {
         expect(rowKeyString(keys)).toBe(c.rowKeyString);
+        expect(rowIDString({schema, table, rowKey: keys})).toBe(c.rowIDString);
         expect(rowIDHash({schema, table, rowKey: keys})).toBe(c.rowIDHash);
       }
     });
