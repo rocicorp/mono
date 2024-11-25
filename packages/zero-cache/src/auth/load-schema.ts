@@ -25,11 +25,7 @@ function parseAuthConfig(
   try {
     const config = JSON.parse(input);
     return {
-      authorization: v.parse(
-        config.authorization,
-        authorizationConfigSchema,
-        'strict',
-      ),
+      authorization: v.parse(config.authorization, authorizationConfigSchema),
       schema: config.schema as Schema,
     };
   } catch (e) {
@@ -49,8 +45,6 @@ export function getSchema(config: ZeroConfig): Promise<{
     if (config.schema.json) {
       return parseAuthConfig(config.schema.json, 'config.schema.json');
     }
-    console.log?.('Loading schema from file: ', config.schema.file);
-
     const fileContent = await readFile(
       path.resolve(config.schema.file),
       'utf-8',
