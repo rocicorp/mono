@@ -20,7 +20,7 @@ const assetSchema = v.object({
 
 export type AssetAuthorization = v.Infer<typeof assetSchema>;
 
-const authorizationConfigSchema = v.record(
+export const authorizationConfigSchema = v.record(
   v.object({
     row: assetSchema.optional(),
     cell: v.record(assetSchema).optional(),
