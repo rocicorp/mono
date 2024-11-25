@@ -211,13 +211,13 @@ export function zeroForTest<const S extends Schema>(
     newOptions.kvStore = 'mem';
   }
 
-  const schema = options.schema ?? {version: 1, tables: {}};
+  const schema = options.schema ?? ({version: 1, tables: {}} as S);
 
   const r = new TestZero({
     server: 'https://example.com/',
     // Make sure we do not reuse IDB instances between tests by default
     userID: 'test-user-id-' + testZeroCounter++,
-    auth: 'test-auth',
+    auth: () => 'test-auth',
     schema,
     // We do not want any unexpected onUpdateNeeded calls in tests. If the test
     // needs to call onUpdateNeeded it should set this as needed.
@@ -227,7 +227,7 @@ export function zeroForTest<const S extends Schema>(
         }
       : undefined,
     ...newOptions,
-  } as ZeroOptions<S>);
+  } satisfies ZeroOptions<S>);
 
   return r;
 }

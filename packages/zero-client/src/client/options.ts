@@ -20,22 +20,13 @@ export interface ZeroOptions<S extends Schema> {
   server?: string | null | undefined;
 
   /**
-   * Identifies and authenticates the user.
+   * A function that returns a token to identify and authenticate the user.
    *
-   * This value is required when you provide a `authHandler` to your ReflectServer.
-   * During connection this value is passed to your provided `authHandler`, which should use it to
-   * authenticate the user. The `userID` returned by your `authHandler` for this value
-   * must be equal to [[ReflectOptions.userID]].
-   *
-   * In the case authentication fails, the connection to the server will be
-   * closed and Reflect will retry connecting with exponential backoff.
-   *
-   * If a function is provided here, that function is invoked before each
-   * attempt. This provides the application the opportunity to calculate or
-   * fetch a fresh token.
+   * If the token is determined to be invalid (expired, can't be decoded, bad signature, etc),
+   * Zero will call the function provided to get a new token with the error argument
+   * set to `'invalid-token'`.
    */
   auth?:
-    | string
     | ((error?: 'invalid-token') => MaybePromise<string | undefined>)
     | undefined;
 
@@ -44,7 +35,10 @@ export interface ZeroOptions<S extends Schema> {
    *
    * For efficiency, a new Zero instance will initialize its state from
    * the persisted state of an existing Zero instance with the same
-   * `userID`, `roomID`, domain and browser profile.
+   * `userID`, domain and browser profile.
+   *
+   * This must match the user identified by the `auth` token if
+   * `auth` is provided.
    */
   userID: string;
 
