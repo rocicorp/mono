@@ -260,16 +260,13 @@ export class CVRStore {
       if (i > 0) {
         await sleep(this.#loadAttemptIntervalMs);
       }
-      try {
-        return await this.#load(lastConnectTime);
-      } catch (e) {
-        if (e instanceof RowsVersionBehindError) {
-          err = e;
-          this.#lc.info?.(`attempt ${i + 1}: ${String(e)}`);
-          continue;
-        }
-        throw e;
+      const result = await this.#load(lastConnectTime);
+      if (result instanceof RowsVersionBehindError) {
+        this.#lc.info?.(`attempt ${i + 1}: ${String(result)}`);
+        err = result;
+        continue;
       }
+      return result;
     }
     assert(err);
     throw new ErrorForClient([
@@ -279,7 +276,7 @@ export class CVRStore {
     ]);
   }
 
-  async #load(lastConnectTime: number): Promise<CVR> {
+  async #load(lastConnectTime: number): Promise<CVR | RowsVersionBehindError> {
     const start = Date.now();
 
     const id = this.#id;
@@ -356,7 +353,7 @@ export class CVRStore {
         // This will cause the load() method to wait for row catchup and retry.
         // Assuming the ownership signal succeeds, the current owner will stop
         // modifying the CVR and flush its pending row changes.
-        throw new RowsVersionBehindError(version, rowsVersion);
+        return new RowsVersionBehindError(version, rowsVersion);
       }
 
       cvr.version = versionFromString(version);
