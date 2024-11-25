@@ -6,6 +6,7 @@ import {authorizationConfigSchema} from './compiled-authorization.js';
 import * as v from '../../shared/src/valita.js';
 import {parseOptions} from '../../shared/src/options.js';
 import {isSchemaConfig} from './schema-config.js';
+import {normalizeSchema} from './normalized-schema.js';
 
 export const schemaOptions = {
   path: {
@@ -55,9 +56,11 @@ async function main() {
       authorizationConfigSchema,
     );
 
+    const normalizedSchema = normalizeSchema(schemaConfig.schema);
+
     const output = {
       authorization: authConfig,
-      schema: schemaConfig.schema,
+      schema: normalizedSchema,
     };
 
     await writeFile(config.output, JSON.stringify(output, undefined, 2));
