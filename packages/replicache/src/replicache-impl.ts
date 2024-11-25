@@ -366,10 +366,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    * push or pull endpoint. Set this to a function that will ask your user to
    * reauthenticate.
    */
-  getAuth:
-    | ((error?: 'invalid-token') => MaybePromise<string | null | undefined>)
-    | null
-    | undefined = null;
+  getAuth: (() => MaybePromise<string | null | undefined>) | null | undefined =
+    null;
 
   // These three are used for testing
   onPushInvoked = () => undefined;

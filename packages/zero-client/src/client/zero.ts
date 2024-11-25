@@ -499,8 +499,6 @@ export class Zero<const S extends Schema> {
     if (TESTING) {
       internalReplicacheImplMap.set(this, rep);
     }
-
-    rep.getAuth = this.#getAuthToken;
     this.#server = server;
     this.userID = userID;
     this.#jurisdiction = jurisdiction;
