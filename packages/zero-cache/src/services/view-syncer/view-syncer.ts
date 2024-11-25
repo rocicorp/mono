@@ -315,7 +315,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ): Promise<Source<Downstream>> {
     this.#lastConnectTime = Date.now();
     const {clientID, wsID, baseCookie, schemaVersion, tokenData} = ctx;
-    this.#authData = tokenData?.decoded;
+    this.#authData = pickToken(this.#authData, tokenData?.decoded);
 
     const lc = this.#lc
       .withContext('clientID', clientID)
@@ -967,4 +967,51 @@ function checkClientAndCVRVersions(
       `CVR is at version ${versionString(cvr)}`,
     ]);
   }
+}
+
+export function pickToken(
+  previousToken: JWTPayload | undefined,
+  newToken: JWTPayload | undefined,
+) {
+  if (previousToken === undefined) {
+    return newToken;
+  }
+
+  if (newToken) {
+    if (previousToken.sub !== newToken.sub) {
+      throw new ErrorForClient([
+        'error',
+        ErrorKind.Unauthorized,
+        'The user id in the new token does not match the previous token. Client groups are pinned to a single user.',
+      ]);
+    }
+
+    if (previousToken.iat === undefined) {
+      // No issued at time for the existing token? We take the most recently received token.
+      return newToken;
+    }
+
+    if (newToken.iat === undefined) {
+      throw new ErrorForClient([
+        'error',
+        ErrorKind.Unauthorized,
+        'The new token does not have an issued at time but the prior token does. Tokens for a client group must either all have issued at times or all not have issued at times',
+      ]);
+    }
+
+    // The new token is newer, so we take it.
+    if (previousToken.iat < newToken.iat) {
+      return newToken;
+    }
+
+    // if the new token is older or the same, we keep the existing token.
+    return previousToken;
+  }
+
+  // previousToken !== undefined but newToken is undefined
+  throw new ErrorForClient([
+    'error',
+    ErrorKind.Unauthorized,
+    'No token provided. An unauthenticated client cannot connect to an authenticated client group.',
+  ]);
 }
