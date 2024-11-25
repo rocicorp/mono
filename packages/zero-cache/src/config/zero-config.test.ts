@@ -63,9 +63,15 @@ test('zero-cache --help', () => {
                                                    This can be lost, but if it is, zero-cache will have to re-replicate next         
                                                    time it starts up.                                                                
                                                                                                                                      
-     --schema-file string                          default: "./schema.ts"                                                            
+     --schema-file string                          default: "zero-schema.json"                                                       
        ZERO_SCHEMA_FILE env                                                                                                          
-                                                   File path to the Zero client schema definition.                                   
+                                                   File path to the JSON schema file that defines the database structure             
+                                                   and access control rules.                                                         
+                                                                                                                                     
+     --schema-json string                          optional                                                                          
+       ZERO_SCHEMA_JSON env                                                                                                          
+                                                   The JSON schema as a string, containing the same database structure               
+                                                   and access control rules as would be in the schema file.                          
                                                                                                                                      
      --log-level debug,info,warn,error             default: "info"                                                                   
        ZERO_LOG_LEVEL env                                                                                                            

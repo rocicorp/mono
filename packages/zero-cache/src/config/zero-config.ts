@@ -173,9 +173,21 @@ export const zeroOptions = {
     ],
   },
 
-  schemaFile: {
-    type: v.string().default('./schema.ts'),
-    desc: [`File path to the Zero client schema definition.`],
+  schema: {
+    file: {
+      type: v.string().default('zero-schema.json'),
+      desc: [
+        `File path to the JSON schema file that defines the database structure`,
+        `and access control rules.`,
+      ],
+    },
+    json: {
+      type: v.string().optional(),
+      desc: [
+        `The JSON schema as a string, containing the same database structure`,
+        `and access control rules as would be in the schema file.`,
+      ],
+    },
   },
 
   log: logOptions,
