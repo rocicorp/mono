@@ -303,7 +303,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           switch (change[0]) {
             case 'control':
               await this.#handleControlMessage(change[1]);
-              continue;
+              continue; // control messages are not stored/forwarded
             case 'commit':
               watermark = change[2].watermark;
               preCommitWatermark = oneAfter(watermark); // For the next transaction.
