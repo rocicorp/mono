@@ -5,7 +5,7 @@ import {writeFile} from 'node:fs/promises';
 import {authorizationConfigSchema} from './compiled-authorization.js';
 import * as v from '../../shared/src/valita.js';
 import {parseOptions} from '../../shared/src/options.js';
-import type {SchemaConfig} from './schema-config.js';
+import {isSchemaConfig} from './schema-config.js';
 
 export const schemaOptions = {
   path: {
@@ -46,13 +46,17 @@ async function main() {
 
   try {
     const module = await tsImport(relativePath, import.meta.url);
-    const schemaConfig = module.default as SchemaConfig;
-
+    if (!isSchemaConfig(module.default)) {
+      throw new Error(
+        'Schema file must have a default export of type SchemaConfig.',
+      );
+    }
+    const schemaConfig = module.default;
     const authConfig = v.parse(
       await schemaConfig.authorization,
       authorizationConfigSchema,
     );
-    
+
     const output = {
       authorization: authConfig,
       schema: schemaConfig.schema,
