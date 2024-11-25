@@ -30,7 +30,6 @@ import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible
 import {must} from '../../../shared/src/must.js';
 import {navigator} from '../../../shared/src/navigator.js';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.js';
-import type {MaybePromise} from '../../../shared/src/types.js';
 import * as valita from '../../../shared/src/valita.js';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.js';
 import {
