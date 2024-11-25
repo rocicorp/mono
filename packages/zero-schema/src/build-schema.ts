@@ -12,9 +12,7 @@ export const schemaOptions = {
     type: v.string().default('schema.ts'),
     desc: [
       'Relative path to the file containing the schema definition.',
-      'The file must have a default export of type:',
-      '  schema: Schema,',
-      '  authorization?: CompiledAuthorizationConfig | undefined',
+      'The file must have a default export of type SchemaConfig.',
     ],
     alias: 'p',
   },
