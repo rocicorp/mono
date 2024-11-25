@@ -10,7 +10,7 @@ import {
 import type {AST} from '../../../../zero-protocol/src/ast.js';
 import type {JSONObject} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
-import {rowIDHash} from '../../types/row-key.js';
+import {rowIDString} from '../../types/row-key.js';
 import {unescapedSchema as schema} from '../change-streamer/pg/schema/shard.js';
 import type {Patch, PatchToVersion} from './client-handler.js';
 import type {CVRFlushStats, CVRStore} from './cvr-store.js';
@@ -305,7 +305,9 @@ export type RefCounts = Record<Hash, number>;
  */
 export class CVRQueryDrivenUpdater extends CVRUpdater {
   readonly #removedOrExecutedQueryIDs = new Set<string>();
-  readonly #receivedRows = new CustomKeyMap<RowID, RefCounts | null>(rowIDHash);
+  readonly #receivedRows = new CustomKeyMap<RowID, RefCounts | null>(
+    rowIDString,
+  );
   #existingRows: Promise<RowRecord[]> | undefined = undefined;
 
   /**
@@ -365,7 +367,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   async #lookupRowsForExecutedAndRemovedQueries(
     lc: LogContext,
   ): Promise<RowRecord[]> {
-    const results = new CustomKeyMap<RowID, RowRecord>(rowIDHash);
+    const results = new CustomKeyMap<RowID, RowRecord>(rowIDString);
 
     if (this.#removedOrExecutedQueryIDs.size === 0) {
       // Query-less update. This can happen for config only changes.
