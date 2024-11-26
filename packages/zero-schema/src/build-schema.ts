@@ -2,7 +2,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {tsImport} from 'tsx/esm/api';
 import {writeFile} from 'node:fs/promises';
-import {permissionsConfigSchema} from './compiled-permissions.js';
+import {authorizationConfigSchema} from './compiled-authorization.js';
 import * as v from '../../shared/src/valita.js';
 import {parseOptions} from '../../shared/src/options.js';
 import {isSchemaConfig} from './schema-config.js';
@@ -23,7 +23,7 @@ export const schemaOptions = {
       'Output path for the generated schema JSON file.',
       '',
       'The schema will be written as a JSON file containing the compiled',
-      'permission rules derived from your schema definition.',
+      'authorization rules derived from your schema definition.',
     ],
     alias: 'o',
   },
@@ -51,15 +51,15 @@ async function main() {
       );
     }
     const schemaConfig = module.default;
-    const permissions = v.parse(
-      await schemaConfig.permissions,
-      permissionsConfigSchema,
+    const authConfig = v.parse(
+      await schemaConfig.authorization,
+      authorizationConfigSchema,
     );
 
     const normalizedSchema = normalizeSchema(schemaConfig.schema);
 
     const output = {
-      permissions,
+      authorization: authConfig,
       schema: normalizedSchema,
     };
 

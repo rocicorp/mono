@@ -34,9 +34,9 @@ import {DatabaseStorage} from '../services/view-syncer/database-storage.js';
 import type {NormalizedTableSpec} from '../services/view-syncer/pipeline-driver.js';
 import {normalize} from '../services/view-syncer/pipeline-driver.js';
 import type {
-  PermissionsConfig,
+  AuthorizationConfig,
   Policy,
-} from '../../../zero-schema/src/compiled-permissions.js';
+} from '../../../zero-schema/src/compiled-authorization.js';
 import {StatementRunner} from '../db/statements.js';
 import type {Schema} from '../../../zero-schema/src/schema.js';
 import {AuthQuery, authQuery} from '../../../zql/src/query/auth-query.js';
@@ -62,7 +62,7 @@ export interface WriteAuthorizer {
 
 export class WriteAuthorizerImpl implements WriteAuthorizer {
   readonly #schema: Schema;
-  readonly #permissionsConfig: PermissionsConfig;
+  readonly #authorizationConfig: AuthorizationConfig;
   readonly #replica: Database;
   readonly #builderDelegate: BuilderDelegate;
   readonly #tableSpecs: Map<string, NormalizedTableSpec>;
@@ -74,13 +74,13 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     lc: LogContext,
     config: Pick<ZeroConfig, 'storageDBTmpDir'>,
     schema: Schema,
-    permissions: PermissionsConfig | undefined,
+    authorization: AuthorizationConfig | undefined,
     replica: Database,
     cgID: string,
   ) {
     this.#lc = lc.withContext('class', 'WriteAuthorizerImpl');
     this.#schema = schema;
-    this.#permissionsConfig = permissions ?? {};
+    this.#authorizationConfig = authorization ?? {};
     this.#replica = replica;
     const tmpDir = config.storageDBTmpDir ?? tmpdir();
     const writeAuthzStorage = DatabaseStorage.create(
@@ -283,7 +283,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     authData: JWTPayload | undefined,
     op: ActionOpMap[A],
   ) {
-    const rules = this.#permissionsConfig[op.tableName];
+    const rules = this.#authorizationConfig[op.tableName];
     if (rules?.row === undefined && rules?.cell === undefined) {
       return true;
     }
