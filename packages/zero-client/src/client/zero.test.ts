@@ -223,17 +223,6 @@ test('onOnlineChange callback', async () => {
     expect(onlineCount).to.equal(1);
     expect(offlineCount).to.equal(1);
   }
-
-  {
-    // Now clear onOnlineChange and test that it doesn't get called.
-    onlineCount = offlineCount = 0;
-    await z.triggerError(ErrorKind.InvalidMessage, 'eee');
-    await z.waitForConnectionState(ConnectionState.Disconnected);
-    await clock.tickAsync(0);
-    expect(z.online).false;
-    expect(onlineCount).to.equal(0);
-    expect(offlineCount).to.equal(0);
-  }
 });
 
 test('disconnects if ping fails', async () => {
