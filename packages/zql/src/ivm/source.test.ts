@@ -5,6 +5,7 @@ import type {
   SimpleOperator,
 } from '../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {Catch, expandNode} from './catch.js';
 import type {Constraint} from './constraint.js';
 import type {Node} from './data.js';
@@ -181,6 +182,7 @@ test('fetch-start', () => {
 
 test('fetch-with-constraint-and-start', () => {
   const cases: {
+    columns?: Record<string, SchemaValue> | undefined;
     startData: Row[];
     start: Start;
     constraint: Constraint;
@@ -243,13 +245,35 @@ test('fetch-with-constraint-and-start', () => {
         {a: 9, b: false},
       ],
     },
+    {
+      columns: {
+        a: {type: 'number'},
+        b: {type: 'boolean'},
+        c: {type: 'number'},
+      },
+      startData: [
+        {a: 2, b: false, c: 2},
+        {a: 3, b: false, c: 1},
+        {a: 5, b: true, c: 2},
+        {a: 6, b: false, c: 1},
+        {a: 7, b: false, c: 2},
+        {a: 8, b: true, c: 1},
+        {a: 9, b: false, c: 2},
+      ],
+      start: {
+        row: {a: 6, b: false, c: 1},
+        basis: 'at',
+      },
+      constraint: {b: false, c: 1},
+      expected: [{a: 6, b: false, c: 1}],
+    },
   ];
 
   for (const c of cases) {
     const sort = [['a', 'asc']] as const;
     const s = createSource(
       'table',
-      {
+      c.columns ?? {
         a: {type: 'number'},
         b: {type: 'boolean'},
       },
@@ -694,6 +718,16 @@ test('overlay-vs-constraint', () => {
         {a: 4, b: false},
       ],
     },
+    {
+      startData: [
+        {a: 2, b: false},
+        {a: 4, b: true},
+        {a: 5, b: true},
+      ],
+      constraint: {a: 4, b: false},
+      change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
+      expected: [{a: 4, b: false}],
+    },
   ];
 
   for (const c of cases) {
@@ -963,6 +997,7 @@ test('overlay-vs-filter', () => {
 test('overlay-vs-constraint-and-start', () => {
   const cases: {
     startData: Row[];
+    columns?: Record<string, SchemaValue> | undefined;
     start: Start;
     constraint: Constraint;
     change: SourceChange;
@@ -1087,13 +1122,37 @@ test('overlay-vs-constraint-and-start', () => {
         {a: 7, b: false},
       ],
     },
+    {
+      columns: {
+        a: {type: 'number'},
+        b: {type: 'boolean'},
+        c: {type: 'number'},
+      },
+      startData: [
+        {a: 2, b: false, c: 1},
+        {a: 3, b: false, c: 1},
+        {a: 5, b: true, c: 1},
+        {a: 6, b: true, c: 2},
+        {a: 7, b: false, c: 2},
+      ],
+      start: {
+        row: {a: 5, b: true, c: 1},
+        basis: 'at',
+      },
+      constraint: {b: true, c: 1},
+      change: {type: 'add', row: {a: 5.5, b: true, c: 1}},
+      expected: [
+        {a: 5, b: true, c: 1},
+        {a: 5.5, b: true, c: 1},
+      ],
+    },
   ];
 
   for (const c of cases) {
     const sort = [['a', 'asc']] as const;
     const s = createSource(
       'table',
-      {
+      c.columns ?? {
         a: {type: 'number'},
         b: {type: 'boolean'},
       },
@@ -1154,7 +1213,7 @@ test('per-output-sorts', () => {
   );
 });
 
-test('streas-are-one-time-only', () => {
+test('streams-are-one-time-only', () => {
   // It is very important that streas are one-time only. This is because on
   // the server, they are backed by cursors over streaming SQL queries which
   // can't be rewound or branched. This test ensures that streas from all
