@@ -1,7 +1,7 @@
 import {
   createSchema,
   createTableSchema,
-  defineAuthorization,
+  definePermissions,
   type ExpressionBuilder,
   type TableSchema,
   type TableSchemaToRow,
@@ -187,92 +187,82 @@ type AuthData = {
   role: 'crew' | 'user';
 };
 
-const authorization = defineAuthorization<AuthData, Schema>(schema, () => {
-  const allowIfLoggedIn = (
-    authData: AuthData,
-    {cmpLit}: ExpressionBuilder<TableSchema>,
-  ) => cmpLit(authData.sub, 'IS NOT', null);
+export const permissions: ReturnType<typeof definePermissions> =
+  definePermissions<AuthData, Schema>(schema, () => {
+    const allowIfLoggedIn = (
+      authData: AuthData,
+      {cmpLit}: ExpressionBuilder<TableSchema>,
+    ) => cmpLit(authData.sub, 'IS NOT', null);
 
-  const allowIfIssueCreator = (
-    authData: AuthData,
-    {cmp}: ExpressionBuilder<typeof issueSchema>,
-  ) => cmp('creatorID', '=', authData.sub);
+    const allowIfIssueCreator = (
+      authData: AuthData,
+      {cmp}: ExpressionBuilder<typeof issueSchema>,
+    ) => cmp('creatorID', '=', authData.sub);
 
-  const allowIfCommentCreator = (
-    authData: AuthData,
-    {cmp}: ExpressionBuilder<typeof commentSchema>,
-  ) => cmp('creatorID', '=', authData.sub);
+    const allowIfCommentCreator = (
+      authData: AuthData,
+      {cmp}: ExpressionBuilder<typeof commentSchema>,
+    ) => cmp('creatorID', '=', authData.sub);
 
-  const allowIfAdmin = (
-    authData: AuthData,
-    {cmpLit}: ExpressionBuilder<TableSchema>,
-  ) => cmpLit(authData.role, '=', 'crew');
+    const allowIfAdmin = (
+      authData: AuthData,
+      {cmpLit}: ExpressionBuilder<TableSchema>,
+    ) => cmpLit(authData.role, '=', 'crew');
 
-  const allowIfUserIDMatchesLoggedInUser = (
-    authData: AuthData,
-    {cmp}: ExpressionBuilder<typeof viewStateSchema>,
-  ) => cmp('userID', '=', authData.sub);
+    const allowIfUserIDMatchesLoggedInUser = (
+      authData: AuthData,
+      {cmp}: ExpressionBuilder<typeof viewStateSchema>,
+    ) => cmp('userID', '=', authData.sub);
 
-  return {
-    user: {
-      // Only the authentication system can write to the user table.
-      row: {
-        insert: [],
-        update: {
-          preMutation: [],
+    return {
+      user: {
+        // Only the authentication system can write to the user table.
+        row: {
+          insert: [],
+          update: {
+            preMutation: [],
+          },
+          delete: [],
         },
-        delete: [],
       },
-    },
-    issue: {
-      row: {
-        insert: [allowIfLoggedIn],
-        update: {
-          preMutation: [allowIfIssueCreator, allowIfAdmin],
+      issue: {
+        row: {
+          insert: [allowIfLoggedIn],
+          update: {
+            preMutation: [allowIfIssueCreator, allowIfAdmin],
+          },
+          delete: [allowIfIssueCreator, allowIfAdmin],
         },
-        delete: [allowIfIssueCreator, allowIfAdmin],
       },
-    },
-    comment: {
-      row: {
-        insert: [allowIfLoggedIn],
-        update: {
-          preMutation: [allowIfCommentCreator, allowIfAdmin],
+      comment: {
+        row: {
+          insert: [allowIfLoggedIn],
+          update: {
+            preMutation: [allowIfCommentCreator, allowIfAdmin],
+          },
+          delete: [allowIfCommentCreator, allowIfAdmin],
         },
-        delete: [allowIfCommentCreator, allowIfAdmin],
       },
-    },
-    label: {
-      row: {
-        insert: [allowIfAdmin],
-        update: {
-          preMutation: [allowIfAdmin],
+      label: {
+        row: {
+          insert: [allowIfAdmin],
+          update: {
+            preMutation: [allowIfAdmin],
+          },
+          delete: [allowIfAdmin],
         },
-        delete: [allowIfAdmin],
       },
-    },
-    viewState: {
-      row: {
-        insert: [allowIfUserIDMatchesLoggedInUser],
-        update: {
-          preMutation: [allowIfUserIDMatchesLoggedInUser],
-          postProposedMutation: [allowIfUserIDMatchesLoggedInUser],
+      viewState: {
+        row: {
+          insert: [allowIfUserIDMatchesLoggedInUser],
+          update: {
+            preMutation: [allowIfUserIDMatchesLoggedInUser],
+            postProposedMutation: [allowIfUserIDMatchesLoggedInUser],
+          },
+          // view state cannot be deleted
+          delete: [],
         },
-        // view state cannot be deleted
-        delete: [],
       },
-    },
-    // TODO (mlaw): issueLabel permissions (only issue creator can set)
-  };
-});
-
-// TODO (mlaw): once we move auth to be defined on the table, there will be a single default export which is
-// the schema. Working towards this next.
-const exported: {
-  schema: typeof schema;
-  authorization: ReturnType<typeof defineAuthorization>;
-} = {
-  schema,
-  authorization,
-};
-export default exported;
+      // TODO (mlaw): issueLabel permissions (only issue creator can set)
+    };
+  });

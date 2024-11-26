@@ -1,6 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import {must} from '../../../shared/src/must.js';
-import {defineAuthorization} from '../../../zero-schema/src/authorization.js';
+import {definePermissions} from '../../../zero-schema/src/permissions.js';
 import {createSchema} from '../../../zero-schema/src/schema.js';
 import {
   createTableSchema,
@@ -15,6 +14,7 @@ import {
 } from '../../../zql/src/query/query-impl.js';
 import type {Query, QueryType} from '../../../zql/src/query/query.js';
 import {transformQuery} from './read-authorizer.js';
+import {must} from '../../../shared/src/must.js';
 
 const mockDelegate = {} as QueryDelegate;
 
@@ -90,7 +90,7 @@ const authData: AuthData = {
   role: 'user',
 };
 const permissionRules = must(
-  await defineAuthorization<AuthData, typeof schema>(schema, () => ({
+  await definePermissions<AuthData, typeof schema>(schema, () => ({
     unreadable: {
       row: {
         select: [],

@@ -1,7 +1,7 @@
 import type {JWTPayload} from 'jose';
 import {hashOfAST} from '../../../zero-protocol/src/ast-hash.js';
 import type {AST, Condition} from '../../../zero-protocol/src/ast.js';
-import type {AuthorizationConfig} from '../../../zero-schema/src/compiled-authorization.js';
+import type {PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.js';
 import {bindStaticParameters} from '../../../zql/src/builder/builder.js';
 import {dnf} from '../../../zql/src/query/dnf.js';
 import type {JSONValue} from '../../../shared/src/json.js';
@@ -26,7 +26,7 @@ export type TransformedAndHashed =
  */
 export function transformAndHashQuery(
   query: AST,
-  permissionRules: AuthorizationConfig,
+  permissionRules: PermissionsConfig,
   authData: JWTPayload | undefined,
 ): TransformedAndHashed {
   const transformed = transformQuery(query, permissionRules, authData);
@@ -46,7 +46,7 @@ export function transformAndHashQuery(
  */
 export function transformQuery(
   query: AST,
-  permissionRules: AuthorizationConfig,
+  permissionRules: PermissionsConfig,
   authData: JWTPayload | undefined,
 ): AST | undefined {
   const queryWithPermissions = transformQueryInternal(query, permissionRules);
@@ -59,7 +59,7 @@ export function transformQuery(
 
 function transformQueryInternal(
   query: AST,
-  permissionRules: AuthorizationConfig,
+  permissionRules: PermissionsConfig,
 ): AST | undefined {
   const rowSelectRules = permissionRules[query.table]?.row?.select;
 
@@ -119,7 +119,7 @@ function addRulesToWhere(
 // that they cannot read.
 function transformCondition(
   cond: Condition,
-  auth: AuthorizationConfig,
+  auth: PermissionsConfig,
 ): Condition {
   switch (cond.type) {
     case 'simple':

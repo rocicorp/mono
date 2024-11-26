@@ -9,7 +9,7 @@ import {processMutation} from './mutagen.js';
 import {WriteAuthorizerImpl} from '../../auth/write-authorizer.js';
 import {MutationType} from '../../../../zero-protocol/src/push.js';
 import {zeroSchema} from './mutagen-test-shared.js';
-import {defineAuthorization} from '../../../../zero-schema/src/authorization.js';
+import {definePermissions} from '../../../../zero-schema/src/permissions.js';
 import {ExpressionBuilder} from '../../../../zql/src/query/expression.js';
 
 const SHARD_ID = '0';
@@ -169,7 +169,7 @@ type AuthData = {
   role: string;
 };
 
-const authorizationConfig = await defineAuthorization<AuthData, typeof schema>(
+const permissionsConfig = await definePermissions<AuthData, typeof schema>(
   schema,
   () => {
     const allowIfAdmin = (
@@ -264,7 +264,7 @@ beforeEach(async () => {
     lc,
     {},
     schema,
-    authorizationConfig,
+    permissionsConfig,
     replica,
     SHARD_ID,
   );

@@ -2,9 +2,9 @@ import type {Query} from '../../zql/src/query/query.js';
 import type {Schema} from './schema.js';
 import type {TableSchema} from './table-schema.js';
 import type {
-  AssetAuthorization as CompiledAssetAuthorization,
-  AuthorizationConfig as CompiledAuthorizationConfig,
-} from './compiled-authorization.js';
+  AssetPermissions as CompiledAssetPermissions,
+  PermissionsConfig as CompiledPermissionsConfig,
+} from './compiled-permissions.js';
 import {normalizeSchema} from './normalized-schema.js';
 import {AuthQuery} from '../../zql/src/query/auth-query.js';
 import type {Condition} from '../../zero-protocol/src/ast.js';
@@ -15,29 +15,29 @@ export type Queries<TSchema extends Schema> = {
   [K in keyof TSchema['tables']]: Query<TSchema['tables'][K]>;
 };
 
-type AuthorizationRule<TAuthDataShape, TSchema extends TableSchema> = (
+type PermissionRule<TAuthDataShape, TSchema extends TableSchema> = (
   authData: TAuthDataShape,
   eb: ExpressionBuilder<TSchema>,
 ) => Condition;
 
-type AssetAuthorization<TAuthDataShape, TSchema extends TableSchema> = {
-  select?: AuthorizationRule<TAuthDataShape, TSchema>[] | undefined;
-  insert?: AuthorizationRule<TAuthDataShape, TSchema>[] | undefined;
+type AssetPermissions<TAuthDataShape, TSchema extends TableSchema> = {
+  select?: PermissionRule<TAuthDataShape, TSchema>[] | undefined;
+  insert?: PermissionRule<TAuthDataShape, TSchema>[] | undefined;
   update?:
     | {
-        preMutation?: AuthorizationRule<TAuthDataShape, TSchema>[];
-        postProposedMutation?: AuthorizationRule<TAuthDataShape, TSchema>[];
+        preMutation?: PermissionRule<TAuthDataShape, TSchema>[];
+        postProposedMutation?: PermissionRule<TAuthDataShape, TSchema>[];
       }
     | undefined;
-  delete?: AuthorizationRule<TAuthDataShape, TSchema>[] | undefined;
+  delete?: PermissionRule<TAuthDataShape, TSchema>[] | undefined;
 };
 
-export type AuthorizationConfig<TAuthDataShape, TSchema extends Schema> = {
+export type PermissionsConfig<TAuthDataShape, TSchema extends Schema> = {
   [K in keyof TSchema['tables']]?: {
-    row?: AssetAuthorization<TAuthDataShape, TSchema['tables'][K]> | undefined;
+    row?: AssetPermissions<TAuthDataShape, TSchema['tables'][K]> | undefined;
     cell?:
       | {
-          [C in keyof TSchema['tables'][K]['columns']]?: AssetAuthorization<
+          [C in keyof TSchema['tables'][K]['columns']]?: AssetPermissions<
             TAuthDataShape,
             TSchema['tables'][K]
           >;
@@ -46,15 +46,12 @@ export type AuthorizationConfig<TAuthDataShape, TSchema extends Schema> = {
   };
 };
 
-export async function defineAuthorization<
-  TAuthDataShape,
-  TSchema extends Schema,
->(
+export async function definePermissions<TAuthDataShape, TSchema extends Schema>(
   schema: TSchema,
   definer: () =>
-    | Promise<AuthorizationConfig<TAuthDataShape, TSchema>>
-    | AuthorizationConfig<TAuthDataShape, TSchema>,
-): Promise<CompiledAuthorizationConfig | undefined> {
+    | Promise<PermissionsConfig<TAuthDataShape, TSchema>>
+    | PermissionsConfig<TAuthDataShape, TSchema>,
+): Promise<CompiledPermissionsConfig | undefined> {
   const normalizedSchema = normalizeSchema(schema);
   const expressionBuilders = {} as Record<
     string,
@@ -65,17 +62,17 @@ export async function defineAuthorization<
   }
 
   const config = await definer();
-  return compileAuthorization(config, expressionBuilders);
+  return compilePermissions(config, expressionBuilders);
 }
 
-function compileAuthorization<TAuthDataShape, TSchema extends Schema>(
-  authz: AuthorizationConfig<TAuthDataShape, TSchema> | undefined,
+function compilePermissions<TAuthDataShape, TSchema extends Schema>(
+  authz: PermissionsConfig<TAuthDataShape, TSchema> | undefined,
   expressionBuilders: Record<string, ExpressionBuilder<TableSchema>>,
-): CompiledAuthorizationConfig | undefined {
+): CompiledPermissionsConfig | undefined {
   if (!authz) {
     return undefined;
   }
-  const ret: CompiledAuthorizationConfig = {};
+  const ret: CompiledPermissionsConfig = {};
   for (const [tableName, tableConfig] of Object.entries(authz)) {
     ret[tableName] = {
       row: compileRowConfig(tableConfig.row, expressionBuilders[tableName]),
@@ -87,9 +84,9 @@ function compileAuthorization<TAuthDataShape, TSchema extends Schema>(
 }
 
 function compileRowConfig<TAuthDataShape, TSchema extends TableSchema>(
-  rowRules: AssetAuthorization<TAuthDataShape, TSchema> | undefined,
+  rowRules: AssetPermissions<TAuthDataShape, TSchema> | undefined,
   expressionBuilder: ExpressionBuilder<TSchema>,
-): CompiledAssetAuthorization | undefined {
+): CompiledAssetPermissions | undefined {
   if (!rowRules) {
     return undefined;
   }
@@ -111,7 +108,7 @@ function compileRowConfig<TAuthDataShape, TSchema extends TableSchema>(
 }
 
 function compileRules<TAuthDataShape, TSchema extends TableSchema>(
-  rules: AuthorizationRule<TAuthDataShape, TSchema>[] | undefined,
+  rules: PermissionRule<TAuthDataShape, TSchema>[] | undefined,
   expressionBuilder: ExpressionBuilder<TSchema>,
 ): ['allow', Condition][] | undefined {
   if (!rules) {
@@ -129,14 +126,14 @@ function compileRules<TAuthDataShape, TSchema extends TableSchema>(
 
 function compileCellConfig<TAuthDataShape, TSchema extends TableSchema>(
   cellRules:
-    | Record<string, AssetAuthorization<TAuthDataShape, TSchema>>
+    | Record<string, AssetPermissions<TAuthDataShape, TSchema>>
     | undefined,
   expressionBuilder: ExpressionBuilder<TSchema>,
-): Record<string, CompiledAssetAuthorization> | undefined {
+): Record<string, CompiledAssetPermissions> | undefined {
   if (!cellRules) {
     return undefined;
   }
-  const ret: Record<string, CompiledAssetAuthorization> = {};
+  const ret: Record<string, CompiledAssetPermissions> = {};
   for (const [columnName, rules] of Object.entries(cellRules)) {
     ret[columnName] = {
       select: compileRules(rules.select, expressionBuilder),

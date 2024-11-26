@@ -41,9 +41,9 @@ import {PipelineDriver} from './pipeline-driver.js';
 import {initViewSyncerSchema} from './schema/init.js';
 import {Snapshotter} from './snapshotter.js';
 import {pickToken, type SyncContext, ViewSyncerService} from './view-syncer.js';
-import type {AuthorizationConfig} from '../../../../zero-schema/src/compiled-authorization.js';
-import {defineAuthorization} from '../../../../zero-schema/src/authorization.js';
 import type {ExpressionBuilder} from '../../../../zql/src/query/expression.js';
+import {definePermissions} from '../../../../zero-schema/src/permissions.js';
+import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.js';
 
 const SHARD_ID = 'ABC';
 
@@ -126,7 +126,7 @@ type AuthData = {
   role: 'user' | 'admin';
   iat: number;
 };
-const permissions: AuthorizationConfig | undefined = await defineAuthorization<
+const permissions: PermissionsConfig | undefined = await definePermissions<
   AuthData,
   typeof schema
 >(schema, () => ({
@@ -140,7 +140,7 @@ const permissions: AuthorizationConfig | undefined = await defineAuthorization<
   },
 }));
 
-async function setup(permissions: AuthorizationConfig = {}) {
+async function setup(permissions: PermissionsConfig = {}) {
   const lc = createSilentLogContext();
   const storageDB = new Database(lc, ':memory:');
   storageDB.prepare(CREATE_STORAGE_TABLE).run();

@@ -57,7 +57,7 @@ export type {
   VersionNotSupportedResponse,
   WriteTransaction,
 } from '../../replicache/src/mod.js';
-export {defineAuthorization} from '../../zero-schema/src/authorization.js';
+export {definePermissions} from '../../zero-schema/src/permissions.js';
 export {createSchema} from '../../zero-schema/src/schema.js';
 export {
   createTableSchema,
