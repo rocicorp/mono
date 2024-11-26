@@ -98,7 +98,7 @@ export interface ZeroOptions<S extends Schema> {
    * The default behavior is to reload the page (using `location.reload()`).
    * Provide your own function to prevent the page from reloading automatically.
    */
-  get onClientStateNotFound(): (() => void) | null;
+  onClientStateNotFound?: (() => void) | null;
 
   /**
    * The number of milliseconds to wait before disconnecting a Zero
