@@ -6,7 +6,9 @@
   "module": "true",
   "scripts": {
     "check-types": "tsc",
-    "check-types:watch": "tsc --watch"
+    "check-types:watch": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch"
   },
   "devDependencies": {
     "zql": "0.0.0"

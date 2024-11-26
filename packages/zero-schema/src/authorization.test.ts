@@ -53,115 +53,63 @@ test('authorization rules create query ASTs', async () => {
 
   expect(config).toMatchInlineSnapshot(`
     {
-      "authorization": {
-        "user": {
-          "cell": undefined,
-          "column": undefined,
-          "row": undefined,
-          "table": {
-            "delete": [
-              [
-                "allow",
-                {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "user",
-                  "where": {
-                    "conditions": [
-                      {
-                        "field": "id",
-                        "op": "=",
-                        "type": "simple",
-                        "value": {
-                          "anchor": "authData",
-                          "field": "sub",
-                          "type": "static",
-                        },
-                      },
-                      {
-                        "field": "role",
-                        "op": "=",
-                        "type": "simple",
-                        "value": "admin",
-                      },
-                    ],
-                    "type": "and",
-                  },
+      "user": {
+        "cell": undefined,
+        "row": {
+          "delete": [
+            [
+              "allow",
+              {
+                "left": {
+                  "anchor": "authData",
+                  "field": "role",
+                  "type": "static",
                 },
-              ],
-            ],
-            "insert": [
-              [
-                "allow",
-                {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "user",
-                  "where": {
-                    "conditions": [
-                      {
-                        "field": "id",
-                        "op": "=",
-                        "type": "simple",
-                        "value": {
-                          "anchor": "authData",
-                          "field": "sub",
-                          "type": "static",
-                        },
-                      },
-                      {
-                        "field": "role",
-                        "op": "=",
-                        "type": "simple",
-                        "value": "admin",
-                      },
-                    ],
-                    "type": "and",
-                  },
+                "op": "=",
+                "right": {
+                  "type": "literal",
+                  "value": "admin",
                 },
-              ],
+                "type": "simple",
+              },
             ],
-            "select": undefined,
-            "update": [
+          ],
+          "insert": [
+            [
+              "allow",
+              {
+                "left": {
+                  "anchor": "authData",
+                  "field": "role",
+                  "type": "static",
+                },
+                "op": "=",
+                "right": {
+                  "type": "literal",
+                  "value": "admin",
+                },
+                "type": "simple",
+              },
+            ],
+          ],
+          "select": undefined,
+          "update": {
+            "postProposedMutation": undefined,
+            "preMutation": [
               [
                 "allow",
                 {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "user",
-                  "where": {
-                    "conditions": [
-                      {
-                        "field": "id",
-                        "op": "=",
-                        "type": "simple",
-                        "value": {
-                          "anchor": "authData",
-                          "field": "sub",
-                          "type": "static",
-                        },
-                      },
-                      {
-                        "field": "role",
-                        "op": "=",
-                        "type": "simple",
-                        "value": "admin",
-                      },
-                    ],
-                    "type": "and",
+                  "left": {
+                    "anchor": "authData",
+                    "field": "role",
+                    "type": "static",
                   },
+                  "op": "=",
+                  "right": {
+                    "type": "literal",
+                    "value": "admin",
+                  },
+                  "type": "simple",
                 },
               ],
             ],
