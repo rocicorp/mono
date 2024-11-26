@@ -27,7 +27,7 @@ import {
 import type {NullableVersion} from '../../../zero-protocol/src/version.js';
 import type {Schema} from '../../../zero-schema/src/mod.js';
 import type {WSString} from './http-string.js';
-import type {ZeroOptions} from './options.js';
+import type {UpdateNeededReason, ZeroOptions} from './options.js';
 import type {QueryManager} from './query-manager.js';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.js';
 import {ServerError} from './server-error.js';
@@ -48,7 +48,6 @@ import {
   PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
-  type UpdateNeededReason,
 } from './zero.js';
 
 let realSetTimeout: typeof setTimeout;
@@ -82,7 +81,7 @@ test('onOnlineChange callback', async () => {
   let onlineCount = 0;
   let offlineCount = 0;
 
-  const r = zeroForTest({
+  const z = zeroForTest({
     logLevel: 'debug',
     schema: {
       version: 1,
@@ -110,33 +109,33 @@ test('onOnlineChange callback', async () => {
   {
     // Offline by default.
     await clock.tickAsync(1);
-    expect(r.online).false;
+    expect(z.online).false;
   }
 
   {
     // First test a disconnect followed by a reconnect. This should not trigger
     // the onOnlineChange callback.
-    await r.waitForConnectionState(ConnectionState.Connecting);
-    expect(r.online).false;
+    await z.waitForConnectionState(ConnectionState.Connecting);
+    expect(z.online).false;
     expect(onlineCount).to.equal(0);
     expect(offlineCount).to.equal(0);
-    await r.triggerConnected();
-    await r.waitForConnectionState(ConnectionState.Connected);
+    await z.triggerConnected();
+    await z.waitForConnectionState(ConnectionState.Connected);
     await clock.tickAsync(0);
-    expect(r.online).true;
+    expect(z.online).true;
     expect(onlineCount).to.equal(1);
     expect(offlineCount).to.equal(0);
-    await r.triggerClose();
-    await r.waitForConnectionState(ConnectionState.Disconnected);
+    await z.triggerClose();
+    await z.waitForConnectionState(ConnectionState.Disconnected);
     // Still connected because we haven't yet failed to reconnect.
     await clock.tickAsync(0);
-    expect(r.online).true;
+    expect(z.online).true;
     expect(onlineCount).to.equal(1);
     expect(offlineCount).to.equal(0);
-    await r.triggerConnected();
-    await r.waitForConnectionState(ConnectionState.Connected);
+    await z.triggerConnected();
+    await z.waitForConnectionState(ConnectionState.Connected);
     await clock.tickAsync(0);
-    expect(r.online).true;
+    expect(z.online).true;
     expect(onlineCount).to.equal(1);
     expect(offlineCount).to.equal(0);
   }
@@ -145,19 +144,19 @@ test('onOnlineChange callback', async () => {
     // Now testing with an error that causes the connection to close. This should
     // trigger the callback.
     onlineCount = offlineCount = 0;
-    await r.triggerError(ErrorKind.InvalidMessage, 'aaa');
-    await r.waitForConnectionState(ConnectionState.Disconnected);
+    await z.triggerError(ErrorKind.InvalidMessage, 'aaa');
+    await z.waitForConnectionState(ConnectionState.Disconnected);
     await clock.tickAsync(0);
-    expect(r.online).false;
+    expect(z.online).false;
     expect(onlineCount).to.equal(0);
     expect(offlineCount).to.equal(1);
 
     // And followed by a reconnect.
-    expect(r.online).false;
+    expect(z.online).false;
     await tickAFewTimes(clock, RUN_LOOP_INTERVAL_MS);
-    await r.triggerConnected();
+    await z.triggerConnected();
     await clock.tickAsync(0);
-    expect(r.online).true;
+    expect(z.online).true;
     expect(onlineCount).to.equal(1);
     expect(offlineCount).to.equal(1);
   }
@@ -165,18 +164,18 @@ test('onOnlineChange callback', async () => {
   {
     // Now test with an auth error. This should not trigger the callback on the first error.
     onlineCount = offlineCount = 0;
-    await r.triggerError(ErrorKind.Unauthorized, 'bbb');
-    await r.waitForConnectionState(ConnectionState.Disconnected);
+    await z.triggerError(ErrorKind.Unauthorized, 'bbb');
+    await z.waitForConnectionState(ConnectionState.Disconnected);
     await clock.tickAsync(0);
-    expect(r.online).true;
+    expect(z.online).true;
     expect(onlineCount).to.equal(0);
     expect(offlineCount).to.equal(0);
 
     // And followed by a reconnect.
-    expect(r.online).true;
-    await r.triggerConnected();
+    expect(z.online).true;
+    await z.triggerConnected();
     await clock.tickAsync(0);
-    expect(r.online).true;
+    expect(z.online).true;
     expect(onlineCount).to.equal(0);
     expect(offlineCount).to.equal(0);
   }
@@ -184,27 +183,27 @@ test('onOnlineChange callback', async () => {
   {
     // Now test with two auth error. This should trigger the callback on the second error.
     onlineCount = offlineCount = 0;
-    await r.triggerError(ErrorKind.Unauthorized, 'ccc');
-    await r.waitForConnectionState(ConnectionState.Disconnected);
+    await z.triggerError(ErrorKind.Unauthorized, 'ccc');
+    await z.waitForConnectionState(ConnectionState.Disconnected);
     await clock.tickAsync(0);
-    expect(r.online).true;
+    expect(z.online).true;
     expect(onlineCount).to.equal(0);
     expect(offlineCount).to.equal(0);
 
-    await r.waitForConnectionState(ConnectionState.Connecting);
-    await r.triggerError(ErrorKind.Unauthorized, 'ddd');
-    await r.waitForConnectionState(ConnectionState.Disconnected);
+    await z.waitForConnectionState(ConnectionState.Connecting);
+    await z.triggerError(ErrorKind.Unauthorized, 'ddd');
+    await z.waitForConnectionState(ConnectionState.Disconnected);
     await tickAFewTimes(clock, RUN_LOOP_INTERVAL_MS);
     await clock.tickAsync(0);
-    expect(r.online).false;
+    expect(z.online).false;
     expect(onlineCount).to.equal(0);
     expect(offlineCount).to.equal(1);
 
     // And followed by a reconnect.
-    await r.waitForConnectionState(ConnectionState.Connecting);
-    await r.triggerConnected();
+    await z.waitForConnectionState(ConnectionState.Connecting);
+    await z.triggerConnected();
     await clock.tickAsync(0);
-    expect(r.online).true;
+    expect(z.online).true;
     expect(onlineCount).to.equal(1);
     expect(offlineCount).to.equal(1);
   }
@@ -213,14 +212,14 @@ test('onOnlineChange callback', async () => {
     // Connection timed out.
     onlineCount = offlineCount = 0;
     await clock.tickAsync(CONNECT_TIMEOUT_MS);
-    expect(r.online).false;
+    expect(z.online).false;
     expect(onlineCount).to.equal(0);
     expect(offlineCount).to.equal(1);
     await clock.tickAsync(RUN_LOOP_INTERVAL_MS);
     // and back online
-    await r.triggerConnected();
+    await z.triggerConnected();
     await clock.tickAsync(0);
-    expect(r.online).true;
+    expect(z.online).true;
     expect(onlineCount).to.equal(1);
     expect(offlineCount).to.equal(1);
   }
@@ -228,24 +227,13 @@ test('onOnlineChange callback', async () => {
   {
     // Now clear onOnlineChange and test that it doesn't get called.
     onlineCount = offlineCount = 0;
-    r.onOnlineChange = null;
-    await r.triggerError(ErrorKind.InvalidMessage, 'eee');
-    await r.waitForConnectionState(ConnectionState.Disconnected);
+    await z.triggerError(ErrorKind.InvalidMessage, 'eee');
+    await z.waitForConnectionState(ConnectionState.Disconnected);
     await clock.tickAsync(0);
-    expect(r.online).false;
+    expect(z.online).false;
     expect(onlineCount).to.equal(0);
     expect(offlineCount).to.equal(0);
   }
-});
-
-test('onOnlineChange reflection on Zero class', async () => {
-  const f = () => 42;
-  const r = zeroForTest({
-    onOnlineChange: f,
-  });
-  await tickAFewTimes(clock);
-
-  expect(r.onOnlineChange).to.equal(f);
 });
 
 test('disconnects if ping fails', async () => {
@@ -300,7 +288,6 @@ suite('createSocket', () => {
     clientID: string,
     userID: string,
     auth: string | undefined,
-    jurisdiction: 'eu' | undefined,
     lmid: number,
     debugPerf: boolean,
     now: number,
@@ -319,7 +306,6 @@ suite('createSocket', () => {
         schemaVersion,
         userID,
         auth,
-        jurisdiction,
         lmid,
         'wsidx',
         debugPerf,
@@ -341,7 +327,6 @@ suite('createSocket', () => {
         schemaVersion,
         userID,
         auth,
-        jurisdiction,
         lmid,
         'wsidx',
         debugPerf,
@@ -361,7 +346,6 @@ suite('createSocket', () => {
     'clientID',
     'userID',
     '',
-    undefined,
     0,
     false,
     0,
@@ -373,7 +357,6 @@ suite('createSocket', () => {
     'clientID',
     'userID',
     '',
-    undefined,
     0,
     false,
     0,
@@ -385,7 +368,6 @@ suite('createSocket', () => {
     'clientID',
     'userID',
     '',
-    undefined,
     0,
     false,
     0,
@@ -398,7 +380,6 @@ suite('createSocket', () => {
     'clientID',
     'userID',
     '',
-    undefined,
     0,
     false,
     0,
@@ -411,7 +392,6 @@ suite('createSocket', () => {
     'clientID',
     'userID',
     '',
-    undefined,
     0,
     false,
     0,
@@ -424,7 +404,6 @@ suite('createSocket', () => {
     'clientID',
     'userID',
     '',
-    undefined,
     123,
     false,
     0,
@@ -436,7 +415,6 @@ suite('createSocket', () => {
     null,
     'clientID',
     'userID',
-    undefined,
     undefined,
     123,
     false,
@@ -450,7 +428,6 @@ suite('createSocket', () => {
     'clientID',
     'userID',
     'auth with []',
-    undefined,
     0,
     false,
     0,
@@ -463,11 +440,10 @@ suite('createSocket', () => {
     'clientID',
     'userID',
     'auth with []',
-    'eu',
     0,
     false,
     0,
-    'ws://example.com/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx',
+    'ws://example.com/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx',
   );
 
   t(
@@ -476,11 +452,10 @@ suite('createSocket', () => {
     'clientID',
     'userID',
     'auth with []',
-    'eu',
     0,
     true,
     0,
-    'ws://example.com/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&jurisdiction=eu&baseCookie=&ts=0&lmid=0&wsid=wsidx&debugPerf=true',
+    'ws://example.com/sync/v1/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&debugPerf=true',
   );
 
   t(
@@ -489,7 +464,6 @@ suite('createSocket', () => {
     'clientID',
     'userID',
     '',
-    undefined,
     0,
     false,
     456,
@@ -1667,22 +1641,13 @@ test('VersionNotSupported custom onUpdateNeeded handler', async () => {
   const fake = sinon.fake((_reason: UpdateNeededReason) => {
     resolve();
   });
-  const r = zeroForTest();
-  r.onUpdateNeeded = fake;
+  const r = zeroForTest({onUpdateNeeded: fake});
 
   await r.triggerError(ErrorKind.VersionNotSupported, 'server test message');
   await promise;
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 
   expect(fake.calledOnce).true;
-});
-
-test('VersionNotSupported null onUpdateNeeded handler', async () => {
-  const r = zeroForTest();
-  r.onUpdateNeeded = null;
-
-  await r.triggerError(ErrorKind.VersionNotSupported, 'server test message');
-  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 });
 
 test('SchemaVersionNotSupported default handler', async () => {
@@ -1713,8 +1678,7 @@ test('SchemaVersionNotSupported custom onUpdateNeeded handler', async () => {
   const fake = sinon.fake((_reason: UpdateNeededReason) => {
     resolve();
   });
-  const r = zeroForTest();
-  r.onUpdateNeeded = fake;
+  const r = zeroForTest({onUpdateNeeded: fake});
 
   await r.triggerError(
     ErrorKind.SchemaVersionNotSupported,
@@ -1724,17 +1688,6 @@ test('SchemaVersionNotSupported custom onUpdateNeeded handler', async () => {
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 
   expect(fake.calledOnce).true;
-});
-
-test('SchemaVersionNotSupported null onUpdateNeeded handler', async () => {
-  const r = zeroForTest();
-  r.onUpdateNeeded = null;
-
-  await r.triggerError(
-    ErrorKind.SchemaVersionNotSupported,
-    'server test message',
-  );
-  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 });
 
 test('ClientNotFound default handler', async () => {
@@ -1762,22 +1715,12 @@ test('ClientNotFound custom onClientStateNotFound handler', async () => {
   const fake = sinon.fake(() => {
     resolve();
   });
-  const r = zeroForTest();
-  r.onClientStateNotFound = fake;
-
+  const r = zeroForTest({onClientStateNotFound: fake});
   await r.triggerError(ErrorKind.ClientNotFound, 'server test message');
   await promise;
   expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 
   expect(fake.calledOnce).true;
-});
-
-test('ClientNotFound null handler', async () => {
-  const r = zeroForTest();
-  r.onClientStateNotFound = null;
-
-  await r.triggerError(ErrorKind.ClientNotFound, 'server test message');
-  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
 });
 
 test('server ahead', async () => {
@@ -1976,12 +1919,17 @@ suite('Disconnect on hide', () => {
         document.dispatchEvent(new Event('visibilitychange'));
       };
 
+      let resolveOnlineChangePromise: (v: boolean) => void = () => {};
+
       const r = zeroForTest({
         hiddenTabDisconnectDelay,
+        onOnlineChange: online => {
+          resolveOnlineChangePromise(online);
+        },
       });
       const makeOnOnlineChangePromise = () =>
         new Promise(resolve => {
-          r.onOnlineChange = resolve;
+          resolveOnlineChangePromise = resolve;
         });
       let onOnlineChangeP = makeOnOnlineChangePromise();
 

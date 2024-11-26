@@ -49,12 +49,6 @@ export interface ZeroOptions<S extends Schema> {
   userID: string;
 
   /**
-   * The server side data can be restricted to a jurisdiction. This is
-   * useful for GDPR compliance.
-   */
-  jurisdiction?: 'eu' | undefined;
-
-  /**
    * Determines the level of detail at which Zero logs messages about
    * its operation. Messages are logged to the `console`.
    *
@@ -74,9 +68,37 @@ export interface ZeroOptions<S extends Schema> {
   schema: S;
 
   /**
-   * `onOnlineChange` is called when the Zero instance's online status changes
+   * `onOnlineChange` is called when the Zero instance's online status changes.
    */
   onOnlineChange?: ((online: boolean) => void) | undefined;
+
+  /**
+   * `onUpdateNeeded` is called when a client code update is needed.
+   *
+   * See {@link UpdateNeededReason} for why updates can be needed.
+   *
+   * The default behavior is to reload the page (using `location.reload()`).
+   * Provide your own function to prevent the page from
+   * reloading automatically. You may want to display a toast to inform the end
+   * user there is a new version of your app available and prompt them to
+   * refresh.
+   */
+  onUpdateNeeded?: ((reason: UpdateNeededReason) => void) | undefined;
+
+  /**
+   * `onClientStateNotFound` is called when this client is no longer able
+   * to sync with the server due to missing synchronization state.  This can be
+   * because:
+   * - the local persistent synchronization state has been garbage collected.
+   *   This can happen if the client has no pending mutations and has not been
+   *   used for a while (e.g. the client's tab has been hidden for a long time).
+   * - the server fails to find the server side synchronization state for
+   *   this client.
+   *
+   * The default behavior is to reload the page (using `location.reload()`).
+   * Provide your own function to prevent the page from reloading automatically.
+   */
+  get onClientStateNotFound(): (() => void) | null;
 
   /**
    * The number of milliseconds to wait before disconnecting a Zero
@@ -108,7 +130,8 @@ export interface ZeroOptions<S extends Schema> {
    *
    * Zero adds some extra information to headers on initialization if possible.
    * This speeds up data synchronization. This number should be kept less than
-   * or equal to the maximum header size allowed by the server and any load balancers.
+   * or equal to the maximum header size allowed by the server and any load
+   * balancers.
    *
    * Default value: 8kb.
    */
@@ -142,3 +165,15 @@ export interface ZeroAdvancedOptions<S extends Schema> extends ZeroOptions<S> {
    */
   batchViewUpdates?: ((applyViewUpdates: () => void) => void) | undefined;
 }
+
+export type UpdateNeededReason =
+  // There is a new client group due to a another tab loading new code which
+  // cannot sync locally with this tab until it updates to the new code.
+  // This tab can still sync with the server.
+  | {type: 'NewClientGroup'}
+  // This client was unable to connect to the server because it is using a
+  // protocol version that the server does not support.
+  | {type: 'VersionNotSupported'}
+  // This client was unable to connect to the server because it is using a
+  // schema version (see {@link Schema}) that the server does not support.
+  | {type: 'SchemaVersionNotSupported'};
