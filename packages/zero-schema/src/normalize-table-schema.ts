@@ -190,17 +190,8 @@ function normalizeFieldRelationship(
   };
 }
 
-type NormalizedJunctionRelationship = {
-  source: CompoundKey;
-  junction: {
-    sourceField: CompoundKey;
-    destField: CompoundKey;
-    schema: NormalizedTableSchema;
-  };
-  dest: {
-    field: CompoundKey;
-    schema: NormalizedTableSchema;
-  };
+type NormalizedJunctionRelationship = NormalizedFieldRelationship & {
+  junction: NormalizedFieldRelationship;
 };
 
 function normalizeJunctionRelationship(
@@ -208,22 +199,11 @@ function normalizeJunctionRelationship(
   tableSchemaCache: TableSchemaCache,
 ): NormalizedJunctionRelationship {
   return {
-    source: relationship.source,
-    junction: {
-      sourceField: relationship.junction.sourceField,
-      destField: relationship.junction.destField,
-      schema: normalizeLazyTableSchema(
-        relationship.junction.schema,
-        tableSchemaCache,
-      ),
-    },
-    dest: {
-      field: relationship.dest.field,
-      schema: normalizeLazyTableSchema(
-        relationship.dest.schema,
-        tableSchemaCache,
-      ),
-    },
+    ...normalizeFieldRelationship(relationship, tableSchemaCache),
+    junction: normalizeFieldRelationship(
+      relationship.junction,
+      tableSchemaCache,
+    ),
   };
 }
 

@@ -30,9 +30,11 @@ const issueSchema: TableSchema = {
     labels: {
       source: ['id'],
       junction: {
-        schema: () => issueLabelSchema,
-        sourceField: ['issueID'],
-        destField: ['labelID'],
+        source: ['issueID'],
+        dest: {
+          field: ['labelID'],
+          schema: () => issueLabelSchema,
+        },
       },
       dest: {
         field: ['id'],

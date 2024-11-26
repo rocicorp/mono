@@ -90,10 +90,7 @@ export class Take implements Operator {
       (req.constraint &&
         constraintMatchesPartitionKey(req.constraint, this.#partitionKey))
     ) {
-      const takeStateKey = getTakeStateKeyFromConstraint(
-        this.#partitionKey,
-        req.constraint,
-      );
+      const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
       const takeState = this.#storage.get(takeStateKey);
       if (!takeState) {
         yield* this.#initialFetch(req);
@@ -124,10 +121,7 @@ export class Take implements Operator {
       if (this.getSchema().compareRows(inputNode.row, maxBound) > 0) {
         return;
       }
-      const takeStateKey = getTakeStateKeyFromRow(
-        this.#partitionKey,
-        inputNode.row,
-      );
+      const takeStateKey = getTakeStateKey(this.#partitionKey, inputNode.row);
       const takeState = this.#storage.get(takeStateKey);
       if (
         takeState?.bound !== undefined &&
@@ -151,10 +145,7 @@ export class Take implements Operator {
       return;
     }
 
-    const takeStateKey = getTakeStateKeyFromConstraint(
-      this.#partitionKey,
-      req.constraint,
-    );
+    const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
     assert(this.#storage.get(takeStateKey) === undefined);
 
     let size = 0;
@@ -199,10 +190,7 @@ export class Take implements Operator {
 
     let takeState: TakeState | undefined;
     if (this.#limit > 0) {
-      const takeStateKey = getTakeStateKeyFromConstraint(
-        this.#partitionKey,
-        req.constraint,
-      );
+      const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
       takeState = this.#storage.get(takeStateKey);
       assert(
         takeState !== undefined,
@@ -227,7 +215,7 @@ export class Take implements Operator {
   }
 
   #getStateAndConstraint(row: Row) {
-    const takeStateKey = getTakeStateKeyFromRow(this.#partitionKey, row);
+    const takeStateKey = getTakeStateKey(this.#partitionKey, row);
     const takeState = this.#storage.get(takeStateKey);
     let maxBound: Row | undefined;
     let constraint: Constraint | undefined;
@@ -643,44 +631,21 @@ export class Take implements Operator {
   }
 }
 
-function getTakeStateKey(partitionValue: Value[] = []): string {
-  return JSON.stringify(['take', ...partitionValue]);
-}
-
-function getTakeStateKeyFromRow(
+function getTakeStateKey(
   partitionKey: PartitionKey | undefined,
-  row: Row,
+  rowOrConstraint: Row | Constraint | undefined,
 ): string {
-  if (!partitionKey) {
-    return getTakeStateKey();
-  }
-
-  // The order must be consistent with getTakeStateKeyFromConstraint. We always use the
-  // order as defined by the partition key.
+  // The order must be consistent. We always use the order as defined by the
+  // partition key.
   const partitionValues: Value[] = [];
-  for (const key of partitionKey) {
-    partitionValues.push(row[key]);
+
+  if (partitionKey && rowOrConstraint) {
+    for (const key of partitionKey) {
+      partitionValues.push(rowOrConstraint[key]);
+    }
   }
 
-  return getTakeStateKey(partitionValues);
-}
-
-function getTakeStateKeyFromConstraint(
-  partitionKey: PartitionKey | undefined,
-  constraint: Constraint | undefined,
-): string {
-  if (!partitionKey || !constraint) {
-    return getTakeStateKey();
-  }
-
-  // The order must be consistent with getTakeStateKeyFromRow. We always use the
-  // order as defined by the partition key.
-  const partitionValues: Value[] = [];
-  for (const key of partitionKey) {
-    partitionValues.push(constraint[key]);
-  }
-
-  return getTakeStateKey(partitionValues);
+  return JSON.stringify(['take', ...partitionValues]);
 }
 
 function constraintMatchesPartitionKey(

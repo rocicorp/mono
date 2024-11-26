@@ -26,9 +26,11 @@ export const issueSchema = {
     labels: {
       source: ['id'],
       junction: {
-        sourceField: ['issueId'],
-        destField: ['labelId'],
-        schema: () => issueLabelSchema,
+        source: ['issueId'],
+        dest: {
+          field: ['labelId'],
+          schema: () => issueLabelSchema,
+        },
       },
       dest: {
         field: ['id'],
@@ -59,9 +61,11 @@ export const labelSchema = {
     issues: {
       source: ['id'],
       junction: {
-        sourceField: ['labelId'],
-        destField: ['issueId'],
-        schema: issueLabelSchema,
+        source: ['labelId'],
+        dest: {
+          field: ['issueId'],
+          schema: issueLabelSchema,
+        },
       },
       dest: {
         field: ['id'],

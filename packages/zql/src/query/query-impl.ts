@@ -231,7 +231,7 @@ export abstract class AbstractQuery<
 
     if (isJunctionRelationship(junctionRelationship)) {
       const destSchema = junctionRelationship.dest.schema;
-      const junctionSchema = junctionRelationship.junction.schema;
+      const junctionSchema = junctionRelationship.junction.dest.schema;
       const sq = cb(
         this._newQuery(
           destSchema,
@@ -244,11 +244,11 @@ export abstract class AbstractQuery<
       ) as unknown as QueryImpl<any, any>;
       assert(
         junctionRelationship.source.length ===
-          junctionRelationship.junction.sourceField.length,
+          junctionRelationship.junction.source.length,
         'Invalid relationship',
       );
       assert(
-        junctionRelationship.junction.destField.length ===
+        junctionRelationship.junction.dest.field.length ===
           junctionRelationship.dest.field.length,
         'Invalid relationship',
       );
@@ -261,7 +261,7 @@ export abstract class AbstractQuery<
             {
               correlations: junctionRelationship.source.map((field, i) => ({
                 parentField: field,
-                childField: junctionRelationship.junction.sourceField[i],
+                childField: junctionRelationship.junction.source[i],
                 op: '=',
               })),
               subquery: {
@@ -270,7 +270,7 @@ export abstract class AbstractQuery<
                 orderBy: addPrimaryKeys(junctionSchema, undefined),
                 related: [
                   {
-                    correlations: junctionRelationship.junction.destField.map(
+                    correlations: junctionRelationship.junction.dest.field.map(
                       (field, i) => ({
                         parentField: field,
                         childField: junctionRelationship.dest.field[i],
@@ -421,7 +421,7 @@ export abstract class AbstractQuery<
 
     if (isJunctionRelationship(junctionRelationship)) {
       const destSchema = junctionRelationship.dest.schema;
-      const junctionSchema = junctionRelationship.junction.schema;
+      const junctionSchema = junctionRelationship.junction.dest.schema;
       const queryToDest = cb(
         this._newQuery(
           destSchema,
@@ -435,11 +435,11 @@ export abstract class AbstractQuery<
 
       assert(
         junctionRelationship.source.length ===
-          junctionRelationship.junction.sourceField.length,
+          junctionRelationship.junction.source.length,
         'Invalid relationship',
       );
       assert(
-        junctionRelationship.junction.destField.length ===
+        junctionRelationship.junction.dest.field.length ===
           junctionRelationship.dest.field.length,
         'Invalid relationship',
       );
@@ -449,7 +449,7 @@ export abstract class AbstractQuery<
         related: {
           correlations: junctionRelationship.source.map((field, i) => ({
             parentField: field,
-            childField: junctionRelationship.junction.sourceField[i],
+            childField: junctionRelationship.junction.source[i],
             op: '=',
           })),
           subquery: {
@@ -459,14 +459,13 @@ export abstract class AbstractQuery<
             where: {
               type: 'correlatedSubquery',
               related: {
-                correlations: junctionRelationship.junction.destField.map(
+                correlations: junctionRelationship.junction.dest.field.map(
                   (field, i) => ({
                     parentField: field,
                     childField: junctionRelationship.dest.field[i],
                     op: '=',
                   }),
                 ),
-
                 subquery: addPrimaryKeysToAst(destSchema, queryToDest.#ast),
               },
               op: 'EXISTS',
