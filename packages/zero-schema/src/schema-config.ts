@@ -1,7 +1,7 @@
 import * as v from '../../shared/src/valita.js';
 import {compoundKeySchema} from '../../zero-protocol/src/ast.js';
 import {primaryKeySchema} from '../../zero-protocol/src/primary-key.js';
-import type {AuthorizationConfig} from './compiled-authorization.js';
+import {type PermissionsConfig} from './compiled-permissions.js';
 import type {Schema} from './schema.js';
 import type {
   FieldRelationship,
@@ -13,7 +13,7 @@ import type {
 
 export type SchemaConfig = {
   schema: Schema;
-  authorization: AuthorizationConfig;
+  permissions: PermissionsConfig;
 };
 
 const fieldRelationshipSchema: v.Type<FieldRelationship> = v.readonlyObject({
@@ -55,3 +55,9 @@ export const schemaSchema = v.readonlyObject({
   version: v.number(),
   tables: v.record(tableSchemaSchema),
 });
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function isSchemaConfig(value: any): value is SchemaConfig {
+  // eslint-disable-next-line eqeqeq
+  return value != null && 'schema' in value && 'permissions' in value;
+}

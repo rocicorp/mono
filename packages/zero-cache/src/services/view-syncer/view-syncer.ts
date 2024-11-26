@@ -49,7 +49,7 @@ import {
 import {SchemaChangeError} from './snapshotter.js';
 import {transformAndHashQuery} from '../../auth/read-authorizer.js';
 import type {JWTPayload} from 'jose';
-import type {AuthorizationConfig} from '../../../../zero-schema/src/compiled-authorization.js';
+import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.js';
 import type {AST} from '../../../../zero-protocol/src/ast.js';
 
 export type TokenData = {
@@ -113,7 +113,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #clients = new Map<string, ClientHandler>();
   readonly #cvrStore: CVRStore;
   readonly #stopped = resolver();
-  readonly #permissions: AuthorizationConfig;
+  readonly #permissions: PermissionsConfig;
 
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
@@ -128,7 +128,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     pipelineDriver: PipelineDriver,
     versionChanges: Subscription<ReplicaState>,
     drainCoordinator: DrainCoordinator,
-    permissions: AuthorizationConfig,
+    permissions: PermissionsConfig,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
     idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS,
   ) {
