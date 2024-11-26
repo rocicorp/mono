@@ -219,7 +219,6 @@ export class Take implements Operator {
     const takeState = this.#storage.get(takeStateKey);
     let maxBound: Row | undefined;
     let constraint: Constraint | undefined;
-    // The partition key was never fetched, so this push can be discarded.
     if (takeState) {
       maxBound = this.#storage.get(MAX_BOUND_KEY);
       constraint =
