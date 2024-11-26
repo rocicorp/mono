@@ -60,14 +60,16 @@ test('relationship schema types', () => {
       },
       labels: {
         source: 'id',
-        junction: {
-          schema: issueLabelSchema,
-          sourceField: 'issueID',
-          destField: 'labelID',
-        },
         dest: {
           field: 'id',
-          schema: labelSchema,
+          schema: () => labelSchema,
+        },
+        junction: {
+          source: 'issueID',
+          dest: {
+            field: 'labelID',
+            schema: issueLabelSchema,
+          },
         },
       },
     },
@@ -99,6 +101,10 @@ test('relationship schema types', () => {
   expectTypeOf(issueSchema.relationships.labels).toMatchTypeOf<
     FieldRelationship<Issue, Label>
   >();
+  expectTypeOf(issueSchema.relationships.labels.junction).toMatchTypeOf<
+    FieldRelationship<IssueLabel, IssueLabel>
+  >();
+
   expectTypeOf(issueSchema.relationships.labels).toMatchTypeOf<
     JunctionRelationship<Issue, IssueLabel, Label>
   >();

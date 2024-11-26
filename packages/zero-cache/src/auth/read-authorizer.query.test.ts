@@ -1,40 +1,40 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 /* eslint-disable arrow-body-style */
 import {beforeEach, describe, expect, test} from 'vitest';
+import {assert} from '../../../shared/src/asserts.js';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
+import {must} from '../../../shared/src/must.js';
+import type {
+  DeleteOp,
+  InsertOp,
+  UpdateOp,
+} from '../../../zero-protocol/src/push.js';
+import {defineAuthorization} from '../../../zero-schema/src/authorization.js';
+import type {
+  TableSchema,
+  TableSchemaToRow,
+  ValueType,
+} from '../../../zero-schema/src/table-schema.js';
+import {
+  bindStaticParameters,
+  buildPipeline,
+} from '../../../zql/src/builder/builder.js';
+import {Catch} from '../../../zql/src/ivm/catch.js';
+import type {Node} from '../../../zql/src/ivm/data.js';
+import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.js';
+import type {Source} from '../../../zql/src/ivm/source.js';
+import type {ExpressionBuilder} from '../../../zql/src/query/expression.js';
 import {
   completedAstSymbol,
   newQuery,
   QueryImpl,
   type QueryDelegate,
 } from '../../../zql/src/query/query-impl.js';
-import {Database} from '../../../zqlite/src/db.js';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
-import type {Source} from '../../../zql/src/ivm/source.js';
-import type {
-  TableSchema,
-  TableSchemaToRow,
-  ValueType,
-} from '../../../zero-schema/src/table-schema.js';
-import {TableSource} from '../../../zqlite/src/table-source.js';
-import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.js';
-import {must} from '../../../shared/src/must.js';
-import {defineAuthorization} from '../../../zero-schema/src/authorization.js';
-import type {ExpressionBuilder} from '../../../zql/src/query/expression.js';
-import {WriteAuthorizerImpl} from './write-authorizer.js';
-import type {
-  DeleteOp,
-  InsertOp,
-  UpdateOp,
-} from '../../../zero-protocol/src/push.js';
-import {assert} from '../../../shared/src/asserts.js';
-import {transformQuery} from './read-authorizer.js';
 import type {Query, QueryType} from '../../../zql/src/query/query.js';
-import {Catch} from '../../../zql/src/ivm/catch.js';
-import {
-  bindStaticParameters,
-  buildPipeline,
-} from '../../../zql/src/builder/builder.js';
-import type {Node} from '../../../zql/src/ivm/data.js';
+import {Database} from '../../../zqlite/src/db.js';
+import {TableSource} from '../../../zqlite/src/table-source.js';
+import {transformQuery} from './read-authorizer.js';
+import {WriteAuthorizerImpl} from './write-authorizer.js';
 
 const schema = {
   version: 1,
@@ -65,9 +65,11 @@ const schema = {
         viewedIssues: {
           source: 'id',
           junction: {
-            schema: () => schema.tables.viewState,
-            destField: 'issueId',
-            sourceField: 'userId',
+            source: 'userId',
+            dest: {
+              field: 'issueId',
+              schema: () => schema.tables.viewState,
+            },
           },
           dest: {
             field: 'id',
@@ -77,9 +79,11 @@ const schema = {
         projects: {
           source: 'id',
           junction: {
-            schema: () => schema.tables.projectMember,
-            destField: 'projectId',
-            sourceField: 'userId',
+            source: 'userId',
+            dest: {
+              field: 'projectId',
+              schema: () => schema.tables.projectMember,
+            },
           },
           dest: {
             field: 'id',
@@ -124,9 +128,11 @@ const schema = {
         },
         labels: {
           junction: {
-            schema: () => schema.tables.issueLabel,
-            destField: 'labelId',
-            sourceField: 'issueId',
+            source: 'issueId',
+            dest: {
+              field: 'labelId',
+              schema: () => schema.tables.issueLabel,
+            },
           },
           dest: {
             field: 'id',
@@ -251,9 +257,11 @@ const schema = {
         },
         members: {
           junction: {
-            schema: () => schema.tables.projectMember,
-            destField: 'userId',
-            sourceField: 'projectId',
+            source: 'projectId',
+            dest: {
+              field: 'userId',
+              schema: () => schema.tables.projectMember,
+            },
           },
           dest: {
             field: 'id',

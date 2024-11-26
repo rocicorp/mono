@@ -111,11 +111,7 @@ export type JunctionRelationship<
   TJunctionSchema extends TableSchema,
   TDestSchema extends TableSchema,
 > = FieldRelationship<TSourceSchema, TDestSchema> & {
-  junction: {
-    sourceField: keyof TJunctionSchema['columns'];
-    destField: keyof TJunctionSchema['columns'];
-    schema: Lazy<TJunctionSchema>;
-  };
+  junction: FieldRelationship<TJunctionSchema, TJunctionSchema>;
 };
 
 export function isFieldRelationship(
