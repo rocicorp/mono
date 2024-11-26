@@ -761,7 +761,7 @@ suite('take with partition', () => {
 
   takeTest({
     ...base,
-    name: 'more data than limit',
+    name: 'compound partition key more data than limit',
     sourceRows: [
       {id: 'c1', issueID: 'i1', created: 100},
       {id: 'c2', issueID: 'i1', created: 100},
