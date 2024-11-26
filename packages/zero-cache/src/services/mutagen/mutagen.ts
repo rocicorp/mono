@@ -19,7 +19,7 @@ import {
   type UpdateOp,
   type UpsertOp,
 } from '../../../../zero-protocol/src/push.js';
-import type {AuthorizationConfig} from '../../../../zero-schema/src/compiled-authorization.js';
+import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {type ZeroConfig} from '../../config/zero-config.js';
 import {Mode} from '../../db/transaction-pool.js';
@@ -67,7 +67,7 @@ export class MutagenService implements Mutagen, Service {
     upstream: PostgresDB,
     config: ZeroConfig,
     schema: Schema,
-    authorization: AuthorizationConfig,
+    permissions: PermissionsConfig,
   ) {
     this.id = clientGroupID;
     this.#lc = lc;
@@ -80,7 +80,7 @@ export class MutagenService implements Mutagen, Service {
       this.#lc,
       config,
       schema,
-      authorization,
+      permissions,
       this.#replica,
       clientGroupID,
     );

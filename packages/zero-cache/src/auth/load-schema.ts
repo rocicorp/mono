@@ -1,8 +1,8 @@
 import path from 'node:path';
 import {
-  authorizationConfigSchema,
-  type AuthorizationConfig,
-} from '../../../zero-schema/src/compiled-authorization.js';
+  permissionsConfigSchema,
+  type PermissionsConfig,
+} from '../../../zero-schema/src/compiled-permissions.js';
 import type {Schema} from '../../../zero-schema/src/schema.js';
 import {readFile} from 'node:fs/promises';
 import * as v from '../../../shared/src/valita.js';
@@ -11,7 +11,7 @@ import type {ZeroConfig} from '../config/zero-config.js';
 let loadedSchema:
   | Promise<{
       schema: Schema;
-      authorization: AuthorizationConfig;
+      permissions: PermissionsConfig;
     }>
   | undefined;
 
@@ -20,14 +20,14 @@ function parseAuthConfig(
   source: string,
 ): {
   schema: Schema;
-  authorization: AuthorizationConfig;
+  permissions: PermissionsConfig;
 } {
   try {
     const config = JSON.parse(input);
     return {
-      authorization: v.parse(
-        config.authorization,
-        authorizationConfigSchema,
+      permissions: v.parse(
+        config.permissions,
+        permissionsConfigSchema,
         'strict',
       ),
       schema: config.schema as Schema,
@@ -39,7 +39,7 @@ function parseAuthConfig(
 
 export function getSchema(config: ZeroConfig): Promise<{
   schema: Schema;
-  authorization: AuthorizationConfig;
+  permissions: PermissionsConfig;
 }> {
   if (loadedSchema) {
     return loadedSchema;

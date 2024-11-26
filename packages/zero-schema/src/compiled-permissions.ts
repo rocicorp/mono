@@ -18,13 +18,13 @@ const assetSchema = v.object({
   delete: policySchema.optional(),
 });
 
-export type AssetAuthorization = v.Infer<typeof assetSchema>;
+export type AssetPermissions = v.Infer<typeof assetSchema>;
 
-export const authorizationConfigSchema = v.record(
+export const permissionsConfigSchema = v.record(
   v.object({
     row: assetSchema.optional(),
     cell: v.record(assetSchema).optional(),
   }),
 );
 
-export type AuthorizationConfig = v.Infer<typeof authorizationConfigSchema>;
+export type PermissionsConfig = v.Infer<typeof permissionsConfigSchema>;
