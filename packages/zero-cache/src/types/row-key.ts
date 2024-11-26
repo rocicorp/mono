@@ -48,13 +48,21 @@ function tuples(key: RowKey) {
   return Object.entries(normalizedKeyOrder(key)).flat();
 }
 
+const rowIDStrings = new WeakMap<RowID, string>();
+
 /**
  * A normalized string representation of a {@link RowID} suitable to use
  * as a Map key. Use {@link rowIDHash} if you need string keys of bounded
  * length.
  */
 export function rowIDString(id: RowID): string {
-  return stringify([id.schema, id.table, ...tuples(id.rowKey)]);
+  let val = rowIDStrings.get(id);
+  if (val) {
+    return val;
+  }
+  val = stringify([id.schema, id.table, ...tuples(id.rowKey)]);
+  rowIDStrings.set(id, val);
+  return val;
 }
 
 const rowIDHashes = new WeakMap<RowID, string>();

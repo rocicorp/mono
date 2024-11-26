@@ -30,7 +30,6 @@ import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible
 import {must} from '../../../shared/src/must.js';
 import {navigator} from '../../../shared/src/navigator.js';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.js';
-import type {MaybePromise} from '../../../shared/src/types.js';
 import * as valita from '../../../shared/src/valita.js';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.js';
 import {
@@ -499,8 +498,6 @@ export class Zero<const S extends Schema> {
     if (TESTING) {
       internalReplicacheImplMap.set(this, rep);
     }
-
-    rep.getAuth = this.#getAuthToken;
     this.#server = server;
     this.userID = userID;
     this.#jurisdiction = jurisdiction;
@@ -1230,18 +1227,14 @@ export class Zero<const S extends Schema> {
     };
   }
 
-  #getAuthToken = (
-    error?: 'invalid-token',
-  ): MaybePromise<string | undefined> | undefined => {
-    const {auth} = this.#options;
-    return typeof auth === 'function' ? auth(error) : auth;
-  };
-
   async #updateAuthToken(
     lc: LogContext,
     error?: 'invalid-token',
   ): Promise<void> {
-    const auth = await this.#getAuthToken(error);
+    const {auth: authOption} = this.#options;
+    const auth = await (typeof authOption === 'function'
+      ? authOption(error)
+      : authOption);
     if (auth) {
       lc.debug?.('Got auth token');
       this.#rep.auth = auth;
