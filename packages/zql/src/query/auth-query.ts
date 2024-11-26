@@ -16,10 +16,6 @@ export function authQuery<TSchema extends TableSchema>(
   return new AuthQuery<TSchema>(normalizeTableSchema(schema));
 }
 
-/**
- * This class will replace `config-query` once we have moved all
- * authorization logic out of the config.
- */
 export class AuthQuery<
   TTableSchema extends TableSchema,
   TReturn extends QueryType = DefaultQueryResultRow<TTableSchema>,

@@ -5,4 +5,4 @@ export {
   type TableSchemaToRow,
 } from './table-schema.js';
 export * from './schema.js';
-export {defineAuthorization} from './authorization.js';
+export {definePermissions} from './permissions.js';
