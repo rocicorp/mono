@@ -5,6 +5,7 @@ import type {
   SimpleOperator,
 } from '../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {Catch, expandNode} from './catch.js';
 import type {Constraint} from './constraint.js';
 import type {Node} from './data.js';
@@ -181,6 +182,7 @@ test('fetch-start', () => {
 
 test('fetch-with-constraint-and-start', () => {
   const cases: {
+    columns?: Record<string, SchemaValue> | undefined;
     startData: Row[];
     start: Start;
     constraint: Constraint;
@@ -244,6 +246,11 @@ test('fetch-with-constraint-and-start', () => {
       ],
     },
     {
+      columns: {
+        a: {type: 'number'},
+        b: {type: 'boolean'},
+        c: {type: 'number'},
+      },
       startData: [
         {a: 2, b: false, c: 2},
         {a: 3, b: false, c: 1},
@@ -266,10 +273,9 @@ test('fetch-with-constraint-and-start', () => {
     const sort = [['a', 'asc']] as const;
     const s = createSource(
       'table',
-      {
+      c.columns ?? {
         a: {type: 'number'},
         b: {type: 'boolean'},
-        c: {type: 'number', optional: true},
       },
       ['a'],
     );
@@ -987,6 +993,7 @@ test('overlay-vs-filter', () => {
 test('overlay-vs-constraint-and-start', () => {
   const cases: {
     startData: Row[];
+    columns?: Record<string, SchemaValue> | undefined;
     start: Start;
     constraint: Constraint;
     change: SourceChange;
@@ -1112,6 +1119,11 @@ test('overlay-vs-constraint-and-start', () => {
       ],
     },
     {
+      columns: {
+        a: {type: 'number'},
+        b: {type: 'boolean'},
+        c: {type: 'number'},
+      },
       startData: [
         {a: 2, b: false, c: 1},
         {a: 3, b: false, c: 1},
@@ -1136,10 +1148,9 @@ test('overlay-vs-constraint-and-start', () => {
     const sort = [['a', 'asc']] as const;
     const s = createSource(
       'table',
-      {
+      c.columns ?? {
         a: {type: 'number'},
         b: {type: 'boolean'},
-        c: {type: 'number', optional: true},
       },
       ['a'],
     );
