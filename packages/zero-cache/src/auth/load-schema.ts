@@ -7,6 +7,7 @@ import type {Schema} from '../../../zero-schema/src/schema.js';
 import {readFile} from 'node:fs/promises';
 import * as v from '../../../shared/src/valita.js';
 import type {ZeroConfig} from '../config/zero-config.js';
+import {normalizeSchema} from '../../../zero-schema/src/normalized-schema.js';
 
 let loadedSchema:
   | Promise<{
@@ -24,9 +25,14 @@ function parseAuthConfig(
 } {
   try {
     const config = JSON.parse(input);
+    const authorization = v.parse(
+      config.authorization,
+      authorizationConfigSchema,
+    );
+    const normalizedSchema = normalizeSchema(config.schema);
     return {
-      authorization: v.parse(config.authorization, authorizationConfigSchema),
-      schema: config.schema as Schema,
+      authorization,
+      schema: normalizedSchema,
     };
   } catch (e) {
     throw new Error(`Failed to parse schema config from ${source}: ${e}`);
