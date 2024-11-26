@@ -624,10 +624,10 @@ export class Zero<const S extends Schema> {
   readonly mutateBatch: BatchMutator<S>;
 
   /**
-   * Whether this Zero instance has been closed. Once a Zero instance has
-   * been closed it no longer syncs and you can no longer read or write data out
-   * of it. After it has been closed it is pretty much useless and should not be
-   * used any more.
+   * Whether this Zero instance has been closed.
+   *
+   * Once a Zero instance has been closed it no longer syncs, you can no
+   * longer query or mutate data with it, and its query views stop updating.
    */
   get closed(): boolean {
     return this.#rep.closed;
@@ -636,7 +636,8 @@ export class Zero<const S extends Schema> {
   /**
    * Closes this Zero instance.
    *
-   * When closed all subscriptions end and no more read or writes are allowed.
+   * Once a Zero instance has been closed it no longer syncs, you can no
+   * longer query or mutate data with it, and its query views stop updating.
    */
   close(): Promise<void> {
     const lc = this.#lc.withContext('close');
