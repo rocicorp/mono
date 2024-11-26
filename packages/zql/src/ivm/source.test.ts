@@ -243,6 +243,23 @@ test('fetch-with-constraint-and-start', () => {
         {a: 9, b: false},
       ],
     },
+    {
+      startData: [
+        {a: 2, b: false, c: 2},
+        {a: 3, b: false, c: 1},
+        {a: 5, b: true, c: 2},
+        {a: 6, b: false, c: 1},
+        {a: 7, b: false, c: 2},
+        {a: 8, b: true, c: 1},
+        {a: 9, b: false, c: 2},
+      ],
+      start: {
+        row: {a: 6, b: false, c: 1},
+        basis: 'at',
+      },
+      constraint: {b: false, c: 1},
+      expected: [{a: 6, b: false, c: 1}],
+    },
   ];
 
   for (const c of cases) {
@@ -252,6 +269,7 @@ test('fetch-with-constraint-and-start', () => {
       {
         a: {type: 'number'},
         b: {type: 'boolean'},
+        c: {type: 'number', optional: true},
       },
       ['a'],
     );
@@ -694,6 +712,16 @@ test('overlay-vs-constraint', () => {
         {a: 4, b: false},
       ],
     },
+    {
+      startData: [
+        {a: 2, b: false},
+        {a: 4, b: true},
+        {a: 5, b: true},
+      ],
+      constraint: {a: 4, b: false},
+      change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
+      expected: [{a: 4, b: false}],
+    },
   ];
 
   for (const c of cases) {
@@ -1083,6 +1111,25 @@ test('overlay-vs-constraint-and-start', () => {
         {a: 7, b: false},
       ],
     },
+    {
+      startData: [
+        {a: 2, b: false, c: 1},
+        {a: 3, b: false, c: 1},
+        {a: 5, b: true, c: 1},
+        {a: 6, b: true, c: 2},
+        {a: 7, b: false, c: 2},
+      ],
+      start: {
+        row: {a: 5, b: true, c: 1},
+        basis: 'at',
+      },
+      constraint: {b: true, c: 1},
+      change: {type: 'add', row: {a: 5.5, b: true, c: 1}},
+      expected: [
+        {a: 5, b: true, c: 1},
+        {a: 5.5, b: true, c: 1},
+      ],
+    },
   ];
 
   for (const c of cases) {
@@ -1092,6 +1139,7 @@ test('overlay-vs-constraint-and-start', () => {
       {
         a: {type: 'number'},
         b: {type: 'boolean'},
+        c: {type: 'number', optional: true},
       },
       ['a'],
     );
@@ -1150,7 +1198,7 @@ test('per-output-sorts', () => {
   );
 });
 
-test('streas-are-one-time-only', () => {
+test('streams-are-one-time-only', () => {
   // It is very important that streas are one-time only. This is because on
   // the server, they are backed by cursors over streaming SQL queries which
   // can't be rewound or branched. This test ensures that streas from all
