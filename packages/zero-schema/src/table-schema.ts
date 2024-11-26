@@ -79,9 +79,9 @@ export type Supertype<TSchemas extends TableSchema[]> = {
 /**
  * A schema might have a relationship to itself.
  * Given we cannot reference a variable in the same statement we initialize
- * the variable, we use a function to get around this.
+ * the variable, we allow use of a function to get around this.
  */
-export type Lazy<T> = () => T;
+type Lazy<T> = T | (() => T);
 
 export type Relationship =
   | FieldRelationship<TableSchema, TableSchema>
@@ -98,7 +98,7 @@ export type FieldRelationship<
   source: keyof TSourceSchema['columns'];
   dest: {
     field: keyof TDestSchema['columns'];
-    schema: TDestSchema | Lazy<TDestSchema>;
+    schema: Lazy<TDestSchema>;
   };
 };
 
@@ -110,16 +110,11 @@ export type JunctionRelationship<
   TSourceSchema extends TableSchema,
   TJunctionSchema extends TableSchema,
   TDestSchema extends TableSchema,
-> = {
-  source: keyof TSourceSchema['columns'];
+> = FieldRelationship<TSourceSchema, TDestSchema> & {
   junction: {
     sourceField: keyof TJunctionSchema['columns'];
     destField: keyof TJunctionSchema['columns'];
-    schema: TDestSchema | Lazy<TJunctionSchema>;
-  };
-  dest: {
-    field: keyof TDestSchema['columns'];
-    schema: TDestSchema | Lazy<TJunctionSchema>;
+    schema: Lazy<TJunctionSchema>;
   };
 };
 
