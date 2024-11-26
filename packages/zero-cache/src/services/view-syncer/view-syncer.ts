@@ -16,7 +16,7 @@ import {
 import {stringify} from '../../types/bigint-json.js';
 import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB} from '../../types/pg.js';
-import {rowIDHash, type RowKey} from '../../types/row-key.js';
+import {rowIDString, type RowKey} from '../../types/row-key.js';
 import type {Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import type {ReplicaState} from '../replicator/replicator.js';
@@ -128,7 +128,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#drainCoordinator = drainCoordinator;
     this.#keepaliveMs = keepaliveMs;
     this.#idleTimeoutMs = idleTimeoutMs;
-    this.#cvrStore = new CVRStore(lc, db, taskID, clientGroupID);
+    this.#cvrStore = new CVRStore(
+      lc,
+      db,
+      taskID,
+      clientGroupID,
+      // On failure, cancel the #stateChanges subscription. The run()
+      // loop will then await #cvrStore.flushed() which rejects if necessary.
+      () => this.#stateChanges.cancel(),
+    );
   }
 
   #runInLockWithCVR<T>(fn: (cvr: CVRSnapshot) => Promise<T> | T): Promise<T> {
@@ -207,6 +215,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#lc.error?.(e);
       this.#cleanup(e);
     } finally {
+      // Always wait for the cvrStore to flush, regardless of how the service
+      // was stopped.
+      await this.#cvrStore.flushed().catch(e => this.#lc.error?.(e));
       this.#lc.info?.('view-syncer stopped');
       this.#stopped.resolve();
     }
@@ -710,7 +721,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     pokers: PokeHandler[],
   ) {
     const start = Date.now();
-    const rows = new CustomKeyMap<RowID, RowUpdate>(rowIDHash);
+    const rows = new CustomKeyMap<RowID, RowUpdate>(rowIDString);
     let total = 0;
 
     const processBatch = async () => {

@@ -121,8 +121,8 @@ export function applyChange(
         assert(found, 'node does not exist');
         view.splice(pos, 1);
       }
-      // Needed to ensure cleanup of operator state is done.
-      expandNode(change.node);
+      // Needed to ensure cleanup of operator state is fully done.
+      drainStreams(change.node);
       break;
     }
     case 'child': {
@@ -245,9 +245,10 @@ function makeEntryPreserveRelationships(
   return result;
 }
 
-function expandNode(node: Node) {
-  Object.entries(node.relationships).map(([k, v]) => [
-    k,
-    [...v].map(expandNode),
-  ]);
+function drainStreams(node: Node) {
+  for (const stream of Object.values(node.relationships)) {
+    for (const node of stream) {
+      drainStreams(node);
+    }
+  }
 }
