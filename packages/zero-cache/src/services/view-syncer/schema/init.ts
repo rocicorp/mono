@@ -28,6 +28,7 @@ export async function initViewSyncerSchema(
     // v5 enables asynchronous row-record flushing, and thus relies on
     // the logic that updates and checks the rowsVersion table in v3.
     5: {minSafeVersion: 3},
+    6: migrateV5ToV6,
   };
 
   await runSchemaMigrations(
@@ -73,5 +74,12 @@ const migrateV3ToV4: Migration = {
   migrateSchema: async (_, tx) => {
     await tx`ALTER TABLE cvr.instances ADD "owner" TEXT`;
     await tx`ALTER TABLE cvr.instances ADD "grantedAt" TIMESTAMPTZ`;
+  },
+};
+
+const migrateV5ToV6: Migration = {
+  migrateSchema: async (_, tx) => {
+    await tx`ALTER TABLE cvr."rows" DROP CONSTRAINT fk_rows_client_group`;
+    await tx`ALTER TABLE cvr."rowsVersion" DROP CONSTRAINT fk_rows_version_client_group`;
   },
 };

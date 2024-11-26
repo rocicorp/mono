@@ -221,6 +221,12 @@ export function compareRowsRows(a: RowsRow, b: RowsRow) {
   );
 }
 
+/**
+ * Note: Although `clientGroupID` logically references the same column in
+ * `cvr.instances`, a FOREIGN KEY constraint must not be declared as the
+ * `cvr.rows` TABLE needs to be updated without affecting the
+ * `SELECT ... FOR UPDATE` lock when `cvr.instances` is updated.
+ */
 const CREATE_CVR_ROWS_TABLE = `
 CREATE TABLE cvr.rows (
   "clientGroupID"    TEXT,
@@ -231,11 +237,7 @@ CREATE TABLE cvr.rows (
   "patchVersion"     TEXT NOT NULL,
   "refCounts"        JSONB,  -- {[queryHash: string]: number}, NULL for tombstone
 
-  PRIMARY KEY ("clientGroupID", "schema", "table", "rowKey"),
-
-  CONSTRAINT fk_rows_client_group
-    FOREIGN KEY("clientGroupID")
-    REFERENCES cvr.instances("clientGroupID")
+  PRIMARY KEY ("clientGroupID", "schema", "table", "rowKey")
 );
 
 -- For catchup patches.
@@ -255,15 +257,16 @@ CREATE INDEX row_ref_counts ON cvr.rows USING GIN ("refCounts");
  * a column in the `cvr.instances` table) so that general `cvr` updates
  * and `row` updates can be executed independently without serialization
  * conflicts.
+ *
+ * Note: Although `clientGroupID` logically references the same column in
+ * `cvr.instances`, a FOREIGN KEY constraint must not be declared as the
+ * `cvr.rows` TABLE needs to be updated without affecting the
+ * `SELECT ... FOR UPDATE` lock when `cvr.instances` is updated.
  */
 export const CREATE_CVR_ROWS_VERSION_TABLE = `
 CREATE TABLE cvr."rowsVersion" (
   "clientGroupID" TEXT PRIMARY KEY,
-  "version"       TEXT NOT NULL,
-
-  CONSTRAINT fk_rows_version_client_group
-    FOREIGN KEY("clientGroupID")
-    REFERENCES cvr.instances("clientGroupID")
+  "version"       TEXT NOT NULL
 );
 `;
 
