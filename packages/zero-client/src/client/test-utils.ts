@@ -219,15 +219,15 @@ export function zeroForTest<const S extends Schema>(
     userID: 'test-user-id-' + testZeroCounter++,
     auth: 'test-auth',
     schema,
+    // We do not want any unexpected onUpdateNeeded calls in tests. If the test
+    // needs to call onUpdateNeeded it should set this as needed.
+    onUpdateNeeded: errorOnUpdateNeeded
+      ? reason => {
+          throw new Error(`Unexpected update needed: ${reason.type}`);
+        }
+      : undefined,
     ...newOptions,
   } as ZeroOptions<S>);
-  // We do not want any unexpected onUpdateNeeded calls in tests. If the test
-  // needs to call onUpdateNeeded it should set this as needed.
-  if (errorOnUpdateNeeded) {
-    r.onUpdateNeeded = () => {
-      throw new Error('Unexpected update needed');
-    };
-  }
 
   return r;
 }

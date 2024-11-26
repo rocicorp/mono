@@ -93,7 +93,11 @@ import {
   type Series,
   getLastConnectErrorValue,
 } from './metrics.js';
-import type {ZeroAdvancedOptions, ZeroOptions} from './options.js';
+import type {
+  UpdateNeededReason,
+  ZeroAdvancedOptions,
+  ZeroOptions,
+} from './options.js';
 import {PROTOCOL_VERSION} from './protocol-version.js';
 import {QueryManager} from './query-manager.js';
 import {
@@ -177,22 +181,6 @@ export const CONNECT_TIMEOUT_MS = 10_000;
 const CHECK_CONNECTIVITY_ON_ERROR_FREQUENCY = 6;
 
 const NULL_LAST_MUTATION_ID_SENT = {clientID: '', id: -1} as const;
-
-/**
- * The reason {@link onUpdateNeeded} was called.
- */
-export type UpdateNeededReason =
-  // There is a new client group due to a new tab loading new code with
-  // different mutators, indexes, schema version, or format version.
-  // This tab cannot sync locally with this new tab until it updates to
-  // the new code.
-  | {type: 'NewClientGroup'}
-  // This is used when Zero tries to connect with a version that the server
-  // does not support
-  | {type: 'VersionNotSupported'}
-  // This is used when Zero tries to connect with a schema version that the
-  // server does not support
-  | {type: 'SchemaVersionNotSupported'};
 
 function convertOnUpdateNeededReason(
   reason: ReplicacheUpdateNeededReason,
@@ -288,17 +276,12 @@ export class Zero<const S extends Schema> {
 
   #online = false;
 
-  /**
-   * `onOnlineChange` is called when the Zero instance's online status
-   * changes.
-   */
-  onOnlineChange: ((online: boolean) => void) | null | undefined = null;
-
-  #onUpdateNeeded:
-    | ((reason: UpdateNeededReason, serverErrorMsg?: string) => void)
-    | null = null;
-  #onClientStateNotFound: ((reason?: string) => void) | null = null;
-  readonly #jurisdiction: 'eu' | undefined;
+  readonly #onOnlineChange: ((online: boolean) => void) | undefined;
+  readonly #onUpdateNeeded: (
+    reason: UpdateNeededReason,
+    serverErrorMsg?: string,
+  ) => void;
+  readonly #onClientStateNotFound: (reason?: string) => void;
   // Last cookie used to initiate a connection
   #connectCookie: NullableVersion = null;
   // Total number of sockets successfully connected by this client
@@ -315,56 +298,6 @@ export class Zero<const S extends Schema> {
   };
 
   readonly #zeroContext: ZeroContext;
-
-  /**
-   * `onUpdateNeeded` is called when a code update is needed.
-   *
-   * A code update can be needed because:
-   * - the server no longer supports the protocol version of the current code,
-   * - a new Zero client has created a new client group, because its code
-   *   has different mutators, indexes, schema version and/or format version
-   *   from this Zero client. This is likely due to the new client having
-   *   newer code. A code update is needed to be able to locally sync with this
-   *   new Zero client (i.e. to sync while offline, the clients can can
-   *   still sync with each other via the server).
-   *
-   * The default behavior is to reload the page (using `location.reload()`). Set
-   * this to `null` or provide your own function to prevent the page from
-   * reloading automatically. You may want to provide your own function to
-   * display a toast to inform the end user there is a new version of your app
-   * available and prompting them to refresh.
-   */
-  get onUpdateNeeded(): ((reason: UpdateNeededReason) => void) | null {
-    return this.#onUpdateNeeded;
-  }
-  set onUpdateNeeded(callback: ((reason: UpdateNeededReason) => void) | null) {
-    this.#onUpdateNeeded = callback;
-    this.#rep.onUpdateNeeded =
-      callback &&
-      (reason => {
-        callback(convertOnUpdateNeededReason(reason));
-      });
-  }
-
-  /**
-   * `onClientStateNotFound` is called when this client will no longer be able
-   * to sync due to missing synchronization state.  This can be because:
-   * - the local persistent synchronization state has been garbage collected.
-   *   This can happen if the client has no pending mutations and has not been
-   *   used for a while.
-   * - the zero-cache fails to find the synchronization state of this client.
-   *
-   * The default behavior is to reload the page (using `location.reload()`). Set
-   * this to `null` or provide your own function to prevent the page from
-   * reloading automatically.
-   */
-  get onClientStateNotFound(): (() => void) | null {
-    return this.#onClientStateNotFound;
-  }
-  set onClientStateNotFound(value: (() => void) | null) {
-    this.#onClientStateNotFound = value;
-    this.#rep.onClientStateNotFound = value;
-  }
 
   #connectResolver = resolver<void>();
   #pendingPullsByRequestID: Map<string, Resolver<PullResponseBody>> = new Map();
@@ -431,7 +364,8 @@ export class Zero<const S extends Schema> {
     const {
       userID,
       onOnlineChange,
-      jurisdiction,
+      onUpdateNeeded,
+      onClientStateNotFound,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
       kvStore = 'idb',
       schema,
@@ -446,16 +380,13 @@ export class Zero<const S extends Schema> {
       false /*options.enableAnalytics,*/, // Reenable analytics
     );
 
-    if (jurisdiction !== undefined && jurisdiction !== 'eu') {
-      throw new Error('ZeroOptions.jurisdiction must be "eu" if present.');
-    }
     if (hiddenTabDisconnectDelay < 0) {
       throw new Error(
         'ZeroOptions.hiddenTabDisconnectDelay must not be negative.',
       );
     }
 
-    this.onOnlineChange = onOnlineChange;
+    this.#onOnlineChange = onOnlineChange;
     this.#options = options;
 
     this.#logOptions = this.#createLogOptions({
@@ -500,29 +431,37 @@ export class Zero<const S extends Schema> {
     }
     this.#server = server;
     this.userID = userID;
-    this.#jurisdiction = jurisdiction;
     this.#lc = new LogContext(
       logOptions.logLevel,
       {clientID: rep.clientID},
       logOptions.logSink,
     );
-    this.onUpdateNeeded = (
-      reason: UpdateNeededReason,
-      serverErrorMsg?: string | undefined,
-    ) => {
-      reloadWithReason(
-        this.#lc,
-        this.#reload,
-        updateNeededReloadReason(reason, serverErrorMsg),
-      );
+
+    const onUpdateNeededCallback =
+      onUpdateNeeded ??
+      ((reason: UpdateNeededReason, serverErrorMsg?: string | undefined) => {
+        reloadWithReason(
+          this.#lc,
+          this.#reload,
+          updateNeededReloadReason(reason, serverErrorMsg),
+        );
+      });
+    this.#onUpdateNeeded = onUpdateNeededCallback;
+    this.#rep.onUpdateNeeded = reason => {
+      onUpdateNeededCallback(convertOnUpdateNeededReason(reason));
     };
-    this.onClientStateNotFound = (reason?: string) => {
-      reloadWithReason(
-        this.#lc,
-        this.#reload,
-        reason ?? ON_CLIENT_STATE_NOT_FOUND_REASON_CLIENT,
-      );
-    };
+
+    const onClientStateNotFoundCallback =
+      onClientStateNotFound ??
+      ((reason?: string) => {
+        reloadWithReason(
+          this.#lc,
+          this.#reload,
+          reason ?? ON_CLIENT_STATE_NOT_FOUND_REASON_CLIENT,
+        );
+      });
+    this.#onClientStateNotFound = onClientStateNotFoundCallback;
+    this.#rep.onClientStateNotFound = onClientStateNotFoundCallback;
 
     const {mutate, mutateBatch} = makeCRUDMutate<S>(
       normalizedSchema,
@@ -685,10 +624,10 @@ export class Zero<const S extends Schema> {
   readonly mutateBatch: BatchMutator<S>;
 
   /**
-   * Whether this Zero instance has been closed. Once a Zero instance has
-   * been closed it no longer syncs and you can no longer read or write data out
-   * of it. After it has been closed it is pretty much useless and should not be
-   * used any more.
+   * Whether this Zero instance has been closed.
+   *
+   * Once a Zero instance has been closed it no longer syncs, you can no
+   * longer query or mutate data with it, and its query views stop updating.
    */
   get closed(): boolean {
     return this.#rep.closed;
@@ -697,7 +636,8 @@ export class Zero<const S extends Schema> {
   /**
    * Closes this Zero instance.
    *
-   * When closed all subscriptions end and no more read or writes are allowed.
+   * Once a Zero instance has been closed it no longer syncs, you can no
+   * longer query or mutate data with it, and its query views stop updating.
    */
   close(): Promise<void> {
     const lc = this.#lc.withContext('close');
@@ -993,7 +933,6 @@ export class Zero<const S extends Schema> {
       this.#options.schema.version,
       this.userID,
       this.#rep.auth,
-      this.#jurisdiction,
       this.#lastMutationIDReceived,
       wsid,
       this.#options.logLevel === 'debug',
@@ -1524,7 +1463,7 @@ export class Zero<const S extends Schema> {
     }
 
     this.#online = online;
-    this.onOnlineChange?.(online);
+    this.#onOnlineChange?.(online);
   }
 
   /**
@@ -1646,7 +1585,6 @@ export async function createSocket(
   schemaVersion: number,
   userID: string,
   auth: string | undefined,
-  jurisdiction: 'eu' | undefined,
   lmid: number,
   wsid: string,
   debugPerf: boolean,
@@ -1661,9 +1599,6 @@ export async function createSocket(
   searchParams.set('clientGroupID', clientGroupID);
   searchParams.set('schemaVersion', schemaVersion.toString());
   searchParams.set('userID', userID);
-  if (jurisdiction !== undefined) {
-    searchParams.set('jurisdiction', jurisdiction);
-  }
   searchParams.set('baseCookie', baseCookie === null ? '' : String(baseCookie));
   searchParams.set('ts', String(performance.now()));
   searchParams.set('lmid', String(lmid));
