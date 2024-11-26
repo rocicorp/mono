@@ -25,6 +25,9 @@ export async function initViewSyncerSchema(
     2: migrateV1toV2,
     3: migrateV2ToV3,
     4: migrateV3ToV4,
+    // v5 enables asynchronous row-record flushing, and thus relies on
+    // the logic that updates and checks the rowsVersion table in v3.
+    5: {minSafeVersion: 3},
   };
 
   await runSchemaMigrations(

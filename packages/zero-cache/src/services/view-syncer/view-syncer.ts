@@ -128,7 +128,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#drainCoordinator = drainCoordinator;
     this.#keepaliveMs = keepaliveMs;
     this.#idleTimeoutMs = idleTimeoutMs;
-    this.#cvrStore = new CVRStore(lc, db, taskID, clientGroupID);
+    this.#cvrStore = new CVRStore(
+      lc,
+      db,
+      taskID,
+      clientGroupID,
+      // On failure, cancel the #stateChanges subscription. The run()
+      // loop will then await #cvrStore.flushed() which rejects if necessary.
+      () => this.#stateChanges.cancel(),
+    );
   }
 
   #runInLockWithCVR<T>(fn: (cvr: CVRSnapshot) => Promise<T> | T): Promise<T> {
@@ -207,6 +215,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#lc.error?.(e);
       this.#cleanup(e);
     } finally {
+      // Always wait for the cvrStore to flush, regardless of how the service
+      // was stopped.
+      await this.#cvrStore.flushed().catch(e => this.#lc.error?.(e));
       this.#lc.info?.('view-syncer stopped');
       this.#stopped.resolve();
     }
