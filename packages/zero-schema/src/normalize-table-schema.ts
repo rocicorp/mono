@@ -3,10 +3,10 @@ import {sortedEntries} from '../../shared/src/sorted-entries.js';
 import type {Writable} from '../../shared/src/writable.js';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
 import {
-  type SchemaValue,
   isFieldRelationship,
   type FieldRelationship,
   type JunctionRelationship,
+  type SchemaValue,
   type TableSchema,
 } from './table-schema.js';
 
@@ -188,17 +188,8 @@ function normalizeFieldRelationship(
   };
 }
 
-type NormalizedJunctionRelationship = {
-  source: string;
-  junction: {
-    sourceField: string;
-    destField: string;
-    schema: NormalizedTableSchema;
-  };
-  dest: {
-    field: string;
-    schema: NormalizedTableSchema;
-  };
+type NormalizedJunctionRelationship = NormalizedFieldRelationship & {
+  junction: NormalizedFieldRelationship;
 };
 
 function normalizeJunctionRelationship(
@@ -206,22 +197,11 @@ function normalizeJunctionRelationship(
   tableSchemaCache: TableSchemaCache,
 ): NormalizedJunctionRelationship {
   return {
-    source: relationship.source,
-    junction: {
-      sourceField: relationship.junction.sourceField,
-      destField: relationship.junction.destField,
-      schema: normalizeLazyTableSchema(
-        relationship.junction.schema,
-        tableSchemaCache,
-      ),
-    },
-    dest: {
-      field: relationship.dest.field,
-      schema: normalizeLazyTableSchema(
-        relationship.dest.schema,
-        tableSchemaCache,
-      ),
-    },
+    ...normalizeFieldRelationship(relationship, tableSchemaCache),
+    junction: normalizeFieldRelationship(
+      relationship.junction,
+      tableSchemaCache,
+    ),
   };
 }
 

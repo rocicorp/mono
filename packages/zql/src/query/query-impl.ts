@@ -227,7 +227,7 @@ export abstract class AbstractQuery<
 
     if (isJunctionRelationship(junctionRelationship)) {
       const destSchema = junctionRelationship.dest.schema;
-      const junctionSchema = junctionRelationship.junction.schema;
+      const junctionSchema = junctionRelationship.junction.dest.schema;
       const sq = cb(
         this._newQuery(
           destSchema,
@@ -247,7 +247,7 @@ export abstract class AbstractQuery<
             {
               correlation: {
                 parentField: junctionRelationship.source,
-                childField: junctionRelationship.junction.sourceField,
+                childField: junctionRelationship.junction.source,
                 op: '=',
               },
               subquery: {
@@ -257,7 +257,7 @@ export abstract class AbstractQuery<
                 related: [
                   {
                     correlation: {
-                      parentField: junctionRelationship.junction.destField,
+                      parentField: junctionRelationship.junction.dest.field,
                       childField: junctionRelationship.dest.field,
                       op: '=',
                     },
@@ -401,7 +401,7 @@ export abstract class AbstractQuery<
 
     if (isJunctionRelationship(junctionRelationship)) {
       const destSchema = junctionRelationship.dest.schema;
-      const junctionSchema = junctionRelationship.junction.schema;
+      const junctionSchema = junctionRelationship.junction.dest.schema;
       const queryToDest = cb(
         this._newQuery(
           destSchema,
@@ -418,7 +418,7 @@ export abstract class AbstractQuery<
         related: {
           correlation: {
             parentField: junctionRelationship.source,
-            childField: junctionRelationship.junction.sourceField,
+            childField: junctionRelationship.junction.source,
             op: '=',
           },
           subquery: {
@@ -429,7 +429,7 @@ export abstract class AbstractQuery<
               type: 'correlatedSubquery',
               related: {
                 correlation: {
-                  parentField: junctionRelationship.junction.destField,
+                  parentField: junctionRelationship.junction.dest.field,
                   childField: junctionRelationship.dest.field,
                   op: '=',
                 },
