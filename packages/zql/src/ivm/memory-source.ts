@@ -264,7 +264,7 @@ export class MemorySource implements Source {
     const predicate = conn.filters?.predicate;
     const matchesConstraintAndFilters = predicate
       ? (row: Row) => matchesConstraint(row) && predicate(row)
-      : (row: Row) => matchesConstraint(row);
+      : matchesConstraint;
     const nextLowerKey = (row: Row | undefined) => {
       if (!row) {
         return undefined;
