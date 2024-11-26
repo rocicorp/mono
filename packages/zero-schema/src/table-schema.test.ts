@@ -52,22 +52,22 @@ test('relationship schema types', () => {
     },
     relationships: {
       comments: {
-        source: 'id',
+        source: ['id'],
         dest: {
-          field: 'issueID',
+          field: ['issueID'],
           schema: commentSchema,
         },
       },
       labels: {
-        source: 'id',
+        source: ['id'],
         dest: {
-          field: 'id',
+          field: ['id'],
           schema: () => labelSchema,
         },
         junction: {
-          source: 'issueID',
+          source: ['issueID'],
           dest: {
-            field: 'labelID',
+            field: ['labelID'],
             schema: issueLabelSchema,
           },
         },
