@@ -4,7 +4,7 @@ import {useState} from 'react';
 import labelIcon from '../assets/icons/label.svg';
 import {useZero} from '../hooks/use-zero.js';
 import {Button} from './button.js';
-import Selector from './selector.js';
+import {Combobox} from './combobox.js';
 import UserPicker from './user-picker.js';
 
 export type Selection =
@@ -70,7 +70,7 @@ export default function Filter({onSelect}: Props) {
             </div>
             <div className="filter-modal-item">
               <p className="filter-modal-label">Label</p>
-              <Selector
+              <Combobox
                 onChange={l => handleSelect({label: l.name})}
                 items={labels.map(c => ({
                   text: c.name,
