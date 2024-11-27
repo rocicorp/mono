@@ -38,9 +38,23 @@ suite('take with no partition', () => {
         limit: 0,
         pushes: [{type: 'add', row: {id: 'i4', created: 50}}],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 50,
+                "id": "i4",
+              },
+              "type": "add",
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`{}`);
+      expect(pushes).toMatchInlineSnapshot(`[]`);
     });
 
     test('less than limit add row at start', () => {
@@ -54,9 +68,50 @@ suite('take with no partition', () => {
         limit: 5,
         pushes: [{type: 'add', row: {id: 'i4', created: 50}}],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 50,
+                "id": "i4",
+              },
+              "type": "add",
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`
+        {
+          "["take"]": {
+            "bound": {
+              "created": 300,
+              "id": "i3",
+            },
+            "size": 4,
+          },
+          "maxBound": {
+            "created": 300,
+            "id": "i3",
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 50,
+                "id": "i4",
+              },
+            },
+            "type": "add",
+          },
+        ]
+      `);
     });
 
     test('less than limit add row at end', () => {
@@ -70,9 +125,50 @@ suite('take with no partition', () => {
         limit: 5,
         pushes: [{type: 'add', row: {id: 'i4', created: 350}}],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 350,
+                "id": "i4",
+              },
+              "type": "add",
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`
+        {
+          "["take"]": {
+            "bound": {
+              "created": 350,
+              "id": "i4",
+            },
+            "size": 4,
+          },
+          "maxBound": {
+            "created": 350,
+            "id": "i4",
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 350,
+                "id": "i4",
+              },
+            },
+            "type": "add",
+          },
+        ]
+      `);
     });
 
     test('at limit add row after bound', () => {
@@ -87,9 +183,37 @@ suite('take with no partition', () => {
         limit: 3,
         pushes: [{type: 'add', row: {id: 'i5', created: 350}}],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 350,
+                "id": "i5",
+              },
+              "type": "add",
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`
+        {
+          "["take"]": {
+            "bound": {
+              "created": 300,
+              "id": "i3",
+            },
+            "size": 3,
+          },
+          "maxBound": {
+            "created": 300,
+            "id": "i3",
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`[]`);
     });
 
     test('at limit add row at start', () => {
@@ -104,9 +228,74 @@ suite('take with no partition', () => {
         limit: 3,
         pushes: [{type: 'add', row: {id: 'i5', created: 50}}],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 50,
+                "id": "i5",
+              },
+              "type": "add",
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "before",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                },
+              },
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`
+        {
+          "["take"]": {
+            "bound": {
+              "created": 200,
+              "id": "i2",
+            },
+            "size": 3,
+          },
+          "maxBound": {
+            "created": 300,
+            "id": "i3",
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 300,
+                "id": "i3",
+              },
+            },
+            "type": "remove",
+          },
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 50,
+                "id": "i5",
+              },
+            },
+            "type": "add",
+          },
+        ]
+      `);
     });
 
     test('at limit add row at end', () => {
@@ -121,9 +310,74 @@ suite('take with no partition', () => {
         limit: 3,
         pushes: [{type: 'add', row: {id: 'i5', created: 250}}],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 250,
+                "id": "i5",
+              },
+              "type": "add",
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "before",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                },
+              },
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`
+        {
+          "["take"]": {
+            "bound": {
+              "created": 250,
+              "id": "i5",
+            },
+            "size": 3,
+          },
+          "maxBound": {
+            "created": 300,
+            "id": "i3",
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 300,
+                "id": "i3",
+              },
+            },
+            "type": "remove",
+          },
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 250,
+                "id": "i5",
+              },
+            },
+            "type": "add",
+          },
+        ]
+      `);
     });
   });
 
@@ -139,9 +393,23 @@ suite('take with no partition', () => {
         limit: 0,
         pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`{}`);
+      expect(pushes).toMatchInlineSnapshot(`[]`);
     });
 
     test('less than limit remove row at start', () => {
@@ -155,9 +423,64 @@ suite('take with no partition', () => {
         limit: 5,
         pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "before",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                },
+              },
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`
+        {
+          "["take"]": {
+            "bound": {
+              "created": 300,
+              "id": "i3",
+            },
+            "size": 2,
+          },
+          "maxBound": {
+            "created": 300,
+            "id": "i3",
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+            },
+            "type": "remove",
+          },
+        ]
+      `);
     });
 
     test('less than limit remove row at end', () => {
@@ -171,9 +494,64 @@ suite('take with no partition', () => {
         limit: 5,
         pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 300,
+                "id": "i3",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "before",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                },
+              },
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`
+        {
+          "["take"]": {
+            "bound": {
+              "created": 200,
+              "id": "i2",
+            },
+            "size": 2,
+          },
+          "maxBound": {
+            "created": 300,
+            "id": "i3",
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 300,
+                "id": "i3",
+              },
+            },
+            "type": "remove",
+          },
+        ]
+      `);
     });
 
     test('at limit remove row after bound', () => {
@@ -188,9 +566,37 @@ suite('take with no partition', () => {
         limit: 3,
         pushes: [{type: 'remove', row: {id: 'i4', created: 400}}],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 400,
+                "id": "i4",
+              },
+              "type": "remove",
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`
+        {
+          "["take"]": {
+            "bound": {
+              "created": 300,
+              "id": "i3",
+            },
+            "size": 3,
+          },
+          "maxBound": {
+            "created": 300,
+            "id": "i3",
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`[]`);
     });
 
     test('at limit remove row at start with row after', () => {
@@ -205,9 +611,74 @@ suite('take with no partition', () => {
         limit: 3,
         pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "before",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                },
+              },
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`
+        {
+          "["take"]": {
+            "bound": {
+              "created": 400,
+              "id": "i4",
+            },
+            "size": 3,
+          },
+          "maxBound": {
+            "created": 400,
+            "id": "i4",
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+            },
+            "type": "remove",
+          },
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 400,
+                "id": "i4",
+              },
+            },
+            "type": "add",
+          },
+        ]
+      `);
     });
 
     test('at limit remove row at start with row after, limit 2', () => {
@@ -222,9 +693,74 @@ suite('take with no partition', () => {
         limit: 2,
         pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "before",
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                },
+              },
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`
+        {
+          "["take"]": {
+            "bound": {
+              "created": 300,
+              "id": "i3",
+            },
+            "size": 2,
+          },
+          "maxBound": {
+            "created": 300,
+            "id": "i3",
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+            },
+            "type": "remove",
+          },
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 300,
+                "id": "i3",
+              },
+            },
+            "type": "add",
+          },
+        ]
+      `);
     });
 
     test('at limit remove row at start with row after, limit 1', () => {
@@ -239,9 +775,74 @@ suite('take with no partition', () => {
         limit: 1,
         pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "before",
+                "row": {
+                  "created": 100,
+                  "id": "i1",
+                },
+              },
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`
+        {
+          "["take"]": {
+            "bound": {
+              "created": 200,
+              "id": "i2",
+            },
+            "size": 1,
+          },
+          "maxBound": {
+            "created": 200,
+            "id": "i2",
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+            },
+            "type": "remove",
+          },
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 200,
+                "id": "i2",
+              },
+            },
+            "type": "add",
+          },
+        ]
+      `);
     });
 
     test('at limit remove row at start no row after', () => {
@@ -255,9 +856,64 @@ suite('take with no partition', () => {
         limit: 3,
         pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "before",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                },
+              },
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`
+        {
+          "["take"]": {
+            "bound": {
+              "created": 300,
+              "id": "i3",
+            },
+            "size": 2,
+          },
+          "maxBound": {
+            "created": 300,
+            "id": "i3",
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+            },
+            "type": "remove",
+          },
+        ]
+      `);
     });
 
     test('at limit remove row at end with row after', () => {
@@ -272,9 +928,74 @@ suite('take with no partition', () => {
         limit: 3,
         pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 300,
+                "id": "i3",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "before",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                },
+              },
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`
+        {
+          "["take"]": {
+            "bound": {
+              "created": 400,
+              "id": "i4",
+            },
+            "size": 3,
+          },
+          "maxBound": {
+            "created": 400,
+            "id": "i4",
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 300,
+                "id": "i3",
+              },
+            },
+            "type": "remove",
+          },
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 400,
+                "id": "i4",
+              },
+            },
+            "type": "add",
+          },
+        ]
+      `);
     });
 
     test('at limit remove row at end, no row after', () => {
@@ -288,9 +1009,64 @@ suite('take with no partition', () => {
         limit: 3,
         pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 300,
+                "id": "i3",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "before",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                },
+              },
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`
+        {
+          "["take"]": {
+            "bound": {
+              "created": 200,
+              "id": "i2",
+            },
+            "size": 2,
+          },
+          "maxBound": {
+            "created": 300,
+            "id": "i3",
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 300,
+                "id": "i3",
+              },
+            },
+            "type": "remove",
+          },
+        ]
+      `);
     });
   });
 
@@ -327,9 +1103,29 @@ suite('take with no partition', () => {
           },
         ],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "oldRow": {
+                "created": 200,
+                "id": "i2",
+                "text": "b",
+              },
+              "row": {
+                "created": 200,
+                "id": "i2",
+                "text": "c",
+              },
+              "type": "edit",
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`{}`);
+      expect(pushes).toMatchInlineSnapshot(`[]`);
     });
 
     describe('less than limit ', () => {
@@ -345,9 +1141,61 @@ suite('take with no partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 100,
+                  "id": "i1",
+                  "text": "a",
+                },
+                "row": {
+                  "created": 100,
+                  "id": "i1",
+                  "text": "a2",
+                },
+                "type": "edit",
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take"]": {
+              "bound": {
+                "created": 400,
+                "id": "i4",
+                "text": "d",
+              },
+              "size": 4,
+            },
+            "maxBound": {
+              "created": 400,
+              "id": "i4",
+              "text": "d",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "oldRow": {
+                "created": 100,
+                "id": "i1",
+                "text": "a",
+              },
+              "row": {
+                "created": 100,
+                "id": "i1",
+                "text": "a2",
+              },
+              "type": "edit",
+            },
+          ]
+        `);
       });
 
       test('edit row at end', () => {
@@ -362,9 +1210,61 @@ suite('take with no partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": "d",
+                },
+                "row": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": "d2",
+                },
+                "type": "edit",
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take"]": {
+              "bound": {
+                "created": 400,
+                "id": "i4",
+                "text": "d",
+              },
+              "size": 4,
+            },
+            "maxBound": {
+              "created": 400,
+              "id": "i4",
+              "text": "d",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "oldRow": {
+                "created": 400,
+                "id": "i4",
+                "text": "d",
+              },
+              "row": {
+                "created": 400,
+                "id": "i4",
+                "text": "d2",
+              },
+              "type": "edit",
+            },
+          ]
+        `);
       });
     });
 
@@ -381,9 +1281,45 @@ suite('take with no partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": "d",
+                },
+                "row": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": "d2",
+                },
+                "type": "edit",
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take"]": {
+              "bound": {
+                "created": 300,
+                "id": "i3",
+                "text": "c",
+              },
+              "size": 3,
+            },
+            "maxBound": {
+              "created": 300,
+              "id": "i3",
+              "text": "c",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`[]`);
       });
 
       test('edit row before boundary', () => {
@@ -398,9 +1334,61 @@ suite('take with no partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": "b",
+                },
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": "b2",
+                },
+                "type": "edit",
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take"]": {
+              "bound": {
+                "created": 300,
+                "id": "i3",
+                "text": "c",
+              },
+              "size": 3,
+            },
+            "maxBound": {
+              "created": 300,
+              "id": "i3",
+              "text": "c",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "oldRow": {
+                "created": 200,
+                "id": "i2",
+                "text": "b",
+              },
+              "row": {
+                "created": 200,
+                "id": "i2",
+                "text": "b2",
+              },
+              "type": "edit",
+            },
+          ]
+        `);
       });
 
       test('edit row at boundary', () => {
@@ -415,9 +1403,61 @@ suite('take with no partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": "c",
+                },
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": "c2",
+                },
+                "type": "edit",
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take"]": {
+              "bound": {
+                "created": 300,
+                "id": "i3",
+                "text": "c",
+              },
+              "size": 3,
+            },
+            "maxBound": {
+              "created": 300,
+              "id": "i3",
+              "text": "c",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "oldRow": {
+                "created": 300,
+                "id": "i3",
+                "text": "c",
+              },
+              "row": {
+                "created": 300,
+                "id": "i3",
+                "text": "c2",
+              },
+              "type": "edit",
+            },
+          ]
+        `);
       });
 
       test('edit row before boundary, changing its order', () => {
@@ -432,9 +1472,61 @@ suite('take with no partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": "b",
+                },
+                "row": {
+                  "created": 50,
+                  "id": "i2",
+                  "text": "b2",
+                },
+                "type": "edit",
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take"]": {
+              "bound": {
+                "created": 300,
+                "id": "i3",
+                "text": "c",
+              },
+              "size": 3,
+            },
+            "maxBound": {
+              "created": 300,
+              "id": "i3",
+              "text": "c",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "oldRow": {
+                "created": 200,
+                "id": "i2",
+                "text": "b",
+              },
+              "row": {
+                "created": 50,
+                "id": "i2",
+                "text": "b2",
+              },
+              "type": "edit",
+            },
+          ]
+        `);
       });
 
       test('edit row after boundary to make it the new boundary', () => {
@@ -449,9 +1541,85 @@ suite('take with no partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": "d",
+                },
+                "row": {
+                  "created": 250,
+                  "id": "i4",
+                  "text": "d",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              "takeSnitch",
+              "fetch",
+              {
+                "constraint": undefined,
+                "start": {
+                  "basis": "before",
+                  "row": {
+                    "created": 300,
+                    "id": "i3",
+                    "text": "c",
+                  },
+                },
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take"]": {
+              "bound": {
+                "created": 250,
+                "id": "i4",
+                "text": "d",
+              },
+              "size": 3,
+            },
+            "maxBound": {
+              "created": 300,
+              "id": "i3",
+              "text": "c",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": "c",
+                },
+              },
+              "type": "remove",
+            },
+            {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 250,
+                  "id": "i4",
+                  "text": "d",
+                },
+              },
+              "type": "add",
+            },
+          ]
+        `);
       });
 
       test('edit row before boundary to make it new boundary', () => {
@@ -466,9 +1634,76 @@ suite('take with no partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": "b",
+                },
+                "row": {
+                  "created": 350,
+                  "id": "i2",
+                  "text": "b2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              "takeSnitch",
+              "fetch",
+              {
+                "constraint": undefined,
+                "start": {
+                  "basis": "after",
+                  "row": {
+                    "created": 300,
+                    "id": "i3",
+                    "text": "c",
+                  },
+                },
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take"]": {
+              "bound": {
+                "created": 350,
+                "id": "i2",
+                "text": "b2",
+              },
+              "size": 3,
+            },
+            "maxBound": {
+              "created": 350,
+              "id": "i2",
+              "text": "b2",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "oldRow": {
+                "created": 200,
+                "id": "i2",
+                "text": "b",
+              },
+              "row": {
+                "created": 350,
+                "id": "i2",
+                "text": "b2",
+              },
+              "type": "edit",
+            },
+          ]
+        `);
       });
 
       test('edit row before boundary to fetch new boundary', () => {
@@ -483,9 +1718,85 @@ suite('take with no partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": "b",
+                },
+                "row": {
+                  "created": 450,
+                  "id": "i2",
+                  "text": "b2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              "takeSnitch",
+              "fetch",
+              {
+                "constraint": undefined,
+                "start": {
+                  "basis": "after",
+                  "row": {
+                    "created": 300,
+                    "id": "i3",
+                    "text": "c",
+                  },
+                },
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take"]": {
+              "bound": {
+                "created": 400,
+                "id": "i4",
+                "text": "d",
+              },
+              "size": 3,
+            },
+            "maxBound": {
+              "created": 400,
+              "id": "i4",
+              "text": "d",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": "b",
+                },
+              },
+              "type": "remove",
+            },
+            {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": "d",
+                },
+              },
+              "type": "add",
+            },
+          ]
+        `);
       });
     });
 
@@ -501,9 +1812,61 @@ suite('take with no partition', () => {
           },
         ],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "oldRow": {
+                "created": 100,
+                "id": "i1",
+                "text": "a",
+              },
+              "row": {
+                "created": 50,
+                "id": "i1",
+                "text": "a2",
+              },
+              "type": "edit",
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`
+        {
+          "["take"]": {
+            "bound": {
+              "created": 50,
+              "id": "i1",
+              "text": "a2",
+            },
+            "size": 1,
+          },
+          "maxBound": {
+            "created": 100,
+            "id": "i1",
+            "text": "a",
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "oldRow": {
+              "created": 100,
+              "id": "i1",
+              "text": "a",
+            },
+            "row": {
+              "created": 50,
+              "id": "i1",
+              "text": "a2",
+            },
+            "type": "edit",
+          },
+        ]
+      `);
     });
   });
 });
@@ -538,9 +1901,24 @@ suite('take with partition', () => {
         limit: 0,
         pushes: [{type: 'add', row: {id: 'c6', issueID: 'i2', created: 150}}],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 150,
+                "id": "c6",
+                "issueID": "i2",
+              },
+              "type": "add",
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`{}`);
+      expect(pushes).toMatchInlineSnapshot(`[]`);
     });
 
     test('less than limit add row at start', () => {
@@ -560,9 +1938,62 @@ suite('take with partition', () => {
         limit: 5,
         pushes: [{type: 'add', row: {id: 'c6', issueID: 'i2', created: 150}}],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 150,
+                "id": "c6",
+                "issueID": "i2",
+              },
+              "type": "add",
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`
+        {
+          "["take","i1"]": {
+            "bound": {
+              "created": 300,
+              "id": "c3",
+              "issueID": "i1",
+            },
+            "size": 3,
+          },
+          "["take","i2"]": {
+            "bound": {
+              "created": 500,
+              "id": "c5",
+              "issueID": "i2",
+            },
+            "size": 3,
+          },
+          "maxBound": {
+            "created": 500,
+            "id": "c5",
+            "issueID": "i2",
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 150,
+                "id": "c6",
+                "issueID": "i2",
+              },
+            },
+            "type": "add",
+          },
+        ]
+      `);
     });
 
     test('at limit add row at end', () => {
@@ -586,9 +2017,90 @@ suite('take with partition', () => {
         limit: 3,
         pushes: [{type: 'add', row: {id: 'c8', issueID: 'i2', created: 550}}],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 550,
+                "id": "c8",
+                "issueID": "i2",
+              },
+              "type": "add",
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i2",
+              },
+              "start": {
+                "basis": "before",
+                "row": {
+                  "created": 600,
+                  "id": "c6",
+                  "issueID": "i2",
+                },
+              },
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`
+        {
+          "["take","i1"]": {
+            "bound": {
+              "created": 580,
+              "id": "c3",
+              "issueID": "i1",
+            },
+            "size": 3,
+          },
+          "["take","i2"]": {
+            "bound": {
+              "created": 550,
+              "id": "c8",
+              "issueID": "i2",
+            },
+            "size": 3,
+          },
+          "maxBound": {
+            "created": 600,
+            "id": "c6",
+            "issueID": "i2",
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 600,
+                "id": "c6",
+                "issueID": "i2",
+              },
+            },
+            "type": "remove",
+          },
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 550,
+                "id": "c8",
+                "issueID": "i2",
+              },
+            },
+            "type": "add",
+          },
+        ]
+      `);
     });
 
     test('add with non-fetched partition value', () => {
@@ -608,9 +2120,48 @@ suite('take with partition', () => {
         limit: 3,
         pushes: [{type: 'add', row: {id: 'c6', issueID: '3', created: 550}}],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 550,
+                "id": "c6",
+                "issueID": "3",
+              },
+              "type": "add",
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`
+        {
+          "["take","i1"]": {
+            "bound": {
+              "created": 300,
+              "id": "c3",
+              "issueID": "i1",
+            },
+            "size": 3,
+          },
+          "["take","i2"]": {
+            "bound": {
+              "created": 500,
+              "id": "c5",
+              "issueID": "i2",
+            },
+            "size": 2,
+          },
+          "maxBound": {
+            "created": 500,
+            "id": "c5",
+            "issueID": "i2",
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`[]`);
     });
   });
 
@@ -632,9 +2183,24 @@ suite('take with partition', () => {
           {type: 'remove', row: {id: 'c1', issueID: 'i1', created: 100}},
         ],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "c1",
+                "issueID": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`{}`);
+      expect(pushes).toMatchInlineSnapshot(`[]`);
     });
 
     test('less than limit remove row at start', () => {
@@ -656,9 +2222,79 @@ suite('take with partition', () => {
           {type: 'remove', row: {id: 'c1', issueID: 'i1', created: 100}},
         ],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "c1",
+                "issueID": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+              "start": {
+                "basis": "before",
+                "row": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                },
+              },
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`
+        {
+          "["take","i1"]": {
+            "bound": {
+              "created": 300,
+              "id": "c3",
+              "issueID": "i1",
+            },
+            "size": 2,
+          },
+          "["take","i2"]": {
+            "bound": {
+              "created": 500,
+              "id": "c5",
+              "issueID": "i2",
+            },
+            "size": 2,
+          },
+          "maxBound": {
+            "created": 500,
+            "id": "c5",
+            "issueID": "i2",
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`
+        [
+          {
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 100,
+                "id": "c1",
+                "issueID": "i1",
+              },
+            },
+            "type": "remove",
+          },
+        ]
+      `);
     });
 
     test('remove row unfetched partition', () => {
@@ -681,9 +2317,48 @@ suite('take with partition', () => {
           {type: 'remove', row: {id: 'c6', issueID: 'i3', created: 600}},
         ],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "row": {
+                "created": 600,
+                "id": "c6",
+                "issueID": "i3",
+              },
+              "type": "remove",
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`
+        {
+          "["take","i1"]": {
+            "bound": {
+              "created": 300,
+              "id": "c3",
+              "issueID": "i1",
+            },
+            "size": 3,
+          },
+          "["take","i2"]": {
+            "bound": {
+              "created": 500,
+              "id": "c5",
+              "issueID": "i2",
+            },
+            "size": 2,
+          },
+          "maxBound": {
+            "created": 500,
+            "id": "c5",
+            "issueID": "i2",
+          },
+        }
+      `);
+      expect(pushes).toMatchInlineSnapshot(`[]`);
     });
   });
 
@@ -729,9 +2404,31 @@ suite('take with partition', () => {
           },
         ],
       });
-      expect(messages).toMatchInlineSnapshot();
-      expect(storage).toMatchInlineSnapshot();
-      expect(pushes).toMatchInlineSnapshot();
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "takeSnitch",
+            "push",
+            {
+              "oldRow": {
+                "created": 200,
+                "id": "c2",
+                "issueID": "i1",
+                "text": "b",
+              },
+              "row": {
+                "created": 200,
+                "id": "c2",
+                "issueID": "i1",
+                "text": "b2",
+              },
+              "type": "edit",
+            },
+          ],
+        ]
+      `);
+      expect(storage).toMatchInlineSnapshot(`{}`);
+      expect(pushes).toMatchInlineSnapshot(`[]`);
     });
 
     describe('less than limit ', () => {
@@ -747,9 +2444,76 @@ suite('take with partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+                "row": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a2",
+                },
+                "type": "edit",
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take","i1"]": {
+              "bound": {
+                "created": 300,
+                "id": "c3",
+                "issueID": "i1",
+                "text": "c",
+              },
+              "size": 3,
+            },
+            "["take","i2"]": {
+              "bound": {
+                "created": 500,
+                "id": "c5",
+                "issueID": "i2",
+                "text": "e",
+              },
+              "size": 2,
+            },
+            "maxBound": {
+              "created": 500,
+              "id": "c5",
+              "issueID": "i2",
+              "text": "e",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "oldRow": {
+                "created": 100,
+                "id": "c1",
+                "issueID": "i1",
+                "text": "a",
+              },
+              "row": {
+                "created": 100,
+                "id": "c1",
+                "issueID": "i1",
+                "text": "a2",
+              },
+              "type": "edit",
+            },
+          ]
+        `);
       });
 
       test('edit row at end', () => {
@@ -764,9 +2528,76 @@ suite('take with partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e",
+                },
+                "row": {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e2",
+                },
+                "type": "edit",
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take","i1"]": {
+              "bound": {
+                "created": 300,
+                "id": "c3",
+                "issueID": "i1",
+                "text": "c",
+              },
+              "size": 3,
+            },
+            "["take","i2"]": {
+              "bound": {
+                "created": 500,
+                "id": "c5",
+                "issueID": "i2",
+                "text": "e",
+              },
+              "size": 2,
+            },
+            "maxBound": {
+              "created": 500,
+              "id": "c5",
+              "issueID": "i2",
+              "text": "e",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "oldRow": {
+                "created": 500,
+                "id": "c5",
+                "issueID": "i2",
+                "text": "e",
+              },
+              "row": {
+                "created": 500,
+                "id": "c5",
+                "issueID": "i2",
+                "text": "e2",
+              },
+              "type": "edit",
+            },
+          ]
+        `);
       });
     });
 
@@ -783,9 +2614,58 @@ suite('take with partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+                "row": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c2",
+                },
+                "type": "edit",
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take","i1"]": {
+              "bound": {
+                "created": 200,
+                "id": "c2",
+                "issueID": "i1",
+                "text": "b",
+              },
+              "size": 2,
+            },
+            "["take","i2"]": {
+              "bound": {
+                "created": 500,
+                "id": "c5",
+                "issueID": "i2",
+                "text": "e",
+              },
+              "size": 2,
+            },
+            "maxBound": {
+              "created": 500,
+              "id": "c5",
+              "issueID": "i2",
+              "text": "e",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`[]`);
       });
 
       test('edit row before boundary', () => {
@@ -800,9 +2680,76 @@ suite('take with partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+                "row": {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b2",
+                },
+                "type": "edit",
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take","i1"]": {
+              "bound": {
+                "created": 300,
+                "id": "c3",
+                "issueID": "i1",
+                "text": "c",
+              },
+              "size": 3,
+            },
+            "["take","i2"]": {
+              "bound": {
+                "created": 500,
+                "id": "c5",
+                "issueID": "i2",
+                "text": "e",
+              },
+              "size": 2,
+            },
+            "maxBound": {
+              "created": 500,
+              "id": "c5",
+              "issueID": "i2",
+              "text": "e",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "oldRow": {
+                "created": 200,
+                "id": "c2",
+                "issueID": "i1",
+                "text": "b",
+              },
+              "row": {
+                "created": 200,
+                "id": "c2",
+                "issueID": "i1",
+                "text": "b2",
+              },
+              "type": "edit",
+            },
+          ]
+        `);
       });
 
       test('edit row at boundary', () => {
@@ -817,9 +2764,76 @@ suite('take with partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+                "row": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c2",
+                },
+                "type": "edit",
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take","i1"]": {
+              "bound": {
+                "created": 300,
+                "id": "c3",
+                "issueID": "i1",
+                "text": "c",
+              },
+              "size": 3,
+            },
+            "["take","i2"]": {
+              "bound": {
+                "created": 500,
+                "id": "c5",
+                "issueID": "i2",
+                "text": "e",
+              },
+              "size": 2,
+            },
+            "maxBound": {
+              "created": 500,
+              "id": "c5",
+              "issueID": "i2",
+              "text": "e",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "oldRow": {
+                "created": 300,
+                "id": "c3",
+                "issueID": "i1",
+                "text": "c",
+              },
+              "row": {
+                "created": 300,
+                "id": "c3",
+                "issueID": "i1",
+                "text": "c2",
+              },
+              "type": "edit",
+            },
+          ]
+        `);
       });
 
       test('edit row at boundary, making it not the boundary', () => {
@@ -834,9 +2848,94 @@ suite('take with partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+                "row": {
+                  "created": 150,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              "takeSnitch",
+              "fetch",
+              {
+                "constraint": {
+                  "issueID": "i1",
+                },
+                "start": {
+                  "basis": "before",
+                  "row": {
+                    "created": 300,
+                    "id": "c3",
+                    "issueID": "i1",
+                    "text": "c",
+                  },
+                },
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take","i1"]": {
+              "bound": {
+                "created": 200,
+                "id": "c2",
+                "issueID": "i1",
+                "text": "b",
+              },
+              "size": 3,
+            },
+            "["take","i2"]": {
+              "bound": {
+                "created": 500,
+                "id": "c5",
+                "issueID": "i2",
+                "text": "e",
+              },
+              "size": 2,
+            },
+            "maxBound": {
+              "created": 500,
+              "id": "c5",
+              "issueID": "i2",
+              "text": "e",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "oldRow": {
+                "created": 300,
+                "id": "c3",
+                "issueID": "i1",
+                "text": "c",
+              },
+              "row": {
+                "created": 150,
+                "id": "c3",
+                "issueID": "i1",
+                "text": "c2",
+              },
+              "type": "edit",
+            },
+          ]
+        `);
       });
 
       test('edit row at boundary, making it fall outside the window', () => {
@@ -851,9 +2950,103 @@ suite('take with partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+                "row": {
+                  "created": 350,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              "takeSnitch",
+              "fetch",
+              {
+                "constraint": {
+                  "issueID": "i1",
+                },
+                "start": {
+                  "basis": "at",
+                  "row": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b",
+                  },
+                },
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take","i1"]": {
+              "bound": {
+                "created": 300,
+                "id": "c3",
+                "issueID": "i1",
+                "text": "c",
+              },
+              "size": 2,
+            },
+            "["take","i2"]": {
+              "bound": {
+                "created": 500,
+                "id": "c5",
+                "issueID": "i2",
+                "text": "e",
+              },
+              "size": 2,
+            },
+            "maxBound": {
+              "created": 500,
+              "id": "c5",
+              "issueID": "i2",
+              "text": "e",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+              },
+              "type": "remove",
+            },
+            {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+              },
+              "type": "add",
+            },
+          ]
+        `);
       });
 
       test('edit row before boundary, changing its order', () => {
@@ -868,9 +3061,76 @@ suite('take with partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+                "row": {
+                  "created": 50,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b2",
+                },
+                "type": "edit",
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take","i1"]": {
+              "bound": {
+                "created": 300,
+                "id": "c3",
+                "issueID": "i1",
+                "text": "c",
+              },
+              "size": 3,
+            },
+            "["take","i2"]": {
+              "bound": {
+                "created": 500,
+                "id": "c5",
+                "issueID": "i2",
+                "text": "e",
+              },
+              "size": 2,
+            },
+            "maxBound": {
+              "created": 500,
+              "id": "c5",
+              "issueID": "i2",
+              "text": "e",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "oldRow": {
+                "created": 200,
+                "id": "c2",
+                "issueID": "i1",
+                "text": "b",
+              },
+              "row": {
+                "created": 50,
+                "id": "c2",
+                "issueID": "i1",
+                "text": "b2",
+              },
+              "type": "edit",
+            },
+          ]
+        `);
       });
 
       test('edit row after boundary to make it the new boundary', () => {
@@ -885,9 +3145,103 @@ suite('take with partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+                "row": {
+                  "created": 150,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              "takeSnitch",
+              "fetch",
+              {
+                "constraint": {
+                  "issueID": "i1",
+                },
+                "start": {
+                  "basis": "before",
+                  "row": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b",
+                  },
+                },
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take","i1"]": {
+              "bound": {
+                "created": 150,
+                "id": "c3",
+                "issueID": "i1",
+                "text": "c2",
+              },
+              "size": 2,
+            },
+            "["take","i2"]": {
+              "bound": {
+                "created": 500,
+                "id": "c5",
+                "issueID": "i2",
+                "text": "e",
+              },
+              "size": 2,
+            },
+            "maxBound": {
+              "created": 500,
+              "id": "c5",
+              "issueID": "i2",
+              "text": "e",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+              },
+              "type": "remove",
+            },
+            {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 150,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c2",
+                },
+              },
+              "type": "add",
+            },
+          ]
+        `);
       });
 
       test('edit row before boundary to make it new boundary', () => {
@@ -902,9 +3256,94 @@ suite('take with partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+                "row": {
+                  "created": 250,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              "takeSnitch",
+              "fetch",
+              {
+                "constraint": {
+                  "issueID": "i1",
+                },
+                "start": {
+                  "basis": "after",
+                  "row": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b",
+                  },
+                },
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take","i1"]": {
+              "bound": {
+                "created": 250,
+                "id": "c1",
+                "issueID": "i1",
+                "text": "a2",
+              },
+              "size": 2,
+            },
+            "["take","i2"]": {
+              "bound": {
+                "created": 500,
+                "id": "c5",
+                "issueID": "i2",
+                "text": "e",
+              },
+              "size": 2,
+            },
+            "maxBound": {
+              "created": 500,
+              "id": "c5",
+              "issueID": "i2",
+              "text": "e",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "oldRow": {
+                "created": 100,
+                "id": "c1",
+                "issueID": "i1",
+                "text": "a",
+              },
+              "row": {
+                "created": 250,
+                "id": "c1",
+                "issueID": "i1",
+                "text": "a2",
+              },
+              "type": "edit",
+            },
+          ]
+        `);
       });
 
       test('edit row before boundary to fetch new boundary', () => {
@@ -919,9 +3358,103 @@ suite('take with partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+                "row": {
+                  "created": 350,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              "takeSnitch",
+              "fetch",
+              {
+                "constraint": {
+                  "issueID": "i1",
+                },
+                "start": {
+                  "basis": "after",
+                  "row": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b",
+                  },
+                },
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take","i1"]": {
+              "bound": {
+                "created": 300,
+                "id": "c3",
+                "issueID": "i1",
+                "text": "c",
+              },
+              "size": 2,
+            },
+            "["take","i2"]": {
+              "bound": {
+                "created": 500,
+                "id": "c5",
+                "issueID": "i2",
+                "text": "e",
+              },
+              "size": 2,
+            },
+            "maxBound": {
+              "created": 500,
+              "id": "c5",
+              "issueID": "i2",
+              "text": "e",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+              },
+              "type": "remove",
+            },
+            {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+              },
+              "type": "add",
+            },
+          ]
+        `);
       });
     });
 
@@ -938,9 +3471,145 @@ suite('take with partition', () => {
             },
           ],
         });
-        expect(messages).toMatchInlineSnapshot();
-        expect(storage).toMatchInlineSnapshot();
-        expect(pushes).toMatchInlineSnapshot();
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              "takeSnitch",
+              "push",
+              {
+                "oldRow": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+                "row": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i2",
+                  "text": "a2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              "takeSnitch",
+              "fetch",
+              {
+                "constraint": {
+                  "issueID": "i1",
+                },
+                "start": {
+                  "basis": "before",
+                  "row": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b",
+                  },
+                },
+              },
+            ],
+            [
+              "takeSnitch",
+              "fetch",
+              {
+                "constraint": {
+                  "issueID": "i2",
+                },
+                "start": {
+                  "basis": "before",
+                  "row": {
+                    "created": 500,
+                    "id": "c5",
+                    "issueID": "i2",
+                    "text": "e",
+                  },
+                },
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take","i1"]": {
+              "bound": {
+                "created": 300,
+                "id": "c3",
+                "issueID": "i1",
+                "text": "c",
+              },
+              "size": 2,
+            },
+            "["take","i2"]": {
+              "bound": {
+                "created": 400,
+                "id": "c4",
+                "issueID": "i2",
+                "text": "d",
+              },
+              "size": 2,
+            },
+            "maxBound": {
+              "created": 500,
+              "id": "c5",
+              "issueID": "i2",
+              "text": "e",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+              },
+              "type": "remove",
+            },
+            {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+              },
+              "type": "add",
+            },
+            {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e",
+                },
+              },
+              "type": "remove",
+            },
+            {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i2",
+                  "text": "a2",
+                },
+              },
+              "type": "add",
+            },
+          ]
+        `);
       });
     });
   });
