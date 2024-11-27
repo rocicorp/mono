@@ -27,592 +27,270 @@ suite('take with no partition', () => {
   } as const;
 
   suite('add', () => {
-    takeTest({
-      ...base,
-      name: 'limit 0',
-      sourceRows: [
-        {id: 'i1', created: 100},
-        {id: 'i2', created: 200},
-        {id: 'i3', created: 300},
-      ],
-      limit: 0,
-      pushes: [{type: 'add', row: {id: 'i4', created: 50}}],
-      expectedMessages: [
-        ['takeSnitch', 'push', {type: 'add', row: {id: 'i4', created: 50}}],
-      ],
-      expectedStorage: {},
-      expectedOutput: [],
-    });
-
-    takeTest({
-      ...base,
-      name: 'less than limit add row at start',
-      sourceRows: [
-        {id: 'i1', created: 100},
-        {id: 'i2', created: 200},
-        {id: 'i3', created: 300},
-      ],
-      limit: 5,
-      pushes: [{type: 'add', row: {id: 'i4', created: 50}}],
-      expectedMessages: [
-        ['takeSnitch', 'push', {type: 'add', row: {id: 'i4', created: 50}}],
-      ],
-      expectedStorage: {
-        '["take"]': {
-          bound: {
-            created: 300,
-            id: 'i3',
-          },
-          size: 4,
-        },
-        'maxBound': {
-          created: 300,
-          id: 'i3',
-        },
-      },
-      expectedOutput: [
-        {type: 'add', node: {row: {id: 'i4', created: 50}, relationships: {}}},
-      ],
-    });
-
-    takeTest({
-      ...base,
-      name: 'less than limit add row at end',
-      sourceRows: [
-        {id: 'i1', created: 100},
-        {id: 'i2', created: 200},
-        {id: 'i3', created: 300},
-      ],
-      limit: 5,
-      pushes: [{type: 'add', row: {id: 'i4', created: 350}}],
-      expectedMessages: [
-        ['takeSnitch', 'push', {type: 'add', row: {id: 'i4', created: 350}}],
-      ],
-      expectedStorage: {
-        '["take"]': {
-          bound: {
-            created: 350,
-            id: 'i4',
-          },
-          size: 4,
-        },
-        'maxBound': {
-          created: 350,
-          id: 'i4',
-        },
-      },
-      expectedOutput: [
-        {type: 'add', node: {row: {id: 'i4', created: 350}, relationships: {}}},
-      ],
-    });
-
-    takeTest({
-      ...base,
-      name: 'at limit add row after bound',
-      sourceRows: [
-        {id: 'i1', created: 100},
-        {id: 'i2', created: 200},
-        {id: 'i3', created: 300},
-        {id: 'i4', created: 400},
-      ],
-      limit: 3,
-      pushes: [{type: 'add', row: {id: 'i5', created: 350}}],
-      expectedMessages: [
-        ['takeSnitch', 'push', {type: 'add', row: {id: 'i5', created: 350}}],
-      ],
-      expectedStorage: {
-        '["take"]': {
-          bound: {
-            created: 300,
-            id: 'i3',
-          },
-          size: 3,
-        },
-        'maxBound': {
-          created: 300,
-          id: 'i3',
-        },
-      },
-      expectedOutput: [],
-    });
-
-    takeTest({
-      ...base,
-      name: 'at limit add row at start',
-      sourceRows: [
-        {id: 'i1', created: 100},
-        {id: 'i2', created: 200},
-        {id: 'i3', created: 300},
-        {id: 'i4', created: 400},
-      ],
-      limit: 3,
-      pushes: [{type: 'add', row: {id: 'i5', created: 50}}],
-      expectedMessages: [
-        ['takeSnitch', 'push', {type: 'add', row: {id: 'i5', created: 50}}],
-        [
-          'takeSnitch',
-          'fetch',
-          {start: {basis: 'before', row: {id: 'i3', created: 300}}},
+    test('limit 0', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        sourceRows: [
+          {id: 'i1', created: 100},
+          {id: 'i2', created: 200},
+          {id: 'i3', created: 300},
         ],
-      ],
-      expectedStorage: {
-        '["take"]': {
-          bound: {
-            created: 200,
-            id: 'i2',
-          },
-          size: 3,
-        },
-        'maxBound': {
-          created: 300,
-          id: 'i3',
-        },
-      },
-      expectedOutput: [
-        {
-          type: 'remove',
-          node: {row: {id: 'i3', created: 300}, relationships: {}},
-        },
-        {type: 'add', node: {row: {id: 'i5', created: 50}, relationships: {}}},
-      ],
+        limit: 0,
+        pushes: [{type: 'add', row: {id: 'i4', created: 50}}],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
     });
 
-    takeTest({
-      ...base,
-      name: 'at limit add row at end',
-      sourceRows: [
-        {id: 'i1', created: 100},
-        {id: 'i2', created: 200},
-        {id: 'i3', created: 300},
-        {id: 'i4', created: 400},
-      ],
-      limit: 3,
-      pushes: [{type: 'add', row: {id: 'i5', created: 250}}],
-      expectedMessages: [
-        ['takeSnitch', 'push', {type: 'add', row: {id: 'i5', created: 250}}],
-        [
-          'takeSnitch',
-          'fetch',
-          {start: {basis: 'before', row: {id: 'i3', created: 300}}},
+    test('less than limit add row at start', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        sourceRows: [
+          {id: 'i1', created: 100},
+          {id: 'i2', created: 200},
+          {id: 'i3', created: 300},
         ],
-      ],
-      expectedStorage: {
-        '["take"]': {
-          bound: {
-            created: 250,
-            id: 'i5',
-          },
-          size: 3,
-        },
-        'maxBound': {
-          created: 300,
-          id: 'i3',
-        },
-      },
-      expectedOutput: [
-        {
-          type: 'remove',
-          node: {row: {id: 'i3', created: 300}, relationships: {}},
-        },
-        {type: 'add', node: {row: {id: 'i5', created: 250}, relationships: {}}},
-      ],
+        limit: 5,
+        pushes: [{type: 'add', row: {id: 'i4', created: 50}}],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
+    });
+
+    test('less than limit add row at end', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        sourceRows: [
+          {id: 'i1', created: 100},
+          {id: 'i2', created: 200},
+          {id: 'i3', created: 300},
+        ],
+        limit: 5,
+        pushes: [{type: 'add', row: {id: 'i4', created: 350}}],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
+    });
+
+    test('at limit add row after bound', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        sourceRows: [
+          {id: 'i1', created: 100},
+          {id: 'i2', created: 200},
+          {id: 'i3', created: 300},
+          {id: 'i4', created: 400},
+        ],
+        limit: 3,
+        pushes: [{type: 'add', row: {id: 'i5', created: 350}}],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
+    });
+
+    test('at limit add row at start', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        sourceRows: [
+          {id: 'i1', created: 100},
+          {id: 'i2', created: 200},
+          {id: 'i3', created: 300},
+          {id: 'i4', created: 400},
+        ],
+        limit: 3,
+        pushes: [{type: 'add', row: {id: 'i5', created: 50}}],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
+    });
+
+    test('at limit add row at end', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        sourceRows: [
+          {id: 'i1', created: 100},
+          {id: 'i2', created: 200},
+          {id: 'i3', created: 300},
+          {id: 'i4', created: 400},
+        ],
+        limit: 3,
+        pushes: [{type: 'add', row: {id: 'i5', created: 250}}],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
     });
   });
 
   suite('remove', () => {
-    takeTest({
-      ...base,
-      name: 'limit 0',
-      sourceRows: [
-        {id: 'i1', created: 100},
-        {id: 'i2', created: 200},
-        {id: 'i3', created: 300},
-      ],
-      limit: 0,
-      pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
-      expectedMessages: [
-        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i1', created: 100}}],
-      ],
-      expectedStorage: {},
-      expectedOutput: [],
-    });
-
-    takeTest({
-      ...base,
-      name: 'less than limit remove row at start',
-      sourceRows: [
-        {id: 'i1', created: 100},
-        {id: 'i2', created: 200},
-        {id: 'i3', created: 300},
-      ],
-      limit: 5,
-      pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
-      expectedMessages: [
-        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i1', created: 100}}],
-        [
-          'takeSnitch',
-          'fetch',
-          {
-            start: {
-              basis: 'before',
-              row: {
-                created: 300,
-                id: 'i3',
-              },
-            },
-          },
+    test('limit 0', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        sourceRows: [
+          {id: 'i1', created: 100},
+          {id: 'i2', created: 200},
+          {id: 'i3', created: 300},
         ],
-      ],
-      expectedStorage: {
-        '["take"]': {
-          bound: {
-            created: 300,
-            id: 'i3',
-          },
-          size: 2,
-        },
-        'maxBound': {
-          created: 300,
-          id: 'i3',
-        },
-      },
-      expectedOutput: [
-        {
-          type: 'remove',
-          node: {row: {id: 'i1', created: 100}, relationships: {}},
-        },
-      ],
+        limit: 0,
+        pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
     });
 
-    takeTest({
-      ...base,
-      name: 'less than limit remove row at end',
-      sourceRows: [
-        {id: 'i1', created: 100},
-        {id: 'i2', created: 200},
-        {id: 'i3', created: 300},
-      ],
-      limit: 5,
-      pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
-      expectedMessages: [
-        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i3', created: 300}}],
-        [
-          'takeSnitch',
-          'fetch',
-          {
-            start: {
-              basis: 'before',
-              row: {
-                created: 300,
-                id: 'i3',
-              },
-            },
-          },
+    test('less than limit remove row at start', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        sourceRows: [
+          {id: 'i1', created: 100},
+          {id: 'i2', created: 200},
+          {id: 'i3', created: 300},
         ],
-      ],
-      expectedStorage: {
-        '["take"]': {
-          bound: {
-            created: 200,
-            id: 'i2',
-          },
-          size: 2,
-        },
-        'maxBound': {
-          created: 300,
-          id: 'i3',
-        },
-      },
-      expectedOutput: [
-        {
-          type: 'remove',
-          node: {row: {id: 'i3', created: 300}, relationships: {}},
-        },
-      ],
+        limit: 5,
+        pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
     });
 
-    takeTest({
-      ...base,
-      name: 'at limit remove row after bound',
-      sourceRows: [
-        {id: 'i1', created: 100},
-        {id: 'i2', created: 200},
-        {id: 'i3', created: 300},
-        {id: 'i4', created: 400},
-      ],
-      limit: 3,
-      pushes: [{type: 'remove', row: {id: 'i4', created: 400}}],
-      expectedMessages: [
-        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i4', created: 400}}],
-      ],
-      expectedStorage: {
-        '["take"]': {
-          bound: {
-            created: 300,
-            id: 'i3',
-          },
-          size: 3,
-        },
-        'maxBound': {
-          created: 300,
-          id: 'i3',
-        },
-      },
-      expectedOutput: [],
-    });
-
-    takeTest({
-      ...base,
-      name: 'at limit remove row at start with row after',
-      sourceRows: [
-        {id: 'i1', created: 100},
-        {id: 'i2', created: 200},
-        {id: 'i3', created: 300},
-        {id: 'i4', created: 400},
-      ],
-      limit: 3,
-      pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
-      expectedMessages: [
-        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i1', created: 100}}],
-        [
-          'takeSnitch',
-          'fetch',
-          {start: {basis: 'before', row: {id: 'i3', created: 300}}},
+    test('less than limit remove row at end', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        sourceRows: [
+          {id: 'i1', created: 100},
+          {id: 'i2', created: 200},
+          {id: 'i3', created: 300},
         ],
-      ],
-      expectedStorage: {
-        '["take"]': {
-          bound: {
-            created: 400,
-            id: 'i4',
-          },
-          size: 3,
-        },
-        'maxBound': {
-          created: 400,
-          id: 'i4',
-        },
-      },
-      expectedOutput: [
-        {
-          type: 'remove',
-          node: {row: {id: 'i1', created: 100}, relationships: {}},
-        },
-        {
-          type: 'add',
-          node: {row: {id: 'i4', created: 400}, relationships: {}},
-        },
-      ],
+        limit: 5,
+        pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
     });
 
-    takeTest({
-      ...base,
-      name: 'at limit remove row at start with row after, limit 2',
-      sourceRows: [
-        {id: 'i1', created: 100},
-        {id: 'i2', created: 200},
-        {id: 'i3', created: 300},
-        {id: 'i4', created: 400},
-      ],
-      limit: 2,
-      pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
-      expectedMessages: [
-        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i1', created: 100}}],
-        [
-          'takeSnitch',
-          'fetch',
-          {start: {basis: 'before', row: {id: 'i2', created: 200}}},
+    test('at limit remove row after bound', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        sourceRows: [
+          {id: 'i1', created: 100},
+          {id: 'i2', created: 200},
+          {id: 'i3', created: 300},
+          {id: 'i4', created: 400},
         ],
-      ],
-      expectedStorage: {
-        '["take"]': {
-          bound: {
-            created: 300,
-            id: 'i3',
-          },
-          size: 2,
-        },
-        'maxBound': {
-          created: 300,
-          id: 'i3',
-        },
-      },
-      expectedOutput: [
-        {
-          type: 'remove',
-          node: {row: {id: 'i1', created: 100}, relationships: {}},
-        },
-        {
-          type: 'add',
-          node: {row: {id: 'i3', created: 300}, relationships: {}},
-        },
-      ],
+        limit: 3,
+        pushes: [{type: 'remove', row: {id: 'i4', created: 400}}],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
     });
 
-    takeTest({
-      ...base,
-      name: 'at limit remove row at start with row after, limit 1',
-      sourceRows: [
-        {id: 'i1', created: 100},
-        {id: 'i2', created: 200},
-        {id: 'i3', created: 300},
-        {id: 'i4', created: 400},
-      ],
-      limit: 1,
-      pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
-      expectedMessages: [
-        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i1', created: 100}}],
-        [
-          'takeSnitch',
-          'fetch',
-          {start: {basis: 'before', row: {id: 'i1', created: 100}}},
+    test('at limit remove row at start with row after', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        sourceRows: [
+          {id: 'i1', created: 100},
+          {id: 'i2', created: 200},
+          {id: 'i3', created: 300},
+          {id: 'i4', created: 400},
         ],
-      ],
-      expectedStorage: {
-        '["take"]': {
-          bound: {
-            created: 200,
-            id: 'i2',
-          },
-          size: 1,
-        },
-        'maxBound': {
-          created: 200,
-          id: 'i2',
-        },
-      },
-      expectedOutput: [
-        {
-          type: 'remove',
-          node: {row: {id: 'i1', created: 100}, relationships: {}},
-        },
-        {
-          type: 'add',
-          node: {row: {id: 'i2', created: 200}, relationships: {}},
-        },
-      ],
+        limit: 3,
+        pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
     });
 
-    takeTest({
-      ...base,
-      name: 'at limit remove row at start no row after',
-      sourceRows: [
-        {id: 'i1', created: 100},
-        {id: 'i2', created: 200},
-        {id: 'i3', created: 300},
-      ],
-      limit: 3,
-      pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
-      expectedMessages: [
-        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i1', created: 100}}],
-        [
-          'takeSnitch',
-          'fetch',
-          {start: {basis: 'before', row: {id: 'i3', created: 300}}},
+    test('at limit remove row at start with row after, limit 2', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        sourceRows: [
+          {id: 'i1', created: 100},
+          {id: 'i2', created: 200},
+          {id: 'i3', created: 300},
+          {id: 'i4', created: 400},
         ],
-      ],
-      expectedStorage: {
-        '["take"]': {
-          bound: {
-            created: 300,
-            id: 'i3',
-          },
-          size: 2,
-        },
-        'maxBound': {
-          created: 300,
-          id: 'i3',
-        },
-      },
-      expectedOutput: [
-        {
-          type: 'remove',
-          node: {row: {id: 'i1', created: 100}, relationships: {}},
-        },
-      ],
+        limit: 2,
+        pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
     });
 
-    takeTest({
-      ...base,
-      name: 'at limit remove row at end with row after',
-      sourceRows: [
-        {id: 'i1', created: 100},
-        {id: 'i2', created: 200},
-        {id: 'i3', created: 300},
-        {id: 'i4', created: 400},
-      ],
-      limit: 3,
-      pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
-      expectedMessages: [
-        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i3', created: 300}}],
-        [
-          'takeSnitch',
-          'fetch',
-          {start: {basis: 'before', row: {id: 'i3', created: 300}}},
+    test('at limit remove row at start with row after, limit 1', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        sourceRows: [
+          {id: 'i1', created: 100},
+          {id: 'i2', created: 200},
+          {id: 'i3', created: 300},
+          {id: 'i4', created: 400},
         ],
-      ],
-      expectedStorage: {
-        '["take"]': {
-          bound: {
-            created: 400,
-            id: 'i4',
-          },
-          size: 3,
-        },
-        'maxBound': {
-          created: 400,
-          id: 'i4',
-        },
-      },
-      expectedOutput: [
-        {
-          type: 'remove',
-          node: {row: {id: 'i3', created: 300}, relationships: {}},
-        },
-        {
-          type: 'add',
-          node: {row: {id: 'i4', created: 400}, relationships: {}},
-        },
-      ],
+        limit: 1,
+        pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
     });
 
-    takeTest({
-      ...base,
-      name: 'at limit remove row at end, no row after',
-      sourceRows: [
-        {id: 'i1', created: 100},
-        {id: 'i2', created: 200},
-        {id: 'i3', created: 300},
-      ],
-      limit: 3,
-      pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
-      expectedMessages: [
-        ['takeSnitch', 'push', {type: 'remove', row: {id: 'i3', created: 300}}],
-        [
-          'takeSnitch',
-          'fetch',
-          {start: {basis: 'before', row: {id: 'i3', created: 300}}},
+    test('at limit remove row at start no row after', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        sourceRows: [
+          {id: 'i1', created: 100},
+          {id: 'i2', created: 200},
+          {id: 'i3', created: 300},
         ],
-      ],
-      expectedStorage: {
-        '["take"]': {
-          bound: {
-            created: 200,
-            id: 'i2',
-          },
-          size: 2,
-        },
-        'maxBound': {
-          created: 300,
-          id: 'i3',
-        },
-      },
-      expectedOutput: [
-        {
-          type: 'remove',
-          node: {row: {id: 'i3', created: 300}, relationships: {}},
-        },
-      ],
+        limit: 3,
+        pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
+    });
+
+    test('at limit remove row at end with row after', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        sourceRows: [
+          {id: 'i1', created: 100},
+          {id: 'i2', created: 200},
+          {id: 'i3', created: 300},
+          {id: 'i4', created: 400},
+        ],
+        limit: 3,
+        pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
+    });
+
+    test('at limit remove row at end, no row after', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        sourceRows: [
+          {id: 'i1', created: 100},
+          {id: 'i2', created: 200},
+          {id: 'i3', created: 300},
+        ],
+        limit: 3,
+        pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
     });
   });
 
@@ -637,556 +315,195 @@ suite('take with no partition', () => {
       partition: undefined,
     } as const;
 
-    takeTest({
-      ...base,
-      name: 'limit 0',
-      limit: 0,
-      pushes: [
-        {
-          type: 'edit',
-          oldRow: {id: 'i2', created: 200, text: 'b'},
-          row: {id: 'i2', created: 200, text: 'c'},
-        },
-      ],
-      expectedMessages: [
-        [
-          'takeSnitch',
-          'push',
+    test('limit 0', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        limit: 0,
+        pushes: [
           {
             type: 'edit',
             oldRow: {id: 'i2', created: 200, text: 'b'},
             row: {id: 'i2', created: 200, text: 'c'},
           },
         ],
-      ],
-      expectedStorage: {},
-      expectedOutput: [],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
     });
 
     describe('less than limit ', () => {
-      takeTest({
-        ...base,
-        name: 'edit row at start',
-        limit: 5,
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'i1', created: 100, text: 'a'},
-            row: {id: 'i1', created: 100, text: 'a2'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('edit row at start', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 5,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'i1', created: 100, text: 'a'},
               row: {id: 'i1', created: 100, text: 'a2'},
             },
           ],
-        ],
-        expectedStorage: {
-          '["take"]': {
-            bound: {
-              created: 400,
-              id: 'i4',
-              text: 'd',
-            },
-            size: 4,
-          },
-          'maxBound': {
-            created: 400,
-            id: 'i4',
-            text: 'd',
-          },
-        },
-        expectedOutput: [
-          {
-            type: 'edit',
-            oldRow: {id: 'i1', created: 100, text: 'a'},
-            row: {id: 'i1', created: 100, text: 'a2'},
-          },
-        ],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
 
-      takeTest({
-        ...base,
-        name: 'edit row at end',
-        limit: 5,
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'i4', created: 400, text: 'd'},
-            row: {id: 'i4', created: 400, text: 'd2'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('edit row at end', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 5,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'i4', created: 400, text: 'd'},
               row: {id: 'i4', created: 400, text: 'd2'},
             },
           ],
-        ],
-        expectedStorage: {
-          '["take"]': {
-            bound: {
-              created: 400,
-              id: 'i4',
-              text: 'd',
-            },
-            size: 4,
-          },
-          'maxBound': {
-            created: 400,
-            id: 'i4',
-            text: 'd',
-          },
-        },
-        expectedOutput: [
-          {
-            type: 'edit',
-            oldRow: {id: 'i4', created: 400, text: 'd'},
-            row: {id: 'i4', created: 400, text: 'd2'},
-          },
-        ],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
     });
 
     describe('at limit', () => {
-      takeTest({
-        ...base,
-        name: 'edit row after boundary',
-        limit: 3,
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'i4', created: 400, text: 'd'},
-            row: {id: 'i4', created: 400, text: 'd2'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('edit row after boundary', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 3,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'i4', created: 400, text: 'd'},
               row: {id: 'i4', created: 400, text: 'd2'},
             },
           ],
-        ],
-        expectedStorage: {
-          '["take"]': {
-            bound: {
-              created: 300,
-              id: 'i3',
-              text: 'c',
-            },
-            size: 3,
-          },
-          'maxBound': {
-            created: 300,
-            id: 'i3',
-            text: 'c',
-          },
-        },
-        expectedOutput: [],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
 
-      takeTest({
-        ...base,
-        name: 'edit row before boundary',
-        limit: 3,
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'i2', created: 200, text: 'b'},
-            row: {id: 'i2', created: 200, text: 'b2'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('edit row before boundary', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 3,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'i2', created: 200, text: 'b'},
               row: {id: 'i2', created: 200, text: 'b2'},
             },
           ],
-        ],
-        expectedStorage: {
-          '["take"]': {
-            bound: {
-              created: 300,
-              id: 'i3',
-              text: 'c',
-            },
-            size: 3,
-          },
-          'maxBound': {
-            created: 300,
-            id: 'i3',
-            text: 'c',
-          },
-        },
-        expectedOutput: [
-          {
-            type: 'edit',
-            oldRow: {id: 'i2', created: 200, text: 'b'},
-            row: {id: 'i2', created: 200, text: 'b2'},
-          },
-        ],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
 
-      takeTest({
-        ...base,
-        name: 'edit row at boundary',
-        limit: 3,
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'i3', created: 300, text: 'c'},
-            row: {id: 'i3', created: 300, text: 'c2'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('edit row at boundary', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 3,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'i3', created: 300, text: 'c'},
               row: {id: 'i3', created: 300, text: 'c2'},
             },
           ],
-        ],
-        expectedStorage: {
-          '["take"]': {
-            bound: {
-              created: 300,
-              id: 'i3',
-              text: 'c',
-            },
-            size: 3,
-          },
-          'maxBound': {
-            created: 300,
-            id: 'i3',
-            text: 'c',
-          },
-        },
-        expectedOutput: [
-          {
-            type: 'edit',
-            oldRow: {id: 'i3', created: 300, text: 'c'},
-            row: {id: 'i3', created: 300, text: 'c2'},
-          },
-        ],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
 
-      takeTest({
-        ...base,
-        name: 'edit row before boundary, changing its order',
-        limit: 3,
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'i2', created: 200, text: 'b'},
-            row: {id: 'i2', created: 50, text: 'b2'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('edit row before boundary, changing its order', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 3,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'i2', created: 200, text: 'b'},
               row: {id: 'i2', created: 50, text: 'b2'},
             },
           ],
-        ],
-        expectedStorage: {
-          '["take"]': {
-            bound: {
-              created: 300,
-              id: 'i3',
-              text: 'c',
-            },
-            size: 3,
-          },
-          'maxBound': {
-            created: 300,
-            id: 'i3',
-            text: 'c',
-          },
-        },
-        expectedOutput: [
-          {
-            type: 'edit',
-            oldRow: {id: 'i2', created: 200, text: 'b'},
-            row: {id: 'i2', created: 50, text: 'b2'},
-          },
-        ],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
 
-      takeTest({
-        ...base,
-        name: 'edit row after boundary to make it the new boundary',
-        limit: 3,
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'i4', created: 400, text: 'd'},
-            row: {id: 'i4', created: 250, text: 'd'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('edit row after boundary to make it the new boundary', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 3,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'i4', created: 400, text: 'd'},
               row: {id: 'i4', created: 250, text: 'd'},
             },
           ],
-          [
-            'takeSnitch',
-            'fetch',
-            {
-              constraint: undefined,
-              start: {
-                basis: 'before',
-                row: {
-                  id: 'i3',
-                  created: 300,
-                  text: 'c',
-                },
-              },
-            },
-          ],
-        ],
-        expectedStorage: {
-          '["take"]': {
-            bound: {
-              created: 250,
-              id: 'i4',
-              text: 'd',
-            },
-            size: 3,
-          },
-          'maxBound': {
-            created: 300,
-            id: 'i3',
-            text: 'c',
-          },
-        },
-        expectedOutput: [
-          {
-            type: 'remove',
-            node: {row: {id: 'i3', created: 300, text: 'c'}, relationships: {}},
-          },
-          {
-            type: 'add',
-            node: {
-              row: {id: 'i4', created: 250, text: 'd'},
-              relationships: {},
-            },
-          },
-        ],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
 
-      takeTest({
-        ...base,
-        name: 'edit row before boundary to make it new boundary',
-        limit: 3,
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'i2', created: 200, text: 'b'},
-            row: {id: 'i2', created: 350, text: 'b2'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('edit row before boundary to make it new boundary', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 3,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'i2', created: 200, text: 'b'},
               row: {id: 'i2', created: 350, text: 'b2'},
             },
           ],
-          [
-            'takeSnitch',
-            'fetch',
-            {
-              constraint: undefined,
-              start: {
-                basis: 'after',
-                row: {
-                  id: 'i3',
-                  created: 300,
-                  text: 'c',
-                },
-              },
-            },
-          ],
-        ],
-        expectedStorage: {
-          '["take"]': {
-            bound: {
-              created: 350,
-              id: 'i2',
-              text: 'b2',
-            },
-            size: 3,
-          },
-          'maxBound': {
-            created: 350,
-            id: 'i2',
-            text: 'b2',
-          },
-        },
-        expectedOutput: [
-          {
-            type: 'edit',
-            oldRow: {id: 'i2', created: 200, text: 'b'},
-            row: {id: 'i2', created: 350, text: 'b2'},
-          },
-        ],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
 
-      takeTest({
-        ...base,
-        name: 'edit row before boundary to fetch new boundary',
-        limit: 3,
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'i2', created: 200, text: 'b'},
-            row: {id: 'i2', created: 450, text: 'b2'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('edit row before boundary to fetch new boundary', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 3,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'i2', created: 200, text: 'b'},
               row: {id: 'i2', created: 450, text: 'b2'},
             },
           ],
-          [
-            'takeSnitch',
-            'fetch',
-            {
-              constraint: undefined,
-              start: {
-                basis: 'after',
-                row: {
-                  id: 'i3',
-                  created: 300,
-                  text: 'c',
-                },
-              },
-            },
-          ],
-        ],
-        expectedStorage: {
-          '["take"]': {
-            bound: {
-              created: 400,
-              id: 'i4',
-              text: 'd',
-            },
-            size: 3,
-          },
-          'maxBound': {
-            created: 400,
-            id: 'i4',
-            text: 'd',
-          },
-        },
-        expectedOutput: [
-          {
-            type: 'remove',
-            node: {
-              row: {id: 'i2', created: 200, text: 'b'},
-              relationships: {},
-            },
-          },
-          {
-            type: 'add',
-            node: {
-              row: {id: 'i4', created: 400, text: 'd'},
-              relationships: {},
-            },
-          },
-        ],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
     });
 
-    takeTest({
-      ...base,
-      name: 'at limit 1',
-      limit: 1,
-      pushes: [
-        {
-          type: 'edit',
-          oldRow: {id: 'i1', created: 100, text: 'a'},
-          row: {id: 'i1', created: 50, text: 'a2'},
-        },
-      ],
-      expectedMessages: [
-        [
-          'takeSnitch',
-          'push',
+    test('at limit 1', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        limit: 1,
+        pushes: [
           {
             type: 'edit',
             oldRow: {id: 'i1', created: 100, text: 'a'},
             row: {id: 'i1', created: 50, text: 'a2'},
           },
         ],
-      ],
-      expectedStorage: {
-        '["take"]': {
-          bound: {
-            created: 50,
-            id: 'i1',
-            text: 'a2',
-          },
-          size: 1,
-        },
-        'maxBound': {
-          created: 100,
-          id: 'i1',
-          text: 'a',
-        },
-      },
-      expectedOutput: [
-        {
-          oldRow: {
-            created: 100,
-            id: 'i1',
-            text: 'a',
-          },
-          row: {
-            created: 50,
-            id: 'i1',
-            text: 'a2',
-          },
-          type: 'edit',
-        },
-      ],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
     });
   });
 });
@@ -1206,301 +523,167 @@ suite('take with partition', () => {
   } as const;
 
   suite('add', () => {
-    takeTest({
-      ...base,
-      partition: {
-        key: ['issueID'],
-        values: [['i1'], ['i2']],
-      },
-      name: 'limit 0',
-      sourceRows: [
-        {id: 'c1', issueID: 'i1', created: 100},
-        {id: 'c2', issueID: 'i1', created: 200},
-        {id: 'c3', issueID: 'i1', created: 300},
-      ],
-      limit: 0,
-      pushes: [{type: 'add', row: {id: 'c6', issueID: 'i2', created: 150}}],
-      expectedMessages: [
-        [
-          'takeSnitch',
-          'push',
-          {type: 'add', row: {id: 'c6', issueID: 'i2', created: 150}},
+    test('limit 0', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        partition: {
+          key: ['issueID'],
+          values: [['i1'], ['i2']],
+        },
+        sourceRows: [
+          {id: 'c1', issueID: 'i1', created: 100},
+          {id: 'c2', issueID: 'i1', created: 200},
+          {id: 'c3', issueID: 'i1', created: 300},
         ],
-      ],
-      expectedStorage: {},
-      expectedOutput: [],
+        limit: 0,
+        pushes: [{type: 'add', row: {id: 'c6', issueID: 'i2', created: 150}}],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
     });
 
-    takeTest({
-      ...base,
-      partition: {
-        key: ['issueID'],
-        values: [['i1'], ['i2']],
-      },
-      name: 'less than limit add row at start',
-      sourceRows: [
-        {id: 'c1', issueID: 'i1', created: 100},
-        {id: 'c2', issueID: 'i1', created: 200},
-        {id: 'c3', issueID: 'i1', created: 300},
-        {id: 'c4', issueID: 'i2', created: 400},
-        {id: 'c5', issueID: 'i2', created: 500},
-      ],
-      limit: 5,
-      pushes: [{type: 'add', row: {id: 'c6', issueID: 'i2', created: 150}}],
-      expectedMessages: [
-        [
-          'takeSnitch',
-          'push',
-          {type: 'add', row: {id: 'c6', issueID: 'i2', created: 150}},
+    test('less than limit add row at start', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        partition: {
+          key: ['issueID'],
+          values: [['i1'], ['i2']],
+        },
+        sourceRows: [
+          {id: 'c1', issueID: 'i1', created: 100},
+          {id: 'c2', issueID: 'i1', created: 200},
+          {id: 'c3', issueID: 'i1', created: 300},
+          {id: 'c4', issueID: 'i2', created: 400},
+          {id: 'c5', issueID: 'i2', created: 500},
         ],
-      ],
-      expectedStorage: {
-        '["take","i1"]': {
-          bound: {id: 'c3', issueID: 'i1', created: 300},
-          size: 3,
-        },
-        '["take","i2"]': {
-          bound: {id: 'c5', issueID: 'i2', created: 500},
-          size: 3,
-        },
-        'maxBound': {id: 'c5', issueID: 'i2', created: 500},
-      },
-      expectedOutput: [
-        {
-          type: 'add',
-          node: {
-            row: {id: 'c6', issueID: 'i2', created: 150},
-            relationships: {},
-          },
-        },
-      ],
+        limit: 5,
+        pushes: [{type: 'add', row: {id: 'c6', issueID: 'i2', created: 150}}],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
     });
 
-    takeTest({
-      ...base,
-      name: 'at limit add row at end',
-      partition: {
-        key: ['issueID'],
-        values: [['i1'], ['i2']],
-      },
-      sourceRows: [
-        {id: 'c1', issueID: 'i1', created: 100},
-        {id: 'c2', issueID: 'i1', created: 200},
-        // 580 to test that it constrains looking for previous
-        // to constraint issueID: 'i2'
-        {id: 'c3', issueID: 'i1', created: 580},
-        {id: 'c4', issueID: 'i2', created: 400},
-        {id: 'c5', issueID: 'i2', created: 500},
-        {id: 'c6', issueID: 'i2', created: 600},
-        {id: 'c7', issueID: 'i2', created: 700},
-      ],
-      limit: 3,
-      pushes: [{type: 'add', row: {id: 'c8', issueID: 'i2', created: 550}}],
-      expectedMessages: [
-        [
-          'takeSnitch',
-          'push',
-          {type: 'add', row: {id: 'c8', issueID: 'i2', created: 550}},
+    test('at limit add row at end', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        partition: {
+          key: ['issueID'],
+          values: [['i1'], ['i2']],
+        },
+        sourceRows: [
+          {id: 'c1', issueID: 'i1', created: 100},
+          {id: 'c2', issueID: 'i1', created: 200},
+          // 580 to test that it constrains looking for previous
+          // to constraint issueID: 'i2'
+          {id: 'c3', issueID: 'i1', created: 580},
+          {id: 'c4', issueID: 'i2', created: 400},
+          {id: 'c5', issueID: 'i2', created: 500},
+          {id: 'c6', issueID: 'i2', created: 600},
+          {id: 'c7', issueID: 'i2', created: 700},
         ],
-        [
-          'takeSnitch',
-          'fetch',
-          {
-            constraint: {
-              issueID: 'i2',
-            },
-            start: {
-              basis: 'before',
-              row: {id: 'c6', issueID: 'i2', created: 600},
-            },
-          },
-        ],
-      ],
-      expectedStorage: {
-        '["take","i1"]': {
-          bound: {id: 'c3', issueID: 'i1', created: 580},
-          size: 3,
-        },
-        '["take","i2"]': {
-          bound: {id: 'c8', issueID: 'i2', created: 550},
-          size: 3,
-        },
-        'maxBound': {id: 'c6', issueID: 'i2', created: 600},
-      },
-      expectedOutput: [
-        {
-          type: 'remove',
-          node: {
-            row: {id: 'c6', issueID: 'i2', created: 600},
-            relationships: {},
-          },
-        },
-        {
-          type: 'add',
-          node: {
-            row: {id: 'c8', issueID: 'i2', created: 550},
-            relationships: {},
-          },
-        },
-      ],
+        limit: 3,
+        pushes: [{type: 'add', row: {id: 'c8', issueID: 'i2', created: 550}}],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
     });
 
-    takeTest({
-      ...base,
-      name: 'add with non-fetched partition value',
-      partition: {
-        key: ['issueID'],
-        values: [['i1'], ['i2']],
-      },
-      sourceRows: [
-        {id: 'c1', issueID: 'i1', created: 100},
-        {id: 'c2', issueID: 'i1', created: 200},
-        {id: 'c3', issueID: 'i1', created: 300},
-        {id: 'c4', issueID: 'i2', created: 400},
-        {id: 'c5', issueID: 'i2', created: 500},
-      ],
-      limit: 3,
-      pushes: [{type: 'add', row: {id: 'c6', issueID: '3', created: 550}}],
-      expectedMessages: [
-        [
-          'takeSnitch',
-          'push',
-          {type: 'add', row: {id: 'c6', issueID: '3', created: 550}},
+    test('add with non-fetched partition value', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        partition: {
+          key: ['issueID'],
+          values: [['i1'], ['i2']],
+        },
+        sourceRows: [
+          {id: 'c1', issueID: 'i1', created: 100},
+          {id: 'c2', issueID: 'i1', created: 200},
+          {id: 'c3', issueID: 'i1', created: 300},
+          {id: 'c4', issueID: 'i2', created: 400},
+          {id: 'c5', issueID: 'i2', created: 500},
         ],
-      ],
-      expectedStorage: {
-        '["take","i1"]': {
-          bound: {id: 'c3', issueID: 'i1', created: 300},
-          size: 3,
-        },
-        '["take","i2"]': {
-          bound: {id: 'c5', issueID: 'i2', created: 500},
-          size: 2,
-        },
-        'maxBound': {id: 'c5', issueID: 'i2', created: 500},
-      },
-      expectedOutput: [],
+        limit: 3,
+        pushes: [{type: 'add', row: {id: 'c6', issueID: '3', created: 550}}],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
     });
   });
 
   suite('remove', () => {
-    takeTest({
-      ...base,
-      partition: {
-        key: ['issueID'],
-        values: [['i1'], ['i2']],
-      },
-      name: 'limit 0',
-      sourceRows: [
-        {id: 'c1', issueID: 'i1', created: 100},
-        {id: 'c2', issueID: 'i1', created: 200},
-        {id: 'c3', issueID: 'i1', created: 300},
-      ],
-      limit: 0,
-      pushes: [{type: 'remove', row: {id: 'c1', issueID: 'i1', created: 100}}],
-      expectedMessages: [
-        [
-          'takeSnitch',
-          'push',
+    test('limit 0', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        partition: {
+          key: ['issueID'],
+          values: [['i1'], ['i2']],
+        },
+        sourceRows: [
+          {id: 'c1', issueID: 'i1', created: 100},
+          {id: 'c2', issueID: 'i1', created: 200},
+          {id: 'c3', issueID: 'i1', created: 300},
+        ],
+        limit: 0,
+        pushes: [
           {type: 'remove', row: {id: 'c1', issueID: 'i1', created: 100}},
         ],
-      ],
-      expectedStorage: {},
-      expectedOutput: [],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
     });
 
-    takeTest({
-      ...base,
-      partition: {
-        key: ['issueID'],
-        values: [['i1'], ['i2']],
-      },
-      name: 'less than limit remove row at start',
-      sourceRows: [
-        {id: 'c1', issueID: 'i1', created: 100},
-        {id: 'c2', issueID: 'i1', created: 200},
-        {id: 'c3', issueID: 'i1', created: 300},
-        {id: 'c4', issueID: 'i2', created: 400},
-        {id: 'c5', issueID: 'i2', created: 500},
-      ],
-      limit: 5,
-      pushes: [{type: 'remove', row: {id: 'c1', issueID: 'i1', created: 100}}],
-      expectedMessages: [
-        [
-          'takeSnitch',
-          'push',
+    test('less than limit remove row at start', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        partition: {
+          key: ['issueID'],
+          values: [['i1'], ['i2']],
+        },
+        sourceRows: [
+          {id: 'c1', issueID: 'i1', created: 100},
+          {id: 'c2', issueID: 'i1', created: 200},
+          {id: 'c3', issueID: 'i1', created: 300},
+          {id: 'c4', issueID: 'i2', created: 400},
+          {id: 'c5', issueID: 'i2', created: 500},
+        ],
+        limit: 5,
+        pushes: [
           {type: 'remove', row: {id: 'c1', issueID: 'i1', created: 100}},
         ],
-        [
-          'takeSnitch',
-          'fetch',
-          {
-            constraint: {issueID: 'i1'},
-            start: {
-              basis: 'before',
-              row: {id: 'c3', issueID: 'i1', created: 300},
-            },
-          },
-        ],
-      ],
-      expectedStorage: {
-        '["take","i1"]': {
-          bound: {id: 'c3', issueID: 'i1', created: 300},
-          size: 2,
-        },
-        '["take","i2"]': {
-          bound: {id: 'c5', issueID: 'i2', created: 500},
-          size: 2,
-        },
-        'maxBound': {id: 'c5', issueID: 'i2', created: 500},
-      },
-      expectedOutput: [
-        {
-          type: 'remove',
-          node: {
-            row: {id: 'c1', issueID: 'i1', created: 100},
-            relationships: {},
-          },
-        },
-      ],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
     });
 
-    takeTest({
-      ...base,
-      partition: {
-        key: ['issueID'],
-        values: [['i1'], ['i2']],
-      },
-      name: 'remove row unfetched partition',
-      sourceRows: [
-        {id: 'c1', issueID: 'i1', created: 100},
-        {id: 'c2', issueID: 'i1', created: 200},
-        {id: 'c3', issueID: 'i1', created: 300},
-        {id: 'c4', issueID: 'i2', created: 400},
-        {id: 'c5', issueID: 'i2', created: 500},
-        {id: 'c6', issueID: 'i3', created: 600},
-      ],
-      limit: 5,
-      pushes: [{type: 'remove', row: {id: 'c6', issueID: 'i3', created: 600}}],
-      expectedMessages: [
-        [
-          'takeSnitch',
-          'push',
+    test('remove row unfetched partition', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        partition: {
+          key: ['issueID'],
+          values: [['i1'], ['i2']],
+        },
+        sourceRows: [
+          {id: 'c1', issueID: 'i1', created: 100},
+          {id: 'c2', issueID: 'i1', created: 200},
+          {id: 'c3', issueID: 'i1', created: 300},
+          {id: 'c4', issueID: 'i2', created: 400},
+          {id: 'c5', issueID: 'i2', created: 500},
+          {id: 'c6', issueID: 'i3', created: 600},
+        ],
+        limit: 5,
+        pushes: [
           {type: 'remove', row: {id: 'c6', issueID: 'i3', created: 600}},
         ],
-      ],
-      expectedStorage: {
-        '["take","i1"]': {
-          bound: {id: 'c3', issueID: 'i1', created: 300},
-          size: 3,
-        },
-        '["take","i2"]': {
-          bound: {id: 'c5', issueID: 'i2', created: 500},
-          size: 2,
-        },
-        'maxBound': {id: 'c5', issueID: 'i2', created: 500},
-      },
-      expectedOutput: [],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
     });
   });
 
@@ -1530,926 +713,281 @@ suite('take with partition', () => {
       },
     } as const;
 
-    takeTest({
-      ...base,
-      name: 'limit 0',
-      partition: {
-        key: ['issueID'],
-        values: [['i1'], ['i2']],
-      },
-      limit: 0,
-      pushes: [
-        {
-          type: 'edit',
-          oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
-          row: {id: 'c2', issueID: 'i1', created: 200, text: 'b2'},
+    test('limit 0', () => {
+      const {messages, storage, pushes} = takeTest({
+        ...base,
+        partition: {
+          key: ['issueID'],
+          values: [['i1'], ['i2']],
         },
-      ],
-      expectedMessages: [
-        [
-          'takeSnitch',
-          'push',
+        limit: 0,
+        pushes: [
           {
             type: 'edit',
             oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
             row: {id: 'c2', issueID: 'i1', created: 200, text: 'b2'},
           },
         ],
-      ],
-      expectedStorage: {},
-      expectedOutput: [],
+      });
+      expect(messages).toMatchInlineSnapshot();
+      expect(storage).toMatchInlineSnapshot();
+      expect(pushes).toMatchInlineSnapshot();
     });
 
     describe('less than limit ', () => {
-      takeTest({
-        ...base,
-        name: 'edit row at start',
-        limit: 5,
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
-            row: {id: 'c1', issueID: 'i1', created: 100, text: 'a2'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('edit row at start', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 5,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
               row: {id: 'c1', issueID: 'i1', created: 100, text: 'a2'},
             },
           ],
-        ],
-        expectedStorage: {
-          '["take","i1"]': {
-            bound: {
-              created: 300,
-              id: 'c3',
-              issueID: 'i1',
-              text: 'c',
-            },
-            size: 3,
-          },
-          '["take","i2"]': {
-            bound: {
-              created: 500,
-              id: 'c5',
-              issueID: 'i2',
-              text: 'e',
-            },
-            size: 2,
-          },
-          'maxBound': {
-            created: 500,
-            id: 'c5',
-            issueID: 'i2',
-            text: 'e',
-          },
-        },
-        expectedOutput: [
-          {
-            type: 'edit',
-            oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
-            row: {id: 'c1', issueID: 'i1', created: 100, text: 'a2'},
-          },
-        ],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
 
-      takeTest({
-        ...base,
-        name: 'edit row at end',
-        limit: 5,
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'c5', issueID: 'i2', created: 500, text: 'e'},
-            row: {id: 'c5', issueID: 'i2', created: 500, text: 'e2'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('edit row at end', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 5,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'c5', issueID: 'i2', created: 500, text: 'e'},
               row: {id: 'c5', issueID: 'i2', created: 500, text: 'e2'},
             },
           ],
-        ],
-        expectedStorage: {
-          '["take","i1"]': {
-            bound: {
-              created: 300,
-              id: 'c3',
-              issueID: 'i1',
-              text: 'c',
-            },
-            size: 3,
-          },
-          '["take","i2"]': {
-            bound: {
-              created: 500,
-              id: 'c5',
-              issueID: 'i2',
-              text: 'e',
-            },
-            size: 2,
-          },
-          'maxBound': {
-            created: 500,
-            id: 'c5',
-            issueID: 'i2',
-            text: 'e',
-          },
-        },
-        expectedOutput: [
-          {
-            type: 'edit',
-            oldRow: {id: 'c5', issueID: 'i2', created: 500, text: 'e'},
-            row: {id: 'c5', issueID: 'i2', created: 500, text: 'e2'},
-          },
-        ],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
     });
 
     describe('at limit', () => {
-      takeTest({
-        ...base,
-        limit: 2,
-        name: 'edit row after boundary',
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
-            row: {id: 'c3', issueID: 'i1', created: 300, text: 'c2'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('edit row after boundary', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 2,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
               row: {id: 'c3', issueID: 'i1', created: 300, text: 'c2'},
             },
           ],
-        ],
-        expectedStorage: {
-          '["take","i1"]': {
-            bound: {
-              created: 200,
-              id: 'c2',
-              issueID: 'i1',
-              text: 'b',
-            },
-            size: 2,
-          },
-          '["take","i2"]': {
-            bound: {
-              created: 500,
-              id: 'c5',
-              issueID: 'i2',
-              text: 'e',
-            },
-            size: 2,
-          },
-          'maxBound': {
-            created: 500,
-            id: 'c5',
-            issueID: 'i2',
-            text: 'e',
-          },
-        },
-        expectedOutput: [],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
 
-      takeTest({
-        ...base,
-        limit: 3,
-        name: 'edit row before boundary',
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
-            row: {id: 'c2', issueID: 'i1', created: 200, text: 'b2'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('edit row before boundary', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 3,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
               row: {id: 'c2', issueID: 'i1', created: 200, text: 'b2'},
             },
           ],
-        ],
-        expectedStorage: {
-          '["take","i1"]': {
-            bound: {
-              created: 300,
-              id: 'c3',
-              issueID: 'i1',
-              text: 'c',
-            },
-            size: 3,
-          },
-          '["take","i2"]': {
-            bound: {
-              created: 500,
-              id: 'c5',
-              issueID: 'i2',
-              text: 'e',
-            },
-            size: 2,
-          },
-          'maxBound': {
-            created: 500,
-            id: 'c5',
-            issueID: 'i2',
-            text: 'e',
-          },
-        },
-        expectedOutput: [
-          {
-            type: 'edit',
-            oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
-            row: {id: 'c2', issueID: 'i1', created: 200, text: 'b2'},
-          },
-        ],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
 
-      takeTest({
-        ...base,
-        limit: 3,
-        name: 'edit row at boundary',
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
-            row: {id: 'c3', issueID: 'i1', created: 300, text: 'c2'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('edit row at boundary', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 3,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
               row: {id: 'c3', issueID: 'i1', created: 300, text: 'c2'},
             },
           ],
-        ],
-        expectedStorage: {
-          '["take","i1"]': {
-            bound: {
-              created: 300,
-              id: 'c3',
-              issueID: 'i1',
-              text: 'c',
-            },
-            size: 3,
-          },
-          '["take","i2"]': {
-            bound: {
-              created: 500,
-              id: 'c5',
-              issueID: 'i2',
-              text: 'e',
-            },
-            size: 2,
-          },
-          'maxBound': {
-            created: 500,
-            id: 'c5',
-            issueID: 'i2',
-            text: 'e',
-          },
-        },
-        expectedOutput: [
-          {
-            type: 'edit',
-            oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
-            row: {id: 'c3', issueID: 'i1', created: 300, text: 'c2'},
-          },
-        ],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
 
-      takeTest({
-        ...base,
-        limit: 3,
-        name: 'edit row at boundary, making it not the boundary',
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
-            row: {id: 'c3', issueID: 'i1', created: 150, text: 'c2'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('edit row at boundary, making it not the boundary', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 3,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
               row: {id: 'c3', issueID: 'i1', created: 150, text: 'c2'},
             },
           ],
-          [
-            'takeSnitch',
-            'fetch',
-            {
-              constraint: {
-                issueID: 'i1',
-              },
-              start: {
-                basis: 'before',
-                row: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
-              },
-            },
-          ],
-        ],
-        expectedStorage: {
-          '["take","i1"]': {
-            bound: {
-              created: 200,
-              id: 'c2',
-              issueID: 'i1',
-              text: 'b',
-            },
-            size: 3,
-          },
-          '["take","i2"]': {
-            bound: {
-              created: 500,
-              id: 'c5',
-              issueID: 'i2',
-              text: 'e',
-            },
-            size: 2,
-          },
-          'maxBound': {
-            created: 500,
-            id: 'c5',
-            issueID: 'i2',
-            text: 'e',
-          },
-        },
-        expectedOutput: [
-          {
-            type: 'edit',
-            oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
-            row: {id: 'c3', issueID: 'i1', created: 150, text: 'c2'},
-          },
-        ],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
 
-      takeTest({
-        ...base,
-        limit: 2,
-        name: 'edit row at boundary, making it fall outside the window',
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
-            row: {id: 'c2', issueID: 'i1', created: 350, text: 'b2'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('edit row at boundary, making it fall outside the window', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 2,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
               row: {id: 'c2', issueID: 'i1', created: 350, text: 'b2'},
             },
           ],
-          [
-            'takeSnitch',
-            'fetch',
-            {
-              constraint: {
-                issueID: 'i1',
-              },
-              start: {
-                basis: 'at',
-                row: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
-              },
-            },
-          ],
-        ],
-        expectedStorage: {
-          '["take","i1"]': {
-            bound: {
-              created: 300,
-              id: 'c3',
-              issueID: 'i1',
-              text: 'c',
-            },
-            size: 2,
-          },
-          '["take","i2"]': {
-            bound: {
-              created: 500,
-              id: 'c5',
-              issueID: 'i2',
-              text: 'e',
-            },
-            size: 2,
-          },
-          'maxBound': {
-            created: 500,
-            id: 'c5',
-            issueID: 'i2',
-            text: 'e',
-          },
-        },
-        expectedOutput: [
-          {
-            type: 'remove',
-            node: {
-              row: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
-              relationships: {},
-            },
-          },
-          {
-            type: 'add',
-            node: {
-              row: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
-              relationships: {},
-            },
-          },
-        ],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
 
-      takeTest({
-        ...base,
-        limit: 3,
-        name: 'edit row before boundary, changing its order',
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
-            row: {id: 'c2', issueID: 'i1', created: 50, text: 'b2'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('edit row before boundary, changing its order', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 3,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
               row: {id: 'c2', issueID: 'i1', created: 50, text: 'b2'},
             },
           ],
-        ],
-        expectedStorage: {
-          '["take","i1"]': {
-            bound: {
-              created: 300,
-              id: 'c3',
-              issueID: 'i1',
-              text: 'c',
-            },
-            size: 3,
-          },
-          '["take","i2"]': {
-            bound: {
-              created: 500,
-              id: 'c5',
-              issueID: 'i2',
-              text: 'e',
-            },
-            size: 2,
-          },
-          'maxBound': {
-            created: 500,
-            id: 'c5',
-            issueID: 'i2',
-            text: 'e',
-          },
-        },
-        expectedOutput: [
-          {
-            type: 'edit',
-            oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
-            row: {id: 'c2', issueID: 'i1', created: 50, text: 'b2'},
-          },
-        ],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
 
-      takeTest({
-        ...base,
-        limit: 2,
-        name: 'edit row after boundary to make it the new boundary',
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
-            row: {id: 'c3', issueID: 'i1', created: 150, text: 'c2'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('edit row after boundary to make it the new boundary', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 2,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
               row: {id: 'c3', issueID: 'i1', created: 150, text: 'c2'},
             },
           ],
-          [
-            'takeSnitch',
-            'fetch',
-            {
-              constraint: {
-                issueID: 'i1',
-              },
-              start: {
-                basis: 'before',
-                row: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
-              },
-            },
-          ],
-        ],
-        expectedStorage: {
-          '["take","i1"]': {
-            bound: {
-              created: 150,
-              id: 'c3',
-              issueID: 'i1',
-              text: 'c2',
-            },
-            size: 2,
-          },
-          '["take","i2"]': {
-            bound: {
-              created: 500,
-              id: 'c5',
-              issueID: 'i2',
-              text: 'e',
-            },
-            size: 2,
-          },
-          'maxBound': {
-            created: 500,
-            id: 'c5',
-            issueID: 'i2',
-            text: 'e',
-          },
-        },
-        expectedOutput: [
-          {
-            type: 'remove',
-            node: {
-              row: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
-              relationships: {},
-            },
-          },
-          {
-            type: 'add',
-            node: {
-              row: {id: 'c3', issueID: 'i1', created: 150, text: 'c2'},
-              relationships: {},
-            },
-          },
-        ],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
 
-      takeTest({
-        ...base,
-        limit: 2,
-        name: 'edit row before boundary to make it new boundary',
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
-            row: {id: 'c1', issueID: 'i1', created: 250, text: 'a2'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('edit row before boundary to make it new boundary', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 2,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
               row: {id: 'c1', issueID: 'i1', created: 250, text: 'a2'},
             },
           ],
-          [
-            'takeSnitch',
-            'fetch',
-            {
-              constraint: {
-                issueID: 'i1',
-              },
-              start: {
-                basis: 'after',
-                row: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
-              },
-            },
-          ],
-        ],
-        expectedStorage: {
-          '["take","i1"]': {
-            bound: {
-              created: 250,
-              id: 'c1',
-              issueID: 'i1',
-              text: 'a2',
-            },
-            size: 2,
-          },
-          '["take","i2"]': {
-            bound: {
-              created: 500,
-              id: 'c5',
-              issueID: 'i2',
-              text: 'e',
-            },
-            size: 2,
-          },
-          'maxBound': {
-            created: 500,
-            id: 'c5',
-            issueID: 'i2',
-            text: 'e',
-          },
-        },
-        expectedOutput: [
-          {
-            type: 'edit',
-            oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
-            row: {id: 'c1', issueID: 'i1', created: 250, text: 'a2'},
-          },
-        ],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
 
-      takeTest({
-        ...base,
-        limit: 2,
-        name: 'edit row before boundary to fetch new boundary',
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
-            row: {id: 'c1', issueID: 'i1', created: 350, text: 'a2'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('edit row before boundary to fetch new boundary', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 2,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
               row: {id: 'c1', issueID: 'i1', created: 350, text: 'a2'},
             },
           ],
-          [
-            'takeSnitch',
-            'fetch',
-            {
-              constraint: {
-                issueID: 'i1',
-              },
-              start: {
-                basis: 'after',
-                row: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
-              },
-            },
-          ],
-        ],
-        expectedStorage: {
-          '["take","i1"]': {
-            bound: {
-              created: 300,
-              id: 'c3',
-              issueID: 'i1',
-              text: 'c',
-            },
-            size: 2,
-          },
-          '["take","i2"]': {
-            bound: {
-              created: 500,
-              id: 'c5',
-              issueID: 'i2',
-              text: 'e',
-            },
-            size: 2,
-          },
-          'maxBound': {
-            created: 500,
-            id: 'c5',
-            issueID: 'i2',
-            text: 'e',
-          },
-        },
-        expectedOutput: [
-          {
-            type: 'remove',
-            node: {
-              row: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
-              relationships: {},
-            },
-          },
-          {
-            type: 'add',
-            node: {
-              row: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
-              relationships: {},
-            },
-          },
-        ],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
     });
 
     describe('changing partition value', () => {
-      takeTest({
-        ...base,
-        limit: 2,
-        name: 'move to from first partition to second',
-        pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
-            row: {id: 'c1', issueID: 'i2', created: 100, text: 'a2'},
-          },
-        ],
-        expectedMessages: [
-          [
-            'takeSnitch',
-            'push',
+      test('move to from first partition to second', () => {
+        const {messages, storage, pushes} = takeTest({
+          ...base,
+          limit: 2,
+          pushes: [
             {
               type: 'edit',
               oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
               row: {id: 'c1', issueID: 'i2', created: 100, text: 'a2'},
             },
           ],
-          [
-            'takeSnitch',
-            'fetch',
-            {
-              constraint: {
-                issueID: 'i1',
-              },
-              start: {
-                basis: 'before',
-                row: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
-              },
-            },
-          ],
-          [
-            'takeSnitch',
-            'fetch',
-            {
-              constraint: {
-                issueID: 'i2',
-              },
-              start: {
-                basis: 'before',
-                row: {id: 'c5', issueID: 'i2', created: 500, text: 'e'},
-              },
-            },
-          ],
-        ],
-        expectedStorage: {
-          '["take","i1"]': {
-            bound: {
-              created: 300,
-              id: 'c3',
-              issueID: 'i1',
-              text: 'c',
-            },
-            size: 2,
-          },
-          '["take","i2"]': {
-            bound: {
-              created: 400,
-              id: 'c4',
-              issueID: 'i2',
-              text: 'd',
-            },
-            size: 2,
-          },
-          'maxBound': {
-            created: 500,
-            id: 'c5',
-            issueID: 'i2',
-            text: 'e',
-          },
-        },
-        expectedOutput: [
-          {
-            type: 'remove',
-            node: {
-              row: {
-                created: 100,
-                id: 'c1',
-                issueID: 'i1',
-                text: 'a',
-              },
-              relationships: {},
-            },
-          },
-          {
-            type: 'add',
-            node: {
-              row: {
-                created: 300,
-                id: 'c3',
-                issueID: 'i1',
-                text: 'c',
-              },
-              relationships: {},
-            },
-          },
-          {
-            type: 'remove',
-            node: {
-              row: {
-                created: 500,
-                id: 'c5',
-                issueID: 'i2',
-                text: 'e',
-              },
-              relationships: {},
-            },
-          },
-          {
-            type: 'add',
-            node: {
-              row: {
-                created: 100,
-                id: 'c1',
-                issueID: 'i2',
-                text: 'a2',
-              },
-              relationships: {},
-            },
-          },
-        ],
+        });
+        expect(messages).toMatchInlineSnapshot();
+        expect(storage).toMatchInlineSnapshot();
+        expect(pushes).toMatchInlineSnapshot();
       });
     });
   });
 });
 
-function takeTest(t: TakeTest) {
-  test(t.name, () => {
-    const log: SnitchMessage[] = [];
-    const source = createSource('table', t.columns, t.primaryKey);
-    for (const row of t.sourceRows) {
-      source.push({type: 'add', row});
-    }
-    const snitch = new Snitch(
-      source.connect(t.sort || [['id', 'asc']]),
-      'takeSnitch',
-      log,
-    );
-    const memoryStorage = new MemoryStorage();
-    const partitionKey = t.partition?.key;
+function takeTest(t: TakeTest): TakeTestReults {
+  const log: SnitchMessage[] = [];
+  const source = createSource('table', t.columns, t.primaryKey);
+  for (const row of t.sourceRows) {
+    source.push({type: 'add', row});
+  }
+  const snitch = new Snitch(
+    source.connect(t.sort || [['id', 'asc']]),
+    'takeSnitch',
+    log,
+  );
+  const memoryStorage = new MemoryStorage();
+  const partitionKey = t.partition?.key;
 
-    const take = new Take(snitch, memoryStorage, t.limit, partitionKey);
-    const c = new Catch(take);
-    if (t.partition === undefined) {
-      c.fetch();
-    } else {
-      assert(partitionKey);
-      for (const partitionValue of t.partition.values) {
-        c.fetch({
-          constraint: Object.fromEntries(
-            partitionKey.map((k, i) => [k, partitionValue[i]]),
-          ),
-        });
-      }
+  const take = new Take(snitch, memoryStorage, t.limit, partitionKey);
+  const c = new Catch(take);
+  if (t.partition === undefined) {
+    c.fetch();
+  } else {
+    assert(partitionKey);
+    for (const partitionValue of t.partition.values) {
+      c.fetch({
+        constraint: Object.fromEntries(
+          partitionKey.map((k, i) => [k, partitionValue[i]]),
+        ),
+      });
     }
-    expect(c.pushes).toEqual([]);
-    log.length = 0;
-    for (const change of t.pushes) {
-      source.push(change);
-    }
+  }
+  expect(c.pushes).toEqual([]);
+  log.length = 0;
+  for (const change of t.pushes) {
+    source.push(change);
+  }
 
-    expect(log).toEqual(t.expectedMessages);
-    expect(memoryStorage.cloneData()).toEqual(t.expectedStorage);
-    expect(c.pushes).toEqual(t.expectedOutput);
-  });
+  return {
+    messages: log,
+    storage: memoryStorage.cloneData(),
+    pushes: c.pushes,
+  };
 }
 
 type TakeTest = {
-  name: string;
   columns: Record<string, SchemaValue>;
   primaryKey: PrimaryKey;
   sourceRows: readonly Row[];
@@ -2462,7 +1000,10 @@ type TakeTest = {
       }
     | undefined;
   pushes: SourceChange[];
-  expectedMessages: SnitchMessage[];
-  expectedStorage: Record<string, JSONValue>;
-  expectedOutput: CaughtChange[];
+};
+
+type TakeTestReults = {
+  messages: SnitchMessage[];
+  storage: Record<string, JSONValue>;
+  pushes: CaughtChange[];
 };
