@@ -29,19 +29,19 @@ const issueSchema: TableSchema = {
   relationships: {
     labels: {
       correlation: [['id', 'id']],
-      destSchema: () => labelSchema,
+      schema: () => labelSchema,
       junction: {
         correlation: [['issueID', 'labelID']],
-        destSchema: () => issueLabelSchema,
+        schema: () => issueLabelSchema,
       },
     },
     comments: {
       correlation: [['id', 'issueID']],
-      destSchema: () => commentSchema,
+      schema: () => commentSchema,
     },
     creator: {
       correlation: [['creatorID', 'id']],
-      destSchema: () => memberSchema,
+      schema: () => memberSchema,
     },
   },
 };
@@ -59,7 +59,7 @@ const commentSchema: TableSchema = {
   relationships: {
     creator: {
       correlation: [['creatorID', 'id']],
-      destSchema: () => memberSchema,
+      schema: () => memberSchema,
     },
   },
 };

@@ -934,7 +934,7 @@ test('join with compound keys', () => {
           ['a1', 'b1'],
           ['a2', 'b2'],
         ],
-        destSchema: bSchema,
+        schema: bSchema,
       },
     },
   } as const;

@@ -71,7 +71,7 @@ type TestSchemaWithRelationships = {
   relationships: {
     test: {
       correlation: [['s', 's']];
-      destSchema: TestSchema;
+      schema: TestSchema;
     };
   };
   primaryKey: ['s'];
@@ -87,15 +87,15 @@ type TestSchemaWithMoreRelationships = {
   relationships: {
     testWithRelationships: {
       correlation: [['a', 'a']];
-      destSchema: TestSchemaWithRelationships;
+      schema: TestSchemaWithRelationships;
     };
     test: {
       correlation: [['s', 's']];
-      destSchema: TestSchema;
+      schema: TestSchema;
     };
     self: {
       correlation: [['s', 's']];
-      destSchema: TestSchemaWithMoreRelationships;
+      schema: TestSchemaWithMoreRelationships;
     };
   };
   primaryKey: ['s'];
@@ -404,7 +404,7 @@ describe('schema structure', () => {
       relationships: {
         comments: {
           correlation: [['id', 'issueId']],
-          destSchema: commentSchema,
+          schema: commentSchema,
         },
       },
       primaryKey: ['id'],
@@ -425,7 +425,7 @@ describe('schema structure', () => {
       relationships: {
         issue: {
           correlation: [['issueId', 'id']],
-          destSchema: () => issueSchema,
+          schema: () => issueSchema,
         },
       },
     } as const;
@@ -441,11 +441,11 @@ describe('schema structure', () => {
       relationships: {
         comments: {
           correlation: [['id', 'issueId']],
-          destSchema: commentSchema,
+          schema: commentSchema,
         },
         parent: {
           correlation: [['parentId', 'id']],
-          destSchema: () => issueSchema,
+          schema: () => issueSchema,
         },
       },
     } as const;

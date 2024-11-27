@@ -41,11 +41,11 @@ const readable = {
   relationships: {
     readable: {
       correlation: [['readableId', 'id']],
-      destSchema: () => readable,
+      schema: () => readable,
     },
     unreadable: {
       correlation: [['unreadableId', 'id']],
-      destSchema: unreadable,
+      schema: unreadable,
     },
   },
 } as const;
@@ -58,11 +58,11 @@ const adminReadable = {
   relationships: {
     self1: {
       correlation: [['id', 'id']],
-      destSchema: () => adminReadable,
+      schema: () => adminReadable,
     },
     self2: {
       correlation: [['id', 'id']],
-      destSchema: () => adminReadable,
+      schema: () => adminReadable,
     },
   },
 } as const;

@@ -50,27 +50,27 @@ const schema = {
       relationships: {
         ownedIssues: {
           correlation: [['id', 'ownerId']],
-          destSchema: () => schema.tables.issue,
+          schema: () => schema.tables.issue,
         },
         createdIssues: {
           correlation: [['id', 'creatorId']],
-          destSchema: () => schema.tables.issue,
+          schema: () => schema.tables.issue,
         },
         viewedIssues: {
           correlation: [['id', 'id']],
-          destSchema: () => schema.tables.issue,
+          schema: () => schema.tables.issue,
           junction: {
             correlation: [['userId', 'issueId']],
-            destSchema: () => schema.tables.viewState,
+            schema: () => schema.tables.viewState,
           },
         },
         projects: {
           correlation: [['id', 'id']],
-          destSchema: () => schema.tables.project,
+          schema: () => schema.tables.project,
           source: ['id'],
           junction: {
             correlation: [['userId', 'projectId']],
-            destSchema: () => schema.tables.projectMember,
+            schema: () => schema.tables.projectMember,
           },
         },
       },
@@ -90,31 +90,31 @@ const schema = {
       relationships: {
         owner: {
           correlation: [['ownerId', 'id']],
-          destSchema: () => schema.tables.user,
+          schema: () => schema.tables.user,
         },
         creator: {
           correlation: [['creatorId', 'id']],
-          destSchema: () => schema.tables.user,
+          schema: () => schema.tables.user,
         },
         comments: {
           correlation: [['id', 'issueId']],
-          destSchema: () => schema.tables.comment,
+          schema: () => schema.tables.comment,
         },
         labels: {
           correlation: [['id', 'id']],
-          destSchema: () => schema.tables.label,
+          schema: () => schema.tables.label,
           junction: {
             correlation: [['issueId', 'labelId']],
-            destSchema: () => schema.tables.issueLabel,
+            schema: () => schema.tables.issueLabel,
           },
         },
         project: {
           correlation: [['projectId', 'id']],
-          destSchema: () => schema.tables.project,
+          schema: () => schema.tables.project,
         },
         viewState: {
           correlation: [['id', 'issueId']],
-          destSchema: () => schema.tables.viewState,
+          schema: () => schema.tables.viewState,
         },
       },
     },
@@ -130,11 +130,11 @@ const schema = {
       relationships: {
         issue: {
           correlation: [['issueId', 'id']],
-          destSchema: () => schema.tables.issue,
+          schema: () => schema.tables.issue,
         },
         user: {
           correlation: [['authorId', 'id']],
-          destSchema: () => schema.tables.user,
+          schema: () => schema.tables.user,
         },
       },
     },
@@ -148,11 +148,11 @@ const schema = {
       relationships: {
         issue: {
           correlation: [['issueId', 'id']],
-          destSchema: () => schema.tables.issue,
+          schema: () => schema.tables.issue,
         },
         label: {
           correlation: [['labelId', 'id']],
-          destSchema: () => schema.tables.label,
+          schema: () => schema.tables.label,
         },
       },
     },
@@ -176,11 +176,11 @@ const schema = {
       relationships: {
         user: {
           correlation: [['userId', 'id']],
-          destSchema: () => schema.tables.user,
+          schema: () => schema.tables.user,
         },
         issue: {
           correlation: [['issueId', 'id']],
-          destSchema: () => schema.tables.issue,
+          schema: () => schema.tables.issue,
         },
       },
     },
@@ -194,14 +194,14 @@ const schema = {
       relationships: {
         issues: {
           correlation: [['id', 'projectId']],
-          destSchema: () => schema.tables.issue,
+          schema: () => schema.tables.issue,
         },
         members: {
           correlation: [['id', 'id']],
-          destSchema: () => schema.tables.user,
+          schema: () => schema.tables.user,
           junction: {
             correlation: [['projectId', 'userId']],
-            destSchema: () => schema.tables.projectMember,
+            schema: () => schema.tables.projectMember,
           },
         },
       },
@@ -216,11 +216,11 @@ const schema = {
       relationships: {
         project: {
           correlation: [['projectId', 'id']],
-          destSchema: () => schema.tables.project,
+          schema: () => schema.tables.project,
         },
         user: {
           correlation: [['userId', 'id']],
-          destSchema: () => schema.tables.user,
+          schema: () => schema.tables.user,
         },
       },
     },

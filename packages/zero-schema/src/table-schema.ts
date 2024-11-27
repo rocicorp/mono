@@ -109,7 +109,7 @@ export type FieldRelationship<
   correlation: AtLeastOne<
     readonly [source: FieldName<TSourceSchema>, dest: FieldName<TDestSchema>]
   >;
-  destSchema: Lazy<TDestSchema>;
+  schema: Lazy<TDestSchema>;
 };
 
 /**

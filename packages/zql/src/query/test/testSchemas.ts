@@ -11,18 +11,18 @@ export const issueSchema = {
   relationships: {
     owner: {
       correlation: [['ownerId', 'id']],
-      destSchema: () => userSchema,
+      schema: () => userSchema,
     },
     comments: {
       correlation: [['id', 'issueId']],
-      destSchema: () => commentSchema,
+      schema: () => commentSchema,
     },
     labels: {
       correlation: [['id', 'id']],
-      destSchema: () => labelSchema,
+      schema: () => labelSchema,
       junction: {
         correlation: [['issueId', 'labelId']],
-        destSchema: () => issueLabelSchema,
+        schema: () => issueLabelSchema,
       },
     },
   },
@@ -48,10 +48,10 @@ export const labelSchema = {
   relationships: {
     issues: {
       correlation: [['id', 'id']],
-      destSchema: issueSchema,
+      schema: issueSchema,
       junction: {
         correlation: [['labelId', 'issueId']],
-        destSchema: issueLabelSchema,
+        schema: issueLabelSchema,
       },
     },
   },
@@ -70,15 +70,15 @@ export const commentSchema = {
   relationships: {
     issue: {
       correlation: [['issueId', 'id']],
-      destSchema: issueSchema,
+      schema: issueSchema,
     },
     revisions: {
       correlation: [['id', 'commentId']],
-      destSchema: () => revisionSchema,
+      schema: () => revisionSchema,
     },
     author: {
       correlation: [['authorId', 'id']],
-      destSchema: () => userSchema,
+      schema: () => userSchema,
     },
   },
 } as const;
@@ -95,11 +95,11 @@ export const revisionSchema = {
   relationships: {
     comment: {
       correlation: [['commentId', 'id']],
-      destSchema: commentSchema,
+      schema: commentSchema,
     },
     author: {
       correlation: [['authorId', 'id']],
-      destSchema: () => userSchema,
+      schema: () => userSchema,
     },
   },
 } as const;
@@ -115,7 +115,7 @@ export const userSchema = {
   relationships: {
     issues: {
       correlation: [['id', 'ownerId']],
-      destSchema: issueSchema,
+      schema: issueSchema,
     },
   },
 } as const;

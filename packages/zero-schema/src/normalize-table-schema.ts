@@ -169,7 +169,7 @@ type Correlation = AtLeastOne<readonly [source: string, dest: string]>;
 
 type NormalizedFieldRelationship = {
   correlation: Correlation;
-  destSchema: NormalizedTableSchema;
+  schema: NormalizedTableSchema;
 };
 
 function normalizeFieldRelationship(
@@ -178,10 +178,7 @@ function normalizeFieldRelationship(
 ): NormalizedFieldRelationship {
   return {
     correlation: relationship.correlation,
-    destSchema: normalizeLazyTableSchema(
-      relationship.destSchema,
-      tableSchemaCache,
-    ),
+    schema: normalizeLazyTableSchema(relationship.schema, tableSchemaCache),
   };
 }
 

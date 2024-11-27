@@ -40,29 +40,29 @@ const issueSchema = createTableSchema({
       correlation: [['id', 'id']],
       junction: {
         correlation: [['issueID', 'labelID']],
-        destSchema: () => issueLabelSchema,
+        schema: () => issueLabelSchema,
       },
-      destSchema: () => labelSchema,
+      schema: () => labelSchema,
     },
     comments: {
       correlation: [['id', 'issueID']],
-      destSchema: () => commentSchema,
+      schema: () => commentSchema,
     },
     creator: {
       correlation: [['creatorID', 'id']],
-      destSchema: () => userSchema,
+      schema: () => userSchema,
     },
     assignee: {
       correlation: [['assigneeID', 'id']],
-      destSchema: () => userSchema,
+      schema: () => userSchema,
     },
     viewState: {
       correlation: [['id', 'issueID']],
-      destSchema: () => viewStateSchema,
+      schema: () => viewStateSchema,
     },
     emoji: {
       correlation: [['id', 'subjectID']],
-      destSchema: () => emojiSchema,
+      schema: () => emojiSchema,
     },
   },
 });
@@ -91,11 +91,11 @@ const commentSchema = createTableSchema({
   relationships: {
     creator: {
       correlation: [['creatorID', 'id']],
-      destSchema: () => userSchema,
+      schema: () => userSchema,
     },
     emoji: {
       correlation: [['id', 'subjectID']],
-      destSchema: () => emojiSchema,
+      schema: () => emojiSchema,
     },
   },
 });
@@ -134,7 +134,7 @@ const emojiSchema = createTableSchema({
   relationships: {
     creator: {
       correlation: [['creatorID', 'id']],
-      destSchema: () => userSchema,
+      schema: () => userSchema,
     },
   },
 });

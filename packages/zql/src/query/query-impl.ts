@@ -189,12 +189,12 @@ export abstract class AbstractQuery<
     const fieldRelationship = related;
     const junctionRelationship = related;
     if (isFieldRelationship(fieldRelationship)) {
-      const {destSchema} = fieldRelationship;
+      const {schema} = fieldRelationship;
       const sq = cb(
         this._newQuery(
-          destSchema,
+          schema,
           {
-            table: destSchema.tableName,
+            table: schema.tableName,
             alias: relationship as string,
           },
           undefined,
@@ -209,7 +209,7 @@ export abstract class AbstractQuery<
             ...(this.#ast.related ?? []),
             {
               correlation: fieldRelationship.correlation,
-              subquery: addPrimaryKeysToAst(destSchema, sq.#ast),
+              subquery: addPrimaryKeysToAst(schema, sq.#ast),
             },
           ],
         },
@@ -223,13 +223,13 @@ export abstract class AbstractQuery<
       );
     }
     if (isJunctionRelationship(junctionRelationship)) {
-      const {destSchema} = junctionRelationship;
-      const junctionDestSchema = junctionRelationship.junction.destSchema;
+      const {schema} = junctionRelationship;
+      const junctionSchema = junctionRelationship.junction.schema;
       const sq = cb(
         this._newQuery(
-          destSchema,
+          schema,
           {
-            table: destSchema.tableName,
+            table: schema.tableName,
             alias: relationship as string,
           },
           undefined,
@@ -256,9 +256,9 @@ export abstract class AbstractQuery<
                 ]),
               ),
               subquery: {
-                table: junctionDestSchema.tableName,
+                table: junctionSchema.tableName,
                 alias: relationship as string,
-                orderBy: addPrimaryKeys(junctionDestSchema, undefined),
+                orderBy: addPrimaryKeys(junctionSchema, undefined),
                 related: [
                   {
                     correlation: atLeastOne(
@@ -270,7 +270,7 @@ export abstract class AbstractQuery<
                       ),
                     ),
                     hidden: true,
-                    subquery: addPrimaryKeysToAst(destSchema, sq.#ast),
+                    subquery: addPrimaryKeysToAst(schema, sq.#ast),
                   },
                 ],
               },
@@ -383,7 +383,7 @@ export abstract class AbstractQuery<
     const junctionRelationship = related;
 
     if (isFieldRelationship(fieldRelationship)) {
-      const {destSchema} = fieldRelationship;
+      const destSchema = fieldRelationship.schema;
       const sq = cb(
         this._newQuery(
           destSchema,
@@ -405,13 +405,13 @@ export abstract class AbstractQuery<
     }
 
     if (isJunctionRelationship(junctionRelationship)) {
-      const {destSchema} = junctionRelationship;
-      const junctionDestSchema = junctionRelationship.junction.destSchema;
+      const {schema} = junctionRelationship;
+      const junctionSchema = junctionRelationship.junction.schema;
       const queryToDest = cb(
         this._newQuery(
-          destSchema,
+          schema,
           {
-            table: destSchema.tableName,
+            table: schema.tableName,
             alias: `${SUBQ_PREFIX}${relationship}`,
           },
           undefined,
@@ -437,9 +437,9 @@ export abstract class AbstractQuery<
             ]),
           ),
           subquery: {
-            table: junctionDestSchema.tableName,
+            table: junctionSchema.tableName,
             alias: `${SUBQ_PREFIX}${relationship}`,
-            orderBy: addPrimaryKeys(junctionDestSchema, undefined),
+            orderBy: addPrimaryKeys(junctionSchema, undefined),
             where: {
               type: 'correlatedSubquery',
               related: {
@@ -450,7 +450,7 @@ export abstract class AbstractQuery<
                     junctionRelationship.correlation[i][1],
                   ]),
                 ),
-                subquery: addPrimaryKeysToAst(destSchema, queryToDest.#ast),
+                subquery: addPrimaryKeysToAst(schema, queryToDest.#ast),
               },
               op: 'EXISTS',
             },

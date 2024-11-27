@@ -53,14 +53,14 @@ test('relationship schema types', () => {
     relationships: {
       comments: {
         correlation: [['id', 'issueID']],
-        destSchema: commentSchema,
+        schema: commentSchema,
       },
       labels: {
         correlation: [['id', 'id']],
-        destSchema: () => labelSchema,
+        schema: () => labelSchema,
         junction: {
           correlation: [['issueID', 'labelID']],
-          destSchema: issueLabelSchema,
+          schema: issueLabelSchema,
         },
       },
     },

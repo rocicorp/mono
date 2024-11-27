@@ -161,11 +161,11 @@ test('relationships should be sorted', () => {
     relationships: {
       b: {
         correlation: [['bar-source', 'field']],
-        destSchema: barSchema,
+        schema: barSchema,
       },
       a: {
         correlation: [['bar-source', 'field']],
-        destSchema: () => barSchema,
+        schema: () => barSchema,
       },
     },
   };
@@ -191,7 +191,7 @@ test('relationships should be sorted', () => {
               "field"
             ]
           ],
-          "destSchema": {
+          "schema": {
             "tableName": "bar",
             "primaryKey": [
               "id"
@@ -212,7 +212,7 @@ test('relationships should be sorted', () => {
               "field"
             ]
           ],
-          "destSchema": {
+          "schema": {
             "tableName": "bar",
             "primaryKey": [
               "id"
@@ -242,14 +242,14 @@ test('Cyclic relationship should be supported', () => {
     relationships: {
       bar: {
         correlation: [['bar-source', 'field']],
-        destSchema: () => fooTableSchema,
+        schema: () => fooTableSchema,
       },
     },
   };
 
   const normalizedFooTableSchema = normalizeTableSchema(fooTableSchema);
 
-  expect(normalizedFooTableSchema.relationships.bar.destSchema).toBe(
+  expect(normalizedFooTableSchema.relationships.bar.schema).toBe(
     normalizedFooTableSchema,
   );
 });
@@ -264,7 +264,7 @@ test('Mutually resolving relationships should be supported', () => {
     relationships: {
       bar: {
         correlation: [['bar-source', 'field']],
-        destSchema: () => barTableSchema,
+        schema: () => barTableSchema,
       },
     },
   };
@@ -278,7 +278,7 @@ test('Mutually resolving relationships should be supported', () => {
     relationships: {
       foo: {
         correlation: [['foo-source', 'field']],
-        destSchema: () => fooTableSchema,
+        schema: () => fooTableSchema,
       },
     },
   };
@@ -286,7 +286,6 @@ test('Mutually resolving relationships should be supported', () => {
   const normalizedFooTableSchema = normalizeTableSchema(fooTableSchema);
 
   expect(
-    normalizedFooTableSchema.relationships.bar.destSchema.relationships.foo
-      .destSchema,
+    normalizedFooTableSchema.relationships.bar.schema.relationships.foo.schema,
   ).toBe(normalizedFooTableSchema);
 });
