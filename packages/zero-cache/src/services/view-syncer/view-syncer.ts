@@ -5,7 +5,6 @@ import type {Row} from 'postgres';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.js';
 import {must} from '../../../../shared/src/must.js';
-import {difference} from '../../../../shared/src/set-utils.js';
 import {
   ErrorKind,
   type ChangeDesiredQueriesBody,
@@ -48,12 +47,10 @@ import {
   type RowID,
 } from './schema/types.js';
 import {SchemaChangeError} from './snapshotter.js';
-import {
-  transformAndHashQuery,
-  type TransformedAndHashed,
-} from '../../auth/read-authorizer.js';
+import {transformAndHashQuery} from '../../auth/read-authorizer.js';
 import type {JWTPayload} from 'jose';
 import type {AuthorizationConfig} from '../../../../zero-schema/src/compiled-authorization.js';
+import type {AST} from '../../../../zero-protocol/src/ast.js';
 
 export type TokenData = {
   readonly raw: string;
@@ -525,11 +522,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
       const {query: transformedAst, hash: newTransformationHash} =
         transformAndHashQuery(ast, this.#permissions, this.#authData);
-      if (
-        newTransformationHash !== transformationHash ||
-        // if the transformation hash is undefined that means the user may not run the query at all
-        newTransformationHash === undefined
-      ) {
+      assert(
+        transformedAst !== undefined && newTransformationHash !== undefined,
+        'This query may not be run because the table it reads is not readable. Table: ' +
+          ast.table,
+      );
+      if (newTransformationHash !== transformationHash) {
         continue; // Query results may have changed.
       }
       const start = Date.now();
@@ -555,57 +553,54 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     const lc = this.#lc.withContext('cvrVersion', versionString(cvr.version));
 
     const hydratedQueries = this.#pipelines.addedQueries();
-    const allClientQueries = new Set(Object.keys(cvr.queries));
-    const transformations = new Map<string, TransformedAndHashed>();
 
-    const desiredClientQueries = new Set(
-      Object.keys(cvr.queries).filter(id => {
-        const q = cvr.queries[id];
-        const transformed = transformAndHashQuery(
-          q.ast,
-          this.#permissions,
-          this.#authData,
-        );
-
-        const keep = q.internal || Object.keys(q.desiredBy).length > 0;
-        if (keep) {
-          transformations.set(id, transformed);
-        }
-        return keep;
-      }),
-    );
-
-    // For all already hydrated queries, find out if any have divergent transformation hashes.
-    // If they do, they need to be re-hydrated.
-    const transformedQueries = [...hydratedQueries].filter(hash => {
-      const transformationHash = transformations.get(hash)?.hash;
-      if (!transformationHash) {
-        // The query was not in desiredClientQueries so it'll end
-        // up being removed from the hydrated query set.
-        // There's no need for further processing.
-        return false;
-      }
-      const existing = cvr.queries[hash];
-      return existing.transformationHash !== transformationHash;
+    // Convert queries to their transformed ast's and hashes
+    const transformationHashToHash = new Map<string, string>();
+    const serverQueries = Object.entries(cvr.queries).map(([id, q]) => {
+      const {query, hash: transformationHash} = transformAndHashQuery(
+        q.ast,
+        this.#permissions,
+        this.#authData,
+      );
+      assert(
+        query !== undefined && transformationHash !== undefined,
+        'This query may not be run because the table it reads is not readable. Table: ' +
+          q.ast.table,
+      );
+      transformationHashToHash.set(transformationHash, id);
+      return {
+        id,
+        // TODO(mlaw): follow up to handle the case where we statically determine
+        // the query cannot be run and is `undefined`.
+        ast: query,
+        transformationHash,
+        desired: q.internal || Object.keys(q.desiredBy).length > 0,
+      };
     });
 
-    const addQueries = [...difference(desiredClientQueries, hydratedQueries)];
-    const removeQueries = [
-      ...difference(allClientQueries, desiredClientQueries),
-    ];
+    const addQueries = serverQueries.filter(
+      q => q.desired && !hydratedQueries.has(q.transformationHash),
+    );
+    const removeQueries = serverQueries.filter(q => !q.desired);
+    const desiredQueries = new Set(
+      serverQueries.filter(q => q.desired).map(q => q.id),
+    );
+    const unhydrateQueries = [...hydratedQueries].filter(
+      transformationHash => !desiredQueries.has(transformationHash),
+    );
+
     if (
       addQueries.length > 0 ||
       removeQueries.length > 0 ||
-      transformedQueries.length > 0
+      unhydrateQueries.length > 0
     ) {
-      // Note: clients are caught up as part of #addAndRemoveQueries().
       await this.#addAndRemoveQueries(
         lc,
         cvr,
         addQueries,
         removeQueries,
-        transformedQueries,
-        transformations,
+        unhydrateQueries,
+        transformationHashToHash,
       );
     } else {
       await this.#catchupClients(lc, cvr);
@@ -613,7 +608,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     // If CVR was non-empty, then the CVR, database, and all clients
     // should now be at the same version.
-    if (allClientQueries.size) {
+    if (serverQueries.length > 0) {
       const cvrVersion = must(this.#cvr).version;
       const dbVersion = this.#pipelines.currentVersion();
       assert(
@@ -627,15 +622,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   async #addAndRemoveQueries(
     lc: LogContext,
     cvr: CVRSnapshot,
-    addQueries: string[],
-    removeQueries: string[],
-    transformedQueries: string[],
-    transformations: Map<string, TransformedAndHashed>,
+    addQueries: {id: string; ast: AST; transformationHash: string}[],
+    removeQueries: {id: string; ast: AST; transformationHash: string}[],
+    unhydrateQueries: string[],
+    transformationHashToHash: Map<string, string>,
   ) {
     assert(
       addQueries.length > 0 ||
         removeQueries.length > 0 ||
-        transformedQueries.length > 0,
+        unhydrateQueries.length > 0,
     );
     const start = Date.now();
 
@@ -654,15 +649,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     // executed and removed queries.
     const {newVersion, queryPatches} = updater.trackQueries(
       lc,
-      addQueries.map(hash => ({
-        id: hash,
-        transformationHash: must(transformations.get(hash)?.hash),
-      })),
+      addQueries,
       removeQueries,
-      transformedQueries.map(hash => ({
-        id: hash,
-        transformationHash: must(transformations.get(hash)?.hash),
-      })),
     );
     const pokers = [...this.#clients.values()].map(c =>
       c.startPoke(newVersion, this.#pipelines.currentSchemaVersions()),
@@ -673,29 +661,29 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     // Removing queries is easy. The pipelines are dropped, and the CVR
     // updater handles the updates and pokes.
-    for (const hash of removeQueries) {
-      this.#pipelines.removeQuery(hash);
+    for (const q of removeQueries) {
+      this.#pipelines.removeQuery(q.transformationHash);
     }
-    for (const hash of transformedQueries) {
+    for (const hash of unhydrateQueries) {
       this.#pipelines.removeQuery(hash);
     }
 
     const pipelines = this.#pipelines;
     function* generateRowChanges() {
-      for (const hash of transformedQueries) {
-        const {ast} = cvr.queries[hash];
-        lc.debug?.(`transforming pipeline for query ${hash}`, ast);
-        yield* pipelines.addQuery(hash, must(transformations.get(hash)?.query));
-      }
-      for (const hash of addQueries) {
-        const {ast} = cvr.queries[hash];
-        lc.debug?.(`adding pipeline for query ${hash}`, ast);
-        yield* pipelines.addQuery(hash, must(transformations.get(hash)?.query));
+      for (const q of addQueries) {
+        lc.debug?.(`adding pipeline for query ${q.id}`, q.ast);
+        yield* pipelines.addQuery(q.transformationHash, q.ast);
       }
     }
     // #processChanges does batched de-duping of rows. Wrap all pipelines in
     // a single generator in order to maximize de-duping.
-    await this.#processChanges(lc, generateRowChanges(), updater, pokers);
+    await this.#processChanges(
+      lc,
+      generateRowChanges(),
+      updater,
+      pokers,
+      transformationHashToHash,
+    );
 
     for (const patch of await updater.deleteUnreferencedRows(lc)) {
       pokers.forEach(poker => poker.addPatch(patch));
@@ -705,7 +693,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#cvr = (await updater.flush(lc, this.#lastConnectTime)).cvr;
 
     // Before ending the poke, catch up clients that were behind the old CVR.
-    await this.#catchupClients(lc, cvr, addQueries, pokers);
+    await this.#catchupClients(
+      lc,
+      cvr,
+      addQueries.map(q => q.id),
+      pokers,
+    );
 
     // Signal clients to commit.
     pokers.forEach(poker => poker.end());
@@ -799,6 +792,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     changes: Iterable<RowChange>,
     updater: CVRQueryDrivenUpdater,
     pokers: PokeHandler[],
+    transformationHashToHash: Map<string, string>,
   ) {
     const start = Date.now();
     const rows = new CustomKeyMap<RowID, RowUpdate>(rowIDString);
@@ -814,7 +808,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     };
 
     for (const change of changes) {
-      const {type, queryHash, table, rowKey, row} = change;
+      const {type, queryHash: transformationHash, table, rowKey, row} = change;
+      const queryHash = must(
+        transformationHashToHash.get(transformationHash),
+        'could not find the original hash for the transformation hash',
+      );
       const rowID: RowID = {schema: '', table, rowKey: rowKey as RowKey};
 
       let parsedRow = rows.get(rowID);
@@ -893,8 +891,22 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
 
     lc.debug?.(`applying ${numChanges} to advance to ${version}`);
+    const transformationHashToHash = new Map<string, string>();
+    for (const query of Object.values(cvr.queries)) {
+      if (!query.transformationHash) {
+        continue;
+      }
+      transformationHashToHash.set(query.transformationHash, query.id);
+    }
+
     try {
-      await this.#processChanges(lc, changes, updater, pokers);
+      await this.#processChanges(
+        lc,
+        changes,
+        updater,
+        pokers,
+        transformationHashToHash,
+      );
     } catch (e) {
       if (e instanceof SchemaChangeError) {
         pokers.forEach(poker => poker.cancel());
