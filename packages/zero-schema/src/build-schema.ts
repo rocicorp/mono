@@ -45,11 +45,7 @@ async function main() {
 
   try {
     const module = await tsImport(relativePath, import.meta.url);
-    if (!isSchemaConfig(module.default)) {
-      throw new Error(
-        'Schema file must have a default export of type SchemaConfig.',
-      );
-    }
+
     const schemaConfig = module.default;
     const authConfig = v.parse(
       await schemaConfig.authorization,
