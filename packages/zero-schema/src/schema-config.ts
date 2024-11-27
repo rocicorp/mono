@@ -1,6 +1,5 @@
-import {
-  authorizationConfigSchema,
-  type AuthorizationConfig,
+import type {
+   AuthorizationConfig,
 } from './compiled-authorization.js';
 import type {Schema} from './schema.js';
 import * as v from '../../shared/src/valita.js';
@@ -54,11 +53,3 @@ export const schemaSchema = v.object({
   tables: v.record(tableSchemaSchema),
 });
 
-export const schemaConfigSchema = v.object({
-  schema: schemaSchema,
-  authorization: authorizationConfigSchema,
-});
-
-export function isSchemaConfig(value: unknown): value is SchemaConfig {
-  return v.is(value, schemaConfigSchema);
-}
