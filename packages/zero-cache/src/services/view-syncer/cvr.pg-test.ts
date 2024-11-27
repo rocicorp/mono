@@ -1229,7 +1229,6 @@ describe('view-syncer/cvr', () => {
       lc,
       [{id: 'oneHash', transformationHash: 'serverOneHash'}],
       [],
-      [],
     );
     expect(newVersion).toEqual({stateVersion: '1aa', minorVersion: 1});
     expect(queryPatches).toMatchInlineSnapshot(`
@@ -1691,7 +1690,6 @@ describe('view-syncer/cvr', () => {
       lc,
       [{id: 'oneHash', transformationHash: 'serverTwoHash'}],
       [],
-      [],
     );
     expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
     expect(queryPatches).toHaveLength(0);
@@ -1990,9 +1988,8 @@ describe('view-syncer/cvr', () => {
     updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '123');
     ({newVersion, queryPatches} = updater.trackQueries(
       lc,
-      [],
-      [],
       [{id: 'oneHash', transformationHash: 'newXFormHash'}],
+      [],
     ));
     expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 2});
     expect(queryPatches).toHaveLength(0);
@@ -2009,6 +2006,7 @@ describe('view-syncer/cvr', () => {
         "instances": 2,
         "queries": 1,
         "rows": 0,
+        "rowsDeferred": 0,
         "statements": 4,
       }
     `);
@@ -2211,7 +2209,6 @@ describe('view-syncer/cvr', () => {
         {id: 'oneHash', transformationHash: 'updatedServerOneHash'},
         {id: 'twoHash', transformationHash: 'updatedServerTwoHash'},
       ],
-      [],
       [],
     );
     expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
@@ -2698,8 +2695,7 @@ describe('view-syncer/cvr', () => {
     const {newVersion, queryPatches} = updater.trackQueries(
       lc,
       [],
-      ['oneHash'],
-      [],
+      [{id: 'oneHash', transformationHash: 'oneHash'}],
     );
     expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
     expect(queryPatches).toMatchInlineSnapshot(`
@@ -3125,7 +3121,6 @@ describe('view-syncer/cvr', () => {
         {id: 'oneHash', transformationHash: 'serverOneHash'},
         {id: 'twoHash', transformationHash: 'serverTwoHash'},
       ],
-      [],
       [],
     );
     expect(newVersion).toEqual({stateVersion: '1ba'});

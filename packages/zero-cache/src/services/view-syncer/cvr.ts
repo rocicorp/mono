@@ -304,7 +304,7 @@ export type RefCounts = Record<Hash, number>;
  * {@link CVRStore.catchupConfigPatches} and {@link CVRStore.catchupRowPatches}.
  */
 export class CVRQueryDrivenUpdater extends CVRUpdater {
-  readonly #removedOrExecutedOrTransformedQueryIDs = new Set<string>();
+  readonly #removedOrExecutedQueryIDs = new Set<string>();
   readonly #receivedRows = new CustomKeyMap<RowID, RefCounts | null>(
     rowIDString,
   );
@@ -349,21 +349,14 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   trackQueries(
     lc: LogContext,
     executed: {id: string; transformationHash: string}[],
-    removed: string[],
-    transformed: {id: string; transformationHash: string}[],
+    removed: {id: string; transformationHash: string}[],
   ): {newVersion: CVRVersion; queryPatches: PatchToVersion[]} {
     assert(this.#existingRows === undefined, `trackQueries already called`);
 
     const queryPatches: Patch[] = [
       executed.map(q => this.#trackExecuted(q.id, q.transformationHash)),
-      removed.map(id => this.#trackRemoved(id)),
+      removed.map(q => this.#trackRemoved(q.id)),
     ].flat(2);
-
-    // Transformed queries are already running in the pipeline driver.
-    // There should be no patches in terms of query state (desired -> gotten).
-    transformed.map(q =>
-      this.#trackGotAndTransformed(q.id, q.transformationHash),
-    );
 
     this.#existingRows = this.#lookupRowsForExecutedAndRemovedQueries(lc);
 
@@ -381,7 +374,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   ): Promise<RowRecord[]> {
     const results = new CustomKeyMap<RowID, RowRecord>(rowIDString);
 
-    if (this.#removedOrExecutedOrTransformedQueryIDs.size === 0) {
+    if (this.#removedOrExecutedQueryIDs.size === 0) {
       // Query-less update. This can happen for config only changes.
       return [];
     }
@@ -393,7 +386,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       total++;
       assert(existing.refCounts !== null); // allRowRecords does not include null.
       for (const id of Object.keys(existing.refCounts)) {
-        if (this.#removedOrExecutedOrTransformedQueryIDs.has(id)) {
+        if (this.#removedOrExecutedQueryIDs.has(id)) {
           results.set(existing.id, existing);
           break;
         }
@@ -404,7 +397,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       `found ${
         results.size
       } (of ${total}) rows for executed / removed queries ${[
-        ...this.#removedOrExecutedOrTransformedQueryIDs,
+        ...this.#removedOrExecutedQueryIDs,
       ]}`,
     );
     return [...results.values()];
@@ -417,8 +410,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * This must be called for all executed queries.
    */
   #trackExecuted(queryID: string, transformationHash: string): Patch[] {
-    assert(!this.#removedOrExecutedOrTransformedQueryIDs.has(queryID));
-    this.#removedOrExecutedOrTransformedQueryIDs.add(queryID);
+    assert(!this.#removedOrExecutedQueryIDs.has(queryID));
+    this.#removedOrExecutedQueryIDs.add(queryID);
 
     let gotQueryPatch: Patch | undefined;
     const query = this._cvr.queries[queryID];
@@ -443,22 +436,6 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     return gotQueryPatch ? [gotQueryPatch] : [];
   }
 
-  #trackGotAndTransformed(queryID: string, transformationHash: string) {
-    assert(!this.#removedOrExecutedOrTransformedQueryIDs.has(queryID));
-    this.#removedOrExecutedOrTransformedQueryIDs.add(queryID);
-    const query = this._cvr.queries[queryID];
-    // If we're updating a transformed query, the transformation hash must have
-    // changed.
-    assert(query.transformationHash !== transformationHash);
-    // The query must also already have been tracked and have a patch version.
-    assert(!query.internal && query.patchVersion !== undefined);
-    const transformationVersion = this._ensureNewVersion();
-
-    query.transformationHash = transformationHash;
-    query.transformationVersion = transformationVersion;
-    this._cvrStore.updateQuery(query);
-  }
-
   /**
    * Tracks a query removed from the "gotten" set. In addition to producing the
    * appropriate patches for deleting the query, the removed query is taken into
@@ -473,8 +450,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     const query = this._cvr.queries[queryID];
     assertNotInternal(query);
 
-    assert(!this.#removedOrExecutedOrTransformedQueryIDs.has(queryID));
-    this.#removedOrExecutedOrTransformedQueryIDs.add(queryID);
+    assert(!this.#removedOrExecutedQueryIDs.has(queryID));
+    this.#removedOrExecutedQueryIDs.add(queryID);
     delete this._cvr.queries[queryID];
 
     const newVersion = this._ensureNewVersion();
@@ -528,7 +505,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
           : mergeRefCounts(
               existing?.refCounts,
               refCounts,
-              this.#removedOrExecutedOrTransformedQueryIDs,
+              this.#removedOrExecutedQueryIDs,
             );
 
       this.#receivedRows.set(id, merged);
@@ -588,7 +565,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * [CVR Sync Algorithm](https://www.notion.so/replicache/Sync-and-Client-View-Records-CVR-a18e02ec3ec543449ea22070855ff33d?pvs=4#7874f9b80a514be2b8cd5cf538b88d37).
    */
   async deleteUnreferencedRows(lc?: LogContext): Promise<PatchToVersion[]> {
-    if (this.#removedOrExecutedOrTransformedQueryIDs.size === 0) {
+    if (this.#removedOrExecutedQueryIDs.size === 0) {
       // Query-less update. This can happen for config-only changes.
       assert(this.#receivedRows.size === 0);
       return [];
@@ -625,7 +602,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     const newRefCounts = mergeRefCounts(
       existing.refCounts,
       undefined,
-      this.#removedOrExecutedOrTransformedQueryIDs,
+      this.#removedOrExecutedQueryIDs,
     );
     // If a row is still referenced, we update the refCounts but not the
     // patchVersion (as the existence and contents of the row have not

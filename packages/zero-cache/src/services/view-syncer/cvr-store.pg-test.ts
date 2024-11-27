@@ -335,7 +335,6 @@ describe('view-syncer/cvr-store', () => {
       lc,
       [{id: 'foo', transformationHash: 'foo-transformed'}],
       [],
-      [],
     );
 
     let rows = new CustomKeyMap<RowID, RowUpdate>(rowIDString);
@@ -385,7 +384,6 @@ describe('view-syncer/cvr-store', () => {
     updater.trackQueries(
       lc,
       [{id: 'foo', transformationHash: 'foo-transformed'}],
-      [],
       [],
     );
 
@@ -460,7 +458,6 @@ describe('view-syncer/cvr-store', () => {
       updater.trackQueries(
         lc,
         [{id: 'foo', transformationHash: 'foo-transformed'}],
-        [],
         [],
       );
 
