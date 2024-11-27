@@ -5,7 +5,6 @@ import {writeFile} from 'node:fs/promises';
 import {authorizationConfigSchema} from './compiled-authorization.js';
 import * as v from '../../shared/src/valita.js';
 import {parseOptions} from '../../shared/src/options.js';
-import {isSchemaConfig} from './schema-config.js';
 import {normalizeSchema} from './normalized-schema.js';
 
 export const schemaOptions = {
