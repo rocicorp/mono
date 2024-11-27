@@ -251,18 +251,16 @@ function applyCorrelatedSubQuery(
   const child = buildPipelineInternal(
     sq.subquery,
     delegate,
-    sq.correlations.map(c => c.childField) as readonly string[] as CompoundKey,
+    sq.correlation.map(c => c[1]) as readonly string[] as CompoundKey,
   );
   end = new Join({
     parent: end,
     child,
     storage: delegate.createStorage(),
-    parentKey: sq.correlations.map(
-      c => c.parentField,
+    parentKey: sq.correlation.map(
+      c => c[0],
     ) as readonly string[] as CompoundKey,
-    childKey: sq.correlations.map(
-      c => c.childField,
-    ) as readonly string[] as CompoundKey,
+    childKey: sq.correlation.map(c => c[1]) as readonly string[] as CompoundKey,
     relationshipName: sq.subquery.alias,
     hidden: sq.hidden ?? false,
   });

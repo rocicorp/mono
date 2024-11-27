@@ -87,11 +87,16 @@ export type Relationship =
   | FieldRelationship<TableSchema, TableSchema>
   | JunctionRelationship<TableSchema, TableSchema, TableSchema>;
 
-type AtLeastOne<T> = readonly [T, ...T[]];
+export type AtLeastOne<T> = readonly [T, ...T[]];
 
-type FieldName<TSchema extends TableSchema> = AtLeastOne<
-  keyof TSchema['columns']
->;
+export function atLeastOne<T>(arr: readonly T[]): AtLeastOne<T> {
+  if (arr.length === 0) {
+    throw new Error('Expected at least one element');
+  }
+  return arr as AtLeastOne<T>;
+}
+
+type FieldName<TSchema extends TableSchema> = keyof TSchema['columns'];
 
 /**
  * A relationship between two entities where
@@ -101,11 +106,10 @@ export type FieldRelationship<
   TSourceSchema extends TableSchema,
   TDestSchema extends TableSchema,
 > = {
-  source: FieldName<TSourceSchema>;
-  dest: {
-    field: FieldName<TDestSchema>;
-    schema: Lazy<TDestSchema>;
-  };
+  correlation: AtLeastOne<
+    readonly [source: FieldName<TSourceSchema>, dest: FieldName<TDestSchema>]
+  >;
+  destSchema: Lazy<TDestSchema>;
 };
 
 /**

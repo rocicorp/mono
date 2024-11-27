@@ -10,6 +10,7 @@ import {
   type NormalizedTableSchema,
 } from '../../../zero-schema/src/normalize-table-schema.js';
 import {
+  atLeastOne,
   isFieldRelationship,
   isJunctionRelationship,
   type PullSchemaForRelationship,
@@ -188,7 +189,7 @@ export abstract class AbstractQuery<
     const fieldRelationship = related;
     const junctionRelationship = related;
     if (isFieldRelationship(fieldRelationship)) {
-      const destSchema = fieldRelationship.dest.schema;
+      const {destSchema} = fieldRelationship;
       const sq = cb(
         this._newQuery(
           destSchema,
@@ -199,10 +200,7 @@ export abstract class AbstractQuery<
           undefined,
         ),
       ) as unknown as QueryImpl<any, any>;
-      assert(
-        fieldRelationship.source.length === fieldRelationship.dest.field.length,
-        'Invalid relationship',
-      );
+
       return this._newQuery(
         this.#schema,
         {
@@ -210,11 +208,7 @@ export abstract class AbstractQuery<
           related: [
             ...(this.#ast.related ?? []),
             {
-              correlations: fieldRelationship.source.map((field, i) => ({
-                parentField: field,
-                childField: fieldRelationship.dest.field[i],
-                op: '=',
-              })),
+              correlation: fieldRelationship.correlation,
               subquery: addPrimaryKeysToAst(destSchema, sq.#ast),
             },
           ],
@@ -228,10 +222,9 @@ export abstract class AbstractQuery<
         },
       );
     }
-
     if (isJunctionRelationship(junctionRelationship)) {
-      const destSchema = junctionRelationship.dest.schema;
-      const junctionSchema = junctionRelationship.junction.dest.schema;
+      const {destSchema} = junctionRelationship;
+      const junctionDestSchema = junctionRelationship.junction.destSchema;
       const sq = cb(
         this._newQuery(
           destSchema,
@@ -243,13 +236,10 @@ export abstract class AbstractQuery<
         ),
       ) as unknown as QueryImpl<any, any>;
       assert(
-        junctionRelationship.source.length ===
-          junctionRelationship.junction.source.length,
-        'Invalid relationship',
-      );
-      assert(
-        junctionRelationship.junction.dest.field.length ===
-          junctionRelationship.dest.field.length,
+        junctionRelationship.correlation.length > 0 &&
+          junctionRelationship.junction.correlation.length > 0 &&
+          junctionRelationship.correlation.length ===
+            junctionRelationship.junction.correlation.length,
         'Invalid relationship',
       );
       return this._newQuery(
@@ -259,23 +249,25 @@ export abstract class AbstractQuery<
           related: [
             ...(this.#ast.related ?? []),
             {
-              correlations: junctionRelationship.source.map((field, i) => ({
-                parentField: field,
-                childField: junctionRelationship.junction.source[i],
-                op: '=',
-              })),
+              correlation: atLeastOne(
+                junctionRelationship.correlation.map((field, i) => [
+                  field[0],
+                  junctionRelationship.junction.correlation[i][0],
+                ]),
+              ),
               subquery: {
-                table: junctionSchema.tableName,
+                table: junctionDestSchema.tableName,
                 alias: relationship as string,
-                orderBy: addPrimaryKeys(junctionSchema, undefined),
+                orderBy: addPrimaryKeys(junctionDestSchema, undefined),
                 related: [
                   {
-                    correlations: junctionRelationship.junction.dest.field.map(
-                      (field, i) => ({
-                        parentField: field,
-                        childField: junctionRelationship.dest.field[i],
-                        op: '=',
-                      }),
+                    correlation: atLeastOne(
+                      junctionRelationship.junction.correlation.map(
+                        (field, i) => [
+                          field[1],
+                          junctionRelationship.correlation[i][1],
+                        ],
+                      ),
                     ),
                     hidden: true,
                     subquery: addPrimaryKeysToAst(destSchema, sq.#ast),
@@ -294,6 +286,7 @@ export abstract class AbstractQuery<
         },
       );
     }
+
     throw new Error(`Invalid relationship ${relationship as string}`);
   }
 
@@ -390,7 +383,7 @@ export abstract class AbstractQuery<
     const junctionRelationship = related;
 
     if (isFieldRelationship(fieldRelationship)) {
-      const destSchema = fieldRelationship.dest.schema;
+      const {destSchema} = fieldRelationship;
       const sq = cb(
         this._newQuery(
           destSchema,
@@ -401,18 +394,10 @@ export abstract class AbstractQuery<
           undefined,
         ),
       ) as unknown as QueryImpl<any, any>;
-      assert(
-        fieldRelationship.source.length === fieldRelationship.dest.field.length,
-        'Invalid relationship',
-      );
       return {
         type: 'correlatedSubquery',
         related: {
-          correlations: fieldRelationship.source.map((field, i) => ({
-            parentField: field,
-            childField: fieldRelationship.dest.field[i],
-            op: '=',
-          })),
+          correlation: fieldRelationship.correlation,
           subquery: addPrimaryKeysToAst(destSchema, sq.#ast),
         },
         op: 'EXISTS',
@@ -420,8 +405,8 @@ export abstract class AbstractQuery<
     }
 
     if (isJunctionRelationship(junctionRelationship)) {
-      const destSchema = junctionRelationship.dest.schema;
-      const junctionSchema = junctionRelationship.junction.dest.schema;
+      const {destSchema} = junctionRelationship;
+      const junctionDestSchema = junctionRelationship.junction.destSchema;
       const queryToDest = cb(
         this._newQuery(
           destSchema,
@@ -434,37 +419,36 @@ export abstract class AbstractQuery<
       ) as unknown as QueryImpl<any, any>;
 
       assert(
-        junctionRelationship.source.length ===
-          junctionRelationship.junction.source.length,
-        'Invalid relationship',
-      );
-      assert(
-        junctionRelationship.junction.dest.field.length ===
-          junctionRelationship.dest.field.length,
+        junctionRelationship.correlation.length > 0 &&
+          junctionRelationship.junction.correlation.length > 0 &&
+          junctionRelationship.correlation.length ===
+            junctionRelationship.junction.correlation.length,
         'Invalid relationship',
       );
 
       return {
         type: 'correlatedSubquery',
         related: {
-          correlations: junctionRelationship.source.map((field, i) => ({
-            parentField: field,
-            childField: junctionRelationship.junction.source[i],
-            op: '=',
-          })),
+          // source to source
+          correlation: atLeastOne(
+            junctionRelationship.correlation.map((field, i) => [
+              field[0],
+              junctionRelationship.junction.correlation[i][0],
+            ]),
+          ),
           subquery: {
-            table: junctionSchema.tableName,
+            table: junctionDestSchema.tableName,
             alias: `${SUBQ_PREFIX}${relationship}`,
-            orderBy: addPrimaryKeys(junctionSchema, undefined),
+            orderBy: addPrimaryKeys(junctionDestSchema, undefined),
             where: {
               type: 'correlatedSubquery',
               related: {
-                correlations: junctionRelationship.junction.dest.field.map(
-                  (field, i) => ({
-                    parentField: field,
-                    childField: junctionRelationship.dest.field[i],
-                    op: '=',
-                  }),
+                // dest to dest
+                correlation: atLeastOne(
+                  junctionRelationship.junction.correlation.map((field, i) => [
+                    field[1],
+                    junctionRelationship.correlation[i][1],
+                  ]),
                 ),
                 subquery: addPrimaryKeysToAst(destSchema, queryToDest.#ast),
               },

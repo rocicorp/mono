@@ -160,18 +160,12 @@ test('relationships should be sorted', () => {
     },
     relationships: {
       b: {
-        dest: {
-          field: ['field'],
-          schema: barSchema,
-        },
-        source: ['bar-source'],
+        correlation: [['bar-source', 'field']],
+        destSchema: barSchema,
       },
       a: {
-        dest: {
-          field: ['field'],
-          schema: () => barSchema,
-        },
-        source: ['bar-source'],
+        correlation: [['bar-source', 'field']],
+        destSchema: () => barSchema,
       },
     },
   };
@@ -191,41 +185,45 @@ test('relationships should be sorted', () => {
       },
       "relationships": {
         "a": {
-          "source": "bar-source",
-          "dest": {
-            "field": "field",
-            "schema": {
-              "tableName": "bar",
-              "primaryKey": [
-                "id"
-              ],
-              "columns": {
-                "id": {
-                  "type": "string",
-                  "optional": false
-                }
-              },
-              "relationships": {}
-            }
+          "correlation": [
+            [
+              "bar-source",
+              "field"
+            ]
+          ],
+          "destSchema": {
+            "tableName": "bar",
+            "primaryKey": [
+              "id"
+            ],
+            "columns": {
+              "id": {
+                "type": "string",
+                "optional": false
+              }
+            },
+            "relationships": {}
           }
         },
         "b": {
-          "source": "bar-source",
-          "dest": {
-            "field": "field",
-            "schema": {
-              "tableName": "bar",
-              "primaryKey": [
-                "id"
-              ],
-              "columns": {
-                "id": {
-                  "type": "string",
-                  "optional": false
-                }
-              },
-              "relationships": {}
-            }
+          "correlation": [
+            [
+              "bar-source",
+              "field"
+            ]
+          ],
+          "destSchema": {
+            "tableName": "bar",
+            "primaryKey": [
+              "id"
+            ],
+            "columns": {
+              "id": {
+                "type": "string",
+                "optional": false
+              }
+            },
+            "relationships": {}
           }
         }
       }
@@ -243,19 +241,15 @@ test('Cyclic relationship should be supported', () => {
     },
     relationships: {
       bar: {
-        dest: {
-          field: ['field'],
-
-          schema: () => fooTableSchema,
-        },
-        source: ['bar-source'],
+        correlation: [['bar-source', 'field']],
+        destSchema: () => fooTableSchema,
       },
     },
   };
 
   const normalizedFooTableSchema = normalizeTableSchema(fooTableSchema);
 
-  expect(normalizedFooTableSchema.relationships.bar.dest.schema).toBe(
+  expect(normalizedFooTableSchema.relationships.bar.destSchema).toBe(
     normalizedFooTableSchema,
   );
 });
@@ -269,11 +263,8 @@ test('Mutually resolving relationships should be supported', () => {
     },
     relationships: {
       bar: {
-        dest: {
-          field: ['field'],
-          schema: () => barTableSchema,
-        },
-        source: ['bar-source'],
+        correlation: [['bar-source', 'field']],
+        destSchema: () => barTableSchema,
       },
     },
   };
@@ -286,11 +277,8 @@ test('Mutually resolving relationships should be supported', () => {
     },
     relationships: {
       foo: {
-        dest: {
-          field: ['field'],
-          schema: () => fooTableSchema,
-        },
-        source: ['foo-source'],
+        correlation: [['foo-source', 'field']],
+        destSchema: () => fooTableSchema,
       },
     },
   };
@@ -298,7 +286,7 @@ test('Mutually resolving relationships should be supported', () => {
   const normalizedFooTableSchema = normalizeTableSchema(fooTableSchema);
 
   expect(
-    normalizedFooTableSchema.relationships.bar.dest.schema.relationships.foo
-      .dest.schema,
+    normalizedFooTableSchema.relationships.bar.destSchema.relationships.foo
+      .destSchema,
   ).toBe(normalizedFooTableSchema);
 });

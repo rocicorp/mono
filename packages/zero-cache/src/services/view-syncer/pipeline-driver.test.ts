@@ -78,7 +78,7 @@ describe('view-syncer/pipeline-driver', () => {
     orderBy: [['id', 'desc']],
     related: [
       {
-        correlations: [{parentField: 'id', childField: 'issueID', op: '='}],
+        correlation: [['id', 'issueID']],
         subquery: {
           table: 'comments',
           alias: 'comments',

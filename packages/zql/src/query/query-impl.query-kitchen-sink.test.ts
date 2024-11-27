@@ -328,12 +328,11 @@ describe('kitchen sink query', () => {
           ],
           "related": [
             {
-              "correlations": [
-                {
-                  "childField": "id",
-                  "op": "=",
-                  "parentField": "ownerId",
-                },
+              "correlation": [
+                [
+                  "ownerId",
+                  "id",
+                ],
               ],
               "subquery": {
                 "alias": "owner",
@@ -347,12 +346,11 @@ describe('kitchen sink query', () => {
               },
             },
             {
-              "correlations": [
-                {
-                  "childField": "issueId",
-                  "op": "=",
-                  "parentField": "id",
-                },
+              "correlation": [
+                [
+                  "id",
+                  "issueId",
+                ],
               ],
               "subquery": {
                 "alias": "comments",
@@ -369,12 +367,11 @@ describe('kitchen sink query', () => {
                 ],
                 "related": [
                   {
-                    "correlations": [
-                      {
-                        "childField": "commentId",
-                        "op": "=",
-                        "parentField": "id",
-                      },
+                    "correlation": [
+                      [
+                        "id",
+                        "commentId",
+                      ],
                     ],
                     "subquery": {
                       "alias": "revisions",
@@ -393,12 +390,11 @@ describe('kitchen sink query', () => {
               },
             },
             {
-              "correlations": [
-                {
-                  "childField": "issueId",
-                  "op": "=",
-                  "parentField": "id",
-                },
+              "correlation": [
+                [
+                  "id",
+                  "issueId",
+                ],
               ],
               "subquery": {
                 "alias": "labels",
@@ -414,12 +410,11 @@ describe('kitchen sink query', () => {
                 ],
                 "related": [
                   {
-                    "correlations": [
-                      {
-                        "childField": "id",
-                        "op": "=",
-                        "parentField": "labelId",
-                      },
+                    "correlation": [
+                      [
+                        "labelId",
+                        "id",
+                      ],
                     ],
                     "hidden": true,
                     "subquery": {

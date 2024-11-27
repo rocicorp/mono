@@ -10,31 +10,19 @@ export const issueSchema = {
   primaryKey: ['id'],
   relationships: {
     owner: {
-      source: ['ownerId'],
-      dest: {
-        field: ['id'],
-        schema: () => userSchema,
-      },
+      correlation: [['ownerId', 'id']],
+      destSchema: () => userSchema,
     },
     comments: {
-      source: ['id'],
-      dest: {
-        field: ['issueId'],
-        schema: () => commentSchema,
-      },
+      correlation: [['id', 'issueId']],
+      destSchema: () => commentSchema,
     },
     labels: {
-      source: ['id'],
+      correlation: [['id', 'id']],
+      destSchema: () => labelSchema,
       junction: {
-        source: ['issueId'],
-        dest: {
-          field: ['labelId'],
-          schema: () => issueLabelSchema,
-        },
-      },
-      dest: {
-        field: ['id'],
-        schema: () => labelSchema,
+        correlation: [['issueId', 'labelId']],
+        destSchema: () => issueLabelSchema,
       },
     },
   },
@@ -59,17 +47,11 @@ export const labelSchema = {
   primaryKey: ['id'],
   relationships: {
     issues: {
-      source: ['id'],
+      correlation: [['id', 'id']],
+      destSchema: issueSchema,
       junction: {
-        source: ['labelId'],
-        dest: {
-          field: ['issueId'],
-          schema: issueLabelSchema,
-        },
-      },
-      dest: {
-        field: ['id'],
-        schema: issueSchema,
+        correlation: [['labelId', 'issueId']],
+        destSchema: issueLabelSchema,
       },
     },
   },
@@ -87,25 +69,16 @@ export const commentSchema = {
   primaryKey: ['id'],
   relationships: {
     issue: {
-      source: ['issueId'],
-      dest: {
-        field: ['id'],
-        schema: issueSchema,
-      },
+      correlation: [['issueId', 'id']],
+      destSchema: issueSchema,
     },
     revisions: {
-      source: ['id'],
-      dest: {
-        field: ['commentId'],
-        schema: () => revisionSchema,
-      },
+      correlation: [['id', 'commentId']],
+      destSchema: () => revisionSchema,
     },
     author: {
-      source: ['authorId'],
-      dest: {
-        field: ['id'],
-        schema: () => userSchema,
-      },
+      correlation: [['authorId', 'id']],
+      destSchema: () => userSchema,
     },
   },
 } as const;
@@ -121,18 +94,12 @@ export const revisionSchema = {
   primaryKey: ['id'],
   relationships: {
     comment: {
-      source: ['commentId'],
-      dest: {
-        field: ['id'],
-        schema: commentSchema,
-      },
+      correlation: [['commentId', 'id']],
+      destSchema: commentSchema,
     },
     author: {
-      source: ['authorId'],
-      dest: {
-        field: ['id'],
-        schema: () => userSchema,
-      },
+      correlation: [['authorId', 'id']],
+      destSchema: () => userSchema,
     },
   },
 } as const;
@@ -147,11 +114,8 @@ export const userSchema = {
   primaryKey: ['id'],
   relationships: {
     issues: {
-      source: ['id'],
-      dest: {
-        field: ['ownerId'],
-        schema: issueSchema,
-      },
+      correlation: [['id', 'ownerId']],
+      destSchema: issueSchema,
     },
   },
 } as const;

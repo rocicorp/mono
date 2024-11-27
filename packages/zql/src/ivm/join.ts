@@ -18,6 +18,8 @@ type Args = {
   parentKey: CompoundKey;
   childKey: CompoundKey;
 
+  // TODO: Change parentKey & childKey to a correlation
+
   relationshipName: string;
   hidden: boolean;
 };

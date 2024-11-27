@@ -149,13 +149,7 @@ test('self-join', () => {
         orderBy: [['id', 'asc']],
         related: [
           {
-            correlations: [
-              {
-                parentField: 'recruiterID',
-                op: '=',
-                childField: 'id',
-              },
-            ],
+            correlation: [['recruiterID', 'id']],
             subquery: {
               table: 'users',
               alias: 'recruiter',
@@ -315,13 +309,7 @@ test('self-join edit', () => {
         orderBy: [['id', 'asc']],
         related: [
           {
-            correlations: [
-              {
-                parentField: 'recruiterID',
-                op: '=',
-                childField: 'id',
-              },
-            ],
+            correlation: [['recruiterID', 'id']],
             subquery: {
               table: 'users',
               alias: 'recruiter',
@@ -477,13 +465,7 @@ test('multi-join', () => {
         },
         related: [
           {
-            correlations: [
-              {
-                parentField: 'id',
-                op: '=',
-                childField: 'userID',
-              },
-            ],
+            correlation: [['id', 'userID']],
             subquery: {
               table: 'userStates',
               alias: 'userStates',
@@ -493,13 +475,7 @@ test('multi-join', () => {
               ],
               related: [
                 {
-                  correlations: [
-                    {
-                      parentField: 'stateCode',
-                      op: '=',
-                      childField: 'code',
-                    },
-                  ],
+                  correlation: [['stateCode', 'code']],
                   subquery: {
                     table: 'states',
                     alias: 'states',
@@ -591,13 +567,7 @@ test('join with limit', () => {
         limit: 3,
         related: [
           {
-            correlations: [
-              {
-                parentField: 'id',
-                op: '=',
-                childField: 'userID',
-              },
-            ],
+            correlation: [['id', 'userID']],
             subquery: {
               table: 'userStates',
               alias: 'userStates',
@@ -608,13 +578,7 @@ test('join with limit', () => {
               limit: 1,
               related: [
                 {
-                  correlations: [
-                    {
-                      parentField: 'stateCode',
-                      op: '=',
-                      childField: 'code',
-                    },
-                  ],
+                  correlation: [['stateCode', 'code']],
                   subquery: {
                     table: 'states',
                     alias: 'states',
@@ -733,13 +697,7 @@ test('exists junction', () => {
         where: {
           type: 'correlatedSubquery',
           related: {
-            correlations: [
-              {
-                parentField: 'id',
-                op: '=',
-                childField: 'userID',
-              },
-            ],
+            correlation: [['id', 'userID']],
             subquery: {
               table: 'userStates',
               alias: 'zsubq_userStates',
@@ -750,13 +708,7 @@ test('exists junction', () => {
               where: {
                 type: 'correlatedSubquery',
                 related: {
-                  correlations: [
-                    {
-                      parentField: 'stateCode',
-                      op: '=',
-                      childField: 'code',
-                    },
-                  ],
+                  correlation: [['stateCode', 'code']],
                   subquery: {
                     table: 'states',
                     alias: 'zsubq_states',
@@ -947,13 +899,7 @@ test('exists self join', () => {
         where: {
           type: 'correlatedSubquery',
           related: {
-            correlations: [
-              {
-                parentField: 'recruiterID',
-                op: '=',
-                childField: 'id',
-              },
-            ],
+            correlation: [['recruiterID', 'id']],
             subquery: {
               table: 'users',
               alias: 'zsubq_recruiter',
@@ -1133,13 +1079,7 @@ test('not exists self join', () => {
         where: {
           type: 'correlatedSubquery',
           related: {
-            correlations: [
-              {
-                parentField: 'recruiterID',
-                op: '=',
-                childField: 'id',
-              },
-            ],
+            correlation: [['recruiterID', 'id']],
             subquery: {
               table: 'users',
               alias: 'zsubq_recruiter',
@@ -1222,13 +1162,7 @@ test('bind static parameters', () => {
     },
     related: [
       {
-        correlations: [
-          {
-            parentField: 'id',
-            op: '=',
-            childField: 'userID',
-          },
-        ],
+        correlation: [['id', 'userID']],
         subquery: {
           table: 'userStates',
           alias: 'userStates',
@@ -1265,12 +1199,11 @@ test('bind static parameters', () => {
       ],
       "related": [
         {
-          "correlations": [
-            {
-              "childField": "userID",
-              "op": "=",
-              "parentField": "id",
-            },
+          "correlation": [
+            [
+              "id",
+              "userID",
+            ],
           ],
           "subquery": {
             "alias": "userStates",

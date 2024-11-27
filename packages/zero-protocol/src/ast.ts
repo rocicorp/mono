@@ -118,20 +118,23 @@ const disjunctionSchema: v.Type<Disjunction> = v.readonlyObject({
   conditions: v.readonlyArray(conditionSchema),
 });
 
+const stringTupleSchema = v.tuple([
+  v.string(), // parent
+  v.string(), // child
+]);
+
+const correlationSchema: v.Type<
+  AtLeastOne<readonly [parent: string, child: string]>
+> = v.readonly(v.tuple([stringTupleSchema]).concat(v.array(stringTupleSchema)));
+
 // Split out so that its inferred type can be checked against
-// Omit<CorrelatedSubquery, 'correlations'> in ast-type-test.ts.
+// Omit<CorrelatedSubquery, 'correlation'> in ast-type-test.ts.
 // The mutually-recursive reference of the 'other' field to astSchema
 // is the only thing added in v.lazy.  The v.lazy is necessary due to the
 // mutually-recursive types, but v.lazy prevents inference of the resulting
 // type.
 export const correlatedSubquerySchemaOmitSubquery = v.readonlyObject({
-  correlations: v.readonlyArray(
-    v.readonlyObject({
-      parentField: v.string(),
-      childField: v.string(),
-      op: v.literal('='),
-    }),
-  ),
+  correlation: correlationSchema,
   hidden: v.boolean().optional(),
 });
 
@@ -202,16 +205,14 @@ export type AST = {
   readonly orderBy?: Ordering | undefined;
 };
 
+type AtLeastOne<T> = readonly [T, ...T[]];
+
 export type CorrelatedSubquery = {
   /**
-   * Only equality correlations are supported for now.
+   * Only equality correlation are supported for now.
    * E.g., direct foreign key relationships.
    */
-  readonly correlations: readonly {
-    readonly parentField: string;
-    readonly childField: string;
-    readonly op: '=';
-  }[];
+  readonly correlation: AtLeastOne<readonly [parent: string, child: string]>;
   readonly subquery: AST;
   // If a hop in the subquery chain should be hidden from the output view.
   // A common example is junction edges. The query API provides the illusion
@@ -340,7 +341,7 @@ export function normalizeAST(ast: AST): Required<AST> {
           ast.related.map(
             r =>
               ({
-                correlations: r.correlations,
+                correlation: r.correlation,
                 hidden: r.hidden,
                 subquery: normalizeAST(r.subquery),
               }) satisfies Required<CorrelatedSubquery>,

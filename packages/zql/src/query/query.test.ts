@@ -70,11 +70,8 @@ type TestSchemaWithRelationships = {
   };
   relationships: {
     test: {
-      source: ['s'];
-      dest: {
-        field: ['s'];
-        schema: TestSchema;
-      };
+      correlation: [['s', 's']];
+      destSchema: TestSchema;
     };
   };
   primaryKey: ['s'];
@@ -89,25 +86,16 @@ type TestSchemaWithMoreRelationships = {
   };
   relationships: {
     testWithRelationships: {
-      source: ['a'];
-      dest: {
-        field: ['a'];
-        schema: TestSchemaWithRelationships;
-      };
+      correlation: [['a', 'a']];
+      destSchema: TestSchemaWithRelationships;
     };
     test: {
-      source: ['s'];
-      dest: {
-        field: ['s'];
-        schema: TestSchema;
-      };
+      correlation: [['s', 's']];
+      destSchema: TestSchema;
     };
     self: {
-      source: ['s'];
-      dest: {
-        field: ['s'];
-        schema: TestSchemaWithMoreRelationships;
-      };
+      correlation: [['s', 's']];
+      destSchema: TestSchemaWithMoreRelationships;
     };
   };
   primaryKey: ['s'];
@@ -415,11 +403,8 @@ describe('schema structure', () => {
       },
       relationships: {
         comments: {
-          source: ['id'],
-          dest: {
-            field: ['issueId'],
-            schema: commentSchema,
-          },
+          correlation: [['id', 'issueId']],
+          destSchema: commentSchema,
         },
       },
       primaryKey: ['id'],
@@ -439,11 +424,8 @@ describe('schema structure', () => {
       },
       relationships: {
         issue: {
-          source: ['issueId'],
-          dest: {
-            field: ['id'],
-            schema: () => issueSchema,
-          },
+          correlation: [['issueId', 'id']],
+          destSchema: () => issueSchema,
         },
       },
     } as const;
@@ -458,18 +440,12 @@ describe('schema structure', () => {
       },
       relationships: {
         comments: {
-          source: ['id'],
-          dest: {
-            field: ['issueId'],
-            schema: commentSchema,
-          },
+          correlation: [['id', 'issueId']],
+          destSchema: commentSchema,
         },
         parent: {
-          source: ['parentId'],
-          dest: {
-            field: ['id'],
-            schema: () => issueSchema,
-          },
+          correlation: [['parentId', 'id']],
+          destSchema: () => issueSchema,
         },
       },
     } as const;

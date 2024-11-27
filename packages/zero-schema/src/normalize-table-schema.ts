@@ -4,6 +4,7 @@ import type {Writable} from '../../shared/src/writable.js';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
 import {
   isFieldRelationship,
+  type AtLeastOne,
   type FieldRelationship,
   type JunctionRelationship,
   type SchemaValue,
@@ -164,14 +165,11 @@ function normalizeRelationship(
   return normalizeJunctionRelationship(relationship, tableSchemaCache);
 }
 
-type CompoundKey = PrimaryKey;
+type Correlation = AtLeastOne<readonly [source: string, dest: string]>;
 
 type NormalizedFieldRelationship = {
-  source: CompoundKey;
-  dest: {
-    field: CompoundKey;
-    schema: NormalizedTableSchema;
-  };
+  correlation: Correlation;
+  destSchema: NormalizedTableSchema;
 };
 
 function normalizeFieldRelationship(
@@ -179,14 +177,11 @@ function normalizeFieldRelationship(
   tableSchemaCache: TableSchemaCache,
 ): NormalizedFieldRelationship {
   return {
-    source: relationship.source,
-    dest: {
-      field: relationship.dest.field,
-      schema: normalizeLazyTableSchema(
-        relationship.dest.schema,
-        tableSchemaCache,
-      ),
-    },
+    correlation: relationship.correlation,
+    destSchema: normalizeLazyTableSchema(
+      relationship.destSchema,
+      tableSchemaCache,
+    ),
   };
 }
 

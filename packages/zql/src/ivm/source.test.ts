@@ -903,13 +903,7 @@ test('overlay-vs-filter', () => {
           {
             type: 'correlatedSubquery',
             related: {
-              correlations: [
-                {
-                  parentField: 'a',
-                  op: '=',
-                  childField: 'b',
-                },
-              ],
+              correlation: [['a', 'b']],
               subquery: {
                 table: 't',
                 alias: 'zsubq_ts',
@@ -945,13 +939,7 @@ test('overlay-vs-filter', () => {
           {
             type: 'correlatedSubquery',
             related: {
-              correlations: [
-                {
-                  parentField: 'a',
-                  op: '=',
-                  childField: 'b',
-                },
-              ],
+              correlation: [['a', 'b']],
               subquery: {
                 table: 't',
                 alias: 'zsubq_ts',

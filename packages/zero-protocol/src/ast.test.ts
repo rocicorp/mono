@@ -166,26 +166,14 @@ test('related subqueries are sorted', () => {
     table: 'table',
     related: [
       {
-        correlations: [
-          {
-            parentField: 'a',
-            childField: 'a',
-            op: '=',
-          },
-        ],
+        correlation: [['a', 'a']],
         subquery: {
           table: 'table',
           alias: 'alias2',
         },
       },
       {
-        correlations: [
-          {
-            parentField: 'a',
-            childField: 'a',
-            op: '=',
-          },
-        ],
+        correlation: [['a', 'a']],
         subquery: {
           table: 'table',
           alias: 'alias1',
@@ -196,26 +184,14 @@ test('related subqueries are sorted', () => {
 
   expect(normalizeAST(ast).related).toEqual([
     {
-      correlations: [
-        {
-          parentField: 'a',
-          childField: 'a',
-          op: '=',
-        },
-      ],
+      correlation: [['a', 'a']],
       subquery: {
         table: 'table',
         alias: 'alias1',
       },
     },
     {
-      correlations: [
-        {
-          parentField: 'a',
-          childField: 'a',
-          op: '=',
-        },
-      ],
+      correlation: [['a', 'a']],
       subquery: {
         table: 'table',
         alias: 'alias2',
