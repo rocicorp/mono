@@ -36,6 +36,7 @@
   /* Typography */
   --typo-label-size: 0.875rem;
   --typo-label-weight: 800;
+  --typo-combobox-size: 1rem;
 
   /* Z-Index */
   --z-index-sidebar: 30;
@@ -731,48 +732,6 @@ textarea.autoResize {
   padding-right: 0;
 }
 
-.selector {
-  position: relative;
-}
-
-.selector .dropdown {
-  position: absolute;
-  z-index: var(--z-index-popover);
-  top: 0;
-  left: 0;
-  border-radius: 0.5rem;
-  width: 100%;
-  background-color: var(--color-nav-selected);
-  max-height: 30rem;
-  overflow-y: auto;
-}
-
-.selector .item {
-  display: block;
-  text-align: left;
-  width: 100%;
-  padding: 0.8175rem;
-  border-radius: 0.5rem;
-  cursor: pointer;
-}
-
-.selector .item:disabled:hover,
-.selector .item:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.selector .item.icon {
-  padding-left: 3.05rem;
-  background-repeat: no-repeat;
-  background-position: 1.1rem center;
-  background-size: 14px;
-}
-
-.selector .dropdown .item.selected {
-  background-color: var(--color-row-hover);
-}
-
 .login-to-comment {
   color: var(--color-text-primary-active);
   opacity: 0.6;
@@ -790,13 +749,16 @@ textarea.autoResize {
   opacity: 1;
 }
 
-.item-avatar,
 .issue-creator-avatar {
   width: 1.4rem;
   height: 1.4rem;
   border-radius: 50%;
   display: inline-block;
   margin-right: 0.8175rem;
+}
+
+.user-picker img.icon {
+  border-radius: 50%;
 }
 
 /* Issue Composer */
@@ -1102,10 +1064,6 @@ textarea.autoResize {
     width: 100%;
     margin-top: 0;
     margin-bottom: 4rem;
-  }
-
-  .selector .dropdown {
-    max-height: 25vh;
   }
 
   .modal {
