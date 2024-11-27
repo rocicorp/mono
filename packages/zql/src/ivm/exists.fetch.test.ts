@@ -10,6 +10,8 @@ import {Join, type CompoundKey} from './join.js';
 import {MemoryStorage} from './memory-storage.js';
 import {Snitch, type SnitchMessage} from './snitch.js';
 import {createSource} from './test/source-factory.js';
+import {unreachable} from '../../../shared/src/asserts.js';
+import type {JSONValue} from '../../../shared/src/json.js';
 
 const base = {
   columns: [
@@ -26,68 +28,18 @@ const base = {
 
 const oneParentWithChildTest: FetchTest = {
   ...base,
-  name: 'one parent with child',
   existsType: 'EXISTS',
   sources: [[{id: 'i1'}], [{id: 'c1', issueID: 'i1'}]],
-  expectedMessages: {
-    initialFetch: [
-      ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
-      ['0', 'fetch', {start: {row: {id: 'i1'}, basis: 'at'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
-    ],
-    fetch: [
-      ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
-    ],
-    cleanup: [
-      ['0', 'cleanup', {}],
-      ['1', 'cleanup', {constraint: {issueID: 'i1'}}],
-    ],
-  },
-  expectedStorage: {
-    '["size",["i1"]]': 1,
-  },
-  expectedHydrate: [
-    {
-      row: {id: 'i1'},
-      relationships: {
-        comments: [{row: {id: 'c1', issueID: 'i1'}, relationships: {}}],
-      },
-    },
-  ],
 };
 
 const oneParentNoChildTest: FetchTest = {
   ...base,
-  name: 'one parent no child',
   sources: [[{id: 'i1'}], []],
   existsType: 'EXISTS',
-  expectedMessages: {
-    initialFetch: [
-      ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
-      ['0', 'fetch', {start: {row: {id: 'i1'}, basis: 'at'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
-    ],
-    fetch: [
-      ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
-    ],
-    cleanup: [
-      ['0', 'cleanup', {}],
-      ['1', 'cleanup', {constraint: {issueID: 'i1'}}],
-    ],
-  },
-  expectedStorage: {
-    '["size",["i1"]]': 0,
-  },
-  expectedHydrate: [],
 };
 
 const threeParentsTwoWithChildrenTest: FetchTest = {
   ...base,
-  name: 'three parents, two with children',
   sources: [
     [{id: 'i1'}, {id: 'i2'}, {id: 'i3'}],
     [
@@ -96,206 +48,156 @@ const threeParentsTwoWithChildrenTest: FetchTest = {
     ],
   ],
   existsType: 'EXISTS',
-  expectedMessages: {
-    initialFetch: [
-      ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
-      ['0', 'fetch', {start: {row: {id: 'i1'}, basis: 'at'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i2'}}],
-      ['0', 'fetch', {start: {row: {id: 'i2'}, basis: 'at'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i2'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i3'}}],
-      ['0', 'fetch', {start: {row: {id: 'i3'}, basis: 'at'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i3'}}],
-    ],
-    fetch: [
-      ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i2'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i3'}}],
-    ],
-    cleanup: [
-      ['0', 'cleanup', {}],
-      ['1', 'cleanup', {constraint: {issueID: 'i1'}}],
-      ['1', 'cleanup', {constraint: {issueID: 'i2'}}],
-      ['1', 'cleanup', {constraint: {issueID: 'i3'}}],
-    ],
-  },
-  expectedStorage: {
-    '["size",["i1"]]': 1,
-    '["size",["i2"]]': 0,
-    '["size",["i3"]]': 1,
-  },
-  expectedHydrate: [
-    {
-      row: {id: 'i1'},
-      relationships: {
-        comments: [{row: {id: 'c1', issueID: 'i1'}, relationships: {}}],
-      },
-    },
-    {
-      row: {id: 'i3'},
-      relationships: {
-        comments: [{row: {id: 'c2', issueID: 'i3'}, relationships: {}}],
-      },
-    },
-  ],
 };
 
 const threeParentsNoChildrenTest: FetchTest = {
   ...base,
-  name: 'three parents no children',
   sources: [[{id: 'i1'}, {id: 'i2'}, {id: 'i3'}], []],
   existsType: 'EXISTS',
-  expectedMessages: {
-    initialFetch: [
-      ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
-      ['0', 'fetch', {start: {row: {id: 'i1'}, basis: 'at'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i2'}}],
-      ['0', 'fetch', {start: {row: {id: 'i2'}, basis: 'at'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i2'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i3'}}],
-      ['0', 'fetch', {start: {row: {id: 'i3'}, basis: 'at'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i3'}}],
-    ],
-    fetch: [
-      ['0', 'fetch', {}],
-      ['1', 'fetch', {constraint: {issueID: 'i1'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i2'}}],
-      ['1', 'fetch', {constraint: {issueID: 'i3'}}],
-    ],
-    cleanup: [
-      ['0', 'cleanup', {}],
-      ['1', 'cleanup', {constraint: {issueID: 'i1'}}],
-      ['1', 'cleanup', {constraint: {issueID: 'i2'}}],
-      ['1', 'cleanup', {constraint: {issueID: 'i3'}}],
-    ],
-  },
-  expectedStorage: {
-    '["size",["i1"]]': 0,
-    '["size",["i2"]]': 0,
-    '["size",["i3"]]': 0,
-  },
-  expectedHydrate: [],
 };
 
 suite('EXISTS', () => {
-  fetchTest(oneParentWithChildTest);
-  fetchTest(oneParentNoChildTest);
-  fetchTest(threeParentsTwoWithChildrenTest);
-  fetchTest(threeParentsNoChildrenTest);
+  test('one parent with child', () => {
+    const {messages, storage, hydrate} = fetchTest(oneParentWithChildTest);
+    expect(messages).toMatchInlineSnapshot();
+    expect(storage).toMatchInlineSnapshot();
+    expect(hydrate).toMatchInlineSnapshot();
+  });
+  test('one parent no child', () => {
+    const {messages, storage, hydrate} = fetchTest(oneParentNoChildTest);
+    expect(messages).toMatchInlineSnapshot();
+    expect(storage).toMatchInlineSnapshot();
+    expect(hydrate).toMatchInlineSnapshot();
+  });
+  test('three parents, two with children', () => {
+    const {messages, storage, hydrate} = fetchTest(
+      threeParentsTwoWithChildrenTest,
+    );
+    expect(messages).toMatchInlineSnapshot();
+    expect(storage).toMatchInlineSnapshot();
+    expect(hydrate).toMatchInlineSnapshot();
+  });
+  test('three parents no children', () => {
+    const {messages, storage, hydrate} = fetchTest(threeParentsNoChildrenTest);
+    expect(messages).toMatchInlineSnapshot();
+    expect(storage).toMatchInlineSnapshot();
+    expect(hydrate).toMatchInlineSnapshot();
+  });
 });
 
 suite('NOT EXISTS', () => {
-  fetchTest({
-    ...oneParentWithChildTest,
-    existsType: 'NOT EXISTS',
-    expectedHydrate: [],
+  test('one parent with child', () => {
+    const {messages, storage, hydrate} = fetchTest({
+      ...oneParentWithChildTest,
+      existsType: 'NOT EXISTS',
+    });
+    expect(messages).toMatchInlineSnapshot();
+    expect(storage).toMatchInlineSnapshot();
+    expect(hydrate).toMatchInlineSnapshot();
   });
-  fetchTest({
-    ...oneParentNoChildTest,
-    existsType: 'NOT EXISTS',
-    expectedHydrate: [
-      {
-        row: {id: 'i1'},
-        relationships: {comments: []},
-      },
-    ],
+  test('one parent no child', () => {
+    const {messages, storage, hydrate} = fetchTest({
+      ...oneParentNoChildTest,
+      existsType: 'NOT EXISTS',
+    });
+    expect(messages).toMatchInlineSnapshot();
+    expect(storage).toMatchInlineSnapshot();
+    expect(hydrate).toMatchInlineSnapshot();
   });
-  fetchTest({
-    ...threeParentsTwoWithChildrenTest,
-    existsType: 'NOT EXISTS',
-    expectedHydrate: [
-      {
-        row: {id: 'i2'},
-        relationships: {comments: []},
-      },
-    ],
+  test('three parents, two with children', () => {
+    const {messages, storage, hydrate} = fetchTest(
+      threeParentsTwoWithChildrenTest,
+    );
+    expect(messages).toMatchInlineSnapshot();
+    expect(storage).toMatchInlineSnapshot();
+    expect(hydrate).toMatchInlineSnapshot();
   });
-  fetchTest({
-    ...threeParentsNoChildrenTest,
-    existsType: 'NOT EXISTS',
-    expectedHydrate: [
-      {
-        row: {id: 'i1'},
-        relationships: {comments: []},
-      },
-      {
-        row: {id: 'i2'},
-        relationships: {comments: []},
-      },
-      {
-        row: {id: 'i3'},
-        relationships: {comments: []},
-      },
-    ],
+  test('three parents no children', () => {
+    const {messages, storage, hydrate} = fetchTest(threeParentsNoChildrenTest);
+    expect(messages).toMatchInlineSnapshot();
+    expect(storage).toMatchInlineSnapshot();
+    expect(hydrate).toMatchInlineSnapshot();
   });
 });
 
 // This test runs the join through three phases:
 // initial fetch, fetch, and cleanup.
-function fetchTest(t: FetchTest) {
-  test(t.name, () => {
-    const log: SnitchMessage[] = [];
+function fetchTest(t: FetchTest): FetchTestResults {
+  const log: SnitchMessage[] = [];
 
-    const sources = t.sources.map((rows, i) => {
-      const ordering = t.sorts?.[i] ?? [['id', 'asc']];
-      const source = createSource(`t${i}`, t.columns[i], t.primaryKeys[i]);
-      for (const row of rows) {
-        source.push({type: 'add', row});
-      }
-      const snitch = new Snitch(source.connect(ordering), String(i), log);
-      return {
-        source,
-        snitch,
-      };
-    });
-
-    const existsStorage = new MemoryStorage();
-    const exists = new Exists(
-      new Join({
-        parent: sources[0].snitch,
-        child: sources[1].snitch,
-        storage: new MemoryStorage(),
-        ...t.join,
-        hidden: false,
-      }),
-      existsStorage,
-      t.join.relationshipName,
-      t.existsType,
-    );
-
-    for (const [method, fetchType] of [
-      ['fetch', 'initialFetch'],
-      ['fetch', 'fetch'],
-      ['cleanup', 'cleanup'],
-    ] as const) {
-      log.length = 0;
-
-      const c = new Catch(exists);
-      const r = c[method]();
-
-      expect(r).toEqual(t.expectedHydrate);
-      expect(c.pushes).toEqual([]);
-
-      if (method === 'fetch') {
-        expect(existsStorage.cloneData()).toEqual(t.expectedStorage);
-      } else {
-        method satisfies 'cleanup';
-        expect(existsStorage.cloneData()).toEqual({});
-      }
-
-      const expectedMessages = t.expectedMessages[fetchType];
-      expect(log, fetchType).toEqual(expectedMessages);
+  const sources = t.sources.map((rows, i) => {
+    const ordering = t.sorts?.[i] ?? [['id', 'asc']];
+    const source = createSource(`t${i}`, t.columns[i], t.primaryKeys[i]);
+    for (const row of rows) {
+      source.push({type: 'add', row});
     }
+    const snitch = new Snitch(source.connect(ordering), String(i), log);
+    return {
+      source,
+      snitch,
+    };
   });
+
+  const existsStorage = new MemoryStorage();
+  const exists = new Exists(
+    new Join({
+      parent: sources[0].snitch,
+      child: sources[1].snitch,
+      storage: new MemoryStorage(),
+      ...t.join,
+      hidden: false,
+    }),
+    existsStorage,
+    t.join.relationshipName,
+    t.existsType,
+  );
+
+  const result: FetchTestResults = {
+    hydrate: [],
+    storage: {},
+    messages: {
+      initialFetch: [],
+      fetch: [],
+      cleanup: [],
+    },
+  };
+  for (const [method, fetchType] of [
+    ['fetch', 'initialFetch'],
+    ['fetch', 'fetch'],
+    ['cleanup', 'cleanup'],
+  ] as const) {
+    log.length = 0;
+
+    const c = new Catch(exists);
+    const r = c[method]();
+    expect(c.pushes).toEqual([]);
+
+    switch (fetchType) {
+      case 'initialFetch': {
+        result.hydrate = r;
+        result.storage = existsStorage.cloneData();
+        break;
+      }
+      case 'fetch': {
+        expect(r).toEqual(result.hydrate);
+        expect(existsStorage.cloneData()).toEqual(result.storage);
+        break;
+      }
+      case 'cleanup': {
+        expect(r).toEqual(result.hydrate);
+
+        expect(existsStorage.cloneData()).toEqual({});
+        break;
+      }
+      default:
+        unreachable(fetchType);
+    }
+    result.messages[fetchType] = [...log];
+  }
+  return result;
 }
 
 type FetchTest = {
-  name: string;
   columns: readonly Record<string, SchemaValue>[];
   primaryKeys: readonly PrimaryKey[];
   sources: readonly Row[][];
@@ -306,11 +208,14 @@ type FetchTest = {
     relationshipName: string;
   };
   existsType: 'EXISTS' | 'NOT EXISTS';
-  expectedMessages: {
+};
+
+type FetchTestResults = {
+  messages: {
     initialFetch: SnitchMessage[];
     fetch: SnitchMessage[];
     cleanup: SnitchMessage[];
   };
-  expectedStorage: Record<string, number>;
-  expectedHydrate: Node[];
+  storage: Record<string, JSONValue>;
+  hydrate: Node[];
 };
