@@ -105,15 +105,19 @@ suite('NOT EXISTS', () => {
     expect(hydrate).toMatchInlineSnapshot();
   });
   test('three parents, two with children', () => {
-    const {messages, storage, hydrate} = fetchTest(
-      threeParentsTwoWithChildrenTest,
-    );
+    const {messages, storage, hydrate} = fetchTest({
+      ...threeParentsTwoWithChildrenTest,
+      existsType: 'NOT EXISTS',
+    });
     expect(messages).toMatchInlineSnapshot();
     expect(storage).toMatchInlineSnapshot();
     expect(hydrate).toMatchInlineSnapshot();
   });
   test('three parents no children', () => {
-    const {messages, storage, hydrate} = fetchTest(threeParentsNoChildrenTest);
+    const {messages, storage, hydrate} = fetchTest({
+      ...threeParentsNoChildrenTest,
+      existsType: 'NOT EXISTS',
+    });
     expect(messages).toMatchInlineSnapshot();
     expect(storage).toMatchInlineSnapshot();
     expect(hydrate).toMatchInlineSnapshot();
