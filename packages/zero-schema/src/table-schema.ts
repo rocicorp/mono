@@ -8,7 +8,7 @@ export type ValueType = 'string' | 'number' | 'boolean' | 'null' | 'json';
  */
 export type SchemaValue = {
   type: ValueType;
-  optional?: boolean;
+  optional?: boolean | undefined;
 };
 
 export type SourceOrTableSchema = {
