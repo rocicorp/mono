@@ -4,16 +4,7 @@
   "pipeline": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["out/**", "dist/**", ".next/**", "next-env.d.ts"],
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "../zero-advanced/src/**/*.ts",
-        "../zero-cache/src/**/*.ts",
-        "../zero-client/src/**/*.ts",
-        "../zero-react/src/**/*.ts",
-        "../zero-schema/src/**/*.ts",
-        "../zero-solid/src/**/*.ts"
-      ]
+      "outputs": ["out/**", "dist/**", ".next/**", "next-env.d.ts"]
     },
     "lint": {
       "outputs": []
