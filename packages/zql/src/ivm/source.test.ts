@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, suite, test} from 'vitest';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 import type {
   Condition,
@@ -180,96 +180,13 @@ test('fetch-start', () => {
   );
 });
 
-test('fetch-with-constraint-and-start', () => {
-  const cases: {
+suite('fetch-with-constraint-and-start', () => {
+  function t(c: {
     columns?: Record<string, SchemaValue> | undefined;
     startData: Row[];
     start: Start;
     constraint: Constraint;
-    expected: Row[];
-  }[] = [
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 3, b: false},
-        {a: 5, b: true},
-        {a: 6, b: false},
-        {a: 7, b: false},
-      ],
-      start: {
-        row: {a: 6, b: false},
-        basis: 'before',
-      },
-      constraint: {b: false},
-      expected: [
-        {a: 3, b: false},
-        {a: 6, b: false},
-        {a: 7, b: false},
-      ],
-    },
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 3, b: false},
-        {a: 5, b: true},
-        {a: 6, b: false},
-        {a: 7, b: false},
-      ],
-      start: {
-        row: {a: 6, b: false},
-        basis: 'at',
-      },
-      constraint: {b: false},
-      expected: [
-        {a: 6, b: false},
-        {a: 7, b: false},
-      ],
-    },
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 3, b: false},
-        {a: 5, b: true},
-        {a: 6, b: false},
-        {a: 7, b: false},
-        {a: 8, b: true},
-        {a: 9, b: false},
-      ],
-      start: {
-        row: {a: 6, b: false},
-        basis: 'after',
-      },
-      constraint: {b: false},
-      expected: [
-        {a: 7, b: false},
-        {a: 9, b: false},
-      ],
-    },
-    {
-      columns: {
-        a: {type: 'number'},
-        b: {type: 'boolean'},
-        c: {type: 'number'},
-      },
-      startData: [
-        {a: 2, b: false, c: 2},
-        {a: 3, b: false, c: 1},
-        {a: 5, b: true, c: 2},
-        {a: 6, b: false, c: 1},
-        {a: 7, b: false, c: 2},
-        {a: 8, b: true, c: 1},
-        {a: 9, b: false, c: 2},
-      ],
-      start: {
-        row: {a: 6, b: false, c: 1},
-        basis: 'at',
-      },
-      constraint: {b: false, c: 1},
-      expected: [{a: 6, b: false, c: 1}],
-    },
-  ];
-
-  for (const c of cases) {
+  }) {
     const sort = [['a', 'asc']] as const;
     const s = createSource(
       'table',
@@ -283,11 +200,161 @@ test('fetch-with-constraint-and-start', () => {
       s.push({type: 'add', row});
     }
     const out = new Catch(s.connect(sort));
-    expect(
-      out.fetch({constraint: c.constraint, start: c.start}),
-      JSON.stringify(c),
-    ).toEqual(asNodes(c.expected));
+    return out.fetch({constraint: c.constraint, start: c.start});
   }
+  test('c1', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 6, b: false},
+          basis: 'before',
+        },
+        constraint: {b: false},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": false,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 6,
+            "b": false,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 7,
+            "b": false,
+          },
+        },
+      ]
+    `);
+  });
+
+  test('c2', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 6, b: false},
+          basis: 'at',
+        },
+        constraint: {b: false},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 6,
+            "b": false,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 7,
+            "b": false,
+          },
+        },
+      ]
+    `);
+  });
+
+  test('c3', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+          {a: 8, b: true},
+          {a: 9, b: false},
+        ],
+        start: {
+          row: {a: 6, b: false},
+          basis: 'after',
+        },
+        constraint: {b: false},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 7,
+            "b": false,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 9,
+            "b": false,
+          },
+        },
+      ]
+    `);
+  });
+
+  test('c4', () => {
+    expect(
+      t({
+        columns: {
+          a: {type: 'number'},
+          b: {type: 'boolean'},
+          c: {type: 'number'},
+        },
+        startData: [
+          {a: 2, b: false, c: 2},
+          {a: 3, b: false, c: 1},
+          {a: 5, b: true, c: 2},
+          {a: 6, b: false, c: 1},
+          {a: 7, b: false, c: 2},
+          {a: 8, b: true, c: 1},
+          {a: 9, b: false, c: 2},
+        ],
+        start: {
+          row: {a: 6, b: false, c: 1},
+          basis: 'at',
+        },
+        constraint: {b: false, c: 1},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 6,
+            "b": false,
+            "c": 1,
+          },
+        },
+      ]
+    `);
+  });
 });
 
 test('push', () => {
@@ -368,286 +435,8 @@ test('overlay-source-isolation', () => {
   expect(o3.fetches).toEqual([[], [], asNodes([{a: 2}])]);
 });
 
-test('overlay-vs-fetch-start', () => {
-  const cases: {
-    startData: Row[];
-    start: Start;
-    change: SourceChange;
-    expected: Row[] | string;
-  }[] = [
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 1},
-        basis: 'before',
-      },
-      change: {type: 'add', row: {a: 1}},
-      expected: [{a: 1}, {a: 2}, {a: 4}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 2},
-        basis: 'before',
-      },
-      change: {type: 'add', row: {a: 1}},
-      expected: [{a: 1}, {a: 2}, {a: 4}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 2},
-        basis: 'before',
-      },
-      change: {type: 'add', row: {a: 2}},
-      expected: 'Row already exists',
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 2},
-        basis: 'before',
-      },
-      change: {type: 'add', row: {a: 3}},
-      expected: [{a: 2}, {a: 3}, {a: 4}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 2},
-        basis: 'before',
-      },
-      change: {type: 'add', row: {a: 5}},
-      expected: [{a: 2}, {a: 4}, {a: 5}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 4},
-        basis: 'before',
-      },
-      change: {type: 'add', row: {a: 0}},
-      expected: [{a: 2}, {a: 4}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 4},
-        basis: 'before',
-      },
-      change: {type: 'add', row: {a: 3}},
-      expected: [{a: 3}, {a: 4}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 4},
-        basis: 'before',
-      },
-      change: {type: 'add', row: {a: 5}},
-      expected: [{a: 2}, {a: 4}, {a: 5}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 2},
-        basis: 'at',
-      },
-      change: {type: 'add', row: {a: 1}},
-      expected: [{a: 2}, {a: 4}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 2},
-        basis: 'at',
-      },
-      change: {type: 'add', row: {a: 3}},
-      expected: [{a: 2}, {a: 3}, {a: 4}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 2},
-        basis: 'at',
-      },
-      change: {type: 'add', row: {a: 5}},
-      expected: [{a: 2}, {a: 4}, {a: 5}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 2},
-        basis: 'after',
-      },
-      change: {type: 'add', row: {a: 1}},
-      expected: [{a: 4}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 2},
-        basis: 'after',
-      },
-      change: {type: 'add', row: {a: 3}},
-      expected: [{a: 3}, {a: 4}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 2},
-        basis: 'after',
-      },
-      change: {type: 'add', row: {a: 5}},
-      expected: [{a: 4}, {a: 5}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 4},
-        basis: 'after',
-      },
-      change: {type: 'add', row: {a: 3}},
-      expected: [],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 4},
-        basis: 'after',
-      },
-      change: {type: 'add', row: {a: 5}},
-      expected: [{a: 5}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 2},
-        basis: 'before',
-      },
-      change: {type: 'remove', row: {a: 1}},
-      expected: 'Row not found',
-    },
-    {
-      startData: [{a: 2}],
-      start: {
-        row: {a: 2},
-        basis: 'before',
-      },
-      change: {type: 'remove', row: {a: 2}},
-      expected: [],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 2},
-        basis: 'before',
-      },
-      change: {type: 'remove', row: {a: 2}},
-      expected: [{a: 4}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 2},
-        basis: 'before',
-      },
-      change: {type: 'remove', row: {a: 4}},
-      expected: [{a: 2}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 4},
-        basis: 'before',
-      },
-      change: {type: 'remove', row: {a: 2}},
-      expected: [{a: 4}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 4},
-        basis: 'before',
-      },
-      change: {type: 'remove', row: {a: 4}},
-      expected: [{a: 2}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 2},
-        basis: 'at',
-      },
-      change: {type: 'remove', row: {a: 2}},
-      expected: [{a: 4}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 2},
-        basis: 'at',
-      },
-      change: {type: 'remove', row: {a: 4}},
-      expected: [{a: 2}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 4},
-        basis: 'at',
-      },
-      change: {type: 'remove', row: {a: 2}},
-      expected: [{a: 4}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 4},
-        basis: 'at',
-      },
-      change: {type: 'remove', row: {a: 4}},
-      expected: [],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 2},
-        basis: 'after',
-      },
-      change: {type: 'remove', row: {a: 2}},
-      expected: [{a: 4}],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 2},
-        basis: 'after',
-      },
-      change: {type: 'remove', row: {a: 4}},
-      expected: [],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 4},
-        basis: 'after',
-      },
-      change: {type: 'remove', row: {a: 2}},
-      expected: [],
-    },
-    {
-      startData: [{a: 2}, {a: 4}],
-      start: {
-        row: {a: 4},
-        basis: 'after',
-      },
-      change: {type: 'remove', row: {a: 4}},
-      expected: [],
-    },
-  ];
-
-  for (const c of cases) {
+suite('overlay-vs-fetch-start', () => {
+  function t(c: {startData: Row[]; start: Start; change: SourceChange}) {
     const sort = [['a', 'asc']] as const;
     const s = createSource('table', {a: {type: 'number'}}, ['a']);
     for (const row of c.startData) {
@@ -658,79 +447,800 @@ test('overlay-vs-fetch-start', () => {
       out.fetch({
         start: c.start,
       });
-    if (typeof c.expected === 'string') {
-      expect(() => s.push(c.change), JSON.stringify(c)).toThrow(c.expected);
-    } else {
+    try {
       s.push(c.change);
-      expect(out.fetches, JSON.stringify(c)).toEqual([asNodes(c.expected)]);
+    } catch (e) {
+      return {
+        e,
+      };
     }
+    return out.fetches;
   }
+  test('c1', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 1},
+          basis: 'before',
+        },
+        change: {type: 'add', row: {a: 1}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 1,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 2,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c2', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'before',
+        },
+        change: {type: 'add', row: {a: 1}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 1,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 2,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c3', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'before',
+        },
+        change: {type: 'add', row: {a: 2}},
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "e": [Error: Row already exists: {"type":"add","row":{"a":2}}],
+      }
+    `);
+  });
+
+  test('c4', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'before',
+        },
+        change: {type: 'add', row: {a: 3}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 2,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 3,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c5', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'before',
+        },
+        change: {type: 'add', row: {a: 5}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 2,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 5,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c6', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 4},
+          basis: 'before',
+        },
+        change: {type: 'add', row: {a: 0}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 2,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c7', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 4},
+          basis: 'before',
+        },
+        change: {type: 'add', row: {a: 3}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 3,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c8', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 4},
+          basis: 'before',
+        },
+        change: {type: 'add', row: {a: 5}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 2,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 5,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c9', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'at',
+        },
+        change: {type: 'add', row: {a: 1}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 2,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c10', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'at',
+        },
+        change: {type: 'add', row: {a: 3}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 2,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 3,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c11', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'at',
+        },
+        change: {type: 'add', row: {a: 5}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 2,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 5,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c12', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'after',
+        },
+        change: {type: 'add', row: {a: 1}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c13', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'after',
+        },
+        change: {type: 'add', row: {a: 3}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 3,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c14', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'after',
+        },
+        change: {type: 'add', row: {a: 5}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 5,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c15', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 4},
+          basis: 'after',
+        },
+        change: {type: 'add', row: {a: 3}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [],
+      ]
+    `);
+  });
+
+  test('c16', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 4},
+          basis: 'after',
+        },
+        change: {type: 'add', row: {a: 5}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 5,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c17', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'before',
+        },
+        change: {type: 'remove', row: {a: 1}},
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "e": [Error: Row not found: {"type":"remove","row":{"a":1}}],
+      }
+    `);
+  });
+
+  test('c18', () => {
+    expect(
+      t({
+        startData: [{a: 2}],
+        start: {
+          row: {a: 2},
+          basis: 'before',
+        },
+        change: {type: 'remove', row: {a: 2}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [],
+      ]
+    `);
+  });
+
+  test('c19', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'before',
+        },
+        change: {type: 'remove', row: {a: 2}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c20', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'before',
+        },
+        change: {type: 'remove', row: {a: 4}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 2,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c21', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 4},
+          basis: 'before',
+        },
+        change: {type: 'remove', row: {a: 2}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c22', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 4},
+          basis: 'before',
+        },
+        change: {type: 'remove', row: {a: 4}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 2,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c23', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'at',
+        },
+        change: {type: 'remove', row: {a: 2}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c24', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'at',
+        },
+        change: {type: 'remove', row: {a: 4}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 2,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c25', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 4},
+          basis: 'at',
+        },
+        change: {type: 'remove', row: {a: 2}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c26', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 4},
+          basis: 'at',
+        },
+        change: {type: 'remove', row: {a: 4}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [],
+      ]
+    `);
+  });
+
+  test('c27', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'after',
+        },
+        change: {type: 'remove', row: {a: 2}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c28', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'after',
+        },
+        change: {type: 'remove', row: {a: 4}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [],
+      ]
+    `);
+  });
+
+  test('c29', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 4},
+          basis: 'after',
+        },
+        change: {type: 'remove', row: {a: 2}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [],
+      ]
+    `);
+  });
+
+  test('c30', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 4},
+          basis: 'after',
+        },
+        change: {type: 'remove', row: {a: 4}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [],
+      ]
+    `);
+  });
 });
 
-test('overlay-vs-constraint', () => {
-  const cases: {
+suite('overlay-vs-constraint', () => {
+  function t(c: {
     startData: Row[];
     constraint: Constraint;
     change: SourceChange;
-    expected: Row[] | string;
-  }[] = [
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 4, b: true},
-      ],
-      constraint: {b: true},
-      change: {type: 'add', row: {a: 1, b: true}},
-      expected: [
-        {a: 1, b: true},
-        {a: 4, b: true},
-      ],
-    },
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 4, b: true},
-      ],
-      constraint: {b: true},
-      change: {type: 'add', row: {a: 1, b: false}},
-      expected: [{a: 4, b: true}],
-    },
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 4, b: true},
-        {a: 5, b: true},
-      ],
-      constraint: {b: true},
-      change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
-      expected: [{a: 5, b: true}],
-    },
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 4, b: true},
-        {a: 5, b: true},
-      ],
-      constraint: {b: false},
-      change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
-      expected: [
-        {a: 2, b: false},
-        {a: 4, b: false},
-      ],
-    },
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 4, b: true},
-        {a: 5, b: true},
-      ],
-      constraint: {a: 4, b: false},
-      change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
-      expected: [{a: 4, b: false}],
-    },
-  ];
-
-  for (const c of cases) {
+  }) {
     const sort = [['a', 'asc']] as const;
     const s = createSource(
       'table',
@@ -748,223 +1258,161 @@ test('overlay-vs-constraint', () => {
       out.fetch({
         constraint: c.constraint,
       });
-    if (typeof c.expected === 'string') {
-      expect(() => s.push(c.change), JSON.stringify(c)).toThrow(c.expected);
-    } else {
+    try {
       s.push(c.change);
-      expect(out.fetches, JSON.stringify(c)).toEqual([asNodes(c.expected)]);
+    } catch (e) {
+      return {
+        e,
+      };
     }
+    return out.fetches;
   }
+
+  test('c1', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+        ],
+        constraint: {b: true},
+        change: {type: 'add', row: {a: 1, b: true}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 1,
+              "b": true,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+              "b": true,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c2', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+        ],
+        constraint: {b: true},
+        change: {type: 'add', row: {a: 1, b: false}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+              "b": true,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c3', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+          {a: 5, b: true},
+        ],
+        constraint: {b: true},
+        change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 5,
+              "b": true,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c4', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+          {a: 5, b: true},
+        ],
+        constraint: {b: false},
+        change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 2,
+              "b": false,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+              "b": false,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c5', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+          {a: 5, b: true},
+        ],
+        constraint: {a: 4, b: false},
+        change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+              "b": false,
+            },
+          },
+        ],
+      ]
+    `);
+  });
 });
 
-test('overlay-vs-filter', () => {
-  const cases: {
-    startData: Row[];
-    filter: Condition;
-    change: SourceChange;
-    expected: Row[] | string;
-    appliedFilters?: false;
-  }[] = [
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 4, b: true},
-      ],
-      filter: {
-        type: 'simple',
-        op: '=',
-        left: {type: 'column', name: 'b'},
-        right: {type: 'literal', value: true},
-      },
-      change: {type: 'add', row: {a: 1, b: true}},
-      expected: [
-        {a: 1, b: true},
-        {a: 4, b: true},
-      ],
-    },
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 4, b: true},
-      ],
-      filter: {
-        type: 'simple',
-        op: '=',
-        left: {type: 'column', name: 'b'},
-        right: {type: 'literal', value: true},
-      },
-      change: {type: 'add', row: {a: 1, b: false}},
-      expected: [{a: 4, b: true}],
-    },
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 4, b: true},
-        {a: 5, b: true},
-      ],
-      filter: {
-        type: 'simple',
-        op: '=',
-        left: {type: 'column', name: 'b'},
-        right: {type: 'literal', value: true},
-      },
-      change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
-      expected: [{a: 5, b: true}],
-    },
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 4, b: true},
-        {a: 5, b: true},
-      ],
-      filter: {
-        type: 'simple',
-        op: '=',
-        left: {type: 'column', name: 'b'},
-        right: {type: 'literal', value: false},
-      },
-      change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
-      expected: [
-        {a: 2, b: false},
-        {a: 4, b: false},
-      ],
-    },
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 4, b: true},
-      ],
-      filter: {
-        type: 'or',
-        conditions: [
-          {
-            type: 'simple',
-            op: '=',
-            left: {type: 'column', name: 'a'},
-            right: {type: 'literal', value: 4},
-          },
-          {
-            type: 'simple',
-            op: '=',
-            left: {type: 'column', name: 'b'},
-            right: {type: 'literal', value: false},
-          },
-        ],
-      },
-      change: {type: 'add', row: {a: 1, b: true}},
-      expected: [
-        {a: 2, b: false},
-        {a: 4, b: true},
-      ],
-    },
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 4, b: true},
-      ],
-      filter: {
-        type: 'or',
-        conditions: [
-          {
-            type: 'simple',
-            op: '=',
-            left: {type: 'column', name: 'a'},
-            right: {type: 'literal', value: 4},
-          },
-          {
-            type: 'simple',
-            op: '=',
-            left: {type: 'column', name: 'b'},
-            right: {type: 'literal', value: false},
-          },
-        ],
-      },
-      change: {type: 'add', row: {a: 1, b: false}},
-      expected: [
-        {a: 1, b: false},
-        {a: 2, b: false},
-        {a: 4, b: true},
-      ],
-    },
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 4, b: true},
-      ],
-      filter: {
-        type: 'or',
-        conditions: [
-          {
-            type: 'simple',
-            op: '=',
-            left: {type: 'column', name: 'a'},
-            right: {type: 'literal', value: 4},
-          },
-          {
-            type: 'correlatedSubquery',
-            related: {
-              correlation: {
-                parentField: 'a',
-                op: '=',
-                childField: 'b',
-              },
-              subquery: {
-                table: 't',
-                alias: 'zsubq_ts',
-                orderBy: [['id', 'asc']],
-              },
-            },
-            op: 'EXISTS',
-          },
-        ],
-      },
-      change: {type: 'add', row: {a: 1, b: false}},
-      expected: [
-        {a: 1, b: false},
-        {a: 2, b: false},
-        {a: 4, b: true},
-      ],
-      appliedFilters: false,
-    },
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 4, b: true},
-      ],
-      filter: {
-        type: 'and',
-        conditions: [
-          {
-            type: 'simple',
-            op: '=',
-            left: {type: 'column', name: 'a'},
-            right: {type: 'literal', value: 4},
-          },
-          {
-            type: 'correlatedSubquery',
-            related: {
-              correlation: {
-                parentField: 'a',
-                op: '=',
-                childField: 'b',
-              },
-              subquery: {
-                table: 't',
-                alias: 'zsubq_ts',
-                orderBy: [['id', 'asc']],
-              },
-            },
-            op: 'EXISTS',
-          },
-        ],
-      },
-      change: {type: 'add', row: {a: 1, b: false}},
-      expected: [{a: 4, b: true}],
-      appliedFilters: false,
-    },
-  ];
-
-  for (const c of cases) {
+suite('overlay-vs-filter', () => {
+  function t(c: {startData: Row[]; filter: Condition; change: SourceChange}) {
     const sort = [['a', 'asc']] as const;
     const s = createSource(
       'table',
@@ -978,173 +1426,409 @@ test('overlay-vs-filter', () => {
       s.push({type: 'add', row});
     }
     const sourceInput = s.connect(sort, c.filter);
-    expect(sourceInput.appliedFilters).toEqual(c.appliedFilters !== false);
     const out = new OverlaySpy(sourceInput);
     out.onPush = () => out.fetch({});
-    if (typeof c.expected === 'string') {
-      expect(() => s.push(c.change), JSON.stringify(c)).toThrow(c.expected);
-    } else {
+    try {
       s.push(c.change);
-      expect(out.fetches, JSON.stringify(c)).toEqual([asNodes(c.expected)]);
+    } catch (e) {
+      return {
+        e,
+        appliedFilters: sourceInput.appliedFilters,
+      };
     }
+    return {
+      fetches: out.fetches,
+      appliedFilters: sourceInput.appliedFilters,
+    };
   }
+
+  test('c1', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+        ],
+        filter: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'b'},
+          right: {type: 'literal', value: true},
+        },
+        change: {type: 'add', row: {a: 1, b: true}},
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "appliedFilters": true,
+        "fetches": [
+          [
+            {
+              "relationships": {},
+              "row": {
+                "a": 1,
+                "b": true,
+              },
+            },
+            {
+              "relationships": {},
+              "row": {
+                "a": 4,
+                "b": true,
+              },
+            },
+          ],
+        ],
+      }
+    `);
+  });
+
+  test('c2', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+        ],
+        filter: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'b'},
+          right: {type: 'literal', value: true},
+        },
+        change: {type: 'add', row: {a: 1, b: false}},
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "appliedFilters": true,
+        "fetches": [
+          [
+            {
+              "relationships": {},
+              "row": {
+                "a": 4,
+                "b": true,
+              },
+            },
+          ],
+        ],
+      }
+    `);
+  });
+
+  test('c3', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+          {a: 5, b: true},
+        ],
+        filter: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'b'},
+          right: {type: 'literal', value: true},
+        },
+        change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "appliedFilters": true,
+        "fetches": [
+          [
+            {
+              "relationships": {},
+              "row": {
+                "a": 5,
+                "b": true,
+              },
+            },
+          ],
+        ],
+      }
+    `);
+  });
+
+  test('c4', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+          {a: 5, b: true},
+        ],
+        filter: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'b'},
+          right: {type: 'literal', value: false},
+        },
+        change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "appliedFilters": true,
+        "fetches": [
+          [
+            {
+              "relationships": {},
+              "row": {
+                "a": 2,
+                "b": false,
+              },
+            },
+            {
+              "relationships": {},
+              "row": {
+                "a": 4,
+                "b": false,
+              },
+            },
+          ],
+        ],
+      }
+    `);
+  });
+
+  test('c5', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+        ],
+        filter: {
+          type: 'or',
+          conditions: [
+            {
+              type: 'simple',
+              op: '=',
+              left: {type: 'column', name: 'a'},
+              right: {type: 'literal', value: 4},
+            },
+            {
+              type: 'simple',
+              op: '=',
+              left: {type: 'column', name: 'b'},
+              right: {type: 'literal', value: false},
+            },
+          ],
+        },
+        change: {type: 'add', row: {a: 1, b: true}},
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "appliedFilters": true,
+        "fetches": [
+          [
+            {
+              "relationships": {},
+              "row": {
+                "a": 2,
+                "b": false,
+              },
+            },
+            {
+              "relationships": {},
+              "row": {
+                "a": 4,
+                "b": true,
+              },
+            },
+          ],
+        ],
+      }
+    `);
+  });
+
+  test('c6', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+        ],
+        filter: {
+          type: 'or',
+          conditions: [
+            {
+              type: 'simple',
+              op: '=',
+              left: {type: 'column', name: 'a'},
+              right: {type: 'literal', value: 4},
+            },
+            {
+              type: 'simple',
+              op: '=',
+              left: {type: 'column', name: 'b'},
+              right: {type: 'literal', value: false},
+            },
+          ],
+        },
+        change: {type: 'add', row: {a: 1, b: false}},
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "appliedFilters": true,
+        "fetches": [
+          [
+            {
+              "relationships": {},
+              "row": {
+                "a": 1,
+                "b": false,
+              },
+            },
+            {
+              "relationships": {},
+              "row": {
+                "a": 2,
+                "b": false,
+              },
+            },
+            {
+              "relationships": {},
+              "row": {
+                "a": 4,
+                "b": true,
+              },
+            },
+          ],
+        ],
+      }
+    `);
+  });
+  test('c7', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+        ],
+        filter: {
+          type: 'or',
+          conditions: [
+            {
+              type: 'simple',
+              op: '=',
+              left: {type: 'column', name: 'a'},
+              right: {type: 'literal', value: 4},
+            },
+            {
+              type: 'correlatedSubquery',
+              related: {
+                correlation: {
+                  parentField: 'a',
+                  op: '=',
+                  childField: 'b',
+                },
+                subquery: {
+                  table: 't',
+                  alias: 'zsubq_ts',
+                  orderBy: [['id', 'asc']],
+                },
+              },
+              op: 'EXISTS',
+            },
+          ],
+        },
+        change: {type: 'add', row: {a: 1, b: false}},
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "appliedFilters": false,
+        "fetches": [
+          [
+            {
+              "relationships": {},
+              "row": {
+                "a": 1,
+                "b": false,
+              },
+            },
+            {
+              "relationships": {},
+              "row": {
+                "a": 2,
+                "b": false,
+              },
+            },
+            {
+              "relationships": {},
+              "row": {
+                "a": 4,
+                "b": true,
+              },
+            },
+          ],
+        ],
+      }
+    `);
+  });
+
+  test('c8', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 4, b: true},
+        ],
+        filter: {
+          type: 'and',
+          conditions: [
+            {
+              type: 'simple',
+              op: '=',
+              left: {type: 'column', name: 'a'},
+              right: {type: 'literal', value: 4},
+            },
+            {
+              type: 'correlatedSubquery',
+              related: {
+                correlation: {
+                  parentField: 'a',
+                  op: '=',
+                  childField: 'b',
+                },
+                subquery: {
+                  table: 't',
+                  alias: 'zsubq_ts',
+                  orderBy: [['id', 'asc']],
+                },
+              },
+              op: 'EXISTS',
+            },
+          ],
+        },
+        change: {type: 'add', row: {a: 1, b: false}},
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "appliedFilters": false,
+        "fetches": [
+          [
+            {
+              "relationships": {},
+              "row": {
+                "a": 4,
+                "b": true,
+              },
+            },
+          ],
+        ],
+      }
+    `);
+  });
 });
 
-test('overlay-vs-constraint-and-start', () => {
-  const cases: {
+suite('overlay-vs-constraint-and-start', () => {
+  function t(c: {
     startData: Row[];
     columns?: Record<string, SchemaValue> | undefined;
     start: Start;
     constraint: Constraint;
     change: SourceChange;
-    expected: Row[] | string;
-  }[] = [
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 3, b: false},
-        {a: 5, b: true},
-        {a: 6, b: false},
-        {a: 7, b: false},
-      ],
-      start: {
-        row: {a: 6, b: false},
-        basis: 'before',
-      },
-      constraint: {b: false},
-      change: {type: 'add', row: {a: 4, b: false}},
-      expected: [
-        {a: 4, b: false},
-        {a: 6, b: false},
-        {a: 7, b: false},
-      ],
-    },
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 3, b: false},
-        {a: 5, b: true},
-        {a: 6, b: false},
-        {a: 7, b: false},
-      ],
-      start: {
-        row: {a: 6, b: false},
-        basis: 'before',
-      },
-      constraint: {b: false},
-      change: {type: 'add', row: {a: 2.5, b: false}},
-      expected: [
-        {a: 3, b: false},
-        {a: 6, b: false},
-        {a: 7, b: false},
-      ],
-    },
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 3, b: false},
-        {a: 5, b: true},
-        {a: 6, b: false},
-        {a: 7, b: false},
-      ],
-      start: {
-        row: {a: 5.5, b: false},
-        basis: 'at',
-      },
-      constraint: {b: false},
-      change: {type: 'add', row: {a: 5.75, b: false}},
-      expected: [
-        {a: 5.75, b: false},
-        {a: 6, b: false},
-        {a: 7, b: false},
-      ],
-    },
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 3, b: false},
-        {a: 5, b: true},
-        {a: 6, b: false},
-        {a: 7, b: false},
-      ],
-      start: {
-        row: {a: 5.5, b: false},
-        basis: 'at',
-      },
-      constraint: {b: false},
-      change: {type: 'add', row: {a: 4, b: false}},
-      expected: [
-        {a: 6, b: false},
-        {a: 7, b: false},
-      ],
-    },
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 3, b: false},
-        {a: 5, b: true},
-        {a: 6, b: false},
-        {a: 7, b: false},
-      ],
-      start: {
-        row: {a: 5.5, b: false},
-        basis: 'at',
-      },
-      constraint: {b: false},
-      change: {type: 'add', row: {a: 8, b: false}},
-      expected: [
-        {a: 6, b: false},
-        {a: 7, b: false},
-        {a: 8, b: false},
-      ],
-    },
-    {
-      startData: [
-        {a: 2, b: false},
-        {a: 3, b: false},
-        {a: 5, b: true},
-        {a: 6, b: false},
-        {a: 7, b: false},
-      ],
-      start: {
-        row: {a: 5.5, b: false},
-        basis: 'after',
-      },
-      constraint: {b: false},
-      change: {type: 'add', row: {a: 6.5, b: false}},
-      expected: [
-        {a: 6, b: false},
-        {a: 6.5, b: false},
-        {a: 7, b: false},
-      ],
-    },
-    {
-      columns: {
-        a: {type: 'number'},
-        b: {type: 'boolean'},
-        c: {type: 'number'},
-      },
-      startData: [
-        {a: 2, b: false, c: 1},
-        {a: 3, b: false, c: 1},
-        {a: 5, b: true, c: 1},
-        {a: 6, b: true, c: 2},
-        {a: 7, b: false, c: 2},
-      ],
-      start: {
-        row: {a: 5, b: true, c: 1},
-        basis: 'at',
-      },
-      constraint: {b: true, c: 1},
-      change: {type: 'add', row: {a: 5.5, b: true, c: 1}},
-      expected: [
-        {a: 5, b: true, c: 1},
-        {a: 5.5, b: true, c: 1},
-      ],
-    },
-  ];
-
-  for (const c of cases) {
+  }) {
     const sort = [['a', 'asc']] as const;
     const s = createSource(
       'table',
@@ -1163,13 +1847,330 @@ test('overlay-vs-constraint-and-start', () => {
         start: c.start,
         constraint: c.constraint,
       });
-    if (typeof c.expected === 'string') {
-      expect(() => s.push(c.change), JSON.stringify(c)).toThrow(c.expected);
-    } else {
+    try {
       s.push(c.change);
-      expect(out.fetches, JSON.stringify(c)).toEqual([asNodes(c.expected)]);
+    } catch (e) {
+      return {
+        e,
+      };
     }
+    return out.fetches;
   }
+
+  test('c1', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 6, b: false},
+          basis: 'before',
+        },
+        constraint: {b: false},
+        change: {type: 'add', row: {a: 4, b: false}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+              "b": false,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 6,
+              "b": false,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 7,
+              "b": false,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c2', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 6, b: false},
+          basis: 'before',
+        },
+        constraint: {b: false},
+        change: {type: 'add', row: {a: 2.5, b: false}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 3,
+              "b": false,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 6,
+              "b": false,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 7,
+              "b": false,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c3', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 5.5, b: false},
+          basis: 'at',
+        },
+        constraint: {b: false},
+        change: {type: 'add', row: {a: 5.75, b: false}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 5.75,
+              "b": false,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 6,
+              "b": false,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 7,
+              "b": false,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c4', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 5.5, b: false},
+          basis: 'at',
+        },
+        constraint: {b: false},
+        change: {type: 'add', row: {a: 4, b: false}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 6,
+              "b": false,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 7,
+              "b": false,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c5', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 5.5, b: false},
+          basis: 'at',
+        },
+        constraint: {b: false},
+        change: {type: 'add', row: {a: 8, b: false}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 6,
+              "b": false,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 7,
+              "b": false,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 8,
+              "b": false,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c6', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 5.5, b: false},
+          basis: 'after',
+        },
+        constraint: {b: false},
+        change: {type: 'add', row: {a: 6.5, b: false}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 6,
+              "b": false,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 6.5,
+              "b": false,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 7,
+              "b": false,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c7', () => {
+    expect(
+      t({
+        columns: {
+          a: {type: 'number'},
+          b: {type: 'boolean'},
+          c: {type: 'number'},
+        },
+        startData: [
+          {a: 2, b: false, c: 1},
+          {a: 3, b: false, c: 1},
+          {a: 5, b: true, c: 1},
+          {a: 6, b: true, c: 2},
+          {a: 7, b: false, c: 2},
+        ],
+        start: {
+          row: {a: 5, b: true, c: 1},
+          basis: 'at',
+        },
+        constraint: {b: true, c: 1},
+        change: {type: 'add', row: {a: 5.5, b: true, c: 1}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 5,
+              "b": true,
+              "c": 1,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 5.5,
+              "b": true,
+              "c": 1,
+            },
+          },
+        ],
+      ]
+    `);
+  });
 });
 
 test('per-output-sorts', () => {
