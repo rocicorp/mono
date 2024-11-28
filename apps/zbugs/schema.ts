@@ -36,16 +36,18 @@ const issueSchema = createTableSchema({
   },
   primaryKey: ['id'],
   relationships: {
-    labels: {
-      sourceField: ['id'],
-      destField: ['id'],
-      junction: {
-        sourceField: ['issueID'],
-        destField: ['labelID'],
+    labels: [
+      {
+        sourceField: ['id'],
+        destField: ['issueID'],
         destSchema: () => issueLabelSchema,
       },
-      destSchema: () => labelSchema,
-    },
+      {
+        sourceField: ['labelID'],
+        destField: ['id'],
+        destSchema: () => labelSchema,
+      },
+    ],
     comments: {
       sourceField: ['id'],
       destField: ['issueID'],

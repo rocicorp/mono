@@ -1,7 +1,8 @@
 import {expect, test} from 'vitest';
+import {assert} from '../../shared/src/asserts.js';
 import {normalizeSchema} from './normalized-schema.js';
 import type {Schema} from './schema.js';
-import type {TableSchema} from './table-schema.js';
+import {isFieldRelationship} from './table-schema.js';
 
 // Use JSON to preserve the order of properties since
 // the testing framework doesn't care about the order.
@@ -130,7 +131,7 @@ test('order version and table properties', () => {
 });
 
 test('Mutually resolving relationships should be supported', () => {
-  const fooTableSchema: TableSchema = {
+  const fooTableSchema = {
     tableName: 'foo',
     primaryKey: ['id'],
     columns: {
@@ -143,9 +144,9 @@ test('Mutually resolving relationships should be supported', () => {
         destSchema: () => barTableSchema,
       },
     },
-  };
+  } as const;
 
-  const barTableSchema: TableSchema = {
+  const barTableSchema = {
     tableName: 'bar',
     primaryKey: ['id'],
     columns: {
@@ -158,16 +159,18 @@ test('Mutually resolving relationships should be supported', () => {
         destSchema: () => fooTableSchema,
       },
     },
-  };
+  } as const;
 
   const normalizedFooSchema = normalizeSchema({
     tables: {foo: fooTableSchema, bar: barTableSchema},
     version: 1,
   });
 
+  assert(isFieldRelationship(normalizedFooSchema.tables.foo.relationships.bar));
   expect(normalizedFooSchema.tables.foo.relationships.bar.destSchema).toBe(
     normalizedFooSchema.tables.bar,
   );
+  assert(isFieldRelationship(normalizedFooSchema.tables.bar.relationships.foo));
   expect(normalizedFooSchema.tables.bar.relationships.foo.destSchema).toBe(
     normalizedFooSchema.tables.foo,
   );

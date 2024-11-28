@@ -19,16 +19,18 @@ export const issueSchema = {
       destField: ['issueId'],
       destSchema: () => commentSchema,
     },
-    labels: {
-      sourceField: ['id'],
-      destField: ['id'],
-      destSchema: () => labelSchema,
-      junction: {
-        sourceField: ['issueId'],
-        destField: ['labelId'],
+    labels: [
+      {
+        sourceField: ['id'],
+        destField: ['issueId'],
         destSchema: () => issueLabelSchema,
       },
-    },
+      {
+        sourceField: ['labelId'],
+        destField: ['id'],
+        destSchema: () => labelSchema,
+      },
+    ],
   },
 } as const;
 
@@ -50,16 +52,18 @@ export const labelSchema = {
   },
   primaryKey: ['id'],
   relationships: {
-    issues: {
-      sourceField: ['id'],
-      destField: ['id'],
-      destSchema: issueSchema,
-      junction: {
-        sourceField: ['labelId'],
-        destField: ['issueId'],
+    issues: [
+      {
+        sourceField: ['id'],
+        destField: ['labelId'],
         destSchema: issueLabelSchema,
       },
-    },
+      {
+        sourceField: ['issueId'],
+        destField: ['id'],
+        destSchema: issueSchema,
+      },
+    ],
   },
 } as const;
 

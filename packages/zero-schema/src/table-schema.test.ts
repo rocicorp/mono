@@ -56,16 +56,18 @@ test('relationship schema types', () => {
         destField: ['issueID'],
         destSchema: commentSchema,
       },
-      labels: {
-        sourceField: ['id'],
-        destField: ['id'],
-        destSchema: () => labelSchema,
-        junction: {
-          sourceField: ['issueID'],
-          destField: ['labelID'],
+      labels: [
+        {
+          sourceField: ['id'],
+          destField: ['issueID'],
           destSchema: issueLabelSchema,
         },
-      },
+        {
+          sourceField: ['labelID'],
+          destField: ['id'],
+          destSchema: () => labelSchema,
+        },
+      ],
     },
   } as const;
 
@@ -89,14 +91,6 @@ test('relationship schema types', () => {
   >();
   expectTypeOf(issueSchema.relationships.comments).not.toMatchTypeOf<
     JunctionRelationship<Issue, any, Comment>
-  >();
-
-  expectTypeOf(issueSchema.relationships.labels).toMatchTypeOf<Relationship>();
-  expectTypeOf(issueSchema.relationships.labels).toMatchTypeOf<
-    FieldRelationship<Issue, Label>
-  >();
-  expectTypeOf(issueSchema.relationships.labels.junction).toMatchTypeOf<
-    FieldRelationship<IssueLabel, IssueLabel>
   >();
 
   expectTypeOf(issueSchema.relationships.labels).toMatchTypeOf<

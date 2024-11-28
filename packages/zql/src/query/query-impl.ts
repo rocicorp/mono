@@ -183,18 +183,16 @@ export abstract class AbstractQuery<
         `Relationship names may not start with "${SUBQ_PREFIX}". That is a reserved prefix.`,
       );
     }
-    const related = this.#schema.relationships[relationship as string];
+    const related = this.#schema.relationships[relationship];
     assert(related, 'Invalid relationship');
-    const fieldRelationship = related;
-    const junctionRelationship = related;
-    if (isFieldRelationship(fieldRelationship)) {
-      const {destSchema} = fieldRelationship;
+    if (isFieldRelationship(related)) {
+      const {destSchema} = related;
       const sq = cb(
         this._newQuery(
           destSchema,
           {
             table: destSchema.tableName,
-            alias: relationship as string,
+            alias: relationship,
           },
           undefined,
         ),
@@ -208,8 +206,8 @@ export abstract class AbstractQuery<
             ...(this.#ast.related ?? []),
             {
               correlation: {
-                parentField: fieldRelationship.sourceField,
-                childField: fieldRelationship.destField,
+                parentField: related.sourceField,
+                childField: related.destField,
               },
               subquery: addPrimaryKeysToAst(destSchema, sq.#ast),
             },
@@ -219,30 +217,27 @@ export abstract class AbstractQuery<
           ...this.#format,
           relationships: {
             ...this.#format.relationships,
-            [relationship as string]: sq.#format,
+            [relationship]: sq.#format,
           },
         },
       );
     }
-    if (isJunctionRelationship(junctionRelationship)) {
-      const {destSchema} = junctionRelationship;
-      const junctionDestSchema = junctionRelationship.junction.destSchema;
+
+    if (isJunctionRelationship(related)) {
+      assert(related.length === 2, 'Invalid relationship');
+      const [firstRelation, secondRelation] = related;
+      const {destSchema} = secondRelation;
+      const junctionSchema = firstRelation.destSchema;
       const sq = cb(
         this._newQuery(
           destSchema,
           {
             table: destSchema.tableName,
-            alias: relationship as string,
+            alias: relationship,
           },
           undefined,
         ),
       ) as unknown as QueryImpl<TableSchema, QueryType>;
-
-      assert(
-        junctionRelationship.destField.length ===
-          junctionRelationship.junction.destField.length,
-        'Invalid relationship',
-      );
 
       return this._newQuery(
         this.#schema,
@@ -252,18 +247,18 @@ export abstract class AbstractQuery<
             ...(this.#ast.related ?? []),
             {
               correlation: {
-                parentField: junctionRelationship.sourceField,
-                childField: junctionRelationship.junction.sourceField,
+                parentField: firstRelation.sourceField,
+                childField: firstRelation.destField,
               },
               subquery: {
-                table: junctionDestSchema.tableName,
+                table: junctionSchema.tableName,
                 alias: relationship,
-                orderBy: addPrimaryKeys(junctionDestSchema, undefined),
+                orderBy: addPrimaryKeys(junctionSchema, undefined),
                 related: [
                   {
                     correlation: {
-                      parentField: junctionRelationship.junction.destField,
-                      childField: junctionRelationship.destField,
+                      parentField: secondRelation.sourceField,
+                      childField: secondRelation.destField,
                     },
                     hidden: true,
                     subquery: addPrimaryKeysToAst(destSchema, sq.#ast),
@@ -375,11 +370,9 @@ export abstract class AbstractQuery<
   ): Condition => {
     const related = this.#schema.relationships[relationship];
     assert(related, 'Invalid relationship');
-    const fieldRelationship = related;
-    const junctionRelationship = related;
 
-    if (isFieldRelationship(fieldRelationship)) {
-      const {destSchema} = fieldRelationship;
+    if (isFieldRelationship(related)) {
+      const {destSchema} = related;
       const sq = cb(
         this._newQuery(
           destSchema,
@@ -394,8 +387,8 @@ export abstract class AbstractQuery<
         type: 'correlatedSubquery',
         related: {
           correlation: {
-            parentField: fieldRelationship.sourceField,
-            childField: fieldRelationship.destField,
+            parentField: related.sourceField,
+            childField: related.destField,
           },
           subquery: addPrimaryKeysToAst(destSchema, sq.#ast),
         },
@@ -403,9 +396,11 @@ export abstract class AbstractQuery<
       };
     }
 
-    if (isJunctionRelationship(junctionRelationship)) {
-      const {destSchema} = junctionRelationship;
-      const junctionDestSchema = junctionRelationship.junction.destSchema;
+    if (isJunctionRelationship(related)) {
+      assert(related.length === 2, 'Invalid relationship');
+      const [firstRelation, secondRelation] = related;
+      const {destSchema} = secondRelation;
+      const junctionSchema = firstRelation.destSchema;
       const queryToDest = cb(
         this._newQuery(
           destSchema,
@@ -415,33 +410,25 @@ export abstract class AbstractQuery<
           },
           undefined,
         ),
-      ) as unknown as QueryImpl<TableSchema, QueryType>;
-
-      assert(
-        junctionRelationship.destField.length ===
-          junctionRelationship.junction.destField.length,
-        'Invalid relationship',
-      );
+      ) as QueryImpl<TableSchema, QueryType>;
 
       return {
         type: 'correlatedSubquery',
         related: {
-          // source to source
           correlation: {
-            parentField: junctionRelationship.sourceField,
-            childField: junctionRelationship.junction.sourceField,
+            parentField: firstRelation.sourceField,
+            childField: firstRelation.destField,
           },
           subquery: {
-            table: junctionDestSchema.tableName,
+            table: junctionSchema.tableName,
             alias: `${SUBQ_PREFIX}${relationship}`,
-            orderBy: addPrimaryKeys(junctionDestSchema, undefined),
+            orderBy: addPrimaryKeys(junctionSchema, undefined),
             where: {
               type: 'correlatedSubquery',
               related: {
-                // dest to dest
                 correlation: {
-                  parentField: junctionRelationship.junction.destField,
-                  childField: junctionRelationship.destField,
+                  parentField: secondRelation.sourceField,
+                  childField: secondRelation.destField,
                 },
 
                 subquery: addPrimaryKeysToAst(destSchema, queryToDest.#ast),
@@ -454,7 +441,7 @@ export abstract class AbstractQuery<
       };
     }
 
-    throw new Error(`Invalid relationship ${relationship as string}`);
+    throw new Error(`Invalid relationship ${relationship}`);
   };
 
   #completedAST: AST | undefined;

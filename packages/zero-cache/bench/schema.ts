@@ -27,16 +27,18 @@ const issueSchema: TableSchema = {
   },
   primaryKey: ['id'],
   relationships: {
-    labels: {
-      sourceField: ['id'],
-      destField: ['id'],
-      destSchema: () => labelSchema,
-      junction: {
-        sourceField: ['issueID'],
-        destField: ['labelID'],
+    labels: [
+      {
+        sourceField: ['id'],
+        destField: ['issueID'],
         destSchema: () => issueLabelSchema,
       },
-    },
+      {
+        sourceField: ['labelID'],
+        destField: ['id'],
+        destSchema: () => labelSchema,
+      },
+    ],
     comments: {
       sourceField: ['id'],
       destField: ['issueID'],

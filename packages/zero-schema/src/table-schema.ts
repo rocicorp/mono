@@ -1,3 +1,4 @@
+import {assert} from '../../shared/src/asserts.js';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
 
 export type ValueType = 'string' | 'number' | 'boolean' | 'null' | 'json';
@@ -121,28 +122,40 @@ export type JunctionRelationship<
   TSourceSchema extends TableSchema,
   TJunctionSchema extends TableSchema,
   TDestSchema extends TableSchema,
-> = FieldRelationship<TSourceSchema, TDestSchema> & {
-  junction: FieldRelationship<TJunctionSchema, TJunctionSchema>;
-};
+> = readonly [
+  FieldRelationship<TSourceSchema, TJunctionSchema>,
+  FieldRelationship<TJunctionSchema, TDestSchema>,
+];
 
 export function isFieldRelationship(
   relationship: Relationship,
 ): relationship is FieldRelationship<TableSchema, TableSchema> {
-  return (
-    (
-      relationship as JunctionRelationship<
-        TableSchema,
-        TableSchema,
-        TableSchema
-      >
-    ).junction === undefined
-  );
+  return !isJunctionRelationship(relationship);
+}
+
+export function assertFieldRelationship(
+  relationship: Relationship,
+): asserts relationship is FieldRelationship<TableSchema, TableSchema> {
+  assert(isFieldRelationship(relationship), 'Expected field relationship');
 }
 
 export function isJunctionRelationship(
   relationship: Relationship,
 ): relationship is JunctionRelationship<TableSchema, TableSchema, TableSchema> {
-  return !isFieldRelationship(relationship);
+  return Array.isArray(relationship);
+}
+
+export function assertJunctionRelationship(
+  relationship: Relationship,
+): asserts relationship is JunctionRelationship<
+  TableSchema,
+  TableSchema,
+  TableSchema
+> {
+  assert(
+    isJunctionRelationship(relationship),
+    'Expected junction relationship',
+  );
 }
 
 /**

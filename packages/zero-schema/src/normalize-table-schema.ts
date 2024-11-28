@@ -189,21 +189,19 @@ function normalizeFieldRelationship(
   };
 }
 
-type NormalizedJunctionRelationship = NormalizedFieldRelationship & {
-  junction: NormalizedFieldRelationship;
-};
+type NormalizedJunctionRelationship = readonly [
+  NormalizedFieldRelationship,
+  NormalizedFieldRelationship,
+];
 
 function normalizeJunctionRelationship(
   relationship: JunctionRelationship<TableSchema, TableSchema, TableSchema>,
   tableSchemaCache: TableSchemaCache,
 ): NormalizedJunctionRelationship {
-  return {
-    ...normalizeFieldRelationship(relationship, tableSchemaCache),
-    junction: normalizeFieldRelationship(
-      relationship.junction,
-      tableSchemaCache,
-    ),
-  };
+  return [
+    normalizeFieldRelationship(relationship[0], tableSchemaCache),
+    normalizeFieldRelationship(relationship[1], tableSchemaCache),
+  ];
 }
 
 function normalizeLazyTableSchema<TS extends TableSchema>(

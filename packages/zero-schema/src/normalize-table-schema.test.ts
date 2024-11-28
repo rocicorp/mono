@@ -4,7 +4,7 @@ import {
   normalizePrimaryKey,
   normalizeTableSchema,
 } from './normalize-table-schema.js';
-import type {TableSchema} from './table-schema.js';
+import {assertFieldRelationship, type TableSchema} from './table-schema.js';
 
 // Use JSON to preserve the order of properties since
 // the testing framework doesn't care about the order.
@@ -252,6 +252,7 @@ test('Cyclic relationship should be supported', () => {
 
   const normalizedFooTableSchema = normalizeTableSchema(fooTableSchema);
 
+  assertFieldRelationship(normalizedFooTableSchema.relationships.bar);
   expect(normalizedFooTableSchema.relationships.bar.destSchema).toBe(
     normalizedFooTableSchema,
   );
@@ -290,6 +291,10 @@ test('Mutually resolving relationships should be supported', () => {
 
   const normalizedFooTableSchema = normalizeTableSchema(fooTableSchema);
 
+  assertFieldRelationship(normalizedFooTableSchema.relationships.bar);
+  assertFieldRelationship(
+    normalizedFooTableSchema.relationships.bar.destSchema.relationships.foo,
+  );
   expect(
     normalizedFooTableSchema.relationships.bar.destSchema.relationships.foo
       .destSchema,

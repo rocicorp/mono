@@ -58,27 +58,30 @@ const schema = {
           destField: ['creatorId'],
           destSchema: () => schema.tables.issue,
         },
-        viewedIssues: {
-          sourceField: ['id'],
-          destField: ['id'],
-          destSchema: () => schema.tables.issue,
-          junction: {
-            sourceField: ['userId'],
-            destField: ['issueId'],
+        viewedIssues: [
+          {
+            sourceField: ['id'],
+            destField: ['userId'],
             destSchema: () => schema.tables.viewState,
           },
-        },
-        projects: {
-          sourceField: ['id'],
-          destField: ['id'],
-          destSchema: () => schema.tables.project,
-          source: ['id'],
-          junction: {
-            sourceField: ['userId'],
-            destField: ['projectId'],
+          {
+            sourceField: ['issueId'],
+            destField: ['id'],
+            destSchema: () => schema.tables.issue,
+          },
+        ],
+        projects: [
+          {
+            sourceField: ['id'],
+            destField: ['userId'],
             destSchema: () => schema.tables.projectMember,
           },
-        },
+          {
+            sourceField: ['projectId'],
+            destField: ['id'],
+            destSchema: () => schema.tables.project,
+          },
+        ],
       },
     },
     issue: {
@@ -109,16 +112,18 @@ const schema = {
           destField: ['issueId'],
           destSchema: () => schema.tables.comment,
         },
-        labels: {
-          sourceField: ['id'],
-          destField: ['id'],
-          destSchema: () => schema.tables.label,
-          junction: {
-            sourceField: ['issueId'],
-            destField: ['labelId'],
+        labels: [
+          {
+            sourceField: ['id'],
+            destField: ['issueId'],
             destSchema: () => schema.tables.issueLabel,
           },
-        },
+          {
+            sourceField: ['labelId'],
+            destField: ['id'],
+            destSchema: () => schema.tables.label,
+          },
+        ],
         project: {
           sourceField: ['projectId'],
           destField: ['id'],
@@ -216,16 +221,18 @@ const schema = {
           destField: ['projectId'],
           destSchema: () => schema.tables.issue,
         },
-        members: {
-          sourceField: ['id'],
-          destField: ['id'],
-          destSchema: () => schema.tables.user,
-          junction: {
-            sourceField: ['projectId'],
-            destField: ['userId'],
+        members: [
+          {
+            sourceField: ['id'],
+            destField: ['projectId'],
             destSchema: () => schema.tables.projectMember,
           },
-        },
+          {
+            sourceField: ['userId'],
+            destField: ['id'],
+            destSchema: () => schema.tables.user,
+          },
+        ],
       },
     },
     projectMember: {
