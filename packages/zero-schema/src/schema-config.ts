@@ -16,9 +16,9 @@ const fieldRelationshipSchema = v.object({
   destSchema: v.lazy(() => tableSchemaSchema),
 });
 
-const junctionRelationshipSchema = fieldRelationshipSchema.extend({
-  junction: fieldRelationshipSchema,
-});
+const junctionRelationshipSchema = v.readonly(
+  v.tuple([fieldRelationshipSchema, fieldRelationshipSchema]),
+);
 
 export const relationshipSchema = v.union(
   fieldRelationshipSchema,
