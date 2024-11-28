@@ -540,7 +540,7 @@ suite('overlay-vs-fetch-start', () => {
       }),
     ).toMatchInlineSnapshot(`
       {
-        "e": "Row already exists: {"type":"add","row":{"a":2}}",
+        "e": "Row already exists {"type":"add","row":{"a":2}}",
       }
     `);
   });
@@ -952,7 +952,7 @@ suite('overlay-vs-fetch-start', () => {
       }),
     ).toMatchInlineSnapshot(`
       {
-        "e": "Row not found: {"type":"remove","row":{"a":1}}",
+        "e": "Row not found {"type":"remove","row":{"a":1}}",
       }
     `);
   });
