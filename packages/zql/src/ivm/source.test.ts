@@ -451,7 +451,7 @@ suite('overlay-vs-fetch-start', () => {
       s.push(c.change);
     } catch (e) {
       return {
-        e,
+        e: (e as Error).message,
       };
     }
     return out.fetches;
@@ -540,7 +540,7 @@ suite('overlay-vs-fetch-start', () => {
       }),
     ).toMatchInlineSnapshot(`
       {
-        "e": [Error: Row already exists: {"type":"add","row":{"a":2}}],
+        "e": "Row already exists: {"type":"add","row":{"a":2}}",
       }
     `);
   });
@@ -952,7 +952,7 @@ suite('overlay-vs-fetch-start', () => {
       }),
     ).toMatchInlineSnapshot(`
       {
-        "e": [Error: Row not found: {"type":"remove","row":{"a":1}}],
+        "e": "Row not found: {"type":"remove","row":{"a":1}}",
       }
     `);
   });
@@ -1262,7 +1262,7 @@ suite('overlay-vs-constraint', () => {
       s.push(c.change);
     } catch (e) {
       return {
-        e,
+        e: (e as Error).message,
       };
     }
     return out.fetches;
@@ -1432,7 +1432,7 @@ suite('overlay-vs-filter', () => {
       s.push(c.change);
     } catch (e) {
       return {
-        e,
+        e: (e as Error).message,
         appliedFilters: sourceInput.appliedFilters,
       };
     }
@@ -1851,7 +1851,7 @@ suite('overlay-vs-constraint-and-start', () => {
       s.push(c.change);
     } catch (e) {
       return {
-        e,
+        e: (e as Error).message,
       };
     }
     return out.fetches;
