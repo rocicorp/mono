@@ -1569,6 +1569,7 @@ describe('view-syncer/cvr', () => {
     });
   });
 
+  // ^^: just run this test twice? Once for executed once for transformed
   test('new transformation hash', async () => {
     const initialState: DBState = {
       instances: [
@@ -1681,11 +1682,11 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
-    const cvr = await cvrStore.load(LAST_CONNECT);
-    const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '123');
+    let cvrStore = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    let cvr = await cvrStore.load(LAST_CONNECT);
+    let updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '123');
 
-    const {newVersion, queryPatches} = updater.trackQueries(
+    let {newVersion, queryPatches} = updater.trackQueries(
       lc,
       [{id: 'oneHash', transformationHash: 'serverTwoHash'}],
       [],
@@ -1759,7 +1760,7 @@ describe('view-syncer/cvr', () => {
     ] satisfies PatchToVersion[]);
 
     // Same last active day (no index change), but different hour.
-    const {cvr: updated, stats} = await updater.flush(
+    let {cvr: updated, stats} = await updater.flush(
       lc,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
@@ -1866,9 +1867,9 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const doCVRStore2 = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
-    const reloaded = await doCVRStore2.load(LAST_CONNECT);
-    expect(reloaded).toEqual(updated);
+    cvrStore = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    cvr = await cvrStore.load(LAST_CONNECT);
+    expect(cvr).toEqual(updated);
 
     expect(await getAllState(db)).toEqual({
       instances: [
@@ -1980,6 +1981,89 @@ describe('view-syncer/cvr', () => {
           rowVersion: '09',
           schema: 'public',
           table: 'issues',
+        },
+      ],
+    });
+
+    updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '123');
+    ({newVersion, queryPatches} = updater.trackQueries(
+      lc,
+      [{id: 'oneHash', transformationHash: 'newXFormHash'}],
+      [],
+    ));
+    expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 2});
+    expect(queryPatches).toHaveLength(0);
+
+    ({cvr: updated, stats} = await updater.flush(
+      lc,
+      LAST_CONNECT,
+      Date.UTC(2024, 3, 23, 2),
+    ));
+    expect(stats).toMatchInlineSnapshot(`
+      {
+        "clients": 0,
+        "desires": 0,
+        "instances": 2,
+        "queries": 1,
+        "rows": 0,
+        "rowsDeferred": 0,
+        "statements": 4,
+      }
+    `);
+
+    const newState = await getAllState(db);
+    expect({
+      instances: newState.instances,
+      clients: newState.clients,
+      queries: newState.queries,
+    }).toEqual({
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          lastActive: new Date('2024-04-23T02:00:00Z').getTime(),
+          version: '1ba:02',
+          replicaVersion: '123',
+          owner: 'my-task',
+          grantedAt: 1709251200000,
+        },
+      ],
+      clients: initialState.clients,
+      queries: [
+        {
+          clientAST: {
+            table: 'issues',
+          },
+          clientGroupID: 'abc123',
+          deleted: true,
+          internal: null,
+          patchVersion: '189',
+          queryHash: 'already-deleted',
+          transformationHash: null,
+          transformationVersion: null,
+        },
+        {
+          clientAST: {
+            table: 'issues',
+          },
+          clientGroupID: 'abc123',
+          deleted: true,
+          internal: null,
+          patchVersion: '19z',
+          queryHash: 'catchup-delete',
+          transformationHash: null,
+          transformationVersion: null,
+        },
+        {
+          clientAST: {
+            table: 'issues',
+          },
+          clientGroupID: 'abc123',
+          deleted: false,
+          internal: null,
+          patchVersion: '1aa:01',
+          queryHash: 'oneHash',
+          transformationHash: 'newXFormHash',
+          transformationVersion: '1ba:02',
         },
       ],
     });
@@ -2611,7 +2695,7 @@ describe('view-syncer/cvr', () => {
     const {newVersion, queryPatches} = updater.trackQueries(
       lc,
       [],
-      ['oneHash'],
+      [{id: 'oneHash', transformationHash: 'oneHash'}],
     );
     expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 1});
     expect(queryPatches).toMatchInlineSnapshot(`

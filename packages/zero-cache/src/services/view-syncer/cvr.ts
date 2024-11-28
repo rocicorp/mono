@@ -339,18 +339,23 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * with those queries, which will be used to reconcile the rows to keep
    * after all rows have been {@link received()}.
    *
+   * "transformed" queries are queries that are currently
+   * gotten and running in the pipeline driver but
+   * received a new transformation hash due to an auth token
+   * update.
+   *
    * @returns The new CVRVersion to be used when all changes are committed.
    */
   trackQueries(
     lc: LogContext,
     executed: {id: string; transformationHash: string}[],
-    removed: string[],
+    removed: {id: string; transformationHash: string}[],
   ): {newVersion: CVRVersion; queryPatches: PatchToVersion[]} {
     assert(this.#existingRows === undefined, `trackQueries already called`);
 
     const queryPatches: Patch[] = [
       executed.map(q => this.#trackExecuted(q.id, q.transformationHash)),
-      removed.map(id => this.#trackRemoved(id)),
+      removed.map(q => this.#trackRemoved(q.id)),
     ].flat(2);
 
     this.#existingRows = this.#lookupRowsForExecutedAndRemovedQueries(lc);

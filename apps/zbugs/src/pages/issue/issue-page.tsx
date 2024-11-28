@@ -1,5 +1,5 @@
-import {escapeLike, type TableSchemaToRow} from '@rocicorp/zero';
 import type {Zero} from '@rocicorp/zero';
+import {escapeLike, type TableSchemaToRow} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {nanoid} from 'nanoid';
 import {useEffect, useMemo, useState} from 'react';
@@ -7,19 +7,19 @@ import TextareaAutosize from 'react-textarea-autosize';
 import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.js';
+import type {Schema} from '../../../schema.js';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
 import {Button} from '../../components/button.js';
 import {CanEdit} from '../../components/can-edit.js';
+import {Combobox} from '../../components/combobox.js';
 import {Confirm} from '../../components/confirm.js';
 import {EmojiPanel} from '../../components/emoji-panel.js';
 import LabelPicker from '../../components/label-picker.js';
 import {Link} from '../../components/link.js';
 import Markdown from '../../components/markdown.js';
 import RelativeTime from '../../components/relative-time.js';
-import Selector from '../../components/selector.js';
 import UserPicker from '../../components/user-picker.js';
-import type {Schema} from '../../../schema.js';
 import {useCanEdit} from '../../hooks/use-can-edit.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useZero} from '../../hooks/use-zero.js';
@@ -257,7 +257,8 @@ export default function IssuePage() {
         <div className="issue-sidebar">
           <div className="sidebar-item">
             <p className="issue-detail-label">Status</p>
-            <Selector
+            <Combobox
+              editable={false}
               disabled={!canEdit}
               items={[
                 {
@@ -283,6 +284,7 @@ export default function IssuePage() {
             <UserPicker
               disabled={!canEdit}
               selected={{login: issue.assignee?.login}}
+              placeholder="Assign to..."
               unselectedLabel="Nobody"
               onSelect={user => {
                 z.mutate.issue.update({

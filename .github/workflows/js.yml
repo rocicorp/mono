@@ -24,13 +24,10 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 18.x
+          node-version: 20.x
           cache: 'npm'
       - run: npm ci
-      - if: github.event_name == 'pull_request'
-        run: npm run check-format -- --filter="[${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}]"
-      - if: github.event_name != 'pull_request'
-        run: npm run check-format
+      - run: npm run check-format
 
   lint:
     name: Lint
@@ -44,13 +41,10 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 18.x
+          node-version: 20.x
           cache: 'npm'
       - run: npm ci
-      - if: github.event_name == 'pull_request'
-        run: npm run lint -- --filter="[${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}]"
-      - if: github.event_name != 'pull_request'
-        run: npm run lint
+      - run: npm run lint
 
   check-types:
     name: Check Types
@@ -64,13 +58,10 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 18.x
+          node-version: 20.x
           cache: 'npm'
       - run: npm ci
-      - if: github.event_name == 'pull_request'
-        run: npm run check-types -- --filter="...[${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}]"
-      - if: github.event_name != 'pull_request'
-        run: npm run check-types
+      - run: npm run check-types
 
   test:
     name: Test
@@ -84,14 +75,11 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 18.x
+          node-version: 20.x
           cache: 'npm'
 
       - run: npm ci
 
       - name: Install Playwright Deps
         run: npx playwright install --with-deps
-      - if: github.event_name == 'pull_request'
-        run: npm run test -- --filter="...[${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}]"
-      - if: github.event_name != 'pull_request'
-        run: npm run test
+      - run: npm run test

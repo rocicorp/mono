@@ -1,0 +1,125 @@
+.container {
+  position: relative;
+  width: 100%;
+}
+
+.inputWrapper {
+  position: relative;
+  cursor: text;
+}
+
+.input:enabled:hover {
+  color: var(--color-text-primary-active);
+}
+
+.input {
+  width: 100%;
+  background-color: var(--color-nav-selected);
+  display: block;
+  text-align: left;
+  width: 100%;
+  padding: 0.8175rem;
+  padding-left: 3.0675rem;
+  border-radius: 0.5rem;
+  transition: color 0.3s ease;
+  border: 1px solid var(--color-button-outline);
+
+  /* Needed to make the text render the same as the div */
+  text-rendering: auto;
+}
+
+.noResults,
+.option {
+  display: flex;
+  align-items: center;
+  padding: 0.8175rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease-in-out;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+
+  border: 1px solid transparent;
+
+  /* Needed to make the text render the same as the div */
+  text-rendering: auto;
+}
+
+.input:disabled:hover,
+.input:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.selectedIcon {
+  position: absolute;
+  left: 0.875rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1rem;
+  height: 1rem;
+  pointer-events: none;
+  width: 1.4rem;
+  height: 1.4rem;
+}
+
+.toggleButton {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0.25rem;
+  background: none;
+  border: none;
+  cursor: text;
+  transition: color 0.15s ease-in-out;
+  pointer-events: none;
+}
+
+.disabled .toggleButton {
+  opacity: 0.6;
+}
+
+.toggleIcon {
+  opacity: 0.85;
+  transition: opacity 0.3s ease;
+  height: 0.875rem;
+  width: 0.875rem;
+}
+
+.optionsList {
+  position: absolute;
+  z-index: 10;
+  width: 100%;
+  max-height: 15rem;
+  overflow-y: auto;
+  background-color: var(--color-nav-selected);
+  border-radius: 0.5rem;
+  top: 0;
+}
+
+.optionsList.editable {
+  top: auto;
+  margin-top: 0.25rem;
+}
+
+.noResults {
+  cursor: default;
+}
+
+.optionContent {
+  display: flex;
+  align-items: center;
+  gap: 0.8175rem;
+}
+
+.optionIcon {
+  width: 1.4rem;
+  height: 1.4rem;
+}
+
+.highlighted {
+  background-color: var(--color-row-hover);
+}

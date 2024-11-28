@@ -40,7 +40,10 @@ import {DrainCoordinator} from './drain-coordinator.js';
 import {PipelineDriver} from './pipeline-driver.js';
 import {initViewSyncerSchema} from './schema/init.js';
 import {Snapshotter} from './snapshotter.js';
-import {type SyncContext, ViewSyncerService} from './view-syncer.js';
+import {pickToken, type SyncContext, ViewSyncerService} from './view-syncer.js';
+import type {AuthorizationConfig} from '../../../../zero-schema/src/compiled-authorization.js';
+import {defineAuthorization} from '../../../../zero-schema/src/authorization.js';
+import type {ExpressionBuilder} from '../../../../zql/src/query/expression.js';
 
 const SHARD_ID = 'ABC';
 
@@ -65,122 +68,163 @@ const EXPECTED_LMIDS_AST: AST = {
   ],
 };
 
+const ON_FAILURE = (e: unknown) => {
+  throw e;
+};
+
 const REPLICA_VERSION = '01';
+const TASK_ID = 'foo-task';
+const serviceID = '9876';
+const ISSUES_QUERY: AST = {
+  table: 'issues',
+  where: {
+    type: 'simple',
+    left: {
+      type: 'column',
+      name: 'id',
+    },
+    op: 'IN',
+    right: {
+      type: 'literal',
+      value: ['1', '2', '3', '4'],
+    },
+  },
+  orderBy: [['id', 'asc']],
+};
 
-describe('view-syncer/service', () => {
-  let storageDB: Database;
-  let replicaDbFile: DbFile;
-  let replica: Database;
-  let cvrDB: PostgresDB;
+const ISSUES_QUERY2: AST = {
+  table: 'issues',
+  orderBy: [['id', 'asc']],
+};
+
+const USERS_QUERY: AST = {
+  table: 'users',
+  orderBy: [['id', 'asc']],
+};
+
+const schema = {
+  version: 1,
+  tables: {
+    issues: {
+      tableName: 'issues',
+      columns: {
+        id: {type: 'string'},
+        title: {type: 'string'},
+        owner: {type: 'string'},
+        parent: {type: 'string'},
+        big: {type: 'number'},
+        json: {type: 'json'},
+      },
+      primaryKey: ['id'],
+      relationships: {},
+    },
+  },
+} as const;
+
+type AuthData = {
+  sub: string;
+  role: 'user' | 'admin';
+  iat: number;
+};
+const permissions: AuthorizationConfig | undefined = await defineAuthorization<
+  AuthData,
+  typeof schema
+>(schema, () => ({
+  issues: {
+    row: {
+      select: [
+        (authData, eb: ExpressionBuilder<typeof schema.tables.issues>) =>
+          eb.cmpLit(authData.role, '=', 'admin'),
+      ],
+    },
+  },
+}));
+
+async function setup(permissions: AuthorizationConfig = {}) {
   const lc = createSilentLogContext();
-  let stateChanges: Subscription<ReplicaState>;
-  let drainCoordinator: DrainCoordinator;
+  const storageDB = new Database(lc, ':memory:');
+  storageDB.prepare(CREATE_STORAGE_TABLE).run();
 
-  let operatorStorage: ClientGroupStorage;
-  let vs: ViewSyncerService;
-  let viewSyncerDone: Promise<void>;
-  let replicator: FakeReplicator;
+  const replicaDbFile = new DbFile('view_syncer_service_test');
+  const replica = replicaDbFile.connect(lc);
+  initChangeLog(replica);
+  initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
 
-  const SYNC_CONTEXT = {
-    clientID: 'foo',
-    wsID: 'ws1',
-    baseCookie: null,
-    schemaVersion: 2,
-  };
-  const ON_FAILURE = (e: unknown) => {
-    throw e;
-  };
-
-  const messages = new ReplicationMessages({issues: 'id', users: 'id'});
-  const zeroMessages = new ReplicationMessages(
-    {schemaVersions: 'lock'},
-    'zero',
+  replica.pragma('journal_mode = WAL2');
+  replica.pragma('busy_timeout = 1');
+  replica.exec(`
+  CREATE TABLE "zero_ABC.clients" (
+    "clientGroupID"  TEXT,
+    "clientID"       TEXT,
+    "lastMutationID" INTEGER,
+    "userID"         TEXT,
+    _0_version       TEXT NOT NULL,
+    PRIMARY KEY ("clientGroupID", "clientID")
+  );
+  CREATE TABLE "zero.schemaVersions" (
+    "lock"                INTEGER PRIMARY KEY,
+    "minSupportedVersion" INTEGER,
+    "maxSupportedVersion" INTEGER,
+    _0_version            TEXT NOT NULL
+  );
+  CREATE TABLE issues (
+    id text PRIMARY KEY,
+    owner text,
+    parent text,
+    big INTEGER,
+    title text,
+    json JSON,
+    _0_version TEXT NOT NULL
+  );
+  CREATE TABLE users (
+    id text PRIMARY KEY,
+    name text,
+    _0_version TEXT NOT NULL
   );
 
-  beforeEach(async () => {
-    storageDB = new Database(lc, ':memory:');
-    storageDB.prepare(CREATE_STORAGE_TABLE).run();
+  INSERT INTO "zero_ABC.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
+    VALUES ('9876', 'foo', 42, '00');
+  INSERT INTO "zero.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
+    VALUES (1, 2, 3, '00');  
 
-    replicaDbFile = new DbFile('view_syncer_service_test');
-    replica = replicaDbFile.connect(lc);
-    initChangeLog(replica);
-    initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
+  INSERT INTO users (id, name, _0_version) VALUES ('100', 'Alice', '00');
+  INSERT INTO users (id, name, _0_version) VALUES ('101', 'Bob', '00');
+  INSERT INTO users (id, name, _0_version) VALUES ('102', 'Candice', '00');
 
-    replica.pragma('journal_mode = WAL2');
-    replica.pragma('busy_timeout = 1');
-    replica.exec(`
-    CREATE TABLE "zero_ABC.clients" (
-      "clientGroupID"  TEXT,
-      "clientID"       TEXT,
-      "lastMutationID" INTEGER,
-      "userID"         TEXT,
-      _0_version       TEXT NOT NULL,
-      PRIMARY KEY ("clientGroupID", "clientID")
-    );
-    CREATE TABLE "zero.schemaVersions" (
-      "lock"                INTEGER PRIMARY KEY,
-      "minSupportedVersion" INTEGER,
-      "maxSupportedVersion" INTEGER,
-      _0_version            TEXT NOT NULL
-    );
-    CREATE TABLE issues (
-      id text PRIMARY KEY,
-      owner text,
-      parent text,
-      big INTEGER,
-      title text,
-      json JSON,
-      _0_version TEXT NOT NULL
-    );
-    CREATE TABLE users (
-      id text PRIMARY KEY,
-      name text,
-      _0_version TEXT NOT NULL
-    );
+  INSERT INTO issues (id, title, owner, big, _0_version) VALUES ('1', 'parent issue foo', 100, 9007199254740991, '00');
+  INSERT INTO issues (id, title, owner, big, _0_version) VALUES ('2', 'parent issue bar', 101, -9007199254740991, '00');
+  INSERT INTO issues (id, title, owner, parent, big, _0_version) VALUES ('3', 'foo', 102, 1, 123, '00');
+  INSERT INTO issues (id, title, owner, parent, big, _0_version) VALUES ('4', 'bar', 101, 2, 100, '00');
+  -- The last row should not match the ISSUES_TITLE_QUERY: "WHERE id IN (1, 2, 3, 4)"
+  INSERT INTO issues (id, title, owner, parent, big, json, _0_version) VALUES 
+    ('5', 'not matched', 101, 2, 100, '[123,{"foo":456,"bar":789},"baz"]', '00');
+  `);
 
-    INSERT INTO "zero_ABC.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
-      VALUES ('9876', 'foo', 42, '00');
-    INSERT INTO "zero.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
-      VALUES (1, 2, 3, '00');  
+  const cvrDB = await testDBs.create('view_syncer_service_test');
+  await initViewSyncerSchema(lc, cvrDB);
 
-    INSERT INTO users (id, name, _0_version) VALUES ('100', 'Alice', '00');
-    INSERT INTO users (id, name, _0_version) VALUES ('101', 'Bob', '00');
-    INSERT INTO users (id, name, _0_version) VALUES ('102', 'Candice', '00');
-
-    INSERT INTO issues (id, title, owner, big, _0_version) VALUES ('1', 'parent issue foo', 100, 9007199254740991, '00');
-    INSERT INTO issues (id, title, owner, big, _0_version) VALUES ('2', 'parent issue bar', 101, -9007199254740991, '00');
-    INSERT INTO issues (id, title, owner, parent, big, _0_version) VALUES ('3', 'foo', 102, 1, 123, '00');
-    INSERT INTO issues (id, title, owner, parent, big, _0_version) VALUES ('4', 'bar', 101, 2, 100, '00');
-    -- The last row should not match the ISSUES_TITLE_QUERY: "WHERE id IN (1, 2, 3, 4)"
-    INSERT INTO issues (id, title, owner, parent, big, json, _0_version) VALUES 
-      ('5', 'not matched', 101, 2, 100, '[123,{"foo":456,"bar":789},"baz"]', '00');
-    `);
-
-    cvrDB = await testDBs.create('view_syncer_service_test');
-    await initViewSyncerSchema(lc, cvrDB);
-
-    replicator = fakeReplicator(lc, replica);
-    stateChanges = Subscription.create();
-    drainCoordinator = new DrainCoordinator();
-    operatorStorage = new DatabaseStorage(storageDB).createClientGroupStorage(
-      serviceID,
-    );
-    vs = new ViewSyncerService(
-      lc,
-      TASK_ID,
-      serviceID,
-      SHARD_ID,
-      cvrDB,
-      new PipelineDriver(
-        lc.withContext('component', 'pipeline-driver'),
-        new Snapshotter(lc, replicaDbFile.path),
-        operatorStorage,
-      ),
-      stateChanges,
-      drainCoordinator,
-    );
-    viewSyncerDone = vs.run();
-  });
+  const replicator = fakeReplicator(lc, replica);
+  const stateChanges: Subscription<ReplicaState> = Subscription.create();
+  const drainCoordinator = new DrainCoordinator();
+  const operatorStorage = new DatabaseStorage(
+    storageDB,
+  ).createClientGroupStorage(serviceID);
+  const vs = new ViewSyncerService(
+    lc,
+    TASK_ID,
+    serviceID,
+    SHARD_ID,
+    cvrDB,
+    new PipelineDriver(
+      lc.withContext('component', 'pipeline-driver'),
+      new Snapshotter(lc, replicaDbFile.path),
+      operatorStorage,
+    ),
+    stateChanges,
+    drainCoordinator,
+    permissions,
+  );
+  const viewSyncerDone = vs.run();
 
   async function connect(ctx: SyncContext, desiredQueriesPatch: QueriesPatch) {
     const stream = await vs.initConnection(ctx, [
@@ -220,42 +264,81 @@ describe('view-syncer/service', () => {
     expect(await client.dequeue(timedOut, 10)).toBe(timedOut);
   }
 
+  return {
+    storageDB,
+    replicaDbFile,
+    replica,
+    cvrDB,
+    stateChanges,
+    drainCoordinator,
+    operatorStorage,
+    vs,
+    viewSyncerDone,
+    replicator,
+    connect,
+    nextPoke,
+    expectNoPokes,
+  };
+}
+
+describe('view-syncer/service', () => {
+  let storageDB: Database;
+  let replicaDbFile: DbFile;
+  let replica: Database;
+  let cvrDB: PostgresDB;
+  const lc = createSilentLogContext();
+  let stateChanges: Subscription<ReplicaState>;
+  let drainCoordinator: DrainCoordinator;
+
+  let operatorStorage: ClientGroupStorage;
+  let vs: ViewSyncerService;
+  let viewSyncerDone: Promise<void>;
+  let replicator: FakeReplicator;
+  let connect: (
+    ctx: SyncContext,
+    desiredQueriesPatch: QueriesPatch,
+  ) => Promise<Queue<Downstream>>;
+  let nextPoke: (client: Queue<Downstream>) => Promise<Downstream[]>;
+  let expectNoPokes: (client: Queue<Downstream>) => Promise<void>;
+
+  const SYNC_CONTEXT = {
+    clientID: 'foo',
+    wsID: 'ws1',
+    baseCookie: null,
+    schemaVersion: 2,
+    tokenData: undefined,
+  };
+
+  const messages = new ReplicationMessages({issues: 'id', users: 'id'});
+  const zeroMessages = new ReplicationMessages(
+    {schemaVersions: 'lock'},
+    'zero',
+  );
+
+  beforeEach(async () => {
+    ({
+      storageDB,
+      replicaDbFile,
+      replica,
+      cvrDB,
+      stateChanges,
+      drainCoordinator,
+      operatorStorage,
+      vs,
+      viewSyncerDone,
+      replicator,
+      connect,
+      nextPoke,
+      expectNoPokes,
+    } = await setup());
+  });
+
   afterEach(async () => {
     await vs.stop();
     await viewSyncerDone;
     await testDBs.drop(cvrDB);
     replicaDbFile.delete();
   });
-
-  const TASK_ID = 'foo-task';
-  const serviceID = '9876';
-
-  const ISSUES_QUERY: AST = {
-    table: 'issues',
-    where: {
-      type: 'simple',
-      left: {
-        type: 'column',
-        name: 'id',
-      },
-      op: 'IN',
-      right: {
-        type: 'literal',
-        value: ['1', '2', '3', '4'],
-      },
-    },
-    orderBy: [['id', 'asc']],
-  };
-
-  const ISSUES_QUERY2: AST = {
-    table: 'issues',
-    orderBy: [['id', 'asc']],
-  };
-
-  const USERS_QUERY: AST = {
-    table: 'users',
-    orderBy: [['id', 'asc']],
-  };
 
   test('adds desired queries from initConnectionMessage', async () => {
     await connect(SYNC_CONTEXT, [
@@ -1838,6 +1921,7 @@ describe('view-syncer/service', () => {
         wsID: '9382',
         baseCookie: preAdvancement.cookie,
         schemaVersion: 2,
+        tokenData: undefined,
       },
       [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
     );
@@ -2291,5 +2375,416 @@ describe('view-syncer/service', () => {
     // until that interval elapses.
     await viewSyncerDone;
     expect(drainCoordinator.nextDrainTime).toBeGreaterThan(now);
+  });
+});
+
+describe('pipeline update after token swap', () => {
+  let stateChanges: Subscription<ReplicaState>;
+  let connect: (
+    ctx: SyncContext,
+    desiredQueriesPatch: QueriesPatch,
+  ) => Promise<Queue<Downstream>>;
+  let nextPoke: (client: Queue<Downstream>) => Promise<Downstream[]>;
+  let replicaDbFile: DbFile;
+  let cvrDB: PostgresDB;
+  let vs: ViewSyncerService;
+  let viewSyncerDone: Promise<void>;
+
+  const SYNC_CONTEXT = {
+    clientID: 'foo',
+    wsID: 'ws1',
+    baseCookie: null,
+    schemaVersion: 2,
+    tokenData: {
+      raw: '',
+      decoded: {sub: 'foo', role: 'user', iat: 0},
+    },
+  };
+
+  beforeEach(async () => {
+    ({
+      stateChanges,
+      connect,
+      nextPoke,
+      vs,
+      viewSyncerDone,
+      cvrDB,
+      replicaDbFile,
+    } = await setup(permissions));
+  });
+
+  afterEach(async () => {
+    await vs.stop();
+    await viewSyncerDone;
+    await testDBs.drop(cvrDB);
+    replicaDbFile.delete();
+  });
+
+  test('client with no role followed by client with admin role', async () => {
+    const client = await connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+    // the user is not logged in as admin and so cannot see any issues.
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "00:01",
+            "cookie": "00:02",
+            "pokeID": "00:02",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "gotQueriesPatch": [
+              {
+                "ast": {
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "issues",
+                  "where": {
+                    "left": {
+                      "name": "id",
+                      "type": "column",
+                    },
+                    "op": "IN",
+                    "right": {
+                      "type": "literal",
+                      "value": [
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                      ],
+                    },
+                    "type": "simple",
+                  },
+                },
+                "hash": "query-hash1",
+                "op": "put",
+              },
+            ],
+            "lastMutationIDChanges": {
+              "foo": 42,
+            },
+            "pokeID": "00:02",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "00:02",
+          },
+        ],
+      ]
+    `);
+
+    // New client connects with same everything (client group, user id) but brings a new role.
+    // This should transform their existing queries to return the data they can now see.
+    const client2 = await connect(
+      {
+        ...SYNC_CONTEXT,
+        clientID: 'bar',
+        tokenData: {
+          raw: '',
+          decoded: {sub: 'foo', role: 'admin', iat: 1},
+        },
+      },
+      [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
+    );
+
+    expect(await nextPoke(client2)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": null,
+            "cookie": "00:04",
+            "pokeID": "00:04",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "clientsPatch": [
+              {
+                "clientID": "foo",
+                "op": "put",
+              },
+              {
+                "clientID": "bar",
+                "op": "put",
+              },
+            ],
+            "desiredQueriesPatches": {
+              "bar": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": {
+                      "left": {
+                        "name": "id",
+                        "type": "column",
+                      },
+                      "op": "IN",
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                      "type": "simple",
+                    },
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+              "foo": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": {
+                      "left": {
+                        "name": "id",
+                        "type": "column",
+                      },
+                      "op": "IN",
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                      "type": "simple",
+                    },
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+            },
+            "gotQueriesPatch": [
+              {
+                "ast": {
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "issues",
+                  "where": {
+                    "left": {
+                      "name": "id",
+                      "type": "column",
+                    },
+                    "op": "IN",
+                    "right": {
+                      "type": "literal",
+                      "value": [
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                      ],
+                    },
+                    "type": "simple",
+                  },
+                },
+                "hash": "query-hash1",
+                "op": "put",
+              },
+            ],
+            "lastMutationIDChanges": {
+              "foo": 42,
+            },
+            "pokeID": "00:04",
+            "rowsPatch": [
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 9007199254740991,
+                  "id": "1",
+                  "json": null,
+                  "owner": "100",
+                  "parent": null,
+                  "title": "parent issue foo",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": -9007199254740991,
+                  "id": "2",
+                  "json": null,
+                  "owner": "101",
+                  "parent": null,
+                  "title": "parent issue bar",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 123,
+                  "id": "3",
+                  "json": null,
+                  "owner": "102",
+                  "parent": "1",
+                  "title": "foo",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 100,
+                  "id": "4",
+                  "json": null,
+                  "owner": "101",
+                  "parent": "2",
+                  "title": "bar",
+                },
+              },
+            ],
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "00:04",
+          },
+        ],
+      ]
+    `);
+  });
+});
+
+describe('pickToken', () => {
+  test('previous token is undefined', () => {
+    expect(pickToken(undefined, {sub: 'foo', iat: 1})).toEqual({
+      sub: 'foo',
+      iat: 1,
+    });
+  });
+
+  test('previous token exists, new token is undefined', () => {
+    expect(() => pickToken({sub: 'foo', iat: 1}, undefined)).toThrowError(
+      ErrorForClient,
+    );
+  });
+
+  test('previous token has a subject, new token does not', () => {
+    expect(() => pickToken({sub: 'foo'}, {})).toThrowError(ErrorForClient);
+  });
+
+  test('previous token has a subject, new token has a different subject', () => {
+    expect(() =>
+      pickToken({sub: 'foo', iat: 1}, {sub: 'bar', iat: 1}),
+    ).toThrowError(ErrorForClient);
+  });
+
+  test('previous token has a subject, new token has the same subject', () => {
+    expect(pickToken({sub: 'foo', iat: 1}, {sub: 'foo', iat: 2})).toEqual({
+      sub: 'foo',
+      iat: 2,
+    });
+
+    expect(pickToken({sub: 'foo', iat: 2}, {sub: 'foo', iat: 1})).toEqual({
+      sub: 'foo',
+      iat: 2,
+    });
+  });
+
+  test('previous token has no subject, new token has a subject', () => {
+    expect(() => pickToken({sub: 'foo', iat: 123}, {iat: 123})).toThrowError(
+      ErrorForClient,
+    );
+  });
+
+  test('previous token has no subject, new token has no subject', () => {
+    expect(pickToken({iat: 1}, {iat: 2})).toEqual({
+      iat: 2,
+    });
+    expect(pickToken({iat: 2}, {iat: 1})).toEqual({
+      iat: 2,
+    });
+  });
+
+  test('previous token has an issued at time, new token does not', () => {
+    expect(() => pickToken({sub: 'foo', iat: 1}, {sub: 'foo'})).toThrowError(
+      ErrorForClient,
+    );
+  });
+
+  test('previous token has an issued at time, new token has a greater issued at time', () => {
+    expect(pickToken({sub: 'foo', iat: 1}, {sub: 'foo', iat: 2})).toEqual({
+      sub: 'foo',
+      iat: 2,
+    });
+  });
+
+  test('previous token has an issued at time, new token has a lesser issued at time', () => {
+    expect(pickToken({sub: 'foo', iat: 2}, {sub: 'foo', iat: 1})).toEqual({
+      sub: 'foo',
+      iat: 2,
+    });
+  });
+
+  test('previous token has an issued at time, new token has the same issued at time', () => {
+    expect(pickToken({sub: 'foo', iat: 2}, {sub: 'foo', iat: 2})).toEqual({
+      sub: 'foo',
+      iat: 2,
+    });
+  });
+
+  test('previous token has no issued at time, new token has an issued at time', () => {
+    expect(pickToken({sub: 'foo'}, {sub: 'foo', iat: 2})).toEqual({
+      sub: 'foo',
+      iat: 2,
+    });
+  });
+
+  test('previous token has no issued at time, new token has no issued at time', () => {
+    expect(pickToken({sub: 'foo'}, {sub: 'foo'})).toEqual({
+      sub: 'foo',
+    });
   });
 });

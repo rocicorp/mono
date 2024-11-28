@@ -5,7 +5,6 @@ import type {Row} from 'postgres';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.js';
 import {must} from '../../../../shared/src/must.js';
-import {difference} from '../../../../shared/src/set-utils.js';
 import {
   ErrorKind,
   type ChangeDesiredQueriesBody,
@@ -48,12 +47,22 @@ import {
   type RowID,
 } from './schema/types.js';
 import {SchemaChangeError} from './snapshotter.js';
+import {transformAndHashQuery} from '../../auth/read-authorizer.js';
+import type {JWTPayload} from 'jose';
+import type {AuthorizationConfig} from '../../../../zero-schema/src/compiled-authorization.js';
+import type {AST} from '../../../../zero-protocol/src/ast.js';
+
+export type TokenData = {
+  readonly raw: string;
+  readonly decoded: JWTPayload;
+};
 
 export type SyncContext = {
   readonly clientID: string;
   readonly wsID: string;
   readonly baseCookie: string | null;
   readonly schemaVersion: number;
+  readonly tokenData: TokenData | undefined;
 };
 
 export interface ViewSyncer {
@@ -104,9 +113,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #clients = new Map<string, ClientHandler>();
   readonly #cvrStore: CVRStore;
   readonly #stopped = resolver();
+  readonly #permissions: AuthorizationConfig;
 
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
+  #authData: JWTPayload | undefined;
 
   constructor(
     lc: LogContext,
@@ -117,6 +128,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     pipelineDriver: PipelineDriver,
     versionChanges: Subscription<ReplicaState>,
     drainCoordinator: DrainCoordinator,
+    permissions: AuthorizationConfig,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
     idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS,
   ) {
@@ -137,6 +149,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // loop will then await #cvrStore.flushed() which rejects if necessary.
       () => this.#stateChanges.cancel(),
     );
+    this.#permissions = permissions;
   }
 
   #runInLockWithCVR<T>(fn: (cvr: CVRSnapshot) => Promise<T> | T): Promise<T> {
@@ -298,8 +311,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     initConnectionMessage: InitConnectionMessage,
   ): Promise<Source<Downstream>> {
     this.#lastConnectTime = Date.now();
+    const {clientID, wsID, baseCookie, schemaVersion, tokenData} = ctx;
+    this.#authData = pickToken(this.#authData, tokenData?.decoded);
 
-    const {clientID, wsID, baseCookie, schemaVersion} = ctx;
     const lc = this.#lc
       .withContext('clientID', clientID)
       .withContext('wsID', wsID);
@@ -506,13 +520,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       if (!query.internal && Object.keys(query.desiredBy).length === 0) {
         continue; // No longer desired.
       }
-      const newTransformationHash = hash; // Currently, no transformations are done.
+      const {query: transformedAst, hash: newTransformationHash} =
+        transformAndHashQuery(ast, this.#permissions, this.#authData);
+      assert(
+        transformedAst !== undefined && newTransformationHash !== undefined,
+        'This query may not be run because the table it reads is not readable. Table: ' +
+          ast.table,
+      );
       if (newTransformationHash !== transformationHash) {
         continue; // Query results may have changed.
       }
       const start = Date.now();
       let count = 0;
-      for (const _ of this.#pipelines.addQuery(hash, ast)) {
+      for (const _ of this.#pipelines.addQuery(hash, transformedAst)) {
         count++;
       }
       const elapsed = Date.now() - start;
@@ -533,28 +553,62 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     const lc = this.#lc.withContext('cvrVersion', versionString(cvr.version));
 
     const hydratedQueries = this.#pipelines.addedQueries();
-    const allClientQueries = new Set(Object.keys(cvr.queries));
-    const desiredClientQueries = new Set(
-      Object.keys(cvr.queries).filter(id => {
-        const q = cvr.queries[id];
-        return q.internal || Object.keys(q.desiredBy).length > 0;
-      }),
+
+    // Convert queries to their transformed ast's and hashes
+    const transformationHashToHash = new Map<string, string>();
+    const serverQueries = Object.entries(cvr.queries).map(([id, q]) => {
+      const {query, hash: transformationHash} = transformAndHashQuery(
+        q.ast,
+        this.#permissions,
+        this.#authData,
+      );
+      assert(
+        query !== undefined && transformationHash !== undefined,
+        'This query may not be run because the table it reads is not readable. Table: ' +
+          q.ast.table,
+      );
+      transformationHashToHash.set(transformationHash, id);
+      return {
+        id,
+        // TODO(mlaw): follow up to handle the case where we statically determine
+        // the query cannot be run and is `undefined`.
+        ast: query,
+        transformationHash,
+        desired: q.internal || Object.keys(q.desiredBy).length > 0,
+      };
+    });
+
+    const addQueries = serverQueries.filter(
+      q => q.desired && !hydratedQueries.has(q.transformationHash),
+    );
+    const removeQueries = serverQueries.filter(q => !q.desired);
+    const desiredQueries = new Set(
+      serverQueries.filter(q => q.desired).map(q => q.id),
+    );
+    const unhydrateQueries = [...hydratedQueries].filter(
+      transformationHash => !desiredQueries.has(transformationHash),
     );
 
-    const addQueries = [...difference(desiredClientQueries, hydratedQueries)];
-    const removeQueries = [
-      ...difference(allClientQueries, desiredClientQueries),
-    ];
-    if (addQueries.length > 0 || removeQueries.length > 0) {
-      // Note: clients are caught up as part of #addAndRemoveQueries().
-      await this.#addAndRemoveQueries(lc, cvr, addQueries, removeQueries);
+    if (
+      addQueries.length > 0 ||
+      removeQueries.length > 0 ||
+      unhydrateQueries.length > 0
+    ) {
+      await this.#addAndRemoveQueries(
+        lc,
+        cvr,
+        addQueries,
+        removeQueries,
+        unhydrateQueries,
+        transformationHashToHash,
+      );
     } else {
       await this.#catchupClients(lc, cvr);
     }
 
     // If CVR was non-empty, then the CVR, database, and all clients
     // should now be at the same version.
-    if (allClientQueries.size) {
+    if (serverQueries.length > 0) {
       const cvrVersion = must(this.#cvr).version;
       const dbVersion = this.#pipelines.currentVersion();
       assert(
@@ -568,10 +622,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   async #addAndRemoveQueries(
     lc: LogContext,
     cvr: CVRSnapshot,
-    addQueries: string[],
-    removeQueries: string[],
+    addQueries: {id: string; ast: AST; transformationHash: string}[],
+    removeQueries: {id: string; ast: AST; transformationHash: string}[],
+    unhydrateQueries: string[],
+    transformationHashToHash: Map<string, string>,
   ) {
-    assert(addQueries.length > 0 || removeQueries.length > 0);
+    assert(
+      addQueries.length > 0 ||
+        removeQueries.length > 0 ||
+        unhydrateQueries.length > 0,
+    );
     const start = Date.now();
 
     const stateVersion = this.#pipelines.currentVersion();
@@ -585,11 +645,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#pipelines.replicaVersion,
     );
 
-    // Note: This kicks of background PG queries for CVR data associated with the
+    // Note: This kicks off background PG queries for CVR data associated with the
     // executed and removed queries.
     const {newVersion, queryPatches} = updater.trackQueries(
       lc,
-      addQueries.map(hash => ({id: hash, transformationHash: hash})),
+      addQueries,
       removeQueries,
     );
     const pokers = [...this.#clients.values()].map(c =>
@@ -601,21 +661,29 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     // Removing queries is easy. The pipelines are dropped, and the CVR
     // updater handles the updates and pokes.
-    for (const hash of removeQueries) {
+    for (const q of removeQueries) {
+      this.#pipelines.removeQuery(q.transformationHash);
+    }
+    for (const hash of unhydrateQueries) {
       this.#pipelines.removeQuery(hash);
     }
 
     const pipelines = this.#pipelines;
     function* generateRowChanges() {
-      for (const hash of addQueries) {
-        const {ast} = cvr.queries[hash];
-        lc.debug?.(`adding pipeline for query ${hash}`, ast);
-        yield* pipelines.addQuery(hash, ast);
+      for (const q of addQueries) {
+        lc.debug?.(`adding pipeline for query ${q.id}`, q.ast);
+        yield* pipelines.addQuery(q.transformationHash, q.ast);
       }
     }
     // #processChanges does batched de-duping of rows. Wrap all pipelines in
     // a single generator in order to maximize de-duping.
-    await this.#processChanges(lc, generateRowChanges(), updater, pokers);
+    await this.#processChanges(
+      lc,
+      generateRowChanges(),
+      updater,
+      pokers,
+      transformationHashToHash,
+    );
 
     for (const patch of await updater.deleteUnreferencedRows(lc)) {
       pokers.forEach(poker => poker.addPatch(patch));
@@ -625,7 +693,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#cvr = (await updater.flush(lc, this.#lastConnectTime)).cvr;
 
     // Before ending the poke, catch up clients that were behind the old CVR.
-    await this.#catchupClients(lc, cvr, addQueries, pokers);
+    await this.#catchupClients(
+      lc,
+      cvr,
+      addQueries.map(q => q.id),
+      pokers,
+    );
 
     // Signal clients to commit.
     pokers.forEach(poker => poker.end());
@@ -719,6 +792,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     changes: Iterable<RowChange>,
     updater: CVRQueryDrivenUpdater,
     pokers: PokeHandler[],
+    transformationHashToHash: Map<string, string>,
   ) {
     const start = Date.now();
     const rows = new CustomKeyMap<RowID, RowUpdate>(rowIDString);
@@ -734,7 +808,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     };
 
     for (const change of changes) {
-      const {type, queryHash, table, rowKey, row} = change;
+      const {type, queryHash: transformationHash, table, rowKey, row} = change;
+      const queryHash = must(
+        transformationHashToHash.get(transformationHash),
+        'could not find the original hash for the transformation hash',
+      );
       const rowID: RowID = {schema: '', table, rowKey: rowKey as RowKey};
 
       let parsedRow = rows.get(rowID);
@@ -813,8 +891,22 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
 
     lc.debug?.(`applying ${numChanges} to advance to ${version}`);
+    const transformationHashToHash = new Map<string, string>();
+    for (const query of Object.values(cvr.queries)) {
+      if (!query.transformationHash) {
+        continue;
+      }
+      transformationHashToHash.set(query.transformationHash, query.id);
+    }
+
     try {
-      await this.#processChanges(lc, changes, updater, pokers);
+      await this.#processChanges(
+        lc,
+        changes,
+        updater,
+        pokers,
+        transformationHashToHash,
+      );
     } catch (e) {
       if (e instanceof SchemaChangeError) {
         pokers.forEach(poker => poker.cancel());
@@ -887,4 +979,51 @@ function checkClientAndCVRVersions(
       `CVR is at version ${versionString(cvr)}`,
     ]);
   }
+}
+
+export function pickToken(
+  previousToken: JWTPayload | undefined,
+  newToken: JWTPayload | undefined,
+) {
+  if (previousToken === undefined) {
+    return newToken;
+  }
+
+  if (newToken) {
+    if (previousToken.sub !== newToken.sub) {
+      throw new ErrorForClient([
+        'error',
+        ErrorKind.Unauthorized,
+        'The user id in the new token does not match the previous token. Client groups are pinned to a single user.',
+      ]);
+    }
+
+    if (previousToken.iat === undefined) {
+      // No issued at time for the existing token? We take the most recently received token.
+      return newToken;
+    }
+
+    if (newToken.iat === undefined) {
+      throw new ErrorForClient([
+        'error',
+        ErrorKind.Unauthorized,
+        'The new token does not have an issued at time but the prior token does. Tokens for a client group must either all have issued at times or all not have issued at times',
+      ]);
+    }
+
+    // The new token is newer, so we take it.
+    if (previousToken.iat < newToken.iat) {
+      return newToken;
+    }
+
+    // if the new token is older or the same, we keep the existing token.
+    return previousToken;
+  }
+
+  // previousToken !== undefined but newToken is undefined
+  throw new ErrorForClient([
+    'error',
+    ErrorKind.Unauthorized,
+    'No token provided. An unauthenticated client cannot connect to an authenticated client group.',
+  ]);
 }
