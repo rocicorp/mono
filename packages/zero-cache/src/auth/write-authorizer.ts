@@ -405,10 +405,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       return true;
     }
 
-    if (
-      applicableRowPolicy &&
-      !this.#passesPolicy(applicableRowPolicy, authData, rowQuery)
-    ) {
+    if (!this.#passesPolicy(applicableRowPolicy, authData, rowQuery)) {
       return false;
     }
 
@@ -422,10 +419,16 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   }
 
   #passesPolicy(
-    policy: Policy,
+    policy: Policy | undefined,
     authData: JWTPayload | undefined,
     rowQuery: Query<TableSchema>,
   ) {
+    if (policy === undefined) {
+      return true;
+    }
+    if (policy.length === 0) {
+      return false;
+    }
     let rowQueryAst = (rowQuery as AuthQuery<TableSchema>).ast;
     rowQueryAst = bindStaticParameters(
       {

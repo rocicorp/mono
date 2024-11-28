@@ -117,14 +117,21 @@ const labelSchema = createTableSchema({
   primaryKey: 'id',
 });
 
-const issueLabelSchema = createTableSchema({
+const issueLabelSchema = {
   tableName: 'issueLabel',
   columns: {
     issueID: 'string',
     labelID: 'string',
   },
   primaryKey: ['issueID', 'labelID'],
-});
+  relationships: {
+    issue: {
+      sourceField: 'issueID',
+      destField: 'id',
+      destSchema: () => issueSchema,
+    },
+  },
+} as const;
 
 const emojiSchema = createTableSchema({
   tableName: 'emoji',
@@ -156,6 +163,17 @@ const userPrefSchema = createTableSchema({
   primaryKey: ['userID', 'key'],
 });
 
+export type IssueRow = TableSchemaToRow<typeof issueSchema>;
+export type CommentRow = TableSchemaToRow<typeof commentSchema>;
+export type Schema = typeof schema;
+
+/** The contents of the zbugs JWT */
+type AuthData = {
+  // The logged in userID.
+  sub: string;
+  role: 'crew' | 'user';
+};
+
 export const schema = createSchema({
   version: 5,
   tables: {
@@ -170,35 +188,24 @@ export const schema = createSchema({
   },
 });
 
-export type IssueRow = TableSchemaToRow<typeof issueSchema>;
-export type CommentRow = TableSchemaToRow<typeof commentSchema>;
-export type Schema = typeof schema;
-
-/** The contents of the zbugs JWT */
-type AuthData = {
-  // The logged in userID.
-  sub: string;
-  role: 'crew' | 'user';
-};
-
 export const permissions: ReturnType<typeof definePermissions> =
   definePermissions<AuthData, Schema>(schema, () => {
-    const allowIfLoggedIn = (
+    const userIsLoggedIn = (
       authData: AuthData,
       {cmpLit}: ExpressionBuilder<TableSchema>,
     ) => cmpLit(authData.sub, 'IS NOT', null);
 
-    const allowIfIssueCreator = (
+    const loggedInUserIsIssueCreator = (
       authData: AuthData,
       {cmp}: ExpressionBuilder<typeof issueSchema>,
     ) => cmp('creatorID', '=', authData.sub);
 
-    const allowIfCommentCreator = (
+    const loggedInUserIsCommentCreator = (
       authData: AuthData,
       {cmp}: ExpressionBuilder<typeof commentSchema>,
     ) => cmp('creatorID', '=', authData.sub);
 
-    const allowIfAdmin = (
+    const loggedInUserIsAdmin = (
       authData: AuthData,
       {cmpLit}: ExpressionBuilder<TableSchema>,
     ) => cmpLit(authData.role, '=', 'crew');
@@ -208,6 +215,17 @@ export const permissions: ReturnType<typeof definePermissions> =
       {cmp}: ExpressionBuilder<typeof viewStateSchema>,
     ) => cmp('userID', '=', authData.sub);
 
+    const allowIfAdminOrIssueCreator = (
+      authData: AuthData,
+      eb: ExpressionBuilder<typeof issueLabelSchema>,
+    ) =>
+      eb.or(
+        loggedInUserIsAdmin(authData, eb),
+        eb.exists('issue', iq =>
+          iq.where(eb => loggedInUserIsIssueCreator(authData, eb)),
+        ),
+      );
+
     return {
       user: {
         // Only the authentication system can write to the user table.
@@ -216,34 +234,48 @@ export const permissions: ReturnType<typeof definePermissions> =
           update: {
             preMutation: [],
           },
-          delete: [],
         },
       },
       issue: {
         row: {
-          insert: [allowIfLoggedIn],
+          insert: [
+            (authData, eb) =>
+              eb.and(
+                userIsLoggedIn(authData, eb),
+                // prevents setting the creatorID of an issue to someone
+                // other than the user doing the creating
+                loggedInUserIsIssueCreator(authData, eb),
+              ),
+          ],
           update: {
-            preMutation: [allowIfIssueCreator, allowIfAdmin],
+            // TODO: add a check to prevent changing the creatorID
+            preMutation: [loggedInUserIsIssueCreator, loggedInUserIsAdmin],
           },
-          delete: [allowIfIssueCreator, allowIfAdmin],
+          delete: [loggedInUserIsIssueCreator, loggedInUserIsAdmin],
         },
       },
       comment: {
         row: {
-          insert: [allowIfLoggedIn],
+          insert: [
+            (authData, eb) =>
+              eb.and(
+                userIsLoggedIn(authData, eb),
+                loggedInUserIsCommentCreator(authData, eb),
+              ),
+          ],
           update: {
-            preMutation: [allowIfCommentCreator, allowIfAdmin],
+            preMutation: [loggedInUserIsCommentCreator, loggedInUserIsAdmin],
           },
-          delete: [allowIfCommentCreator, allowIfAdmin],
+          delete: [loggedInUserIsCommentCreator, loggedInUserIsAdmin],
         },
       },
       label: {
         row: {
-          insert: [allowIfAdmin],
+          insert: [loggedInUserIsAdmin],
           update: {
-            preMutation: [allowIfAdmin],
+            preMutation: [loggedInUserIsAdmin],
           },
-          delete: [allowIfAdmin],
+          delete: [loggedInUserIsAdmin],
         },
       },
       viewState: {
@@ -257,6 +289,14 @@ export const permissions: ReturnType<typeof definePermissions> =
           delete: [],
         },
       },
-      // TODO (mlaw): issueLabel permissions (only issue creator can set)
+      issueLabel: {
+        row: {
+          insert: [allowIfAdminOrIssueCreator],
+          update: {
+            preMutation: [],
+          },
+          delete: [allowIfAdminOrIssueCreator],
+        },
+      },
     };
   });
