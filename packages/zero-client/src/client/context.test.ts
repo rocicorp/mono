@@ -1,5 +1,5 @@
-import type {ExperimentalNoIndexDiff} from '../../../replicache/src/mod.js';
 import {expect, test} from 'vitest';
+import type {ExperimentalNoIndexDiff} from '../../../replicache/src/mod.js';
 import {Catch} from '../../../zql/src/ivm/catch.js';
 import {Join} from '../../../zql/src/ivm/join.js';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.js';

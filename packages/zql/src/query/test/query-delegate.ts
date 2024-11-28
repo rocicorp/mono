@@ -13,10 +13,14 @@ import {
 } from './testSchemas.js';
 
 export class QueryDelegateImpl implements QueryDelegate {
-  #sources: Record<string, Source> = makeSources();
-  #commitListeners: Set<CommitListener> = new Set();
+  readonly #sources: Record<string, Source> = makeSources();
+  readonly #commitListeners: Set<CommitListener> = new Set();
 
-  addedServerQueries: AST[] = [];
+  readonly addedServerQueries: AST[] = [];
+
+  constructor(sources?: Record<string, Source>) {
+    this.#sources = sources ?? makeSources();
+  }
 
   batchViewUpdates<T>(applyViewUpdates: () => T): T {
     return applyViewUpdates();

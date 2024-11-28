@@ -36,54 +36,42 @@ const issueSchema = createTableSchema({
   },
   primaryKey: ['id'],
   relationships: {
-    labels: {
-      source: 'id',
-      junction: {
-        source: 'issueID',
-        dest: {
-          field: 'labelID',
-          schema: () => issueLabelSchema,
-        },
+    labels: [
+      {
+        sourceField: ['id'],
+        destField: ['issueID'],
+        destSchema: () => issueLabelSchema,
       },
-      dest: {
-        field: 'id',
-        schema: () => labelSchema,
+      {
+        sourceField: ['labelID'],
+        destField: ['id'],
+        destSchema: () => labelSchema,
       },
-    },
+    ],
     comments: {
-      source: 'id',
-      dest: {
-        field: 'issueID',
-        schema: () => commentSchema,
-      },
+      sourceField: ['id'],
+      destField: ['issueID'],
+      destSchema: () => commentSchema,
     },
     creator: {
-      source: 'creatorID',
-      dest: {
-        field: 'id',
-        schema: () => userSchema,
-      },
+      sourceField: ['creatorID'],
+      destField: ['id'],
+      destSchema: () => userSchema,
     },
     assignee: {
-      source: 'assigneeID',
-      dest: {
-        field: 'id',
-        schema: () => userSchema,
-      },
+      sourceField: ['assigneeID'],
+      destField: ['id'],
+      destSchema: () => userSchema,
     },
     viewState: {
-      source: 'id',
-      dest: {
-        field: 'issueID',
-        schema: () => viewStateSchema,
-      },
+      sourceField: ['id'],
+      destField: ['issueID'],
+      destSchema: () => viewStateSchema,
     },
     emoji: {
-      source: 'id',
-      dest: {
-        field: 'subjectID',
-        schema: () => emojiSchema,
-      },
+      sourceField: ['id'],
+      destField: ['subjectID'],
+      destSchema: () => emojiSchema,
     },
   },
 });
@@ -111,18 +99,14 @@ const commentSchema = createTableSchema({
   primaryKey: ['id'],
   relationships: {
     creator: {
-      source: 'creatorID',
-      dest: {
-        field: 'id',
-        schema: () => userSchema,
-      },
+      sourceField: ['creatorID'],
+      destField: ['id'],
+      destSchema: () => userSchema,
     },
     emoji: {
-      source: 'id',
-      dest: {
-        field: 'subjectID',
-        schema: () => emojiSchema,
-      },
+      sourceField: ['id'],
+      destField: ['subjectID'],
+      destSchema: () => emojiSchema,
     },
   },
 });
@@ -160,11 +144,9 @@ const emojiSchema = createTableSchema({
   primaryKey: ['id'],
   relationships: {
     creator: {
-      source: 'creatorID',
-      dest: {
-        field: 'id',
-        schema: () => userSchema,
-      },
+      sourceField: ['creatorID'],
+      destField: ['id'],
+      destSchema: () => userSchema,
     },
   },
 });
