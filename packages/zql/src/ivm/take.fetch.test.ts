@@ -9,7 +9,7 @@ import {Catch} from './catch.js';
 import {SetOfConstraint} from './constraint.js';
 import type {Node} from './data.js';
 import {MemoryStorage} from './memory-storage.js';
-import {Snitch, type PushMessage, type SnitchMessage} from './snitch.js';
+import {Snitch, type SnitchMessage} from './snitch.js';
 import {Take, type PartitionKey} from './take.js';
 import {createSource} from './test/source-factory.js';
 
@@ -22,210 +22,98 @@ suite('take with no partition', () => {
       ['id', 'asc'],
     ],
     partitionKey: undefined,
+    partitionValues: [undefined],
   } as const;
 
-  takeTest({
-    ...base,
-    name: 'limit 0',
-    sourceRows: [
-      {id: 'i1', created: 100},
-      {id: 'i2', created: 200},
-      {id: 'i3', created: 300},
-    ],
-    limit: 0,
-    partitions: [
-      {
-        partitionValue: undefined,
-        expectedMessages: [[], [], [['takeSnitch', 'cleanup', {}]]],
-        expectedStorage: {},
-        expectedHydrate: [],
-      },
-    ],
+  test('limit 0', () => {
+    const {partitions} = takeTest({
+      ...base,
+      sourceRows: [
+        {id: 'i1', created: 100},
+        {id: 'i2', created: 200},
+        {id: 'i3', created: 300},
+      ],
+      limit: 0,
+    });
+    expect(partitions[0].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[0].storage).toMatchInlineSnapshot();
+    expect(partitions[0].hydrate).toMatchInlineSnapshot();
   });
 
-  takeTest({
-    ...base,
-    name: 'no data',
-    sourceRows: [],
-    limit: 5,
-    partitions: [
-      {
-        partitionValue: undefined,
-        expectedMessages: [
-          [['takeSnitch', 'fetch', {}]],
-          [],
-          [['takeSnitch', 'cleanup', {}]],
-        ],
-        expectedStorage: {
-          '["take"]': {
-            bound: undefined,
-            size: 0,
-          },
-        },
-        expectedHydrate: [],
-      },
-    ],
+  test('no data', () => {
+    const {partitions} = takeTest({
+      ...base,
+      sourceRows: [],
+      limit: 5,
+    });
+    expect(partitions[0].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[0].storage).toMatchInlineSnapshot();
+    expect(partitions[0].hydrate).toMatchInlineSnapshot();
   });
 
-  takeTest({
-    ...base,
-    name: 'less data than limit',
-    sourceRows: [
-      {id: 'i1', created: 100},
-      {id: 'i2', created: 200},
-      {id: 'i3', created: 300},
-    ],
-    limit: 5,
-    partitions: [
-      {
-        partitionValue: undefined,
-        expectedMessages: [
-          [['takeSnitch', 'fetch', {}]],
-          [['takeSnitch', 'fetch', {}]],
-          [['takeSnitch', 'cleanup', {}]],
-        ],
-        expectedStorage: {
-          '["take"]': {
-            bound: {
-              created: 300,
-              id: 'i3',
-            },
-            size: 3,
-          },
-          'maxBound': {
-            created: 300,
-            id: 'i3',
-          },
-        },
-        expectedHydrate: [
-          {row: {id: 'i1', created: 100}, relationships: {}},
-          {row: {id: 'i2', created: 200}, relationships: {}},
-          {row: {id: 'i3', created: 300}, relationships: {}},
-        ],
-      },
-    ],
+  test('less data than limit', () => {
+    const {partitions} = takeTest({
+      ...base,
+      sourceRows: [
+        {id: 'i1', created: 100},
+        {id: 'i2', created: 200},
+        {id: 'i3', created: 300},
+      ],
+      limit: 5,
+    });
+    expect(partitions[0].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[0].storage).toMatchInlineSnapshot();
+    expect(partitions[0].hydrate).toMatchInlineSnapshot();
   });
 
-  takeTest({
-    ...base,
-    name: 'data size and limit equal',
-    sourceRows: [
-      {id: 'i1', created: 100},
-      {id: 'i2', created: 200},
-      {id: 'i3', created: 300},
-      {id: 'i4', created: 400},
-      {id: 'i5', created: 500},
-    ],
-    limit: 5,
-    partitions: [
-      {
-        partitionValue: undefined,
-        expectedMessages: [
-          [['takeSnitch', 'fetch', {}]],
-          [['takeSnitch', 'fetch', {}]],
-          [['takeSnitch', 'cleanup', {}]],
-        ],
-        expectedStorage: {
-          '["take"]': {
-            bound: {
-              created: 500,
-              id: 'i5',
-            },
-            size: 5,
-          },
-          'maxBound': {
-            created: 500,
-            id: 'i5',
-          },
-        },
-        expectedHydrate: [
-          {row: {id: 'i1', created: 100}, relationships: {}},
-          {row: {id: 'i2', created: 200}, relationships: {}},
-          {row: {id: 'i3', created: 300}, relationships: {}},
-          {row: {id: 'i4', created: 400}, relationships: {}},
-          {row: {id: 'i5', created: 500}, relationships: {}},
-        ],
-      },
-    ],
+  test('data size and limit equal', () => {
+    const {partitions} = takeTest({
+      ...base,
+      sourceRows: [
+        {id: 'i1', created: 100},
+        {id: 'i2', created: 200},
+        {id: 'i3', created: 300},
+        {id: 'i4', created: 400},
+        {id: 'i5', created: 500},
+      ],
+      limit: 5,
+    });
+    expect(partitions[0].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[0].storage).toMatchInlineSnapshot();
+    expect(partitions[0].hydrate).toMatchInlineSnapshot();
   });
 
-  takeTest({
-    ...base,
-    name: 'more data than limit',
-    sourceRows: [
-      {id: 'i1', created: 100},
-      {id: 'i2', created: 200},
-      {id: 'i3', created: 300},
-      {id: 'i4', created: 400},
-      {id: 'i5', created: 500},
-      {id: 'i6', created: 600},
-    ],
-    limit: 5,
-    partitions: [
-      {
-        partitionValue: undefined,
-        expectedMessages: [
-          [['takeSnitch', 'fetch', {}]],
-          [['takeSnitch', 'fetch', {}]],
-          [['takeSnitch', 'cleanup', {}]],
-        ],
-        expectedStorage: {
-          '["take"]': {
-            bound: {
-              created: 500,
-              id: 'i5',
-            },
-            size: 5,
-          },
-          'maxBound': {
-            created: 500,
-            id: 'i5',
-          },
-        },
-        expectedHydrate: [
-          {row: {id: 'i1', created: 100}, relationships: {}},
-          {row: {id: 'i2', created: 200}, relationships: {}},
-          {row: {id: 'i3', created: 300}, relationships: {}},
-          {row: {id: 'i4', created: 400}, relationships: {}},
-          {row: {id: 'i5', created: 500}, relationships: {}},
-        ],
-      },
-    ],
+  test('more data than limit', () => {
+    const {partitions} = takeTest({
+      ...base,
+      sourceRows: [
+        {id: 'i1', created: 100},
+        {id: 'i2', created: 200},
+        {id: 'i3', created: 300},
+        {id: 'i4', created: 400},
+        {id: 'i5', created: 500},
+        {id: 'i6', created: 600},
+      ],
+      limit: 5,
+    });
+    expect(partitions[0].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[0].storage).toMatchInlineSnapshot();
+    expect(partitions[0].hydrate).toMatchInlineSnapshot();
   });
 
-  takeTest({
-    ...base,
-    name: 'limit 1',
-    sourceRows: [
-      {id: 'i1', created: 100},
-      {id: 'i2', created: 200},
-      {id: 'i3', created: 300},
-    ],
-    limit: 1,
-    partitions: [
-      {
-        partitionValue: undefined,
-        expectedMessages: [
-          [['takeSnitch', 'fetch', {}]],
-          [['takeSnitch', 'fetch', {}]],
-          [['takeSnitch', 'cleanup', {}]],
-        ],
-        expectedStorage: {
-          '["take"]': {
-            bound: {
-              created: 100,
-              id: 'i1',
-            },
-            size: 1,
-          },
-          'maxBound': {
-            created: 100,
-            id: 'i1',
-          },
-        },
-        expectedHydrate: [{row: {id: 'i1', created: 100}, relationships: {}}],
-      },
-    ],
+  test('limit 1', () => {
+    const {partitions} = takeTest({
+      ...base,
+      sourceRows: [
+        {id: 'i1', created: 100},
+        {id: 'i2', created: 200},
+        {id: 'i3', created: 300},
+      ],
+      limit: 1,
+    });
+    expect(partitions[0].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[0].storage).toMatchInlineSnapshot();
+    expect(partitions[0].hydrate).toMatchInlineSnapshot();
   });
 });
 
@@ -244,872 +132,271 @@ suite('take with partition', () => {
     partitionKey: ['issueID'],
   } as const;
 
-  takeTest({
-    ...base,
-    name: 'limit 0',
-    sourceRows: [
-      {id: 'c1', issueID: 'i1', created: 100},
-      {id: 'c2', issueID: 'i1', created: 200},
-      {id: 'c3', issueID: 'i1', created: 300},
-    ],
-    limit: 0,
-    partitions: [
-      {
-        partitionValue: ['i1'],
-        expectedMessages: [
-          [],
-          [],
-          [
-            [
-              'takeSnitch',
-              'cleanup',
-              {
-                constraint: {
-                  issueID: 'i1',
-                },
-              },
-            ],
-          ],
-        ],
-        expectedStorage: {},
-        expectedHydrate: [],
-      },
-      {
-        partitionValue: ['i2'],
-        expectedMessages: [
-          [],
-          [],
-          [
-            [
-              'takeSnitch',
-              'cleanup',
-              {
-                constraint: {
-                  issueID: 'i2',
-                },
-              },
-            ],
-          ],
-        ],
-        expectedStorage: {},
-        expectedHydrate: [],
-      },
-    ],
+  test('limit 0', () => {
+    const {partitions} = takeTest({
+      ...base,
+      sourceRows: [
+        {id: 'c1', issueID: 'i1', created: 100},
+        {id: 'c2', issueID: 'i1', created: 200},
+        {id: 'c3', issueID: 'i1', created: 300},
+      ],
+      limit: 0,
+      partitionValues: [['i1'], ['i2']],
+    });
+
+    expect(partitions[0].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[0].storage).toMatchInlineSnapshot();
+    expect(partitions[0].hydrate).toMatchInlineSnapshot();
+
+    expect(partitions[1].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[1].storage).toMatchInlineSnapshot();
+    expect(partitions[1].hydrate).toMatchInlineSnapshot();
   });
 
-  takeTest({
-    ...base,
-    name: 'no data',
-    sourceRows: [],
-    limit: 5,
-    partitions: [
-      {
-        partitionValue: ['i1'],
-        expectedMessages: [
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i1',
-                },
-              },
-            ],
-          ],
-          [],
-          [
-            [
-              'takeSnitch',
-              'cleanup',
-              {
-                constraint: {
-                  issueID: 'i1',
-                },
-              },
-            ],
-          ],
-        ],
-        expectedStorage: {
-          '["take","i1"]': {
-            bound: undefined,
-            size: 0,
-          },
-        },
-        expectedHydrate: [],
-      },
-      {
-        partitionValue: ['i2'],
-        expectedMessages: [
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i2',
-                },
-              },
-            ],
-          ],
-          [],
-          [
-            [
-              'takeSnitch',
-              'cleanup',
-              {
-                constraint: {
-                  issueID: 'i2',
-                },
-              },
-            ],
-          ],
-        ],
-        expectedStorage: {
-          '["take","i2"]': {
-            bound: undefined,
-            size: 0,
-          },
-        },
-        expectedHydrate: [],
-      },
-    ],
+  test('no data', () => {
+    const {partitions} = takeTest({
+      ...base,
+      sourceRows: [],
+      limit: 5,
+      partitionValues: [['i1'], ['i2']],
+    });
+
+    expect(partitions[0].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[0].storage).toMatchInlineSnapshot();
+    expect(partitions[0].hydrate).toMatchInlineSnapshot();
+
+    expect(partitions[1].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[1].storage).toMatchInlineSnapshot();
+    expect(partitions[1].hydrate).toMatchInlineSnapshot();
   });
 
-  takeTest({
-    ...base,
-    name: 'less data than limit',
-    sourceRows: [
-      {id: 'c1', issueID: 'i1', created: 100},
-      {id: 'c2', issueID: 'i1', created: 200},
-      {id: 'c3', issueID: 'i1', created: 300},
-      {id: 'c4', issueID: 'i2', created: 400},
-      {id: 'c5', issueID: 'i2', created: 500},
-    ],
-    limit: 5,
-    partitions: [
-      {
-        partitionValue: ['i0'],
-        expectedMessages: [
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i0',
-                },
-              },
-            ],
-          ],
-          [],
-          [
-            [
-              'takeSnitch',
-              'cleanup',
-              {
-                constraint: {
-                  issueID: 'i0',
-                },
-              },
-            ],
-          ],
-        ],
-        expectedStorage: {
-          '["take","i0"]': {
-            bound: undefined,
-            size: 0,
-          },
-        },
-        expectedHydrate: [],
-      },
-      {
-        partitionValue: ['i1'],
-        expectedMessages: [
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i1',
-                },
-              },
-            ],
-          ],
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i1',
-                },
-              },
-            ],
-          ],
-          [
-            [
-              'takeSnitch',
-              'cleanup',
-              {
-                constraint: {
-                  issueID: 'i1',
-                },
-              },
-            ],
-          ],
-        ],
-        expectedStorage: {
-          '["take","i1"]': {
-            bound: {id: 'c3', issueID: 'i1', created: 300},
-            size: 3,
-          },
-          'maxBound': {id: 'c3', issueID: 'i1', created: 300},
-        },
-        expectedHydrate: [
-          {row: {id: 'c1', issueID: 'i1', created: 100}, relationships: {}},
-          {row: {id: 'c2', issueID: 'i1', created: 200}, relationships: {}},
-          {row: {id: 'c3', issueID: 'i1', created: 300}, relationships: {}},
-        ],
-      },
-      {
-        partitionValue: ['i2'],
-        expectedMessages: [
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i2',
-                },
-              },
-            ],
-          ],
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i2',
-                },
-              },
-            ],
-          ],
-          [
-            [
-              'takeSnitch',
-              'cleanup',
-              {
-                constraint: {
-                  issueID: 'i2',
-                },
-              },
-            ],
-          ],
-        ],
-        expectedStorage: {
-          '["take","i2"]': {
-            bound: {id: 'c5', issueID: 'i2', created: 500},
-            size: 2,
-          },
-          'maxBound': {id: 'c5', issueID: 'i2', created: 500},
-        },
-        expectedHydrate: [
-          {row: {id: 'c4', issueID: 'i2', created: 400}, relationships: {}},
-          {row: {id: 'c5', issueID: 'i2', created: 500}, relationships: {}},
-        ],
-      },
-    ],
+  test('less data than limit', () => {
+    const {partitions} = takeTest({
+      ...base,
+      sourceRows: [
+        {id: 'c1', issueID: 'i1', created: 100},
+        {id: 'c2', issueID: 'i1', created: 200},
+        {id: 'c3', issueID: 'i1', created: 300},
+        {id: 'c4', issueID: 'i2', created: 400},
+        {id: 'c5', issueID: 'i2', created: 500},
+      ],
+      limit: 5,
+      partitionValues: [['i0'], ['i1'], ['i2']],
+    });
+
+    expect(partitions[0].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[0].storage).toMatchInlineSnapshot();
+    expect(partitions[0].hydrate).toMatchInlineSnapshot();
+
+    expect(partitions[1].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[1].storage).toMatchInlineSnapshot();
+    expect(partitions[1].hydrate).toMatchInlineSnapshot();
+
+    expect(partitions[2].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[2].storage).toMatchInlineSnapshot();
+    expect(partitions[2].hydrate).toMatchInlineSnapshot();
   });
 
-  takeTest({
-    ...base,
-    name: 'data size and limit equal',
-    sourceRows: [
-      {id: 'c1', issueID: 'i1', created: 100},
-      {id: 'c2', issueID: 'i1', created: 200},
-      {id: 'c3', issueID: 'i1', created: 300},
-      {id: 'c4', issueID: 'i2', created: 400},
-      {id: 'c5', issueID: 'i2', created: 500},
-      {id: 'c6', issueID: 'i2', created: 600},
-    ],
-    limit: 3,
-    partitions: [
-      {
-        partitionValue: ['i1'],
-        expectedMessages: [
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i1',
-                },
-              },
-            ],
-          ],
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i1',
-                },
-              },
-            ],
-          ],
-          [
-            [
-              'takeSnitch',
-              'cleanup',
-              {
-                constraint: {
-                  issueID: 'i1',
-                },
-              },
-            ],
-          ],
-        ],
-        expectedStorage: {
-          '["take","i1"]': {
-            bound: {id: 'c3', issueID: 'i1', created: 300},
-            size: 3,
-          },
-          'maxBound': {id: 'c3', issueID: 'i1', created: 300},
-        },
-        expectedHydrate: [
-          {row: {id: 'c1', issueID: 'i1', created: 100}, relationships: {}},
-          {row: {id: 'c2', issueID: 'i1', created: 200}, relationships: {}},
-          {row: {id: 'c3', issueID: 'i1', created: 300}, relationships: {}},
-        ],
-      },
-      {
-        partitionValue: ['i2'],
-        expectedMessages: [
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i2',
-                },
-              },
-            ],
-          ],
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i2',
-                },
-              },
-            ],
-          ],
-          [
-            [
-              'takeSnitch',
-              'cleanup',
-              {
-                constraint: {
-                  issueID: 'i2',
-                },
-              },
-            ],
-          ],
-        ],
-        expectedStorage: {
-          '["take","i2"]': {
-            bound: {id: 'c6', issueID: 'i2', created: 600},
-            size: 3,
-          },
-          'maxBound': {id: 'c6', issueID: 'i2', created: 600},
-        },
-        expectedHydrate: [
-          {row: {id: 'c4', issueID: 'i2', created: 400}, relationships: {}},
-          {row: {id: 'c5', issueID: 'i2', created: 500}, relationships: {}},
-          {row: {id: 'c6', issueID: 'i2', created: 600}, relationships: {}},
-        ],
-      },
-    ],
+  test('data size and limit equal', () => {
+    const {partitions} = takeTest({
+      ...base,
+      sourceRows: [
+        {id: 'c1', issueID: 'i1', created: 100},
+        {id: 'c2', issueID: 'i1', created: 200},
+        {id: 'c3', issueID: 'i1', created: 300},
+        {id: 'c4', issueID: 'i2', created: 400},
+        {id: 'c5', issueID: 'i2', created: 500},
+        {id: 'c6', issueID: 'i2', created: 600},
+      ],
+      limit: 3,
+      partitionValues: [['i1'], ['i2']],
+    });
+
+    expect(partitions[0].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[0].storage).toMatchInlineSnapshot();
+    expect(partitions[0].hydrate).toMatchInlineSnapshot();
+
+    expect(partitions[1].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[1].storage).toMatchInlineSnapshot();
+    expect(partitions[1].hydrate).toMatchInlineSnapshot();
   });
 
-  takeTest({
-    ...base,
-    name: 'more data than limit',
-    sourceRows: [
-      {id: 'c1', issueID: 'i1', created: 100},
-      {id: 'c2', issueID: 'i1', created: 200},
-      {id: 'c3', issueID: 'i1', created: 300},
-      {id: 'c4', issueID: 'i2', created: 400},
-      {id: 'c5', issueID: 'i2', created: 500},
-      {id: 'c6', issueID: 'i2', created: 600},
-      {id: 'c7', issueID: 'i1', created: 700},
-      {id: 'c8', issueID: 'i2', created: 800},
-    ],
-    limit: 3,
-    partitions: [
-      {
-        partitionValue: ['i1'],
-        expectedMessages: [
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i1',
-                },
-              },
-            ],
-          ],
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i1',
-                },
-              },
-            ],
-          ],
-          [
-            [
-              'takeSnitch',
-              'cleanup',
-              {
-                constraint: {
-                  issueID: 'i1',
-                },
-              },
-            ],
-          ],
-        ],
-        expectedStorage: {
-          '["take","i1"]': {
-            bound: {id: 'c3', issueID: 'i1', created: 300},
-            size: 3,
-          },
-          'maxBound': {id: 'c3', issueID: 'i1', created: 300},
-        },
-        expectedHydrate: [
-          {row: {id: 'c1', issueID: 'i1', created: 100}, relationships: {}},
-          {row: {id: 'c2', issueID: 'i1', created: 200}, relationships: {}},
-          {row: {id: 'c3', issueID: 'i1', created: 300}, relationships: {}},
-        ],
-      },
-      {
-        partitionValue: ['i2'],
-        expectedMessages: [
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i2',
-                },
-              },
-            ],
-          ],
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i2',
-                },
-              },
-            ],
-          ],
-          [
-            [
-              'takeSnitch',
-              'cleanup',
-              {
-                constraint: {
-                  issueID: 'i2',
-                },
-              },
-            ],
-          ],
-        ],
-        expectedStorage: {
-          '["take","i2"]': {
-            bound: {id: 'c6', issueID: 'i2', created: 600},
-            size: 3,
-          },
-          'maxBound': {id: 'c6', issueID: 'i2', created: 600},
-        },
-        expectedHydrate: [
-          {row: {id: 'c4', issueID: 'i2', created: 400}, relationships: {}},
-          {row: {id: 'c5', issueID: 'i2', created: 500}, relationships: {}},
-          {row: {id: 'c6', issueID: 'i2', created: 600}, relationships: {}},
-        ],
-      },
-    ],
+  test('more data than limit', () => {
+    const {partitions} = takeTest({
+      ...base,
+      sourceRows: [
+        {id: 'c1', issueID: 'i1', created: 100},
+        {id: 'c2', issueID: 'i1', created: 200},
+        {id: 'c3', issueID: 'i1', created: 300},
+        {id: 'c4', issueID: 'i2', created: 400},
+        {id: 'c5', issueID: 'i2', created: 500},
+        {id: 'c6', issueID: 'i2', created: 600},
+        {id: 'c7', issueID: 'i1', created: 700},
+        {id: 'c8', issueID: 'i2', created: 800},
+      ],
+      limit: 3,
+      partitionValues: [['i1'], ['i2']],
+    });
+
+    expect(partitions[0].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[0].storage).toMatchInlineSnapshot();
+    expect(partitions[0].hydrate).toMatchInlineSnapshot();
+
+    expect(partitions[1].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[1].storage).toMatchInlineSnapshot();
+    expect(partitions[1].hydrate).toMatchInlineSnapshot();
   });
 
-  takeTest({
-    ...base,
-    name: 'compound partition key more data than limit',
-    sourceRows: [
-      {id: 'c1', issueID: 'i1', created: 100},
-      {id: 'c2', issueID: 'i1', created: 100},
-      {id: 'c3', issueID: 'i1', created: 100},
-      {id: 'c4', issueID: 'i1', created: 200},
-      {id: 'c5', issueID: 'i2', created: 100},
-      {id: 'c6', issueID: 'i2', created: 100},
-      {id: 'c7', issueID: 'i2', created: 200},
-      {id: 'c8', issueID: 'i2', created: 200},
-    ],
-    limit: 2,
-    partitionKey: ['issueID', 'created'],
-    partitions: [
-      {
-        partitionValue: ['i1', 100],
-        expectedMessages: [
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i1',
-                  created: 100,
-                },
-              },
-            ],
-          ],
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i1',
-                  created: 100,
-                },
-              },
-            ],
-          ],
-          [
-            [
-              'takeSnitch',
-              'cleanup',
-              {
-                constraint: {
-                  issueID: 'i1',
-                  created: 100,
-                },
-              },
-            ],
-          ],
-        ],
-        expectedStorage: {
-          '["take","i1",100]': {
-            bound: {
-              created: 100,
-              id: 'c2',
-              issueID: 'i1',
-            },
-            size: 2,
-          },
-          'maxBound': {
-            created: 100,
-            id: 'c2',
-            issueID: 'i1',
-          },
-        },
-        expectedHydrate: [
-          {row: {id: 'c1', issueID: 'i1', created: 100}, relationships: {}},
-          {row: {id: 'c2', issueID: 'i1', created: 100}, relationships: {}},
-        ],
-      },
-      {
-        partitionValue: ['i1', 200],
-        expectedMessages: [
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i1',
-                  created: 200,
-                },
-              },
-            ],
-          ],
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i1',
-                  created: 200,
-                },
-              },
-            ],
-          ],
-          [
-            [
-              'takeSnitch',
-              'cleanup',
-              {
-                constraint: {
-                  issueID: 'i1',
-                  created: 200,
-                },
-              },
-            ],
-          ],
-        ],
-        expectedStorage: {
-          '["take","i1",200]': {
-            bound: {
-              created: 200,
-              id: 'c4',
-              issueID: 'i1',
-            },
-            size: 1,
-          },
-          'maxBound': {
-            created: 200,
-            id: 'c4',
-            issueID: 'i1',
-          },
-        },
-        expectedHydrate: [
-          {row: {id: 'c4', issueID: 'i1', created: 200}, relationships: {}},
-        ],
-      },
-      {
-        partitionValue: ['i2', 100],
-        expectedMessages: [
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i2',
-                  created: 100,
-                },
-              },
-            ],
-          ],
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i2',
-                  created: 100,
-                },
-              },
-            ],
-          ],
-          [
-            [
-              'takeSnitch',
-              'cleanup',
-              {
-                constraint: {
-                  issueID: 'i2',
-                  created: 100,
-                },
-              },
-            ],
-          ],
-        ],
-        expectedStorage: {
-          '["take","i2",100]': {
-            bound: {
-              created: 100,
-              id: 'c6',
-              issueID: 'i2',
-            },
-            size: 2,
-          },
-          'maxBound': {
-            created: 200,
-            id: 'c4',
-            issueID: 'i1',
-          },
-        },
-        expectedHydrate: [
-          {row: {id: 'c5', issueID: 'i2', created: 100}, relationships: {}},
-          {row: {id: 'c6', issueID: 'i2', created: 100}, relationships: {}},
-        ],
-      },
-      {
-        partitionValue: ['i2', 200],
-        expectedMessages: [
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i2',
-                  created: 200,
-                },
-              },
-            ],
-          ],
-          [
-            [
-              'takeSnitch',
-              'fetch',
-              {
-                constraint: {
-                  issueID: 'i2',
-                  created: 200,
-                },
-              },
-            ],
-          ],
-          [
-            [
-              'takeSnitch',
-              'cleanup',
-              {
-                constraint: {
-                  issueID: 'i2',
-                  created: 200,
-                },
-              },
-            ],
-          ],
-        ],
-        expectedStorage: {
-          '["take","i2",200]': {
-            bound: {
-              created: 200,
-              id: 'c8',
-              issueID: 'i2',
-            },
-            size: 2,
-          },
-          'maxBound': {
-            created: 200,
-            id: 'c8',
-            issueID: 'i2',
-          },
-        },
-        expectedHydrate: [
-          {row: {id: 'c7', issueID: 'i2', created: 200}, relationships: {}},
-          {row: {id: 'c8', issueID: 'i2', created: 200}, relationships: {}},
-        ],
-      },
-    ],
+  test('compound partition key more data than limit', () => {
+    const {partitions} = takeTest({
+      ...base,
+      sourceRows: [
+        {id: 'c1', issueID: 'i1', created: 100},
+        {id: 'c2', issueID: 'i1', created: 100},
+        {id: 'c3', issueID: 'i1', created: 100},
+        {id: 'c4', issueID: 'i1', created: 200},
+        {id: 'c5', issueID: 'i2', created: 100},
+        {id: 'c6', issueID: 'i2', created: 100},
+        {id: 'c7', issueID: 'i2', created: 200},
+        {id: 'c8', issueID: 'i2', created: 200},
+      ],
+      limit: 2,
+      partitionKey: ['issueID', 'created'],
+      partitionValues: [
+        ['i1', 100],
+        ['i1', 200],
+        ['i2', 100],
+        ['i2', 200],
+      ],
+    });
+
+    expect(partitions[0].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[0].storage).toMatchInlineSnapshot();
+    expect(partitions[0].hydrate).toMatchInlineSnapshot();
+
+    expect(partitions[1].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[1].storage).toMatchInlineSnapshot();
+    expect(partitions[1].hydrate).toMatchInlineSnapshot();
+
+    expect(partitions[2].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[2].storage).toMatchInlineSnapshot();
+    expect(partitions[2].hydrate).toMatchInlineSnapshot();
+
+    expect(partitions[3].fetchMessages).toMatchInlineSnapshot();
+    expect(partitions[3].storage).toMatchInlineSnapshot();
+    expect(partitions[3].hydrate).toMatchInlineSnapshot();
   });
 });
 
-function takeTest(t: TakeTest) {
-  test(t.name, () => {
-    const log: SnitchMessage[] = [];
-    const source = createSource('table', t.columns, t.primaryKey);
-    for (const row of t.sourceRows) {
-      source.push({type: 'add', row});
-    }
-    const snitch = new Snitch(
-      source.connect(t.sort || [['id', 'asc']]),
-      'takeSnitch',
-      log,
-    );
-    const memoryStorage = new MemoryStorage();
+function takeTest(t: TakeTest): TakeTestResults {
+  const log: SnitchMessage[] = [];
+  const source = createSource('table', t.columns, t.primaryKey);
+  for (const row of t.sourceRows) {
+    source.push({type: 'add', row});
+  }
+  const snitch = new Snitch(
+    source.connect(t.sort || [['id', 'asc']]),
+    'takeSnitch',
+    log,
+  );
+  const storage = new MemoryStorage();
 
-    const {partitionKey} = t;
-    const take = new Take(snitch, memoryStorage, t.limit, partitionKey);
-    if (t.partitionKey === undefined) {
-      assert(t.partitions.length === 1);
-      assert(t.partitions[0].partitionValue === undefined);
-    }
-    for (const partition of t.partitions) {
-      const {partitionValue} = partition;
-      const fetches = ['fetch', 'fetch', 'cleanup'] as const;
-      for (let i = 0; i < fetches.length; i++) {
-        const fetchType = fetches[i];
-        log.length = 0;
+  const {partitionKey} = t;
+  const take = new Take(snitch, storage, t.limit, partitionKey);
+  if (t.partitionKey === undefined) {
+    assert(t.partitionValues.length === 1);
+    assert(t.partitionValues[0] === undefined);
+  }
+  const results: TakeTestResults = {
+    partitions: [],
+  };
+  for (const partitionValue of t.partitionValues) {
+    const partitionResults: PartitionTestResults = {
+      fetchMessages: [],
+      storage: {},
+      hydrate: [],
+    };
+    results.partitions.push(partitionResults);
+    for (const [phase, fetchType] of [
+      ['hydrate', 'fetch'],
+      ['fetch', 'fetch'],
+      ['cleanup', 'cleanup'],
+    ] as const) {
+      log.length = 0;
 
-        const c = new Catch(take);
-        const r = c[fetchType](
-          partitionKey &&
-            partitionValue && {
-              constraint: Object.fromEntries(
-                partitionKey.map((k, i) => [k, partitionValue[i]]),
-              ),
-            },
+      const c = new Catch(take);
+      const r = c[fetchType](
+        partitionKey &&
+          partitionValue && {
+            constraint: Object.fromEntries(
+              partitionKey.map((k, i) => [k, partitionValue[i]]),
+            ),
+          },
+      );
+      if (phase === 'hydrate') {
+        partitionResults.hydrate = r;
+      } else {
+        expect(r).toEqual(partitionResults.hydrate);
+      }
+
+      if (phase === 'hydrate') {
+        partitionResults.storage = storage.cloneData();
+      } else if (phase === 'fetch') {
+        expect(storage.cloneData()).toEqual(partitionResults.storage);
+      } else {
+        phase satisfies 'cleanup';
+        expect(storage.cloneData()).toEqual(
+          'maxBound' in partitionResults.storage
+            ? {maxBound: partitionResults.storage.maxBound}
+            : {},
         );
+      }
 
-        expect(r).toEqual(partition.expectedHydrate);
-        expect(c.pushes).toEqual([]);
-        if (fetchType === 'fetch') {
-          expect(memoryStorage.cloneData()).toEqual(partition.expectedStorage);
-        } else {
-          fetchType satisfies 'cleanup';
-          expect(memoryStorage.cloneData()).toEqual(
-            'maxBound' in partition.expectedStorage
-              ? {maxBound: partition.expectedStorage.maxBound}
-              : {},
-          );
-        }
-
-        let expectedMessages = partition.expectedMessages[i] as Exclude<
-          SnitchMessage,
-          PushMessage
-        >[];
-        if (fetchType === 'fetch') {
-          expectedMessages = expectedMessages.map(([name, _, arg]) => [
-            name,
-            'fetch',
-            arg,
-          ]);
-        } else if (fetchType === 'cleanup') {
-          // For cleanup, the last fetch for any constraint should be a cleanup.
-          // Others should be fetch.
-          const seen = new SetOfConstraint();
-          for (let i = expectedMessages.length - 1; i >= 0; i--) {
-            const [name, _, req] = expectedMessages[i];
-            if (!(req.constraint && seen.has(req.constraint))) {
-              expectedMessages[i] = [name, 'cleanup', req];
-            } else {
-              expectedMessages[i] = [name, 'fetch', req];
-            }
-            req.constraint && seen.add(req.constraint);
+      if (phase === 'hydrate') {
+        partitionResults.fetchMessages = [...log];
+      } else if (phase === 'fetch') {
+        // should be the same as for hydrate
+        expect(log).toEqual(partitionResults.fetchMessages);
+      } else {
+        // For cleanup, the last fetch for any constraint should be a cleanup.
+        // Others should be fetch.
+        phase satisfies 'cleanup';
+        const expectedMessages = [];
+        const seen = new SetOfConstraint();
+        for (let i = partitionResults.fetchMessages.length - 1; i >= 0; i--) {
+          const [name, type, req] = partitionResults.fetchMessages[i];
+          expect(type).toSatisfy(t => t === 'fetch' || t === 'cleanup');
+          assert(type !== 'push');
+          if (!(req.constraint && seen.has(req.constraint))) {
+            expectedMessages[i] = [name, 'cleanup', req];
+          } else {
+            expectedMessages[i] = [name, 'fetch', req];
           }
+          req.constraint && seen.add(req.constraint);
         }
         expect(log).toEqual(expectedMessages);
       }
     }
-  });
+  }
+  return results;
 }
 
 type TakeTest = {
-  name: string;
   columns: Record<string, SchemaValue>;
   primaryKey: PrimaryKey;
   sourceRows: Row[];
   sort?: Ordering | undefined;
   limit: number;
   partitionKey: PartitionKey | undefined;
-  partitions: {
-    partitionValue: [Value, ...Value[]] | undefined;
-    expectedMessages: [SnitchMessage[], SnitchMessage[], SnitchMessage[]];
-    expectedStorage: Record<string, JSONValue>;
-    expectedHydrate: Node[];
-  }[];
+  partitionValues: readonly ([Value, ...Value[]] | undefined)[];
+};
+
+type TakeTestResults = {
+  partitions: PartitionTestResults[];
+};
+
+type PartitionTestResults = {
+  fetchMessages: SnitchMessage[];
+  storage: Record<string, JSONValue>;
+  hydrate: Node[];
 };

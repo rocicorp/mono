@@ -2217,6 +2217,8 @@ function fetchTest(t: FetchTest): FetchTestResults {
 
     if (phase === 'hydrate') {
       results.hydrate = r;
+    } else {
+      expect(r).toEqual(results.hydrate);
     }
     expect(c.pushes).toEqual([]);
 
