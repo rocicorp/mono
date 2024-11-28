@@ -1717,7 +1717,10 @@ suite('overlay-vs-filter', () => {
             {
               type: 'correlatedSubquery',
               related: {
-                correlation: [['a', 'b']],
+                correlation: {
+                  parentField: ['a'],
+                  childField: ['b'],
+                },
                 subquery: {
                   table: 't',
                   alias: 'zsubq_ts',
@@ -1781,7 +1784,10 @@ suite('overlay-vs-filter', () => {
             {
               type: 'correlatedSubquery',
               related: {
-                correlation: [['a', 'b']],
+                correlation: {
+                  parentField: ['a'],
+                  childField: ['b'],
+                },
                 subquery: {
                   table: 't',
                   alias: 'zsubq_ts',

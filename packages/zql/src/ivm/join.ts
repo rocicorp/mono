@@ -1,4 +1,5 @@
 import {assert, unreachable} from '../../../shared/src/asserts.js';
+import type {CompoundKey} from '../../../zero-protocol/src/ast.js';
 import type {Row, Value} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
 import type {Change, ChildChange} from './change.js';
@@ -6,8 +7,6 @@ import {valuesEqual, type Node} from './data.js';
 import type {FetchRequest, Input, Output, Storage} from './operator.js';
 import type {SourceSchema} from './schema.js';
 import {take, type Stream} from './stream.js';
-
-export type CompoundKey = PrimaryKey;
 
 type Args = {
   parent: Input;

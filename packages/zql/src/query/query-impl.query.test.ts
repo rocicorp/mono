@@ -930,11 +930,9 @@ test('join with compound keys', () => {
     primaryKey: ['id'],
     relationships: {
       b: {
-        correlation: [
-          ['a1', 'b1'],
-          ['a2', 'b2'],
-        ],
-        schema: bSchema,
+        sourceField: ['a1', 'a2'],
+        destField: ['b1', 'b2'],
+        destSchema: bSchema,
       },
     },
   } as const;

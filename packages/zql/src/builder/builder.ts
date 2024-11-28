@@ -4,6 +4,7 @@ import {must} from '../../../shared/src/must.js';
 import type {
   AST,
   ColumnReference,
+  CompoundKey,
   Condition,
   Conjunction,
   CorrelatedSubquery,
@@ -21,7 +22,7 @@ import {Exists} from '../ivm/exists.js';
 import {FanIn} from '../ivm/fan-in.js';
 import {FanOut} from '../ivm/fan-out.js';
 import {Filter} from '../ivm/filter.js';
-import {Join, type CompoundKey} from '../ivm/join.js';
+import {Join} from '../ivm/join.js';
 import type {Input, Storage} from '../ivm/operator.js';
 import {Skip} from '../ivm/skip.js';
 import type {Source} from '../ivm/source.js';
@@ -251,16 +252,14 @@ function applyCorrelatedSubQuery(
   const child = buildPipelineInternal(
     sq.subquery,
     delegate,
-    sq.correlation.map(c => c[1]) as readonly string[] as CompoundKey,
+    sq.correlation.childField,
   );
   end = new Join({
     parent: end,
     child,
     storage: delegate.createStorage(),
-    parentKey: sq.correlation.map(
-      c => c[0],
-    ) as readonly string[] as CompoundKey,
-    childKey: sq.correlation.map(c => c[1]) as readonly string[] as CompoundKey,
+    parentKey: sq.correlation.parentField,
+    childKey: sq.correlation.childField,
     relationshipName: sq.subquery.alias,
     hidden: sq.hidden ?? false,
   });

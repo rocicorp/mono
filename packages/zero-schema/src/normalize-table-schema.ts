@@ -1,10 +1,10 @@
 import {assert} from '../../shared/src/asserts.js';
 import {sortedEntries} from '../../shared/src/sorted-entries.js';
 import type {Writable} from '../../shared/src/writable.js';
+import type {CompoundKey} from '../../zero-protocol/src/ast.js';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
 import {
   isFieldRelationship,
-  type AtLeastOne,
   type FieldRelationship,
   type JunctionRelationship,
   type SchemaValue,
@@ -165,20 +165,27 @@ function normalizeRelationship(
   return normalizeJunctionRelationship(relationship, tableSchemaCache);
 }
 
-type Correlation = AtLeastOne<readonly [source: string, dest: string]>;
-
 type NormalizedFieldRelationship = {
-  correlation: Correlation;
-  schema: NormalizedTableSchema;
+  sourceField: CompoundKey;
+  destField: CompoundKey;
+  destSchema: NormalizedTableSchema;
 };
 
 function normalizeFieldRelationship(
   relationship: FieldRelationship<TableSchema, TableSchema>,
   tableSchemaCache: TableSchemaCache,
 ): NormalizedFieldRelationship {
+  assert(
+    relationship.sourceField.length === relationship.destField.length,
+    'Source and destination fields must have the same length',
+  );
   return {
-    correlation: relationship.correlation,
-    schema: normalizeLazyTableSchema(relationship.schema, tableSchemaCache),
+    sourceField: relationship.sourceField,
+    destField: relationship.destField,
+    destSchema: normalizeLazyTableSchema(
+      relationship.destSchema,
+      tableSchemaCache,
+    ),
   };
 }
 

@@ -160,12 +160,14 @@ test('relationships should be sorted', () => {
     },
     relationships: {
       b: {
-        correlation: [['bar-source', 'field']],
-        schema: barSchema,
+        sourceField: ['bar-source'],
+        destField: ['field'],
+        destSchema: barSchema,
       },
       a: {
-        correlation: [['bar-source', 'field']],
-        schema: () => barSchema,
+        sourceField: ['bar-source'],
+        destField: ['field'],
+        destSchema: () => barSchema,
       },
     },
   };
@@ -185,13 +187,13 @@ test('relationships should be sorted', () => {
       },
       "relationships": {
         "a": {
-          "correlation": [
-            [
-              "bar-source",
-              "field"
-            ]
+          "sourceField": [
+            "bar-source"
           ],
-          "schema": {
+          "destField": [
+            "field"
+          ],
+          "destSchema": {
             "tableName": "bar",
             "primaryKey": [
               "id"
@@ -206,13 +208,13 @@ test('relationships should be sorted', () => {
           }
         },
         "b": {
-          "correlation": [
-            [
-              "bar-source",
-              "field"
-            ]
+          "sourceField": [
+            "bar-source"
           ],
-          "schema": {
+          "destField": [
+            "field"
+          ],
+          "destSchema": {
             "tableName": "bar",
             "primaryKey": [
               "id"
@@ -241,15 +243,16 @@ test('Cyclic relationship should be supported', () => {
     },
     relationships: {
       bar: {
-        correlation: [['bar-source', 'field']],
-        schema: () => fooTableSchema,
+        sourceField: ['bar-source'],
+        destField: ['field'],
+        destSchema: () => fooTableSchema,
       },
     },
   };
 
   const normalizedFooTableSchema = normalizeTableSchema(fooTableSchema);
 
-  expect(normalizedFooTableSchema.relationships.bar.schema).toBe(
+  expect(normalizedFooTableSchema.relationships.bar.destSchema).toBe(
     normalizedFooTableSchema,
   );
 });
@@ -263,8 +266,9 @@ test('Mutually resolving relationships should be supported', () => {
     },
     relationships: {
       bar: {
-        correlation: [['bar-source', 'field']],
-        schema: () => barTableSchema,
+        sourceField: ['bar-source'],
+        destField: ['field'],
+        destSchema: () => barTableSchema,
       },
     },
   };
@@ -277,8 +281,9 @@ test('Mutually resolving relationships should be supported', () => {
     },
     relationships: {
       foo: {
-        correlation: [['foo-source', 'field']],
-        schema: () => fooTableSchema,
+        sourceField: ['foo-source'],
+        destField: ['field'],
+        destSchema: () => fooTableSchema,
       },
     },
   };
@@ -286,6 +291,7 @@ test('Mutually resolving relationships should be supported', () => {
   const normalizedFooTableSchema = normalizeTableSchema(fooTableSchema);
 
   expect(
-    normalizedFooTableSchema.relationships.bar.schema.relationships.foo.schema,
+    normalizedFooTableSchema.relationships.bar.destSchema.relationships.foo
+      .destSchema,
   ).toBe(normalizedFooTableSchema);
 });

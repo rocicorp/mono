@@ -118,14 +118,16 @@ const disjunctionSchema: v.Type<Disjunction> = v.readonlyObject({
   conditions: v.readonlyArray(conditionSchema),
 });
 
-const stringTupleSchema = v.tuple([
-  v.string(), // parent
-  v.string(), // child
-]);
+export type CompoundKey = readonly [string, ...string[]];
 
-const correlationSchema: v.Type<
-  AtLeastOne<readonly [parent: string, child: string]>
-> = v.readonly(v.tuple([stringTupleSchema]).concat(v.array(stringTupleSchema)));
+export const compoundKeySchema: v.Type<CompoundKey> = v
+  .tuple([v.string()])
+  .concat(v.array(v.string()));
+
+const correlationSchema = v.readonlyObject({
+  parentField: compoundKeySchema,
+  childField: compoundKeySchema,
+});
 
 // Split out so that its inferred type can be checked against
 // Omit<CorrelatedSubquery, 'correlation'> in ast-type-test.ts.
@@ -205,14 +207,15 @@ export type AST = {
   readonly orderBy?: Ordering | undefined;
 };
 
-type AtLeastOne<T> = readonly [T, ...T[]];
-
 export type CorrelatedSubquery = {
   /**
    * Only equality correlation are supported for now.
    * E.g., direct foreign key relationships.
    */
-  readonly correlation: AtLeastOne<readonly [parent: string, child: string]>;
+  readonly correlation: {
+    parentField: CompoundKey;
+    childField: CompoundKey;
+  };
   readonly subquery: AST;
   // If a hop in the subquery chain should be hidden from the output view.
   // A common example is junction edges. The query API provides the illusion

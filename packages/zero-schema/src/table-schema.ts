@@ -96,7 +96,9 @@ export function atLeastOne<T>(arr: readonly T[]): AtLeastOne<T> {
   return arr as AtLeastOne<T>;
 }
 
-type FieldName<TSchema extends TableSchema> = keyof TSchema['columns'];
+type FieldName<TSchema extends TableSchema> = AtLeastOne<
+  keyof TSchema['columns']
+>;
 
 /**
  * A relationship between two entities where
@@ -106,10 +108,9 @@ export type FieldRelationship<
   TSourceSchema extends TableSchema,
   TDestSchema extends TableSchema,
 > = {
-  correlation: AtLeastOne<
-    readonly [source: FieldName<TSourceSchema>, dest: FieldName<TDestSchema>]
-  >;
-  schema: Lazy<TDestSchema>;
+  sourceField: FieldName<TSourceSchema>;
+  destField: FieldName<TDestSchema>;
+  destSchema: Lazy<TDestSchema>;
 };
 
 /**

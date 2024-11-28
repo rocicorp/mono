@@ -138,8 +138,9 @@ test('Mutually resolving relationships should be supported', () => {
     },
     relationships: {
       bar: {
-        correlation: [['bar-source', 'field']],
-        schema: () => barTableSchema,
+        sourceField: ['bar-source'],
+        destField: ['field'],
+        destSchema: () => barTableSchema,
       },
     },
   };
@@ -152,8 +153,9 @@ test('Mutually resolving relationships should be supported', () => {
     },
     relationships: {
       foo: {
-        correlation: [['foo-source', 'field']],
-        schema: () => fooTableSchema,
+        sourceField: ['foo-source'],
+        destField: ['field'],
+        destSchema: () => fooTableSchema,
       },
     },
   };
@@ -163,10 +165,10 @@ test('Mutually resolving relationships should be supported', () => {
     version: 1,
   });
 
-  expect(normalizedFooSchema.tables.foo.relationships.bar.schema).toBe(
+  expect(normalizedFooSchema.tables.foo.relationships.bar.destSchema).toBe(
     normalizedFooSchema.tables.bar,
   );
-  expect(normalizedFooSchema.tables.bar.relationships.foo.schema).toBe(
+  expect(normalizedFooSchema.tables.bar.relationships.foo.destSchema).toBe(
     normalizedFooSchema.tables.foo,
   );
 });

@@ -1,9 +1,8 @@
-import type {
-   AuthorizationConfig,
-} from './compiled-authorization.js';
-import type {Schema} from './schema.js';
 import * as v from '../../shared/src/valita.js';
+import {compoundKeySchema} from '../../zero-protocol/src/ast.js';
 import {primaryKeySchema} from '../../zero-protocol/src/primary-key.js';
+import type {AuthorizationConfig} from './compiled-authorization.js';
+import type {Schema} from './schema.js';
 import type {TableSchema} from './table-schema.js';
 
 export type SchemaConfig = {
@@ -11,20 +10,20 @@ export type SchemaConfig = {
   authorization: AuthorizationConfig;
 };
 
-export const relationshipSchema = v.object({
-  source: v.string(),
-  junction: v
-    .object({
-      schema: v.lazy(() => tableSchemaSchema),
-      sourceField: v.string(),
-      destField: v.string(),
-    })
-    .optional(),
-  dest: v.object({
-    field: v.string(),
-    schema: v.lazy(() => tableSchemaSchema),
-  }),
+const fieldRelationshipSchema = v.object({
+  sourceField: compoundKeySchema,
+  destField: compoundKeySchema,
+  destSchema: v.lazy(() => tableSchemaSchema),
 });
+
+const junctionRelationshipSchema = fieldRelationshipSchema.extend({
+  junction: fieldRelationshipSchema,
+});
+
+export const relationshipSchema = v.union(
+  fieldRelationshipSchema,
+  junctionRelationshipSchema,
+);
 
 export const schemaValueSchema = v.object({
   type: v.union(
@@ -52,4 +51,3 @@ export const schemaSchema = v.object({
   version: v.number(),
   tables: v.record(tableSchemaSchema),
 });
-

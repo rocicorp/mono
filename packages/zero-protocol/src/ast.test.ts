@@ -166,14 +166,14 @@ test('related subqueries are sorted', () => {
     table: 'table',
     related: [
       {
-        correlation: [['a', 'a']],
+        correlation: {parentField: ['a'], childField: ['a']},
         subquery: {
           table: 'table',
           alias: 'alias2',
         },
       },
       {
-        correlation: [['a', 'a']],
+        correlation: {parentField: ['a'], childField: ['a']},
         subquery: {
           table: 'table',
           alias: 'alias1',
@@ -182,25 +182,50 @@ test('related subqueries are sorted', () => {
     ],
   };
 
-  expect(normalizeAST(ast).related).toEqual([
-    {
-      correlation: [['a', 'a']],
-      subquery: {
-        table: 'table',
-        alias: 'alias1',
+  expect(normalizeAST(ast).related).toMatchInlineSnapshot(`
+    [
+      {
+        "correlation": {
+          "childField": [
+            "a",
+          ],
+          "parentField": [
+            "a",
+          ],
+        },
+        "hidden": undefined,
+        "subquery": {
+          "alias": "alias1",
+          "limit": undefined,
+          "orderBy": undefined,
+          "related": undefined,
+          "schema": undefined,
+          "start": undefined,
+          "table": "table",
+          "where": undefined,
+        },
       },
-    },
-    {
-      correlation: [['a', 'a']],
-      subquery: {
-        table: 'table',
-        alias: 'alias2',
-        where: undefined,
-        limit: undefined,
-        orderBy: undefined,
-        schema: undefined,
-        related: undefined,
+      {
+        "correlation": {
+          "childField": [
+            "a",
+          ],
+          "parentField": [
+            "a",
+          ],
+        },
+        "hidden": undefined,
+        "subquery": {
+          "alias": "alias2",
+          "limit": undefined,
+          "orderBy": undefined,
+          "related": undefined,
+          "schema": undefined,
+          "start": undefined,
+          "table": "table",
+          "where": undefined,
+        },
       },
-    },
-  ]);
+    ]
+  `);
 });

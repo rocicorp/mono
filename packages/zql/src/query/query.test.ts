@@ -70,8 +70,9 @@ type TestSchemaWithRelationships = {
   };
   relationships: {
     test: {
-      correlation: [['s', 's']];
-      schema: TestSchema;
+      sourceField: ['s'];
+      destField: ['s'];
+      destSchema: TestSchema;
     };
   };
   primaryKey: ['s'];
@@ -86,16 +87,19 @@ type TestSchemaWithMoreRelationships = {
   };
   relationships: {
     testWithRelationships: {
-      correlation: [['a', 'a']];
-      schema: TestSchemaWithRelationships;
+      sourceField: ['a'];
+      destField: ['a'];
+      destSchema: TestSchemaWithRelationships;
     };
     test: {
-      correlation: [['s', 's']];
-      schema: TestSchema;
+      sourceField: ['s'];
+      destField: ['s'];
+      destSchema: TestSchema;
     };
     self: {
-      correlation: [['s', 's']];
-      schema: TestSchemaWithMoreRelationships;
+      sourceField: ['s'];
+      destField: ['s'];
+      destSchema: TestSchemaWithMoreRelationships;
     };
   };
   primaryKey: ['s'];
@@ -403,8 +407,9 @@ describe('schema structure', () => {
       },
       relationships: {
         comments: {
-          correlation: [['id', 'issueId']],
-          schema: commentSchema,
+          sourceField: ['id'],
+          destField: ['issueId'],
+          destSchema: commentSchema,
         },
       },
       primaryKey: ['id'],
@@ -424,8 +429,9 @@ describe('schema structure', () => {
       },
       relationships: {
         issue: {
-          correlation: [['issueId', 'id']],
-          schema: () => issueSchema,
+          sourceField: ['issueId'],
+          destField: ['id'],
+          destSchema: () => issueSchema,
         },
       },
     } as const;
@@ -440,12 +446,14 @@ describe('schema structure', () => {
       },
       relationships: {
         comments: {
-          correlation: [['id', 'issueId']],
-          schema: commentSchema,
+          sourceField: ['id'],
+          destField: ['issueId'],
+          destSchema: commentSchema,
         },
         parent: {
-          correlation: [['parentId', 'id']],
-          schema: () => issueSchema,
+          sourceField: ['parentId'],
+          destField: ['id'],
+          destSchema: () => issueSchema,
         },
       },
     } as const;
