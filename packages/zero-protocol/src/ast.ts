@@ -58,7 +58,7 @@ export const simpleOperatorSchema = v.union(
   inOpsSchema,
 );
 
-const literalReferenceSchema = v.object({
+const literalReferenceSchema: v.Type<LiteralReference> = v.readonlyObject({
   type: v.literal('literal'),
   value: v.union(
     v.string(),
@@ -68,11 +68,11 @@ const literalReferenceSchema = v.object({
     v.readonlyArray(v.union(v.string(), v.number(), v.boolean())),
   ),
 });
-const columnReferenceSchema = v.object({
+const columnReferenceSchema: v.Type<ColumnReference> = v.readonlyObject({
   type: v.literal('column'),
   name: v.string(),
 });
-const parameterReferenceSchema = v.object({
+const parameterReferenceSchema: v.Type<Parameter> = v.readonlyObject({
   type: v.literal('static'),
   anchor: v.union(v.literal('authData'), v.literal('preMutationRow')),
   field: v.string(),
@@ -83,25 +83,24 @@ const conditionValueSchema = v.union(
   parameterReferenceSchema,
 );
 
-export const simpleConditionSchema = v.object({
+export const simpleConditionSchema: v.Type<SimpleCondition> = v.readonlyObject({
   type: v.literal('simple'),
   op: simpleOperatorSchema,
   left: conditionValueSchema,
   right: v.union(parameterReferenceSchema, literalReferenceSchema),
 });
 
-export const correlatedSubqueryConditionOperatorSchema = v.union(
-  v.literal('EXISTS'),
-  v.literal('NOT EXISTS'),
-);
+export const correlatedSubqueryConditionOperatorSchema: v.Type<CorrelatedSubqueryConditionOperator> =
+  v.union(v.literal('EXISTS'), v.literal('NOT EXISTS'));
 
-export const correlatedSubqueryConditionSchema = v.readonlyObject({
-  type: v.literal('correlatedSubquery'),
-  related: v.lazy(() => correlatedSubquerySchema),
-  op: correlatedSubqueryConditionOperatorSchema,
-});
+export const correlatedSubqueryConditionSchema: v.Type<CorrelatedSubqueryCondition> =
+  v.readonlyObject({
+    type: v.literal('correlatedSubquery'),
+    related: v.lazy(() => correlatedSubquerySchema),
+    op: correlatedSubqueryConditionOperatorSchema,
+  });
 
-export const conditionSchema = v.union(
+export const conditionSchema: v.Type<Condition> = v.union(
   simpleConditionSchema,
   v.lazy(() => conjunctionSchema),
   v.lazy(() => disjunctionSchema),
@@ -120,9 +119,9 @@ const disjunctionSchema: v.Type<Disjunction> = v.readonlyObject({
 
 export type CompoundKey = readonly [string, ...string[]];
 
-export const compoundKeySchema: v.Type<CompoundKey> = v
-  .tuple([v.string()])
-  .concat(v.array(v.string()));
+export const compoundKeySchema: v.Type<CompoundKey> = v.readonly(
+  v.tuple([v.string()]).concat(v.array(v.string())),
+);
 
 const correlationSchema = v.readonlyObject({
   parentField: compoundKeySchema,
@@ -145,7 +144,7 @@ export const correlatedSubquerySchema: v.Type<CorrelatedSubquery> =
     subquery: v.lazy(() => astSchema),
   });
 
-export const astSchema = v.object({
+export const astSchema: v.Type<AST> = v.readonlyObject({
   schema: v.string().optional(),
   table: v.string(),
   alias: v.string().optional(),

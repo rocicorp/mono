@@ -170,7 +170,7 @@ type NormalizedFieldRelationship = {
 };
 
 function normalizeFieldRelationship(
-  relationship: FieldRelationship<TableSchema, TableSchema>,
+  relationship: FieldRelationship,
   tableSchemaCache: TableSchemaCache,
 ): NormalizedFieldRelationship {
   const sourceField = normalizeFieldName(relationship.sourceField);
@@ -195,7 +195,7 @@ type NormalizedJunctionRelationship = readonly [
 ];
 
 function normalizeJunctionRelationship(
-  relationship: JunctionRelationship<TableSchema, TableSchema, TableSchema>,
+  relationship: JunctionRelationship,
   tableSchemaCache: TableSchemaCache,
 ): NormalizedJunctionRelationship {
   return [
