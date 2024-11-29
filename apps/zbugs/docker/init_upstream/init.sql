@@ -194,7 +194,7 @@ CREATE TABLE "userPref" (
     "value" VARCHAR NOT NULL,
     "userID" VARCHAR REFERENCES "user"(id) ON DELETE CASCADE,
 
-    PRIMARY KEY ("key", "userID")
+    PRIMARY KEY ("userID", "key")
 );
 
 CREATE SCHEMA IF NOT EXISTS zero;

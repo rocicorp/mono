@@ -37,13 +37,13 @@ test('toPrimaryKeyString', () => {
     }),
   ).toMatchInlineSnapshot(`"e/issue_label/dqncq7kzfa6fpmhj26azwoy9t"`);
 
-  // Order of the primary key fields does not matter.
+  // Order of the primary key fields matter.
   expect(
     toPrimaryKeyString('issue_label', ['labelID', 'issueID'], {
       issueID: 'issue1',
       labelID: 'label1',
     }),
-  ).toMatchInlineSnapshot(`"e/issue_label/dqncq7kzfa6fpmhj26azwoy9t"`);
+  ).toMatchInlineSnapshot(`"e/issue_label/6k4z2behq35evuhhopppftje7"`);
 
   // Extra columns are ignored
   expect(
@@ -63,7 +63,7 @@ test('toPrimaryKeyString', () => {
     }),
   ).toMatchInlineSnapshot(`"e/issue_label/3.141592653589793"`);
 
-  // 1 is same as '1' but that's okay because the scheme should not allow
+  // 1 is same as '1' but that's okay because the schema should not allow
   // incorrect types at a higher level.
   expect(
     toPrimaryKeyString('issue_label', ['id'], {

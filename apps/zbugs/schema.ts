@@ -158,7 +158,7 @@ const userPrefSchema = createTableSchema({
     userID: {type: 'string'},
     value: {type: 'string'},
   },
-  primaryKey: ['key', 'userID'],
+  primaryKey: ['userID', 'key'],
   relationships: {},
 });
 
