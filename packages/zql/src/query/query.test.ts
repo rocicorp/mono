@@ -70,11 +70,9 @@ type TestSchemaWithRelationships = {
   };
   relationships: {
     test: {
-      source: 's';
-      dest: {
-        field: 's';
-        schema: TestSchema;
-      };
+      sourceField: ['s'];
+      destField: ['s'];
+      destSchema: TestSchema;
     };
   };
   primaryKey: ['s'];
@@ -89,25 +87,19 @@ type TestSchemaWithMoreRelationships = {
   };
   relationships: {
     testWithRelationships: {
-      source: 'a';
-      dest: {
-        field: 'a';
-        schema: TestSchemaWithRelationships;
-      };
+      sourceField: ['a'];
+      destField: ['a'];
+      destSchema: TestSchemaWithRelationships;
     };
     test: {
-      source: 's';
-      dest: {
-        field: 's';
-        schema: TestSchema;
-      };
+      sourceField: ['s'];
+      destField: ['s'];
+      destSchema: TestSchema;
     };
     self: {
-      source: 's';
-      dest: {
-        field: 's';
-        schema: TestSchemaWithMoreRelationships;
-      };
+      sourceField: ['s'];
+      destField: ['s'];
+      destSchema: TestSchemaWithMoreRelationships;
     };
   };
   primaryKey: ['s'];
@@ -415,11 +407,9 @@ describe('schema structure', () => {
       },
       relationships: {
         comments: {
-          source: 'id',
-          dest: {
-            field: 'issueId',
-            schema: commentSchema,
-          },
+          sourceField: ['id'],
+          destField: ['issueId'],
+          destSchema: commentSchema,
         },
       },
       primaryKey: ['id'],
@@ -439,11 +429,9 @@ describe('schema structure', () => {
       },
       relationships: {
         issue: {
-          source: 'issueId',
-          dest: {
-            field: 'id',
-            schema: () => issueSchema,
-          },
+          sourceField: ['issueId'],
+          destField: ['id'],
+          destSchema: () => issueSchema,
         },
       },
     } as const;
@@ -458,18 +446,14 @@ describe('schema structure', () => {
       },
       relationships: {
         comments: {
-          source: 'id',
-          dest: {
-            field: 'issueId',
-            schema: commentSchema,
-          },
+          sourceField: ['id'],
+          destField: ['issueId'],
+          destSchema: commentSchema,
         },
         parent: {
-          source: 'parentId',
-          dest: {
-            field: 'id',
-            schema: () => issueSchema,
-          },
+          sourceField: ['parentId'],
+          destField: ['id'],
+          destSchema: () => issueSchema,
         },
       },
     } as const;

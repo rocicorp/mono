@@ -1,13 +1,13 @@
 import {expect} from 'vitest';
 import type {JSONObject} from '../../../../shared/src/json.js';
 import {must} from '../../../../shared/src/must.js';
-import type {Ordering} from '../../../../zero-protocol/src/ast.js';
+import type {CompoundKey, Ordering} from '../../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.js';
 import type {SchemaValue} from '../../../../zero-schema/src/table-schema.js';
 import {ArrayView} from '../array-view.js';
 import {Catch} from '../catch.js';
-import {Join, type CompoundKey} from '../join.js';
+import {Join} from '../join.js';
 import {MemoryStorage} from '../memory-storage.js';
 import type {Input, Operator, Storage} from '../operator.js';
 import {Snitch, type SnitchMessage} from '../snitch.js';

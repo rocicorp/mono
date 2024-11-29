@@ -1718,9 +1718,8 @@ suite('overlay-vs-filter', () => {
               type: 'correlatedSubquery',
               related: {
                 correlation: {
-                  parentField: 'a',
-                  op: '=',
-                  childField: 'b',
+                  parentField: ['a'],
+                  childField: ['b'],
                 },
                 subquery: {
                   table: 't',
@@ -1786,9 +1785,8 @@ suite('overlay-vs-filter', () => {
               type: 'correlatedSubquery',
               related: {
                 correlation: {
-                  parentField: 'a',
-                  op: '=',
-                  childField: 'b',
+                  parentField: ['a'],
+                  childField: ['b'],
                 },
                 subquery: {
                   table: 't',

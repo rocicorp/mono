@@ -7,11 +7,11 @@
  */
 
 import {compareUTF8} from 'compare-utf8';
+import {defined} from '../../shared/src/arrays.js';
+import {assert} from '../../shared/src/asserts.js';
 import {must} from '../../shared/src/must.js';
 import * as v from '../../shared/src/valita.js';
-import {defined} from '../../shared/src/arrays.js';
 import {rowSchema, type Row} from './data.js';
-import {assert} from '../../shared/src/asserts.js';
 
 export const selectorSchema = v.string();
 
@@ -118,6 +118,17 @@ const disjunctionSchema: v.Type<Disjunction> = v.readonlyObject({
   conditions: v.readonlyArray(conditionSchema),
 });
 
+export type CompoundKey = readonly [string, ...string[]];
+
+export const compoundKeySchema: v.Type<CompoundKey> = v
+  .tuple([v.string()])
+  .concat(v.array(v.string()));
+
+const correlationSchema = v.readonlyObject({
+  parentField: compoundKeySchema,
+  childField: compoundKeySchema,
+});
+
 // Split out so that its inferred type can be checked against
 // Omit<CorrelatedSubquery, 'correlation'> in ast-type-test.ts.
 // The mutually-recursive reference of the 'other' field to astSchema
@@ -125,11 +136,7 @@ const disjunctionSchema: v.Type<Disjunction> = v.readonlyObject({
 // mutually-recursive types, but v.lazy prevents inference of the resulting
 // type.
 export const correlatedSubquerySchemaOmitSubquery = v.readonlyObject({
-  correlation: v.object({
-    parentField: v.string(),
-    childField: v.string(),
-    op: v.literal('='),
-  }),
+  correlation: correlationSchema,
   hidden: v.boolean().optional(),
 });
 
@@ -202,13 +209,12 @@ export type AST = {
 
 export type CorrelatedSubquery = {
   /**
-   * Only equality correlations are supported for now.
+   * Only equality correlation are supported for now.
    * E.g., direct foreign key relationships.
    */
   readonly correlation: {
-    readonly parentField: string;
-    readonly childField: string;
-    readonly op: '=';
+    parentField: CompoundKey;
+    childField: CompoundKey;
   };
   readonly subquery: AST;
   // If a hop in the subquery chain should be hidden from the output view.
@@ -338,11 +344,7 @@ export function normalizeAST(ast: AST): Required<AST> {
           ast.related.map(
             r =>
               ({
-                correlation: {
-                  parentField: r.correlation.parentField,
-                  childField: r.correlation.childField,
-                  op: r.correlation.op,
-                },
+                correlation: r.correlation,
                 hidden: r.hidden,
                 subquery: normalizeAST(r.subquery),
               }) satisfies Required<CorrelatedSubquery>,

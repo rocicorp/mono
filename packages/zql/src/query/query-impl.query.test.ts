@@ -1,11 +1,12 @@
 import {describe, expect, test} from 'vitest';
 import {deepClone} from '../../../shared/src/deep-clone.js';
 import {must} from '../../../shared/src/must.js';
+import {MemorySource} from '../ivm/memory-source.js';
 import {newQuery, type QueryDelegate, QueryImpl} from './query-impl.js';
-import {issueSchema, userSchema} from './test/testSchemas.js';
 import type {AdvancedQuery} from './query-internal.js';
 import type {DefaultQueryResultRow} from './query.js';
 import {QueryDelegateImpl} from './test/query-delegate.js';
+import {issueSchema, userSchema} from './test/testSchemas.js';
 
 /**
  * Some basic manual tests to get us started.
@@ -903,4 +904,122 @@ test('literal filter', () => {
       title: 'issue 3',
     },
   ]);
+});
+
+test('join with compound keys', () => {
+  const bSchema = {
+    tableName: 'b',
+    columns: {
+      id: {type: 'number'},
+      b1: {type: 'number'},
+      b2: {type: 'number'},
+      b3: {type: 'number'},
+    },
+    primaryKey: ['id'],
+    relationships: {},
+  } as const;
+
+  const aSchema = {
+    tableName: 'a',
+    columns: {
+      id: {type: 'number'},
+      a1: {type: 'number'},
+      a2: {type: 'number'},
+      a3: {type: 'number'},
+    },
+    primaryKey: ['id'],
+    relationships: {
+      b: {
+        sourceField: ['a1', 'a2'],
+        destField: ['b1', 'b2'],
+        destSchema: bSchema,
+      },
+    },
+  } as const;
+
+  const sources = {
+    a: new MemorySource('a', aSchema.columns, aSchema.primaryKey),
+    b: new MemorySource('b', bSchema.columns, bSchema.primaryKey),
+  };
+
+  const queryDelegate = new QueryDelegateImpl(sources);
+  const aSource = must(queryDelegate.getSource('a'));
+  const bSource = must(queryDelegate.getSource('b'));
+
+  for (const row of [
+    {id: 0, a1: 1, a2: 2, a3: 3},
+    {id: 1, a1: 2, a2: 3, a3: 4},
+    {id: 2, a1: 2, a2: 3, a3: 5},
+  ]) {
+    aSource.push({
+      type: 'add',
+      row,
+    });
+  }
+
+  for (const row of [
+    {id: 0, b1: 1, b2: 2, b3: 3},
+    {id: 1, b1: 1, b2: 2, b3: 4},
+    {id: 2, b1: 2, b2: 3, b3: 5},
+  ]) {
+    bSource.push({
+      type: 'add',
+      row,
+    });
+  }
+
+  const rows = newQuery(queryDelegate, aSchema).related('b').run();
+
+  expect(rows).toMatchInlineSnapshot(`
+    [
+      {
+        "a1": 1,
+        "a2": 2,
+        "a3": 3,
+        "b": [
+          {
+            "b1": 1,
+            "b2": 2,
+            "b3": 3,
+            "id": 0,
+          },
+          {
+            "b1": 1,
+            "b2": 2,
+            "b3": 4,
+            "id": 1,
+          },
+        ],
+        "id": 0,
+      },
+      {
+        "a1": 2,
+        "a2": 3,
+        "a3": 4,
+        "b": [
+          {
+            "b1": 2,
+            "b2": 3,
+            "b3": 5,
+            "id": 2,
+          },
+        ],
+        "id": 1,
+      },
+      {
+        "a1": 2,
+        "a2": 3,
+        "a3": 5,
+        "b": [
+          {
+            "b1": 2,
+            "b2": 3,
+            "b3": 5,
+            "id": 2,
+          },
+        ],
+        "id": 2,
+      },
+    ]
+  `);
 });

@@ -1,17 +1,17 @@
 import {expect, suite, test} from 'vitest';
-import type {Ordering} from '../../../zero-protocol/src/ast.js';
+import {unreachable} from '../../../shared/src/asserts.js';
+import type {JSONValue} from '../../../shared/src/json.js';
+import type {CompoundKey, Ordering} from '../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {Catch} from './catch.js';
 import type {Node} from './data.js';
 import {Exists} from './exists.js';
-import {Join, type CompoundKey} from './join.js';
+import {Join} from './join.js';
 import {MemoryStorage} from './memory-storage.js';
 import {Snitch, type SnitchMessage} from './snitch.js';
 import {createSource} from './test/source-factory.js';
-import {unreachable} from '../../../shared/src/asserts.js';
-import type {JSONValue} from '../../../shared/src/json.js';
 
 const base = {
   columns: [

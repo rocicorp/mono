@@ -49,47 +49,39 @@ const schema = {
       primaryKey: ['id'],
       relationships: {
         ownedIssues: {
-          dest: {
-            field: 'ownerId',
-            schema: () => schema.tables.issue,
-          },
-          source: 'id',
+          sourceField: ['id'],
+          destField: ['ownerId'],
+          destSchema: () => schema.tables.issue,
         },
         createdIssues: {
-          dest: {
-            field: 'creatorId',
-            schema: () => schema.tables.issue,
-          },
-          source: 'id',
+          sourceField: ['id'],
+          destField: ['creatorId'],
+          destSchema: () => schema.tables.issue,
         },
-        viewedIssues: {
-          source: 'id',
-          junction: {
-            source: 'userId',
-            dest: {
-              field: 'issueId',
-              schema: () => schema.tables.viewState,
-            },
+        viewedIssues: [
+          {
+            sourceField: ['id'],
+            destField: ['userId'],
+            destSchema: () => schema.tables.viewState,
           },
-          dest: {
-            field: 'id',
-            schema: () => schema.tables.issue,
+          {
+            sourceField: ['issueId'],
+            destField: ['id'],
+            destSchema: () => schema.tables.issue,
           },
-        },
-        projects: {
-          source: 'id',
-          junction: {
-            source: 'userId',
-            dest: {
-              field: 'projectId',
-              schema: () => schema.tables.projectMember,
-            },
+        ],
+        projects: [
+          {
+            sourceField: ['id'],
+            destField: ['userId'],
+            destSchema: () => schema.tables.projectMember,
           },
-          dest: {
-            field: 'id',
-            schema: () => schema.tables.project,
+          {
+            sourceField: ['projectId'],
+            destField: ['id'],
+            destSchema: () => schema.tables.project,
           },
-        },
+        ],
       },
     },
     issue: {
@@ -106,53 +98,41 @@ const schema = {
       primaryKey: ['id'],
       relationships: {
         owner: {
-          dest: {
-            field: 'id',
-            schema: () => schema.tables.user,
-          },
-          source: 'ownerId',
+          sourceField: ['ownerId'],
+          destField: ['id'],
+          destSchema: () => schema.tables.user,
         },
         creator: {
-          dest: {
-            field: 'id',
-            schema: () => schema.tables.user,
-          },
-          source: 'creatorId',
+          sourceField: ['creatorId'],
+          destField: ['id'],
+          destSchema: () => schema.tables.user,
         },
         comments: {
-          dest: {
-            field: 'issueId',
-            schema: () => schema.tables.comment,
-          },
-          source: 'id',
+          sourceField: ['id'],
+          destField: ['issueId'],
+          destSchema: () => schema.tables.comment,
         },
-        labels: {
-          junction: {
-            source: 'issueId',
-            dest: {
-              field: 'labelId',
-              schema: () => schema.tables.issueLabel,
-            },
+        labels: [
+          {
+            sourceField: ['id'],
+            destField: ['issueId'],
+            destSchema: () => schema.tables.issueLabel,
           },
-          dest: {
-            field: 'id',
-            schema: () => schema.tables.label,
+          {
+            sourceField: ['labelId'],
+            destField: ['id'],
+            destSchema: () => schema.tables.label,
           },
-          source: 'id',
-        },
+        ],
         project: {
-          dest: {
-            field: 'id',
-            schema: () => schema.tables.project,
-          },
-          source: 'projectId',
+          sourceField: ['projectId'],
+          destField: ['id'],
+          destSchema: () => schema.tables.project,
         },
         viewState: {
-          dest: {
-            field: 'issueId',
-            schema: () => schema.tables.viewState,
-          },
-          source: 'id',
+          sourceField: ['id'],
+          destField: ['issueId'],
+          destSchema: () => schema.tables.viewState,
         },
       },
     },
@@ -167,18 +147,14 @@ const schema = {
       primaryKey: ['id'],
       relationships: {
         issue: {
-          dest: {
-            field: 'id',
-            schema: () => schema.tables.issue,
-          },
-          source: 'issueId',
+          sourceField: ['issueId'],
+          destField: ['id'],
+          destSchema: () => schema.tables.issue,
         },
         user: {
-          dest: {
-            field: 'id',
-            schema: () => schema.tables.user,
-          },
-          source: 'authorId',
+          sourceField: ['authorId'],
+          destField: ['id'],
+          destSchema: () => schema.tables.user,
         },
       },
     },
@@ -191,18 +167,14 @@ const schema = {
       primaryKey: ['issueId', 'labelId'],
       relationships: {
         issue: {
-          dest: {
-            field: 'id',
-            schema: () => schema.tables.issue,
-          },
-          source: 'issueId',
+          sourceField: ['issueId'],
+          destField: ['id'],
+          destSchema: () => schema.tables.issue,
         },
         label: {
-          dest: {
-            field: 'id',
-            schema: () => schema.tables.label,
-          },
-          source: 'labelId',
+          sourceField: ['labelId'],
+          destField: ['id'],
+          destSchema: () => schema.tables.label,
         },
       },
     },
@@ -225,18 +197,14 @@ const schema = {
       primaryKey: ['issueId', 'userId'],
       relationships: {
         user: {
-          dest: {
-            field: 'id',
-            schema: () => schema.tables.user,
-          },
-          source: 'userId',
+          sourceField: ['userId'],
+          destField: ['id'],
+          destSchema: () => schema.tables.user,
         },
         issue: {
-          dest: {
-            field: 'id',
-            schema: () => schema.tables.issue,
-          },
-          source: 'issueId',
+          sourceField: ['issueId'],
+          destField: ['id'],
+          destSchema: () => schema.tables.issue,
         },
       },
     },
@@ -249,26 +217,22 @@ const schema = {
       primaryKey: ['id'],
       relationships: {
         issues: {
-          dest: {
-            field: 'projectId',
-            schema: () => schema.tables.issue,
-          },
-          source: 'id',
+          sourceField: ['id'],
+          destField: ['projectId'],
+          destSchema: () => schema.tables.issue,
         },
-        members: {
-          junction: {
-            source: 'projectId',
-            dest: {
-              field: 'userId',
-              schema: () => schema.tables.projectMember,
-            },
+        members: [
+          {
+            sourceField: ['id'],
+            destField: ['projectId'],
+            destSchema: () => schema.tables.projectMember,
           },
-          dest: {
-            field: 'id',
-            schema: () => schema.tables.user,
+          {
+            sourceField: ['userId'],
+            destField: ['id'],
+            destSchema: () => schema.tables.user,
           },
-          source: 'id',
-        },
+        ],
       },
     },
     projectMember: {
@@ -280,18 +244,14 @@ const schema = {
       primaryKey: ['projectId', 'userId'],
       relationships: {
         project: {
-          dest: {
-            field: 'id',
-            schema: () => schema.tables.project,
-          },
-          source: 'projectId',
+          sourceField: ['projectId'],
+          destField: ['id'],
+          destSchema: () => schema.tables.project,
         },
         user: {
-          dest: {
-            field: 'id',
-            schema: () => schema.tables.user,
-          },
-          source: 'userId',
+          sourceField: ['userId'],
+          destField: ['id'],
+          destSchema: () => schema.tables.user,
         },
       },
     },

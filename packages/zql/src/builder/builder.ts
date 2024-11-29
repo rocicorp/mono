@@ -4,6 +4,7 @@ import {must} from '../../../shared/src/must.js';
 import type {
   AST,
   ColumnReference,
+  CompoundKey,
   Condition,
   Conjunction,
   CorrelatedSubquery,
@@ -147,7 +148,7 @@ function isParameter(value: ValuePosition): value is Parameter {
 function buildPipelineInternal(
   ast: AST,
   delegate: BuilderDelegate,
-  partitionKey?: string | undefined,
+  partitionKey?: CompoundKey | undefined,
 ): Input {
   const source = delegate.getSource(ast.table);
   if (!source) {
@@ -171,12 +172,7 @@ function buildPipelineInternal(
   }
 
   if (ast.limit) {
-    end = new Take(
-      end,
-      delegate.createStorage(),
-      ast.limit,
-      partitionKey === undefined ? undefined : [partitionKey],
-    );
+    end = new Take(end, delegate.createStorage(), ast.limit, partitionKey);
   }
 
   if (ast.related) {
@@ -262,9 +258,8 @@ function applyCorrelatedSubQuery(
     parent: end,
     child,
     storage: delegate.createStorage(),
-    // TODO: Compound keys in the AST
-    parentKey: [sq.correlation.parentField],
-    childKey: [sq.correlation.childField],
+    parentKey: sq.correlation.parentField,
+    childKey: sq.correlation.childField,
     relationshipName: sq.subquery.alias,
     hidden: sq.hidden ?? false,
   });

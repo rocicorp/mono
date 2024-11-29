@@ -186,9 +186,12 @@ describe('building the AST', () => {
         "related": [
           {
             "correlation": {
-              "childField": "id",
-              "op": "=",
-              "parentField": "ownerId",
+              "childField": [
+                "id",
+              ],
+              "parentField": [
+                "ownerId",
+              ],
             },
             "subquery": {
               "alias": "owner",
@@ -215,9 +218,12 @@ describe('building the AST', () => {
         "related": [
           {
             "correlation": {
-              "childField": "issueId",
-              "op": "=",
-              "parentField": "id",
+              "childField": [
+                "issueId",
+              ],
+              "parentField": [
+                "id",
+              ],
             },
             "subquery": {
               "alias": "labels",
@@ -234,9 +240,12 @@ describe('building the AST', () => {
               "related": [
                 {
                   "correlation": {
-                    "childField": "id",
-                    "op": "=",
-                    "parentField": "labelId",
+                    "childField": [
+                      "id",
+                    ],
+                    "parentField": [
+                      "labelId",
+                    ],
                   },
                   "hidden": true,
                   "subquery": {
@@ -270,9 +279,12 @@ describe('building the AST', () => {
         "related": [
           {
             "correlation": {
-              "childField": "id",
-              "op": "=",
-              "parentField": "ownerId",
+              "childField": [
+                "id",
+              ],
+              "parentField": [
+                "ownerId",
+              ],
             },
             "subquery": {
               "alias": "owner",
@@ -285,9 +297,12 @@ describe('building the AST', () => {
               "related": [
                 {
                   "correlation": {
-                    "childField": "ownerId",
-                    "op": "=",
-                    "parentField": "id",
+                    "childField": [
+                      "ownerId",
+                    ],
+                    "parentField": [
+                      "id",
+                    ],
                   },
                   "subquery": {
                     "alias": "issues",
@@ -300,9 +315,12 @@ describe('building the AST', () => {
                     "related": [
                       {
                         "correlation": {
-                          "childField": "issueId",
-                          "op": "=",
-                          "parentField": "id",
+                          "childField": [
+                            "issueId",
+                          ],
+                          "parentField": [
+                            "id",
+                          ],
                         },
                         "subquery": {
                           "alias": "labels",
@@ -319,9 +337,12 @@ describe('building the AST', () => {
                           "related": [
                             {
                               "correlation": {
-                                "childField": "id",
-                                "op": "=",
-                                "parentField": "labelId",
+                                "childField": [
+                                  "id",
+                                ],
+                                "parentField": [
+                                  "labelId",
+                                ],
                               },
                               "hidden": true,
                               "subquery": {
@@ -364,9 +385,12 @@ describe('building the AST', () => {
         "related": [
           {
             "correlation": {
-              "childField": "id",
-              "op": "=",
-              "parentField": "ownerId",
+              "childField": [
+                "id",
+              ],
+              "parentField": [
+                "ownerId",
+              ],
             },
             "subquery": {
               "alias": "owner",
@@ -381,9 +405,12 @@ describe('building the AST', () => {
           },
           {
             "correlation": {
-              "childField": "issueId",
-              "op": "=",
-              "parentField": "id",
+              "childField": [
+                "issueId",
+              ],
+              "parentField": [
+                "id",
+              ],
             },
             "subquery": {
               "alias": "comments",
@@ -398,9 +425,12 @@ describe('building the AST', () => {
           },
           {
             "correlation": {
-              "childField": "issueId",
-              "op": "=",
-              "parentField": "id",
+              "childField": [
+                "issueId",
+              ],
+              "parentField": [
+                "id",
+              ],
             },
             "subquery": {
               "alias": "labels",
@@ -417,9 +447,12 @@ describe('building the AST', () => {
               "related": [
                 {
                   "correlation": {
-                    "childField": "id",
-                    "op": "=",
-                    "parentField": "labelId",
+                    "childField": [
+                      "id",
+                    ],
+                    "parentField": [
+                      "labelId",
+                    ],
                   },
                   "hidden": true,
                   "subquery": {
@@ -1381,9 +1414,12 @@ describe('exists', () => {
             "op": "EXISTS",
             "related": {
               "correlation": {
-                "childField": "id",
-                "op": "=",
-                "parentField": "ownerId",
+                "childField": [
+                  "id",
+                ],
+                "parentField": [
+                  "ownerId",
+                ],
               },
               "subquery": {
                 "alias": "zsubq_owner",
@@ -1409,9 +1445,12 @@ describe('exists', () => {
           "op": "EXISTS",
           "related": {
             "correlation": {
-              "childField": "id",
-              "op": "=",
-              "parentField": "ownerId",
+              "childField": [
+                "id",
+              ],
+              "parentField": [
+                "ownerId",
+              ],
             },
             "subquery": {
               "alias": "zsubq_owner",
@@ -1441,9 +1480,12 @@ describe('exists', () => {
             "op": "EXISTS",
             "related": {
               "correlation": {
-                "childField": "id",
-                "op": "=",
-                "parentField": "ownerId",
+                "childField": [
+                  "id",
+                ],
+                "parentField": [
+                  "ownerId",
+                ],
               },
               "subquery": {
                 "alias": "zsubq_owner",
@@ -1486,9 +1528,12 @@ describe('exists', () => {
           "op": "EXISTS",
           "related": {
             "correlation": {
-              "childField": "id",
-              "op": "=",
-              "parentField": "ownerId",
+              "childField": [
+                "id",
+              ],
+              "parentField": [
+                "ownerId",
+              ],
             },
             "subquery": {
               "alias": "zsubq_owner",
@@ -1546,9 +1591,12 @@ describe('exists', () => {
           "op": "EXISTS",
           "related": {
             "correlation": {
-              "childField": "issueId",
-              "op": "=",
-              "parentField": "id",
+              "childField": [
+                "issueId",
+              ],
+              "parentField": [
+                "id",
+              ],
             },
             "subquery": {
               "alias": "zsubq_labels",
@@ -1567,9 +1615,12 @@ describe('exists', () => {
                 "op": "EXISTS",
                 "related": {
                   "correlation": {
-                    "childField": "id",
-                    "op": "=",
-                    "parentField": "labelId",
+                    "childField": [
+                      "id",
+                    ],
+                    "parentField": [
+                      "labelId",
+                    ],
                   },
                   "subquery": {
                     "alias": "zsubq_labels",
@@ -1610,9 +1661,12 @@ describe('exists', () => {
               "op": "EXISTS",
               "related": {
                 "correlation": {
-                  "childField": "id",
-                  "op": "=",
-                  "parentField": "ownerId",
+                  "childField": [
+                    "id",
+                  ],
+                  "parentField": [
+                    "ownerId",
+                  ],
                 },
                 "subquery": {
                   "alias": "zsubq_owner",
@@ -1631,9 +1685,12 @@ describe('exists', () => {
               "op": "EXISTS",
               "related": {
                 "correlation": {
-                  "childField": "issueId",
-                  "op": "=",
-                  "parentField": "id",
+                  "childField": [
+                    "issueId",
+                  ],
+                  "parentField": [
+                    "id",
+                  ],
                 },
                 "subquery": {
                   "alias": "zsubq_comments",
@@ -1666,9 +1723,12 @@ describe('exists', () => {
             "op": "NOT EXISTS",
             "related": {
               "correlation": {
-                "childField": "issueId",
-                "op": "=",
-                "parentField": "id",
+                "childField": [
+                  "issueId",
+                ],
+                "parentField": [
+                  "id",
+                ],
               },
               "subquery": {
                 "alias": "zsubq_comments",
@@ -1698,9 +1758,12 @@ describe('exists', () => {
             "op": "NOT EXISTS",
             "related": {
               "correlation": {
-                "childField": "issueId",
-                "op": "=",
-                "parentField": "id",
+                "childField": [
+                  "issueId",
+                ],
+                "parentField": [
+                  "id",
+                ],
               },
               "subquery": {
                 "alias": "zsubq_labels",
@@ -1719,9 +1782,12 @@ describe('exists', () => {
                   "op": "EXISTS",
                   "related": {
                     "correlation": {
-                      "childField": "id",
-                      "op": "=",
-                      "parentField": "labelId",
+                      "childField": [
+                        "id",
+                      ],
+                      "parentField": [
+                        "labelId",
+                      ],
                     },
                     "subquery": {
                       "alias": "zsubq_labels",
@@ -1762,9 +1828,12 @@ describe('exists', () => {
               "op": "EXISTS",
               "related": {
                 "correlation": {
-                  "childField": "id",
-                  "op": "=",
-                  "parentField": "ownerId",
+                  "childField": [
+                    "id",
+                  ],
+                  "parentField": [
+                    "ownerId",
+                  ],
                 },
                 "subquery": {
                   "alias": "zsubq_owner",
@@ -1783,9 +1852,12 @@ describe('exists', () => {
               "op": "EXISTS",
               "related": {
                 "correlation": {
-                  "childField": "issueId",
-                  "op": "=",
-                  "parentField": "id",
+                  "childField": [
+                    "issueId",
+                  ],
+                  "parentField": [
+                    "id",
+                  ],
                 },
                 "subquery": {
                   "alias": "zsubq_comments",
@@ -1804,9 +1876,12 @@ describe('exists', () => {
               "op": "EXISTS",
               "related": {
                 "correlation": {
-                  "childField": "issueId",
-                  "op": "=",
-                  "parentField": "id",
+                  "childField": [
+                    "issueId",
+                  ],
+                  "parentField": [
+                    "id",
+                  ],
                 },
                 "subquery": {
                   "alias": "zsubq_labels",
@@ -1825,9 +1900,12 @@ describe('exists', () => {
                     "op": "EXISTS",
                     "related": {
                       "correlation": {
-                        "childField": "id",
-                        "op": "=",
-                        "parentField": "labelId",
+                        "childField": [
+                          "id",
+                        ],
+                        "parentField": [
+                          "labelId",
+                        ],
                       },
                       "subquery": {
                         "alias": "zsubq_labels",
@@ -1873,9 +1951,12 @@ describe('exists', () => {
               "op": "EXISTS",
               "related": {
                 "correlation": {
-                  "childField": "id",
-                  "op": "=",
-                  "parentField": "ownerId",
+                  "childField": [
+                    "id",
+                  ],
+                  "parentField": [
+                    "ownerId",
+                  ],
                 },
                 "subquery": {
                   "alias": "zsubq_owner",
@@ -1906,9 +1987,12 @@ describe('exists', () => {
               "op": "EXISTS",
               "related": {
                 "correlation": {
-                  "childField": "id",
-                  "op": "=",
-                  "parentField": "ownerId",
+                  "childField": [
+                    "id",
+                  ],
+                  "parentField": [
+                    "ownerId",
+                  ],
                 },
                 "subquery": {
                   "alias": "zsubq_owner",

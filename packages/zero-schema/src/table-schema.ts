@@ -1,3 +1,4 @@
+import {assert} from '../../shared/src/asserts.js';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
 
 export type ValueType = 'string' | 'number' | 'boolean' | 'null' | 'json';
@@ -87,6 +88,19 @@ export type Relationship =
   | FieldRelationship<TableSchema, TableSchema>
   | JunctionRelationship<TableSchema, TableSchema, TableSchema>;
 
+export type AtLeastOne<T> = readonly [T, ...T[]];
+
+export function atLeastOne<T>(arr: readonly T[]): AtLeastOne<T> {
+  if (arr.length === 0) {
+    throw new Error('Expected at least one element');
+  }
+  return arr as AtLeastOne<T>;
+}
+
+type FieldName<TSchema extends TableSchema> = AtLeastOne<
+  keyof TSchema['columns']
+>;
+
 /**
  * A relationship between two entities where
  * that relationship is defined via fields on both entities.
@@ -95,11 +109,9 @@ export type FieldRelationship<
   TSourceSchema extends TableSchema,
   TDestSchema extends TableSchema,
 > = {
-  source: keyof TSourceSchema['columns'];
-  dest: {
-    field: keyof TDestSchema['columns'];
-    schema: Lazy<TDestSchema>;
-  };
+  sourceField: FieldName<TSourceSchema>;
+  destField: FieldName<TDestSchema>;
+  destSchema: Lazy<TDestSchema>;
 };
 
 /**
@@ -110,28 +122,40 @@ export type JunctionRelationship<
   TSourceSchema extends TableSchema,
   TJunctionSchema extends TableSchema,
   TDestSchema extends TableSchema,
-> = FieldRelationship<TSourceSchema, TDestSchema> & {
-  junction: FieldRelationship<TJunctionSchema, TJunctionSchema>;
-};
+> = readonly [
+  FieldRelationship<TSourceSchema, TJunctionSchema>,
+  FieldRelationship<TJunctionSchema, TDestSchema>,
+];
 
 export function isFieldRelationship(
   relationship: Relationship,
 ): relationship is FieldRelationship<TableSchema, TableSchema> {
-  return (
-    (
-      relationship as JunctionRelationship<
-        TableSchema,
-        TableSchema,
-        TableSchema
-      >
-    ).junction === undefined
-  );
+  return !isJunctionRelationship(relationship);
+}
+
+export function assertFieldRelationship(
+  relationship: Relationship,
+): asserts relationship is FieldRelationship<TableSchema, TableSchema> {
+  assert(isFieldRelationship(relationship), 'Expected field relationship');
 }
 
 export function isJunctionRelationship(
   relationship: Relationship,
 ): relationship is JunctionRelationship<TableSchema, TableSchema, TableSchema> {
-  return !isFieldRelationship(relationship);
+  return Array.isArray(relationship);
+}
+
+export function assertJunctionRelationship(
+  relationship: Relationship,
+): asserts relationship is JunctionRelationship<
+  TableSchema,
+  TableSchema,
+  TableSchema
+> {
+  assert(
+    isJunctionRelationship(relationship),
+    'Expected junction relationship',
+  );
 }
 
 /**

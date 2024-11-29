@@ -1,6 +1,7 @@
 import {assert} from '../../shared/src/asserts.js';
 import {sortedEntries} from '../../shared/src/sorted-entries.js';
 import type {Writable} from '../../shared/src/writable.js';
+import type {CompoundKey} from '../../zero-protocol/src/ast.js';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
 import {
   isFieldRelationship,
@@ -165,44 +166,42 @@ function normalizeRelationship(
 }
 
 type NormalizedFieldRelationship = {
-  source: string;
-  dest: {
-    field: string;
-    schema: NormalizedTableSchema;
-  };
+  sourceField: CompoundKey;
+  destField: CompoundKey;
+  destSchema: NormalizedTableSchema;
 };
 
 function normalizeFieldRelationship(
   relationship: FieldRelationship<TableSchema, TableSchema>,
   tableSchemaCache: TableSchemaCache,
 ): NormalizedFieldRelationship {
+  assert(
+    relationship.sourceField.length === relationship.destField.length,
+    'Source and destination fields must have the same length',
+  );
   return {
-    source: relationship.source,
-    dest: {
-      field: relationship.dest.field,
-      schema: normalizeLazyTableSchema(
-        relationship.dest.schema,
-        tableSchemaCache,
-      ),
-    },
+    sourceField: relationship.sourceField,
+    destField: relationship.destField,
+    destSchema: normalizeLazyTableSchema(
+      relationship.destSchema,
+      tableSchemaCache,
+    ),
   };
 }
 
-type NormalizedJunctionRelationship = NormalizedFieldRelationship & {
-  junction: NormalizedFieldRelationship;
-};
+type NormalizedJunctionRelationship = readonly [
+  NormalizedFieldRelationship,
+  NormalizedFieldRelationship,
+];
 
 function normalizeJunctionRelationship(
   relationship: JunctionRelationship<TableSchema, TableSchema, TableSchema>,
   tableSchemaCache: TableSchemaCache,
 ): NormalizedJunctionRelationship {
-  return {
-    ...normalizeFieldRelationship(relationship, tableSchemaCache),
-    junction: normalizeFieldRelationship(
-      relationship.junction,
-      tableSchemaCache,
-    ),
-  };
+  return [
+    normalizeFieldRelationship(relationship[0], tableSchemaCache),
+    normalizeFieldRelationship(relationship[1], tableSchemaCache),
+  ];
 }
 
 function normalizeLazyTableSchema<TS extends TableSchema>(

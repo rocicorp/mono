@@ -1,17 +1,17 @@
 import {expect, suite, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.js';
-import type {Ordering} from '../../../zero-protocol/src/ast.js';
+import type {JSONValue} from '../../../shared/src/json.js';
+import type {CompoundKey, Ordering} from '../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import {Catch, type CaughtChange} from './catch.js';
-import {Join, type CompoundKey} from './join.js';
+import {Join} from './join.js';
 import {MemoryStorage} from './memory-storage.js';
 import type {Input} from './operator.js';
 import {Snitch, type SnitchMessage} from './snitch.js';
 import type {SourceChange} from './source.js';
 import {createSource} from './test/source-factory.js';
-import type {JSONValue} from '../../../shared/src/json.js';
 
 suite('sibling relationships tests with issues, comments, and owners', () => {
   const base = {
