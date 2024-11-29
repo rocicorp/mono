@@ -78,28 +78,14 @@ export function normalizeTableSchemaWithCache(
 
 export type NormalizedPrimaryKey = Normalized<PrimaryKey>;
 
-function isSorted(arr: readonly string[]): boolean {
-  for (let i = 1; i < arr.length; i++) {
-    if (arr[i - 1] >= arr[i]) {
-      return false;
-    }
-  }
-  return true;
-}
-
 function assertNoDuplicates(arr: readonly string[]): void {
-  // arr is already sorted.
-  for (let i = 1; i < arr.length; i++) {
-    assert(arr[i - 1] !== arr[i], 'Primary key must not contain duplicates');
-  }
+  assert(
+    new Set(arr).size === arr.length,
+    'Primary key must not contain duplicates',
+  );
 }
 
 export function normalizePrimaryKey(arr: PrimaryKey): NormalizedPrimaryKey {
-  if (isSorted(arr)) {
-    return arr as NormalizedPrimaryKey;
-  }
-
-  arr = [...arr].sort() as unknown as PrimaryKey;
   assertNoDuplicates(arr);
   return arr as NormalizedPrimaryKey;
 }

@@ -19,10 +19,10 @@ test('normalizePrimaryKey', () => {
   expect(normalizePrimaryKey(pk)).toBe(pk);
 
   pk = ['b', 'a'];
-  expect(normalizePrimaryKey(pk)).toEqual(['a', 'b']);
+  expect(normalizePrimaryKey(pk)).toBe(pk);
 
   pk = ['b', 'a', 'c'];
-  expect(normalizePrimaryKey(pk)).toEqual(['a', 'b', 'c']);
+  expect(normalizePrimaryKey(pk)).toBe(pk);
 
   pk = ['a', 'b', 'a'];
   expect(() => normalizePrimaryKey(pk)).toThrow(
