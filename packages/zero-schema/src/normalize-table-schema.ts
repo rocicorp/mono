@@ -10,6 +10,7 @@ import {
   type Relationship,
   type SchemaValue,
   type TableSchema,
+  type ValueType,
 } from './table-schema.js';
 
 declare const normalized: unique symbol;
@@ -67,7 +68,7 @@ export function normalizeTableSchemaWithCache(
 
   let normalizedTableSchema = tableSchemaCache.get(tableSchema);
   if (normalizedTableSchema) {
-    return normalizedTableSchema as NormalizedTableSchema;
+    return normalizedTableSchema;
   }
 
   normalizedTableSchema = new NormalizedTableSchema(
@@ -97,27 +98,32 @@ export function normalizePrimaryKey(
 }
 
 function normalizeColumns(
-  columns: Record<string, SchemaValue>,
+  columns: Record<string, SchemaValue | ValueType>,
   primaryKey: PrimaryKey,
 ): Record<string, SchemaValue> {
   const rv: Writable<Record<string, SchemaValue>> = {};
   for (const pk of primaryKey) {
     const schemaValue = columns[pk];
     assert(schemaValue, `Primary key column "${pk}" not found`);
-    const {type, optional} = schemaValue;
-    assert(!optional, `Primary key column "${pk}" cannot be optional`);
-    assert(
-      type === 'string' || type === 'number' || type === 'boolean',
-      `Primary key column "${pk}" must be a string, number, or boolean. Got ${type}`,
-    );
+    if (typeof schemaValue !== 'string') {
+      const {type, optional} = schemaValue;
+      assert(!optional, `Primary key column "${pk}" cannot be optional`);
+      assert(
+        type === 'string' || type === 'number' || type === 'boolean',
+        `Primary key column "${pk}" must be a string, number, or boolean. Got ${type}`,
+      );
+    }
   }
   for (const [name, column] of sortedEntries(columns)) {
-    rv[name] = normalizeSchemaValue(column);
+    rv[name] = normalizeColumn(column);
   }
   return rv;
 }
 
-function normalizeSchemaValue(value: SchemaValue): SchemaValue {
+function normalizeColumn(value: SchemaValue | ValueType): SchemaValue {
+  if (typeof value === 'string') {
+    return {type: value, optional: false};
+  }
   return {
     type: value.type,
     optional: value.optional ?? false,

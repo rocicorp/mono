@@ -14,7 +14,7 @@ export type SchemaValue = {
 
 export type TableSchema = {
   readonly tableName: string;
-  readonly columns: Record<string, SchemaValue>;
+  readonly columns: Record<string, SchemaValue | ValueType>;
   readonly relationships?: {readonly [name: string]: Relationship} | undefined;
   readonly primaryKey: PrimaryKey | string;
 };
@@ -27,29 +27,25 @@ export type TableSchemaToRow<T extends TableSchema> = {
   [K in keyof T['columns']]: SchemaValueToTSType<T['columns'][K]>;
 };
 
-/**
- * For some reason this needs to be separated out from SchemaValueToTSType in
- * order for intellisense to show `boolean`. If this gets folded into
- * SchemaValueToTSType, intellisense will show
- * SchemaValueToTSType<{type: "boolean"}> instead.
- */
-type BaseType<T extends SchemaValue> = T extends {type: 'string'}
-  ? string
-  : T extends {type: 'number'}
-  ? number
-  : T extends {type: 'boolean'}
-  ? boolean
-  : T extends {type: 'null'}
-  ? null
-  : T extends {type: 'json'}
-  ? // In schema-v2, the user will be able to specify the TS type that
-    // the JSON should match and `any`` will no
-    // longer be used here.
-    // ReadOnlyJSONValue is not used as it causes
-    // infinite depth errors to pop up for users of our APIs.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    any
-  : never;
+type TypeNameToTypeMap = {
+  string: string;
+  number: number;
+  boolean: boolean;
+  null: null;
+
+  // In schema-v2, the user will be able to specify the TS type that
+  // the JSON should match and `any`` will no
+  // longer be used here.
+  // ReadOnlyJSONValue is not used as it causes
+  // infinite depth errors to pop up for users of our APIs.
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  json: any;
+};
+
+type ColumnTypeName<T extends SchemaValue | ValueType> = T extends SchemaValue
+  ? T['type']
+  : T;
 
 /**
  * Given a schema value, return the TypeScript type.
@@ -57,11 +53,14 @@ type BaseType<T extends SchemaValue> = T extends {type: 'string'}
  * This allows us to create the correct return type for a
  * query that has a selection.
  */
-export type SchemaValueToTSType<T extends SchemaValue> = T extends {
-  optional: true;
-}
-  ? BaseType<T> | null
-  : BaseType<T>;
+export type SchemaValueToTSType<T extends SchemaValue | ValueType> =
+  T extends ValueType
+    ? TypeNameToTypeMap[T]
+    : T extends {
+        optional: true;
+      }
+    ? TypeNameToTypeMap[ColumnTypeName<T>] | null
+    : TypeNameToTypeMap[ColumnTypeName<T>];
 
 export type Supertype<TSchemas extends TableSchema[]> = {
   tableName: TSchemas[number]['tableName'];
