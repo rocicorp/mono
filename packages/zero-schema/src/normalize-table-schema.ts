@@ -22,7 +22,7 @@ type Normalized<T> = T & {readonly [normalized]: true};
  */
 export type TableSchemaCache = Map<TableSchema, NormalizedTableSchema>;
 
-export class NormalizedTableSchema {
+export class NormalizedTableSchema implements TableSchema {
   declare readonly [normalized]: true;
   readonly tableName: string;
   readonly primaryKey: NormalizedPrimaryKey;
