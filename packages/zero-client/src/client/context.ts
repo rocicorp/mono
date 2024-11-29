@@ -2,6 +2,11 @@ import type {ExperimentalNoIndexDiff} from '../../../replicache/src/mod.js';
 import {assert, unreachable} from '../../../shared/src/asserts.js';
 import type {AST} from '../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
+import {
+  normalizeTables,
+  type NormalizedTableSchema,
+} from '../../../zero-schema/src/normalize-table-schema.js';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.js';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.js';
 import type {Storage} from '../../../zql/src/ivm/operator.js';
@@ -11,7 +16,6 @@ import type {
   GotCallback,
   QueryDelegate,
 } from '../../../zql/src/query/query-impl.js';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 import {ENTITIES_KEY_PREFIX} from './keys.js';
 
 export type AddQuery = (
@@ -30,7 +34,7 @@ export class ZeroContext implements QueryDelegate {
   // pipelines *synchronously* and the core Replicache infra is all async. So
   // that needs to be fixed.
   readonly #sources = new Map<string, MemorySource | undefined>();
-  readonly #tables: Record<string, TableSchema>;
+  readonly #tables: Record<string, NormalizedTableSchema>;
   readonly #addQuery: AddQuery;
   readonly #batchViewUpdates: (applyViewUpdates: () => void) => void;
   readonly #commitListeners: Set<CommitListener> = new Set();
@@ -42,7 +46,7 @@ export class ZeroContext implements QueryDelegate {
     addQuery: AddQuery,
     batchViewUpdates: (applyViewUpdates: () => void) => void,
   ) {
-    this.#tables = tables;
+    this.#tables = normalizeTables(tables);
     this.#addQuery = addQuery;
     this.#batchViewUpdates = batchViewUpdates;
   }
@@ -52,7 +56,7 @@ export class ZeroContext implements QueryDelegate {
       return this.#sources.get(name);
     }
 
-    const schema = this.#tables[name] as TableSchema | undefined;
+    const schema = this.#tables[name] as NormalizedTableSchema | undefined;
     const source = schema
       ? new MemorySource(name, schema.columns, schema.primaryKey)
       : undefined;

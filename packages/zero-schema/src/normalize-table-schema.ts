@@ -86,9 +86,14 @@ function assertNoDuplicates(arr: readonly string[]): void {
   );
 }
 
-export function normalizePrimaryKey(arr: PrimaryKey): NormalizedPrimaryKey {
-  assertNoDuplicates(arr);
-  return arr as NormalizedPrimaryKey;
+export function normalizePrimaryKey(
+  primaryKey: PrimaryKey | string,
+): NormalizedPrimaryKey {
+  if (typeof primaryKey === 'string') {
+    return [primaryKey] as const as NormalizedPrimaryKey;
+  }
+  assertNoDuplicates(primaryKey);
+  return primaryKey as NormalizedPrimaryKey;
 }
 
 function normalizeColumns(
@@ -212,4 +217,14 @@ function normalizeFieldName(sourceField: string | CompoundKey): CompoundKey {
   }
   assert(sourceField.length > 0, 'Expected at least one field');
   return sourceField;
+}
+
+export function normalizeTables(
+  tables: Record<string, TableSchema>,
+): Record<string, NormalizedTableSchema> {
+  const result: Record<string, NormalizedTableSchema> = {};
+  for (const [name, table] of sortedEntries(tables)) {
+    result[name] = normalizeTableSchemaWithCache(table, name, new Map());
+  }
+  return result;
 }

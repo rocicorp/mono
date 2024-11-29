@@ -126,7 +126,7 @@ export const userSchema = {
     name: {type: 'string'},
     metadata: {type: 'json', optional: true},
   },
-  primaryKey: ['id'],
+  primaryKey: 'id',
   relationships: {
     issues: {
       sourceField: ['id'],

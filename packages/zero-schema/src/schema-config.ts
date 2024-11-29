@@ -36,16 +36,12 @@ export const schemaValueSchema = v.object({
   optional: v.boolean().optional(),
 });
 
-export const sourceOrTableSchemaSchema = v.object({
+export const tableSchemaSchema: v.Type<TableSchema> = v.object({
   tableName: v.string(),
   columns: v.record(schemaValueSchema),
   primaryKey: primaryKeySchema,
+  relationships: v.record(relationshipSchema),
 });
-
-export const tableSchemaSchema: v.Type<TableSchema> =
-  sourceOrTableSchemaSchema.extend({
-    relationships: v.record(relationshipSchema),
-  });
 
 export const schemaSchema = v.object({
   version: v.number(),

@@ -12,14 +12,11 @@ export type SchemaValue = {
   optional?: boolean | undefined;
 };
 
-export type SourceOrTableSchema = {
+export type TableSchema = {
   readonly tableName: string;
-  readonly primaryKey: PrimaryKey;
   readonly columns: Record<string, SchemaValue>;
-};
-
-export type TableSchema = SourceOrTableSchema & {
   readonly relationships?: {readonly [name: string]: Relationship} | undefined;
+  readonly primaryKey: PrimaryKey | string;
 };
 
 export function createTableSchema<const T extends TableSchema>(schema: T) {

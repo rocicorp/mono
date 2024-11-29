@@ -1,4 +1,5 @@
 import type {AST} from '../../../../zero-protocol/src/ast.js';
+import {normalizeTables} from '../../../../zero-schema/src/normalize-table-schema.js';
 import {MemorySource} from '../../ivm/memory-source.js';
 import {MemoryStorage} from '../../ivm/memory-storage.js';
 import type {Source} from '../../ivm/source.js';
@@ -51,30 +52,29 @@ export class QueryDelegateImpl implements QueryDelegate {
 }
 
 function makeSources() {
-  const userArgs = userSchema;
-  const issueArgs = issueSchema;
-  const commentArgs = commentSchema;
-  const revisionArgs = revisionSchema;
-  const labelArgs = labelSchema;
-  const issueLabelArgs = issueLabelSchema;
+  const {user, issue, comment, revision, label, issueLabel} = normalizeTables({
+    user: userSchema,
+    issue: issueSchema,
+    comment: commentSchema,
+    revision: revisionSchema,
+    label: labelSchema,
+    issueLabel: issueLabelSchema,
+  });
+
   return {
-    user: new MemorySource('user', userArgs.columns, userArgs.primaryKey),
-    issue: new MemorySource('issue', issueArgs.columns, issueArgs.primaryKey),
-    comment: new MemorySource(
-      'comment',
-      commentArgs.columns,
-      commentArgs.primaryKey,
-    ),
+    user: new MemorySource('user', user.columns, user.primaryKey),
+    issue: new MemorySource('issue', issue.columns, issue.primaryKey),
+    comment: new MemorySource('comment', comment.columns, comment.primaryKey),
     revision: new MemorySource(
       'revision',
-      revisionArgs.columns,
-      revisionArgs.primaryKey,
+      revision.columns,
+      revision.primaryKey,
     ),
-    label: new MemorySource('label', labelArgs.columns, labelArgs.primaryKey),
+    label: new MemorySource('label', label.columns, label.primaryKey),
     issueLabel: new MemorySource(
       'issueLabel',
-      issueLabelArgs.columns,
-      issueLabelArgs.primaryKey,
+      issueLabel.columns,
+      issueLabel.primaryKey,
     ),
   };
 }
