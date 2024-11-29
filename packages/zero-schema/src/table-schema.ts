@@ -99,9 +99,9 @@ export function atLeastOne<T>(arr: readonly T[]): AtLeastOne<T> {
   return arr as AtLeastOne<T>;
 }
 
-type FieldName<TSchema extends TableSchema> = AtLeastOne<
-  keyof TSchema['columns']
->;
+type FieldName<TSchema extends TableSchema> =
+  | (keyof TSchema['columns'] & string)
+  | AtLeastOne<keyof TSchema['columns'] & string>;
 
 /**
  * A relationship between two entities where

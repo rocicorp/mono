@@ -162,13 +162,15 @@ function normalizeFieldRelationship(
   relationship: FieldRelationship<TableSchema, TableSchema>,
   tableSchemaCache: TableSchemaCache,
 ): NormalizedFieldRelationship {
+  const sourceField = normalizeFieldName(relationship.sourceField);
+  const destField = normalizeFieldName(relationship.destField);
   assert(
-    relationship.sourceField.length === relationship.destField.length,
+    sourceField.length === destField.length,
     'Source and destination fields must have the same length',
   );
   return {
-    sourceField: relationship.sourceField,
-    destField: relationship.destField,
+    sourceField,
+    destField,
     destSchema: normalizeLazyTableSchema(
       relationship.destSchema,
       tableSchemaCache,
@@ -202,4 +204,12 @@ function normalizeLazyTableSchema<TS extends TableSchema>(
     tableSchemaInstance.tableName, // Don't care about name here.
     buildCache,
   );
+}
+
+function normalizeFieldName(sourceField: string | CompoundKey): CompoundKey {
+  if (typeof sourceField === 'string') {
+    return [sourceField];
+  }
+  assert(sourceField.length > 0, 'Expected at least one field');
+  return sourceField;
 }
