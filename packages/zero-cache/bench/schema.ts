@@ -1,16 +1,16 @@
+import type {Schema} from '../../zero-schema/src/schema.js';
 import type {TableSchema} from '../../zero-schema/src/table-schema.js';
 
-const memberSchema: TableSchema = {
+const memberSchema = {
   tableName: 'member',
   columns: {
     id: {type: 'string'},
     name: {type: 'string'},
   },
   primaryKey: ['id'],
-  relationships: {},
-};
+} as const satisfies TableSchema;
 
-const issueSchema: TableSchema = {
+const issueSchema = {
   tableName: 'issue',
   columns: {
     id: {type: 'string'},
@@ -50,9 +50,9 @@ const issueSchema: TableSchema = {
       destSchema: () => memberSchema,
     },
   },
-};
+} as const satisfies TableSchema;
 
-const commentSchema: TableSchema = {
+const commentSchema = {
   tableName: 'comment',
   columns: {
     id: {type: 'string'},
@@ -69,19 +69,18 @@ const commentSchema: TableSchema = {
       destSchema: () => memberSchema,
     },
   },
-};
+} as const satisfies TableSchema;
 
-const labelSchema: TableSchema = {
+const labelSchema = {
   tableName: 'label',
   columns: {
     id: {type: 'string'},
     name: {type: 'string'},
   },
   primaryKey: ['id'],
-  relationships: {},
-};
+} as const satisfies TableSchema;
 
-const issueLabelSchema: TableSchema = {
+const issueLabelSchema = {
   tableName: 'issueLabel',
   columns: {
     id: {type: 'string'},
@@ -90,8 +89,7 @@ const issueLabelSchema: TableSchema = {
   },
   // mutators require an ID field still.
   primaryKey: ['labelID', 'issueID'],
-  relationships: {},
-};
+} as const satisfies TableSchema;
 
 export const schema = {
   member: memberSchema,
@@ -99,7 +97,7 @@ export const schema = {
   comment: commentSchema,
   label: labelSchema,
   issueLabel: issueLabelSchema,
-} as const;
+} as const satisfies Schema['tables'];
 
 type AppSchema = typeof schema;
 export type {AppSchema as Schema};

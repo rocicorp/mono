@@ -7,6 +7,7 @@ import {
   isFieldRelationship,
   type FieldRelationship,
   type JunctionRelationship,
+  type Relationship,
   type SchemaValue,
   type TableSchema,
 } from './table-schema.js';
@@ -129,8 +130,10 @@ function normalizeRelationships(
   tableSchemaCache: TableSchemaCache,
 ): NormalizedRelationships {
   const rv: Writable<NormalizedRelationships> = {};
-  for (const [name, relationship] of sortedEntries(relationships)) {
-    rv[name] = normalizeRelationship(relationship, tableSchemaCache);
+  if (relationships) {
+    for (const [name, relationship] of sortedEntries(relationships)) {
+      rv[name] = normalizeRelationship(relationship, tableSchemaCache);
+    }
   }
   return rv;
 }
@@ -138,8 +141,6 @@ function normalizeRelationships(
 type NormalizedRelationship =
   | NormalizedFieldRelationship
   | NormalizedJunctionRelationship;
-
-type Relationship = TableSchema['relationships'][string];
 
 function normalizeRelationship(
   relationship: Relationship,

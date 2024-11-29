@@ -19,7 +19,6 @@ test('getSource', () => {
         name: {type: 'string'},
       },
       primaryKey: ['id'],
-      relationships: {},
     },
     userStates: {
       tableName: 'userStates',
@@ -28,7 +27,6 @@ test('getSource', () => {
         stateCode: {type: 'string'},
       },
       primaryKey: ['userID', 'stateCode'],
-      relationships: {},
     },
   } as const;
 
@@ -75,7 +73,6 @@ test('processChanges', () => {
         name: {type: 'string'},
       },
       primaryKey: ['id'],
-      relationships: {},
     } as const,
   };
 
@@ -135,7 +132,6 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
         name: {type: 'string'},
       },
       primaryKey: ['id'],
-      relationships: {},
     } as const,
   };
   let batchViewUpdatesCalls = 0;
@@ -195,7 +191,6 @@ test('transactions', () => {
         id: {type: 'string'},
       },
       primaryKey: ['id'],
-      relationships: {},
     },
     flair: {
       tableName: 'flair',
@@ -205,7 +200,6 @@ test('transactions', () => {
         description: {type: 'string'},
       },
       primaryKey: ['id'],
-      relationships: {},
     },
   } as const;
 
@@ -285,7 +279,6 @@ test('batchViewUpdates errors if applyViewUpdates is not called', () => {
         name: {type: 'string'},
       },
       primaryKey: ['id'],
-      relationships: {},
     } as const,
   };
   let batchViewUpdatesCalls = 0;
@@ -312,7 +305,6 @@ test('batchViewUpdates returns value', () => {
         name: {type: 'string'},
       },
       primaryKey: ['id'],
-      relationships: {},
     } as const,
   };
   let batchViewUpdatesCalls = 0;

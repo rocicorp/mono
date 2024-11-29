@@ -316,6 +316,7 @@ export type CorrelatedSubqueryConditionOperator = 'EXISTS' | 'NOT EXISTS';
  * They are used by subqueries to refer to rows emitted by parent queries.
  */
 export type Parameter = StaticParameter;
+
 type StaticParameter = {
   readonly type: 'static';
   // The "namespace" of the injected parameter.
@@ -328,6 +329,7 @@ type StaticParameter = {
 };
 
 const normalizeCache = new WeakMap<AST, Required<AST>>();
+
 export function normalizeAST(ast: AST): Required<AST> {
   const cached = normalizeCache.get(ast);
   if (cached) {
@@ -428,7 +430,7 @@ function compareValuePosition(a: ValuePosition, b: ValuePosition): number {
   switch (a.type) {
     case 'literal':
       assert(b.type === 'literal');
-      return compareUTF8MaybeNull(String(a.value), String(b.value));
+      return compareUTF8(String(a.value), String(b.value));
     case 'column':
       assert(b.type === 'column');
       return compareUTF8(a.name, b.name);

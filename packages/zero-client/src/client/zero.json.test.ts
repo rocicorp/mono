@@ -14,7 +14,6 @@ test('we can create rows with json columns and query those rows', async () => {
           },
           primaryKey: ['id'],
           tableName: 'track',
-          relationships: {},
         },
       },
     },

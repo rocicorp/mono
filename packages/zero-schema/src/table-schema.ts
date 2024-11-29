@@ -19,7 +19,7 @@ export type SourceOrTableSchema = {
 };
 
 export type TableSchema = SourceOrTableSchema & {
-  readonly relationships: {readonly [name: string]: Relationship};
+  readonly relationships?: {readonly [name: string]: Relationship} | undefined;
 };
 
 export function createTableSchema<const T extends TableSchema>(schema: T) {
@@ -72,9 +72,11 @@ export type Supertype<TSchemas extends TableSchema[]> = {
   columns: {
     [K in keyof TSchemas[number]['columns']]: TSchemas[number]['columns'][K];
   };
-  relationships: {
-    [K in keyof TSchemas[number]['relationships']]: TSchemas[number]['relationships'][K];
-  };
+  relationships?:
+    | {
+        [K in keyof TSchemas[number]['relationships']]: TSchemas[number]['relationships'][K];
+      }
+    | undefined;
 };
 
 /**

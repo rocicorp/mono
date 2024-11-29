@@ -118,8 +118,8 @@ export class ExpressionBuilder<TSchema extends TableSchema> {
   or = or;
   not = not;
 
-  exists(relationship: keyof TSchema['relationships']): Condition;
-  exists<TRelationship extends keyof TSchema['relationships'] & string>(
+  exists(relationship: RelationshipName<TSchema>): Condition;
+  exists<TRelationship extends RelationshipName<TSchema>>(
     relationship: TRelationship,
     cb: (
       query: Query<
@@ -137,6 +137,9 @@ export class ExpressionBuilder<TSchema extends TableSchema> {
     return this.#exists(relationship, cb);
   }
 }
+
+export type RelationshipName<TSchema extends TableSchema> =
+  keyof TSchema['relationships'] & string;
 
 export function and(...conditions: (Condition | undefined)[]): Condition {
   const expressions = filterTrue(filterUndefined(conditions));
