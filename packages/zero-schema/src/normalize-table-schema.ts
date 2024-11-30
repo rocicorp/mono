@@ -135,6 +135,25 @@ function normalizeRelationships(
   return rv;
 }
 
+export type DecycledNormalizedTableSchema = Omit<
+  NormalizedTableSchema,
+  'relationships'
+> & {
+  readonly relationships: {
+    readonly [relationship: string]:
+      | DecycledNormalizedFieldRelationship
+      | readonly [
+          DecycledNormalizedFieldRelationship,
+          DecycledNormalizedFieldRelationship,
+        ];
+  };
+};
+
+export type DecycledNormalizedFieldRelationship = Omit<
+  NormalizedFieldRelationship,
+  'destSchema'
+> & {readonly destSchema: string};
+
 type NormalizedRelationship =
   | NormalizedFieldRelationship
   | NormalizedJunctionRelationship;
@@ -175,7 +194,7 @@ function normalizeFieldRelationship(
   };
 }
 
-type NormalizedJunctionRelationship = readonly [
+export type NormalizedJunctionRelationship = readonly [
   NormalizedFieldRelationship,
   NormalizedFieldRelationship,
 ];
