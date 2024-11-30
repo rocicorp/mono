@@ -6,7 +6,10 @@ import {permissionsConfigSchema} from './compiled-permissions.js';
 import * as v from '../../shared/src/valita.js';
 import {parseOptions} from '../../shared/src/options.js';
 import {normalizeSchema} from './normalized-schema.js';
-import {isSchemaConfig} from './schema-config.js';
+import {
+  isSchemaConfig,
+  replacePointersWithSchemaNames,
+} from './schema-config.js';
 
 export const schemaOptions = {
   path: {
@@ -56,11 +59,13 @@ async function main() {
       permissionsConfigSchema,
     );
 
-    const normalizedSchema = normalizeSchema(schemaConfig.schema);
+    const cycleFreeNormalizedSchema = replacePointersWithSchemaNames(
+      normalizeSchema(schemaConfig.schema),
+    );
 
     const output = {
       permissions,
-      schema: normalizedSchema,
+      schema: cycleFreeNormalizedSchema,
     };
 
     await writeFile(config.output, JSON.stringify(output, undefined, 2));
@@ -69,4 +74,5 @@ async function main() {
     process.exit(1);
   }
 }
+
 void main();

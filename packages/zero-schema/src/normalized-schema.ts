@@ -2,6 +2,7 @@ import {sortedEntries} from '../../shared/src/sorted-entries.js';
 import type {Writable} from '../../shared/src/writable.js';
 import {
   normalizeTableSchemaWithCache,
+  type DecycledNormalizedTableSchema,
   type NormalizedTableSchema,
   type TableSchemaCache,
 } from './normalize-table-schema.js';
@@ -31,6 +32,12 @@ export class NormalizedSchema {
     this.tables = normalizeTables(schema.tables);
   }
 }
+
+export type DecycledNormalizedSchema = Omit<NormalizedSchema, 'tables'> & {
+  readonly tables: {
+    readonly [table: string]: DecycledNormalizedTableSchema;
+  };
+};
 
 function normalizeTables(tables: Schema['tables']): {
   readonly [table: string]: NormalizedTableSchema;
