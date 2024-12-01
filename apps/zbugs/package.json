@@ -23,7 +23,7 @@
     "@headlessui/react": "^2.1.8",
     "@octokit/core": "^6.1.2",
     "@radix-ui/react-tooltip": "^1.1.4",
-    "@rocicorp/zero": "0.7.2024120107+e5b941",
+    "@rocicorp/zero": "0.7.2024120108+6d0413",
     "@schickling/fps-meter": "^0.1.2",
     "classnames": "^2.5.1",
     "dotenv": "^16.4.5",
