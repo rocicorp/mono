@@ -1,6 +1,6 @@
 {
   "name": "@rocicorp/zero",
-  "version": "0.7.2024120104+59a5d4",
+  "version": "0.7.2024120105+09036d",
   "scripts": {
     "build": "rm -rf out && npm run build-server && npm run build-client",
     "build-client": "tsc -p tsconfig.client.json && tsc-alias -p tsconfig.client.json && node tool/build.js",
