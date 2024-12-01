@@ -16,7 +16,9 @@ function basePath(...parts) {
  */
 function execute(command, options) {
   console.log(`Executing: ${command}`);
-  return execSync(command, {stdio: 'inherit', ...options});
+  return execSync(command, {stdio: 'inherit', ...options})
+    ?.toString()
+    ?.trim();
 }
 
 /**
@@ -101,6 +103,14 @@ function bumpCanaryVersion(version, hash) {
 const buildBranch = process.argv[2] ?? 'main';
 console.log(`Releasing from branch: ${buildBranch}`);
 
+const npmAuthToken = execute("cat $HOME/.npmrc | grep '_authToken'", {
+  stdio: 'pipe',
+});
+if (!npmAuthToken) {
+  console.error('No npm auth token found in ~/.npmrc');
+  process.exit(1);
+}
+
 try {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zero-build-'));
   // In order to merge the tag on the release branch back into main, we have to
@@ -118,10 +128,7 @@ try {
   //installs turbo and other build dependencies
   execute('npm install');
   const ZERO_PACKAGE_JSON_PATH = basePath('packages', 'zero', 'package.json');
-  const hash = execute('git rev-parse HEAD', {stdio: 'pipe'})
-    .toString()
-    .trim()
-    .substring(0, 6);
+  const hash = execute('git rev-parse HEAD', {stdio: 'pipe'}).substring(0, 6);
   const currentPackageData = getPackageData(ZERO_PACKAGE_JSON_PATH);
   const nextCanaryVersion = bumpCanaryVersion(currentPackageData.version, hash);
   currentPackageData.version = nextCanaryVersion;
@@ -166,12 +173,29 @@ try {
   execute(`git merge ${tagName}`);
   execute(`git push origin main`);
 
+  const dockerCanaryVersion = nextCanaryVersion.replace(/\+/g, '_');
+  execute(
+    `docker build . \
+    --build-arg=ZERO_VERSION=${nextCanaryVersion} \
+    --build-arg=NPM_TOKEN=${npmAuthToken} \
+    -t rocicorp/zero:${dockerCanaryVersion}`,
+    {cwd: basePath('packages', 'zero')},
+  );
+  execute(
+    `docker tag rocicorp/zero:${dockerCanaryVersion} rocicorp/zero:canary`,
+  );
+  execute(`docker push rocicorp/zero:${dockerCanaryVersion}`);
+  execute(`docker push rocicorp/zero:canary`);
+
   console.log(``);
   console.log(``);
   console.log(`🎉 Success!`);
   console.log(``);
   console.log(
-    `* Published @rocicorp/zero@${nextCanaryVersion} to npm with tag '@canary'.`,
+    `* Published @rocicorp/zero@${dockerCanaryVersion} to npm with tag '@canary'.`,
+  );
+  console.log(
+    `* Created Docker image rocicorp/zero:${dockerCanaryVersion} and set tag @canary.`,
   );
   console.log(`* Pushed Git tag ${tagName} to origin and merged with main.`);
   console.log(``);
