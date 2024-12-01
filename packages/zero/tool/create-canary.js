@@ -173,7 +173,7 @@ try {
   execute(`git merge ${tagName}`);
   execute(`git push origin main`);
 
-  const dockerCanaryVersion = nextCanaryVersion.replace(/\+/g, '_');
+  const dockerCanaryVersion = nextCanaryVersion.replace(/\+/g, '-');
   execute(
     `docker build . \
     --build-arg=ZERO_VERSION=${nextCanaryVersion} \
