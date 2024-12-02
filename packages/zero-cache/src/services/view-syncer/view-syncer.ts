@@ -532,7 +532,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
       const start = Date.now();
       let count = 0;
-      for (const _ of this.#pipelines.addQuery(hash, transformedAst)) {
+      for (const _ of this.#pipelines.addQuery(
+        transformationHash,
+        transformedAst,
+      )) {
         count++;
       }
       const elapsed = Date.now() - start;
