@@ -163,7 +163,7 @@ const userPrefSchema = createTableSchema({
 });
 
 export const schema = createSchema({
-  version: 4,
+  version: 5,
   tables: {
     user: userSchema,
     issue: issueSchema,
