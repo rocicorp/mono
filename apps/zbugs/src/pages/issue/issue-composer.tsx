@@ -55,7 +55,6 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
       creatorID: z.userID,
       modified: Date.now(),
       open: true,
-      labelIDs: '',
     });
     reset();
     onDismiss(id);
