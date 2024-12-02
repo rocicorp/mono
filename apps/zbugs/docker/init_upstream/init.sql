@@ -202,7 +202,7 @@ CREATE TABLE IF NOT EXISTS zero."schemaVersions" (
 );
 
 INSERT INTO zero."schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion")
-VALUES (true, 3, 4) ON CONFLICT DO NOTHING;
+VALUES (true, 3, 5) ON CONFLICT DO NOTHING;
 
 
 -- last modified function and trigger

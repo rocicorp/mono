@@ -1,10 +1,13 @@
 import {expect, test} from 'vitest';
-import type {Schema} from './schema.js';
+import {createSchema, type Schema} from './schema.js';
 import {normalizeSchema} from './normalized-schema.js';
 import {
+  parseSchema,
   replacePointersWithSchemaNames,
   replaceSchemaNamesWithPointers,
+  stringifySchema,
 } from './schema-config.js';
+import {definePermissions} from './permissions.js';
 
 test('replace pointers, replace strings', () => {
   const foo = {
@@ -64,4 +67,50 @@ test('replace pointers, replace strings', () => {
 
   expect(normal).toEqual(normalized);
   expect(replacePointersWithSchemaNames(normal)).toEqual(replaced);
+});
+
+test('round trip', async () => {
+  const circular = {
+    tableName: 'circular',
+    columns: {
+      id: {type: 'string'},
+    },
+    primaryKey: ['id'],
+    relationships: {
+      self: {
+        sourceField: 'id',
+        destField: 'id',
+        destSchema: () => circular,
+      },
+    },
+  } as const;
+  const baseSchema = createSchema({
+    tables: {
+      circular,
+    },
+    version: 1,
+  });
+  const schema = normalizeSchema(baseSchema);
+
+  const schemaAndPermissions = {
+    schema,
+    permissions: definePermissions<{sub: string}, typeof baseSchema>(
+      baseSchema,
+      () => ({
+        circular: {
+          row: {
+            select: [(_, eb) => eb.exists('self')],
+          },
+        },
+      }),
+    ),
+  };
+  const roundTripped = parseSchema(
+    await stringifySchema(schemaAndPermissions),
+    'test',
+  );
+  expect(roundTripped).toEqual({
+    schema: schemaAndPermissions.schema,
+    permissions: await schemaAndPermissions.permissions,
+  });
 });
