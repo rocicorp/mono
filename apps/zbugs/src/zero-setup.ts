@@ -9,6 +9,7 @@ export type LoginState = {
   decoded: {
     sub: string;
     name: string;
+    role: 'crew' | 'user';
   };
 };
 
