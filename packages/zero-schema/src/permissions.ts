@@ -37,9 +37,9 @@ export type PermissionsConfig<TAuthDataShape, TSchema extends Schema> = {
     row?: AssetPermissions<TAuthDataShape, TSchema['tables'][K]> | undefined;
     cell?:
       | {
-          [C in keyof TSchema['tables'][K]['columns']]?: AssetPermissions<
-            TAuthDataShape,
-            TSchema['tables'][K]
+          [C in keyof TSchema['tables'][K]['columns']]?: Omit<
+            AssetPermissions<TAuthDataShape, TSchema['tables'][K]>,
+            'cell'
           >;
         }
       | undefined;
