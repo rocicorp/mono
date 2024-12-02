@@ -1,5 +1,6 @@
 import {expect, test} from 'vitest';
 import type {ExperimentalNoIndexDiff} from '../../../replicache/src/mod.js';
+import {assert} from '../../../shared/src/asserts.js';
 import {Catch} from '../../../zql/src/ivm/catch.js';
 import {Join} from '../../../zql/src/ivm/join.js';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.js';
@@ -19,7 +20,6 @@ test('getSource', () => {
         name: {type: 'string'},
       },
       primaryKey: ['id'],
-      relationships: {},
     },
     userStates: {
       tableName: 'userStates',
@@ -28,7 +28,6 @@ test('getSource', () => {
         stateCode: {type: 'string'},
       },
       primaryKey: ['userID', 'stateCode'],
-      relationships: {},
     },
   } as const;
 
@@ -39,15 +38,25 @@ test('getSource', () => {
   );
 
   const source = context.getSource('users');
-
-  expect((source as MemorySource).getSchemaInfo()).toEqual({
-    tableName: 'users',
-    columns: {
-      id: {type: 'string'},
-      name: {type: 'string'},
-    },
-    primaryKey: ['id'],
-  });
+  assert(source instanceof MemorySource);
+  expect(source.getSchemaInfo()).toMatchInlineSnapshot(`
+    {
+      "columns": {
+        "id": {
+          "optional": false,
+          "type": "string",
+        },
+        "name": {
+          "optional": false,
+          "type": "string",
+        },
+      },
+      "primaryKey": [
+        "id",
+      ],
+      "tableName": "users",
+    }
+  `);
 
   // Calling again should cache first value.
   expect(context.getSource('users')).toBe(source);
@@ -56,14 +65,25 @@ test('getSource', () => {
 
   // Should work for other table too.
   const source2 = context.getSource('userStates');
-  expect((source2 as MemorySource).getSchemaInfo()).toEqual({
-    tableName: 'userStates',
-    columns: {
-      userID: {type: 'string'},
-      stateCode: {type: 'string'},
-    },
-    primaryKey: ['userID', 'stateCode'],
-  });
+  expect((source2 as MemorySource).getSchemaInfo()).toMatchInlineSnapshot(`
+    {
+      "columns": {
+        "stateCode": {
+          "optional": false,
+          "type": "string",
+        },
+        "userID": {
+          "optional": false,
+          "type": "string",
+        },
+      },
+      "primaryKey": [
+        "userID",
+        "stateCode",
+      ],
+      "tableName": "userStates",
+    }
+  `);
 });
 
 test('processChanges', () => {
@@ -75,7 +95,6 @@ test('processChanges', () => {
         name: {type: 'string'},
       },
       primaryKey: ['id'],
-      relationships: {},
     } as const,
   };
 
@@ -135,7 +154,6 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
         name: {type: 'string'},
       },
       primaryKey: ['id'],
-      relationships: {},
     } as const,
   };
   let batchViewUpdatesCalls = 0;
@@ -195,7 +213,6 @@ test('transactions', () => {
         id: {type: 'string'},
       },
       primaryKey: ['id'],
-      relationships: {},
     },
     flair: {
       tableName: 'flair',
@@ -205,7 +222,6 @@ test('transactions', () => {
         description: {type: 'string'},
       },
       primaryKey: ['id'],
-      relationships: {},
     },
   } as const;
 
@@ -285,7 +301,6 @@ test('batchViewUpdates errors if applyViewUpdates is not called', () => {
         name: {type: 'string'},
       },
       primaryKey: ['id'],
-      relationships: {},
     } as const,
   };
   let batchViewUpdatesCalls = 0;
@@ -312,7 +327,6 @@ test('batchViewUpdates returns value', () => {
         name: {type: 'string'},
       },
       primaryKey: ['id'],
-      relationships: {},
     } as const,
   };
   let batchViewUpdatesCalls = 0;

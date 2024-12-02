@@ -10,67 +10,66 @@ import {
 const userSchema = createTableSchema({
   tableName: 'user',
   columns: {
-    id: {type: 'string'},
-    login: {type: 'string'},
-    name: {type: 'string'},
-    avatar: {type: 'string'},
-    role: {type: 'string'},
+    id: 'string',
+    login: 'string',
+    name: 'string',
+    avatar: 'string',
+    role: 'string',
   },
-  primaryKey: ['id'],
-  relationships: {},
+  primaryKey: 'id',
 });
 
 const issueSchema = createTableSchema({
   tableName: 'issue',
   columns: {
-    id: {type: 'string'},
+    id: 'string',
     shortID: {type: 'number', optional: true},
-    title: {type: 'string'},
-    open: {type: 'boolean'},
-    modified: {type: 'number'},
-    created: {type: 'number'},
-    creatorID: {type: 'string'},
+    title: 'string',
+    open: 'boolean',
+    modified: 'number',
+    created: 'number',
+    creatorID: 'string',
     assigneeID: {type: 'string', optional: true},
-    description: {type: 'string'},
-    labelIDs: {type: 'string'},
+    description: 'string',
+    labelIDs: 'string',
   },
-  primaryKey: ['id'],
+  primaryKey: 'id',
   relationships: {
     labels: [
       {
-        sourceField: ['id'],
-        destField: ['issueID'],
+        sourceField: 'id',
+        destField: 'issueID',
         destSchema: () => issueLabelSchema,
       },
       {
-        sourceField: ['labelID'],
-        destField: ['id'],
+        sourceField: 'labelID',
+        destField: 'id',
         destSchema: () => labelSchema,
       },
     ],
     comments: {
-      sourceField: ['id'],
-      destField: ['issueID'],
+      sourceField: 'id',
+      destField: 'issueID',
       destSchema: () => commentSchema,
     },
     creator: {
-      sourceField: ['creatorID'],
-      destField: ['id'],
+      sourceField: 'creatorID',
+      destField: 'id',
       destSchema: () => userSchema,
     },
     assignee: {
-      sourceField: ['assigneeID'],
-      destField: ['id'],
+      sourceField: 'assigneeID',
+      destField: 'id',
       destSchema: () => userSchema,
     },
     viewState: {
-      sourceField: ['id'],
-      destField: ['issueID'],
+      sourceField: 'id',
+      destField: 'issueID',
       destSchema: () => viewStateSchema,
     },
     emoji: {
-      sourceField: ['id'],
-      destField: ['subjectID'],
+      sourceField: 'id',
+      destField: 'subjectID',
       destSchema: () => emojiSchema,
     },
   },
@@ -79,33 +78,32 @@ const issueSchema = createTableSchema({
 const viewStateSchema = createTableSchema({
   tableName: 'viewState',
   columns: {
-    issueID: {type: 'string'},
-    userID: {type: 'string'},
-    viewed: {type: 'number'},
+    issueID: 'string',
+    userID: 'string',
+    viewed: 'number',
   },
   primaryKey: ['userID', 'issueID'],
-  relationships: {},
 });
 
 const commentSchema = createTableSchema({
   tableName: 'comment',
   columns: {
-    id: {type: 'string'},
-    issueID: {type: 'string'},
-    created: {type: 'number'},
-    body: {type: 'string'},
-    creatorID: {type: 'string'},
+    id: 'string',
+    issueID: 'string',
+    created: 'number',
+    body: 'string',
+    creatorID: 'string',
   },
-  primaryKey: ['id'],
+  primaryKey: 'id',
   relationships: {
     creator: {
-      sourceField: ['creatorID'],
-      destField: ['id'],
+      sourceField: 'creatorID',
+      destField: 'id',
       destSchema: () => userSchema,
     },
     emoji: {
-      sourceField: ['id'],
-      destField: ['subjectID'],
+      sourceField: 'id',
+      destField: 'subjectID',
       destSchema: () => emojiSchema,
     },
   },
@@ -114,39 +112,37 @@ const commentSchema = createTableSchema({
 const labelSchema = createTableSchema({
   tableName: 'label',
   columns: {
-    id: {type: 'string'},
-    name: {type: 'string'},
+    id: 'string',
+    name: 'string',
   },
-  primaryKey: ['id'],
-  relationships: {},
+  primaryKey: 'id',
 });
 
 const issueLabelSchema = createTableSchema({
   tableName: 'issueLabel',
   columns: {
-    issueID: {type: 'string'},
-    labelID: {type: 'string'},
+    issueID: 'string',
+    labelID: 'string',
   },
   primaryKey: ['issueID', 'labelID'],
-  relationships: {},
 });
 
 const emojiSchema = createTableSchema({
   tableName: 'emoji',
   columns: {
-    id: {type: 'string'},
-    value: {type: 'string'},
-    annotation: {type: 'string'},
-    subjectID: {type: 'string'},
-    creatorID: {type: 'string'},
-    created: {type: 'number'},
+    id: 'string',
+    value: 'string',
+    annotation: 'string',
+    subjectID: 'string',
+    creatorID: 'string',
+    created: 'number',
   },
-  primaryKey: ['id'],
+  primaryKey: 'id',
   relationships: {
     creator: {
-      sourceField: ['creatorID'],
-      destField: ['id'],
-      destSchema: () => userSchema,
+      sourceField: 'creatorID',
+      destField: 'id',
+      destSchema: userSchema,
     },
   },
 });
@@ -154,12 +150,11 @@ const emojiSchema = createTableSchema({
 const userPrefSchema = createTableSchema({
   tableName: 'userPref',
   columns: {
-    key: {type: 'string'},
-    userID: {type: 'string'},
-    value: {type: 'string'},
+    key: 'string',
+    userID: 'string',
+    value: 'string',
   },
   primaryKey: ['userID', 'key'],
-  relationships: {},
 });
 
 export const schema = createSchema({

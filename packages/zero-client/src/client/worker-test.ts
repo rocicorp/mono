@@ -47,7 +47,6 @@ async function testBasics(userID: string) {
             value: {type: 'number'},
           },
           primaryKey: ['id'],
-          relationships: {},
         },
       },
     },

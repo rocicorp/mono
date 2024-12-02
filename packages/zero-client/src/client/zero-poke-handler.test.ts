@@ -35,13 +35,11 @@ const schema = normalizeSchema({
       tableName: 'issues',
       primaryKey: ['id'],
       columns: {id: {type: 'string'}, title: {type: 'string'}},
-      relationships: {},
     },
     labels: {
       tableName: 'labels',
       primaryKey: ['id'],
       columns: {id: {type: 'string'}, name: {type: 'string'}},
-      relationships: {},
     },
   },
 });

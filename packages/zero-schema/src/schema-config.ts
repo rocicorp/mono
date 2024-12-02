@@ -1,57 +1,61 @@
-import {type PermissionsConfig} from './compiled-permissions.js';
-import type {Schema} from './schema.js';
 import * as v from '../../shared/src/valita.js';
 import {compoundKeySchema} from '../../zero-protocol/src/ast.js';
 import {primaryKeySchema} from '../../zero-protocol/src/primary-key.js';
-import type {TableSchema} from './table-schema.js';
+import {type PermissionsConfig} from './compiled-permissions.js';
 import type {
   DecycledNormalizedSchema,
   NormalizedSchema,
 } from './normalized-schema.js';
+import type {Schema} from './schema.js';
+import type {
+  FieldRelationship,
+  JunctionRelationship,
+  Relationship,
+  TableSchema,
+  ValueType,
+} from './table-schema.js';
 
 export type SchemaConfig = {
   schema: Schema;
   permissions: PermissionsConfig;
 };
 
-const fieldRelationshipSchema = v.object({
-  sourceField: compoundKeySchema,
-  destField: compoundKeySchema,
+const fieldRelationshipSchema: v.Type<FieldRelationship> = v.readonlyObject({
+  sourceField: v.union(compoundKeySchema, v.string()),
+  destField: v.union(compoundKeySchema, v.string()),
   destSchema: v.lazy(() => tableSchemaSchema),
 });
 
-const junctionRelationshipSchema = v.readonly(
+const junctionRelationshipSchema: v.Type<JunctionRelationship> = v.readonly(
   v.tuple([fieldRelationshipSchema, fieldRelationshipSchema]),
 );
 
-export const relationshipSchema = v.union(
+export const relationshipSchema: v.Type<Relationship> = v.union(
   fieldRelationshipSchema,
   junctionRelationshipSchema,
 );
 
-export const schemaValueSchema = v.object({
-  type: v.union(
-    v.literal('string'),
-    v.literal('number'),
-    v.literal('boolean'),
-    v.literal('null'),
-    v.literal('json'),
-  ),
+export const valueTypeSchema: v.Type<ValueType> = v.union(
+  v.literal('string'),
+  v.literal('number'),
+  v.literal('boolean'),
+  v.literal('null'),
+  v.literal('json'),
+);
+
+export const schemaValueSchema = v.readonlyObject({
+  type: valueTypeSchema,
   optional: v.boolean().optional(),
 });
 
-export const sourceOrTableSchemaSchema = v.object({
+export const tableSchemaSchema: v.Type<TableSchema> = v.readonlyObject({
   tableName: v.string(),
-  columns: v.record(schemaValueSchema),
-  primaryKey: primaryKeySchema,
+  columns: v.record(v.union(schemaValueSchema, valueTypeSchema)),
+  primaryKey: v.union(primaryKeySchema, v.string()),
+  relationships: v.record(relationshipSchema).optional(),
 });
 
-export const tableSchemaSchema: v.Type<TableSchema> =
-  sourceOrTableSchemaSchema.extend({
-    relationships: v.record(relationshipSchema),
-  });
-
-export const schemaSchema = v.object({
+export const schemaSchema = v.readonlyObject({
   version: v.number(),
   tables: v.record(tableSchemaSchema),
 });

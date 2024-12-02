@@ -12,14 +12,11 @@ export type SchemaValue = {
   optional?: boolean | undefined;
 };
 
-export type SourceOrTableSchema = {
+export type TableSchema = {
   readonly tableName: string;
-  readonly primaryKey: PrimaryKey;
-  readonly columns: Record<string, SchemaValue>;
-};
-
-export type TableSchema = SourceOrTableSchema & {
-  readonly relationships: {readonly [name: string]: Relationship};
+  readonly columns: Record<string, SchemaValue | ValueType>;
+  readonly relationships?: {readonly [name: string]: Relationship} | undefined;
+  readonly primaryKey: PrimaryKey | string;
 };
 
 export function createTableSchema<const T extends TableSchema>(schema: T) {
@@ -30,29 +27,25 @@ export type TableSchemaToRow<T extends TableSchema> = {
   [K in keyof T['columns']]: SchemaValueToTSType<T['columns'][K]>;
 };
 
-/**
- * For some reason this needs to be separated out from SchemaValueToTSType in
- * order for intellisense to show `boolean`. If this gets folded into
- * SchemaValueToTSType, intellisense will show
- * SchemaValueToTSType<{type: "boolean"}> instead.
- */
-type BaseType<T extends SchemaValue> = T extends {type: 'string'}
-  ? string
-  : T extends {type: 'number'}
-  ? number
-  : T extends {type: 'boolean'}
-  ? boolean
-  : T extends {type: 'null'}
-  ? null
-  : T extends {type: 'json'}
-  ? // In schema-v2, the user will be able to specify the TS type that
-    // the JSON should match and `any`` will no
-    // longer be used here.
-    // ReadOnlyJSONValue is not used as it causes
-    // infinite depth errors to pop up for users of our APIs.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    any
-  : never;
+type TypeNameToTypeMap = {
+  string: string;
+  number: number;
+  boolean: boolean;
+  null: null;
+
+  // In schema-v2, the user will be able to specify the TS type that
+  // the JSON should match and `any`` will no
+  // longer be used here.
+  // ReadOnlyJSONValue is not used as it causes
+  // infinite depth errors to pop up for users of our APIs.
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  json: any;
+};
+
+type ColumnTypeName<T extends SchemaValue | ValueType> = T extends SchemaValue
+  ? T['type']
+  : T;
 
 /**
  * Given a schema value, return the TypeScript type.
@@ -60,11 +53,14 @@ type BaseType<T extends SchemaValue> = T extends {type: 'string'}
  * This allows us to create the correct return type for a
  * query that has a selection.
  */
-export type SchemaValueToTSType<T extends SchemaValue> = T extends {
-  optional: true;
-}
-  ? BaseType<T> | null
-  : BaseType<T>;
+export type SchemaValueToTSType<T extends SchemaValue | ValueType> =
+  T extends ValueType
+    ? TypeNameToTypeMap[T]
+    : T extends {
+        optional: true;
+      }
+    ? TypeNameToTypeMap[ColumnTypeName<T>] | null
+    : TypeNameToTypeMap[ColumnTypeName<T>];
 
 export type Supertype<TSchemas extends TableSchema[]> = {
   tableName: TSchemas[number]['tableName'];
@@ -72,9 +68,11 @@ export type Supertype<TSchemas extends TableSchema[]> = {
   columns: {
     [K in keyof TSchemas[number]['columns']]: TSchemas[number]['columns'][K];
   };
-  relationships: {
-    [K in keyof TSchemas[number]['relationships']]: TSchemas[number]['relationships'][K];
-  };
+  relationships?:
+    | {
+        [K in keyof TSchemas[number]['relationships']]: TSchemas[number]['relationships'][K];
+      }
+    | undefined;
 };
 
 /**
@@ -84,9 +82,7 @@ export type Supertype<TSchemas extends TableSchema[]> = {
  */
 type Lazy<T> = T | (() => T);
 
-export type Relationship =
-  | FieldRelationship<TableSchema, TableSchema>
-  | JunctionRelationship<TableSchema, TableSchema, TableSchema>;
+export type Relationship = FieldRelationship | JunctionRelationship;
 
 export type AtLeastOne<T> = readonly [T, ...T[]];
 
@@ -97,17 +93,17 @@ export function atLeastOne<T>(arr: readonly T[]): AtLeastOne<T> {
   return arr as AtLeastOne<T>;
 }
 
-type FieldName<TSchema extends TableSchema> = AtLeastOne<
-  keyof TSchema['columns']
->;
+type FieldName<TSchema extends TableSchema> =
+  | (keyof TSchema['columns'] & string)
+  | AtLeastOne<keyof TSchema['columns'] & string>;
 
 /**
  * A relationship between two entities where
  * that relationship is defined via fields on both entities.
  */
 export type FieldRelationship<
-  TSourceSchema extends TableSchema,
-  TDestSchema extends TableSchema,
+  TSourceSchema extends TableSchema = TableSchema,
+  TDestSchema extends TableSchema = TableSchema,
 > = {
   sourceField: FieldName<TSourceSchema>;
   destField: FieldName<TDestSchema>;
@@ -119,9 +115,9 @@ export type FieldRelationship<
  * that relationship is defined via a junction table.
  */
 export type JunctionRelationship<
-  TSourceSchema extends TableSchema,
-  TJunctionSchema extends TableSchema,
-  TDestSchema extends TableSchema,
+  TSourceSchema extends TableSchema = TableSchema,
+  TJunctionSchema extends TableSchema = TableSchema,
+  TDestSchema extends TableSchema = TableSchema,
 > = readonly [
   FieldRelationship<TSourceSchema, TJunctionSchema>,
   FieldRelationship<TJunctionSchema, TDestSchema>,
@@ -129,29 +125,25 @@ export type JunctionRelationship<
 
 export function isFieldRelationship(
   relationship: Relationship,
-): relationship is FieldRelationship<TableSchema, TableSchema> {
+): relationship is FieldRelationship {
   return !isJunctionRelationship(relationship);
 }
 
 export function assertFieldRelationship(
   relationship: Relationship,
-): asserts relationship is FieldRelationship<TableSchema, TableSchema> {
+): asserts relationship is FieldRelationship {
   assert(isFieldRelationship(relationship), 'Expected field relationship');
 }
 
 export function isJunctionRelationship(
   relationship: Relationship,
-): relationship is JunctionRelationship<TableSchema, TableSchema, TableSchema> {
+): relationship is JunctionRelationship {
   return Array.isArray(relationship);
 }
 
 export function assertJunctionRelationship(
   relationship: Relationship,
-): asserts relationship is JunctionRelationship<
-  TableSchema,
-  TableSchema,
-  TableSchema
-> {
+): asserts relationship is JunctionRelationship {
   assert(
     isJunctionRelationship(relationship),
     'Expected junction relationship',

@@ -26,6 +26,7 @@ import {
   cmp,
   ExpressionBuilder,
   type ExpressionFactory,
+  type RelationshipName,
 } from './expression.js';
 import type {AdvancedQuery} from './query-internal.js';
 import type {
@@ -137,10 +138,8 @@ export abstract class AbstractQuery<
     );
   }
 
-  whereExists(
-    relationship: keyof TSchema['relationships'],
-  ): Query<TSchema, TReturn>;
-  whereExists<TRelationship extends keyof TSchema['relationships'] & string>(
+  whereExists(relationship: RelationshipName<TSchema>): Query<TSchema, TReturn>;
+  whereExists<TRelationship extends RelationshipName<TSchema>>(
     relationship: TRelationship,
     cb: (
       query: Query<

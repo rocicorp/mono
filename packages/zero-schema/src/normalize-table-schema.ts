@@ -7,8 +7,10 @@ import {
   isFieldRelationship,
   type FieldRelationship,
   type JunctionRelationship,
+  type Relationship,
   type SchemaValue,
   type TableSchema,
+  type ValueType,
 } from './table-schema.js';
 
 declare const normalized: unique symbol;
@@ -21,7 +23,7 @@ type Normalized<T> = T & {readonly [normalized]: true};
  */
 export type TableSchemaCache = Map<TableSchema, NormalizedTableSchema>;
 
-export class NormalizedTableSchema {
+export class NormalizedTableSchema implements TableSchema {
   declare readonly [normalized]: true;
   readonly tableName: string;
   readonly primaryKey: NormalizedPrimaryKey;
@@ -66,7 +68,7 @@ export function normalizeTableSchemaWithCache(
 
   let normalizedTableSchema = tableSchemaCache.get(tableSchema);
   if (normalizedTableSchema) {
-    return normalizedTableSchema as NormalizedTableSchema;
+    return normalizedTableSchema;
   }
 
   normalizedTableSchema = new NormalizedTableSchema(
@@ -85,33 +87,43 @@ function assertNoDuplicates(arr: readonly string[]): void {
   );
 }
 
-export function normalizePrimaryKey(arr: PrimaryKey): NormalizedPrimaryKey {
-  assertNoDuplicates(arr);
-  return arr as NormalizedPrimaryKey;
+export function normalizePrimaryKey(
+  primaryKey: PrimaryKey | string,
+): NormalizedPrimaryKey {
+  if (typeof primaryKey === 'string') {
+    return [primaryKey] as const as NormalizedPrimaryKey;
+  }
+  assertNoDuplicates(primaryKey);
+  return primaryKey as NormalizedPrimaryKey;
 }
 
 function normalizeColumns(
-  columns: Record<string, SchemaValue>,
+  columns: Record<string, SchemaValue | ValueType>,
   primaryKey: PrimaryKey,
 ): Record<string, SchemaValue> {
   const rv: Writable<Record<string, SchemaValue>> = {};
   for (const pk of primaryKey) {
     const schemaValue = columns[pk];
     assert(schemaValue, `Primary key column "${pk}" not found`);
-    const {type, optional} = schemaValue;
-    assert(!optional, `Primary key column "${pk}" cannot be optional`);
-    assert(
-      type === 'string' || type === 'number' || type === 'boolean',
-      `Primary key column "${pk}" must be a string, number, or boolean. Got ${type}`,
-    );
+    if (typeof schemaValue !== 'string') {
+      const {type, optional} = schemaValue;
+      assert(!optional, `Primary key column "${pk}" cannot be optional`);
+      assert(
+        type === 'string' || type === 'number' || type === 'boolean',
+        `Primary key column "${pk}" must be a string, number, or boolean. Got ${type}`,
+      );
+    }
   }
   for (const [name, column] of sortedEntries(columns)) {
-    rv[name] = normalizeSchemaValue(column);
+    rv[name] = normalizeColumn(column);
   }
   return rv;
 }
 
-function normalizeSchemaValue(value: SchemaValue): SchemaValue {
+function normalizeColumn(value: SchemaValue | ValueType): SchemaValue {
+  if (typeof value === 'string') {
+    return {type: value, optional: false};
+  }
   return {
     type: value.type,
     optional: value.optional ?? false,
@@ -129,8 +141,10 @@ function normalizeRelationships(
   tableSchemaCache: TableSchemaCache,
 ): NormalizedRelationships {
   const rv: Writable<NormalizedRelationships> = {};
-  for (const [name, relationship] of sortedEntries(relationships)) {
-    rv[name] = normalizeRelationship(relationship, tableSchemaCache);
+  if (relationships) {
+    for (const [name, relationship] of sortedEntries(relationships)) {
+      rv[name] = normalizeRelationship(relationship, tableSchemaCache);
+    }
   }
   return rv;
 }
@@ -158,8 +172,6 @@ type NormalizedRelationship =
   | NormalizedFieldRelationship
   | NormalizedJunctionRelationship;
 
-type Relationship = TableSchema['relationships'][string];
-
 function normalizeRelationship(
   relationship: Relationship,
   tableSchemaCache: TableSchemaCache,
@@ -177,16 +189,18 @@ type NormalizedFieldRelationship = {
 };
 
 function normalizeFieldRelationship(
-  relationship: FieldRelationship<TableSchema, TableSchema>,
+  relationship: FieldRelationship,
   tableSchemaCache: TableSchemaCache,
 ): NormalizedFieldRelationship {
+  const sourceField = normalizeFieldName(relationship.sourceField);
+  const destField = normalizeFieldName(relationship.destField);
   assert(
-    relationship.sourceField.length === relationship.destField.length,
+    sourceField.length === destField.length,
     'Source and destination fields must have the same length',
   );
   return {
-    sourceField: relationship.sourceField,
-    destField: relationship.destField,
+    sourceField,
+    destField,
     destSchema: normalizeLazyTableSchema(
       relationship.destSchema,
       tableSchemaCache,
@@ -200,7 +214,7 @@ export type NormalizedJunctionRelationship = readonly [
 ];
 
 function normalizeJunctionRelationship(
-  relationship: JunctionRelationship<TableSchema, TableSchema, TableSchema>,
+  relationship: JunctionRelationship,
   tableSchemaCache: TableSchemaCache,
 ): NormalizedJunctionRelationship {
   return [
@@ -220,4 +234,22 @@ function normalizeLazyTableSchema<TS extends TableSchema>(
     tableSchemaInstance.tableName, // Don't care about name here.
     buildCache,
   );
+}
+
+function normalizeFieldName(sourceField: string | CompoundKey): CompoundKey {
+  if (typeof sourceField === 'string') {
+    return [sourceField];
+  }
+  assert(sourceField.length > 0, 'Expected at least one field');
+  return sourceField;
+}
+
+export function normalizeTables(
+  tables: Record<string, TableSchema>,
+): Record<string, NormalizedTableSchema> {
+  const result: Record<string, NormalizedTableSchema> = {};
+  for (const [name, table] of sortedEntries(tables)) {
+    result[name] = normalizeTableSchemaWithCache(table, name, new Map());
+  }
+  return result;
 }
