@@ -28,7 +28,7 @@ CREATE TABLE issue (
     "created" double precision DEFAULT (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000),
     "creatorID" VARCHAR REFERENCES "user"(id) NOT NULL,
     "assigneeID" VARCHAR REFERENCES "user"(id),
-    "description" TEXT DEFAULT '',
+    "description" TEXT DEFAULT ''
 );
 
 CREATE TABLE "viewState" (
