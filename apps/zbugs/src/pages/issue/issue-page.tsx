@@ -29,6 +29,7 @@ import {LRUCache} from '../../lru-cache.js';
 import {links, type ListContext, type ZbugsHistoryState} from '../../routes.js';
 import CommentComposer from './comment-composer.js';
 import Comment, {parsePermalink} from './comment.js';
+import {useLogin} from '../../hooks/use-login.js';
 
 export default function IssuePage() {
   const z = useZero();
@@ -50,6 +51,7 @@ export default function IssuePage() {
     .related('comments', q => q.orderBy('created', 'asc'))
     .one();
   const issue = useQuery(q);
+  const login = useLogin();
 
   useEffect(() => {
     // only push viewed forward if the issue has been modified since the last viewing
@@ -318,6 +320,32 @@ export default function IssuePage() {
               }}
             />
           </div>
+
+          {login.loginState?.decoded.role === 'crew' ? (
+            <div className="sidebar-item">
+              <p className="issue-detail-label">Visibility</p>
+              <Combobox
+                editable={false}
+                disabled={!canEdit}
+                items={[
+                  {
+                    text: 'Public',
+                    value: 'public',
+                    icon: statusOpen,
+                  },
+                  {
+                    text: 'Internal',
+                    value: 'internal',
+                    icon: statusClosed,
+                  },
+                ]}
+                selectedValue={issue.visibility}
+                onChange={value =>
+                  z.mutate.issue.update({id: issue.id, visibility: value})
+                }
+              />
+            </div>
+          ) : null}
 
           <div className="sidebar-item">
             <p className="issue-detail-label">Creator</p>
