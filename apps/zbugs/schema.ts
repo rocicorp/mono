@@ -175,7 +175,10 @@ type AuthData = {
 };
 
 export const schema = createSchema({
+  // If you change this make sure to change apps/zbugs/docker/init_upstream/init.sql
+  // as well as updating the database on both prod and on sandbox.
   version: 5,
+
   tables: {
     user: userSchema,
     issue: issueSchema,
