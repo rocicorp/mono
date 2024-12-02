@@ -49,7 +49,6 @@ export function Combobox<T>({
     } else {
       umami.track('Combobox closed'); // Track close action
     }
-    console.log('setMenuOpen', b);
     setIsOpen(b);
   };
 
