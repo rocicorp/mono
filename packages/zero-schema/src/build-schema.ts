@@ -2,14 +2,9 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {tsImport} from 'tsx/esm/api';
 import {writeFile} from 'node:fs/promises';
-import {permissionsConfigSchema} from './compiled-permissions.js';
 import * as v from '../../shared/src/valita.js';
 import {parseOptions} from '../../shared/src/options.js';
-import {normalizeSchema} from './normalized-schema.js';
-import {
-  isSchemaConfig,
-  replacePointersWithSchemaNames,
-} from './schema-config.js';
+import {stringifySchema} from './schema-config.js';
 
 export const schemaOptions = {
   path: {
@@ -48,27 +43,7 @@ async function main() {
 
   try {
     const module = await tsImport(relativePath, import.meta.url);
-    if (!isSchemaConfig(module)) {
-      throw new Error(
-        'Schema file must have a export `schema` and `permissions`.',
-      );
-    }
-    const schemaConfig = module;
-    const permissions = v.parse(
-      await schemaConfig.permissions,
-      permissionsConfigSchema,
-    );
-
-    const cycleFreeNormalizedSchema = replacePointersWithSchemaNames(
-      normalizeSchema(schemaConfig.schema),
-    );
-
-    const output = {
-      permissions,
-      schema: cycleFreeNormalizedSchema,
-    };
-
-    await writeFile(config.output, JSON.stringify(output, undefined, 2));
+    await writeFile(config.output, await stringifySchema(module));
   } catch (e) {
     console.error(`Failed to load zero schema from ${absoluteConfigPath}:`, e);
     process.exit(1);

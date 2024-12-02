@@ -1,10 +1,14 @@
 import * as v from '../../shared/src/valita.js';
 import {compoundKeySchema} from '../../zero-protocol/src/ast.js';
 import {primaryKeySchema} from '../../zero-protocol/src/primary-key.js';
-import {type PermissionsConfig} from './compiled-permissions.js';
-import type {
-  DecycledNormalizedSchema,
-  NormalizedSchema,
+import {
+  permissionsConfigSchema,
+  type PermissionsConfig,
+} from './compiled-permissions.js';
+import {
+  normalizeSchema,
+  type DecycledNormalizedSchema,
+  type NormalizedSchema,
 } from './normalized-schema.js';
 import type {Schema} from './schema.js';
 import type {
@@ -120,4 +124,52 @@ export function replaceSchemaNamesWithPointers(
   });
 
   return schema as unknown as NormalizedSchema;
+}
+
+export async function stringifySchema(module: unknown) {
+  if (!isSchemaConfig(module)) {
+    throw new Error(
+      'Schema file must have a export `schema` and `permissions`.',
+    );
+  }
+  const schemaConfig = module;
+  const permissions = v.parse(
+    await schemaConfig.permissions,
+    permissionsConfigSchema,
+  );
+
+  const cycleFreeNormalizedSchema = replacePointersWithSchemaNames(
+    normalizeSchema(schemaConfig.schema),
+  );
+
+  return JSON.stringify(
+    {
+      permissions,
+      schema: cycleFreeNormalizedSchema,
+    },
+    undefined,
+    2,
+  );
+}
+
+export function parseSchema(
+  input: string,
+  source: string,
+): {
+  schema: Schema;
+  permissions: PermissionsConfig;
+} {
+  try {
+    const config = JSON.parse(input);
+    const permissions = v.parse(config.permissions, permissionsConfigSchema);
+    const normalizedSchema = normalizeSchema(
+      replaceSchemaNamesWithPointers(config.schema),
+    );
+    return {
+      permissions,
+      schema: normalizedSchema,
+    };
+  } catch (e) {
+    throw new Error(`Failed to parse schema config from ${source}: ${e}`);
+  }
 }
