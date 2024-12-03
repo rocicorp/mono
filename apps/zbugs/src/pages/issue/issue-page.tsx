@@ -186,14 +186,7 @@ export default function IssuePage() {
           <div className="issue-breadcrumb">
             {listContext ? (
               <>
-                <Link
-                  className="breadcrumb-item"
-                  href={listContext.href}
-                  state={{
-                    zbugsListScrollOffset:
-                      zbugsHistoryState?.zbugsListScrollOffset,
-                  }}
-                >
+                <Link className="breadcrumb-item" href={listContext.href}>
                   {listContext.title}
                 </Link>
                 <span className="breadcrumb-item">&rarr;</span>

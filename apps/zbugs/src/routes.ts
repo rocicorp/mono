@@ -15,7 +15,6 @@ export const links = {
 };
 
 export type ZbugsHistoryState = {
-  readonly zbugsListScrollOffset?: number | undefined;
   readonly zbugsListContext?: ListContext | undefined;
 };
 
