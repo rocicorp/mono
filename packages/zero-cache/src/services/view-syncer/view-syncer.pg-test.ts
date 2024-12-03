@@ -92,6 +92,103 @@ const ISSUES_QUERY: AST = {
   orderBy: [['id', 'asc']],
 };
 
+const ISSUES_QUERY_WITH_EXISTS: AST = {
+  table: 'issues',
+  orderBy: [['id', 'asc']],
+  where: {
+    type: 'correlatedSubquery',
+    op: 'EXISTS',
+    related: {
+      correlation: {
+        parentField: ['id'],
+        childField: ['issueID'],
+      },
+      subquery: {
+        table: 'issueLabels',
+        alias: 'labels',
+        orderBy: [
+          ['issueID', 'asc'],
+          ['labelID', 'asc'],
+        ],
+        where: {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          related: {
+            correlation: {
+              parentField: ['labelID'],
+              childField: ['id'],
+            },
+            subquery: {
+              table: 'labels',
+              alias: 'labels',
+              orderBy: [['id', 'asc']],
+              where: {
+                type: 'simple',
+                left: {
+                  type: 'column',
+                  name: 'name',
+                },
+                op: '=',
+                right: {
+                  type: 'literal',
+                  value: 'bug',
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
+const ISSUES_QUERY_WITH_RELATED: AST = {
+  table: 'issues',
+  orderBy: [['id', 'asc']],
+  where: {
+    type: 'simple',
+    left: {
+      type: 'column',
+      name: 'id',
+    },
+    op: 'IN',
+    right: {
+      type: 'literal',
+      value: ['1', '2'],
+    },
+  },
+  related: [
+    {
+      correlation: {
+        parentField: ['id'],
+        childField: ['issueID'],
+      },
+      hidden: true,
+      subquery: {
+        table: 'issueLabels',
+        alias: 'labels',
+        orderBy: [
+          ['issueID', 'asc'],
+          ['labelID', 'asc'],
+        ],
+        related: [
+          {
+            correlation: {
+              parentField: ['labelID'],
+              childField: ['id'],
+            },
+            subquery: {
+              table: 'labels',
+              alias: 'labels',
+              orderBy: [['id', 'asc']],
+            },
+          },
+        ],
+      },
+    },
+  ],
+};
+
 const ISSUES_QUERY2: AST = {
   table: 'issues',
   orderBy: [['id', 'asc']],
@@ -176,6 +273,17 @@ async function setup(permissions: PermissionsConfig = {}) {
     json JSON,
     _0_version TEXT NOT NULL
   );
+  CREATE TABLE "issueLabels" (
+    issueID TEXT,
+    labelID TEXT,
+    _0_version TEXT NOT NULL,
+    PRIMARY KEY (issueID, labelID)
+  );
+  CREATE TABLE "labels" (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    _0_version TEXT NOT NULL
+  );
   CREATE TABLE users (
     id text PRIMARY KEY,
     name text,
@@ -198,6 +306,9 @@ async function setup(permissions: PermissionsConfig = {}) {
   -- The last row should not match the ISSUES_TITLE_QUERY: "WHERE id IN (1, 2, 3, 4)"
   INSERT INTO issues (id, title, owner, parent, big, json, _0_version) VALUES 
     ('5', 'not matched', 101, 2, 100, '[123,{"foo":456,"bar":789},"baz"]', '00');
+
+  INSERT INTO "issueLabels" (issueID, labelID, _0_version) VALUES ('1', '1', '00');
+  INSERT INTO "labels" (id, name, _0_version) VALUES ('1', 'bug', '00');
   `);
 
   const cvrDB = await testDBs.create('view_syncer_service_test');
@@ -309,7 +420,11 @@ describe('view-syncer/service', () => {
     tokenData: undefined,
   };
 
-  const messages = new ReplicationMessages({issues: 'id', users: 'id'});
+  const messages = new ReplicationMessages({
+    issues: 'id',
+    users: 'id',
+    issueLabels: ['issueID', 'labelID'],
+  });
   const zeroMessages = new ReplicationMessages(
     {schemaVersions: 'lock'},
     'zero',
@@ -2375,6 +2490,79 @@ describe('view-syncer/service', () => {
     // until that interval elapses.
     await viewSyncerDone;
     expect(drainCoordinator.nextDrainTime).toBeGreaterThan(now);
+  });
+
+  test('retracting an exists relationship', async () => {
+    const client = await connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY_WITH_RELATED},
+      {op: 'put', hash: 'query-hash2', ast: ISSUES_QUERY_WITH_EXISTS},
+    ]);
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+    await nextPoke(client);
+
+    replicator.processTransaction(
+      '123',
+      messages.delete('issueLabels', {
+        issueID: '1',
+        labelID: '1',
+      }),
+      messages.delete('issues', {id: '2'}),
+    );
+
+    stateChanges.push({state: 'version-ready'});
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+                  [
+                    [
+                      "pokeStart",
+                      {
+                        "baseCookie": "00:02",
+                        "cookie": "01",
+                        "pokeID": "01",
+                        "schemaVersions": {
+                          "maxSupportedVersion": 3,
+                          "minSupportedVersion": 2,
+                        },
+                      },
+                    ],
+                    [
+                      "pokePart",
+                      {
+                        "pokeID": "01",
+                        "rowsPatch": [
+                          {
+                            "id": {
+                              "issueID": "1",
+                              "labelID": "1",
+                            },
+                            "op": "del",
+                            "tableName": "issueLabels",
+                          },
+                          {
+                            "id": {
+                              "id": "1",
+                            },
+                            "op": "del",
+                            "tableName": "labels",
+                          },
+                          {
+                            "id": {
+                              "id": "2",
+                            },
+                            "op": "del",
+                            "tableName": "issues",
+                          },
+                        ],
+                      },
+                    ],
+                    [
+                      "pokeEnd",
+                      {
+                        "pokeID": "01",
+                      },
+                    ],
+                  ]
+                `);
   });
 });
 
