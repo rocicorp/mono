@@ -54,6 +54,7 @@ beforeEach(() => {
 
   const userSource = must(queryDelegate.getSource('user'));
   const issueSource = must(queryDelegate.getSource('issue'));
+  const labelSource = must(queryDelegate.getSource('label'));
 
   userSource.push({
     type: 'add',
@@ -106,6 +107,14 @@ beforeEach(() => {
       description: 'description 3',
       closed: false,
       ownerId: null,
+    },
+  });
+
+  labelSource.push({
+    type: 'add',
+    row: {
+      id: '0001',
+      name: 'bug',
     },
   });
 });
@@ -216,4 +225,46 @@ test('or', () => {
       },
     ]
   `);
+});
+
+test('where exists retracts when an edit causes a row to no longer match', () => {
+  const query = newQuery(queryDelegate, schemas.issue).whereExists(
+    'labels',
+    q => q.where('name', '=', 'bug'),
+  );
+
+  const view = query.materialize();
+
+  expect(view.data).toMatchInlineSnapshot(`[]`);
+
+  const labelSource = must(queryDelegate.getSource('issueLabel'));
+  labelSource.push({
+    type: 'add',
+    row: {
+      issueId: '0001',
+      labelId: '0001',
+    },
+  });
+
+  expect(view.data).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "description": "description 1",
+        "id": "0001",
+        "ownerId": "0001",
+        "title": "issue 1",
+      },
+    ]
+  `);
+
+  labelSource.push({
+    type: 'remove',
+    row: {
+      issueId: '0001',
+      labelId: '0001',
+    },
+  });
+
+  expect(view.data).toMatchInlineSnapshot(`[]`);
 });
