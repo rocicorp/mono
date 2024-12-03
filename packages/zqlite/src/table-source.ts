@@ -353,13 +353,19 @@ export class TableSource implements Source {
     // the db so we don't push it to outputs if it does/doest not exist.
     switch (change.type) {
       case 'add':
-        assert(!exists(change.row), `Row already exists ${stringify(change)}`);
+        assert(
+          !exists(change.row),
+          () => `Row already exists ${stringify(change)}`,
+        );
         break;
       case 'remove':
-        assert(exists(change.row), `Row not found ${stringify(change)}`);
+        assert(exists(change.row), () => `Row not found ${stringify(change)}`);
         break;
       case 'edit':
-        assert(exists(change.oldRow), `Row not found ${stringify(change)}`);
+        assert(
+          exists(change.oldRow),
+          () => `Row not found ${stringify(change)}`,
+        );
         fromSQLiteTypes(this.#columns, change.oldRow);
         break;
       default:
