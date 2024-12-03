@@ -1,8 +1,9 @@
 import type {Zero} from '@rocicorp/zero';
 import {escapeLike, type TableSchemaToRow} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
+import {useWindowVirtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
-import {useEffect, useMemo, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
@@ -21,11 +22,13 @@ import Markdown from '../../components/markdown.js';
 import RelativeTime from '../../components/relative-time.js';
 import UserPicker from '../../components/user-picker.js';
 import {useCanEdit} from '../../hooks/use-can-edit.js';
+import {useHash} from '../../hooks/use-hash.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useZero} from '../../hooks/use-zero.js';
+import {LRUCache} from '../../lru-cache.js';
 import {links, type ListContext, type ZbugsHistoryState} from '../../routes.js';
 import CommentComposer from './comment-composer.js';
-import Comment from './comment.js';
+import Comment, {parsePermalink} from './comment.js';
 
 export default function IssuePage() {
   const z = useZero();
@@ -128,6 +131,27 @@ export default function IssuePage() {
     () => new Set(issue?.labels?.map(l => l.id)),
     [issue?.labels],
   );
+
+  const {listRef, virtualizer} = useVirtualComments(issue?.comments ?? []);
+
+  const hash = useHash();
+
+  // Permalink scrolling behavior
+  useEffect(() => {
+    if (issue === undefined) {
+      return;
+    }
+    const {comments} = issue;
+    const commentID = parsePermalink(hash);
+    const commentIndex = comments.findIndex(c => c.id === commentID);
+    if (commentIndex !== -1) {
+      virtualizer.scrollToIndex(commentIndex, {
+        align: 'center',
+        // The `smooth` scroll behavior is not fully supported with dynamic size.
+        // behavior: 'smooth',
+      });
+    }
+  }, [hash, issue, virtualizer]);
 
   const [deleteConfirmationShown, setDeleteConfirmationShown] = useState(false);
 
@@ -348,13 +372,40 @@ export default function IssuePage() {
         </div>
 
         <h2 className="issue-detail-label">Comments</h2>
-        {issue.comments.length > 0 ? (
-          <div className="comments-container">
-            {issue.comments.map(comment => (
-              <Comment key={comment.id} id={comment.id} issueID={issue.id} />
+
+        <div className="comments-container" ref={listRef}>
+          <div
+            style={{
+              position: 'relative',
+              height: `${virtualizer.getTotalSize()}px`,
+            }}
+          >
+            {virtualizer.getVirtualItems().map(item => (
+              <div
+                key={item.key + ''}
+                ref={virtualizer.measureElement}
+                data-index={item.index}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${
+                    item.start - virtualizer.options.scrollMargin
+                  }px)`,
+                }}
+              >
+                <Comment
+                  key={issue.comments[item.index].id}
+                  id={issue.comments[item.index].id}
+                  issueID={issue.id}
+                  height={item.size}
+                />
+              </div>
             ))}
           </div>
-        ) : null}
+        </div>
+
         {z.userID === 'anon' ? (
           <a href="/api/login/github" className="login-to-comment">
             Login to comment
@@ -377,6 +428,43 @@ export default function IssuePage() {
       />
     </div>
   );
+}
+
+// This cache is stored outside the state so that it can be used between renders.
+const commentSizeCache = new LRUCache<string, number>(1000);
+
+function useVirtualComments<T extends {id: string}>(comments: T[]) {
+  const defaultHeight = 500;
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const estimateAverage = useRef(defaultHeight);
+  const virtualizer = useWindowVirtualizer({
+    count: comments.length,
+    estimateSize: index => {
+      const {id} = comments[index];
+      return commentSizeCache.get(id) || estimateAverage.current;
+    },
+    overscan: 5,
+    scrollMargin: listRef.current?.offsetTop ?? 0,
+    measureElement: (el: HTMLElement) => {
+      const height = el.offsetHeight;
+      const {index} = el.dataset;
+      if (index && height) {
+        const {id} = comments[parseInt(index)];
+        const oldSize = commentSizeCache.get(id) ?? defaultHeight;
+        commentSizeCache.set(id, height);
+
+        // Update estimateAverage
+        const count = comments.length;
+        const oldTotal = estimateAverage.current * count;
+        const newTotal = oldTotal - oldSize + height;
+        estimateAverage.current = newTotal / count;
+      }
+      return height;
+    },
+    getItemKey: index => comments[index].id,
+    gap: 16,
+  });
+  return {listRef, virtualizer};
 }
 
 function buildListQuery(

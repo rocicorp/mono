@@ -1,20 +1,36 @@
 import {useQuery} from '@rocicorp/zero/react';
-import {useEffect, useRef, useState} from 'react';
+import classNames from 'classnames';
+import {memo, useRef, useState} from 'react';
 import {Button} from '../../components/button.js';
 import {CanEdit} from '../../components/can-edit.js';
 import {Confirm} from '../../components/confirm.js';
 import {EmojiPanel} from '../../components/emoji-panel.js';
+import {Link} from '../../components/link.js';
 import Markdown from '../../components/markdown.js';
 import RelativeTime from '../../components/relative-time.js';
+import {useHash} from '../../hooks/use-hash.js';
 import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
 import CommentComposer from './comment-composer.js';
 import style from './comment.module.css';
-import {Link} from '../../components/link.js';
-import {useHash} from '../../hooks/use-hash.js';
-import classNames from 'classnames';
 
-export default function Comment({id, issueID}: {id: string; issueID: string}) {
+type Props = {
+  id: string;
+  issueID: string;
+  /**
+   * Height of the comment. Used to keep the layout stable when comments are
+   * being "loaded".
+   */
+  height?: number | undefined;
+};
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function parsePermalink(hash: string): string | undefined {
+  const match = hash.match(/^comment-(.+)$/);
+  return match ? match?.[1] : undefined;
+}
+
+const Comment = memo(({id, issueID, height}: Props) => {
   const z = useZero();
   const q = z.query.comment
     .where('id', id)
@@ -33,17 +49,8 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
   const edit = () => setEditing(true);
   const remove = () => z.mutate.comment.delete({id});
 
-  useEffect(() => {
-    if (ref.current && isPermalinked) {
-      ref.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      });
-    }
-  }, [ref, isPermalinked]);
-
   if (!comment) {
-    return null;
+    return <div style={{height}}></div>;
   }
   return (
     <div
@@ -116,4 +123,6 @@ export default function Comment({id, issueID}: {id: string; issueID: string}) {
       />
     </div>
   );
-}
+});
+
+export {Comment as default};
