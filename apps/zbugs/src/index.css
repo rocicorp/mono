@@ -938,6 +938,10 @@ textarea.autoResize {
   color: rgba(255, 255, 255, 0.6);
 }
 
+.comments-container {
+  position: relative;
+}
+
 .comments-container .markdown-container blockquote {
   border-left-color: var(--color-button-outline);
 }
