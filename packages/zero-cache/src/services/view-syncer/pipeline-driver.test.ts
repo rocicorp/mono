@@ -606,7 +606,8 @@ describe('view-syncer/pipeline-driver', () => {
     `);
   });
 
-  test('bug - generates too many adds', () => {
+  // TODO(mlaw): working on fixing the bug revealed by the test below
+  test.fails('bug - generates too many adds', () => {
     const query: AST = {
       table: 'issues',
       where: {
@@ -725,60 +726,6 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "2",
           },
           "table": "issues",
-          "type": "add",
-        },
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "123",
-            "issueID": "2",
-            "labelID": "1",
-          },
-          "rowKey": {
-            "issueID": "2",
-            "labelID": "1",
-          },
-          "table": "issueLabels",
-          "type": "add",
-        },
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "00",
-            "id": "1",
-            "name": "bug",
-          },
-          "rowKey": {
-            "id": "1",
-          },
-          "table": "labels",
-          "type": "add",
-        },
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "123",
-            "issueID": "2",
-            "labelID": "1",
-          },
-          "rowKey": {
-            "issueID": "2",
-            "labelID": "1",
-          },
-          "table": "issueLabels",
-          "type": "add",
-        },
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "00",
-            "id": "1",
-            "name": "bug",
-          },
-          "rowKey": {
-            "id": "1",
-          },
-          "table": "labels",
           "type": "add",
         },
         {
