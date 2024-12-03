@@ -55,10 +55,12 @@ export interface Source {
    */
   connect(sort: Ordering, optionalFilters?: Condition | undefined): SourceInput;
 
+  push(change: SourceChange): void;
+
   /**
    * Pushes a change into the source and into all connected outputs.
    */
-  push(change: SourceChange): void;
+  genPush(change: SourceChange): Iterable<void>;
 }
 
 export interface SourceInput extends Input {

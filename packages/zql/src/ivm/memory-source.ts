@@ -349,6 +349,12 @@ export class MemorySource implements Source {
   }
 
   push(change: SourceChange): void {
+    for (const _ of this.genPush(change)) {
+      // Nothing to do.
+    }
+  }
+
+  *genPush(change: SourceChange) {
     const primaryIndex = this.#getPrimaryIndex();
     const {data} = primaryIndex;
 
@@ -399,6 +405,7 @@ export class MemorySource implements Source {
       if (output) {
         this.#overlay = {outputIndex, change};
         output.push(outputChange);
+        yield;
       }
     }
     this.#overlay = undefined;
