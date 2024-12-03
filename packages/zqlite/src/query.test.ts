@@ -228,10 +228,9 @@ test('or', () => {
 });
 
 test('where exists retracts when an edit causes a row to no longer match', () => {
-  const query = newQuery(queryDelegate, schemas.issue).whereExists(
-    'labels',
-    q => q.where('name', '=', 'bug'),
-  );
+  const query = newQuery(queryDelegate, schemas.issue)
+    .whereExists('labels', q => q.where('name', '=', 'bug'))
+    .related('labels');
 
   const view = query.materialize();
 
@@ -252,6 +251,12 @@ test('where exists retracts when an edit causes a row to no longer match', () =>
         "closed": false,
         "description": "description 1",
         "id": "0001",
+        "labels": [
+          {
+            "id": "0001",
+            "name": "bug",
+          },
+        ],
         "ownerId": "0001",
         "title": "issue 1",
       },
