@@ -399,7 +399,6 @@ class Streamer {
   ): Iterable<RowChange> {
     for (const change of changes) {
       const {type} = change;
-      console.log('CHANGE', JSON.stringify(change, null, 2));
 
       switch (type) {
         case 'add':
@@ -413,7 +412,6 @@ class Streamer {
             schema.relationships[child.relationshipName],
           );
 
-          // console.log('CHILD CHANGE: ', JSON.stringify(change, null, 2));
           yield* this.#streamChanges(queryHash, childSchema, [child.change]);
           break;
         }
@@ -434,7 +432,6 @@ class Streamer {
     op: 'add' | 'remove' | 'edit',
     nodes: Iterable<Node>,
   ): Iterable<RowChange> {
-    console.log('STREAM NODES');
     const {tableName: table, primaryKey} = schema;
 
     for (const node of nodes) {
@@ -451,7 +448,6 @@ class Streamer {
 
       for (const [relationship, children] of Object.entries(relationships)) {
         const childSchema = must(schema.relationships[relationship]);
-        console.log('INTO RELATIONSHIP', relationship);
         yield* this.#streamNodes(queryHash, childSchema, op, children);
       }
     }
