@@ -1,8 +1,9 @@
 import type {Zero} from '@rocicorp/zero';
 import {escapeLike, type TableSchemaToRow} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
+import {useWindowVirtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
-import {useEffect, useMemo, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
@@ -128,6 +129,8 @@ export default function IssuePage() {
     () => new Set(issue?.labels?.map(l => l.id)),
     [issue?.labels],
   );
+
+  const {listRef, virtualizer} = useVirtualComments(issue?.comments ?? []);
 
   const [deleteConfirmationShown, setDeleteConfirmationShown] = useState(false);
 
@@ -348,13 +351,40 @@ export default function IssuePage() {
         </div>
 
         <h2 className="issue-detail-label">Comments</h2>
-        {issue.comments.length > 0 ? (
-          <div className="comments-container">
-            {issue.comments.map(comment => (
-              <Comment key={comment.id} id={comment.id} issueID={issue.id} />
+
+        <div className="comments-container" ref={listRef}>
+          <div
+            style={{
+              position: 'relative',
+              height: `${virtualizer.getTotalSize()}px`,
+            }}
+          >
+            {virtualizer.getVirtualItems().map(item => (
+              <div
+                key={item.key + ''}
+                ref={virtualizer.measureElement}
+                data-index={item.index}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${
+                    item.start - virtualizer.options.scrollMargin
+                  }px)`,
+                }}
+              >
+                <Comment
+                  key={issue.comments[item.index].id}
+                  id={issue.comments[item.index].id}
+                  issueID={issue.id}
+                  height={item.size}
+                />
+              </div>
             ))}
           </div>
-        ) : null}
+        </div>
+
         {z.userID === 'anon' ? (
           <a href="/api/login/github" className="login-to-comment">
             Login to comment
@@ -377,6 +407,42 @@ export default function IssuePage() {
       />
     </div>
   );
+}
+
+const estimateSizeCache: Map<string, number> = new Map();
+
+function useVirtualComments<T extends {id: string}>(comments: T[]) {
+  const defaultHeight = 500;
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const estimateAverage = useRef(defaultHeight);
+  const virtualizer = useWindowVirtualizer({
+    count: comments.length,
+    estimateSize: index => {
+      const {id} = comments[index];
+      return estimateSizeCache.get(id) || estimateAverage.current;
+    },
+    overscan: 5,
+    scrollMargin: listRef.current?.offsetTop ?? 0,
+    measureElement: (el: HTMLElement) => {
+      const height = el.offsetHeight;
+      const {index} = el.dataset;
+      if (index && height) {
+        const {id} = comments[parseInt(index)];
+        const oldSize = estimateSizeCache.get(id) ?? defaultHeight;
+        estimateSizeCache.set(id, height);
+
+        // Update estimateAverage
+        const count = comments.length;
+        const oldTotal = estimateAverage.current * count;
+        const newTotal = oldTotal - oldSize + height;
+        estimateAverage.current = newTotal / count;
+      }
+      return height;
+    },
+    getItemKey: index => comments[index].id,
+    gap: 16,
+  });
+  return {listRef, virtualizer};
 }
 
 function buildListQuery(
