@@ -343,7 +343,13 @@ export class TableSource implements Source {
     }
   }
 
-  push(change: SourceChange) {
+  push(change: SourceChange): void {
+    for (const _ of this.genPush(change)) {
+      // Nothing to do.
+    }
+  }
+
+  *genPush(change: SourceChange) {
     const exists = (row: Row) =>
       this.#stmts.checkExists.get<{exists: number}>(
         ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
@@ -408,6 +414,7 @@ export class TableSource implements Source {
       this.#overlay = {outputIndex, change};
       if (output) {
         output.push(outputChange);
+        yield;
       }
     }
     this.#overlay = undefined;
