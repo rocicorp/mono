@@ -606,8 +606,7 @@ describe('view-syncer/pipeline-driver', () => {
     `);
   });
 
-  // TODO(mlaw): working on fixing the bug revealed by the test below
-  test.fails('bug - generates too many adds', () => {
+  test('whereExists generates the correct number of add and remove changes', () => {
     const query: AST = {
       table: 'issues',
       where: {
@@ -755,6 +754,33 @@ describe('view-syncer/pipeline-driver', () => {
           "table": "labels",
           "type": "add",
         },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "123",
+            "issueID": "2",
+            "labelID": "1",
+          },
+          "rowKey": {
+            "issueID": "2",
+            "labelID": "1",
+          },
+          "table": "issueLabels",
+          "type": "add",
+        },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "00",
+            "id": "1",
+            "name": "bug",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "labels",
+          "type": "add",
+        },
       ]
     `);
 
@@ -791,6 +817,25 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "2",
           },
           "table": "issues",
+          "type": "remove",
+        },
+        {
+          "queryHash": "hash1",
+          "row": undefined,
+          "rowKey": {
+            "issueID": "2",
+            "labelID": "1",
+          },
+          "table": "issueLabels",
+          "type": "remove",
+        },
+        {
+          "queryHash": "hash1",
+          "row": undefined,
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "labels",
           "type": "remove",
         },
       ]
