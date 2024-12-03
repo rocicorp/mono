@@ -21,7 +21,6 @@ import type {SchemaVersions} from '../../types/schema-versions.js';
 import {getSubscriptionState} from '../replicator/schema/replication-state.js';
 import type {ClientGroupStorage} from './database-storage.js';
 import {type SnapshotDiff, Snapshotter} from './snapshotter.js';
-import {SUBQ_PREFIX} from '../../../../zql/src/query/query-impl.js';
 
 export type RowAdd = {
   readonly type: 'add';
