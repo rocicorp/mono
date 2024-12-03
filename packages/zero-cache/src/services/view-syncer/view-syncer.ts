@@ -586,7 +586,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
     const removeQueries = serverQueries.filter(q => !q.desired);
     const desiredQueries = new Set(
-      serverQueries.filter(q => q.desired).map(q => q.id),
+      serverQueries.filter(q => q.desired).map(q => q.transformationHash),
     );
     const unhydrateQueries = [...hydratedQueries].filter(
       transformationHash => !desiredQueries.has(transformationHash),
