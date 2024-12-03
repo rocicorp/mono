@@ -24,6 +24,7 @@ import UserPicker from '../../components/user-picker.js';
 import {useCanEdit} from '../../hooks/use-can-edit.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useZero} from '../../hooks/use-zero.js';
+import {LRUCache} from '../../lru-cache.js';
 import {links, type ListContext, type ZbugsHistoryState} from '../../routes.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
@@ -409,7 +410,8 @@ export default function IssuePage() {
   );
 }
 
-const estimateSizeCache: Map<string, number> = new Map();
+// This cache is stored outside the state so that it can be used between renders.
+const commentSizeCache = new LRUCache<string, number>(1000);
 
 function useVirtualComments<T extends {id: string}>(comments: T[]) {
   const defaultHeight = 500;
@@ -419,7 +421,7 @@ function useVirtualComments<T extends {id: string}>(comments: T[]) {
     count: comments.length,
     estimateSize: index => {
       const {id} = comments[index];
-      return estimateSizeCache.get(id) || estimateAverage.current;
+      return commentSizeCache.get(id) || estimateAverage.current;
     },
     overscan: 5,
     scrollMargin: listRef.current?.offsetTop ?? 0,
@@ -428,8 +430,8 @@ function useVirtualComments<T extends {id: string}>(comments: T[]) {
       const {index} = el.dataset;
       if (index && height) {
         const {id} = comments[parseInt(index)];
-        const oldSize = estimateSizeCache.get(id) ?? defaultHeight;
-        estimateSizeCache.set(id, height);
+        const oldSize = commentSizeCache.get(id) ?? defaultHeight;
+        commentSizeCache.set(id, height);
 
         // Update estimateAverage
         const count = comments.length;
