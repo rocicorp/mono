@@ -141,16 +141,16 @@ export function applyChange(
       const childSchema = must(
         schema.relationships[change.child.relationshipName],
       );
-      const childFormat = must(
-        format.relationships[change.child.relationshipName],
-      );
-      applyChange(
-        existing,
-        change.child.change,
-        childSchema,
-        change.child.relationshipName,
-        childFormat,
-      );
+      const childFormat = format.relationships[change.child.relationshipName];
+      if (childFormat !== undefined) {
+        applyChange(
+          existing,
+          change.child.change,
+          childSchema,
+          change.child.relationshipName,
+          childFormat,
+        );
+      }
       break;
     }
     case 'edit': {
