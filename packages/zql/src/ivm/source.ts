@@ -55,10 +55,19 @@ export interface Source {
    */
   connect(sort: Ordering, optionalFilters?: Condition | undefined): SourceInput;
 
+  /**
+   * Pushes a change into the source and into all connected outputs.
+   */
   push(change: SourceChange): void;
 
   /**
-   * Pushes a change into the source and into all connected outputs.
+   * Pushes a change into the source.
+   * Iterating the returned iterator will push the
+   * change into one connected input at a time.
+   *
+   * Once the iterator is exhausted, the change will
+   * have been pushed into all connected inputs and
+   * committed to the source.
    */
   genPush(change: SourceChange): Iterable<void>;
 }
