@@ -22,12 +22,13 @@ import Markdown from '../../components/markdown.js';
 import RelativeTime from '../../components/relative-time.js';
 import UserPicker from '../../components/user-picker.js';
 import {useCanEdit} from '../../hooks/use-can-edit.js';
+import {useHash} from '../../hooks/use-hash.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {LRUCache} from '../../lru-cache.js';
 import {links, type ListContext, type ZbugsHistoryState} from '../../routes.js';
 import CommentComposer from './comment-composer.js';
-import Comment from './comment.js';
+import Comment, {parsePermalink} from './comment.js';
 
 export default function IssuePage() {
   const z = useZero();
@@ -132,6 +133,25 @@ export default function IssuePage() {
   );
 
   const {listRef, virtualizer} = useVirtualComments(issue?.comments ?? []);
+
+  const hash = useHash();
+
+  // Permalink scrolling behavior
+  useEffect(() => {
+    if (issue === undefined) {
+      return;
+    }
+    const {comments} = issue;
+    const commentID = parsePermalink(hash);
+    const commentIndex = comments.findIndex(c => c.id === commentID);
+    if (commentIndex !== -1) {
+      virtualizer.scrollToIndex(commentIndex, {
+        align: 'center',
+        // The `smooth` scroll behavior is not fully supported with dynamic size.
+        // behavior: 'smooth',
+      });
+    }
+  }, [hash, issue, virtualizer]);
 
   const [deleteConfirmationShown, setDeleteConfirmationShown] = useState(false);
 

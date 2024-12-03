@@ -1,6 +1,6 @@
 import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
-import {memo, useEffect, useRef, useState} from 'react';
+import {memo, useRef, useState} from 'react';
 import {Button} from '../../components/button.js';
 import {CanEdit} from '../../components/can-edit.js';
 import {Confirm} from '../../components/confirm.js';
@@ -24,6 +24,12 @@ type Props = {
   height?: number | undefined;
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function parsePermalink(hash: string): string | undefined {
+  const match = hash.match(/^comment-(.+)$/);
+  return match ? match?.[1] : undefined;
+}
+
 const Comment = memo(({id, issueID, height}: Props) => {
   const z = useZero();
   const q = z.query.comment
@@ -42,15 +48,6 @@ const Comment = memo(({id, issueID, height}: Props) => {
 
   const edit = () => setEditing(true);
   const remove = () => z.mutate.comment.delete({id});
-
-  useEffect(() => {
-    if (ref.current && isPermalinked) {
-      ref.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      });
-    }
-  }, [ref, isPermalinked]);
 
   if (!comment) {
     return <div style={{height}}></div>;
