@@ -606,6 +606,250 @@ describe('view-syncer/pipeline-driver', () => {
     `);
   });
 
+  test('bug - generates too many adds', () => {
+    const query: AST = {
+      table: 'issues',
+      where: {
+        type: 'and',
+        conditions: [
+          {
+            op: '=',
+            left: {
+              name: 'closed',
+              type: 'column',
+            },
+            type: 'simple',
+            right: {
+              type: 'literal',
+              value: true,
+            },
+          },
+          {
+            op: 'EXISTS',
+            type: 'correlatedSubquery',
+            related: {
+              subquery: {
+                alias: 'zsubq_labels',
+                table: 'issueLabels',
+                where: {
+                  op: 'EXISTS',
+                  type: 'correlatedSubquery',
+                  related: {
+                    subquery: {
+                      alias: 'zsubq_labels',
+                      table: 'labels',
+                      where: {
+                        op: '=',
+                        left: {
+                          name: 'name',
+                          type: 'column',
+                        },
+                        type: 'simple',
+                        right: {
+                          type: 'literal',
+                          value: 'bug',
+                        },
+                      },
+                      orderBy: [['id', 'asc']],
+                    },
+                    correlation: {
+                      childField: ['id'],
+                      parentField: ['labelID'],
+                    },
+                  },
+                },
+                orderBy: [
+                  ['issueID', 'asc'],
+                  ['labelID', 'asc'],
+                ],
+              },
+              correlation: {
+                childField: ['issueID'],
+                parentField: ['id'],
+              },
+            },
+          },
+        ],
+      },
+      orderBy: [['id', 'desc']],
+      related: [
+        {
+          subquery: {
+            alias: 'issueLabels',
+            table: 'issueLabels',
+            orderBy: [
+              ['issueID', 'asc'],
+              ['labelID', 'asc'],
+            ],
+            related: [
+              {
+                hidden: true,
+                subquery: {
+                  alias: 'labels',
+                  table: 'labels',
+                  orderBy: [['id', 'asc']],
+                },
+                correlation: {
+                  childField: ['id'],
+                  parentField: ['labelID'],
+                },
+              },
+            ],
+          },
+          correlation: {
+            childField: ['issueID'],
+            parentField: ['id'],
+          },
+        },
+      ],
+    };
+
+    pipelines.init();
+    [...pipelines.addQuery('hash1', query)];
+
+    replicator.processTransaction(
+      '134',
+      messages.insert('issueLabels', {issueID: '2', labelID: '1'}),
+    );
+
+    expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
+      [
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "00",
+            "closed": true,
+            "id": "2",
+          },
+          "rowKey": {
+            "id": "2",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "123",
+            "issueID": "2",
+            "labelID": "1",
+          },
+          "rowKey": {
+            "issueID": "2",
+            "labelID": "1",
+          },
+          "table": "issueLabels",
+          "type": "add",
+        },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "00",
+            "id": "1",
+            "name": "bug",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "labels",
+          "type": "add",
+        },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "123",
+            "issueID": "2",
+            "labelID": "1",
+          },
+          "rowKey": {
+            "issueID": "2",
+            "labelID": "1",
+          },
+          "table": "issueLabels",
+          "type": "add",
+        },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "00",
+            "id": "1",
+            "name": "bug",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "labels",
+          "type": "add",
+        },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "123",
+            "issueID": "2",
+            "labelID": "1",
+          },
+          "rowKey": {
+            "issueID": "2",
+            "labelID": "1",
+          },
+          "table": "issueLabels",
+          "type": "add",
+        },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "00",
+            "id": "1",
+            "name": "bug",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "labels",
+          "type": "add",
+        },
+      ]
+    `);
+
+    replicator.processTransaction(
+      '135',
+      messages.delete('issueLabels', {issueID: '2', labelID: '1'}),
+    );
+
+    expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
+      [
+        {
+          "queryHash": "hash1",
+          "row": undefined,
+          "rowKey": {
+            "issueID": "2",
+            "labelID": "1",
+          },
+          "table": "issueLabels",
+          "type": "remove",
+        },
+        {
+          "queryHash": "hash1",
+          "row": undefined,
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "labels",
+          "type": "remove",
+        },
+        {
+          "queryHash": "hash1",
+          "row": undefined,
+          "rowKey": {
+            "id": "2",
+          },
+          "table": "issues",
+          "type": "remove",
+        },
+      ]
+    `);
+  });
+
   test('getRow', () => {
     pipelines.init();
 
