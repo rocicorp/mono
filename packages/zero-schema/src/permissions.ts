@@ -21,6 +21,7 @@ type PermissionRule<TAuthDataShape, TSchema extends TableSchema> = (
 ) => Condition;
 
 type AssetPermissions<TAuthDataShape, TSchema extends TableSchema> = {
+  // Why an array of rules?: https://github.com/rocicorp/mono/pull/3184/files#r1869680716
   select?: PermissionRule<TAuthDataShape, TSchema>[] | undefined;
   insert?: PermissionRule<TAuthDataShape, TSchema>[] | undefined;
   update?:
@@ -107,6 +108,11 @@ function compileRowConfig<TAuthDataShape, TSchema extends TableSchema>(
   };
 }
 
+/**
+ * What is this "allow" and why are permissions policies an array of rules?
+ *
+ * Please read: https://github.com/rocicorp/mono/pull/3184/files#r1869680716
+ */
 function compileRules<TAuthDataShape, TSchema extends TableSchema>(
   rules: PermissionRule<TAuthDataShape, TSchema>[] | undefined,
   expressionBuilder: ExpressionBuilder<TSchema>,
