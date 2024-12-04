@@ -506,4 +506,86 @@ describe('view-syncer/cvr-store', () => {
     // 12 + (30 * 10)
     expect(await db`SELECT COUNT(*) FROM cvr.rows`).toEqual([{count: 312n}]);
   });
+
+  test('deferred row stress test with empty updates', async () => {
+    const now = Date.UTC(2024, 10, 23);
+    let cvr = await store.load(CONNECT_TIME);
+
+    // Use real setTimeout.
+    setTimeoutFn.mockImplementation((cb, ms) => setTimeout(cb, ms));
+
+    // 12 rows set up in beforeEach().
+    expect(await db`SELECT COUNT(*) FROM cvr.rows`).toEqual([{count: 12n}]);
+
+    // Commit 30 flushes of 10 rows each.
+    for (let i = 20; i < 320; i += 10) {
+      const version = versionToLexi(i);
+      const updater = new CVRQueryDrivenUpdater(store, cvr, version, '01');
+      updater.trackQueries(
+        lc,
+        [{id: 'foo', transformationHash: 'foo-transformed'}],
+        [],
+      );
+
+      const rows = new CustomKeyMap<RowID, RowUpdate>(rowIDString);
+      for (let j = 0; j < 10; j++) {
+        const id = String(i + j);
+        rows.set(
+          {schema: 'public', table: 'issues', rowKey: {id}},
+          {version, contents: {id}, refCounts: {foo: 1}},
+        );
+      }
+      await updater.received(lc, rows);
+      cvr = (await updater.flush(lc, CONNECT_TIME, now)).cvr;
+
+      // add a random sleep for varying the asynchronicity
+      // between the CVR flush and the async row flush.
+      await sleep(Math.random() * 1);
+    }
+
+    const updater = new CVRQueryDrivenUpdater(
+      store,
+      cvr,
+      versionToLexi(320),
+      '01',
+    );
+    updater.trackQueries(
+      lc,
+      [{id: 'foo', transformationHash: 'foo-transformed'}],
+      [],
+    );
+    // Empty rows.
+    const rows = new CustomKeyMap<RowID, RowUpdate>(rowIDString);
+    await updater.received(lc, rows);
+    await updater.flush(lc, CONNECT_TIME, now);
+
+    expect(await db`SELECT * FROM cvr.instances`).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientGroupID": "my-cvr",
+          "grantedAt": 1732233600000,
+          "lastActive": 1732320000000,
+          "owner": "my-task",
+          "replicaVersion": "01",
+          "version": "18w",
+        },
+      ]
+    `);
+
+    // Should block until all pending rows are flushed.
+    await store.flushed();
+
+    // rowsVersion should match cvr.instances version
+    expect(await db`SELECT * FROM cvr."rowsVersion"`).toMatchInlineSnapshot(`
+            Result [
+              {
+                "clientGroupID": "my-cvr",
+                "version": "18w",
+              },
+            ]
+          `);
+
+    // 12 + (30 * 10)
+    expect(await db`SELECT COUNT(*) FROM cvr.rows`).toEqual([{count: 312n}]);
+  });
 });
