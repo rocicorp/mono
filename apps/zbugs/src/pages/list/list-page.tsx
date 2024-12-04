@@ -1,4 +1,6 @@
+import {escapeLike} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
+import {useVirtualizer} from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import React, {
   type CSSProperties,
@@ -7,23 +9,20 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import {FixedSizeList as List, type ListOnScrollProps} from 'react-window';
+import {useDebouncedCallback} from 'use-debounce';
 import {useSearch} from 'wouter';
-import {navigate, useHistoryState} from 'wouter/use-browser-location';
+import {navigate} from 'wouter/use-browser-location';
+import {Button} from '../../components/button.js';
 import Filter, {type Selection} from '../../components/filter.js';
-import {Link} from '../../components/link.js';
-import {useElementSize} from '../../hooks/use-element-size.js';
-import {useZero} from '../../hooks/use-zero.js';
-import {mark} from '../../perf-log.js';
 import IssueLink from '../../components/issue-link.js';
-import type {ListContext, ZbugsHistoryState} from '../../routes.js';
-import {useDebouncedCallback, useThrottledCallback} from 'use-debounce';
+import {Link} from '../../components/link.js';
 import RelativeTime from '../../components/relative-time.js';
 import {useClickOutside} from '../../hooks/use-click-outside.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
-import {Button} from '../../components/button.js';
 import {useLogin} from '../../hooks/use-login.js';
-import {escapeLike} from '@rocicorp/zero';
+import {useZero} from '../../hooks/use-zero.js';
+import {mark} from '../../perf-log.js';
+import type {ListContext} from '../../routes.js';
 
 let firstRowRendered = false;
 const itemSize = 56;
@@ -155,24 +154,6 @@ export default function ListPage() {
     );
   };
 
-  const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
-  let initialScrollOffset = zbugsHistoryState?.zbugsListScrollOffset ?? 0;
-  if (initialScrollOffset > itemSize * issues.length) {
-    initialScrollOffset = 0;
-  }
-  const [scrollOffset, setScrollOffset] = useState(initialScrollOffset);
-
-  const onScroll = useThrottledCallback(({scrollOffset}: ListOnScrollProps) => {
-    history.replaceState(
-      {
-        ...zbugsHistoryState,
-        zbugsListScrollOffset: scrollOffset,
-      } satisfies ZbugsHistoryState,
-      '',
-    );
-    setScrollOffset(scrollOffset);
-  }, 250);
-
   const updateTextFilterQueryString = useDebouncedCallback((text: string) => {
     navigate(addParam(qs, 'q', text, 'exclusive'));
   }, 500);
@@ -210,7 +191,6 @@ export default function ListPage() {
           issue={issue}
           title={issue.title}
           listContext={listContext}
-          scrollOffset={scrollOffset}
         >
           {issue.title}
         </IssueLink>
@@ -233,7 +213,14 @@ export default function ListPage() {
   };
 
   const tableWrapperRef = useRef<HTMLDivElement>(null);
-  const size = useElementSize(tableWrapperRef.current);
+
+  const virtualizer = useVirtualizer({
+    count: issues.length,
+    estimateSize: () => itemSize,
+    overscan: 5,
+    getItemKey: index => issues[index].id,
+    getScrollElement: () => tableWrapperRef.current,
+  });
 
   const [forceSearchMode, setForceSearchMode] = useState(false);
   const searchMode = forceSearchMode || Boolean(textFilter);
@@ -323,19 +310,20 @@ export default function ListPage() {
       </div>
 
       <div className="issue-list" ref={tableWrapperRef}>
-        {size && issues.length ? (
-          <List
-            className="virtual-list"
-            width={size.width}
-            height={size.height}
-            itemSize={itemSize}
-            itemCount={issues.length}
-            onScroll={onScroll}
-            initialScrollOffset={initialScrollOffset}
-          >
-            {Row}
-          </List>
-        ) : null}
+        <div
+          className="virtual-list"
+          style={{height: virtualizer.getTotalSize()}}
+        >
+          {virtualizer.getVirtualItems().map(virtualRow => (
+            <Row
+              key={virtualRow.key + ''}
+              index={virtualRow.index}
+              style={{
+                transform: `translateY(${virtualRow.start}px)`,
+              }}
+            />
+          ))}
+        </div>
       </div>
     </>
   );
