@@ -6,6 +6,7 @@ import {
 } from '@headlessui/react';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import type {TableSchemaToRow} from '@rocicorp/zero';
+import classNames from 'classnames';
 import {nanoid} from 'nanoid';
 import {useCallback} from 'react';
 import {useQuery} from 'zero-react/src/use-query.js';
@@ -198,12 +199,13 @@ function EmojiPill({
 }) {
   const z = useZero();
   const skinTone = useNumericPref(SKIN_TONE_PREF, 0);
+  const mine = findEmojiForCreator(emojis, z.userID) !== undefined;
 
   return (
     <Tooltip.Root>
       <Tooltip.Trigger asChild>
         <ButtonWithLoginCheck
-          className="emoji-pill"
+          className={classNames('emoji-pill', {mine})}
           eventName="Add to existing emoji reaction"
           key={normalizedEmoji}
           loginMessage={loginMessage}
