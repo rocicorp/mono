@@ -6,6 +6,7 @@ import {
   type TableSchema,
   type TableSchemaToRow,
 } from '@rocicorp/zero';
+import type {Condition} from 'zero-protocol/src/ast.js';
 
 const userSchema = createTableSchema({
   tableName: 'user',
@@ -207,6 +208,17 @@ export const schema = createSchema({
   },
 });
 
+type PermissionRule<TSchema extends TableSchema> = (
+  authData: AuthData,
+  eb: ExpressionBuilder<TSchema>,
+) => Condition;
+
+function and<TSchema extends TableSchema>(
+  ...rules: PermissionRule<TSchema>[]
+): PermissionRule<TSchema> {
+  return (authData, eb) => eb.and(...rules.map(rule => rule(authData, eb)));
+}
+
 export const permissions: ReturnType<typeof definePermissions> =
   definePermissions<AuthData, Schema>(schema, () => {
     const userIsLoggedIn = (
@@ -257,7 +269,7 @@ export const permissions: ReturnType<typeof definePermissions> =
       eb.or(loggedInUserIsAdmin(authData, eb), eb.cmp('visibility', 'public'));
 
     /**
-     * Comments are only visible if the user can see the issue they're on.
+     * Comments are only visible if the user can see the issue they're attached to.
      */
     const canSeeComment = (
       authData: AuthData,
@@ -265,7 +277,15 @@ export const permissions: ReturnType<typeof definePermissions> =
     ) => eb.exists('issue', q => q.where(eb => canSeeIssue(authData, eb)));
 
     /**
-     * Emoji are only visible if the user can see the issue they're on.
+     * Issue labels are only visible if the user can see the issue they're attached to.
+     */
+    const canSeeIssueLabel = (
+      authData: AuthData,
+      eb: ExpressionBuilder<typeof issueLabelSchema>,
+    ) => eb.exists('issue', q => q.where(eb => canSeeIssue(authData, eb)));
+
+    /**
+     * Emoji are only visible if the user can see the issue they're attached to.
      */
     const canSeeEmoji = (
       authData: AuthData,
@@ -308,16 +328,19 @@ export const permissions: ReturnType<typeof definePermissions> =
       comment: {
         row: {
           insert: [
-            (authData, eb) =>
-              eb.and(
-                userIsLoggedIn(authData, eb),
-                loggedInUserIsCreator(authData, eb),
-              ),
+            loggedInUserIsAdmin,
+            and(loggedInUserIsCreator, canSeeComment),
           ],
           update: {
-            preMutation: [loggedInUserIsCreator, loggedInUserIsAdmin],
+            preMutation: [
+              loggedInUserIsAdmin,
+              and(loggedInUserIsCreator, canSeeComment),
+            ],
           },
-          delete: [loggedInUserIsCreator, loggedInUserIsAdmin],
+          delete: [
+            loggedInUserIsAdmin,
+            and(canSeeComment, loggedInUserIsCreator),
+          ],
           select: [canSeeComment],
         },
       },
@@ -343,26 +366,25 @@ export const permissions: ReturnType<typeof definePermissions> =
       },
       issueLabel: {
         row: {
-          insert: [allowIfAdminOrIssueCreator],
+          insert: [and(canSeeIssueLabel, allowIfAdminOrIssueCreator)],
           update: {
             preMutation: [],
           },
-          delete: [allowIfAdminOrIssueCreator],
-          select: [
-            (authData, {exists}) =>
-              exists('issue', q => q.where(eb => canSeeIssue(authData, eb))),
-          ],
+          delete: [and(canSeeIssueLabel, allowIfAdminOrIssueCreator)],
+          select: [canSeeIssueLabel],
         },
       },
       emoji: {
         row: {
-          insert: [loggedInUserIsCreator],
+          // Can only insert emoji if the can see the issue.
+          insert: [and(canSeeEmoji, loggedInUserIsCreator)],
+
           // Can only update their own emoji.
           update: {
-            preMutation: [loggedInUserIsCreator],
-            postProposedMutation: [loggedInUserIsCreator],
+            preMutation: [and(canSeeEmoji, loggedInUserIsCreator)],
+            postProposedMutation: [and(canSeeEmoji, loggedInUserIsCreator)],
           },
-          delete: [loggedInUserIsCreator],
+          delete: [and(canSeeEmoji, loggedInUserIsCreator)],
           select: [canSeeEmoji],
         },
       },
