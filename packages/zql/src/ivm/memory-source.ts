@@ -354,19 +354,22 @@ export class MemorySource implements Source {
 
     switch (change.type) {
       case 'add':
-        if (data.has(change.row)) {
-          throw new Error(`Row already exists ${JSON.stringify(change)}`);
-        }
+        assert(
+          !data.has(change.row),
+          () => `Row already exists ${JSON.stringify(change)}`,
+        );
         break;
       case 'remove':
-        if (!data.has(change.row)) {
-          throw new Error(`Row not found ${JSON.stringify(change)}`);
-        }
+        assert(
+          data.has(change.row),
+          () => `Row not found ${JSON.stringify(change)}`,
+        );
         break;
       case 'edit':
-        if (!data.has(change.oldRow)) {
-          throw new Error(`Row not found ${JSON.stringify(change)}`);
-        }
+        assert(
+          data.has(change.oldRow),
+          () => `Row not found ${JSON.stringify(change)}`,
+        );
         break;
       default:
         unreachable(change);

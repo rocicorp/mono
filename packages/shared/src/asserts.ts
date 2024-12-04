@@ -1,6 +1,10 @@
-export function assert(b: unknown, msg = 'Assertion failed'): asserts b {
+export function assert(
+  b: unknown,
+  msg: string | (() => string) = 'Assertion failed',
+): asserts b {
   if (!b) {
-    throw new Error(msg);
+    const msgStr = typeof msg === 'string' ? msg : msg();
+    throw new Error(msgStr);
   }
 }
 
