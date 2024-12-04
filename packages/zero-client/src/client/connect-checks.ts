@@ -2,6 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {navigator} from '../../../shared/src/navigator.js';
 import {sleep} from '../../../shared/src/sleep.js';
+import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.js';
 import {nanoid} from '../util/nanoid.js';
 import {
   type HTTPString,
@@ -11,7 +12,6 @@ import {
   assertWSString,
   toWSString,
 } from './http-string.js';
-import {PROTOCOL_VERSION} from './protocol-version.js';
 
 type CheckResult = {success: boolean; detail: string};
 type Check = (l: LogContext) => Promise<CheckResult>;
