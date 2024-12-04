@@ -39,7 +39,6 @@
     "react-dom": ">=16.0 <19.0",
     "react-markdown": "^9.0.1",
     "react-textarea-autosize": "^8.5.3",
-    "react-window": "^1.8.10",
     "rehype-raw": "^7.0.0",
     "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.0",

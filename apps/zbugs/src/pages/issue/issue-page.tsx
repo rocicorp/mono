@@ -24,12 +24,12 @@ import UserPicker from '../../components/user-picker.js';
 import {useCanEdit} from '../../hooks/use-can-edit.js';
 import {useHash} from '../../hooks/use-hash.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
+import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {LRUCache} from '../../lru-cache.js';
 import {links, type ListContext, type ZbugsHistoryState} from '../../routes.js';
 import CommentComposer from './comment-composer.js';
 import Comment, {parsePermalink} from './comment.js';
-import {useLogin} from '../../hooks/use-login.js';
 
 export default function IssuePage() {
   const z = useZero();
@@ -188,14 +188,7 @@ export default function IssuePage() {
           <div className="issue-breadcrumb">
             {listContext ? (
               <>
-                <Link
-                  className="breadcrumb-item"
-                  href={listContext.href}
-                  state={{
-                    zbugsListScrollOffset:
-                      zbugsHistoryState?.zbugsListScrollOffset,
-                  }}
-                >
+                <Link className="breadcrumb-item" href={listContext.href}>
                   {listContext.title}
                 </Link>
                 <span className="breadcrumb-item">&rarr;</span>
@@ -403,28 +396,21 @@ export default function IssuePage() {
 
         <div className="comments-container" ref={listRef}>
           <div
-            style={{
-              position: 'relative',
-              height: `${virtualizer.getTotalSize()}px`,
-            }}
+            className="virtual-list"
+            style={{height: virtualizer.getTotalSize()}}
           >
             {virtualizer.getVirtualItems().map(item => (
               <div
-                key={item.key + ''}
+                key={item.key as string}
                 ref={virtualizer.measureElement}
                 data-index={item.index}
                 style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
                   transform: `translateY(${
                     item.start - virtualizer.options.scrollMargin
                   }px)`,
                 }}
               >
                 <Comment
-                  key={issue.comments[item.index].id}
                   id={issue.comments[item.index].id}
                   issueID={issue.id}
                   height={item.size}

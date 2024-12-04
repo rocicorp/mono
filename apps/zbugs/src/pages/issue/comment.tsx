@@ -1,6 +1,6 @@
 import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
-import {memo, useRef, useState} from 'react';
+import {memo, useState} from 'react';
 import {Button} from '../../components/button.js';
 import {CanEdit} from '../../components/can-edit.js';
 import {Confirm} from '../../components/confirm.js';
@@ -44,7 +44,6 @@ const Comment = memo(({id, issueID, height}: Props) => {
   const hash = useHash();
   const permalink = comment ? `comment-${comment.id}` : undefined;
   const isPermalinked = hash === permalink;
-  const ref = useRef<HTMLDivElement>(null);
 
   const edit = () => setEditing(true);
   const remove = () => z.mutate.comment.delete({id});
@@ -54,7 +53,6 @@ const Comment = memo(({id, issueID, height}: Props) => {
   }
   return (
     <div
-      ref={ref}
       className={classNames({
         [style.commentItem]: true,
         [style.authorComment]:
