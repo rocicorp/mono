@@ -23,6 +23,11 @@ import type {
 } from '../services/view-syncer/view-syncer.js';
 import {findErrorForClient} from '../types/error-for-client.js';
 import type {Source} from '../types/streams.js';
+import {trace} from '@opentelemetry/api';
+import {version} from '../../../otel/src/version.js';
+import {startAsyncSpan} from '../../../otel/src/span.js';
+
+const tracer = trace.getTracer('syncer-ws-server', version);
 
 /**
  * Represents a connection between the client and server.
@@ -167,29 +172,31 @@ export class Connection {
           this.send(['pong', {}] satisfies PongMessage);
           break;
         case 'push': {
-          const {clientGroupID, mutations, schemaVersion} = msg[1];
-          if (clientGroupID !== this.#clientGroupID) {
-            this.#closeWithError({
-              kind: ErrorKind.InvalidPush,
-              message:
-                `clientGroupID in mutation "${clientGroupID}" does not match ` +
-                `clientGroupID of connection "${this.#clientGroupID}`,
-            });
-          }
-          // Hold a connection-level lock while processing mutations so that:
-          // 1. Mutations are processed in the order in which they are received and
-          // 2. A single view syncer connection cannot hog multiple upstream connections.
-          await this.#mutationLock.withLock(async () => {
-            for (const mutation of mutations) {
-              const maybeError = await this.#mutagen.processMutation(
-                mutation,
-                this.#authData,
-                schemaVersion,
-              );
-              if (maybeError !== undefined) {
-                this.sendError({kind: maybeError[0], message: maybeError[1]});
-              }
+          await startAsyncSpan(tracer, 'connection.push', async () => {
+            const {clientGroupID, mutations, schemaVersion} = msg[1];
+            if (clientGroupID !== this.#clientGroupID) {
+              this.#closeWithError({
+                kind: ErrorKind.InvalidPush,
+                message:
+                  `clientGroupID in mutation "${clientGroupID}" does not match ` +
+                  `clientGroupID of connection "${this.#clientGroupID}`,
+              });
             }
+            // Hold a connection-level lock while processing mutations so that:
+            // 1. Mutations are processed in the order in which they are received and
+            // 2. A single view syncer connection cannot hog multiple upstream connections.
+            await this.#mutationLock.withLock(async () => {
+              for (const mutation of mutations) {
+                const maybeError = await this.#mutagen.processMutation(
+                  mutation,
+                  this.#authData,
+                  schemaVersion,
+                );
+                if (maybeError !== undefined) {
+                  this.sendError({kind: maybeError[0], message: maybeError[1]});
+                }
+              }
+            });
           });
           break;
         }
@@ -197,22 +204,34 @@ export class Connection {
           lc.error?.('TODO: implement pull');
           break;
         case 'changeDesiredQueries':
-          await viewSyncer.changeDesiredQueries(this.#syncContext, msg);
+          await startAsyncSpan(
+            tracer,
+            'connection.changeDesiredQueries',
+            async () => {
+              await viewSyncer.changeDesiredQueries(this.#syncContext, msg);
+            },
+          );
           break;
         case 'deleteClients':
           lc.error?.('TODO: implement deleteClients');
           break;
         case 'initConnection': {
-          // TODO (mlaw): tell mutagens about the new token too
-          this.#outboundStream = await viewSyncer.initConnection(
-            this.#syncContext,
-            msg,
+          await startAsyncSpan(
+            tracer,
+            'connection.initConnection',
+            async () => {
+              // TODO (mlaw): tell mutagens about the new token too
+              this.#outboundStream = await viewSyncer.initConnection(
+                this.#syncContext,
+                msg,
+              );
+              if (this.#closed) {
+                this.#outboundStream.cancel();
+              } else {
+                void this.#proxyOutbound(this.#outboundStream);
+              }
+            },
           );
-          if (this.#closed) {
-            this.#outboundStream.cancel();
-          } else {
-            void this.#proxyOutbound(this.#outboundStream);
-          }
           break;
         }
         default:
