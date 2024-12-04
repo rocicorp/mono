@@ -139,7 +139,7 @@ const issueLabelSchema = {
   },
 } as const;
 
-const emojiSchema = createTableSchema({
+const emojiSchema = {
   tableName: 'emoji',
   columns: {
     id: 'string',
@@ -156,8 +156,18 @@ const emojiSchema = createTableSchema({
       destField: 'id',
       destSchema: userSchema,
     },
+    issue: {
+      sourceField: 'subjectID',
+      destField: 'id',
+      destSchema: issueSchema,
+    },
+    comment: {
+      sourceField: 'subjectID',
+      destField: 'id',
+      destSchema: commentSchema,
+    },
   },
-});
+} as const;
 
 const userPrefSchema = createTableSchema({
   tableName: 'userPref',
@@ -204,24 +214,29 @@ export const permissions: ReturnType<typeof definePermissions> =
       {cmpLit}: ExpressionBuilder<TableSchema>,
     ) => cmpLit(authData.sub, 'IS NOT', null);
 
-    const loggedInUserIsIssueCreator = (
+    const loggedInUserIsCreator = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<typeof issueSchema>,
-    ) => cmp('creatorID', '=', authData.sub);
-
-    const loggedInUserIsCommentCreator = (
-      authData: AuthData,
-      {cmp}: ExpressionBuilder<typeof commentSchema>,
-    ) => cmp('creatorID', '=', authData.sub);
+      eb: ExpressionBuilder<
+        typeof commentSchema | typeof emojiSchema | typeof issueSchema
+      >,
+    ) =>
+      eb.and(
+        userIsLoggedIn(authData, eb),
+        eb.cmp('creatorID', '=', authData.sub),
+      );
 
     const loggedInUserIsAdmin = (
       authData: AuthData,
-      {cmpLit}: ExpressionBuilder<TableSchema>,
-    ) => cmpLit(authData.role, '=', 'crew');
+      eb: ExpressionBuilder<TableSchema>,
+    ) =>
+      eb.and(
+        userIsLoggedIn(authData, eb),
+        eb.cmpLit(authData.role, '=', 'crew'),
+      );
 
     const allowIfUserIDMatchesLoggedInUser = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<typeof viewStateSchema>,
+      {cmp}: ExpressionBuilder<typeof viewStateSchema | typeof userPrefSchema>,
     ) => cmp('userID', '=', authData.sub);
 
     const allowIfAdminOrIssueCreator = (
@@ -231,7 +246,7 @@ export const permissions: ReturnType<typeof definePermissions> =
       eb.or(
         loggedInUserIsAdmin(authData, eb),
         eb.exists('issue', iq =>
-          iq.where(eb => loggedInUserIsIssueCreator(authData, eb)),
+          iq.where(eb => loggedInUserIsCreator(authData, eb)),
         ),
       );
 
@@ -240,6 +255,30 @@ export const permissions: ReturnType<typeof definePermissions> =
       eb: ExpressionBuilder<typeof issueSchema>,
     ) =>
       eb.or(loggedInUserIsAdmin(authData, eb), eb.cmp('visibility', 'public'));
+
+    /**
+     * Comments are only visible if the user can see the issue they're on.
+     */
+    const canSeeComment = (
+      authData: AuthData,
+      eb: ExpressionBuilder<typeof commentSchema>,
+    ) => eb.exists('issue', q => q.where(eb => canSeeIssue(authData, eb)));
+
+    /**
+     * Emoji are only visible if the user can see the issue they're on.
+     */
+    const canSeeEmoji = (
+      authData: AuthData,
+      {exists, or}: ExpressionBuilder<typeof emojiSchema>,
+    ) =>
+      or(
+        exists('issue', q => {
+          return q.where(eb => canSeeIssue(authData, eb));
+        }),
+        exists('comment', q => {
+          return q.where(eb => canSeeComment(authData, eb));
+        }),
+      );
 
     return {
       user: {
@@ -254,19 +293,15 @@ export const permissions: ReturnType<typeof definePermissions> =
       issue: {
         row: {
           insert: [
-            (authData, eb) =>
-              eb.and(
-                userIsLoggedIn(authData, eb),
-                // prevents setting the creatorID of an issue to someone
-                // other than the user doing the creating
-                loggedInUserIsIssueCreator(authData, eb),
-              ),
+            // prevents setting the creatorID of an issue to someone
+            // other than the user doing the creating
+            loggedInUserIsCreator,
           ],
           update: {
-            // TODO: add a check to prevent changing the creatorID
-            preMutation: [loggedInUserIsIssueCreator, loggedInUserIsAdmin],
+            preMutation: [loggedInUserIsCreator, loggedInUserIsAdmin],
+            postProposedMutation: [loggedInUserIsCreator, loggedInUserIsAdmin],
           },
-          delete: [loggedInUserIsIssueCreator, loggedInUserIsAdmin],
+          delete: [loggedInUserIsCreator, loggedInUserIsAdmin],
           select: [canSeeIssue],
         },
       },
@@ -276,18 +311,14 @@ export const permissions: ReturnType<typeof definePermissions> =
             (authData, eb) =>
               eb.and(
                 userIsLoggedIn(authData, eb),
-                loggedInUserIsCommentCreator(authData, eb),
+                loggedInUserIsCreator(authData, eb),
               ),
           ],
           update: {
-            preMutation: [loggedInUserIsCommentCreator, loggedInUserIsAdmin],
+            preMutation: [loggedInUserIsCreator, loggedInUserIsAdmin],
           },
-          delete: [loggedInUserIsCommentCreator, loggedInUserIsAdmin],
-          // comments are only visible if the user can see the issue they're on
-          select: [
-            (authData, {exists}) =>
-              exists('issue', q => q.where(eb => canSeeIssue(authData, eb))),
-          ],
+          delete: [loggedInUserIsCreator, loggedInUserIsAdmin],
+          select: [canSeeComment],
         },
       },
       label: {
@@ -321,6 +352,28 @@ export const permissions: ReturnType<typeof definePermissions> =
             (authData, {exists}) =>
               exists('issue', q => q.where(eb => canSeeIssue(authData, eb))),
           ],
+        },
+      },
+      emoji: {
+        row: {
+          insert: [loggedInUserIsCreator],
+          // Can only update their own emoji.
+          update: {
+            preMutation: [loggedInUserIsCreator],
+            postProposedMutation: [loggedInUserIsCreator],
+          },
+          delete: [loggedInUserIsCreator],
+          select: [canSeeEmoji],
+        },
+      },
+      userPref: {
+        row: {
+          insert: [allowIfUserIDMatchesLoggedInUser],
+          update: {
+            preMutation: [allowIfUserIDMatchesLoggedInUser],
+            postProposedMutation: [allowIfUserIDMatchesLoggedInUser],
+          },
+          delete: [allowIfUserIDMatchesLoggedInUser],
         },
       },
     };
