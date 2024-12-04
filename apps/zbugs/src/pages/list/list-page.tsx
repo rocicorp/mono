@@ -312,9 +312,7 @@ export default function ListPage() {
       <div className="issue-list" ref={tableWrapperRef}>
         <div
           className="virtual-list"
-          style={{
-            height: `${virtualizer.getTotalSize()}px`,
-          }}
+          style={{height: virtualizer.getTotalSize()}}
         >
           {virtualizer.getVirtualItems().map(virtualRow => (
             <Row
