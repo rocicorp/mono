@@ -66,6 +66,14 @@ const logOptions = {
       `and {bold json} for consumption by structured-logging services`,
     ],
   },
+
+  traceCollector: {
+    type: v.string().optional(),
+    desc: [
+      `The URL of the trace collector to which to send trace data. Traces are sent over http.`,
+      `Port defaults to 4318 for most collectors.`,
+    ],
+  },
 };
 
 export type LogConfig = Config<typeof logOptions>;

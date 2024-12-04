@@ -43,6 +43,9 @@ import {
   versionString,
   versionToNullableCookie,
 } from './schema/types.js';
+import {trace} from '@opentelemetry/api';
+import {version} from '../../../../otel/src/version.js';
+import {startAsyncSpan} from '../../../../otel/src/span.js';
 
 type NotNull<T> = T extends null ? never : T;
 
@@ -55,6 +58,8 @@ export type CVRFlushStats = {
   rowsDeferred: number;
   statements: number;
 };
+
+const tracer = trace.getTracer('cvr-store', version);
 
 /**
  * The RowRecordCache is an in-memory cache of the `cvr.rows` tables that
@@ -442,24 +447,26 @@ export class CVRStore {
     this.#maxLoadAttempts = maxLoadAttempts;
   }
 
-  async load(lc: LogContext, lastConnectTime: number): Promise<CVR> {
-    let err: RowsVersionBehindError | undefined;
-    for (let i = 0; i < this.#maxLoadAttempts; i++) {
-      if (i > 0) {
-        await sleep(this.#loadAttemptIntervalMs);
+  load(lc: LogContext, lastConnectTime: number): Promise<CVR> {
+    return startAsyncSpan(tracer, 'cvr.load', async () => {
+      let err: RowsVersionBehindError | undefined;
+      for (let i = 0; i < this.#maxLoadAttempts; i++) {
+        if (i > 0) {
+          await sleep(this.#loadAttemptIntervalMs);
+        }
+        const result = await this.#load(lc, lastConnectTime);
+        if (result instanceof RowsVersionBehindError) {
+          lc.info?.(`attempt ${i + 1}: ${String(result)}`);
+          err = result;
+          continue;
+        }
+        return result;
       }
-      const result = await this.#load(lc, lastConnectTime);
-      if (result instanceof RowsVersionBehindError) {
-        lc.info?.(`attempt ${i + 1}: ${String(result)}`);
-        err = result;
-        continue;
-      }
-      return result;
-    }
-    assert(err);
-    throw new ErrorForClient({
-      kind: ErrorKind.ClientNotFound,
-      message: `max attempts exceeded waiting for CVR@${err.cvrVersion} to catch up from ${err.rowsVersion}`,
+      assert(err);
+      throw new ErrorForClient({
+        kind: ErrorKind.ClientNotFound,
+        message: `max attempts exceeded waiting for CVR@${err.cvrVersion} to catch up from ${err.rowsVersion}`,
+      });
     });
   }
 

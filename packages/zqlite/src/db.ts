@@ -14,7 +14,7 @@ export class Database {
     lc: LogContext,
     path: string,
     options?: SQLite3Database.Options,
-    slowQueryThreshold = 300,
+    slowQueryThreshold = 100,
   ) {
     this.#lc = lc.withContext('class', 'Database').withContext('path', path);
     this.#db = new SQLite3Database(path, options);
