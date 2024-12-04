@@ -3,6 +3,7 @@ import {useEffect, useState} from 'react';
 import {Button} from '../../components/button.js';
 import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
+import {isCtrlEnter} from './is-ctrl-enter.js';
 
 export default function CommentComposer({
   id,
@@ -60,8 +61,15 @@ export default function CommentComposer({
     return () => cleanupFns.forEach(fn => fn());
   }, [currentBody]);
 
-  const textAreaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setCurrentBody(e.target.value);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (isCtrlEnter(e)) {
+      e.preventDefault();
+      save();
+    }
   };
 
   if (!login.loginState) {
@@ -72,7 +80,8 @@ export default function CommentComposer({
     <>
       <textarea
         value={currentBody}
-        onChange={textAreaChange}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
         className="comment-input autoResize"
       />
       <Button
