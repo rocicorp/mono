@@ -124,7 +124,7 @@ export class Storer implements Service {
         if (tx) {
           catchupQueue.push(subscriber); // Wait for the current tx to complete.
         } else {
-          this.#processCatchup([subscriber]); // Catch up immediately.
+          await this.#startCatchup([subscriber]); // Catch up immediately.
         }
         continue;
       }
@@ -190,7 +190,7 @@ export class Storer implements Service {
 
         // Before beginning the next transaction, open a READONLY snapshot to
         // concurrently catchup any queued subscribers.
-        this.#processCatchup(catchupQueue.splice(0));
+        await this.#startCatchup(catchupQueue.splice(0));
       } else if (tag === 'rollback') {
         // Aborted transactions are not stored in the changeLog. Abort the current tx
         // and process catchup of subscribers that were waiting for it to end.
@@ -198,14 +198,14 @@ export class Storer implements Service {
         await tx.pool.done();
         tx = null;
 
-        this.#processCatchup(catchupQueue.splice(0));
+        await this.#startCatchup(catchupQueue.splice(0));
       }
     }
 
     this.#lc.info?.('storer stopped');
   }
 
-  #processCatchup(subs: Subscriber[]) {
+  async #startCatchup(subs: Subscriber[]) {
     if (subs.length === 0) {
       return;
     }
@@ -216,8 +216,14 @@ export class Storer implements Service {
     );
     reader.run(this.#db);
 
-    // Run in the background. Errors are handled in #catchup() by disconnecting
-    // the associated subscriber.
+    // Ensure that the transaction has started (and is thus holding a snapshot
+    // of the database) before continuing on to commit more changes. This is
+    // done by waiting for a no-op task to be processed by the pool, which
+    // indicates that the BEGIN statement has been sent to the database.
+    await reader.processReadTask(() => {});
+
+    // Run the actual catchup queries in the background. Errors are handled in
+    // #catchup() by disconnecting the associated subscriber.
     void Promise.all(subs.map(sub => this.#catchup(sub, reader))).finally(() =>
       reader.setDone(),
     );
