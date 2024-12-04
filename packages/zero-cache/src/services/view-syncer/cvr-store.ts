@@ -121,6 +121,7 @@ class RowRecordCache {
   // Write-back cache state.
   readonly #pending = new CustomKeyMap<RowID, RowRecord>(rowIDString);
   #pendingRowsVersion: CVRVersion | null = null;
+  #flushedRowsVersion: CVRVersion | null = null;
   #flushing: Resolver<void> | null = null;
 
   constructor(
@@ -211,7 +212,7 @@ class RowRecordCache {
   async #flush() {
     const flushing = must(this.#flushing);
     try {
-      while (this.#pending.size) {
+      while (this.#pendingRowsVersion !== this.#flushedRowsVersion) {
         const start = Date.now();
 
         const {rows, rowsVersion} = await this.#db.begin(tx => {
@@ -233,12 +234,13 @@ class RowRecordCache {
             Date.now() - start
           } ms)`,
         );
+        this.#flushedRowsVersion = rowsVersion;
         // Note: apply() may have called while the transaction was committing,
-        //       which will result in looping to commit the next #pending batch.
+        //       which will result in looping to commit the next #pendingRowsVersion.
       }
       this.#lc.debug?.(
         `pending rows flushed to ${versionToNullableCookie(
-          this.#pendingRowsVersion,
+          this.#flushedRowsVersion,
         )}`,
       );
       flushing.resolve();
