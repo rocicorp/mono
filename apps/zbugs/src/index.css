@@ -1212,6 +1212,10 @@ textarea.autoResize {
   cursor: pointer;
 }
 
+.emoji-pill.mine {
+  background-color: var(--color-light-outline);
+}
+
 .add-emoji-button {
   padding: 0.5rem 0;
   border-color: transparent;

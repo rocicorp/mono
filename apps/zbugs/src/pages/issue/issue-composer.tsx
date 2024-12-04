@@ -3,6 +3,7 @@ import {useCallback, useEffect, useState} from 'react';
 import {Button} from '../../components/button.js';
 import {Modal, ModalActions, ModalBody} from '../../components/modal.js';
 import {useZero} from '../../hooks/use-zero.js';
+import {isCtrlEnter} from './is-ctrl-enter.js';
 
 interface Props {
   /** If id is defined the issue created by the composer. */
@@ -74,6 +75,13 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
     [title, description],
   );
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (canSave() && isCtrlEnter(e)) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
   return (
     <Modal
       title="New Issue"
@@ -94,6 +102,7 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
             value={title}
             ref={focusInput} // Attach the inputRef to this input field
             onChange={e => setTitle(e.target.value)}
+            onKeyDown={handleKeyDown}
           />
         </div>
         <div className="w-full px-4">
@@ -101,6 +110,7 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
             className="new-issue-description autoResize"
             value={description || ''}
             onChange={e => setDescription(e.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder="Add description..."
           ></textarea>
         </div>
