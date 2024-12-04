@@ -20,7 +20,12 @@ import {
   type UpsertOp,
 } from '../../../../zero-protocol/src/push.js';
 import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.js';
+import type {Schema} from '../../../../zero-schema/src/schema.js';
 import {Database} from '../../../../zqlite/src/db.js';
+import {
+  WriteAuthorizerImpl,
+  type WriteAuthorizer,
+} from '../../auth/write-authorizer.js';
 import {type ZeroConfig} from '../../config/zero-config.js';
 import {Mode} from '../../db/transaction-pool.js';
 import {ErrorForClient} from '../../types/error-for-client.js';
@@ -29,11 +34,6 @@ import {throwErrorForClientIfSchemaVersionNotSupported} from '../../types/schema
 import {unescapedSchema as schema} from '../change-streamer/pg/schema/shard.js';
 import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.js';
 import type {Service} from '../service.js';
-import {
-  WriteAuthorizerImpl,
-  type WriteAuthorizer,
-} from '../../auth/write-authorizer.js';
-import type {Schema} from '../../../../zero-schema/src/schema.js';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
@@ -126,7 +126,7 @@ export class MutagenService implements Mutagen, Service {
   }
 }
 
-const MAX_SERIALIZATION_ATTEMPTS = 3;
+const MAX_SERIALIZATION_ATTEMPTS = 10;
 
 export async function processMutation(
   lc: LogContext | undefined,
@@ -227,7 +227,7 @@ export async function processMutation(
           e instanceof postgres.PostgresError &&
           e.code === PG_SERIALIZATION_FAILURE
         ) {
-          lc?.info?.(i < MAX_SERIALIZATION_ATTEMPTS ? `Retrying` : '', e);
+          lc?.info?.(`attempt ${i + 1}: ${String(e)}`, e);
           continue; // Retry up to MAX_SERIALIZATION_ATTEMPTS.
         }
         result = [ErrorKind.MutationFailed, String(e)];
@@ -235,6 +235,7 @@ export async function processMutation(
           break;
         }
         lc?.error?.('Got error running mutation, re-running in error mode', e);
+        ``;
         errorMode = true;
         i--;
       }
