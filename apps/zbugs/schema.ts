@@ -19,7 +19,7 @@ const userSchema = createTableSchema({
   primaryKey: 'id',
 });
 
-const issueSchema = createTableSchema({
+const issueSchema = {
   tableName: 'issue',
   columns: {
     id: 'string',
@@ -31,6 +31,7 @@ const issueSchema = createTableSchema({
     creatorID: 'string',
     assigneeID: {type: 'string', optional: true},
     description: 'string',
+    visibility: {type: 'string'},
   },
   primaryKey: 'id',
   relationships: {
@@ -72,7 +73,7 @@ const issueSchema = createTableSchema({
       destSchema: () => emojiSchema,
     },
   },
-});
+} as const;
 
 const viewStateSchema = createTableSchema({
   tableName: 'viewState',
@@ -84,7 +85,7 @@ const viewStateSchema = createTableSchema({
   primaryKey: ['userID', 'issueID'],
 });
 
-const commentSchema = createTableSchema({
+const commentSchema = {
   tableName: 'comment',
   columns: {
     id: 'string',
@@ -105,8 +106,13 @@ const commentSchema = createTableSchema({
       destField: 'subjectID',
       destSchema: () => emojiSchema,
     },
+    issue: {
+      sourceField: 'issueID',
+      destField: 'id',
+      destSchema: () => issueSchema,
+    },
   },
-});
+} as const;
 
 const labelSchema = createTableSchema({
   tableName: 'label',
@@ -229,6 +235,12 @@ export const permissions: ReturnType<typeof definePermissions> =
         ),
       );
 
+    const canSeeIssue = (
+      authData: AuthData,
+      eb: ExpressionBuilder<typeof issueSchema>,
+    ) =>
+      eb.or(loggedInUserIsAdmin(authData, eb), eb.cmp('visibility', 'public'));
+
     return {
       user: {
         // Only the authentication system can write to the user table.
@@ -255,6 +267,7 @@ export const permissions: ReturnType<typeof definePermissions> =
             preMutation: [loggedInUserIsIssueCreator, loggedInUserIsAdmin],
           },
           delete: [loggedInUserIsIssueCreator, loggedInUserIsAdmin],
+          select: [canSeeIssue],
         },
       },
       comment: {
@@ -270,6 +283,11 @@ export const permissions: ReturnType<typeof definePermissions> =
             preMutation: [loggedInUserIsCommentCreator, loggedInUserIsAdmin],
           },
           delete: [loggedInUserIsCommentCreator, loggedInUserIsAdmin],
+          // comments are only visible if the user can see the issue they're on
+          select: [
+            (authData, {exists}) =>
+              exists('issue', q => q.where(eb => canSeeIssue(authData, eb))),
+          ],
         },
       },
       label: {
@@ -299,6 +317,10 @@ export const permissions: ReturnType<typeof definePermissions> =
             preMutation: [],
           },
           delete: [allowIfAdminOrIssueCreator],
+          select: [
+            (authData, {exists}) =>
+              exists('issue', q => q.where(eb => canSeeIssue(authData, eb))),
+          ],
         },
       },
     };

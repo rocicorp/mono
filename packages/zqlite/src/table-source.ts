@@ -343,7 +343,13 @@ export class TableSource implements Source {
     }
   }
 
-  push(change: SourceChange) {
+  push(change: SourceChange): void {
+    for (const _ of this.genPush(change)) {
+      // Nothing to do.
+    }
+  }
+
+  *genPush(change: SourceChange) {
     const exists = (row: Row) =>
       this.#stmts.checkExists.get<{exists: number}>(
         ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
@@ -353,13 +359,19 @@ export class TableSource implements Source {
     // the db so we don't push it to outputs if it does/doest not exist.
     switch (change.type) {
       case 'add':
-        assert(!exists(change.row), `Row already exists ${stringify(change)}`);
+        assert(
+          !exists(change.row),
+          () => `Row already exists ${stringify(change)}`,
+        );
         break;
       case 'remove':
-        assert(exists(change.row), `Row not found ${stringify(change)}`);
+        assert(exists(change.row), () => `Row not found ${stringify(change)}`);
         break;
       case 'edit':
-        assert(exists(change.oldRow), `Row not found ${stringify(change)}`);
+        assert(
+          exists(change.oldRow),
+          () => `Row not found ${stringify(change)}`,
+        );
         fromSQLiteTypes(this.#columns, change.oldRow);
         break;
       default:
@@ -402,6 +414,7 @@ export class TableSource implements Source {
       this.#overlay = {outputIndex, change};
       if (output) {
         output.push(outputChange);
+        yield;
       }
     }
     this.#overlay = undefined;

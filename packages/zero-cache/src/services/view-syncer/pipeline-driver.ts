@@ -353,8 +353,11 @@ export class PipelineDriver {
     }
 
     this.#startAccumulating();
-    source.push(change);
-    yield* this.#stopAccumulating().stream();
+    for (const _ of source.genPush(change)) {
+      yield* this.#stopAccumulating().stream();
+      this.#startAccumulating();
+    }
+    this.#stopAccumulating();
   }
 
   #startAccumulating() {
@@ -448,7 +451,6 @@ class Streamer {
 
       for (const [relationship, children] of Object.entries(relationships)) {
         const childSchema = must(schema.relationships[relationship]);
-
         yield* this.#streamNodes(queryHash, childSchema, op, children);
       }
     }

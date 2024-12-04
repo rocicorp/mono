@@ -28,7 +28,8 @@ CREATE TABLE issue (
     "created" double precision DEFAULT (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000),
     "creatorID" VARCHAR REFERENCES "user"(id) NOT NULL,
     "assigneeID" VARCHAR REFERENCES "user"(id),
-    "description" TEXT DEFAULT ''
+    "description" TEXT DEFAULT '',
+    "visibility" VARCHAR DEFAULT 'public' NOT NULL
 );
 
 CREATE TABLE "viewState" (
@@ -241,7 +242,7 @@ COPY "label"
 FROM
     '/docker-entrypoint-initdb.d/labels.csv' WITH CSV HEADER;
 
-COPY "issue"
+COPY "issue" ("id","shortID","title","open","modified","created","creatorID","assigneeID","description")
 FROM
     '/docker-entrypoint-initdb.d/issues.csv' WITH CSV HEADER;
 
