@@ -1,5 +1,7 @@
+import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {
   ErrorKind,
   MutationType,
@@ -7,12 +9,12 @@ import {
   type CRUDOp,
   type UpsertOp,
 } from '../../../../zero-protocol/src/mod.js';
+import type {WriteAuthorizer} from '../../auth/write-authorizer.js';
 import {Mode} from '../../db/transaction-pool.js';
 import {expectTables, testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {zeroSchema} from './mutagen-test-shared.js';
 import {processMutation} from './mutagen.js';
-import type {WriteAuthorizer} from '../../auth/write-authorizer.js';
 
 const SHARD_ID = '0';
 
@@ -55,8 +57,11 @@ async function createTables(db: PostgresDB) {
 }
 
 describe('processMutation', () => {
+  let lc: LogContext;
   let db: PostgresDB;
+
   beforeEach(async () => {
+    lc = createSilentLogContext();
     db = await testDBs.create('db_mutagen_test');
     await createTables(db);
   });
@@ -72,7 +77,7 @@ describe('processMutation', () => {
     });
 
     const error = await processMutation(
-      undefined,
+      lc,
       undefined,
       db,
       SHARD_ID,
@@ -123,7 +128,7 @@ describe('processMutation', () => {
          VALUES ('abc', '123', 2)`;
 
     const error = await processMutation(
-      undefined,
+      lc,
       {},
       db,
       SHARD_ID,
@@ -174,7 +179,7 @@ describe('processMutation', () => {
         VALUES ('abc', '123', 2)`;
 
     const error = await processMutation(
-      undefined,
+      lc,
       undefined,
       db,
       SHARD_ID,
@@ -226,7 +231,7 @@ describe('processMutation', () => {
     await db`INSERT INTO idonly (id) VALUES ('1');`;
 
     const error = await processMutation(
-      undefined,
+      lc,
       undefined,
       db,
       SHARD_ID,
@@ -278,7 +283,7 @@ describe('processMutation', () => {
 
     await expect(
       processMutation(
-        undefined,
+        lc,
         undefined,
         db,
         SHARD_ID,
@@ -333,7 +338,7 @@ describe('processMutation', () => {
 
     await expect(
       processMutation(
-        undefined,
+        lc,
         undefined,
         db,
         SHARD_ID,
@@ -388,7 +393,7 @@ describe('processMutation', () => {
 
     await expect(
       processMutation(
-        undefined,
+        lc,
         {},
         db,
         SHARD_ID,
@@ -434,7 +439,7 @@ describe('processMutation', () => {
 
   test('process create, set, update, delete all at once', async () => {
     const error = await processMutation(
-      undefined,
+      lc,
       {},
       db,
       SHARD_ID,
@@ -523,7 +528,7 @@ describe('processMutation', () => {
 
   test('fk failure', async () => {
     const error = await processMutation(
-      undefined,
+      lc,
       {},
       db,
       SHARD_ID,
@@ -597,7 +602,7 @@ describe('processMutation', () => {
     });
 
     const error = await processMutation(
-      undefined,
+      lc,
       {},
       db,
       SHARD_ID,

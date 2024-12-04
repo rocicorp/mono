@@ -129,7 +129,7 @@ export class MutagenService implements Mutagen, Service {
 const MAX_SERIALIZATION_ATTEMPTS = 10;
 
 export async function processMutation(
-  lc: LogContext | undefined,
+  lc: LogContext,
   authData: JWTPayload | undefined,
   db: PostgresDB,
   shardID: string,
@@ -143,9 +143,9 @@ export async function processMutation(
     mutation.type === MutationType.CRUD,
     'Only CRUD mutations are supported',
   );
-  lc = lc?.withContext('mutationID', mutation.id);
-  lc = lc?.withContext('processMutation');
-  lc?.debug?.('Process mutation start', mutation);
+  lc = lc.withContext('mutationID', mutation.id);
+  lc = lc.withContext('processMutation');
+  lc.debug?.('Process mutation start', mutation);
 
   let result: MutationError | undefined;
 
@@ -197,6 +197,7 @@ export async function processMutation(
           const done = onTxStart?.();
           try {
             return await processMutationWithTx(
+              lc,
               tx,
               authData,
               shardID,
@@ -211,42 +212,43 @@ export async function processMutation(
           }
         });
         if (errorMode) {
-          lc?.debug?.('Ran mutation successfully in error mode');
+          lc.debug?.('Ran mutation successfully in error mode');
         }
         break;
       } catch (e) {
         if (e instanceof MutationAlreadyProcessedError) {
-          lc?.debug?.(e.message);
+          lc.debug?.(e.message);
           return undefined;
         }
         if (e instanceof ErrorForClient || errorMode) {
-          lc?.error?.('Process mutation error', e);
+          lc.error?.('Process mutation error', e);
           throw e;
         }
         if (
           e instanceof postgres.PostgresError &&
           e.code === PG_SERIALIZATION_FAILURE
         ) {
-          lc?.info?.(`attempt ${i + 1}: ${String(e)}`, e);
+          lc.info?.(`attempt ${i + 1}: ${String(e)}`, e);
           continue; // Retry up to MAX_SERIALIZATION_ATTEMPTS.
         }
         result = [ErrorKind.MutationFailed, String(e)];
         if (errorMode) {
           break;
         }
-        lc?.error?.('Got error running mutation, re-running in error mode', e);
+        lc.error?.('Got error running mutation, re-running in error mode', e);
         ``;
         errorMode = true;
         i--;
       }
     }
   } finally {
-    lc?.debug?.('Process mutation complete in', Date.now() - start);
+    lc.debug?.('Process mutation complete in', Date.now() - start);
   }
   return result;
 }
 
 async function processMutationWithTx(
+  lc: LogContext,
   tx: PostgresTransaction,
   authData: JWTPayload | undefined,
   shardID: string,
@@ -258,6 +260,15 @@ async function processMutationWithTx(
 ) {
   const tasks: (() => Promise<unknown>)[] = [];
 
+  async function execute(stmt: postgres.PendingQuery<postgres.Row[]>) {
+    try {
+      return await stmt.execute();
+    } finally {
+      const q = stmt as unknown as Query;
+      lc.debug?.(`${q.string}: ${JSON.stringify(q.parameters)}`);
+    }
+  }
+
   if (!errorMode) {
     const {ops} = mutation.args[0];
     const normalizedOps = authorizer.normalizeOps(ops);
@@ -268,16 +279,16 @@ async function processMutationWithTx(
       for (const op of ops) {
         switch (op.op) {
           case 'insert':
-            tasks.push(() => getInsertSQL(tx, op).execute());
+            tasks.push(() => execute(getInsertSQL(tx, op)));
             break;
           case 'upsert':
-            tasks.push(() => getUpsertSQL(tx, op).execute());
+            tasks.push(() => execute(getUpsertSQL(tx, op)));
             break;
           case 'update':
-            tasks.push(() => getUpdateSQL(tx, op).execute());
+            tasks.push(() => execute(getUpdateSQL(tx, op)));
             break;
           case 'delete':
-            tasks.push(() => getDeleteSQL(tx, op).execute());
+            tasks.push(() => execute(getDeleteSQL(tx, op)));
             break;
           default:
             unreachable(op);
@@ -412,3 +423,7 @@ class MutationAlreadyProcessedError extends Error {
     assert(received < actual);
   }
 }
+
+// The slice of information from the Query object in Postgres.js that gets logged for debugging.
+// https://github.com/porsager/postgres/blob/f58cd4f3affd3e8ce8f53e42799672d86cd2c70b/src/connection.js#L219
+type Query = {string: string; parameters: object[]};
