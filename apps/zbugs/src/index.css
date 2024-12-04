@@ -459,6 +459,10 @@ textarea.autoResize {
   padding-left: 2.5rem;
 }
 
+.virtual-list {
+  position: relative;
+}
+
 .row.unread::after {
   content: '';
   height: 0.4rem;
@@ -479,6 +483,10 @@ textarea.autoResize {
   gap: 1rem;
   box-shadow: 0px -1px 0px 0px var(--color-light-outline) inset;
   white-space: nowrap;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
 }
 
 .primary-content .row:hover {
