@@ -230,7 +230,7 @@ class RowRecordCache {
           return {rows, rowsVersion};
         });
         this.#lc.debug?.(
-          `flushed ${rows} rows to ${versionString(rowsVersion)} (${
+          `flushed ${rows} rows@${versionString(rowsVersion)} (${
             Date.now() - start
           } ms)`,
         );
@@ -239,9 +239,7 @@ class RowRecordCache {
         //       which will result in looping to commit the next #pendingRowsVersion.
       }
       this.#lc.debug?.(
-        `pending rows flushed to ${versionToNullableCookie(
-          this.#flushedRowsVersion,
-        )}`,
+        `up to date rows@${versionToNullableCookie(this.#flushedRowsVersion)}`,
       );
       flushing.resolve();
       this.#flushing = null;
@@ -572,7 +570,7 @@ export class CVRStore {
       }
     }
     this.#lc.debug?.(
-      `loaded CVR @${versionString(cvr.version)} (${Date.now() - start} ms)`,
+      `loaded cvr@${versionString(cvr.version)} (${Date.now() - start} ms)`,
     );
 
     return cvr;
