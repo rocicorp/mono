@@ -161,6 +161,29 @@ test('onOnlineChange callback', async () => {
   }
 
   {
+    // Now testing with ServerOverloaded error with a large backoff.
+    const BACKOFF_MS = RUN_LOOP_INTERVAL_MS * 10;
+    onlineCount = offlineCount = 0;
+    await z.triggerError(ErrorKind.ServerOverloaded, 'slow down', {
+      minBackoffMs: BACKOFF_MS,
+    });
+    await z.waitForConnectionState(ConnectionState.Disconnected);
+    await clock.tickAsync(0);
+    expect(z.online).false;
+    expect(onlineCount).to.equal(0);
+    expect(offlineCount).to.equal(1);
+
+    // And followed by a reconnect with the longer BACKOFF_MS.
+    expect(z.online).false;
+    await tickAFewTimes(clock, BACKOFF_MS);
+    await z.triggerConnected();
+    await clock.tickAsync(0);
+    expect(z.online).true;
+    expect(onlineCount).to.equal(1);
+    expect(offlineCount).to.equal(1);
+  }
+
+  {
     // Now test with an auth error. This should not trigger the callback on the first error.
     onlineCount = offlineCount = 0;
     await z.triggerError(ErrorKind.Unauthorized, 'bbb');

@@ -459,11 +459,10 @@ export class CVRStore {
       return result;
     }
     assert(err);
-    throw new ErrorForClient([
-      'error',
-      ErrorKind.ClientNotFound,
-      `max attempts exceeded waiting for CVR@${err.cvrVersion} to catch up from ${err.rowsVersion}`,
-    ]);
+    throw new ErrorForClient({
+      kind: ErrorKind.ClientNotFound,
+      message: `max attempts exceeded waiting for CVR@${err.cvrVersion} to catch up from ${err.rowsVersion}`,
+    });
   }
 
   async #load(lastConnectTime: number): Promise<CVR | RowsVersionBehindError> {

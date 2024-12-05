@@ -194,11 +194,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               cvr.version.stateVersion !== '00') &&
             cvr.replicaVersion !== this.#pipelines.replicaVersion
           ) {
-            const msg = `Replica Version mismatch: CVR=${
+            const message = `Replica Version mismatch: CVR=${
               cvr.replicaVersion
             }, DB=${this.#pipelines.replicaVersion}`;
-            lc.info?.(`resetting CVR: ${msg}`);
-            throw new ErrorForClient(['error', ErrorKind.ClientNotFound, msg]);
+            lc.info?.(`resetting CVR: ${message}`);
+            throw new ErrorForClient({kind: ErrorKind.ClientNotFound, message});
           }
 
           if (this.#pipelinesSynced) {
@@ -987,20 +987,18 @@ function checkClientAndCVRVersions(
     cmpVersions(client, NEW_CVR_VERSION) > 0
   ) {
     // CVR is empty but client is not.
-    throw new ErrorForClient([
-      'error',
-      ErrorKind.ClientNotFound,
-      'Client not found',
-    ]);
+    throw new ErrorForClient({
+      kind: ErrorKind.ClientNotFound,
+      message: 'Client not found',
+    });
   }
 
   if (cmpVersions(client, cvr) > 0) {
     // Client is ahead of a non-empty CVR.
-    throw new ErrorForClient([
-      'error',
-      ErrorKind.InvalidConnectionRequestBaseCookie,
-      `CVR is at version ${versionString(cvr)}`,
-    ]);
+    throw new ErrorForClient({
+      kind: ErrorKind.InvalidConnectionRequestBaseCookie,
+      message: `CVR is at version ${versionString(cvr)}`,
+    });
   }
 }
 
@@ -1014,11 +1012,11 @@ export function pickToken(
 
   if (newToken) {
     if (previousToken.sub !== newToken.sub) {
-      throw new ErrorForClient([
-        'error',
-        ErrorKind.Unauthorized,
-        'The user id in the new token does not match the previous token. Client groups are pinned to a single user.',
-      ]);
+      throw new ErrorForClient({
+        kind: ErrorKind.Unauthorized,
+        message:
+          'The user id in the new token does not match the previous token. Client groups are pinned to a single user.',
+      });
     }
 
     if (previousToken.iat === undefined) {
@@ -1027,11 +1025,11 @@ export function pickToken(
     }
 
     if (newToken.iat === undefined) {
-      throw new ErrorForClient([
-        'error',
-        ErrorKind.Unauthorized,
-        'The new token does not have an issued at time but the prior token does. Tokens for a client group must either all have issued at times or all not have issued at times',
-      ]);
+      throw new ErrorForClient({
+        kind: ErrorKind.Unauthorized,
+        message:
+          'The new token does not have an issued at time but the prior token does. Tokens for a client group must either all have issued at times or all not have issued at times',
+      });
     }
 
     // The new token is newer, so we take it.
@@ -1044,9 +1042,9 @@ export function pickToken(
   }
 
   // previousToken !== undefined but newToken is undefined
-  throw new ErrorForClient([
-    'error',
-    ErrorKind.Unauthorized,
-    'No token provided. An unauthenticated client cannot connect to an authenticated client group.',
-  ]);
+  throw new ErrorForClient({
+    kind: ErrorKind.Unauthorized,
+    message:
+      'No token provided. An unauthenticated client cannot connect to an authenticated client group.',
+  });
 }

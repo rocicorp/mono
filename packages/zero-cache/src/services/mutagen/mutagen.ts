@@ -401,11 +401,10 @@ async function checkSchemaVersionAndIncrementLastMutationID(
       lastMutationID,
     );
   } else if (receivedMutationID > lastMutationID) {
-    throw new ErrorForClient([
-      'error',
-      ErrorKind.InvalidPush,
-      `Push contains unexpected mutation id ${receivedMutationID} for client ${clientID}. Expected mutation id ${lastMutationID.toString()}.`,
-    ]);
+    throw new ErrorForClient({
+      kind: ErrorKind.InvalidPush,
+      message: `Push contains unexpected mutation id ${receivedMutationID} for client ${clientID}. Expected mutation id ${lastMutationID.toString()}.`,
+    });
   }
 
   assert(supportedVersionRange.length === 1);
