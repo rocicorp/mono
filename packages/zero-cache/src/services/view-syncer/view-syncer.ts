@@ -226,7 +226,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
       this.#cleanup();
     } catch (e) {
-      this.#lc.error?.(e);
+      this.#lc.error?.(`stopping view-syncer: ${String(e)}`, e);
       this.#cleanup(e);
     } finally {
       // Always wait for the cvrStore to flush, regardless of how the service
