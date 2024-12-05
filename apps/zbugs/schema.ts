@@ -304,7 +304,7 @@ export const permissions: ReturnType<typeof definePermissions> =
           insert: [allowIfUserIDMatchesLoggedInUser],
           update: {
             preMutation: [allowIfUserIDMatchesLoggedInUser],
-            postProposedMutation: [allowIfUserIDMatchesLoggedInUser],
+            postMutation: [allowIfUserIDMatchesLoggedInUser],
           },
           // view state cannot be deleted
           delete: [],
