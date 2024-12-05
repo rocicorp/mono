@@ -1171,7 +1171,9 @@ export class Zero<const S extends Schema> {
     error?: 'invalid-token',
   ): Promise<void> {
     const {auth: authOption} = this.#options;
-    const auth = await authOption?.(error);
+    const auth = await (typeof authOption === 'function'
+      ? authOption(error)
+      : authOption);
     if (auth) {
       lc.debug?.('Got auth token');
       this.#rep.auth = auth;
