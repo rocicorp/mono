@@ -399,7 +399,6 @@ const LOAD_ATTEMPT_INTERVAL_MS = 500;
 const MAX_LOAD_ATTEMPTS = 10;
 
 export class CVRStore {
-  readonly #lc: LogContext;
   readonly #taskID: string;
   readonly #id: string;
   readonly #db: PostgresDB;
@@ -428,7 +427,6 @@ export class CVRStore {
     deferredRowFlushThreshold = 100, // somewhat arbitrary
     setTimeoutFn = setTimeout,
   ) {
-    this.#lc = lc;
     this.#db = db;
     this.#taskID = taskID;
     this.#id = cvrID;
@@ -444,15 +442,15 @@ export class CVRStore {
     this.#maxLoadAttempts = maxLoadAttempts;
   }
 
-  async load(lastConnectTime: number): Promise<CVR> {
+  async load(lc: LogContext, lastConnectTime: number): Promise<CVR> {
     let err: RowsVersionBehindError | undefined;
     for (let i = 0; i < this.#maxLoadAttempts; i++) {
       if (i > 0) {
         await sleep(this.#loadAttemptIntervalMs);
       }
-      const result = await this.#load(lastConnectTime);
+      const result = await this.#load(lc, lastConnectTime);
       if (result instanceof RowsVersionBehindError) {
-        this.#lc.info?.(`attempt ${i + 1}: ${String(result)}`);
+        lc.info?.(`attempt ${i + 1}: ${String(result)}`);
         err = result;
         continue;
       }
@@ -465,7 +463,10 @@ export class CVRStore {
     });
   }
 
-  async #load(lastConnectTime: number): Promise<CVR | RowsVersionBehindError> {
+  async #load(
+    lc: LogContext,
+    lastConnectTime: number,
+  ): Promise<CVR | RowsVersionBehindError> {
     const start = Date.now();
 
     const id = this.#id;
@@ -574,7 +575,7 @@ export class CVRStore {
         query.desiredBy[row.clientID] = versionFromString(row.patchVersion);
       }
     }
-    this.#lc.debug?.(
+    lc.debug?.(
       `loaded cvr@${versionString(cvr.version)} (${Date.now() - start} ms)`,
     );
 

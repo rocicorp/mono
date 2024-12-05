@@ -161,10 +161,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     fn: (lc: LogContext, cvr: CVRSnapshot) => Promise<T> | T,
   ): Promise<T> {
     return this.#lock.withLock(async () => {
-      if (!this.#cvr) {
-        this.#cvr = await this.#cvrStore.load(this.#lastConnectTime);
-      }
       const lc = this.#lc.withContext('lock', randomID());
+      if (!this.#cvr) {
+        this.#cvr = await this.#cvrStore.load(lc, this.#lastConnectTime);
+      }
       lc.debug?.(`cvr@${versionString(this.#cvr.version)}`);
       try {
         return await fn(lc, this.#cvr);

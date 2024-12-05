@@ -461,7 +461,7 @@ describe('view-syncer/service', () => {
     ]);
 
     const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
-    const cvr = await cvrStore.load(Date.now());
+    const cvr = await cvrStore.load(lc, Date.now());
     expect(cvr).toMatchObject({
       clients: {
         foo: {
@@ -509,7 +509,7 @@ describe('view-syncer/service', () => {
     ]);
 
     const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
-    const cvr = await cvrStore.load(Date.now());
+    const cvr = await cvrStore.load(lc, Date.now());
     expect(cvr).toMatchObject({
       clients: {
         foo: {
@@ -2212,7 +2212,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
     await new CVRQueryDrivenUpdater(
       cvrStore,
-      await cvrStore.load(Date.now()),
+      await cvrStore.load(lc, Date.now()),
       '07',
       REPLICA_VERSION,
     ).flush(lc, Date.now());
@@ -2373,7 +2373,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
     await new CVRQueryDrivenUpdater(
       cvrStore,
-      await cvrStore.load(Date.now()),
+      await cvrStore.load(lc, Date.now()),
       '07',
       '1' + REPLICA_VERSION, // Different replica version.
     ).flush(lc, Date.now());
@@ -2422,7 +2422,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
     await new CVRQueryDrivenUpdater(
       cvrStore,
-      await cvrStore.load(Date.now()),
+      await cvrStore.load(lc, Date.now()),
       '07',
       REPLICA_VERSION,
     ).flush(lc, Date.now());
