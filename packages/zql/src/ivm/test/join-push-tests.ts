@@ -112,6 +112,7 @@ export function runJoinTest(t: NewPushTest) {
         storage: joinStorage,
         relationshipName: info.relationshipName,
         hidden: false,
+        system: 'client',
       });
       const snitch = new Snitch(join, name, log);
       last = joins[name] = {

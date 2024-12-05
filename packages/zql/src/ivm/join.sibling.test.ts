@@ -899,6 +899,7 @@ function pushSiblingTest(t: PushTestSibling): PushTestSiblingResults {
       storage,
       ...info,
       hidden: false,
+      system: 'client',
     });
 
     joins[i] = {

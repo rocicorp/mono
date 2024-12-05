@@ -169,6 +169,7 @@ test('related subqueries are sorted', () => {
     related: [
       {
         correlation: {parentField: ['a'], childField: ['a']},
+        system: 'client',
         subquery: {
           table: 'table',
           alias: 'alias2',
@@ -176,6 +177,7 @@ test('related subqueries are sorted', () => {
       },
       {
         correlation: {parentField: ['a'], childField: ['a']},
+        system: 'client',
         subquery: {
           table: 'table',
           alias: 'alias1',
@@ -206,6 +208,7 @@ test('related subqueries are sorted', () => {
           "table": "table",
           "where": undefined,
         },
+        "system": "client",
       },
       {
         "correlation": {
@@ -227,6 +230,7 @@ test('related subqueries are sorted', () => {
           "table": "table",
           "where": undefined,
         },
+        "system": "client",
       },
     ]
   `);

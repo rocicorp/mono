@@ -1253,6 +1253,7 @@ function fetchTest(t: FetchTest): FetchTestResults {
       storage: new MemoryStorage(),
       ...t.join,
       hidden: false,
+      system: 'client',
     }),
     existsStorage,
     t.join.relationshipName,

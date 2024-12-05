@@ -85,17 +85,14 @@ export function bindStaticParameters(
   ast: AST,
   staticQueryParameters: StaticQueryParameters | undefined,
 ) {
-  const visit = (node: AST): AST => {
-    return {
-      ...node,
-      where: node.where ? bindCondition(node.where) : undefined,
-      related: node.related?.map(sq => ({
-        ...sq,
-        subquery: visit(sq.subquery),
-      })),
-    };
-    return node;
-  };
+  const visit = (node: AST): AST => ({
+    ...node,
+    where: node.where ? bindCondition(node.where) : undefined,
+    related: node.related?.map(sq => ({
+      ...sq,
+      subquery: visit(sq.subquery),
+    })),
+  });
 
   function bindCondition(condition: Condition): Condition {
     if (condition.type === 'simple') {
@@ -262,6 +259,7 @@ function applyCorrelatedSubQuery(
     childKey: sq.correlation.childField,
     relationshipName: sq.subquery.alias,
     hidden: sq.hidden ?? false,
+    system: sq.system ?? 'client',
   });
   return end;
 }

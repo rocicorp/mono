@@ -177,6 +177,7 @@ test('tree', () => {
     childKey: ['id'],
     relationshipName: 'children',
     hidden: false,
+    system: 'client',
   });
 
   const view = new ArrayView(join, {
@@ -446,6 +447,7 @@ test('tree-single', () => {
     childKey: ['id'],
     relationshipName: 'child',
     hidden: false,
+    system: 'client',
   });
 
   const view = new ArrayView(join, {
@@ -495,6 +497,7 @@ test('collapse', () => {
   const schema: SourceSchema = {
     tableName: 'issue',
     primaryKey: ['id'],
+    system: 'client',
     columns: {
       id: {type: 'number'},
       name: {type: 'string'},
@@ -507,6 +510,7 @@ test('collapse', () => {
         tableName: 'issueLabel',
         primaryKey: ['id'],
         sort: [['id', 'asc']],
+        system: 'client',
         columns: {
           id: {type: 'number'},
           issueId: {type: 'number'},
@@ -525,6 +529,7 @@ test('collapse', () => {
             },
             isHidden: false,
             sort: [['id', 'asc']],
+            system: 'client',
             compareRows: (r1, r2) => (r1.id as number) - (r2.id as number),
             relationships: {},
           },
@@ -788,6 +793,7 @@ test('collapse-single', () => {
   const schema: SourceSchema = {
     tableName: 'issue',
     primaryKey: ['id'],
+    system: 'client',
     columns: {
       id: {type: 'number'},
       name: {type: 'string'},
@@ -800,6 +806,7 @@ test('collapse-single', () => {
         tableName: 'issueLabel',
         primaryKey: ['id'],
         sort: [['id', 'asc']],
+        system: 'client',
         columns: {
           id: {type: 'number'},
           issueId: {type: 'number'},
@@ -811,6 +818,7 @@ test('collapse-single', () => {
           labels: {
             tableName: 'label',
             primaryKey: ['id'],
+            system: 'client',
             columns: {
               id: {type: 'number'},
               name: {type: 'string'},
@@ -981,6 +989,7 @@ test('tree edit', () => {
     childKey: ['id'],
     relationshipName: 'children',
     hidden: false,
+    system: 'client',
   });
 
   const view = new ArrayView(join, {
@@ -1158,6 +1167,7 @@ test('edit to preserve relationships', () => {
   const schema: SourceSchema = {
     tableName: 'issue',
     primaryKey: ['id'],
+    system: 'client',
     columns: {id: {type: 'number'}, title: {type: 'string'}},
     sort: [['id', 'asc']],
     isHidden: false,
@@ -1166,6 +1176,7 @@ test('edit to preserve relationships', () => {
       labels: {
         tableName: 'label',
         primaryKey: ['id'],
+        system: 'client',
         columns: {id: {type: 'number'}, name: {type: 'string'}},
         sort: [['name', 'asc']],
         isHidden: false,
