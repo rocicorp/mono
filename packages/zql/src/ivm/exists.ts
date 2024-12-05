@@ -86,7 +86,16 @@ export class Exists implements Operator {
         return;
       }
       case 'remove': {
-        this.#pushWithFilter(change);
+        const size = this.#getSize(change.node.row);
+        // If size is undefined, this operator has not output
+        // this row before and so it is unnecessary to output a remove for
+        // it.  Which is fortunate, since #fetchSize/#fetchNodeForRow would
+        // not be able to fetch a Node for this change since it is
+        // removed from the source.
+        if (size === undefined) {
+          return;
+        }
+        this.#pushWithFilter(change, size);
         this.#delSize(change.node.row);
         return;
       }
@@ -225,13 +234,21 @@ export class Exists implements Operator {
   }
 
   #fetchNodeForRow(row: Row) {
-    return must(
+    const fetched = must(
       first(
         this.#input.fetch({
           start: {row, basis: 'at'},
         }),
       ),
     );
+    assert(
+      this.getSchema().compareRows(row, fetched.row) === 0,
+      () =>
+        `fetchNodeForRow returned unexpected row, expected ${JSON.stringify(
+          row,
+        )}, received ${JSON.stringify(fetched.row)}`,
+    );
+    return fetched;
   }
 
   #makeSizeStorageKey(row: Row) {
