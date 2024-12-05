@@ -20,8 +20,8 @@ export interface ZeroOptions<S extends Schema> {
   server?: string | null | undefined;
 
   /**
-   * A string token to identify and authenticate the user, a unction that returns
-   * such a token, or `undefined` if there is no logged in user.
+   * A string token to identify and authenticate the user, a function that
+   * returns such a token, or undefined if there is no logged in user.
    *
    * If the server determines the token is invalid (expired, can't be decoded,
    * bad signature, etc):
