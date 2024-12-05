@@ -898,6 +898,144 @@ test('exists junction', () => {
   `);
 });
 
+test('exists junction with limit, remove row after limit, and last row', () => {
+  const {sources, getSource} = testSources();
+  const sink = new Catch(
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        limit: 2,
+        where: {
+          type: 'correlatedSubquery',
+          related: {
+            correlation: {parentField: ['id'], childField: ['userID']},
+            subquery: {
+              table: 'userStates',
+              alias: 'zsubq_userStates',
+              orderBy: [
+                ['userID', 'asc'],
+                ['stateCode', 'asc'],
+              ],
+              where: {
+                type: 'correlatedSubquery',
+                related: {
+                  correlation: {
+                    parentField: ['stateCode'],
+                    childField: ['code'],
+                  },
+                  subquery: {
+                    table: 'states',
+                    alias: 'zsubq_states',
+                    orderBy: [['code', 'asc']],
+                  },
+                },
+                op: 'EXISTS',
+              },
+            },
+          },
+          op: 'EXISTS',
+        },
+      },
+      {
+        getSource,
+        createStorage: () => new MemoryStorage(),
+      },
+    ),
+  );
+
+  expect(sink.fetch()).toMatchInlineSnapshot(`
+    [
+      {
+        "relationships": {
+          "zsubq_userStates": [
+            {
+              "relationships": {
+                "zsubq_states": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "code": "HI",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "stateCode": "HI",
+                "userID": 1,
+              },
+            },
+          ],
+        },
+        "row": {
+          "id": 1,
+          "name": "aaron",
+          "recruiterID": null,
+        },
+      },
+      {
+        "relationships": {
+          "zsubq_userStates": [
+            {
+              "relationships": {
+                "zsubq_states": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "code": "AZ",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "stateCode": "AZ",
+                "userID": 3,
+              },
+            },
+            {
+              "relationships": {
+                "zsubq_states": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "code": "CA",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "stateCode": "CA",
+                "userID": 3,
+              },
+            },
+          ],
+        },
+        "row": {
+          "id": 3,
+          "name": "greg",
+          "recruiterID": 1,
+        },
+      },
+    ]
+  `);
+
+  // row after limit
+  sources.users.push({
+    type: 'remove',
+    row: {id: 4, name: 'matt', recruiterID: 1},
+  });
+
+  expect(sink.pushes).toMatchInlineSnapshot(`[]`);
+
+  // last row, also after limit
+  sources.users.push({
+    type: 'remove',
+    row: {id: 7, name: 'alex', recruiterID: 1},
+  });
+
+  expect(sink.pushes).toMatchInlineSnapshot(`[]`);
+});
+
 test('exists self join', () => {
   const {sources, getSource} = testSources();
   const sink = new Catch(
