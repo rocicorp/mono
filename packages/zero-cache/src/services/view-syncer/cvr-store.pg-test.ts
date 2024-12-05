@@ -491,7 +491,7 @@ describe('view-syncer/cvr-store', () => {
     `);
 
     // Should block until all pending rows are flushed.
-    await store.flushed();
+    await store.flushed(lc);
 
     // rowsVersion should match cvr.instances version
     expect(await db`SELECT * FROM cvr."rowsVersion"`).toMatchInlineSnapshot(`
@@ -573,7 +573,7 @@ describe('view-syncer/cvr-store', () => {
     `);
 
     // Should block until all pending rows are flushed.
-    await store.flushed();
+    await store.flushed(lc);
 
     // rowsVersion should match cvr.instances version
     expect(await db`SELECT * FROM cvr."rowsVersion"`).toMatchInlineSnapshot(`

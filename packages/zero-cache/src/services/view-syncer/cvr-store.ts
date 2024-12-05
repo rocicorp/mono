@@ -253,8 +253,12 @@ class RowRecordCache {
    * Returns a promise that resolves when all outstanding row-records
    * have been committed.
    */
-  flushed(): Promise<void> {
-    return this.#flushing ? this.#flushing.promise : promiseVoid;
+  flushed(lc: LogContext): Promise<void> {
+    if (this.#flushing) {
+      lc.debug?.('awaiting pending row flush');
+      return this.#flushing.promise;
+    }
+    return promiseVoid;
   }
 
   clear() {
@@ -284,7 +288,7 @@ class RowRecordCache {
     // Note that because catchupRowPatches() is called from within the
     // view syncer lock, this flush is guaranteed to complete since no
     // new CVR updates can happen while the lock is held.
-    await this.flushed();
+    await this.flushed(lc);
     const flushMs = Date.now() - startMs;
 
     const query =
@@ -940,8 +944,8 @@ export class CVRStore {
   }
 
   /** Resolves when all pending updates are flushed. */
-  flushed(): Promise<void> {
-    return this.#rowCache.flushed();
+  flushed(lc: LogContext): Promise<void> {
+    return this.#rowCache.flushed(lc);
   }
 }
 

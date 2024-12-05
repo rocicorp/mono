@@ -231,7 +231,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     } finally {
       // Always wait for the cvrStore to flush, regardless of how the service
       // was stopped.
-      await this.#cvrStore.flushed().catch(e => this.#lc.error?.(e));
+      await this.#cvrStore.flushed(this.#lc).catch(e => this.#lc.error?.(e));
       this.#lc.info?.('view-syncer stopped');
       this.#stopped.resolve();
     }
@@ -261,7 +261,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#shutdownToken = shutdownToken;
 
     shutdownToken.timeoutID = setTimeout(
-      () => {
+      async () => {
+        if (this.#shutdownToken === shutdownToken) {
+          // Keep the view-syncer alive if there are pending rows being flushed.
+          // It's better to do this before shutting down since it may take a
+          // while, during which new connections may come in.
+          await this.#cvrStore.flushed(this.#lc);
+        }
+
         // If #idleToken has changed, this timeout is effectively canceled.
         if (this.#shutdownToken === shutdownToken) {
           this.#lc.info?.('shutting down after idle timeout');
