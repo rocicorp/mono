@@ -3,7 +3,12 @@
 import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../shared/src/asserts.js';
 import {hashOfAST} from '../../../zero-protocol/src/ast-hash.js';
-import type {AST, Condition, Ordering} from '../../../zero-protocol/src/ast.js';
+import type {
+  AST,
+  Condition,
+  Ordering,
+  System,
+} from '../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import {
   normalizeTableSchema,
@@ -115,6 +120,8 @@ export abstract class AbstractQuery<
     return this.#hash;
   }
 
+  protected abstract _system: System;
+
   protected abstract _newQuery<
     TSchema extends TableSchema,
     TReturn extends QueryType,
@@ -204,6 +211,7 @@ export abstract class AbstractQuery<
           related: [
             ...(this.#ast.related ?? []),
             {
+              system: this._system,
               correlation: {
                 parentField: related.sourceField,
                 childField: related.destField,
@@ -245,6 +253,7 @@ export abstract class AbstractQuery<
           related: [
             ...(this.#ast.related ?? []),
             {
+              system: this._system,
               correlation: {
                 parentField: firstRelation.sourceField,
                 childField: firstRelation.destField,
@@ -255,6 +264,7 @@ export abstract class AbstractQuery<
                 orderBy: addPrimaryKeys(junctionSchema, undefined),
                 related: [
                   {
+                    system: this._system,
                     correlation: {
                       parentField: secondRelation.sourceField,
                       childField: secondRelation.destField,
@@ -385,6 +395,7 @@ export abstract class AbstractQuery<
       return {
         type: 'correlatedSubquery',
         related: {
+          system: this._system,
           correlation: {
             parentField: related.sourceField,
             childField: related.destField,
@@ -414,6 +425,7 @@ export abstract class AbstractQuery<
       return {
         type: 'correlatedSubquery',
         related: {
+          system: this._system,
           correlation: {
             parentField: firstRelation.sourceField,
             childField: firstRelation.destField,
@@ -425,6 +437,7 @@ export abstract class AbstractQuery<
             where: {
               type: 'correlatedSubquery',
               related: {
+                system: this._system,
                 correlation: {
                   parentField: secondRelation.sourceField,
                   childField: secondRelation.destField,
@@ -501,6 +514,8 @@ export class QueryImpl<
     this.#delegate = delegate;
     this.#ast = ast;
   }
+
+  protected readonly _system = 'client';
 
   // Not part of Query or QueryInternal interface
   get [astForTestingSymbol](): AST {

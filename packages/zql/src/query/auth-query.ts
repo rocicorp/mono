@@ -32,6 +32,8 @@ export class AuthQuery<
     return new ExpressionBuilder(this._exists);
   }
 
+  protected readonly _system = 'permissions';
+
   protected _newQuery<TSchema extends TableSchema, TReturn extends QueryType>(
     schema: NormalizedTableSchema,
     ast: AST,

@@ -112,6 +112,7 @@ export class MemorySource implements Source {
       columns: this.#columns,
       primaryKey: this.#primaryKey,
       sort: connection.sort,
+      system: 'client',
       relationships: {},
       isHidden: false,
       compareRows: connection.compareRows,

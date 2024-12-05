@@ -199,6 +199,7 @@ export class TableSource implements Source {
       sort: connection.sort,
       relationships: {},
       isHidden: false,
+      system: 'client',
       compareRows: connection.compareRows,
     };
   }
