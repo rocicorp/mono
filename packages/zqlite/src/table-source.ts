@@ -47,6 +47,7 @@ import type {Stream} from '../../zql/src/ivm/stream.js';
 import {Database, Statement} from './db.js';
 import {compile, format, sql} from './internal/sql.js';
 import {StatementCache} from './internal/statement-cache.js';
+import {runtimeDebugFlags, runtimeDebugStats} from './runtime-debug.js';
 
 type Connection = {
   input: Input;
@@ -103,6 +104,10 @@ export class TableSource implements Source {
     this.#columns = columns;
     this.#primaryKey = primaryKey;
     this.#stmts = this.#getStatementsFor(db);
+  }
+
+  get table() {
+    return this.#table;
   }
 
   /**
@@ -281,7 +286,11 @@ export class TableSource implements Source {
       yield* generateWithStart(
         generateWithOverlay(
           req.start?.row,
-          mapFromSQLiteTypes(this.#columns, rowIterator),
+          this.#mapFromSQLiteTypes(
+            this.#columns,
+            rowIterator,
+            sqlAndBindings.text,
+          ),
           req.constraint,
           overlay,
           comparator,
@@ -292,6 +301,19 @@ export class TableSource implements Source {
       );
     } finally {
       this.#stmts.cache.return(cachedStatement);
+    }
+  }
+
+  *#mapFromSQLiteTypes(
+    valueTypes: Record<string, SchemaValue>,
+    rowIterator: IterableIterator<Row>,
+    query: string,
+  ): IterableIterator<Row> {
+    for (const row of rowIterator) {
+      if (runtimeDebugFlags.trackRowsVended) {
+        runtimeDebugStats.rowVended(this.#table, query);
+      }
+      yield fromSQLiteTypes(valueTypes, row);
     }
   }
 
@@ -713,15 +735,6 @@ export function toSQLiteTypeName(type: ValueType) {
       return 'NULL';
     case 'json':
       return 'TEXT';
-  }
-}
-
-export function* mapFromSQLiteTypes(
-  valueTypes: Record<string, SchemaValue>,
-  rowIterator: IterableIterator<Row>,
-): IterableIterator<Row> {
-  for (const row of rowIterator) {
-    yield fromSQLiteTypes(valueTypes, row);
   }
 }
 

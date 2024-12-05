@@ -322,6 +322,20 @@ export const zeroOptions = {
   },
 };
 
+const debugOptions = {
+  ...zeroOptions,
+  debug: {
+    ast: {
+      type: v.string().optional(),
+      desc: ['AST for the query to be transformed or timed.'],
+    },
+    hash: {
+      type: v.string().optional(),
+      desc: ['Hash of the query to fetch the AST for.'],
+    },
+  },
+};
+
 export type ZeroConfig = Config<typeof zeroOptions>;
 
 export const ZERO_ENV_VAR_PREFIX = 'ZERO_';
@@ -337,4 +351,11 @@ export function getZeroConfig(
   }
 
   return loadedConfig;
+}
+
+export function getDebugConfig(
+  env: NodeJS.ProcessEnv = process.env,
+  argv = process.argv.slice(2),
+) {
+  return parseOptions(debugOptions, argv, ZERO_ENV_VAR_PREFIX, env);
 }
