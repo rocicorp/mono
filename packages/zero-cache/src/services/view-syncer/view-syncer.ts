@@ -1,10 +1,12 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import type {JWTPayload} from 'jose';
 import type {Row} from 'postgres';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.js';
 import {must} from '../../../../shared/src/must.js';
+import type {AST} from '../../../../zero-protocol/src/ast.js';
 import {
   ErrorKind,
   type ChangeDesiredQueriesBody,
@@ -12,6 +14,8 @@ import {
   type Downstream,
   type InitConnectionMessage,
 } from '../../../../zero-protocol/src/mod.js';
+import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.js';
+import {transformAndHashQuery} from '../../auth/read-authorizer.js';
 import {stringify} from '../../types/bigint-json.js';
 import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB} from '../../types/pg.js';
@@ -47,10 +51,6 @@ import {
   type RowID,
 } from './schema/types.js';
 import {SchemaChangeError} from './snapshotter.js';
-import {transformAndHashQuery} from '../../auth/read-authorizer.js';
-import type {JWTPayload} from 'jose';
-import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.js';
-import type {AST} from '../../../../zero-protocol/src/ast.js';
 
 export type TokenData = {
   readonly raw: string;
@@ -157,6 +157,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       if (!this.#cvr) {
         this.#cvr = await this.#cvrStore.load(this.#lastConnectTime);
       }
+      this.#lc.debug?.(`cvr@${versionString(this.#cvr.version)}`);
       try {
         return await fn(this.#cvr);
       } catch (e) {
@@ -553,7 +554,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    */
   async #syncQueryPipelineSet(cvr: CVRSnapshot) {
     assert(this.#pipelines.initialized());
-    const lc = this.#lc.withContext('cvrVersion', versionString(cvr.version));
 
     const hydratedQueries = this.#pipelines.addedQueries();
 
@@ -598,7 +598,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       unhydrateQueries.length > 0
     ) {
       await this.#addAndRemoveQueries(
-        lc,
+        this.#lc,
         cvr,
         addQueries,
         removeQueries,
@@ -606,7 +606,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         transformationHashToHash,
       );
     } else {
-      await this.#catchupClients(lc, cvr);
+      await this.#catchupClients(this.#lc, cvr);
     }
 
     // If CVR was non-empty, then the CVR, database, and all clients

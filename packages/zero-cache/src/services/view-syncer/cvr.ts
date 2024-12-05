@@ -17,6 +17,7 @@ import type {CVRFlushStats, CVRStore} from './cvr-store.js';
 import {
   cmpVersions,
   oneAfter,
+  versionString,
   type CVRVersion,
   type ClientQueryRecord,
   type ClientRecord,
@@ -136,7 +137,9 @@ export class CVRUpdater {
     );
 
     lc.debug?.(
-      `flushed CVR ${JSON.stringify(stats)} in (${Date.now() - start} ms)`,
+      `flushed cvr@${versionString(this._cvr.version)} ${JSON.stringify(
+        stats,
+      )} in (${Date.now() - start} ms)`,
     );
     return {
       cvr: this._cvr,
