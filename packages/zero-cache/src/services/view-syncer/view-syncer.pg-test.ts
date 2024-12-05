@@ -11,6 +11,9 @@ import {
   type PokeStartBody,
   type QueriesPatch,
 } from '../../../../zero-protocol/src/mod.js';
+import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.js';
+import {definePermissions} from '../../../../zero-schema/src/permissions.js';
+import type {ExpressionBuilder} from '../../../../zql/src/query/expression.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {StatementRunner} from '../../db/statements.js';
 import {testDBs} from '../../test/db.js';
@@ -41,9 +44,6 @@ import {PipelineDriver} from './pipeline-driver.js';
 import {initViewSyncerSchema} from './schema/init.js';
 import {Snapshotter} from './snapshotter.js';
 import {pickToken, type SyncContext, ViewSyncerService} from './view-syncer.js';
-import type {ExpressionBuilder} from '../../../../zql/src/query/expression.js';
-import {definePermissions} from '../../../../zero-schema/src/permissions.js';
-import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.js';
 
 const SHARD_ID = 'ABC';
 
