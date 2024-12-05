@@ -53,6 +53,7 @@ import {
   encodeSecProtocols,
   nullableVersionSchema,
 } from '../../../zero-protocol/src/mod.js';
+import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.js';
 import type {
   PullRequestMessage,
   PullResponseBody,
@@ -98,7 +99,6 @@ import type {
   ZeroAdvancedOptions,
   ZeroOptions,
 } from './options.js';
-import {PROTOCOL_VERSION} from './protocol-version.js';
 import {QueryManager} from './query-manager.js';
 import {
   reloadScheduled,
@@ -403,7 +403,9 @@ export class Zero<const S extends Schema> {
     };
 
     const replicacheOptions: ReplicacheOptions<WithCRUD<MutatorDefs>> = {
-      schemaVersion: normalizedSchema.version.toString(),
+      // The schema stored in IDB is dependent upon both the application schema
+      // and the AST schema (i.e. PROTOCOL_VERSION).
+      schemaVersion: `${normalizedSchema.version}.${PROTOCOL_VERSION}`,
       logLevel: logOptions.logLevel,
       logSinks: [logOptions.logSink],
       mutators: replicacheMutators,
