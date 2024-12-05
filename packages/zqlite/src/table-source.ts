@@ -93,6 +93,8 @@ export class TableSource implements Source {
   #stmts: Statements;
   #overlay?: Overlay | undefined;
 
+  #rowsVended = 0;
+
   constructor(
     db: Database,
     tableName: string,
@@ -103,6 +105,10 @@ export class TableSource implements Source {
     this.#columns = columns;
     this.#primaryKey = primaryKey;
     this.#stmts = this.#getStatementsFor(db);
+  }
+
+  get rowsVended() {
+    return this.#rowsVended;
   }
 
   /**
@@ -328,7 +334,7 @@ export class TableSource implements Source {
         yield* generateWithStart(
           generateWithOverlay(
             req.start?.row,
-            mapFromSQLiteTypes(this.#columns, rowIterator),
+            this.#mapFromSQLiteTypes(this.#columns, rowIterator),
             req.constraint,
             overlay,
             comparator,
@@ -340,6 +346,17 @@ export class TableSource implements Source {
       } finally {
         this.#stmts.cache.return(cachedStatement);
       }
+    }
+  }
+
+  *#mapFromSQLiteTypes(
+    valueTypes: Record<string, SchemaValue>,
+    rowIterator: IterableIterator<Row>,
+  ): IterableIterator<Row> {
+    for (const row of rowIterator) {
+      fromSQLiteTypes(valueTypes, row);
+      this.#rowsVended++;
+      yield row;
     }
   }
 
@@ -773,16 +790,6 @@ export function toSQLiteTypeName(type: ValueType) {
       return 'NULL';
     case 'json':
       return 'TEXT';
-  }
-}
-
-function* mapFromSQLiteTypes(
-  valueTypes: Record<string, SchemaValue>,
-  rowIterator: IterableIterator<Row>,
-): IterableIterator<Row> {
-  for (const row of rowIterator) {
-    fromSQLiteTypes(valueTypes, row);
-    yield row;
   }
 }
 

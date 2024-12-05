@@ -231,6 +231,11 @@ export const zeroOptions = {
     desc: [`JWT secret for verifying authentication tokens.`],
   },
 
+  ast: {
+    type: v.string().optional(),
+    desc: ['Debug flag. AST for the query to be transformed and output.'],
+  },
+
   taskID: {
     type: v.string().optional(),
     desc: [
