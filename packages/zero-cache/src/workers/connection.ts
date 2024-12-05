@@ -72,13 +72,7 @@ export class Connection {
     this.#wsID = wsID;
     this.#protocolVersion = protocolVersion;
     this.#clientGroupID = clientGroupID;
-    this.#syncContext = {
-      clientID,
-      wsID,
-      baseCookie,
-      schemaVersion,
-      tokenData,
-    };
+    this.#syncContext = {clientID, wsID, baseCookie, schemaVersion, tokenData};
     this.#lc = lc
       .withContext('connection')
       .withContext('clientID', clientID)
