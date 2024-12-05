@@ -103,7 +103,7 @@ export class ClientHandler {
     this.clientID = clientID;
     this.wsID = wsID;
     this.#zeroClientsTable = `${schema(shardID)}.clients`;
-    this.#lc = lc.withContext('clientID', clientID);
+    this.#lc = lc;
     this.#pokes = pokes;
     this.#baseVersion = cookieToVersion(baseCookie);
     this.#schemaVersion = schemaVersion;
