@@ -12,7 +12,6 @@ import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.js';
 import type {AST} from '../../../zero-protocol/src/ast.js';
 import {buildPipeline} from '../../../zql/src/builder/builder.js';
 import {Catch} from '../../../zql/src/ivm/catch.js';
-import {wrapIterable} from '../../../shared/src/iterables.js';
 
 const config = getZeroConfig();
 const schema = await getSchema(config);
@@ -69,3 +68,18 @@ for (const source of sources.values()) {
 console.log(JSON.stringify(view, null, 2));
 console.log('ROWS CONSIDERED:', totalRowsConsidered);
 console.log('TIME:', (end - start).toFixed(2), 'ms');
+
+/*
+Command:
+npm run run-query -- --ast 
+
+Bad query:
+{"table":"issue","orderBy":[["id","asc"]],"related":[{"subquery":{"alias":"assignee","table":"user","orderBy":[["id","asc"]]},"correlation":{"childField":["id"],"parentField":["assigneeID"]}},{"subquery":{"alias":"comments","limit":10,"table":"comment","orderBy":[["id","asc"]],"related":[{"subquery":{"alias":"emoji","table":"emoji","orderBy":[["id","asc"]]},"correlation":{"childField":["subjectID"],"parentField":["id"]}}],"where":{"type":"correlatedSubquery","related":{"correlation":{"parentField":["issueID"],"childField":["id"]},"subquery":{"table":"issue","alias":"zsubq_issue","where":{"type":"or","conditions":[{"type":"simple","left":{"type":"literal","value":null},"right":{"type":"literal","value":"crew"},"op":"="},{"type":"simple","left":{"type":"column","name":"visibility"},"right":{"type":"literal","value":"public"},"op":"="}]},"orderBy":[["id","asc"]]}},"op":"EXISTS"}},"correlation":{"childField":["issueID"],"parentField":["id"]}},{"subquery":{"alias":"creator","table":"user","orderBy":[["id","asc"]]},"correlation":{"childField":["id"],"parentField":["creatorID"]}},{"subquery":{"alias":"emoji","table":"emoji","orderBy":[["id","asc"]]},"correlation":{"childField":["subjectID"],"parentField":["id"]}},{"subquery":{"alias":"labels","table":"issueLabel","orderBy":[["issueID","asc"],["labelID","asc"]],"related":[{"hidden":true,"subquery":{"alias":"labels","table":"label","orderBy":[["id","asc"]]},"correlation":{"childField":["id"],"parentField":["labelID"]}}],"where":{"type":"correlatedSubquery","related":{"correlation":{"parentField":["issueID"],"childField":["id"]},"subquery":{"table":"issue","alias":"zsubq_issue","where":{"type":"or","conditions":[{"type":"simple","left":{"type":"literal","value":null},"right":{"type":"literal","value":"crew"},"op":"="},{"type":"simple","left":{"type":"column","name":"visibility"},"right":{"type":"literal","value":"public"},"op":"="}]},"orderBy":[["id","asc"]]}},"op":"EXISTS"}},"correlation":{"childField":["issueID"],"parentField":["id"]}},{"subquery":{"alias":"viewState","limit":1,"table":"viewState","where":{"op":"=","left":{"name":"userID","type":"column"},"type":"simple","right":{"type":"literal","value":"tDY6IbKdVqbBlRBc3XMwF"}},"orderBy":[["userID","asc"],["issueID","asc"]]},"correlation":{"childField":["issueID"],"parentField":["id"]}}],"where":{"type":"or","conditions":[{"type":"simple","left":{"type":"literal","value":null},"right":{"type":"literal","value":"crew"},"op":"="},{"type":"simple","left":{"type":"column","name":"visibility"},"right":{"type":"literal","value":"public"},"op":"="}]}}
+ROWS CONSIDERED: 12623
+TIME: 234.32 ms
+
+Query with no read perms:
+{"table":"issue","orderBy":[["id","asc"]],"related":[{"subquery":{"alias":"assignee","table":"user","orderBy":[["id","asc"]]},"correlation":{"childField":["id"],"parentField":["assigneeID"]}},{"subquery":{"alias":"comments","limit":10,"table":"comment","orderBy":[["id","asc"]],"related":[{"subquery":{"alias":"emoji","table":"emoji","orderBy":[["id","asc"]]},"correlation":{"childField":["subjectID"],"parentField":["id"]}}]},"correlation":{"childField":["issueID"],"parentField":["id"]}},{"subquery":{"alias":"creator","table":"user","orderBy":[["id","asc"]]},"correlation":{"childField":["id"],"parentField":["creatorID"]}},{"subquery":{"alias":"emoji","table":"emoji","orderBy":[["id","asc"]]},"correlation":{"childField":["subjectID"],"parentField":["id"]}},{"subquery":{"alias":"labels","table":"issueLabel","orderBy":[["issueID","asc"],["labelID","asc"]],"related":[{"hidden":true,"subquery":{"alias":"labels","table":"label","orderBy":[["id","asc"]]},"correlation":{"childField":["id"],"parentField":["labelID"]}}]},"correlation":{"childField":["issueID"],"parentField":["id"]}},{"subquery":{"alias":"viewState","limit":1,"table":"viewState","where":{"op":"=","left":{"name":"userID","type":"column"},"type":"simple","right":{"type":"literal","value":"tDY6IbKdVqbBlRBc3XMwF"}},"orderBy":[["userID","asc"],["issueID","asc"]]},"correlation":{"childField":["issueID"],"parentField":["id"]}}],"where":{"type":"or","conditions":[{"type":"simple","left":{"type":"literal","value":null},"right":{"type":"literal","value":"crew"},"op":"="},{"type":"simple","left":{"type":"column","name":"visibility"},"right":{"type":"literal","value":"public"},"op":"="}]}}
+ROWS CONSIDERED: 3655
+TIME: 86.58 ms
+*/
