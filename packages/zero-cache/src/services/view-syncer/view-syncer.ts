@@ -146,7 +146,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#keepaliveMs = keepaliveMs;
     this.#idleTimeoutMs = idleTimeoutMs;
     this.#cvrStore = new CVRStore(
-      lc,
+      this.#lc,
       db,
       taskID,
       clientGroupID,
