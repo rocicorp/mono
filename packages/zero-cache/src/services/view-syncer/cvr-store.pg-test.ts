@@ -111,9 +111,7 @@ describe('view-syncer/cvr-store', () => {
 
     await expect(
       store.load(CONNECT_TIME),
-    ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[Error: ["error","ClientNotFound","max attempts exceeded waiting for CVR@02 to catch up from 01"]]`,
-    );
+    ).rejects.toThrowErrorMatchingInlineSnapshot(`[Error: {"kind":"ClientNotFound","message":"max attempts exceeded waiting for CVR@02 to catch up from 01"}]`);
 
     // Verify that the store signaled an ownership change to 'my-task' at CONNECT_TIME.
     expect(await db`SELECT * FROM cvr.instances`).toMatchInlineSnapshot(`

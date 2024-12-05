@@ -106,7 +106,12 @@ import {
   reportReloadReason,
   resetBackoff,
 } from './reload-error-handler.js';
-import {ServerError, isAuthError, isServerError} from './server-error.js';
+import {
+  ServerError,
+  isAuthError,
+  isServerError,
+  isServerOverloadedError,
+} from './server-error.js';
 import {getServer} from './server-option.js';
 import {version} from './version.js';
 import {PokeHandler} from './zero-poke-handler.js';
@@ -743,7 +748,7 @@ export class Zero<const S extends Schema> {
     lc: LogContext,
     downMessage: ErrorMessage,
   ): Promise<void> {
-    const [, kind, message] = downMessage;
+    const [, {kind, message}] = downMessage;
 
     // Rate limit errors are not fatal to the connection.
     // We really don't want to disconnect and reconnect a rate limited user as
@@ -755,7 +760,7 @@ export class Zero<const S extends Schema> {
     }
 
     lc.info?.(`${kind}: ${message}}`);
-    const error = new ServerError(kind, message);
+    const error = new ServerError(downMessage[1]);
 
     this.#rejectMessageError?.reject(error);
     lc.debug?.('Rejecting connect resolver due to error', error);
@@ -1204,10 +1209,12 @@ export class Zero<const S extends Schema> {
 
     let needsReauth = false;
     let gotError = false;
+    let backoffMs = RUN_LOOP_INTERVAL_MS;
 
     while (!this.closed) {
       runLoopCounter++;
       let lc = getLogContext();
+      backoffMs = RUN_LOOP_INTERVAL_MS;
 
       try {
         switch (this.#connectionState) {
@@ -1343,6 +1350,11 @@ export class Zero<const S extends Schema> {
         ) {
           gotError = true;
         }
+
+        const overloaded = isServerOverloadedError(ex);
+        if (overloaded && overloaded.minBackoffMs) {
+          backoffMs = Math.max(backoffMs, overloaded.minBackoffMs);
+        }
       }
 
       // Only authentication errors are retried immediately the first time they
@@ -1365,14 +1377,13 @@ export class Zero<const S extends Schema> {
         //   .catch(_ => {
         //     cfGetCheckSucceeded = false;
         //   });
-
         lc.debug?.(
           'Sleeping',
-          RUN_LOOP_INTERVAL_MS,
+          backoffMs,
           'ms before reconnecting due to error, state:',
           this.#connectionState,
         );
-        await sleep(RUN_LOOP_INTERVAL_MS);
+        await sleep(backoffMs);
         // cfGetCheckController.abort();
         // if (!cfGetCheckSucceeded) {
         //   lc.info?.(

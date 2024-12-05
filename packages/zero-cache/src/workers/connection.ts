@@ -5,11 +5,11 @@ import type {CloseEvent, Data, ErrorEvent} from 'ws';
 import WebSocket from 'ws';
 import {unreachable} from '../../../shared/src/asserts.js';
 import * as valita from '../../../shared/src/valita.js';
+import {type ErrorBody} from '../../../zero-protocol/src/error.js';
 import {
   type ConnectedMessage,
   type Downstream,
   ErrorKind,
-  type ErrorMessage,
   type PongMessage,
   upstreamSchema,
 } from '../../../zero-protocol/src/mod.js';
@@ -100,13 +100,12 @@ export class Connection {
       this.#protocolVersion !== PROTOCOL_VERSION &&
       this.#protocolVersion !== PROTOCOL_VERSION - 1
     ) {
-      this.#closeWithError([
-        'error',
-        ErrorKind.VersionNotSupported,
-        `server supports v${
+      this.#closeWithError({
+        kind: ErrorKind.VersionNotSupported,
+        message: `server supports v${
           PROTOCOL_VERSION - 1
         } and v${PROTOCOL_VERSION} protocols`,
-      ]);
+      });
     } else {
       const connectedMessage: ConnectedMessage = [
         'connected',
@@ -155,7 +154,10 @@ export class Connection {
       msg = valita.parse(value, upstreamSchema);
     } catch (e) {
       this.#lc.warn?.(`failed to parse message "${data}": ${String(e)}`);
-      this.#closeWithError(['error', ErrorKind.InvalidMessage, String(e)], e);
+      this.#closeWithError(
+        {kind: ErrorKind.InvalidMessage, message: String(e)},
+        e,
+      );
       return;
     }
     try {
@@ -167,12 +169,12 @@ export class Connection {
         case 'push': {
           const {clientGroupID, mutations, schemaVersion} = msg[1];
           if (clientGroupID !== this.#clientGroupID) {
-            this.#closeWithError([
-              'error',
-              ErrorKind.InvalidPush,
-              `clientGroupID in mutation "${clientGroupID}" does not match ` +
+            this.#closeWithError({
+              kind: ErrorKind.InvalidPush,
+              message:
+                `clientGroupID in mutation "${clientGroupID}" does not match ` +
                 `clientGroupID of connection "${this.#clientGroupID}`,
-            ]);
+            });
           }
           // Hold a connection-level lock while processing mutations so that:
           // 1. Mutations are processed in the order in which they are received and
@@ -185,7 +187,7 @@ export class Connection {
                 schemaVersion,
               );
               if (maybeError !== undefined) {
-                this.sendError(['error', maybeError[0], maybeError[1]]);
+                this.sendError({kind: maybeError[0], message: maybeError[1]});
               }
             }
           });
@@ -244,16 +246,16 @@ export class Connection {
   }
 
   #closeWithThrown(e: unknown) {
-    const errorMessage = findErrorForClient(e)?.errorMessage ?? [
-      'error',
-      ErrorKind.Internal,
-      String(e),
-    ];
-    this.#closeWithError(errorMessage, e);
+    const errorBody = findErrorForClient(e)?.errorBody ?? {
+      kind: ErrorKind.Internal,
+      message: String(e),
+    };
+
+    this.#closeWithError(errorBody, e);
   }
 
-  #closeWithError(errorMessage: ErrorMessage, thrown?: unknown) {
-    this.sendError(errorMessage, thrown);
+  #closeWithError(errorBody: ErrorBody, thrown?: unknown) {
+    this.sendError(errorBody, thrown);
     this.close();
   }
 
@@ -261,8 +263,8 @@ export class Connection {
     send(this.#ws, data);
   }
 
-  sendError(errorMessage: ErrorMessage, thrown?: unknown) {
-    sendError(this.#lc, this.#ws, errorMessage, thrown);
+  sendError(errorBody: ErrorBody, thrown?: unknown) {
+    sendError(this.#lc, this.#ws, errorBody, thrown);
   }
 }
 
@@ -273,11 +275,11 @@ export function send(ws: WebSocket, data: Downstream) {
 export function sendError(
   lc: LogContext,
   ws: WebSocket,
-  errorMessage: ErrorMessage,
+  errorBody: ErrorBody,
   thrown?: unknown,
 ) {
-  lc = lc.withContext('errorKind', errorMessage[1]);
+  lc = lc.withContext('errorKind', errorBody.kind);
   const logLevel = thrown ? 'error' : 'info';
-  lc[logLevel]?.('Sending error on WebSocket', errorMessage, thrown ?? '');
-  send(ws, errorMessage);
+  lc[logLevel]?.('Sending error on WebSocket', errorBody, thrown ?? '');
+  send(ws, ['error', errorBody]);
 }

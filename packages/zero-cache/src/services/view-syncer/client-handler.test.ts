@@ -1,15 +1,16 @@
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import type {
-  Downstream,
-  PokeEndMessage,
-  PokePartMessage,
-  PokeStartMessage,
+import {
+  ErrorKind,
+  type Downstream,
+  type PokeEndMessage,
+  type PokePartMessage,
+  type PokeStartMessage,
 } from '../../../../zero-protocol/src/mod.js';
 import type {JSONObject} from '../../types/bigint-json.js';
 import {ErrorForClient} from '../../types/error-for-client.js';
 import {Subscription} from '../../types/subscription.js';
-import {ClientHandler, type Patch, ensureSafeJSON} from './client-handler.js';
+import {ClientHandler, ensureSafeJSON, type Patch} from './client-handler.js';
 
 const SHARD_ID = 'xyz';
 
@@ -342,11 +343,11 @@ describe('view-syncer/client-handler', () => {
 
     expect(received).toEqual([]);
     expect(e).toBeInstanceOf(ErrorForClient);
-    expect((e as unknown as ErrorForClient).errorMessage).toEqual([
-      'error',
-      'SchemaVersionNotSupported',
-      'Schema version 1 is not in range of supported schema versions [2, 3].',
-    ]);
+    expect((e as unknown as ErrorForClient).errorBody).toEqual({
+      kind: ErrorKind.SchemaVersionNotSupported,
+      message:
+        'Schema version 1 is not in range of supported schema versions [2, 3].',
+    });
   });
 
   test('error on unsafe integer', async () => {

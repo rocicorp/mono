@@ -5,8 +5,8 @@ import {sleep} from '../../../../shared/src/sleep.js';
 import type {AST} from '../../../../zero-protocol/src/ast.js';
 import {
   type Downstream,
+  type ErrorBody,
   ErrorKind,
-  type ErrorMessage,
   type PokePartBody,
   type PokeStartBody,
   type QueriesPatch,
@@ -1182,11 +1182,11 @@ describe('view-syncer/service', () => {
 
     const dequeuePromise = client.dequeue();
     await expect(dequeuePromise).rejects.toBeInstanceOf(ErrorForClient);
-    await expect(dequeuePromise).rejects.toHaveProperty('errorMessage', [
-      'error',
-      'SchemaVersionNotSupported',
-      'Schema version 1 is not in range of supported schema versions [2, 3].',
-    ]);
+    await expect(dequeuePromise).rejects.toHaveProperty('errorBody', {
+      kind: ErrorKind.SchemaVersionNotSupported,
+      message:
+        'Schema version 1 is not in range of supported schema versions [2, 3].',
+    });
   });
 
   test('initial hydration, schemaVersion unsupported with bad query', async () => {
@@ -1210,11 +1210,11 @@ describe('view-syncer/service', () => {
     // propagated, and not any error related to the bad query.
     const dequeuePromise = client.dequeue();
     await expect(dequeuePromise).rejects.toBeInstanceOf(ErrorForClient);
-    await expect(dequeuePromise).rejects.toHaveProperty('errorMessage', [
-      'error',
-      'SchemaVersionNotSupported',
-      'Schema version 1 is not in range of supported schema versions [2, 3].',
-    ]);
+    await expect(dequeuePromise).rejects.toHaveProperty('errorBody', {
+      kind: ErrorKind.SchemaVersionNotSupported,
+      message:
+        'Schema version 1 is not in range of supported schema versions [2, 3].',
+    });
   });
 
   test('process advancement', async () => {
@@ -1659,11 +1659,11 @@ describe('view-syncer/service', () => {
     // updated schemaVersions range
     const dequeuePromise = client1.dequeue();
     await expect(dequeuePromise).rejects.toBeInstanceOf(ErrorForClient);
-    await expect(dequeuePromise).rejects.toHaveProperty('errorMessage', [
-      'error',
-      'SchemaVersionNotSupported',
-      'Schema version 2 is not in range of supported schema versions [3, 3].',
-    ]);
+    await expect(dequeuePromise).rejects.toHaveProperty('errorBody', {
+      kind: ErrorKind.SchemaVersionNotSupported,
+      message:
+        'Schema version 2 is not in range of supported schema versions [3, 3].',
+    });
 
     expect(await nextPoke(client2)).toMatchInlineSnapshot(`
       [
@@ -2393,11 +2393,10 @@ describe('view-syncer/service', () => {
       result = e;
     }
     expect(result).toBeInstanceOf(ErrorForClient);
-    expect((result as ErrorForClient).errorMessage).toEqual([
-      'error',
-      ErrorKind.ClientNotFound,
-      'Replica Version mismatch: CVR=101, DB=01',
-    ] satisfies ErrorMessage);
+    expect((result as ErrorForClient).errorBody).toEqual({
+      kind: ErrorKind.ClientNotFound,
+      message: 'Replica Version mismatch: CVR=101, DB=01',
+    } satisfies ErrorBody);
   });
 
   test('sends client not found if CVR is not found', async () => {
@@ -2413,11 +2412,10 @@ describe('view-syncer/service', () => {
       result = e;
     }
     expect(result).toBeInstanceOf(ErrorForClient);
-    expect((result as ErrorForClient).errorMessage).toEqual([
-      'error',
-      ErrorKind.ClientNotFound,
-      'Client not found',
-    ] satisfies ErrorMessage);
+    expect((result as ErrorForClient).errorBody).toEqual({
+      kind: ErrorKind.ClientNotFound,
+      message: 'Client not found',
+    } satisfies ErrorBody);
   });
 
   test('sends invalid base cookie if client is ahead of CVR', async () => {
@@ -2441,11 +2439,10 @@ describe('view-syncer/service', () => {
       result = e;
     }
     expect(result).toBeInstanceOf(ErrorForClient);
-    expect((result as ErrorForClient).errorMessage).toEqual([
-      'error',
-      ErrorKind.InvalidConnectionRequestBaseCookie,
-      'CVR is at version 07',
-    ] satisfies ErrorMessage);
+    expect((result as ErrorForClient).errorBody).toEqual({
+      kind: ErrorKind.InvalidConnectionRequestBaseCookie,
+      message: 'CVR is at version 07',
+    } satisfies ErrorBody);
   });
 
   test('clean up operator storage on close', async () => {
