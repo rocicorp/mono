@@ -1,18 +1,15 @@
 # Welcome
 
-If you are seeing this, you are one of the very first people to see Zero outside of Rocicorp. That must mean we think a lot of you!
+This is the source code for [zbugs](bugs.rocicorp.dev).
 
-## ⚠️ Warning
+We deploy this continuously (on trunk) to aws and is our dogfood of Zero.
 
-This is still early. There are still **many** bugs. Basically you can run this dogfood app, get a feel for what Zero will be like, and tinker with some queries. You won't be able to write your own app. But we still think it's pretty encouraging in its fledgling form.
+## Requirements
+
+- Docker
+- Node 20+
 
 ## Setup
-
-We do not yet have any npm packages – Zero is under rapid development and we're building it side-by-side with this demo app. The best way to play with Zero is to just play with the demo app.
-
-First, you will need [Docker](https://docs.docker.com/engine/install/).
-
-Then, from root of monorepo:
 
 ```bash
 npm install
@@ -21,7 +18,7 @@ npm install
 ### Run the "upstream" Postgres database
 
 ```bash
-cd apps/zbugs/docker
+cd docker
 docker compose up
 ```
 
