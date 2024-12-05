@@ -115,12 +115,12 @@ export class Connection {
     }
   }
 
-  close() {
+  close(reason: string, ...args: unknown[]) {
     if (this.#closed) {
       return;
     }
-    this.#lc.debug?.('close');
     this.#closed = true;
+    this.#lc.info?.(`closing connection: ${reason}`, ...args);
     this.#ws.removeEventListener('message', this.#handleMessage);
     this.#ws.removeEventListener('close', this.#handleClose);
     this.#ws.removeEventListener('error', this.#handleError);
@@ -225,8 +225,7 @@ export class Connection {
 
   #handleClose = (e: CloseEvent) => {
     const {code, reason, wasClean} = e;
-    this.#lc.info?.('WebSocket close event', {code, reason, wasClean});
-    this.close();
+    this.close('WebSocket close event', {code, reason, wasClean});
   };
 
   #handleError = (e: ErrorEvent) => {
@@ -238,8 +237,7 @@ export class Connection {
       for await (const outMsg of outboundStream) {
         this.send(outMsg);
       }
-      this.#lc.info?.('downstream closed by ViewSyncer');
-      this.close();
+      this.close('downstream closed by ViewSyncer');
     } catch (e) {
       this.#closeWithThrown(e);
     }
@@ -256,7 +254,7 @@ export class Connection {
 
   #closeWithError(errorBody: ErrorBody, thrown?: unknown) {
     this.sendError(errorBody, thrown);
-    this.close();
+    this.close(`client error: ${errorBody.kind}`, errorBody);
   }
 
   send(data: Downstream) {

@@ -139,14 +139,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ) {
     this.id = clientGroupID;
     this.#shardID = shardID;
-    this.#lc = lc.withContext('instance', randomID());
+    this.#lc = lc;
     this.#pipelines = pipelineDriver;
     this.#stateChanges = versionChanges;
     this.#drainCoordinator = drainCoordinator;
     this.#keepaliveMs = keepaliveMs;
     this.#idleTimeoutMs = idleTimeoutMs;
     this.#cvrStore = new CVRStore(
-      this.#lc,
+      lc,
       db,
       taskID,
       clientGroupID,
@@ -407,7 +407,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
         if (newClient) {
           assert(newClient.wsID === wsID);
-          this.#clients.get(clientID)?.close();
+          this.#clients.get(clientID)?.close(`replaced by wsID: ${wsID}`);
           this.#clients.set(clientID, newClient);
           client = newClient;
 
@@ -960,7 +960,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       if (err) {
         client.fail(err);
       } else {
-        client.close();
+        client.close('shutting down');
       }
     }
   }
