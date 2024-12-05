@@ -20,13 +20,15 @@ export interface ZeroOptions<S extends Schema> {
   server?: string | null | undefined;
 
   /**
-   * A string token to identify and authenticate the user or a
-   * function that returns such a token.
+   * A string token to identify and authenticate the user, a unction that returns
+   * such a token, or `undefined` if there is no logged in user.
    *
-   * If a function is provided, and the token is determined to be invalid
-   * (expired, can't be decoded, bad signature, etc), Zero will call the
-   * function to get a new token with the error argument set to
-   * `'invalid-token'`.
+   * If the server determines the token is invalid (expired, can't be decoded,
+   * bad signature, etc):
+   * 1. if a function was provided Zero will call the function to get a new
+   *    token with the error argument set to `'invalid-token'`.
+   * 2. if a string token was provided Zero will continue to retry with the
+   *    provided token.
    */
   auth?:
     | string
