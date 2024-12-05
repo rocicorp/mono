@@ -7,6 +7,7 @@ import {MessagePort} from 'worker_threads';
 import {WebSocketServer, type WebSocket} from 'ws';
 import {must} from '../../../shared/src/must.js';
 import {promiseVoid} from '../../../shared/src/resolved-promises.js';
+import {ErrorKind} from '../../../zero-protocol/src/error.js';
 import {type ZeroConfig} from '../config/zero-config.js';
 import type {ConnectParams} from '../services/dispatcher/connect-params.js';
 import {installWebSocketReceiver} from '../services/dispatcher/websocket-handoff.js';
@@ -24,7 +25,6 @@ import type {Worker} from '../types/processes.js';
 import {Subscription} from '../types/subscription.js';
 import {Connection, sendError} from './connection.js';
 import {createNotifierFrom, subscribeTo} from './replicator.js';
-import {ErrorKind} from '../../../zero-protocol/src/error.js';
 
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;
@@ -47,7 +47,6 @@ export class Syncer implements SingletonService {
   readonly #parent: Worker;
   readonly #wss: WebSocketServer;
   readonly #stopped = resolver();
-  readonly #config: ZeroConfig;
   #jwtSecretBytes: Uint8Array | undefined;
 
   constructor(
@@ -61,7 +60,6 @@ export class Syncer implements SingletonService {
     mutagenFactory: (id: string) => Mutagen & Service,
     parent: Worker,
   ) {
-    this.#config = config;
     // Relays notifications from the parent thread subscription
     // to ViewSyncers within this thread.
     const notifier = createNotifierFrom(lc, parent);
@@ -111,7 +109,6 @@ export class Syncer implements SingletonService {
 
     const connection = new Connection(
       this.#lc,
-      this.#config,
       auth !== undefined && decodedToken !== undefined
         ? {
             raw: auth,
@@ -129,6 +126,8 @@ export class Syncer implements SingletonService {
       },
     );
     this.#connections.set(clientID, connection);
+
+    connection.init();
     if (params.initConnectionMsg) {
       await connection.handleInitConnection(
         JSON.stringify(params.initConnectionMsg),
