@@ -413,7 +413,7 @@ const permissions = must(
           insert: [isViewStateOwner],
           update: {
             preMutation: [isViewStateOwner],
-            postProposedMutation: [isViewStateOwner],
+            postMutation: [isViewStateOwner],
           },
           delete: [isViewStateOwner],
         },

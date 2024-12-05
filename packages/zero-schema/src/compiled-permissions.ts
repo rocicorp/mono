@@ -12,7 +12,7 @@ const assetSchema = v.object({
   update: v
     .object({
       preMutation: policySchema.optional(),
-      postProposedMutation: policySchema.optional(),
+      postMutation: policySchema.optional(),
     })
     .optional(),
   delete: policySchema.optional(),

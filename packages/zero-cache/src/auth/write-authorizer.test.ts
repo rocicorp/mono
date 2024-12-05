@@ -226,7 +226,7 @@ describe('pre & post mutation', () => {
         foo: {
           row: {
             update: {
-              postProposedMutation: [allowIfAIsSubject],
+              postMutation: [allowIfAIsSubject],
             },
           },
         },
