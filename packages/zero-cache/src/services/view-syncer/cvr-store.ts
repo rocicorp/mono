@@ -315,8 +315,10 @@ class RowRecordCache {
     mode: 'allow-defer' | 'force',
   ): PendingQuery<Row[]>[] {
     if (
-      mode === 'allow-defer' && // defer if there are pending updates or
-      (this.#pending.size > 0 || // the new batch is above the limit.
+      mode === 'allow-defer' &&
+      // defer if pending rows are being flushed
+      (this.#flushing !== null ||
+        // or if the new batch is above the limit.
         rowRecordsToFlush.length > this.#deferredRowFlushThreshold)
     ) {
       return [];
