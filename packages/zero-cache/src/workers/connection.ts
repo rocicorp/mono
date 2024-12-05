@@ -4,7 +4,6 @@ import type {JWTPayload} from 'jose';
 import type {CloseEvent, Data, ErrorEvent} from 'ws';
 import WebSocket from 'ws';
 import {unreachable} from '../../../shared/src/asserts.js';
-import {randomCharacters} from '../../../shared/src/random-values.js';
 import * as valita from '../../../shared/src/valita.js';
 import {
   type ConnectedMessage,
@@ -14,7 +13,7 @@ import {
   type PongMessage,
   upstreamSchema,
 } from '../../../zero-protocol/src/mod.js';
-import type {ZeroConfig} from '../config/zero-config.js';
+import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.js';
 import type {ConnectParams} from '../services/dispatcher/connect-params.js';
 import type {Mutagen} from '../services/mutagen/mutagen.js';
 import type {
@@ -35,6 +34,8 @@ import type {Source} from '../types/streams.js';
  */
 export class Connection {
   readonly #ws: WebSocket;
+  readonly #wsID: string;
+  readonly #protocolVersion: number;
   readonly #clientGroupID: string;
   readonly #syncContext: SyncContext;
   readonly #lc: LogContext;
@@ -50,7 +51,6 @@ export class Connection {
 
   constructor(
     lc: LogContext,
-    config: ZeroConfig,
     tokenData: TokenData | undefined,
     viewSyncer: ViewSyncer,
     mutagen: Mutagen,
@@ -58,12 +58,27 @@ export class Connection {
     ws: WebSocket,
     onClose: () => void,
   ) {
+    const {
+      clientGroupID,
+      clientID,
+      wsID,
+      baseCookie,
+      protocolVersion,
+      schemaVersion,
+    } = connectParams;
+
     this.#ws = ws;
     this.#authData = tokenData?.decoded;
-    const {clientGroupID, clientID, wsID, baseCookie, schemaVersion} =
-      connectParams;
+    this.#wsID = wsID;
+    this.#protocolVersion = protocolVersion;
     this.#clientGroupID = clientGroupID;
-    this.#syncContext = {clientID, wsID, baseCookie, schemaVersion, tokenData};
+    this.#syncContext = {
+      clientID,
+      wsID,
+      baseCookie,
+      schemaVersion,
+      tokenData,
+    };
     this.#lc = lc
       .withContext('connection')
       .withContext('clientID', clientID)
@@ -77,13 +92,34 @@ export class Connection {
     this.#ws.addEventListener('message', this.#handleMessage);
     this.#ws.addEventListener('close', this.#handleClose);
     this.#ws.addEventListener('error', this.#handleError);
+  }
 
-    const connectedMessage: ConnectedMessage = [
-      'connected',
-      {wsid: wsID, timestamp: Date.now()},
-    ];
-    send(ws, connectedMessage);
-    this.#warmConnection(config);
+  /**
+   * Checks the protocol version and errors for unsupported protocols,
+   * sending the initial `connected` response on success.
+   *
+   * This is early in the connection lifecycle because {@link #handleMessage}
+   * will only parse messages with schema(s) of supported protocol versions.
+   */
+  init() {
+    if (
+      this.#protocolVersion !== PROTOCOL_VERSION &&
+      this.#protocolVersion !== PROTOCOL_VERSION - 1
+    ) {
+      this.#closeWithError([
+        'error',
+        ErrorKind.VersionNotSupported,
+        `server supports v${
+          PROTOCOL_VERSION - 1
+        } and v${PROTOCOL_VERSION} protocols`,
+      ]);
+    } else {
+      const connectedMessage: ConnectedMessage = [
+        'connected',
+        {wsid: this.#wsID, timestamp: Date.now()},
+      ];
+      send(this.#ws, connectedMessage);
+    }
   }
 
   close() {
@@ -104,20 +140,6 @@ export class Connection {
 
     // spin down services if we have
     // no more client connections for the client group?
-  }
-
-  // Landing this to gather some data on time savings, if any.
-  #warmConnection(config: ZeroConfig) {
-    if (config.warmWebsocket) {
-      for (let i = 0; i < config.warmWebsocket; i++) {
-        send(this.#ws, [
-          'warm',
-          {
-            payload: randomCharacters(1024),
-          },
-        ]);
-      }
-    }
   }
 
   handleInitConnection(initConnectionMsg: string) {

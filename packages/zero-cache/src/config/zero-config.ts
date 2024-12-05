@@ -305,10 +305,6 @@ export const zeroOptions = {
       `tmp directory for IVM operator storage. Leave unset to use os.tmpdir()`,
     ],
   },
-  warmWebsocket: {
-    type: v.number().optional(),
-    hidden: true, // for internal experimentation
-  },
 };
 
 export type ZeroConfig = Config<typeof zeroOptions>;

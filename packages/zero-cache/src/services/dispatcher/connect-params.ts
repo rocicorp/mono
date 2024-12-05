@@ -1,12 +1,13 @@
 import type {IncomingHttpHeaders} from 'node:http2';
-import {URLParams} from '../../types/url-params.js';
 import {must} from '../../../../shared/src/must.js';
 import {
   decodeSecProtocols,
   type InitConnectionMessage,
 } from '../../../../zero-protocol/src/connect.js';
+import {URLParams} from '../../types/url-params.js';
 
 export type ConnectParams = {
+  readonly protocolVersion: number;
   readonly clientID: string;
   readonly clientGroupID: string;
   readonly schemaVersion: number;
@@ -21,6 +22,7 @@ export type ConnectParams = {
 };
 
 export function getConnectParams(
+  protocolVersion: number,
   url: URL,
   headers: IncomingHttpHeaders,
 ):
@@ -50,6 +52,7 @@ export function getConnectParams(
 
     return {
       params: {
+        protocolVersion,
         clientID,
         clientGroupID,
         schemaVersion,
