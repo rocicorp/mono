@@ -134,12 +134,7 @@ export class Take implements Operator {
 
   *#initialFetch(req: FetchRequest): Stream<Node> {
     assert(req.start === undefined);
-    assert(
-      !this.#partitionKey ||
-        (req.constraint &&
-          // TODO: Compound keys
-          constraintMatchesPartitionKey(req.constraint, this.#partitionKey)),
-    );
+    assert(constraintMatchesPartitionKey(req.constraint, this.#partitionKey));
 
     if (this.#limit === 0) {
       return;
@@ -181,35 +176,15 @@ export class Take implements Operator {
 
   *cleanup(req: FetchRequest): Stream<Node> {
     assert(req.start === undefined);
-    assert(
-      !this.#partitionKey ||
-        (req.constraint &&
-          // TODO: Compound keys
-          constraintMatchesPartitionKey(req.constraint, this.#partitionKey)),
-    );
-
-    let takeState: TakeState | undefined;
-    if (this.#limit > 0) {
-      const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
-      takeState = this.#storage.get(takeStateKey);
-      assert(
-        takeState !== undefined,
-        'takeStateKey was: ' +
-          takeStateKey +
-          ', partitionKey was: ' +
-          this.#partitionKey +
-          ', constraint was: ' +
-          JSON.stringify(req.constraint),
-      );
-      this.#storage.del(takeStateKey);
-    }
+    assert(constraintMatchesPartitionKey(req.constraint, this.#partitionKey));
+    const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
+    this.#storage.del(takeStateKey);
+    let size = 0;
     for (const inputNode of this.#input.cleanup(req)) {
-      if (
-        takeState?.bound === undefined ||
-        this.getSchema().compareRows(takeState.bound, inputNode.row) < 0
-      ) {
+      if (size === this.#limit) {
         return;
       }
+      size++;
       yield inputNode;
     }
   }
@@ -648,9 +623,15 @@ function getTakeStateKey(
 }
 
 function constraintMatchesPartitionKey(
-  constraint: Constraint,
-  partitionKey: PartitionKey,
+  constraint: Constraint | undefined,
+  partitionKey: PartitionKey | undefined,
 ): boolean {
+  if (constraint === undefined || partitionKey === undefined) {
+    return constraint === partitionKey;
+  }
+  if (partitionKey.length !== Object.keys(constraint).length) {
+    return false;
+  }
   for (const key of partitionKey) {
     if (!hasOwn(constraint, key)) {
       return false;
