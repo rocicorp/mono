@@ -9,12 +9,7 @@ export type Policy = v.Infer<typeof policySchema>;
 const assetSchema = v.object({
   select: policySchema.optional(),
   insert: policySchema.optional(),
-  update: v
-    .object({
-      preMutation: policySchema.optional(),
-      postMutation: policySchema.optional(),
-    })
-    .optional(),
+  update: policySchema.optional(),
   delete: policySchema.optional(),
 });
 

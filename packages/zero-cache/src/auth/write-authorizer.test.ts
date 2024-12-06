@@ -25,6 +25,7 @@ const allowIfSubject = [
   },
 ] satisfies Rule;
 
+/*
 const allowIfAIsSubject = [
   'allow',
   {
@@ -37,6 +38,7 @@ const allowIfAIsSubject = [
     right: {anchor: 'authData', field: 'sub', type: 'static'},
   },
 ] satisfies Rule;
+ */
 
 const schema: Schema = {
   version: 1,
@@ -191,9 +193,7 @@ describe('pre & post mutation', () => {
       {
         foo: {
           row: {
-            update: {
-              preMutation: [allowIfSubject],
-            },
+            update: [allowIfSubject],
           },
         },
       },
@@ -217,6 +217,7 @@ describe('pre & post mutation', () => {
     expect(authorizer.canPostMutation({sub: '1'}, [op])).toBe(true);
   });
 
+  /*
   test('update is run post-mutation when specified', () => {
     const authorizer = new WriteAuthorizerImpl(
       lc,
@@ -249,4 +250,5 @@ describe('pre & post mutation', () => {
     // subject does match the updated value of `a`
     expect(authorizer.canPostMutation({sub: 'b'}, [op])).toBe(true);
   });
+  */
 });

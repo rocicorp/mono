@@ -32,6 +32,7 @@ import {createPredicate} from './filter.js';
 export type StaticQueryParameters = {
   authData: Record<string, JSONValue>;
   preMutationRow?: Row | undefined;
+  proposedMutationRow?: Row | undefined;
 };
 
 /**

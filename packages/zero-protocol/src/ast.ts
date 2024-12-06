@@ -75,7 +75,11 @@ const columnReferenceSchema: v.Type<ColumnReference> = v.readonlyObject({
 });
 const parameterReferenceSchema: v.Type<Parameter> = v.readonlyObject({
   type: v.literal('static'),
-  anchor: v.union(v.literal('authData'), v.literal('preMutationRow')),
+  anchor: v.union(
+    v.literal('authData'),
+    v.literal('preMutationRow'),
+    v.literal('proposedMutationRow'),
+  ),
   field: v.string(),
 });
 const conditionValueSchema = v.union(
@@ -326,7 +330,7 @@ type StaticParameter = {
   // prior to the mutation being run (preMutationRow).
   // Read and write authorization will both send the
   // current authentication data (authData).
-  readonly anchor: 'authData' | 'preMutationRow';
+  readonly anchor: 'authData' | 'preMutationRow' | 'proposedMutationRow';
   readonly field: string;
 };
 

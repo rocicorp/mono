@@ -219,12 +219,12 @@ export const permissions: ReturnType<typeof definePermissions> =
       {cmpLit}: ExpressionBuilder<TableSchema>,
     ) => cmpLit(authData.role, '=', 'crew');
 
-    const allowIfUserIDMatchesLoggedInUser = (
+    const loggedInUserIsViewStateUser = (
       authData: AuthData,
       {cmp}: ExpressionBuilder<typeof viewStateSchema>,
     ) => cmp('userID', '=', authData.sub);
 
-    const allowIfAdminOrIssueCreator = (
+    const loggedInUserIsAdminOrIssueCreator = (
       authData: AuthData,
       eb: ExpressionBuilder<typeof issueLabelSchema>,
     ) =>
@@ -241,14 +241,20 @@ export const permissions: ReturnType<typeof definePermissions> =
     ) =>
       eb.or(loggedInUserIsAdmin(authData, eb), eb.cmp('visibility', 'public'));
 
+    const keyDidNotChange = <S extends TableSchema>(
+      key: keyof TableSchemaToRow<S>,
+      {cmpLit}: ExpressionBuilder<S>,
+      oldRow: TableSchemaToRow<S>,
+      newRow: TableSchemaToRow<S>,
+    ) => cmpLit(oldRow[key], '=', newRow[key]);
+
     return {
       user: {
         // Only the authentication system can write to the user table.
         row: {
           insert: [],
-          update: {
-            preMutation: [],
-          },
+          update: [],
+          delete: [],
         },
       },
       issue: {
@@ -262,10 +268,16 @@ export const permissions: ReturnType<typeof definePermissions> =
                 loggedInUserIsIssueCreator(authData, eb),
               ),
           ],
-          update: {
-            // TODO: add a check to prevent changing the creatorID
-            preMutation: [loggedInUserIsIssueCreator, loggedInUserIsAdmin],
-          },
+          update: [
+            (authData, eb, oldRow, newRow) =>
+              eb.and(
+                keyDidNotChange('creatorID', eb, oldRow, newRow),
+                eb.or(
+                  loggedInUserIsIssueCreator(authData, eb),
+                  loggedInUserIsAdmin(authData, eb),
+                ),
+              ),
+          ],
           delete: [loggedInUserIsIssueCreator, loggedInUserIsAdmin],
           select: [canSeeIssue],
         },
@@ -279,9 +291,16 @@ export const permissions: ReturnType<typeof definePermissions> =
                 loggedInUserIsCommentCreator(authData, eb),
               ),
           ],
-          update: {
-            preMutation: [loggedInUserIsCommentCreator, loggedInUserIsAdmin],
-          },
+          update: [
+            (authData, eb, oldRow, newRow) =>
+              eb.and(
+                keyDidNotChange('creatorID', eb, oldRow, newRow),
+                eb.or(
+                  loggedInUserIsCommentCreator(authData, eb),
+                  loggedInUserIsAdmin(authData, eb),
+                ),
+              ),
+          ],
           delete: [loggedInUserIsCommentCreator, loggedInUserIsAdmin],
           // comments are only visible if the user can see the issue they're on
           select: [
@@ -293,30 +312,28 @@ export const permissions: ReturnType<typeof definePermissions> =
       label: {
         row: {
           insert: [loggedInUserIsAdmin],
-          update: {
-            preMutation: [loggedInUserIsAdmin],
-          },
+          update: [loggedInUserIsAdmin],
           delete: [loggedInUserIsAdmin],
         },
       },
       viewState: {
         row: {
-          insert: [allowIfUserIDMatchesLoggedInUser],
-          update: {
-            preMutation: [allowIfUserIDMatchesLoggedInUser],
-            postMutation: [allowIfUserIDMatchesLoggedInUser],
-          },
-          // view state cannot be deleted
+          insert: [loggedInUserIsViewStateUser],
+          update: [
+            (authData, eb, oldRow, newRow) =>
+              eb.and(
+                loggedInUserIsViewStateUser(authData, eb),
+                keyDidNotChange('userID', eb, oldRow, newRow),
+              ),
+          ],
           delete: [],
         },
       },
       issueLabel: {
         row: {
-          insert: [allowIfAdminOrIssueCreator],
-          update: {
-            preMutation: [],
-          },
-          delete: [allowIfAdminOrIssueCreator],
+          insert: [loggedInUserIsAdminOrIssueCreator],
+          update: [],
+          delete: [loggedInUserIsAdminOrIssueCreator],
           select: [
             (authData, {exists}) =>
               exists('issue', q => q.where(eb => canSeeIssue(authData, eb))),

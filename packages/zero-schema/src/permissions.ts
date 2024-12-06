@@ -1,6 +1,6 @@
 import type {Query} from '../../zql/src/query/query.js';
 import type {Schema} from './schema.js';
-import type {TableSchema} from './table-schema.js';
+import type {TableSchema, TableSchemaToRow} from './table-schema.js';
 import type {
   AssetPermissions as CompiledAssetPermissions,
   PermissionsConfig as CompiledPermissionsConfig,
@@ -18,18 +18,15 @@ export type Queries<TSchema extends Schema> = {
 type PermissionRule<TAuthDataShape, TSchema extends TableSchema> = (
   authData: TAuthDataShape,
   eb: ExpressionBuilder<TSchema>,
+  preMutationRow: TableSchemaToRow<TSchema>,
+  proposedMutationRow: TableSchemaToRow<TSchema>,
 ) => Condition;
 
 type AssetPermissions<TAuthDataShape, TSchema extends TableSchema> = {
   // Why an array of rules?: https://github.com/rocicorp/mono/pull/3184/files#r1869680716
   select?: PermissionRule<TAuthDataShape, TSchema>[] | undefined;
   insert?: PermissionRule<TAuthDataShape, TSchema>[] | undefined;
-  update?:
-    | {
-        preMutation?: PermissionRule<TAuthDataShape, TSchema>[];
-        postMutation?: PermissionRule<TAuthDataShape, TSchema>[];
-      }
-    | undefined;
+  update?: PermissionRule<TAuthDataShape, TSchema>[] | undefined;
   delete?: PermissionRule<TAuthDataShape, TSchema>[] | undefined;
 };
 
@@ -94,16 +91,7 @@ function compileRowConfig<TAuthDataShape, TSchema extends TableSchema>(
   return {
     select: compileRules(rowRules.select, expressionBuilder),
     insert: compileRules(rowRules.insert, expressionBuilder),
-    update: {
-      preMutation: compileRules(
-        rowRules.update?.preMutation,
-        expressionBuilder,
-      ),
-      postMutation: compileRules(
-        rowRules.update?.postMutation,
-        expressionBuilder,
-      ),
-    },
+    update: compileRules(rowRules.update, expressionBuilder),
     delete: compileRules(rowRules.delete, expressionBuilder),
   };
 }
@@ -125,7 +113,12 @@ function compileRules<TAuthDataShape, TSchema extends TableSchema>(
     rule =>
       [
         'allow',
-        rule(authDataRef as TAuthDataShape, expressionBuilder),
+        rule(
+          authDataRef as TAuthDataShape,
+          expressionBuilder,
+          preMutationRowRef as TableSchemaToRow<TSchema>,
+          proposedMutationRowRef as TableSchemaToRow<TSchema>,
+        ),
       ] as const,
   );
 }
@@ -144,13 +137,7 @@ function compileCellConfig<TAuthDataShape, TSchema extends TableSchema>(
     ret[columnName] = {
       select: compileRules(rules.select, expressionBuilder),
       insert: compileRules(rules.insert, expressionBuilder),
-      update: {
-        preMutation: compileRules(rules.update?.preMutation, expressionBuilder),
-        postMutation: compileRules(
-          rules.update?.postMutation,
-          expressionBuilder,
-        ),
-      },
+      update: compileRules(rules.update, expressionBuilder),
       delete: compileRules(rules.delete, expressionBuilder),
     };
   }
@@ -173,6 +160,16 @@ export const preMutationRowRef = new Proxy(
     get(_target, prop, _receiver) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return staticParam<any, any>('preMutationRow', prop as string);
+    },
+  },
+);
+
+export const proposedMutationRowRef = new Proxy(
+  {},
+  {
+    get(_target, prop, _receiver) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return staticParam<any, any>('proposedMutationRow', prop as string);
     },
   },
 );

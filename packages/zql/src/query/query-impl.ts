@@ -75,7 +75,7 @@ export interface QueryDelegate extends BuilderDelegate {
 }
 
 export function staticParam<TAnchor, TField extends keyof TAnchor>(
-  anchorClass: 'authData' | 'preMutationRow',
+  anchorClass: 'authData' | 'preMutationRow' | 'proposedMutationRow',
   field: TField,
 ): Parameter<TAnchor, TField, TAnchor[TField]> {
   return {

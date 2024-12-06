@@ -45,6 +45,7 @@ import type {Query} from '../../../zql/src/query/query.js';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 import type {Condition} from '../../../zero-protocol/src/ast.js';
 import {dnf} from '../../../zql/src/query/dnf.js';
+import type {Row} from '../../../zero-protocol/src/data.js';
 
 type Phase = 'preMutation' | 'postMutation';
 
@@ -107,16 +108,43 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
         case 'insert':
           // insert does not run pre-mutation checks
           break;
-        case 'update':
-          if (!this.#canUpdate('preMutation', authData, op)) {
+        case 'update': {
+          const oldRow = this.#getPreMutationRow(op);
+          const proposedRow = {
+            ...oldRow,
+            ...op.value,
+          };
+          if (
+            !this.#canDo(
+              'preMutation',
+              'update',
+              authData,
+              op,
+              oldRow,
+              proposedRow,
+            )
+          ) {
+            return false;
+          }
+
+          break;
+        }
+        case 'delete': {
+          const oldRow = this.#getPreMutationRow(op);
+          if (
+            !this.#canDo(
+              'preMutation',
+              'delete',
+              authData,
+              op,
+              oldRow,
+              undefined,
+            )
+          ) {
             return false;
           }
           break;
-        case 'delete':
-          if (!this.#canDelete('preMutation', authData, op)) {
-            return false;
-          }
-          break;
+        }
       }
     }
     return true;
@@ -128,6 +156,8 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   ) {
     this.#statementRunner.beginConcurrent();
     try {
+      const preMutationRows: (Row | undefined)[] = [];
+      const postProposedMutationRows: (Row | undefined)[] = [];
       for (const op of ops) {
         const source = this.#getSource(op.tableName);
         switch (op.op) {
@@ -136,36 +166,69 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
               type: 'add',
               row: op.value,
             });
+            preMutationRows.push(undefined);
+            postProposedMutationRows.push(op.value);
             break;
           }
           // TODO (mlaw): what if someone updates the same thing twice?
           case 'update': {
+            const oldRow = this.#getPreMutationRow(op);
             source.push({
               type: 'edit',
-              oldRow: this.#getPreMutationRow(op),
+              oldRow,
               row: op.value,
+            });
+            preMutationRows.push(oldRow);
+            postProposedMutationRows.push({
+              ...oldRow,
+              ...op.value,
             });
             break;
           }
           case 'delete': {
+            const row = this.#getPreMutationRow(op);
             source.push({
               type: 'remove',
-              row: this.#getPreMutationRow(op),
+              row,
             });
+            preMutationRows.push(row);
+            postProposedMutationRows.push(undefined);
             break;
           }
         }
       }
 
-      for (const op of ops) {
+      assert(preMutationRows.length === ops.length);
+      assert(postProposedMutationRows.length === ops.length);
+
+      for (let i = 0; i < ops.length; i++) {
+        const op = ops[i];
         switch (op.op) {
           case 'insert':
-            if (!this.#canInsert('postMutation', authData, op)) {
+            if (
+              !this.#timedCanDo(
+                'postMutation',
+                'insert',
+                authData,
+                op,
+                preMutationRows[i],
+                postProposedMutationRows[i],
+              )
+            ) {
               return false;
             }
             break;
           case 'update':
-            if (!this.#canUpdate('postMutation', authData, op)) {
+            if (
+              !this.#timedCanDo(
+                'postMutation',
+                'update',
+                authData,
+                op,
+                preMutationRows[i],
+                postProposedMutationRows[i],
+              )
+            ) {
               return false;
             }
             break;
@@ -204,18 +267,6 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     });
   }
 
-  #canInsert(phase: Phase, authData: JWTPayload | undefined, op: InsertOp) {
-    return this.#timedCanDo(phase, 'insert', authData, op);
-  }
-
-  #canUpdate(phase: Phase, authData: JWTPayload | undefined, op: UpdateOp) {
-    return this.#timedCanDo(phase, 'update', authData, op);
-  }
-
-  #canDelete(phase: Phase, authData: JWTPayload | undefined, op: DeleteOp) {
-    return this.#timedCanDo(phase, 'delete', authData, op);
-  }
-
   #getSource(tableName: string) {
     let source = this.#tables.get(tableName);
     if (source) {
@@ -248,10 +299,19 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     action: A,
     authData: JWTPayload | undefined,
     op: ActionOpMap[A],
+    preMutationRow: Row | undefined,
+    proposedMutationRow: Row | undefined,
   ) {
     const start = performance.now();
     try {
-      const ret = this.#canDo(phase, action, authData, op);
+      const ret = this.#canDo(
+        phase,
+        action,
+        authData,
+        op,
+        preMutationRow,
+        proposedMutationRow,
+      );
       return ret;
     } finally {
       this.#lc.info?.(
@@ -282,6 +342,8 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     action: A,
     authData: JWTPayload | undefined,
     op: ActionOpMap[A],
+    preMutationRow: Row | undefined,
+    proposedMutationRow: Row | undefined,
   ) {
     const rules = this.#permissionsConfig[op.tableName];
     if (rules?.row === undefined && rules?.cell === undefined) {
@@ -310,9 +372,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       case 'update':
         if (rowPolicies && rowPolicies.update) {
           if (phase === 'preMutation') {
-            applicableRowPolicy = rowPolicies.update.preMutation;
-          } else if (phase === 'postMutation') {
-            applicableRowPolicy = rowPolicies.update.postMutation;
+            applicableRowPolicy = rowPolicies.update;
           }
         }
         break;
@@ -339,12 +399,6 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
             }
             break;
           case 'update':
-            if (phase === 'preMutation' && policy.update?.preMutation) {
-              applicableCellPolicies.push(policy.update.preMutation);
-            }
-            if (phase === 'postMutation' && policy.update?.postMutation) {
-              applicableCellPolicies.push(policy.update.postMutation);
-            }
             break;
           case 'delete':
             if (policy.delete && phase === 'preMutation') {
@@ -361,6 +415,8 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
         applicableCellPolicies,
         authData,
         rowQuery,
+        preMutationRow,
+        proposedMutationRow,
       )
     ) {
       return false;
@@ -394,6 +450,8 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     applicableCellPolicies: Policy[],
     authData: JWTPayload | undefined,
     rowQuery: Query<TableSchema>,
+    preMutationRow: Row | undefined,
+    proposedMutationRow: Row | undefined,
   ) {
     if (
       applicableRowPolicy === undefined &&
@@ -402,12 +460,28 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       return true;
     }
 
-    if (!this.#passesPolicy(applicableRowPolicy, authData, rowQuery)) {
+    if (
+      !this.#passesPolicy(
+        applicableRowPolicy,
+        authData,
+        rowQuery,
+        preMutationRow,
+        proposedMutationRow,
+      )
+    ) {
       return false;
     }
 
     for (const policy of applicableCellPolicies) {
-      if (!this.#passesPolicy(policy, authData, rowQuery)) {
+      if (
+        !this.#passesPolicy(
+          policy,
+          authData,
+          rowQuery,
+          preMutationRow,
+          proposedMutationRow,
+        )
+      ) {
         return false;
       }
     }
@@ -419,6 +493,8 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     policy: Policy | undefined,
     authData: JWTPayload | undefined,
     rowQuery: Query<TableSchema>,
+    preMutationRow: Row | undefined,
+    proposedMutationRow: Row | undefined,
   ) {
     if (policy === undefined) {
       return true;
@@ -434,7 +510,8 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       },
       {
         authData: authData as Record<string, JSONValue>,
-        preMutationRow: undefined,
+        preMutationRow,
+        proposedMutationRow,
       },
     );
 

@@ -135,7 +135,7 @@ export type DefaultQueryResultRow<TSchema extends TableSchema> = {
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export type Parameter<T, TField extends keyof T, _TReturn = T[TField]> = {
   type: 'static';
-  anchor: 'authData' | 'preMutationRow';
+  anchor: 'authData' | 'preMutationRow' | 'proposedMutationRow';
   field: TField;
 };
 
