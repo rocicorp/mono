@@ -17,3 +17,7 @@ export function defined<T>(arr: (T | undefined)[]): T[] {
   }
   return defined;
 }
+
+export function areEqual<T>(arr1: readonly T[], arr2: readonly T[]): boolean {
+  return arr1.length === arr2.length && arr1.every((e, i) => e === arr2[i]);
+}
