@@ -1,0 +1,44 @@
+.tooltip-content {
+  animation-duration: 0.3s;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+
+  display: flex;
+  padding: 0.25rem 1rem;
+  background-color: var(--color-tooltip-background);
+  border-radius: 2rem;
+  border: 1px solid var(--color-tooltip-outline);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  opacity: 0.97;
+}
+
+.tooltip-arrow {
+  stroke: var(--color-tooltip-outline);
+  stroke-width: 1px;
+}
+
+.tooltip-arrow path:last-of-type {
+  fill: var(--color-tooltip-background);
+  stroke: var(--color-tooltip-background);
+}
+
+.tooltip-content {
+  transition-property: opacity, transform;
+}
+.tooltip-content[data-status='open'],
+.tooltip-content[data-status='close'] {
+  transition-duration: 250ms;
+}
+.tooltip-content[data-status='initial'],
+.tooltip-content[data-status='close'] {
+  opacity: 0;
+}
+.tooltip-content[data-status='initial'][data-placement^='top'],
+.tooltip-content[data-status='close'][data-placement^='top'] {
+  transform: translateY(5px);
+}
+.tooltip-content[data-status='initial'][data-placement^='bottom'],
+.tooltip-content[data-status='close'][data-placement^='bottom'] {
+  transform: translateY(-5px);
+}

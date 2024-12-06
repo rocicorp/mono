@@ -29,6 +29,8 @@
   --color-modal-background: rgba(18, 18, 18, 0.7);
   --color-modal-outline: rgba(62, 62, 62, 0.8);
   --color-button-outline: rgba(50, 50, 50, 1);
+  --color-tooltip-background: rgba(18, 18, 18, 1);
+  --color-tooltip-outline: rgba(62, 62, 62, 1);
 
   /* Filters */
   --filter-backdrop-blur: blur(6.5px);
