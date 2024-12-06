@@ -54,8 +54,7 @@ export default function ListPage() {
     .orderBy(sortField, sortDirection)
     .orderBy('id', sortDirection)
     .related('labels')
-    .related('viewState', q => q.where('userID', z.userID).one())
-    .limit(20);
+    .related('viewState', q => q.where('userID', z.userID).one());
 
   const open =
     status === 'open' ? true : status === 'closed' ? false : undefined;
