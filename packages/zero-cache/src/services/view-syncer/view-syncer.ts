@@ -1,8 +1,16 @@
+import {trace} from '@opentelemetry/api';
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type {JWTPayload} from 'jose';
 import type {Row} from 'postgres';
+import {
+  manualSpan,
+  startAsyncSpan,
+  startSpan,
+} from '../../../../otel/src/span.js';
+import {version} from '../../../../otel/src/version.js';
+import {AbortError} from '../../../../shared/src/abort-error.js';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.js';
 import {must} from '../../../../shared/src/must.js';
@@ -52,13 +60,6 @@ import {
   type RowID,
 } from './schema/types.js';
 import {SchemaChangeError} from './snapshotter.js';
-import {trace} from '@opentelemetry/api';
-import {version} from '../../../../otel/src/version.js';
-import {
-  manualSpan,
-  startAsyncSpan,
-  startSpan,
-} from '../../../../otel/src/span.js';
 
 export type TokenData = {
   readonly raw: string;
@@ -79,7 +80,7 @@ export interface ViewSyncer {
   initConnection(
     ctx: SyncContext,
     msg: InitConnectionMessage,
-  ): Promise<Source<Downstream>>;
+  ): Source<Downstream>;
 
   changeDesiredQueries(
     ctx: SyncContext,
@@ -87,17 +88,7 @@ export interface ViewSyncer {
   ): Promise<void>;
 }
 
-type ShutdownToken = {
-  timeoutID?: ReturnType<typeof setTimeout>;
-};
-
-type ShutdownTimerReason = 'keepalive' | 'no more clients';
-
 const DEFAULT_KEEPALIVE_MS = 5_000;
-// TODO: make idle timeout more intelligent when browser-level client
-//       management can provide signals of whether a client is likely to
-//       reconnect.
-const DEFAULT_IDLE_TIMEOUT_MS = 0;
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
@@ -111,20 +102,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #stateChanges: Subscription<ReplicaState>;
   readonly #drainCoordinator: DrainCoordinator;
   readonly #keepaliveMs: number;
-  readonly #idleTimeoutMs: number;
 
   // Note: It is fine to update this variable outside of the lock.
   #lastConnectTime = 0;
+  // Note: It is okay to add/remove clients without acquiring the lock.
+  readonly #clients = new Map<string, ClientHandler>();
 
   // Serialize on this lock for:
   // (1) storage or database-dependent operations
   // (2) updating member variables.
-  // (3) initializing a new client, to ensure that it only gets pokes after
-  //     we have processed its initConnectionMessage.
-  //
-  // Note that it is okay to remove/delete clients without acquiring the lock.
   readonly #lock = new Lock();
-  readonly #clients = new Map<string, ClientHandler>();
   readonly #cvrStore: CVRStore;
   readonly #stopped = resolver();
   readonly #permissions: PermissionsConfig;
@@ -144,7 +131,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     drainCoordinator: DrainCoordinator,
     permissions: PermissionsConfig,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
-    idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS,
   ) {
     this.id = clientGroupID;
     this.#shardID = shardID;
@@ -153,7 +139,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#stateChanges = versionChanges;
     this.#drainCoordinator = drainCoordinator;
     this.#keepaliveMs = keepaliveMs;
-    this.#idleTimeoutMs = idleTimeoutMs;
     this.#cvrStore = new CVRStore(
       lc,
       db,
@@ -171,6 +156,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ): Promise<T> {
     return this.#lock.withLock(async () => {
       const lc = this.#lc.withContext('lock', randomID());
+      if (!this.#stateChanges.active) {
+        throw new AbortError('view-syncer has been shutdown');
+      }
       if (!this.#cvr) {
         this.#cvr = await this.#cvrStore.load(lc, this.#lastConnectTime);
       }
@@ -258,43 +246,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return this.#pipelines.totalHydrationTimeMs();
   }
 
-  // The shutdownToken is an object associated with an shutdown timeout function,
-  // the latter of which checks the token with identity equality before
-  // executing. Setting the #shutdownToken to a new object or to `null`
-  // effectively cancels the previous timeout.
-  #shutdownToken: ShutdownToken | null = null;
-
-  #startShutdownTimer(reason: ShutdownTimerReason) {
-    if (this.#shutdownToken) {
-      // Previous timeout is canceled for efficiency
-      // (but not necessary for correctness).
-      clearTimeout(this.#shutdownToken?.timeoutID);
-      this.#lc.debug?.(`${reason}. resetting idle timer`);
-    } else {
-      this.#lc.debug?.(`${reason}. starting idle timer`);
-    }
-
-    const shutdownToken: ShutdownToken = {};
-    this.#shutdownToken = shutdownToken;
-
-    shutdownToken.timeoutID = setTimeout(
-      async () => {
-        if (this.#shutdownToken === shutdownToken) {
-          // Keep the view-syncer alive if there are pending rows being flushed.
-          // It's better to do this before shutting down since it may take a
-          // while, during which new connections may come in.
-          await this.#cvrStore.flushed(this.#lc);
-        }
-
-        // If #idleToken has changed, this timeout is effectively canceled.
-        if (this.#shutdownToken === shutdownToken) {
-          this.#lc.info?.('shutting down after idle timeout');
-          this.#stateChanges.cancel(); // Note: #versionChanges.active becomes false.
-        }
-      },
-      reason === 'keepalive' ? this.#keepaliveMs : this.#idleTimeoutMs,
-    );
-  }
+  #keepAliveUntil: number = 0;
 
   /**
    * Guarantees that the ViewSyncer will remain running for at least
@@ -309,11 +261,29 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     if (!this.#stateChanges.active) {
       return false;
     }
-    if (this.#shutdownToken) {
-      // Resets the idle timer for another `#keepaliveMs`.
-      this.#startShutdownTimer('keepalive');
-    }
+    this.#keepAliveUntil = Date.now() + this.#keepaliveMs;
     return true;
+  }
+
+  #shutdownTimer: NodeJS.Timeout | null = null;
+
+  async #tryShutdown() {
+    // Keep the view-syncer alive if there are pending rows being flushed.
+    // It's better to do this before shutting down since it may take a
+    // while, during which new connections may come in.
+    await this.#cvrStore.flushed(this.#lc).catch(e => this.#lc.error?.(e));
+
+    this.#shutdownTimer = null;
+    if (Date.now() <= this.#keepAliveUntil) {
+      this.#lc.debug?.('not shutting down: keepalive');
+      this.#shutdownTimer = setTimeout(
+        () => this.#tryShutdown(),
+        this.#keepaliveMs,
+      );
+    } else if (this.#clients.size === 0) {
+      this.#lc.info?.('shutting down');
+      this.#stateChanges.cancel(); // Note: #stateChanges.active becomes false.
+    }
   }
 
   #deleteClient(clientID: string, client: ClientHandler) {
@@ -325,8 +295,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     if (c === client) {
       this.#clients.delete(clientID);
 
-      if (this.#clients.size === 0) {
-        this.#startShutdownTimer('no more clients');
+      if (this.#clients.size === 0 && this.#shutdownTimer === null) {
+        this.#shutdownTimer = setTimeout(() => this.#tryShutdown(), 0);
       }
     }
   }
@@ -334,8 +304,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   initConnection(
     ctx: SyncContext,
     initConnectionMessage: InitConnectionMessage,
-  ): Promise<Source<Downstream>> {
-    return startAsyncSpan(tracer, 'vs.initConnection', async () => {
+  ): Source<Downstream> {
+    return startSpan(tracer, 'vs.initConnection', () => {
       this.#lastConnectTime = Date.now();
       const {clientID, wsID, baseCookie, schemaVersion, tokenData} = ctx;
       this.#authData = pickToken(this.#authData, tokenData?.decoded);
@@ -364,13 +334,20 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         schemaVersion,
         downstream,
       );
+      this.#clients.get(clientID)?.close(`replaced by wsID: ${wsID}`);
+      this.#clients.set(clientID, newClient);
 
-      await this.#runInLockForClient(
+      // Note: initConnection() must be synchronous so that `downstream` is
+      // immediately returned to the caller (connection.ts). This ensures
+      // that if the connection is subsequently closed, the `downstream`
+      // subscription can be properly canceled even if #runInLockForClient()
+      // has not had a chance to run.
+      void this.#runInLockForClient(
         ctx,
         initConnectionMessage,
         this.#patchQueries,
         newClient,
-      );
+      ).catch(e => newClient.fail(e));
 
       return downstream;
     });
@@ -398,33 +375,21 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     ) => Promise<void>,
     newClient?: ClientHandler,
   ): Promise<void> {
-    return startAsyncSpan(tracer, 'vs.#runInLockForClient', async () => {
-      const {clientID, wsID} = ctx;
-      const [cmd, body] = msg;
+    const {clientID, wsID} = ctx;
+    const [cmd, body] = msg;
 
-      // Clear and cancel any shutdown timeout.
-      if (this.#shutdownToken) {
-        clearTimeout(this.#shutdownToken.timeoutID);
-        this.#shutdownToken = null;
-      }
+    return startAsyncSpan(
+      tracer,
+      `vs.#runInLockForClient(${cmd})`,
+      async () => {
+        let client: ClientHandler | undefined;
+        try {
+          await this.#runInLockWithCVR((lc, cvr) => {
+            lc = lc
+              .withContext('clientID', clientID)
+              .withContext('wsID', wsID)
+              .withContext('cmd', cmd);
 
-      let client: ClientHandler | undefined;
-      try {
-        await this.#runInLockWithCVR((lc, cvr) => {
-          lc = lc
-            .withContext('clientID', clientID)
-            .withContext('wsID', wsID)
-            .withContext('cmd', cmd);
-          lc.debug?.(cmd, body);
-
-          if (newClient) {
-            assert(newClient.wsID === wsID);
-            this.#clients.get(clientID)?.close(`replaced by wsID: ${wsID}`);
-            this.#clients.set(clientID, newClient);
-            client = newClient;
-
-            checkClientAndCVRVersions(client.version(), cvr.version);
-          } else {
             client = this.#clients.get(clientID);
             if (client?.wsID !== wsID) {
               // Only respond to messages of the currently connected client.
@@ -432,25 +397,31 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               lc.debug?.(`client no longer connected. dropping ${cmd} message`);
               return;
             }
-          }
 
-          return fn(lc, clientID, body, cvr);
-        });
-      } catch (e) {
-        this.#lc
-          .withContext('clientID', clientID)
-          .withContext('wsID', wsID)
-          .withContext('cmd', cmd)
-          .error?.(`closing connection with error`, e);
-        if (client) {
-          // Ideally, propagate the exception to the client's downstream subscription ...
-          client.fail(e);
-        } else {
-          // unless the exception happened before the client could be looked up.
-          throw e;
+            if (newClient) {
+              assert(newClient === client);
+              checkClientAndCVRVersions(client.version(), cvr.version);
+            }
+
+            lc.debug?.(cmd, body);
+            return fn(lc, clientID, body, cvr);
+          });
+        } catch (e) {
+          this.#lc
+            .withContext('clientID', clientID)
+            .withContext('wsID', wsID)
+            .withContext('cmd', cmd)
+            .error?.(`closing connection with error`, e);
+          if (client) {
+            // Ideally, propagate the exception to the client's downstream subscription ...
+            client.fail(e);
+          } else {
+            // unless the exception happened before the client could be looked up.
+            throw e;
+          }
         }
-      }
-    });
+      },
+    );
   }
 
   // Must be called from within #lock.

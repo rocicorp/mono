@@ -386,8 +386,8 @@ async function setup(permissions: PermissionsConfig = {}) {
   );
   const viewSyncerDone = vs.run();
 
-  async function connect(ctx: SyncContext, desiredQueriesPatch: QueriesPatch) {
-    const stream = await vs.initConnection(ctx, [
+  function connect(ctx: SyncContext, desiredQueriesPatch: QueriesPatch) {
+    const stream = vs.initConnection(ctx, [
       'initConnection',
       {desiredQueriesPatch},
     ]);
@@ -457,7 +457,7 @@ describe('view-syncer/service', () => {
   let connect: (
     ctx: SyncContext,
     desiredQueriesPatch: QueriesPatch,
-  ) => Promise<Queue<Downstream>>;
+  ) => Queue<Downstream>;
   let nextPoke: (client: Queue<Downstream>) => Promise<Downstream[]>;
   let expectNoPokes: (client: Queue<Downstream>) => Promise<void>;
 
@@ -505,9 +505,10 @@ describe('view-syncer/service', () => {
   });
 
   test('adds desired queries from initConnectionMessage', async () => {
-    await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
+    await nextPoke(client);
 
     const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
     const cvr = await cvrStore.load(lc, Date.now());
@@ -532,7 +533,7 @@ describe('view-syncer/service', () => {
   });
 
   test('responds to changeQueriesPatch', async () => {
-    await connect(SYNC_CONTEXT, [
+    connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
 
@@ -585,7 +586,7 @@ describe('view-syncer/service', () => {
   });
 
   test('initial hydration', async () => {
-    const client = await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
@@ -841,7 +842,7 @@ describe('view-syncer/service', () => {
   });
 
   test('initial hydration, rows in multiple queries', async () => {
-    const client = await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
       {op: 'put', hash: 'query-hash2', ast: ISSUES_QUERY2},
     ]);
@@ -1160,7 +1161,7 @@ describe('view-syncer/service', () => {
   });
 
   test('initial hydration, schemaVersion unsupported', async () => {
-    const client = await connect({...SYNC_CONTEXT, schemaVersion: 1}, [
+    const client = connect({...SYNC_CONTEXT, schemaVersion: 1}, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
@@ -1243,7 +1244,7 @@ describe('view-syncer/service', () => {
     stateChanges.push({state: 'version-ready'});
     await sleep(5);
 
-    const client = await connect({...SYNC_CONTEXT, schemaVersion: 1}, [
+    const client = connect({...SYNC_CONTEXT, schemaVersion: 1}, [
       {
         op: 'put',
         hash: 'query-hash1',
@@ -1257,7 +1258,7 @@ describe('view-syncer/service', () => {
 
     // Make sure it's the SchemaVersionNotSupported error that gets
     // propagated, and not any error related to the bad query.
-    const dequeuePromise = client.dequeue();
+    const dequeuePromise = nextPoke(client);
     await expect(dequeuePromise).rejects.toBeInstanceOf(ErrorForClient);
     await expect(dequeuePromise).rejects.toHaveProperty('errorBody', {
       kind: ErrorKind.SchemaVersionNotSupported,
@@ -1267,7 +1268,7 @@ describe('view-syncer/service', () => {
   });
 
   test('process advancement', async () => {
-    const client = await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
       {op: 'put', hash: 'query-hash2', ast: ISSUES_QUERY2},
     ]);
@@ -1515,7 +1516,7 @@ describe('view-syncer/service', () => {
   });
 
   test('process advancement that results in client having an unsupported schemaVersion', async () => {
-    const client1 = await connect(SYNC_CONTEXT, [
+    const client1 = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
     expect(await nextPoke(client1)).toMatchInlineSnapshot(`
@@ -1586,7 +1587,7 @@ describe('view-syncer/service', () => {
     // Note: client2 is behind, so it does not get an immediate update on connect.
     //       It has to wait until a hydrate to catchup. However, client1 will get
     //       updated about client2.
-    const client2 = await connect(
+    const client2 = connect(
       {...SYNC_CONTEXT, clientID: 'bar', schemaVersion: 3},
       [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
     );
@@ -1766,7 +1767,7 @@ describe('view-syncer/service', () => {
   });
 
   test('process advancement with schema change', async () => {
-    const client = await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
@@ -1963,7 +1964,7 @@ describe('view-syncer/service', () => {
   });
 
   test('catch up client', async () => {
-    const client1 = await connect(SYNC_CONTEXT, [
+    const client1 = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
     expect(await nextPoke(client1)).toMatchInlineSnapshot(`
@@ -2079,7 +2080,7 @@ describe('view-syncer/service', () => {
 
     // Connect with another client (i.e. tab) at older version '00:02'
     // (i.e. pre-advancement).
-    const client2 = await connect(
+    const client2 = connect(
       {
         clientID: 'bar',
         wsID: '9382',
@@ -2267,7 +2268,7 @@ describe('view-syncer/service', () => {
     ).flush(lc, Date.now());
 
     // Connect the client.
-    const client = await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
 
@@ -2428,7 +2429,7 @@ describe('view-syncer/service', () => {
     ).flush(lc, Date.now());
 
     // Connect the client.
-    const client = await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
 
@@ -2450,7 +2451,7 @@ describe('view-syncer/service', () => {
 
   test('sends client not found if CVR is not found', async () => {
     // Connect the client at a non-empty base cookie.
-    const client = await connect({...SYNC_CONTEXT, baseCookie: '00:02'}, [
+    const client = connect({...SYNC_CONTEXT, baseCookie: '00:02'}, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
 
@@ -2477,7 +2478,7 @@ describe('view-syncer/service', () => {
     ).flush(lc, Date.now());
 
     // Connect the client with a base cookie from the future.
-    const client = await connect({...SYNC_CONTEXT, baseCookie: '08'}, [
+    const client = connect({...SYNC_CONTEXT, baseCookie: '08'}, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
 
@@ -2513,7 +2514,7 @@ describe('view-syncer/service', () => {
   });
 
   test('elective drain', async () => {
-    const client = await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
       {op: 'put', hash: 'query-hash2', ast: ISSUES_QUERY2},
       {op: 'put', hash: 'query-hash3', ast: USERS_QUERY},
@@ -2539,7 +2540,7 @@ describe('view-syncer/service', () => {
   });
 
   test('retracting an exists relationship', async () => {
-    const client = await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY_WITH_RELATED},
       {op: 'put', hash: 'query-hash2', ast: ISSUES_QUERY_WITH_EXISTS},
     ]);
@@ -2617,7 +2618,7 @@ describe('permissions', () => {
   let connect: (
     ctx: SyncContext,
     desiredQueriesPatch: QueriesPatch,
-  ) => Promise<Queue<Downstream>>;
+  ) => Queue<Downstream>;
   let nextPoke: (client: Queue<Downstream>) => Promise<Downstream[]>;
   let replicaDbFile: DbFile;
   let cvrDB: PostgresDB;
@@ -2655,7 +2656,7 @@ describe('permissions', () => {
   });
 
   test('client with no role followed by client with admin role', async () => {
-    const client = await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
     stateChanges.push({state: 'version-ready'});
@@ -2727,7 +2728,7 @@ describe('permissions', () => {
 
     // New client connects with same everything (client group, user id) but brings a new role.
     // This should transform their existing queries to return the data they can now see.
-    const client2 = await connect(
+    const client2 = connect(
       {
         ...SYNC_CONTEXT,
         clientID: 'bar',
