@@ -71,10 +71,12 @@ export class Join implements Input {
     this.#schema = {
       ...parentSchema,
       isHidden: hidden,
-      system,
       relationships: {
         ...parentSchema.relationships,
-        [relationshipName]: childSchema,
+        [relationshipName]: {
+          ...childSchema,
+          system,
+        },
       },
     };
 

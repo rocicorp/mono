@@ -400,6 +400,12 @@ class Streamer {
     schema: SourceSchema,
     changes: Iterable<Change>,
   ): Iterable<RowChange> {
+    // We do not sync rows gathered by the permissions
+    // system to the client.
+    if (schema.system === 'permissions') {
+      return;
+    }
+
     for (const change of changes) {
       const {type} = change;
 
@@ -435,7 +441,12 @@ class Streamer {
     op: 'add' | 'remove' | 'edit',
     nodes: Iterable<Node>,
   ): Iterable<RowChange> {
-    const {tableName: table, primaryKey} = schema;
+    const {tableName: table, primaryKey, system} = schema;
+    // We do not sync rows gathered by the permissions
+    // system to the client.
+    if (system === 'permissions') {
+      return;
+    }
 
     for (const node of nodes) {
       const {relationships, row} = node;
