@@ -606,14 +606,6 @@ suite('fetch', () => {
         {
           "relationships": {},
           "row": {
-            "id": 5,
-            "name": "Alex",
-            "startDate": "2023-04-01",
-          },
-        },
-        {
-          "relationships": {},
-          "row": {
             "id": 6,
             "name": "Darick",
             "startDate": "2023-09-01",
@@ -639,14 +631,6 @@ suite('fetch', () => {
       }),
     ).toMatchInlineSnapshot(`
       [
-        {
-          "relationships": {},
-          "row": {
-            "id": 6,
-            "name": "Darick",
-            "startDate": "2023-09-01",
-          },
-        },
         {
           "relationships": {},
           "row": {
