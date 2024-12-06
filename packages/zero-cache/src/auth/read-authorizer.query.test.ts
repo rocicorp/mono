@@ -12,7 +12,6 @@ import type {
 import {definePermissions} from '../../../zero-schema/src/permissions.js';
 import type {
   TableSchema,
-  TableSchemaToRow,
   ValueType,
 } from '../../../zero-schema/src/table-schema.js';
 import {
@@ -30,7 +29,7 @@ import {
   QueryImpl,
   type QueryDelegate,
 } from '../../../zql/src/query/query-impl.js';
-import type {Query, QueryType} from '../../../zql/src/query/query.js';
+import type {Query, QueryType, Row} from '../../../zql/src/query/query.js';
 import {Database} from '../../../zqlite/src/db.js';
 import {TableSource} from '../../../zqlite/src/table-source.js';
 import {transformQuery} from './read-authorizer.js';
@@ -535,7 +534,7 @@ test('cannot create an issue with the wrong creatorId, even if admin', () => {
   ).toBe(true);
 });
 
-function addUser(user: TableSchemaToRow<typeof schema.tables.user>) {
+function addUser(user: Row<typeof schema.tables.user>) {
   const userSource = must(queryDelegate.getSource('user'));
   userSource.push({
     type: 'add',
@@ -543,7 +542,7 @@ function addUser(user: TableSchemaToRow<typeof schema.tables.user>) {
   });
 }
 
-function addProject(project: TableSchemaToRow<typeof schema.tables.project>) {
+function addProject(project: Row<typeof schema.tables.project>) {
   const projectSource = must(queryDelegate.getSource('project'));
   projectSource.push({
     type: 'add',
@@ -552,7 +551,7 @@ function addProject(project: TableSchemaToRow<typeof schema.tables.project>) {
 }
 
 function addProjectMember(
-  projectMember: TableSchemaToRow<typeof schema.tables.projectMember>,
+  projectMember: Row<typeof schema.tables.projectMember>,
 ) {
   const projectMemberSource = must(queryDelegate.getSource('projectMember'));
   projectMemberSource.push({
@@ -561,7 +560,7 @@ function addProjectMember(
   });
 }
 
-function addIssue(issue: TableSchemaToRow<typeof schema.tables.issue>) {
+function addIssue(issue: Row<typeof schema.tables.issue>) {
   const issueSource = must(queryDelegate.getSource('issue'));
   issueSource.push({
     type: 'add',
@@ -569,7 +568,7 @@ function addIssue(issue: TableSchemaToRow<typeof schema.tables.issue>) {
   });
 }
 
-function addComment(comment: TableSchemaToRow<typeof schema.tables.comment>) {
+function addComment(comment: Row<typeof schema.tables.comment>) {
   const commentSource = must(queryDelegate.getSource('comment'));
   commentSource.push({
     type: 'add',
@@ -577,7 +576,7 @@ function addComment(comment: TableSchemaToRow<typeof schema.tables.comment>) {
   });
 }
 
-function addLabel(label: TableSchemaToRow<typeof schema.tables.label>) {
+function addLabel(label: Row<typeof schema.tables.label>) {
   const labelSource = must(queryDelegate.getSource('label'));
   labelSource.push({
     type: 'add',
@@ -585,9 +584,7 @@ function addLabel(label: TableSchemaToRow<typeof schema.tables.label>) {
   });
 }
 
-function addIssueLabel(
-  issueLabel: TableSchemaToRow<typeof schema.tables.issueLabel>,
-) {
+function addIssueLabel(issueLabel: Row<typeof schema.tables.issueLabel>) {
   const issueLabelSource = must(queryDelegate.getSource('issueLabel'));
   issueLabelSource.push({
     type: 'add',
@@ -595,9 +592,7 @@ function addIssueLabel(
   });
 }
 
-function addViewState(
-  viewState: TableSchemaToRow<typeof schema.tables.viewState>,
-) {
+function addViewState(viewState: Row<typeof schema.tables.viewState>) {
   const viewStateSource = must(queryDelegate.getSource('viewState'));
   viewStateSource.push({
     type: 'add',

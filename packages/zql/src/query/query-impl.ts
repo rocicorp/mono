@@ -9,7 +9,7 @@ import type {
   Ordering,
   System,
 } from '../../../zero-protocol/src/ast.js';
-import type {Row} from '../../../zero-protocol/src/data.js';
+import type {Row as IVMRow} from '../../../zero-protocol/src/data.js';
 import {
   normalizeTableSchema,
   type NormalizedTableSchema,
@@ -19,7 +19,6 @@ import {
   isJunctionRelationship,
   type PullSchemaForRelationship,
   type TableSchema,
-  type TableSchemaToRow,
 } from '../../../zero-schema/src/table-schema.js';
 import {buildPipeline, type BuilderDelegate} from '../builder/builder.js';
 import {ArrayView} from '../ivm/array-view.js';
@@ -43,6 +42,7 @@ import type {
   Parameter,
   Query,
   QueryType,
+  Row,
   Smash,
 } from './query.js';
 import type {TypedView} from './typed-view.js';
@@ -323,7 +323,7 @@ export abstract class AbstractQuery<
   }
 
   start(
-    row: Partial<TableSchemaToRow<TSchema>>,
+    row: Partial<Row<TSchema>>,
     opts?: {inclusive: boolean} | undefined,
   ): Query<TSchema, TReturn> {
     return this._newQuery(
@@ -463,7 +463,7 @@ export abstract class AbstractQuery<
       const finalOrderBy = addPrimaryKeys(this.#schema, this.#ast.orderBy);
       if (this.#ast.start) {
         const {row} = this.#ast.start;
-        const narrowedRow: Row = {};
+        const narrowedRow: IVMRow = {};
         for (const [field] of finalOrderBy) {
           narrowedRow[field] = row[field];
         }

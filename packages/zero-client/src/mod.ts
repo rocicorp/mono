@@ -61,7 +61,6 @@ export {definePermissions} from '../../zero-schema/src/permissions.js';
 export {createSchema} from '../../zero-schema/src/schema.js';
 export {
   createTableSchema,
-  type TableSchemaToRow,
   type TableSchema,
 } from '../../zero-schema/src/table-schema.js';
 export {escapeLike} from '../../zql/src/query/escape-like.js';
@@ -76,6 +75,8 @@ export type {
   QueryRowType,
   QueryType,
   Smash,
+  Row,
+  Rows,
 } from '../../zql/src/query/query.js';
 export type {TypedView} from '../../zql/src/query/typed-view.js';
 export type {ZeroOptions} from './client/options.js';

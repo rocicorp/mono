@@ -11,7 +11,7 @@ import {
   useRole,
   useTransitionStatus,
 } from '@floating-ui/react';
-import type {TableSchemaToRow} from '@rocicorp/zero';
+import type {Row} from '@rocicorp/zero';
 import classNames from 'classnames';
 import {nanoid} from 'nanoid';
 import {
@@ -38,8 +38,8 @@ import {Tooltip, TooltipContent, TooltipTrigger} from './tooltip.jsx';
 
 const loginMessage = 'You need to be logged in to modify emoji reactions.';
 
-export type Emoji = TableSchemaToRow<Schema['tables']['emoji']> & {
-  creator: TableSchemaToRow<Schema['tables']['user']> | undefined;
+export type Emoji = Row<Schema['tables']['emoji']> & {
+  creator: Row<Schema['tables']['user']> | undefined;
 };
 
 type Props = {
