@@ -243,6 +243,6 @@ test('protocol version', () => {
   // If this test fails because the AST schema has changed such that
   // old code will not understand the new schema, bump the
   // PROTOCOL_VERSION and update the expected values.
-  expect(hash.toString(36)).toEqual('p2azo5kwhcyg');
-  expect(PROTOCOL_VERSION).toEqual(1);
+  expect(hash.toString(36)).toEqual('abcvo2klqduo');
+  expect(PROTOCOL_VERSION).toEqual(2);
 });
