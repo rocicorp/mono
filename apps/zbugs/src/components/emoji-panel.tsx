@@ -1,14 +1,20 @@
 import {
-  Popover,
-  PopoverButton,
-  PopoverPanel,
-  useClose,
-} from '@headlessui/react';
+  autoUpdate,
+  flip,
+  FloatingFocusManager,
+  FloatingPortal,
+  shift,
+  useDismiss,
+  useFloating,
+  useInteractions,
+  useRole,
+  useTransitionStatus,
+} from '@floating-ui/react';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import type {TableSchemaToRow} from '@rocicorp/zero';
 import classNames from 'classnames';
 import {nanoid} from 'nanoid';
-import {useCallback} from 'react';
+import {forwardRef, useCallback, useState, type ForwardedRef} from 'react';
 import {useQuery} from 'zero-react/src/use-query.js';
 import type {Schema} from '../../schema.js';
 import addEmojiIcon from '../assets/icons/add-emoji.svg';
@@ -17,6 +23,7 @@ import {useLogin} from '../hooks/use-login.js';
 import {useNumericPref} from '../hooks/use-user-pref.js';
 import {useZero} from '../hooks/use-zero.js';
 import {ButtonWithLoginCheck} from './button-with-login-check.js';
+import type {ButtonProps} from './button.js';
 import {EmojiPicker, SKIN_TONE_PREF} from './emoji-picker.js';
 import './emoji.css';
 
@@ -82,16 +89,6 @@ export function EmojiPanel({issueID, commentID}: Props) {
 
   const login = useLogin();
 
-  const button = (
-    <ButtonWithLoginCheck
-      className="add-emoji-button"
-      eventName="Add new emoji reaction"
-      loginMessage={loginMessage}
-    >
-      <img src={addEmojiIcon} />
-    </ButtonWithLoginCheck>
-  );
-
   return (
     <div className="flex gap-2 items-center emoji-reaction-container">
       <Tooltip.Provider>
@@ -104,37 +101,85 @@ export function EmojiPanel({issueID, commentID}: Props) {
           />
         ))}
       </Tooltip.Provider>
-
-      {login.loginState !== undefined ? (
-        <Popover>
-          <PopoverButton as="div">{button}</PopoverButton>
-          <PopoverPanel anchor="bottom start" className="popover-panel">
-            <PopoverContent onChange={addOrRemoveEmoji} />
-          </PopoverPanel>
-        </Popover>
+      {login.loginState === undefined ? (
+        <EmojiButton />
       ) : (
-        button
+        <EmojiMenuButton onEmojiChange={addOrRemoveEmoji} />
       )}
     </div>
   );
 }
 
-function PopoverContent({
-  onChange,
-}: {
-  onChange: (emoji: {unicode: string; annotation: string}) => void;
-}) {
-  const close = useClose();
+const EmojiButton = forwardRef(
+  (props: ButtonProps, ref: ForwardedRef<HTMLButtonElement>) => (
+    <ButtonWithLoginCheck
+      ref={ref}
+      {...props}
+      className="add-emoji-button"
+      eventName="Add new emoji reaction"
+      loginMessage={loginMessage}
+    >
+      <img src={addEmojiIcon} />
+    </ButtonWithLoginCheck>
+  ),
+);
 
-  const onEmojiChange = useCallback(
+function EmojiMenuButton({onEmojiChange}: {onEmojiChange: AddOrRemoveEmoji}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const {refs, floatingStyles, placement, context} = useFloating({
+    open: isOpen,
+    onOpenChange: setIsOpen,
+    middleware: [flip(), shift()],
+    placement: 'bottom-start',
+    whileElementsMounted: autoUpdate,
+    // strategy: 'fixed',
+    transform: false,
+  });
+  const dismiss = useDismiss(context);
+  const role = useRole(context);
+  const {getReferenceProps, getFloatingProps} = useInteractions([
+    dismiss,
+    role,
+  ]);
+
+  const {isMounted, status} = useTransitionStatus(context);
+
+  const onChange = useCallback(
     (details: {unicode: string; annotation: string}) => {
-      onChange(details);
-      close();
+      setIsOpen(false);
+      onEmojiChange(details);
     },
-    [close, onChange],
+    [onEmojiChange],
   );
 
-  return <EmojiPicker onEmojiChange={onEmojiChange} />;
+  // The instructions explicitly says only render the portal when the popup is
+  // rendered. However, if doing that the virtual scrolling jumps around when
+  // the portal element is removed
+  return (
+    <>
+      <EmojiButton
+        ref={refs.setReference}
+        onAction={() => setIsOpen(v => !v)}
+        {...getReferenceProps()}
+      />
+      <FloatingPortal id="root-modal">
+        {isMounted && (
+          <FloatingFocusManager context={context} modal={true}>
+            <div
+              className="popover-panel"
+              ref={refs.setFloating}
+              style={floatingStyles}
+              {...getFloatingProps()}
+              data-placement={placement}
+              data-status={status}
+            >
+              <EmojiPicker onEmojiChange={onChange} />
+            </div>
+          </FloatingFocusManager>
+        )}
+      </FloatingPortal>
+    </>
+  );
 }
 
 function normalizeEmoji(emoji: string): string {

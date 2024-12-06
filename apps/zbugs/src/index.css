@@ -1231,12 +1231,36 @@ textarea.autoResize {
 
 emoji-picker {
   --background: var(--color-modal-background);
-  backdrop-filter: var(--filter-backdrop-blur);
   --border-radius: 0.5rem;
   --border-color: var(--color-modal-outline);
   --emoji-size: 1.25rem;
 }
 
 .popover-panel {
+  backdrop-filter: var(--filter-backdrop-blur);
   z-index: var(--z-index-popover);
+}
+
+.popover-panel {
+  transition-property: opacity, transform;
+}
+
+.popover-panel[data-status='open'],
+.popover-panel[data-status='close'] {
+  transition-duration: 250ms;
+}
+
+.popover-panel[data-status='initial'],
+.popover-panel[data-status='close'] {
+  opacity: 0;
+}
+
+.popover-panel[data-status='initial'][data-placement^='top'],
+.popover-panel[data-status='close'][data-placement^='top'] {
+  transform: translateY(10px);
+}
+
+.popover-panel[data-status='initial'][data-placement^='bottom'],
+.popover-panel[data-status='close'][data-placement^='bottom'] {
+  transform: translateY(-10px);
 }
