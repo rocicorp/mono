@@ -274,6 +274,7 @@ function applyCorrelatedSubqueryCondition(
     input,
     delegate.createStorage(),
     must(condition.related.subquery.alias),
+    condition.related.correlation.parentField,
     condition.op,
   );
 }
@@ -287,7 +288,13 @@ function gatherCorrelatedSubqueryQueriesFromCondition(
       assert(condition.op === 'EXISTS' || condition.op === 'NOT EXISTS');
       csqs.push({
         ...condition.related,
-        subquery: {...condition.related.subquery, limit: EXISTS_LIMIT},
+        subquery: {
+          ...condition.related.subquery,
+          limit:
+            condition.related.system === 'permissions'
+              ? PERMISSIONS_EXISTS_LIMIT
+              : EXISTS_LIMIT,
+        },
       });
       return;
     }
@@ -305,6 +312,7 @@ function gatherCorrelatedSubqueryQueriesFromCondition(
 }
 
 const EXISTS_LIMIT = 3;
+const PERMISSIONS_EXISTS_LIMIT = 1;
 
 export function assertOrderingIncludesPK(
   ordering: Ordering,

@@ -1257,6 +1257,7 @@ function fetchTest(t: FetchTest): FetchTestResults {
     }),
     existsStorage,
     t.join.relationshipName,
+    t.join.parentKey,
     t.existsType,
   );
 

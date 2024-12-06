@@ -1,5 +1,6 @@
 import {assert, unreachable} from '../../../shared/src/asserts.js';
 import {must} from '../../../shared/src/must.js';
+import type {CompoundKey} from '../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import {rowForChange, type Change} from './change.js';
 import {normalizeUndefined, type NormalizedValue} from './data.js';
@@ -28,6 +29,7 @@ export class Exists implements Operator {
   readonly #relationshipName: string;
   readonly #storage: ExistsStorage;
   readonly #not: boolean;
+  readonly #parentJoinKey: CompoundKey;
 
   #output: Output | undefined;
 
@@ -35,6 +37,7 @@ export class Exists implements Operator {
     input: Input,
     storage: Storage,
     relationshipName: string,
+    parentJoinKey: CompoundKey,
     type: 'EXISTS' | 'NOT EXISTS',
   ) {
     this.#input = input;
@@ -43,6 +46,7 @@ export class Exists implements Operator {
     this.#storage = storage as ExistsStorage;
     assert(this.#input.getSchema().relationships[relationshipName]);
     this.#not = type === 'NOT EXISTS';
+    this.#parentJoinKey = parentJoinKey;
   }
 
   setOutput(output: Output) {
@@ -202,11 +206,17 @@ export class Exists implements Operator {
   }
 
   #setSize(row: Row, size: number) {
+    this.#storage.set(this.#makeCacheStorageKey(row), size);
     this.#storage.set(this.#makeSizeStorageKey(row), size);
   }
 
   #delSize(row: Row) {
     this.#storage.del(this.#makeSizeStorageKey(row));
+    // TODO: when to delete the cached size for the row?
+    // need to ref-count for the join key.
+    // Whenever a new row is added for `setSize` we increment.
+    // Then we decrement on `delSize`.
+    // Can have a new `refCount` state key that is increment and decremented for parent add/remove events.
   }
 
   #getOrFetchSize(row: Row): number {
@@ -222,6 +232,11 @@ export class Exists implements Operator {
   }
 
   #fetchSize(row: Row) {
+    const cachedSize = this.#storage.get(this.#makeCacheStorageKey(row));
+    if (cachedSize !== undefined) {
+      return cachedSize;
+    }
+
     const relationship =
       this.#fetchNodeForRow(row).relationships[this.#relationshipName];
     assert(relationship);
@@ -251,11 +266,19 @@ export class Exists implements Operator {
     return fetched;
   }
 
-  #makeSizeStorageKey(row: Row) {
-    const primaryKey: NormalizedValue[] = [];
-    for (const key of this.#input.getSchema().primaryKey) {
-      primaryKey.push(normalizeUndefined(row[key]));
+  #makeCacheStorageKey(row: Row) {
+    const storageKey: NormalizedValue[] = [];
+    for (const key of this.#parentJoinKey) {
+      storageKey.push(normalizeUndefined(row[key]));
     }
-    return JSON.stringify(['size', primaryKey]);
+    return JSON.stringify(['cache', storageKey]);
+  }
+
+  #makeSizeStorageKey(row: Row) {
+    const storageKey: NormalizedValue[] = [];
+    for (const key of this.#input.getSchema().primaryKey) {
+      storageKey.push(normalizeUndefined(row[key]));
+    }
+    return JSON.stringify(['size', storageKey]);
   }
 }
