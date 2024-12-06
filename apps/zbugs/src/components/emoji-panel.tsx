@@ -1,6 +1,7 @@
 import {
   autoUpdate,
   flip,
+  FloatingDelayGroup,
   FloatingFocusManager,
   FloatingPortal,
   shift,
@@ -10,7 +11,6 @@ import {
   useRole,
   useTransitionStatus,
 } from '@floating-ui/react';
-import * as Tooltip from '@radix-ui/react-tooltip';
 import type {TableSchemaToRow} from '@rocicorp/zero';
 import classNames from 'classnames';
 import {nanoid} from 'nanoid';
@@ -18,14 +18,14 @@ import {forwardRef, useCallback, useState, type ForwardedRef} from 'react';
 import {useQuery} from 'zero-react/src/use-query.js';
 import type {Schema} from '../../schema.js';
 import addEmojiIcon from '../assets/icons/add-emoji.svg';
-import {formatEmojiTooltipText} from '../emoji-utils.js';
+import {formatEmojiCreatorList} from '../emoji-utils.js';
 import {useLogin} from '../hooks/use-login.js';
 import {useNumericPref} from '../hooks/use-user-pref.js';
 import {useZero} from '../hooks/use-zero.js';
 import {ButtonWithLoginCheck} from './button-with-login-check.js';
 import type {ButtonProps} from './button.js';
 import {EmojiPicker, SKIN_TONE_PREF} from './emoji-picker.js';
-import './emoji.css';
+import {Tooltip, TooltipContent, TooltipTrigger} from './tooltip.jsx';
 
 const loginMessage = 'You need to be logged in to modify emoji reactions.';
 
@@ -90,8 +90,8 @@ export function EmojiPanel({issueID, commentID}: Props) {
   const login = useLogin();
 
   return (
-    <div className="flex gap-2 items-center emoji-reaction-container">
-      <Tooltip.Provider>
+    <FloatingDelayGroup delay={1000}>
+      <div className="flex gap-2 items-center emoji-reaction-container">
         {Object.entries(groups).map(([normalizedEmoji, emojis]) => (
           <EmojiPill
             key={normalizedEmoji}
@@ -100,13 +100,13 @@ export function EmojiPanel({issueID, commentID}: Props) {
             addOrRemoveEmoji={addOrRemoveEmoji}
           />
         ))}
-      </Tooltip.Provider>
-      {login.loginState === undefined ? (
-        <EmojiButton />
-      ) : (
-        <EmojiMenuButton onEmojiChange={addOrRemoveEmoji} />
-      )}
-    </div>
+        {login.loginState === undefined ? (
+          <EmojiButton />
+        ) : (
+          <EmojiMenuButton onEmojiChange={addOrRemoveEmoji} />
+        )}
+      </div>
+    </FloatingDelayGroup>
   );
 }
 
@@ -249,8 +249,8 @@ function EmojiPill({
   const mine = findEmojiForCreator(emojis, z.userID) !== undefined;
 
   return (
-    <Tooltip.Root>
-      <Tooltip.Trigger asChild>
+    <Tooltip>
+      <TooltipTrigger>
         <ButtonWithLoginCheck
           className={classNames('emoji-pill', {mine})}
           eventName="Add to existing emoji reaction"
@@ -268,29 +268,11 @@ function EmojiPill({
           ))}
           {' ' + emojis.length}
         </ButtonWithLoginCheck>
-      </Tooltip.Trigger>
-      <Tooltip.Portal>
-        <Tooltip.Content className="tooltip-content">
-          <Tooltip.Arrow className="tooltip-arrow" />
-          <EmojiTooltipContent emojis={emojis} userID={z.userID} />
-        </Tooltip.Content>
-      </Tooltip.Portal>
-    </Tooltip.Root>
-  );
-}
+      </TooltipTrigger>
 
-function EmojiTooltipContent({
-  emojis,
-  userID,
-}: {
-  emojis: Emoji[];
-  userID: string;
-}) {
-  const emoji = emojis[0];
-  return (
-    <>
-      <div className="emoji-icon">{emoji.value}</div>
-      <div>{formatEmojiTooltipText(emojis, userID)}</div>
-    </>
+      <TooltipContent>
+        {formatEmojiCreatorList(emojis, z.userID)}
+      </TooltipContent>
+    </Tooltip>
   );
 }
