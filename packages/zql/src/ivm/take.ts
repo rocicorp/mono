@@ -178,9 +178,6 @@ export class Take implements Operator {
     assert(req.start === undefined);
     assert(constraintMatchesPartitionKey(req.constraint, this.#partitionKey));
     const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
-    if (this.#storage.get(takeStateKey) === undefined) {
-      throw new Error('what the f');
-    }
     this.#storage.del(takeStateKey);
     let size = 0;
     for (const inputNode of this.#input.cleanup(req)) {
