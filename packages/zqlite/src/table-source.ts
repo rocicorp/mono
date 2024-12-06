@@ -22,7 +22,12 @@ import {
   generateWithStart,
   type Overlay,
 } from '../../zql/src/ivm/memory-source.js';
-import type {FetchRequest, Input, Output} from '../../zql/src/ivm/operator.js';
+import type {
+  FetchRequest,
+  Input,
+  Output,
+  Start,
+} from '../../zql/src/ivm/operator.js';
 import type {SourceSchema} from '../../zql/src/ivm/schema.js';
 import type {
   Source,
@@ -240,21 +245,9 @@ export class TableSource implements Source {
   }
 
   *#fetch(req: FetchRequest, connection: Connection): Stream<Node> {
-    const {start} = req;
     const {sort} = connection;
 
-    const query = this.#requestToSQL(
-      req.constraint,
-      start !== undefined
-        ? {
-            from: start.row,
-            direction: req.reverse ? 'reverse' : 'forward',
-            inclusive: start.basis === 'at',
-          }
-        : undefined,
-      connection.filters?.condition,
-      sort,
-    );
+    const query = this.#requestToSQL(req, connection.filters?.condition, sort);
     const sqlAndBindings = format(query);
 
     const cachedStatement = this.#stmts.cache.get(sqlAndBindings.text);
@@ -434,11 +427,11 @@ export class TableSource implements Source {
   }
 
   #requestToSQL(
-    constraint: Constraint | undefined,
-    cursor: Cursor | undefined,
+    request: FetchRequest,
     filters: NoSubqueryCondition | undefined,
     order: Ordering,
   ): SQLQuery {
+    const {constraint, start, reverse} = request;
     let query = sql`SELECT ${this.#allColumns} FROM ${sql.ident(this.#table)}`;
     const constraints: SQLQuery[] = [];
 
@@ -453,8 +446,10 @@ export class TableSource implements Source {
       }
     }
 
-    if (cursor) {
-      constraints.push(gatherStartConstraints(cursor, order, this.#columns));
+    if (start) {
+      constraints.push(
+        gatherStartConstraints(start, reverse, order, this.#columns),
+      );
     }
 
     if (filters) {
@@ -465,7 +460,7 @@ export class TableSource implements Source {
       query = sql`${query} WHERE ${sql.join(constraints, sql` AND `)}`;
     }
 
-    if (cursor?.direction === 'reverse') {
+    if (reverse) {
       query = sql`${query} ORDER BY ${sql.join(
         order.map(
           s =>
@@ -568,12 +563,6 @@ function getJsType(value: unknown): ValueType {
     : 'json';
 }
 
-type Cursor = {
-  from: Row;
-  direction: 'forward' | 'reverse';
-  inclusive: boolean;
-};
-
 /**
  * The ordering could be complex such as:
  * `ORDER BY a ASC, b DESC, c ASC`
@@ -591,12 +580,13 @@ type Cursor = {
  * - inclusive adds a final `OR` clause for the exact match.
  */
 function gatherStartConstraints(
-  cursor: Cursor,
+  start: Start,
+  reverse: boolean | undefined,
   order: Ordering,
   columnTypes: Record<string, SchemaValue>,
 ): SQLQuery {
   const constraints: SQLQuery[] = [];
-  const {from, direction, inclusive} = cursor;
+  const {row: from, basis} = start;
 
   for (let i = 0; i < order.length; i++) {
     const group: SQLQuery[] = [];
@@ -604,7 +594,7 @@ function gatherStartConstraints(
     for (let j = 0; j <= i; j++) {
       if (j === i) {
         if (iDirection === 'asc') {
-          if (direction === 'forward') {
+          if (!reverse) {
             group.push(
               sql`${sql.ident(iField)} > ${toSQLiteType(
                 from[iField],
@@ -612,7 +602,7 @@ function gatherStartConstraints(
               )}`,
             );
           } else {
-            direction satisfies 'reverse';
+            reverse satisfies true;
             group.push(
               sql`${sql.ident(iField)} < ${toSQLiteType(
                 from[iField],
@@ -622,7 +612,7 @@ function gatherStartConstraints(
           }
         } else {
           iDirection satisfies 'desc';
-          if (direction === 'forward') {
+          if (!reverse) {
             group.push(
               sql`${sql.ident(iField)} < ${toSQLiteType(
                 from[iField],
@@ -630,7 +620,7 @@ function gatherStartConstraints(
               )}`,
             );
           } else {
-            direction satisfies 'reverse';
+            reverse satisfies true;
             group.push(
               sql`${sql.ident(iField)} > ${toSQLiteType(
                 from[iField],
@@ -652,7 +642,7 @@ function gatherStartConstraints(
     constraints.push(sql`(${sql.join(group, sql` AND `)})`);
   }
 
-  if (inclusive) {
+  if (basis === 'at') {
     constraints.push(
       sql`(${sql.join(
         order.map(
