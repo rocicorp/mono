@@ -132,7 +132,9 @@ function EmojiMenuButton({onEmojiChange}: {onEmojiChange: AddOrRemoveEmoji}) {
     middleware: [flip(), shift()],
     placement: 'bottom-start',
     whileElementsMounted: autoUpdate,
-    // strategy: 'fixed',
+
+    // We don't want to position using transforms because we use transforms for
+    // the show/hide animations.
     transform: false,
   });
   const dismiss = useDismiss(context);
