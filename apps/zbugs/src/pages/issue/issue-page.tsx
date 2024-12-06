@@ -1,5 +1,5 @@
 import type {Zero} from '@rocicorp/zero';
-import {escapeLike, type TableSchemaToRow} from '@rocicorp/zero';
+import {escapeLike, type Row} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {useWindowVirtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
@@ -496,7 +496,7 @@ function useVirtualComments<T extends {id: string}>(comments: T[]) {
 function buildListQuery(
   z: Zero<Schema>,
   listContext: ListContext | undefined,
-  issue: TableSchemaToRow<Schema['tables']['issue']> | undefined,
+  issue: Row<Schema['tables']['issue']> | undefined,
   dir: 'next' | 'prev',
 ) {
   if (!listContext || !issue) {
