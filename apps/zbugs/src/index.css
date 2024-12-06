@@ -1266,3 +1266,26 @@ emoji-picker {
 .popover-panel[data-status='close'][data-placement^='bottom'] {
   transform: translateY(-10px);
 }
+
+:root {
+  --toastify-toast-width: auto;
+  --toastify-toast-background: var(--color-background);
+  --toastify-toast-min-height: 0;
+  --toastify-toast-max-height: 800px;
+  --toastify-font-family: inherit;
+}
+
+.emoji-toast {
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  border: 1px solid rgba(62, 62, 62, 1);
+  border-radius: 2rem;
+  padding: 0.25rem;
+  min-height: 0;
+  width: auto;
+  white-space: nowrap;
+}
+
+.emoji-toast .icon {
+  border-radius: 50%;
+}

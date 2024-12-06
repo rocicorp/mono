@@ -5,6 +5,7 @@ import {useWindowVirtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
 import {useEffect, useMemo, useRef, useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
+import {ToastContainer} from 'react-toastify';
 import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.js';
@@ -181,266 +182,277 @@ export default function IssuePage() {
   const rendering = editing ? {...editing, ...edits} : issue;
 
   return (
-    <div className="issue-detail-container">
-      {/* Center column of info */}
-      <div className="issue-detail">
-        <div className="issue-topbar">
-          <div className="issue-breadcrumb">
-            {listContext ? (
-              <>
-                <Link className="breadcrumb-item" href={listContext.href}>
-                  {listContext.title}
-                </Link>
-                <span className="breadcrumb-item">&rarr;</span>
-              </>
-            ) : null}
-            <span className="breadcrumb-item">Issue {issue.shortID}</span>
-          </div>
-          <CanEdit ownerID={issue.creatorID}>
-            <div className="edit-buttons">
-              {!editing ? (
+    <>
+      <div className="issue-detail-container">
+        <ToastContainer
+          hideProgressBar={true}
+          theme="dark"
+          containerId="bottom"
+          newestOnTop={true}
+          closeButton={false}
+        />
+        {/* Center column of info */}
+        <div className="issue-detail">
+          <div className="issue-topbar">
+            <div className="issue-breadcrumb">
+              {listContext ? (
                 <>
-                  <Button
-                    className="edit-button"
-                    eventName="Edit issue"
-                    onAction={() => setEditing(issue)}
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    className="delete-button"
-                    eventName="Delete issue"
-                    onAction={() => setDeleteConfirmationShown(true)}
-                  >
-                    Delete
-                  </Button>
+                  <Link className="breadcrumb-item" href={listContext.href}>
+                    {listContext.title}
+                  </Link>
+                  <span className="breadcrumb-item">&rarr;</span>
                 </>
-              ) : (
-                <>
-                  <Button
-                    className="save-button"
-                    eventName="Save issue edits"
-                    onAction={save}
-                    disabled={
-                      !edits || edits.title === '' || edits.description === ''
-                    }
-                  >
-                    Save
-                  </Button>
-                  <Button
-                    className="cancel-button"
-                    eventName="Cancel issue edits"
-                    onAction={cancel}
-                  >
-                    Cancel
-                  </Button>
-                </>
-              )}
+              ) : null}
+              <span className="breadcrumb-item">Issue {issue.shortID}</span>
             </div>
-          </CanEdit>
-        </div>
-
-        {!editing ? (
-          <h1 className="issue-detail-title">{rendering.title}</h1>
-        ) : (
-          <div className="edit-title-container">
-            <p className="issue-detail-label">Edit title</p>
-            <TextareaAutosize
-              value={rendering.title}
-              className="edit-title"
-              autoFocus
-              onChange={e => setEdits({...edits, title: e.target.value})}
-            />
+            <CanEdit ownerID={issue.creatorID}>
+              <div className="edit-buttons">
+                {!editing ? (
+                  <>
+                    <Button
+                      className="edit-button"
+                      eventName="Edit issue"
+                      onAction={() => setEditing(issue)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      className="delete-button"
+                      eventName="Delete issue"
+                      onAction={() => setDeleteConfirmationShown(true)}
+                    >
+                      Delete
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      className="save-button"
+                      eventName="Save issue edits"
+                      onAction={save}
+                      disabled={
+                        !edits || edits.title === '' || edits.description === ''
+                      }
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      className="cancel-button"
+                      eventName="Cancel issue edits"
+                      onAction={cancel}
+                    >
+                      Cancel
+                    </Button>
+                  </>
+                )}
+              </div>
+            </CanEdit>
           </div>
-        )}
-        {/* These comments are actually github markdown which unfortunately has
+
+          {!editing ? (
+            <h1 className="issue-detail-title">{rendering.title}</h1>
+          ) : (
+            <div className="edit-title-container">
+              <p className="issue-detail-label">Edit title</p>
+              <TextareaAutosize
+                value={rendering.title}
+                className="edit-title"
+                autoFocus
+                onChange={e => setEdits({...edits, title: e.target.value})}
+              />
+            </div>
+          )}
+          {/* These comments are actually github markdown which unfortunately has
          HTML mixed in. We need to find some way to render them, or convert to
          standard markdown? break-spaces makes it render a little better */}
-        {!editing ? (
-          <div className="description-container markdown-container">
-            <Markdown>{rendering.description}</Markdown>
-            <EmojiPanel issueID={issue.id} />
-          </div>
-        ) : (
-          <div className="edit-description-container">
-            <p className="issue-detail-label">Edit description</p>
-            <TextareaAutosize
-              className="edit-description"
-              value={rendering.description}
-              onChange={e => setEdits({...edits, description: e.target.value})}
-            />
-          </div>
-        )}
+          {!editing ? (
+            <div className="description-container markdown-container">
+              <Markdown>{rendering.description}</Markdown>
+              <EmojiPanel issueID={issue.id} />
+            </div>
+          ) : (
+            <div className="edit-description-container">
+              <p className="issue-detail-label">Edit description</p>
+              <TextareaAutosize
+                className="edit-description"
+                value={rendering.description}
+                onChange={e =>
+                  setEdits({...edits, description: e.target.value})
+                }
+              />
+            </div>
+          )}
 
-        {/* Right sidebar */}
-        <div className="issue-sidebar">
-          <div className="sidebar-item">
-            <p className="issue-detail-label">Status</p>
-            <Combobox
-              editable={false}
-              disabled={!canEdit}
-              items={[
-                {
-                  text: 'Open',
-                  value: true,
-                  icon: statusOpen,
-                },
-                {
-                  text: 'Closed',
-                  value: false,
-                  icon: statusClosed,
-                },
-              ]}
-              selectedValue={issue.open}
-              onChange={value =>
-                z.mutate.issue.update({id: issue.id, open: value})
-              }
-            />
-          </div>
-
-          <div className="sidebar-item">
-            <p className="issue-detail-label">Assignee</p>
-            <UserPicker
-              disabled={!canEdit}
-              selected={{login: issue.assignee?.login}}
-              placeholder="Assign to..."
-              unselectedLabel="Nobody"
-              onSelect={user => {
-                z.mutate.issue.update({
-                  id: issue.id,
-                  assigneeID: user?.id ?? null,
-                });
-              }}
-            />
-          </div>
-
-          {login.loginState?.decoded.role === 'crew' ? (
+          {/* Right sidebar */}
+          <div className="issue-sidebar">
             <div className="sidebar-item">
-              <p className="issue-detail-label">Visibility</p>
+              <p className="issue-detail-label">Status</p>
               <Combobox
                 editable={false}
                 disabled={!canEdit}
                 items={[
                   {
-                    text: 'Public',
-                    value: 'public',
+                    text: 'Open',
+                    value: true,
                     icon: statusOpen,
                   },
                   {
-                    text: 'Internal',
-                    value: 'internal',
+                    text: 'Closed',
+                    value: false,
                     icon: statusClosed,
                   },
                 ]}
-                selectedValue={issue.visibility}
+                selectedValue={issue.open}
                 onChange={value =>
-                  z.mutate.issue.update({id: issue.id, visibility: value})
+                  z.mutate.issue.update({id: issue.id, open: value})
                 }
               />
             </div>
-          ) : null}
 
-          <div className="sidebar-item">
-            <p className="issue-detail-label">Creator</p>
-            <div className="issue-creator">
-              <img
-                src={issue.creator?.avatar}
-                className="issue-creator-avatar"
-                alt={issue.creator?.name}
-              />
-              {issue.creator.login}
-            </div>
-          </div>
-
-          <div className="sidebar-item">
-            <p className="issue-detail-label">Labels</p>
-            <div className="issue-detail-label-container">
-              {issue.labels.map(label => (
-                <span className="pill label" key={label.id}>
-                  {label.name}
-                </span>
-              ))}
-            </div>
-            <CanEdit ownerID={issue.creatorID}>
-              <LabelPicker
-                selected={labelSet}
-                onAssociateLabel={labelID =>
-                  z.mutate.issueLabel.insert({
-                    issueID: issue.id,
-                    labelID,
-                  })
-                }
-                onDisassociateLabel={labelID =>
-                  z.mutate.issueLabel.delete({issueID: issue.id, labelID})
-                }
-                onCreateNewLabel={labelName => {
-                  const labelID = nanoid();
-                  z.mutateBatch(tx => {
-                    tx.label.insert({id: labelID, name: labelName});
-                    tx.issueLabel.insert({issueID: issue.id, labelID});
+            <div className="sidebar-item">
+              <p className="issue-detail-label">Assignee</p>
+              <UserPicker
+                disabled={!canEdit}
+                selected={{login: issue.assignee?.login}}
+                placeholder="Assign to..."
+                unselectedLabel="Nobody"
+                onSelect={user => {
+                  z.mutate.issue.update({
+                    id: issue.id,
+                    assigneeID: user?.id ?? null,
                   });
                 }}
               />
-            </CanEdit>
-          </div>
-
-          <div className="sidebar-item">
-            <p className="issue-detail-label">Last updated</p>
-            <div className="timestamp-container">
-              <RelativeTime timestamp={issue.modified} />
             </div>
-          </div>
-        </div>
 
-        <h2 className="issue-detail-label">Comments</h2>
-
-        <div className="comments-container" ref={listRef}>
-          <div
-            className="virtual-list"
-            style={{height: virtualizer.getTotalSize()}}
-          >
-            {virtualizer.getVirtualItems().map(item => (
-              <div
-                key={item.key as string}
-                ref={virtualizer.measureElement}
-                data-index={item.index}
-                style={{
-                  transform: `translateY(${
-                    item.start - virtualizer.options.scrollMargin
-                  }px)`,
-                }}
-              >
-                <Comment
-                  id={issue.comments[item.index].id}
-                  issueID={issue.id}
-                  height={item.size}
+            {login.loginState?.decoded.role === 'crew' ? (
+              <div className="sidebar-item">
+                <p className="issue-detail-label">Visibility</p>
+                <Combobox
+                  editable={false}
+                  disabled={!canEdit}
+                  items={[
+                    {
+                      text: 'Public',
+                      value: 'public',
+                      icon: statusOpen,
+                    },
+                    {
+                      text: 'Internal',
+                      value: 'internal',
+                      icon: statusClosed,
+                    },
+                  ]}
+                  selectedValue={issue.visibility}
+                  onChange={value =>
+                    z.mutate.issue.update({id: issue.id, visibility: value})
+                  }
                 />
               </div>
-            ))}
-          </div>
-        </div>
+            ) : null}
 
-        {z.userID === 'anon' ? (
-          <a href="/api/login/github" className="login-to-comment">
-            Login to comment
-          </a>
-        ) : (
-          <CommentComposer issueID={issue.id} />
-        )}
+            <div className="sidebar-item">
+              <p className="issue-detail-label">Creator</p>
+              <div className="issue-creator">
+                <img
+                  src={issue.creator?.avatar}
+                  className="issue-creator-avatar"
+                  alt={issue.creator?.name}
+                />
+                {issue.creator.login}
+              </div>
+            </div>
+
+            <div className="sidebar-item">
+              <p className="issue-detail-label">Labels</p>
+              <div className="issue-detail-label-container">
+                {issue.labels.map(label => (
+                  <span className="pill label" key={label.id}>
+                    {label.name}
+                  </span>
+                ))}
+              </div>
+              <CanEdit ownerID={issue.creatorID}>
+                <LabelPicker
+                  selected={labelSet}
+                  onAssociateLabel={labelID =>
+                    z.mutate.issueLabel.insert({
+                      issueID: issue.id,
+                      labelID,
+                    })
+                  }
+                  onDisassociateLabel={labelID =>
+                    z.mutate.issueLabel.delete({issueID: issue.id, labelID})
+                  }
+                  onCreateNewLabel={labelName => {
+                    const labelID = nanoid();
+                    z.mutateBatch(tx => {
+                      tx.label.insert({id: labelID, name: labelName});
+                      tx.issueLabel.insert({issueID: issue.id, labelID});
+                    });
+                  }}
+                />
+              </CanEdit>
+            </div>
+
+            <div className="sidebar-item">
+              <p className="issue-detail-label">Last updated</p>
+              <div className="timestamp-container">
+                <RelativeTime timestamp={issue.modified} />
+              </div>
+            </div>
+          </div>
+
+          <h2 className="issue-detail-label">Comments</h2>
+
+          <div className="comments-container" ref={listRef}>
+            <div
+              className="virtual-list"
+              style={{height: virtualizer.getTotalSize()}}
+            >
+              {virtualizer.getVirtualItems().map(item => (
+                <div
+                  key={item.key as string}
+                  ref={virtualizer.measureElement}
+                  data-index={item.index}
+                  style={{
+                    transform: `translateY(${
+                      item.start - virtualizer.options.scrollMargin
+                    }px)`,
+                  }}
+                >
+                  <Comment
+                    id={issue.comments[item.index].id}
+                    issueID={issue.id}
+                    height={item.size}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {z.userID === 'anon' ? (
+            <a href="/api/login/github" className="login-to-comment">
+              Login to comment
+            </a>
+          ) : (
+            <CommentComposer issueID={issue.id} />
+          )}
+        </div>
+        <Confirm
+          isOpen={deleteConfirmationShown}
+          title="Delete Issue"
+          text="Really delete?"
+          okButtonLabel="Delete"
+          onClose={b => {
+            if (b) {
+              remove();
+            }
+            setDeleteConfirmationShown(false);
+          }}
+        />
       </div>
-      <Confirm
-        isOpen={deleteConfirmationShown}
-        title="Delete Issue"
-        text="Really delete?"
-        okButtonLabel="Delete"
-        onClose={b => {
-          if (b) {
-            remove();
-          }
-          setDeleteConfirmationShown(false);
-        }}
-      />
-    </div>
+    </>
   );
 }
 
