@@ -64,8 +64,7 @@ export function timestampToFpMillis(timestamp: string): number {
     const nanos = Number(fullTime % 1_000_000n);
     return millis + nanos * 1e-6; // floating point milliseconds
   } catch (e) {
-    console.error(`Error parsing ${timestamp}`, e);
-    throw e;
+    throw new Error(`Error parsing ${timestamp}`, {cause: e});
   }
 }
 
