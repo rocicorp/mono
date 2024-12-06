@@ -10,7 +10,6 @@ import {
   startSpan,
 } from '../../../../otel/src/span.js';
 import {version} from '../../../../otel/src/version.js';
-import {AbortError} from '../../../../shared/src/abort-error.js';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.js';
 import {must} from '../../../../shared/src/must.js';
@@ -151,20 +150,20 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#permissions = permissions;
   }
 
-  #runInLockWithCVR<T>(
-    fn: (lc: LogContext, cvr: CVRSnapshot) => Promise<T> | T,
-  ): Promise<T> {
+  #runInLockWithCVR(
+    fn: (lc: LogContext, cvr: CVRSnapshot) => Promise<void> | void,
+  ): Promise<void> {
     return this.#lock.withLock(async () => {
       const lc = this.#lc.withContext('lock', randomID());
       if (!this.#stateChanges.active) {
-        throw new AbortError('view-syncer has been shutdown');
+        return; // view-syncer has been shutdown
       }
       if (!this.#cvr) {
         this.#cvr = await this.#cvrStore.load(lc, this.#lastConnectTime);
       }
       lc.debug?.(`cvr@${versionString(this.#cvr.version)}`);
       try {
-        return await fn(lc, this.#cvr);
+        await fn(lc, this.#cvr);
       } catch (e) {
         // Clear cached state if an error is encountered.
         this.#cvr = undefined;
