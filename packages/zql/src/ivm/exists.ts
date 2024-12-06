@@ -1,3 +1,4 @@
+import {areEqual} from '../../../shared/src/arrays.js';
 import {assert, unreachable} from '../../../shared/src/asserts.js';
 import {must} from '../../../shared/src/must.js';
 import type {CompoundKey} from '../../../zero-protocol/src/ast.js';
@@ -30,6 +31,7 @@ export class Exists implements Operator {
   readonly #storage: ExistsStorage;
   readonly #not: boolean;
   readonly #parentJoinKey: CompoundKey;
+  readonly #skipCache: boolean;
 
   #output: Output | undefined;
 
@@ -47,6 +49,12 @@ export class Exists implements Operator {
     assert(this.#input.getSchema().relationships[relationshipName]);
     this.#not = type === 'NOT EXISTS';
     this.#parentJoinKey = parentJoinKey;
+
+    // If the parentJoinKey is the primary key, no sense in caching.
+    this.#skipCache = areEqual(
+      parentJoinKey,
+      this.#input.getSchema().primaryKey,
+    );
   }
 
   setOutput(output: Output) {
@@ -206,8 +214,22 @@ export class Exists implements Operator {
   }
 
   #setSize(row: Row, size: number) {
-    this.#storage.set(this.#makeCacheStorageKey(row), size);
+    this.#setCachedSize(row, size);
     this.#storage.set(this.#makeSizeStorageKey(row), size);
+  }
+
+  #setCachedSize(row: Row, size: number) {
+    if (this.#skipCache) {
+      return;
+    }
+    this.#storage.set(this.#makeCacheStorageKey(row), size);
+  }
+
+  #getCachedSize(row: Row): number | undefined {
+    if (this.#skipCache) {
+      return undefined;
+    }
+    return this.#storage.get(this.#makeCacheStorageKey(row));
   }
 
   #delSize(row: Row) {
@@ -232,7 +254,7 @@ export class Exists implements Operator {
   }
 
   #fetchSize(row: Row) {
-    const cachedSize = this.#storage.get(this.#makeCacheStorageKey(row));
+    const cachedSize = this.#getCachedSize(row);
     if (cachedSize !== undefined) {
       return cachedSize;
     }
