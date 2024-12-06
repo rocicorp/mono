@@ -4,6 +4,7 @@
 
 import {parseOptions, type Config} from '../../../shared/src/options.js';
 import * as v from '../../../shared/src/valita.js';
+import {singleProcessMode} from '../types/processes.js';
 
 /**
  * Configures the view of the upstream database replicated to this zero-cache.
@@ -321,9 +322,12 @@ const ENV_VAR_PREFIX = 'ZERO_';
 
 let loadedConfig: ZeroConfig | undefined;
 
-export function getZeroConfig(argv = process.argv.slice(2)): ZeroConfig {
-  if (!loadedConfig) {
-    loadedConfig = parseOptions(zeroOptions, argv, ENV_VAR_PREFIX);
+export function getZeroConfig(
+  env: NodeJS.ProcessEnv = process.env,
+  argv = process.argv.slice(2),
+): ZeroConfig {
+  if (!loadedConfig || singleProcessMode()) {
+    loadedConfig = parseOptions(zeroOptions, argv, ENV_VAR_PREFIX, env);
   }
 
   return loadedConfig;
