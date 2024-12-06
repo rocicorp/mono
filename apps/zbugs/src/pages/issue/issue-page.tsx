@@ -3,20 +3,20 @@ import {escapeLike, type Row} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {useWindowVirtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
-import {useEffect, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
-import {ToastContainer} from 'react-toastify';
+import {toast, ToastContainer} from 'react-toastify';
 import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.js';
-import type {Schema} from '../../../schema.js';
+import type {CommentRow, IssueRow, Schema} from '../../../schema.js';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
 import {Button} from '../../components/button.js';
 import {CanEdit} from '../../components/can-edit.js';
 import {Combobox} from '../../components/combobox.js';
 import {Confirm} from '../../components/confirm.js';
-import {EmojiPanel} from '../../components/emoji-panel.js';
+import {EmojiPanel, type Emoji} from '../../components/emoji-panel.js';
 import LabelPicker from '../../components/label-picker.js';
 import {Link} from '../../components/link.js';
 import Markdown from '../../components/markdown.js';
@@ -160,6 +160,45 @@ export default function IssuePage() {
 
   const canEdit = useCanEdit(issue?.creatorID);
 
+  const issueEmojiRef = useRef<HTMLDivElement>(null);
+
+  const handleEmojiChange = useCallback(
+    (changedEmojis: readonly Emoji[]) => {
+      for (const emoji of changedEmojis) {
+        if (emoji.creatorID !== z.userID) {
+          toast(
+            emoji.creator?.login + ' reacted on a comment: ' + emoji.value,
+            {
+              position: 'bottom-center',
+              containerId: 'bottom',
+              className: 'emoji-toast',
+              closeOnClick: true,
+              icon: () => <img className="icon" src={emoji.creator?.avatar} />,
+              onClick: () => {
+                const index =
+                  issue?.comments.findIndex(c => c.id === emoji.subjectID) ??
+                  -1;
+                if (index !== -1) {
+                  virtualizer.scrollToIndex(index, {
+                    align: 'end',
+                  });
+                } else if (emoji.subjectID === issue?.id) {
+                  issueEmojiRef.current?.scrollIntoView({
+                    block: 'end',
+                    behavior: 'smooth',
+                  });
+                }
+              },
+            },
+          );
+        }
+      }
+    },
+    [issue?.comments, issue?.id, virtualizer, z.userID],
+  );
+
+  useEmojiChangeListener(issue, handleEmojiChange);
+
   // TODO: We need the notion of the 'partial' result type to correctly render
   // a 404 here. We can't put the 404 here now because it would flash until we
   // get data.
@@ -268,7 +307,7 @@ export default function IssuePage() {
           {!editing ? (
             <div className="description-container markdown-container">
               <Markdown>{rendering.description}</Markdown>
-              <EmojiPanel issueID={issue.id} />
+              <EmojiPanel issueID={issue.id} ref={issueEmojiRef} />
             </div>
           ) : (
             <div className="edit-description-container">
@@ -540,4 +579,60 @@ function buildListQuery(
     }
   }
   return q;
+}
+
+type Issue = IssueRow & {
+  readonly comments: readonly CommentRow[];
+};
+
+/**
+ *@param delay The amount of time in milliseconds to
+ * wait before considering changes to the emojis as being new. This allows
+ * ignoring changes due to unstable rendering.
+ */
+function useEmojiChangeListener(
+  issue: Issue | undefined,
+  cb: (details: readonly Emoji[]) => void,
+  delay = 500,
+) {
+  const z = useZero();
+  const enable = issue !== undefined;
+  const issueID = issue?.id ?? '';
+  const commentIDs = issue?.comments.map(c => c.id) ?? [];
+  const emojis: Emoji[] = useQuery(
+    z.query.emoji
+      .where(({cmp, or}) =>
+        or(cmp('subjectID', 'IN', commentIDs), cmp('subjectID', issueID)),
+      )
+      .related('creator', q => q.one()),
+    enable,
+  );
+
+  const initialTime = useRef(Date.now());
+  const lastEmojis = useRef(
+    new Map<string, Emoji>(emojis.map(emoji => [emoji.id, emoji])),
+  );
+
+  useEffect(() => {
+    const newEmojis = new Map<string, Emoji>(
+      emojis.map(emoji => [emoji.id, emoji]),
+    );
+    const changedEmojis: Emoji[] = [];
+    for (const [id, emoji] of newEmojis) {
+      if (!lastEmojis.current.has(id)) {
+        changedEmojis.push(emoji);
+      }
+    }
+
+    lastEmojis.current = newEmojis;
+
+    if (
+      changedEmojis.length === 0 ||
+      // Ignore if just rendered/mounted
+      Date.now() - initialTime.current < delay
+    ) {
+      return;
+    }
+    cb(changedEmojis);
+  }, [cb, delay, emojis]);
 }

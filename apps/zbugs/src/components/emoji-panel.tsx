@@ -18,12 +18,9 @@ import {
   forwardRef,
   memo,
   useCallback,
-  useEffect,
-  useRef,
   useState,
   type ForwardedRef,
 } from 'react';
-import {toast} from 'react-toastify';
 import {useQuery} from 'zero-react/src/use-query.js';
 import type {Schema} from '../../schema.js';
 import addEmojiIcon from '../assets/icons/add-emoji.svg';
@@ -39,7 +36,7 @@ import {Tooltip, TooltipContent, TooltipTrigger} from './tooltip.jsx';
 const loginMessage = 'You need to be logged in to modify emoji reactions.';
 
 export type Emoji = Row<Schema['tables']['emoji']> & {
-  creator: Row<Schema['tables']['user']> | undefined;
+  readonly creator: Row<Schema['tables']['user']> | undefined;
 };
 
 type Props = {
@@ -47,101 +44,84 @@ type Props = {
   commentID?: string | undefined;
 };
 
-export const EmojiPanel = memo(({issueID, commentID}: Props) => {
-  const subjectID = commentID ?? issueID;
-  const z = useZero();
-  const q = z.query.emoji
-    .where('subjectID', subjectID)
-    .related('creator', creator => creator.one());
+export const EmojiPanel = memo(
+  forwardRef(
+    ({issueID, commentID}: Props, ref: ForwardedRef<HTMLDivElement>) => {
+      const subjectID = commentID ?? issueID;
+      const z = useZero();
+      const q = z.query.emoji
+        .where('subjectID', subjectID)
+        .related('creator', creator => creator.one());
 
-  const emojis: Emoji[] = useQuery(q);
+      const emojis: Emoji[] = useQuery(q);
 
-  const addEmoji = useCallback(
-    (unicode: string, annotation: string) => {
-      const id = nanoid();
-      z.mutate.emoji.insert({
-        id,
-        value: unicode,
-        annotation,
-        subjectID,
-        creatorID: z.userID,
-        created: Date.now(),
-      });
+      const addEmoji = useCallback(
+        (unicode: string, annotation: string) => {
+          const id = nanoid();
+          z.mutate.emoji.insert({
+            id,
+            value: unicode,
+            annotation,
+            subjectID,
+            creatorID: z.userID,
+            created: Date.now(),
+          });
+        },
+        [subjectID, z],
+      );
+
+      const removeEmoji = useCallback(
+        (id: string) => {
+          z.mutate.emoji.delete({id});
+        },
+        [z],
+      );
+
+      // The emojis is an array. We want to group them by value and count them.
+      const groups = groupAndSortEmojis(emojis);
+
+      const addOrRemoveEmoji = useCallback(
+        (details: {unicode: string; annotation: string}) => {
+          const {unicode, annotation} = details;
+          const normalizedEmoji = normalizeEmoji(unicode);
+          const emojis = groups[normalizedEmoji] ?? [];
+          const existingEmojiID = findEmojiForCreator(emojis, z.userID);
+          if (existingEmojiID) {
+            removeEmoji(existingEmojiID);
+          } else {
+            addEmoji(unicode, annotation);
+          }
+        },
+        [addEmoji, groups, removeEmoji, z.userID],
+      );
+
+      const login = useLogin();
+
+      return (
+        <FloatingDelayGroup delay={1000}>
+          <div
+            className="flex gap-2 items-center emoji-reaction-container"
+            ref={ref}
+          >
+            {Object.entries(groups).map(([normalizedEmoji, emojis]) => (
+              <EmojiPill
+                key={normalizedEmoji}
+                normalizedEmoji={normalizedEmoji}
+                emojis={emojis}
+                addOrRemoveEmoji={addOrRemoveEmoji}
+              />
+            ))}
+            {login.loginState === undefined ? (
+              <EmojiButton />
+            ) : (
+              <EmojiMenuButton onEmojiChange={addOrRemoveEmoji} />
+            )}
+          </div>
+        </FloatingDelayGroup>
+      );
     },
-    [subjectID, z],
-  );
-
-  const removeEmoji = useCallback(
-    (id: string) => {
-      z.mutate.emoji.delete({id});
-    },
-    [z],
-  );
-
-  // The emojis is an array. We want to group them by value and count them.
-  const groups = groupAndSortEmojis(emojis);
-
-  const addOrRemoveEmoji = useCallback(
-    (details: {unicode: string; annotation: string}) => {
-      const {unicode, annotation} = details;
-      const normalizedEmoji = normalizeEmoji(unicode);
-      const emojis = groups[normalizedEmoji] ?? [];
-      const existingEmojiID = findEmojiForCreator(emojis, z.userID);
-      if (existingEmojiID) {
-        removeEmoji(existingEmojiID);
-      } else {
-        addEmoji(unicode, annotation);
-      }
-    },
-    [addEmoji, groups, removeEmoji, z.userID],
-  );
-
-  const login = useLogin();
-
-  const handleEmojiChange = useCallback(
-    (changedEmojis: Emoji[]) => {
-      console.log('changedEmojis', changedEmojis);
-      for (const emoji of changedEmojis) {
-        if (emoji.creatorID !== z.userID) {
-          toast(
-            emoji.creator?.login + ' reacted on a comment: ' + emoji.value,
-            {
-              position: 'bottom-center',
-              containerId: 'bottom',
-              className: 'emoji-toast',
-              // TODO: Scroll into view and show tooltip where it was added
-              closeOnClick: true,
-              icon: () => <img className="icon" src={emoji.creator?.avatar} />,
-            },
-          );
-        }
-      }
-    },
-    [z.userID],
-  );
-
-  useEmojiChangeListener(emojis, z.userID, handleEmojiChange);
-
-  return (
-    <FloatingDelayGroup delay={1000}>
-      <div className="flex gap-2 items-center emoji-reaction-container">
-        {Object.entries(groups).map(([normalizedEmoji, emojis]) => (
-          <EmojiPill
-            key={normalizedEmoji}
-            normalizedEmoji={normalizedEmoji}
-            emojis={emojis}
-            addOrRemoveEmoji={addOrRemoveEmoji}
-          />
-        ))}
-        {login.loginState === undefined ? (
-          <EmojiButton />
-        ) : (
-          <EmojiMenuButton onEmojiChange={addOrRemoveEmoji} />
-        )}
-      </div>
-    </FloatingDelayGroup>
-  );
-});
+  ),
+);
 
 const EmojiButton = memo(
   forwardRef((props: ButtonProps, ref: ForwardedRef<HTMLButtonElement>) => (
@@ -310,40 +290,4 @@ function EmojiPill({
       </TooltipContent>
     </Tooltip>
   );
-}
-
-/**
- *@param delay The amount of time in milliseconds to
- * wait before considering changes to the emojis as being new. This allows
- * ignoring changes due to unstable rendering.
- */
-function useEmojiChangeListener(
-  emojis: Emoji[],
-  userID: string,
-  cb: (changedEmojis: Emoji[]) => void,
-  delay = 500,
-) {
-  const initialTime = useRef(Date.now());
-  const lastEmojis = useRef(
-    new Map<string, Emoji>(emojis.map(emoji => [emoji.id, emoji])),
-  );
-  useEffect(() => {
-    const newEmojis = new Map<string, Emoji>(
-      emojis.map(emoji => [emoji.id, emoji]),
-    );
-    const changedEmojis: Emoji[] = [];
-    for (const [id, emoji] of newEmojis) {
-      if (!lastEmojis.current.has(id)) {
-        changedEmojis.push(emoji);
-      }
-    }
-
-    lastEmojis.current = newEmojis;
-
-    // Ignore if just rendered/mounted
-    if (Date.now() - initialTime.current < delay) {
-      return;
-    }
-    cb(changedEmojis);
-  }, [cb, delay, emojis, userID]);
 }
