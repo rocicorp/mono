@@ -26,6 +26,10 @@ import {Syncer} from '../workers/syncer.js';
 import {exitAfter, runUntilKilled} from './life-cycle.js';
 import {createLogContext} from './logging.js';
 
+function randomID() {
+  return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
+}
+
 export default async function runWorker(
   parent: Worker,
   ...args: string[]
@@ -74,7 +78,8 @@ export default async function runWorker(
   ) => {
     const logger = lc
       .withContext('component', 'view-syncer')
-      .withContext('clientGroupID', id);
+      .withContext('clientGroupID', id)
+      .withContext('instance', randomID());
     return new ViewSyncerService(
       logger,
       must(config.taskID, 'main must set --task-id'),

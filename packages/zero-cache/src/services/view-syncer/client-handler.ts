@@ -117,7 +117,8 @@ export class ClientHandler {
     this.#pokes.fail(e instanceof Error ? e : new Error(String(e)));
   }
 
-  close() {
+  close(reason: string) {
+    this.#lc.debug?.(`view-syncer closing connection: ${reason}`);
     this.#pokes.cancel();
   }
 

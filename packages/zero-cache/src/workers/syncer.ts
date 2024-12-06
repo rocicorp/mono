@@ -86,7 +86,7 @@ export class Syncer implements SingletonService {
     const {clientID, clientGroupID, auth, userID} = params;
     const existing = this.#connections.get(clientID);
     if (existing) {
-      existing.close();
+      existing.close(`replaced by ${params.wsID}`);
     }
 
     let decodedToken: JWTPayload | undefined;
