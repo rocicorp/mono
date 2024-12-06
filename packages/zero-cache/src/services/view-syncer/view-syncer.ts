@@ -423,6 +423,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
   }
 
+  #getClients(atVersion?: CVRVersion): ClientHandler[] {
+    const clients = [...this.#clients.values()];
+    return atVersion
+      ? clients.filter(
+          c => cmpVersions(c.version() ?? EMPTY_CVR_VERSION, atVersion) === 0,
+        )
+      : clients;
+  }
+
   // Must be called from within #lock.
   readonly #patchQueries = (
     lc: LogContext,
@@ -468,14 +477,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           // (Clients that are behind the cvr.version need to be caught up in
           //  #syncQueryPipelineSet(), as row data may be needed for catchup)
           const newCVR = this.#cvr;
-          const pokers = [...this.#clients.values()]
-            .filter(
-              c =>
-                // i.e. only clients that were caught up with the previous cvr
-                cmpVersions(c.version() ?? EMPTY_CVR_VERSION, cvr.version) ===
-                0,
-            )
-            .map(c => c.startPoke(newCVR.version));
+          const pokers = this.#getClients(cvr.version).map(c =>
+            c.startPoke(newCVR.version),
+          );
           for (const patch of patches) {
             pokers.forEach(poker => poker.addPatch(patch));
           }
@@ -669,7 +673,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         addQueries,
         removeQueries,
       );
-      const pokers = [...this.#clients.values()].map(c =>
+      const pokers = this.#getClients().map(c =>
         c.startPoke(newVersion, this.#pipelines.currentSchemaVersions()),
       );
       for (const patch of queryPatches) {
@@ -748,7 +752,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     usePokers?: PokeHandler[],
   ) {
     return startAsyncSpan(tracer, 'vs.#catchupClients', async span => {
-      const clients = [...this.#clients.values()];
+      const clients = this.#getClients();
       const pokers =
         usePokers ??
         clients.map(c =>
@@ -931,7 +935,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         version,
         this.#pipelines.replicaVersion,
       );
-      const pokers = [...this.#clients.values()].map(c =>
+      // Only poke clients that are at the cvr.version. New clients that
+      // are behind need to first be caught up when their initConnection
+      // message is processed (and #syncQueryPipelines is called).
+      const pokers = this.#getClients(cvr.version).map(c =>
         c.startPoke(
           updater.updatedVersion(),
           this.#pipelines.currentSchemaVersions(),
