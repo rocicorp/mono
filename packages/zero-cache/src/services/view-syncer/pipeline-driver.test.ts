@@ -158,6 +158,110 @@ describe('view-syncer/pipeline-driver', () => {
     },
   };
 
+  const ISSUES_QUERY_WITH_EXISTS_FROM_PERMISSIONS: AST = {
+    table: 'issues',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      related: {
+        system: 'permissions',
+        correlation: {
+          parentField: ['id'],
+          childField: ['issueID'],
+        },
+        subquery: {
+          table: 'issueLabels',
+          alias: 'labels',
+          orderBy: [
+            ['issueID', 'asc'],
+            ['labelID', 'asc'],
+          ],
+          where: {
+            type: 'correlatedSubquery',
+            op: 'EXISTS',
+            related: {
+              system: 'permissions',
+              correlation: {
+                parentField: ['labelID'],
+                childField: ['id'],
+              },
+              subquery: {
+                table: 'labels',
+                alias: 'labels',
+                orderBy: [['id', 'asc']],
+                where: {
+                  type: 'simple',
+                  left: {
+                    type: 'column',
+                    name: 'name',
+                  },
+                  op: '=',
+                  right: {
+                    type: 'literal',
+                    value: 'bug',
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  const ISSUES_QUERY_WITH_EXISTS_FROM_PERMISSIONS2: AST = {
+    table: 'issues',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      related: {
+        system: 'client',
+        correlation: {
+          parentField: ['id'],
+          childField: ['issueID'],
+        },
+        subquery: {
+          table: 'issueLabels',
+          alias: 'labels',
+          orderBy: [
+            ['issueID', 'asc'],
+            ['labelID', 'asc'],
+          ],
+          where: {
+            type: 'correlatedSubquery',
+            op: 'EXISTS',
+            related: {
+              system: 'permissions',
+              correlation: {
+                parentField: ['labelID'],
+                childField: ['id'],
+              },
+              subquery: {
+                table: 'labels',
+                alias: 'labels',
+                orderBy: [['id', 'asc']],
+                where: {
+                  type: 'simple',
+                  left: {
+                    type: 'column',
+                    name: 'name',
+                  },
+                  op: '=',
+                  right: {
+                    type: 'literal',
+                    value: 'bug',
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
   const messages = new ReplicationMessages({
     issues: 'id',
     comments: 'id',
@@ -604,6 +708,66 @@ describe('view-syncer/pipeline-driver', () => {
           },
           "table": "issues",
           "type": "remove",
+        },
+      ]
+    `);
+  });
+
+  test('whereExists added by permissions return no rows', () => {
+    pipelines.init();
+    expect([
+      ...pipelines.addQuery('hash1', ISSUES_QUERY_WITH_EXISTS_FROM_PERMISSIONS),
+    ]).toMatchInlineSnapshot(`
+      [
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "00",
+            "closed": false,
+            "id": "1",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+      ]
+    `);
+
+    expect([
+      ...pipelines.addQuery(
+        'hash2',
+        ISSUES_QUERY_WITH_EXISTS_FROM_PERMISSIONS2,
+      ),
+    ]).toMatchInlineSnapshot(`
+      [
+        {
+          "queryHash": "hash2",
+          "row": {
+            "_0_version": "00",
+            "closed": false,
+            "id": "1",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryHash": "hash2",
+          "row": {
+            "_0_version": "00",
+            "issueID": "1",
+            "labelID": "1",
+          },
+          "rowKey": {
+            "issueID": "1",
+            "labelID": "1",
+          },
+          "table": "issueLabels",
+          "type": "add",
         },
       ]
     `);

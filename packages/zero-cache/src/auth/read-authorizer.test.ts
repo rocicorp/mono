@@ -30,6 +30,21 @@ const unreadable = createTableSchema({
   primaryKey: ['id'],
   relationships: {},
 });
+const readableThruUnreadable = createTableSchema({
+  tableName: 'readableThruUnreadable',
+  columns: {
+    id: {type: 'string'},
+    unreadableId: {type: 'string'},
+  },
+  primaryKey: ['id'],
+  relationships: {
+    unreadable: {
+      sourceField: ['unreadableId'],
+      destField: ['id'],
+      destSchema: unreadable,
+    },
+  },
+});
 const readable = {
   tableName: 'readable',
   columns: {
@@ -48,6 +63,11 @@ const readable = {
       sourceField: ['unreadableId'],
       destField: ['id'],
       destSchema: unreadable,
+    },
+    readableThruUnreadable: {
+      sourceField: ['id'],
+      destField: ['id'],
+      destSchema: () => readableThruUnreadable,
     },
   },
 } as const;
@@ -77,6 +97,7 @@ const schema = createSchema({
     readable,
     unreadable,
     adminReadable,
+    readableThruUnreadable,
   },
 });
 
@@ -103,6 +124,16 @@ const permissionRules = must(
             authData: {role: string},
             eb: ExpressionBuilder<typeof adminReadable>,
           ) => eb.cmpLit(authData.role, '=', 'admin'),
+        ],
+      },
+    },
+    readableThruUnreadable: {
+      row: {
+        select: [
+          (
+            _authData: {role: string},
+            eb: ExpressionBuilder<typeof readableThruUnreadable>,
+          ) => eb.exists('unreadable'),
         ],
       },
     },
@@ -685,6 +716,116 @@ describe('unreadable tables', () => {
       }
     `);
   });
+});
+
+test('exists rules in permissions are tagged as the permissions system', () => {
+  expect(
+    transformQuery(
+      ast(newQuery(mockDelegate, schema.tables.readableThruUnreadable)),
+      permissionRules,
+      undefined,
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "related": undefined,
+      "table": "readableThruUnreadable",
+      "where": {
+        "op": "EXISTS",
+        "related": {
+          "correlation": {
+            "childField": [
+              "id",
+            ],
+            "parentField": [
+              "unreadableId",
+            ],
+          },
+          "subquery": {
+            "alias": "zsubq_unreadable",
+            "orderBy": [
+              [
+                "id",
+                "asc",
+              ],
+            ],
+            "related": undefined,
+            "table": "unreadable",
+            "where": undefined,
+          },
+          "system": "permissions",
+        },
+        "type": "correlatedSubquery",
+      },
+    }
+  `);
+
+  expect(
+    transformQuery(
+      ast(
+        newQuery(mockDelegate, schema.tables.readable).related(
+          'readableThruUnreadable',
+        ),
+      ),
+      permissionRules,
+      undefined,
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "related": [
+        {
+          "correlation": {
+            "childField": [
+              "id",
+            ],
+            "parentField": [
+              "id",
+            ],
+          },
+          "subquery": {
+            "alias": "readableThruUnreadable",
+            "orderBy": [
+              [
+                "id",
+                "asc",
+              ],
+            ],
+            "related": undefined,
+            "table": "readableThruUnreadable",
+            "where": {
+              "op": "EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": [
+                    "id",
+                  ],
+                  "parentField": [
+                    "unreadableId",
+                  ],
+                },
+                "subquery": {
+                  "alias": "zsubq_unreadable",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "related": undefined,
+                  "table": "unreadable",
+                  "where": undefined,
+                },
+                "system": "permissions",
+              },
+              "type": "correlatedSubquery",
+            },
+          },
+          "system": "client",
+        },
+      ],
+      "table": "readable",
+      "where": undefined,
+    }
+  `);
 });
 
 describe('tables with no read policies', () => {

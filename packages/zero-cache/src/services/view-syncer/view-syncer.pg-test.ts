@@ -92,6 +92,11 @@ const ISSUES_QUERY: AST = {
   orderBy: [['id', 'asc']],
 };
 
+const COMMENTS_QUERY: AST = {
+  table: 'comments',
+  orderBy: [['id', 'asc']],
+};
+
 const ISSUES_QUERY_WITH_EXISTS: AST = {
   table: 'issues',
   orderBy: [['id', 'asc']],
@@ -203,22 +208,42 @@ const USERS_QUERY: AST = {
   orderBy: [['id', 'asc']],
 };
 
+const issues = {
+  tableName: 'issues',
+  columns: {
+    id: {type: 'string'},
+    title: {type: 'string'},
+    owner: {type: 'string'},
+    parent: {type: 'string'},
+    big: {type: 'number'},
+    json: {type: 'json'},
+  },
+  primaryKey: ['id'],
+  relationships: {},
+} as const;
+
+const comments = {
+  tableName: 'comments',
+  columns: {
+    id: {type: 'string'},
+    issueID: {type: 'string'},
+    text: {type: 'string'},
+  },
+  primaryKey: ['id'],
+  relationships: {
+    issue: {
+      sourceField: 'issueID',
+      destField: 'id',
+      destSchema: issues,
+    },
+  },
+} as const;
+
 const schema = {
   version: 1,
   tables: {
-    issues: {
-      tableName: 'issues',
-      columns: {
-        id: {type: 'string'},
-        title: {type: 'string'},
-        owner: {type: 'string'},
-        parent: {type: 'string'},
-        big: {type: 'number'},
-        json: {type: 'json'},
-      },
-      primaryKey: ['id'],
-      relationships: {},
-    },
+    issues,
+    comments,
   },
 } as const;
 
@@ -227,15 +252,26 @@ type AuthData = {
   role: 'user' | 'admin';
   iat: number;
 };
+const canSeeIssue = (
+  authData: AuthData,
+  eb: ExpressionBuilder<typeof schema.tables.issues>,
+) => eb.cmpLit(authData.role, '=', 'admin');
 const permissions: PermissionsConfig | undefined = await definePermissions<
   AuthData,
   typeof schema
 >(schema, () => ({
   issues: {
     row: {
+      select: [canSeeIssue],
+    },
+  },
+  comments: {
+    row: {
       select: [
-        (authData, eb: ExpressionBuilder<typeof schema.tables.issues>) =>
-          eb.cmpLit(authData.role, '=', 'admin'),
+        (authData, eb: ExpressionBuilder<typeof schema.tables.comments>) =>
+          eb.exists('issue', iq =>
+            iq.where(({eb}) => canSeeIssue(authData, eb)),
+          ),
       ],
     },
   },
@@ -293,6 +329,12 @@ async function setup(permissions: PermissionsConfig = {}) {
     name text,
     _0_version TEXT NOT NULL
   );
+  CREATE TABLE comments (
+    id TEXT PRIMARY KEY,
+    issueID TEXT,
+    text TEXT,
+    _0_version TEXT NOT NULL
+  );
 
   INSERT INTO "zero_ABC.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
     VALUES ('9876', 'foo', 42, '00');
@@ -313,6 +355,9 @@ async function setup(permissions: PermissionsConfig = {}) {
 
   INSERT INTO "issueLabels" (issueID, labelID, _0_version) VALUES ('1', '1', '00');
   INSERT INTO "labels" (id, name, _0_version) VALUES ('1', 'bug', '00');
+
+  INSERT INTO "comments" (id, issueID, text, _0_version) VALUES ('1', '1', 'comment 1', '00');
+  INSERT INTO "comments" (id, issueID, text, _0_version) VALUES ('2', '1', 'comment 2', '00');
   `);
 
   const cvrDB = await testDBs.create('view_syncer_service_test');
@@ -2567,7 +2612,7 @@ describe('view-syncer/service', () => {
   });
 });
 
-describe('pipeline update after token swap', () => {
+describe('permissions', () => {
   let stateChanges: Subscription<ReplicaState>;
   let connect: (
     ctx: SyncContext,
@@ -2879,6 +2924,145 @@ describe('pipeline update after token swap', () => {
           "pokeEnd",
           {
             "pokeID": "00:04",
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('permissions via subquery', async () => {
+    const client = await connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: COMMENTS_QUERY},
+    ]);
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+    // Should not receive any comments b/c they cannot see any issues
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "00:01",
+            "cookie": "00:02",
+            "pokeID": "00:02",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "gotQueriesPatch": [
+              {
+                "ast": {
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "comments",
+                },
+                "hash": "query-hash1",
+                "op": "put",
+              },
+            ],
+            "lastMutationIDChanges": {
+              "foo": 42,
+            },
+            "pokeID": "00:02",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "00:02",
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('query for comments does not return issue rows as those are gotten by the permission system', async () => {
+    const client = await connect(
+      {
+        ...SYNC_CONTEXT,
+        tokenData: {
+          raw: '',
+          decoded: {sub: 'foo', role: 'admin', iat: 1},
+        },
+      },
+      [{op: 'put', hash: 'query-hash2', ast: COMMENTS_QUERY}],
+    );
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+    // Should receive comments since they can see issues as the admin
+    // but should not receive those issues since the query for them was added by
+    // the auth system.
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "00:01",
+            "cookie": "00:02",
+            "pokeID": "00:02",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "gotQueriesPatch": [
+              {
+                "ast": {
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "comments",
+                },
+                "hash": "query-hash2",
+                "op": "put",
+              },
+            ],
+            "lastMutationIDChanges": {
+              "foo": 42,
+            },
+            "pokeID": "00:02",
+            "rowsPatch": [
+              {
+                "op": "put",
+                "tableName": "comments",
+                "value": {
+                  "id": "1",
+                  "issueID": "1",
+                  "text": "comment 1",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "comments",
+                "value": {
+                  "id": "2",
+                  "issueID": "1",
+                  "text": "comment 2",
+                },
+              },
+            ],
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "00:02",
           },
         ],
       ]
