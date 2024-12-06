@@ -262,31 +262,6 @@ export class MemorySource implements Source {
       ? (row: Row) => constraintMatchesRow(constraint, row)
       : (_: Row) => true;
 
-    const predicate = conn.filters?.predicate;
-    const matchesConstraintAndFilters = predicate
-      ? (row: Row) => matchesConstraint(row) && predicate(row)
-      : matchesConstraint;
-    const nextLowerKey = (row: Row | undefined) => {
-      if (!row) {
-        return undefined;
-      }
-      let o = overlay;
-      if (o) {
-        if (comparator(o.change.row, row) >= 0) {
-          o = undefined;
-        }
-      }
-      while (row !== undefined) {
-        row = data.nextLowerKey(row);
-        if (row && matchesConstraintAndFilters(row)) {
-          if (o && comparator(o.change.row, row) >= 0) {
-            return o.change.row;
-          }
-          return row;
-        }
-      }
-      return o?.change.row;
-    };
     let startAt = req.start?.row;
     if (startAt) {
       if (req.constraint) {
