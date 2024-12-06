@@ -71,13 +71,8 @@ function loadWorker(
   id?: string | number,
   ...args: string[]
 ): Worker {
-  // modulePath is relative to this file
-  const ext = path.extname(import.meta.url);
-  // modulePath is .ts. If we have been compiled, it should be changed to .js
-  modulePath = modulePath.replace(/\.ts$/, ext);
-  const absModulePath = new URL(modulePath, import.meta.url).pathname;
-  const worker = childWorker(absModulePath, ...args, ...internalFlags);
-  const name = path.basename(absModulePath, ext) + (id ? ` (${id})` : '');
+  const worker = childWorker(modulePath, undefined, ...args, ...internalFlags);
+  const name = path.basename(modulePath) + (id ? ` (${id})` : '');
   const {promise, resolve} = resolver();
   ready.push(promise);
 
@@ -90,7 +85,10 @@ function loadWorker(
 const {promise: changeStreamerReady, resolve} = resolver();
 const changeStreamer = config.changeStreamerURI
   ? resolve()
-  : loadWorker('./change-streamer.ts', 'supporting').once('message', resolve);
+  : loadWorker('./server/change-streamer.ts', 'supporting').once(
+      'message',
+      resolve,
+    );
 
 if (numSyncers) {
   // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
@@ -108,7 +106,7 @@ await changeStreamerReady;
 if (config.litestream) {
   const mode: ReplicaFileMode = 'backup';
   const replicator = loadWorker(
-    './replicator.ts',
+    './server/replicator.ts',
     'supporting',
     mode,
     mode,
@@ -123,14 +121,14 @@ const syncers: Worker[] = [];
 if (numSyncers) {
   const mode: ReplicaFileMode = config.litestream ? 'serving-copy' : 'serving';
   const replicator = loadWorker(
-    './replicator.ts',
+    './server/replicator.ts',
     'supporting',
     mode,
     mode,
   ).once('message', () => subscribeTo(lc, replicator));
   const notifier = createNotifierFrom(lc, replicator);
   for (let i = 0; i < numSyncers; i++) {
-    syncers.push(loadWorker('./syncer.ts', 'user-facing', i + 1, mode));
+    syncers.push(loadWorker('./server/syncer.ts', 'user-facing', i + 1, mode));
   }
   syncers.forEach(syncer => handleSubscriptionsFrom(lc, syncer, notifier));
 }

@@ -23,12 +23,13 @@ import {createLogContext} from './logging.js';
 
 export default async function runWorker(
   parent: Worker,
+  env: NodeJS.ProcessEnv,
   ...args: string[]
 ): Promise<void> {
   assert(args.length > 0, `replicator mode not specified`);
   const fileMode = v.parse(args[0], replicaFileModeSchema);
 
-  const config = getZeroConfig(args.slice(1));
+  const config = getZeroConfig(env, args.slice(1));
   const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';
   const workerName = `${mode}-replicator`;
   const lc = createLogContext(config.log, {worker: workerName});
@@ -64,5 +65,7 @@ export default async function runWorker(
 
 // fork()
 if (!singleProcessMode()) {
-  void exitAfter(() => runWorker(must(parentWorker), ...process.argv.slice(2)));
+  void exitAfter(() =>
+    runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
+  );
 }
