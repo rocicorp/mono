@@ -20,6 +20,7 @@
   "dependencies": {
     "@fastify/cookie": "^10.0.0",
     "@fastify/oauth2": "^8.0.0",
+    "@floating-ui/react": "^0.26.28",
     "@headlessui/react": "^2.1.8",
     "@octokit/core": "^6.1.2",
     "@radix-ui/react-tooltip": "^1.1.4",

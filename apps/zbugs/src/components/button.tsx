@@ -7,7 +7,7 @@ import {
 } from 'react';
 import {umami} from '../umami.js';
 
-export interface Props {
+export interface ButtonProps {
   onAction?: (() => void) | undefined;
   eventName?: string | undefined;
   children?: ReactNode | undefined;
@@ -19,7 +19,7 @@ export interface Props {
 }
 
 export const Button = forwardRef(
-  (props: Props, ref: ForwardedRef<HTMLButtonElement>) => {
+  (props: ButtonProps, ref: ForwardedRef<HTMLButtonElement>) => {
     const {onAction, eventName, ...rest} = props;
 
     const handleMouseDown = useCallback(
