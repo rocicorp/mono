@@ -6,6 +6,7 @@ import {
   type TableSchema,
   type Row,
 } from '@rocicorp/zero';
+import type {Condition} from 'zero-protocol/src/ast.js';
 
 const userSchema = createTableSchema({
   tableName: 'user',
@@ -139,7 +140,7 @@ const issueLabelSchema = {
   },
 } as const;
 
-const emojiSchema = createTableSchema({
+const emojiSchema = {
   tableName: 'emoji',
   columns: {
     id: 'string',
@@ -156,8 +157,18 @@ const emojiSchema = createTableSchema({
       destField: 'id',
       destSchema: userSchema,
     },
+    issue: {
+      sourceField: 'subjectID',
+      destField: 'id',
+      destSchema: issueSchema,
+    },
+    comment: {
+      sourceField: 'subjectID',
+      destField: 'id',
+      destSchema: commentSchema,
+    },
   },
-});
+} as const;
 
 const userPrefSchema = createTableSchema({
   tableName: 'userPref',
@@ -197,6 +208,17 @@ export const schema = createSchema({
   },
 });
 
+type PermissionRule<TSchema extends TableSchema> = (
+  authData: AuthData,
+  eb: ExpressionBuilder<TSchema>,
+) => Condition;
+
+function and<TSchema extends TableSchema>(
+  ...rules: PermissionRule<TSchema>[]
+): PermissionRule<TSchema> {
+  return (authData, eb) => eb.and(...rules.map(rule => rule(authData, eb)));
+}
+
 export const permissions: ReturnType<typeof definePermissions> =
   definePermissions<AuthData, Schema>(schema, () => {
     const userIsLoggedIn = (
@@ -204,24 +226,29 @@ export const permissions: ReturnType<typeof definePermissions> =
       {cmpLit}: ExpressionBuilder<TableSchema>,
     ) => cmpLit(authData.sub, 'IS NOT', null);
 
-    const loggedInUserIsIssueCreator = (
+    const loggedInUserIsCreator = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<typeof issueSchema>,
-    ) => cmp('creatorID', '=', authData.sub);
-
-    const loggedInUserIsCommentCreator = (
-      authData: AuthData,
-      {cmp}: ExpressionBuilder<typeof commentSchema>,
-    ) => cmp('creatorID', '=', authData.sub);
+      eb: ExpressionBuilder<
+        typeof commentSchema | typeof emojiSchema | typeof issueSchema
+      >,
+    ) =>
+      eb.and(
+        userIsLoggedIn(authData, eb),
+        eb.cmp('creatorID', '=', authData.sub),
+      );
 
     const loggedInUserIsAdmin = (
       authData: AuthData,
-      {cmpLit}: ExpressionBuilder<TableSchema>,
-    ) => cmpLit(authData.role, '=', 'crew');
+      eb: ExpressionBuilder<TableSchema>,
+    ) =>
+      eb.and(
+        userIsLoggedIn(authData, eb),
+        eb.cmpLit(authData.role, '=', 'crew'),
+      );
 
     const allowIfUserIDMatchesLoggedInUser = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<typeof viewStateSchema>,
+      {cmp}: ExpressionBuilder<typeof viewStateSchema | typeof userPrefSchema>,
     ) => cmp('userID', '=', authData.sub);
 
     const allowIfAdminOrIssueCreator = (
@@ -231,7 +258,7 @@ export const permissions: ReturnType<typeof definePermissions> =
       eb.or(
         loggedInUserIsAdmin(authData, eb),
         eb.exists('issue', iq =>
-          iq.where(eb => loggedInUserIsIssueCreator(authData, eb)),
+          iq.where(eb => loggedInUserIsCreator(authData, eb)),
         ),
       );
 
@@ -240,6 +267,38 @@ export const permissions: ReturnType<typeof definePermissions> =
       eb: ExpressionBuilder<typeof issueSchema>,
     ) =>
       eb.or(loggedInUserIsAdmin(authData, eb), eb.cmp('visibility', 'public'));
+
+    /**
+     * Comments are only visible if the user can see the issue they're attached to.
+     */
+    const canSeeComment = (
+      authData: AuthData,
+      eb: ExpressionBuilder<typeof commentSchema>,
+    ) => eb.exists('issue', q => q.where(eb => canSeeIssue(authData, eb)));
+
+    /**
+     * Issue labels are only visible if the user can see the issue they're attached to.
+     */
+    const canSeeIssueLabel = (
+      authData: AuthData,
+      eb: ExpressionBuilder<typeof issueLabelSchema>,
+    ) => eb.exists('issue', q => q.where(eb => canSeeIssue(authData, eb)));
+
+    /**
+     * Emoji are only visible if the user can see the issue they're attached to.
+     */
+    const canSeeEmoji = (
+      authData: AuthData,
+      {exists, or}: ExpressionBuilder<typeof emojiSchema>,
+    ) =>
+      or(
+        exists('issue', q => {
+          return q.where(eb => canSeeIssue(authData, eb));
+        }),
+        exists('comment', q => {
+          return q.where(eb => canSeeComment(authData, eb));
+        }),
+      );
 
     return {
       user: {
@@ -254,40 +313,35 @@ export const permissions: ReturnType<typeof definePermissions> =
       issue: {
         row: {
           insert: [
-            (authData, eb) =>
-              eb.and(
-                userIsLoggedIn(authData, eb),
-                // prevents setting the creatorID of an issue to someone
-                // other than the user doing the creating
-                loggedInUserIsIssueCreator(authData, eb),
-              ),
+            // prevents setting the creatorID of an issue to someone
+            // other than the user doing the creating
+            loggedInUserIsCreator,
           ],
           update: {
-            // TODO: add a check to prevent changing the creatorID
-            preMutation: [loggedInUserIsIssueCreator, loggedInUserIsAdmin],
+            preMutation: [loggedInUserIsCreator, loggedInUserIsAdmin],
+            postProposedMutation: [loggedInUserIsCreator, loggedInUserIsAdmin],
           },
-          delete: [loggedInUserIsIssueCreator, loggedInUserIsAdmin],
+          delete: [loggedInUserIsCreator, loggedInUserIsAdmin],
           select: [canSeeIssue],
         },
       },
       comment: {
         row: {
           insert: [
-            (authData, eb) =>
-              eb.and(
-                userIsLoggedIn(authData, eb),
-                loggedInUserIsCommentCreator(authData, eb),
-              ),
+            loggedInUserIsAdmin,
+            and(loggedInUserIsCreator, canSeeComment),
           ],
           update: {
-            preMutation: [loggedInUserIsCommentCreator, loggedInUserIsAdmin],
+            preMutation: [
+              loggedInUserIsAdmin,
+              and(loggedInUserIsCreator, canSeeComment),
+            ],
           },
-          delete: [loggedInUserIsCommentCreator, loggedInUserIsAdmin],
-          // comments are only visible if the user can see the issue they're on
-          select: [
-            (authData, {exists}) =>
-              exists('issue', q => q.where(eb => canSeeIssue(authData, eb))),
+          delete: [
+            loggedInUserIsAdmin,
+            and(canSeeComment, loggedInUserIsCreator),
           ],
+          select: [canSeeComment],
         },
       },
       label: {
@@ -312,15 +366,36 @@ export const permissions: ReturnType<typeof definePermissions> =
       },
       issueLabel: {
         row: {
-          insert: [allowIfAdminOrIssueCreator],
+          insert: [and(canSeeIssueLabel, allowIfAdminOrIssueCreator)],
           update: {
             preMutation: [],
           },
-          delete: [allowIfAdminOrIssueCreator],
-          select: [
-            (authData, {exists}) =>
-              exists('issue', q => q.where(eb => canSeeIssue(authData, eb))),
-          ],
+          delete: [and(canSeeIssueLabel, allowIfAdminOrIssueCreator)],
+          select: [canSeeIssueLabel],
+        },
+      },
+      emoji: {
+        row: {
+          // Can only insert emoji if the can see the issue.
+          insert: [and(canSeeEmoji, loggedInUserIsCreator)],
+
+          // Can only update their own emoji.
+          update: {
+            preMutation: [and(canSeeEmoji, loggedInUserIsCreator)],
+            postProposedMutation: [and(canSeeEmoji, loggedInUserIsCreator)],
+          },
+          delete: [and(canSeeEmoji, loggedInUserIsCreator)],
+          select: [canSeeEmoji],
+        },
+      },
+      userPref: {
+        row: {
+          insert: [allowIfUserIDMatchesLoggedInUser],
+          update: {
+            preMutation: [allowIfUserIDMatchesLoggedInUser],
+            postProposedMutation: [allowIfUserIDMatchesLoggedInUser],
+          },
+          delete: [allowIfUserIDMatchesLoggedInUser],
         },
       },
     };
