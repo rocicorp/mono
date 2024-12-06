@@ -346,6 +346,7 @@ describe('kitchen sink query', () => {
                 ],
                 "table": "user",
               },
+              "system": "client",
             },
             {
               "correlation": {
@@ -390,10 +391,12 @@ describe('kitchen sink query', () => {
                       ],
                       "table": "revision",
                     },
+                    "system": "client",
                   },
                 ],
                 "table": "comment",
               },
+              "system": "client",
             },
             {
               "correlation": {
@@ -437,10 +440,12 @@ describe('kitchen sink query', () => {
                       ],
                       "table": "label",
                     },
+                    "system": "client",
                   },
                 ],
                 "table": "issueLabel",
               },
+              "system": "client",
             },
           ],
           "start": {

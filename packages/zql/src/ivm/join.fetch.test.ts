@@ -2168,6 +2168,7 @@ function fetchTest(t: FetchTest): FetchTestResults {
       storage,
       ...info,
       hidden: false,
+      system: 'client',
     });
     joins[i] = {
       join,

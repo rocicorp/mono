@@ -169,6 +169,7 @@ test('related subqueries are sorted', () => {
     related: [
       {
         correlation: {parentField: ['a'], childField: ['a']},
+        system: 'client',
         subquery: {
           table: 'table',
           alias: 'alias2',
@@ -176,6 +177,7 @@ test('related subqueries are sorted', () => {
       },
       {
         correlation: {parentField: ['a'], childField: ['a']},
+        system: 'client',
         subquery: {
           table: 'table',
           alias: 'alias1',
@@ -206,6 +208,7 @@ test('related subqueries are sorted', () => {
           "table": "table",
           "where": undefined,
         },
+        "system": "client",
       },
       {
         "correlation": {
@@ -227,6 +230,7 @@ test('related subqueries are sorted', () => {
           "table": "table",
           "where": undefined,
         },
+        "system": "client",
       },
     ]
   `);
@@ -239,6 +243,6 @@ test('protocol version', () => {
   // If this test fails because the AST schema has changed such that
   // old code will not understand the new schema, bump the
   // PROTOCOL_VERSION and update the expected values.
-  expect(hash.toString(36)).toEqual('p2azo5kwhcyg');
-  expect(PROTOCOL_VERSION).toEqual(1);
+  expect(hash.toString(36)).toEqual('abcvo2klqduo');
+  expect(PROTOCOL_VERSION).toEqual(2);
 });

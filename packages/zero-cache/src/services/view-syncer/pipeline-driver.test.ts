@@ -92,6 +92,7 @@ describe('view-syncer/pipeline-driver', () => {
     orderBy: [['id', 'desc']],
     related: [
       {
+        system: 'client',
         correlation: {
           parentField: ['id'],
           childField: ['issueID'],
@@ -112,6 +113,7 @@ describe('view-syncer/pipeline-driver', () => {
       type: 'correlatedSubquery',
       op: 'EXISTS',
       related: {
+        system: 'client',
         correlation: {
           parentField: ['id'],
           childField: ['issueID'],
@@ -127,6 +129,7 @@ describe('view-syncer/pipeline-driver', () => {
             type: 'correlatedSubquery',
             op: 'EXISTS',
             related: {
+              system: 'client',
               correlation: {
                 parentField: ['labelID'],
                 childField: ['id'],
@@ -652,6 +655,7 @@ describe('view-syncer/pipeline-driver', () => {
                       },
                       orderBy: [['id', 'asc']],
                     },
+                    system: 'client',
                     correlation: {
                       childField: ['id'],
                       parentField: ['labelID'],
@@ -663,6 +667,7 @@ describe('view-syncer/pipeline-driver', () => {
                   ['labelID', 'asc'],
                 ],
               },
+              system: 'client',
               correlation: {
                 childField: ['issueID'],
                 parentField: ['id'],
@@ -689,6 +694,7 @@ describe('view-syncer/pipeline-driver', () => {
                   table: 'labels',
                   orderBy: [['id', 'asc']],
                 },
+                system: 'client',
                 correlation: {
                   childField: ['id'],
                   parentField: ['labelID'],
@@ -696,6 +702,7 @@ describe('view-syncer/pipeline-driver', () => {
               },
             ],
           },
+          system: 'client',
           correlation: {
             childField: ['issueID'],
             parentField: ['id'],
