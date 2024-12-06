@@ -22,12 +22,7 @@ import {
   generateWithStart,
   type Overlay,
 } from '../../zql/src/ivm/memory-source.js';
-import type {
-  FetchRequest,
-  Input,
-  Output,
-  Start,
-} from '../../zql/src/ivm/operator.js';
+import type {FetchRequest, Input, Output} from '../../zql/src/ivm/operator.js';
 import type {SourceSchema} from '../../zql/src/ivm/schema.js';
 import type {
   Source,
@@ -244,103 +239,57 @@ export class TableSource implements Source {
     return this.#fetch(req, connection);
   }
 
-  *#fetch(
-    req: FetchRequest,
-    connection: Connection,
-    beforeRequest?: FetchRequest | undefined,
-  ): Stream<Node> {
+  *#fetch(req: FetchRequest, connection: Connection): Stream<Node> {
     const {start} = req;
     const {sort} = connection;
 
-    /**
-     * Before isn't quite "before".
-     * It means to fetch all values in the current order but starting at the row
-     * _just before_ a given row.
-     *
-     * If we have values [1,2,3,4] and we say `fetch starting before 3` we should get back
-     * `[2,3,4]` not `[1,2]`.
-     *
-     * To handle this, we convert `before` to `at` and re-invoke the fetch.
-     */
-    if (start?.basis === 'before') {
-      assert(
-        beforeRequest === undefined,
-        'Before should only be converted once.',
-      );
-      const preSql = this.#requestToSQL(
-        req.constraint,
-        req.start !== undefined
-          ? {
-              from: req.start.row,
-              direction: req.start.basis === 'before' ? 'before' : 'after',
-              inclusive: req.start.basis === 'at',
-            }
-          : undefined,
-        connection.filters?.condition,
-        sort,
-      );
-      const sqlAndBindings = format(preSql);
-
-      let start: Start | undefined;
-      this.#stmts.cache.use(sqlAndBindings.text, cachedStatement => {
-        for (const beforeRow of cachedStatement.statement.iterate<Row>(
-          ...sqlAndBindings.values,
-        )) {
-          start = {row: beforeRow, basis: 'at'};
-          break;
-        }
-      });
-
-      yield* this.#fetch({...req, start}, connection, req);
-    } else {
-      const query = this.#requestToSQL(
-        req.constraint,
-        req.start !== undefined
-          ? {
-              from: req.start.row,
-              direction: req.start.basis === 'before' ? 'before' : 'after',
-              inclusive: req.start.basis === 'at',
-            }
-          : undefined,
-        connection.filters?.condition,
-        sort,
-      );
-      const sqlAndBindings = format(query);
-
-      const cachedStatement = this.#stmts.cache.get(sqlAndBindings.text);
-      try {
-        cachedStatement.statement.safeIntegers(true);
-        const rowIterator = cachedStatement.statement.iterate<Row>(
-          ...sqlAndBindings.values,
-        );
-
-        const callingConnectionIndex = this.#connections.indexOf(connection);
-        assert(callingConnectionIndex !== -1, 'Connection not found');
-
-        const comparator = makeComparator(sort);
-
-        let overlay: Overlay | undefined;
-        if (this.#overlay) {
-          if (callingConnectionIndex <= this.#overlay.outputIndex) {
-            overlay = this.#overlay;
+    const query = this.#requestToSQL(
+      req.constraint,
+      start !== undefined
+        ? {
+            from: start.row,
+            direction: req.reverse ? 'reverse' : 'forward',
+            inclusive: start.basis === 'at',
           }
-        }
+        : undefined,
+      connection.filters?.condition,
+      sort,
+    );
+    const sqlAndBindings = format(query);
 
-        yield* generateWithStart(
-          generateWithOverlay(
-            req.start?.row,
-            mapFromSQLiteTypes(this.#columns, rowIterator),
-            req.constraint,
-            overlay,
-            comparator,
-            connection.filters?.predicate,
-          ),
-          beforeRequest ?? req,
-          comparator,
-        );
-      } finally {
-        this.#stmts.cache.return(cachedStatement);
+    const cachedStatement = this.#stmts.cache.get(sqlAndBindings.text);
+    try {
+      cachedStatement.statement.safeIntegers(true);
+      const rowIterator = cachedStatement.statement.iterate<Row>(
+        ...sqlAndBindings.values,
+      );
+
+      const callingConnectionIndex = this.#connections.indexOf(connection);
+      assert(callingConnectionIndex !== -1, 'Connection not found');
+
+      const comparator = makeComparator(sort, req.reverse);
+
+      let overlay: Overlay | undefined;
+      if (this.#overlay) {
+        if (callingConnectionIndex <= this.#overlay.outputIndex) {
+          overlay = this.#overlay;
+        }
       }
+
+      yield* generateWithStart(
+        generateWithOverlay(
+          req.start?.row,
+          mapFromSQLiteTypes(this.#columns, rowIterator),
+          req.constraint,
+          overlay,
+          comparator,
+          connection.filters?.predicate,
+        ),
+        req.start,
+        comparator,
+      );
+    } finally {
+      this.#stmts.cache.return(cachedStatement);
     }
   }
 
@@ -516,7 +465,7 @@ export class TableSource implements Source {
       query = sql`${query} WHERE ${sql.join(constraints, sql` AND `)}`;
     }
 
-    if (cursor?.direction === 'before') {
+    if (cursor?.direction === 'reverse') {
       query = sql`${query} ORDER BY ${sql.join(
         order.map(
           s =>
@@ -621,7 +570,7 @@ function getJsType(value: unknown): ValueType {
 
 type Cursor = {
   from: Row;
-  direction: 'before' | 'after';
+  direction: 'forward' | 'reverse';
   inclusive: boolean;
 };
 
@@ -655,7 +604,7 @@ function gatherStartConstraints(
     for (let j = 0; j <= i; j++) {
       if (j === i) {
         if (iDirection === 'asc') {
-          if (direction === 'after') {
+          if (direction === 'forward') {
             group.push(
               sql`${sql.ident(iField)} > ${toSQLiteType(
                 from[iField],
@@ -663,7 +612,7 @@ function gatherStartConstraints(
               )}`,
             );
           } else {
-            direction satisfies 'before';
+            direction satisfies 'reverse';
             group.push(
               sql`${sql.ident(iField)} < ${toSQLiteType(
                 from[iField],
@@ -673,7 +622,7 @@ function gatherStartConstraints(
           }
         } else {
           iDirection satisfies 'desc';
-          if (direction === 'after') {
+          if (direction === 'forward') {
             group.push(
               sql`${sql.ident(iField)} < ${toSQLiteType(
                 from[iField],
@@ -681,7 +630,7 @@ function gatherStartConstraints(
               )}`,
             );
           } else {
-            direction satisfies 'before';
+            direction satisfies 'reverse';
             group.push(
               sql`${sql.ident(iField)} > ${toSQLiteType(
                 from[iField],

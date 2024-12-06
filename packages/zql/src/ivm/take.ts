@@ -134,6 +134,7 @@ export class Take implements Operator {
 
   *#initialFetch(req: FetchRequest): Stream<Node> {
     assert(req.start === undefined);
+    assert(!req.reverse);
     assert(constraintMatchesPartitionKey(req.constraint, this.#partitionKey));
 
     if (this.#limit === 0) {
