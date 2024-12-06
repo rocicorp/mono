@@ -82,7 +82,7 @@ export class Exists implements Operator {
       if (this.#filter(node.row)) {
         yield node;
       }
-      this.#delSize(node.row);
+      this.#delSize(node.row, this.#decrementRefCount(node.row));
     }
   }
 
@@ -107,8 +107,10 @@ export class Exists implements Operator {
         if (size === undefined) {
           return;
         }
+
+        const refCount = this.#decrementRefCount(change.node.row);
         this.#pushWithFilter(change, size);
-        this.#delSize(change.node.row);
+        this.#delSize(change.node.row, refCount);
         return;
       }
       case 'child':
@@ -129,6 +131,7 @@ export class Exists implements Operator {
             let size = this.#getSize(change.row);
             if (size !== undefined) {
               size++;
+              this.#setCachedSize(change.row, size);
               this.#setSize(change.row, size);
             } else {
               size = this.#fetchSize(change.row);
@@ -157,6 +160,7 @@ export class Exists implements Operator {
             if (size !== undefined) {
               assert(size > 0);
               size--;
+              this.#setCachedSize(change.row, size);
               this.#setSize(change.row, size);
             } else {
               size = this.#fetchSize(change.row);
@@ -214,7 +218,6 @@ export class Exists implements Operator {
   }
 
   #setSize(row: Row, size: number) {
-    this.#setCachedSize(row, size);
     this.#storage.set(this.#makeSizeStorageKey(row), size);
   }
 
@@ -232,13 +235,42 @@ export class Exists implements Operator {
     return this.#storage.get(this.#makeCacheStorageKey(row));
   }
 
-  #delSize(row: Row) {
+  #incrementRefCount(row: Row) {
+    if (this.#skipCache) {
+      return;
+    }
+    const key = this.#makeRefcountKey(row);
+    const refCount = (this.#storage.get(key) ?? 0) + 1;
+    this.#storage.set(key, refCount);
+
+    return refCount;
+  }
+
+  #decrementRefCount(row: Row) {
+    if (this.#skipCache) {
+      return;
+    }
+    const key = this.#makeRefcountKey(row);
+    const refCount = must(this.#storage.get(key)) - 1;
+    if (refCount === 0) {
+      this.#storage.del(key);
+    } else {
+      this.#storage.set(key, refCount);
+    }
+
+    return refCount;
+  }
+
+  #delSize(row: Row, refCount: number | undefined) {
     this.#storage.del(this.#makeSizeStorageKey(row));
-    // TODO: when to delete the cached size for the row?
-    // need to ref-count for the join key.
-    // Whenever a new row is added for `setSize` we increment.
-    // Then we decrement on `delSize`.
-    // Can have a new `refCount` state key that is increment and decremented for parent add/remove events.
+    if (this.#skipCache) {
+      assert(refCount === undefined);
+      return;
+    }
+    assert(refCount !== undefined);
+    if (refCount === 0) {
+      this.#storage.del(this.#makeCacheStorageKey(row));
+    }
   }
 
   #getOrFetchSize(row: Row): number {
@@ -254,8 +286,10 @@ export class Exists implements Operator {
   }
 
   #fetchSize(row: Row) {
+    this.#incrementRefCount(row);
     const cachedSize = this.#getCachedSize(row);
     if (cachedSize !== undefined) {
+      this.#setSize(row, cachedSize);
       return cachedSize;
     }
 
@@ -266,6 +300,7 @@ export class Exists implements Operator {
     for (const _relatedNode of relationship) {
       size++;
     }
+    this.#setCachedSize(row, size);
     this.#setSize(row, size);
     return size;
   }
@@ -302,5 +337,13 @@ export class Exists implements Operator {
       storageKey.push(normalizeUndefined(row[key]));
     }
     return JSON.stringify(['size', storageKey]);
+  }
+
+  #makeRefcountKey(row: Row) {
+    const storageKey: NormalizedValue[] = [];
+    for (const key of this.#parentJoinKey) {
+      storageKey.push(normalizeUndefined(row[key]));
+    }
+    return JSON.stringify(['refcount', storageKey]);
   }
 }
