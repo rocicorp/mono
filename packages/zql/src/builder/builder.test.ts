@@ -149,6 +149,7 @@ test('self-join', () => {
         orderBy: [['id', 'asc']],
         related: [
           {
+            system: 'client',
             correlation: {parentField: ['recruiterID'], childField: ['id']},
             subquery: {
               table: 'users',
@@ -309,6 +310,7 @@ test('self-join edit', () => {
         orderBy: [['id', 'asc']],
         related: [
           {
+            system: 'client',
             correlation: {parentField: ['recruiterID'], childField: ['id']},
             subquery: {
               table: 'users',
@@ -465,6 +467,7 @@ test('multi-join', () => {
         },
         related: [
           {
+            system: 'client',
             correlation: {parentField: ['id'], childField: ['userID']},
             subquery: {
               table: 'userStates',
@@ -475,6 +478,7 @@ test('multi-join', () => {
               ],
               related: [
                 {
+                  system: 'client',
                   correlation: {
                     parentField: ['stateCode'],
                     childField: ['code'],
@@ -570,6 +574,7 @@ test('join with limit', () => {
         limit: 3,
         related: [
           {
+            system: 'client',
             correlation: {parentField: ['id'], childField: ['userID']},
             subquery: {
               table: 'userStates',
@@ -581,6 +586,7 @@ test('join with limit', () => {
               limit: 1,
               related: [
                 {
+                  system: 'client',
                   correlation: {
                     parentField: ['stateCode'],
                     childField: ['code'],
@@ -703,6 +709,7 @@ test('exists junction', () => {
         where: {
           type: 'correlatedSubquery',
           related: {
+            system: 'client',
             correlation: {parentField: ['id'], childField: ['userID']},
             subquery: {
               table: 'userStates',
@@ -714,6 +721,7 @@ test('exists junction', () => {
               where: {
                 type: 'correlatedSubquery',
                 related: {
+                  system: 'client',
                   correlation: {
                     parentField: ['stateCode'],
                     childField: ['code'],
@@ -1046,6 +1054,7 @@ test('exists self join', () => {
         where: {
           type: 'correlatedSubquery',
           related: {
+            system: 'client',
             correlation: {parentField: ['recruiterID'], childField: ['id']},
             subquery: {
               table: 'users',
@@ -1226,6 +1235,7 @@ test('not exists self join', () => {
         where: {
           type: 'correlatedSubquery',
           related: {
+            system: 'client',
             correlation: {parentField: ['recruiterID'], childField: ['id']},
             subquery: {
               table: 'users',
@@ -1309,6 +1319,7 @@ test('bind static parameters', () => {
     },
     related: [
       {
+        system: 'client',
         correlation: {parentField: ['id'], childField: ['userID']},
         subquery: {
           table: 'userStates',
@@ -1371,6 +1382,7 @@ test('bind static parameters', () => {
               "type": "simple",
             },
           },
+          "system": "client",
         },
       ],
       "table": "users",

@@ -1717,6 +1717,7 @@ suite('overlay-vs-filter', () => {
             {
               type: 'correlatedSubquery',
               related: {
+                system: 'client',
                 correlation: {
                   parentField: ['a'],
                   childField: ['b'],
@@ -1784,6 +1785,7 @@ suite('overlay-vs-filter', () => {
             {
               type: 'correlatedSubquery',
               related: {
+                system: 'client',
                 correlation: {
                   parentField: ['a'],
                   childField: ['b'],

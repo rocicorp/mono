@@ -99,6 +99,7 @@ const ISSUES_QUERY_WITH_EXISTS: AST = {
     type: 'correlatedSubquery',
     op: 'EXISTS',
     related: {
+      system: 'client',
       correlation: {
         parentField: ['id'],
         childField: ['issueID'],
@@ -114,6 +115,7 @@ const ISSUES_QUERY_WITH_EXISTS: AST = {
           type: 'correlatedSubquery',
           op: 'EXISTS',
           related: {
+            system: 'client',
             correlation: {
               parentField: ['labelID'],
               childField: ['id'],
@@ -159,6 +161,7 @@ const ISSUES_QUERY_WITH_RELATED: AST = {
   },
   related: [
     {
+      system: 'client',
       correlation: {
         parentField: ['id'],
         childField: ['issueID'],
@@ -173,6 +176,7 @@ const ISSUES_QUERY_WITH_RELATED: AST = {
         ],
         related: [
           {
+            system: 'client',
             correlation: {
               parentField: ['labelID'],
               childField: ['id'],
