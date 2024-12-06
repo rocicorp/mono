@@ -2256,6 +2256,228 @@ describe('view-syncer/service', () => {
                     `);
   });
 
+  test('catch up new client before advancement', async () => {
+    const client1 = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    await nextPoke(client1);
+
+    stateChanges.push({state: 'version-ready'});
+    const preAdvancement = (await nextPoke(client1))[0][1] as PokeStartBody;
+    expect(preAdvancement).toEqual({
+      baseCookie: '00:01',
+      cookie: '00:02',
+      pokeID: '00:02',
+      schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
+    });
+
+    replicator.processTransaction(
+      '123',
+      messages.update('issues', {
+        id: '1',
+        title: 'new title',
+        owner: 100,
+        parent: null,
+        big: 9007199254740991n,
+      }),
+      messages.delete('issues', {id: '2'}),
+    );
+
+    stateChanges.push({state: 'version-ready'});
+
+    // Connect a second client right as the advancement is about to be processed.
+    await sleep(0.5);
+    const client2 = connect({...SYNC_CONTEXT, clientID: 'bar'}, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+
+    // Response should catch client2 from scratch.
+    expect(await nextPoke(client2)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": null,
+            "cookie": "01:01",
+            "pokeID": "01:01",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "clientsPatch": [
+              {
+                "clientID": "foo",
+                "op": "put",
+              },
+              {
+                "clientID": "bar",
+                "op": "put",
+              },
+            ],
+            "desiredQueriesPatches": {
+              "bar": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": {
+                      "left": {
+                        "name": "id",
+                        "type": "column",
+                      },
+                      "op": "IN",
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                      "type": "simple",
+                    },
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+              "foo": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": {
+                      "left": {
+                        "name": "id",
+                        "type": "column",
+                      },
+                      "op": "IN",
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                      "type": "simple",
+                    },
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+            },
+            "gotQueriesPatch": [
+              {
+                "ast": {
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "issues",
+                  "where": {
+                    "left": {
+                      "name": "id",
+                      "type": "column",
+                    },
+                    "op": "IN",
+                    "right": {
+                      "type": "literal",
+                      "value": [
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                      ],
+                    },
+                    "type": "simple",
+                  },
+                },
+                "hash": "query-hash1",
+                "op": "put",
+              },
+            ],
+            "lastMutationIDChanges": {
+              "foo": 42,
+            },
+            "pokeID": "01:01",
+            "rowsPatch": [
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 123,
+                  "id": "3",
+                  "json": null,
+                  "owner": "102",
+                  "parent": "1",
+                  "title": "foo",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 100,
+                  "id": "4",
+                  "json": null,
+                  "owner": "101",
+                  "parent": "2",
+                  "title": "bar",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 9007199254740991,
+                  "id": "1",
+                  "json": null,
+                  "owner": "100.0",
+                  "parent": null,
+                  "title": "new title",
+                },
+              },
+              {
+                "id": {
+                  "id": "2",
+                },
+                "op": "del",
+                "tableName": "issues",
+              },
+            ],
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "01:01",
+          },
+        ],
+      ]
+    `);
+  });
+
   test('waits for replica to catch up', async () => {
     // Before connecting, artificially set the CVR version to '07',
     // which is ahead of the current replica version '00'.
