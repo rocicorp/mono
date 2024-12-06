@@ -29,6 +29,8 @@
   --color-modal-background: rgba(18, 18, 18, 0.7);
   --color-modal-outline: rgba(62, 62, 62, 0.8);
   --color-button-outline: rgba(50, 50, 50, 1);
+  --color-tooltip-background: rgba(18, 18, 18, 1);
+  --color-tooltip-outline: rgba(62, 62, 62, 1);
 
   /* Filters */
   --filter-backdrop-blur: blur(6.5px);
@@ -1231,12 +1233,59 @@ textarea.autoResize {
 
 emoji-picker {
   --background: var(--color-modal-background);
-  backdrop-filter: var(--filter-backdrop-blur);
   --border-radius: 0.5rem;
   --border-color: var(--color-modal-outline);
   --emoji-size: 1.25rem;
 }
 
 .popover-panel {
+  backdrop-filter: var(--filter-backdrop-blur);
   z-index: var(--z-index-popover);
+}
+
+.popover-panel {
+  transition-property: opacity, transform;
+}
+
+.popover-panel[data-status='open'],
+.popover-panel[data-status='close'] {
+  transition-duration: 250ms;
+}
+
+.popover-panel[data-status='initial'],
+.popover-panel[data-status='close'] {
+  opacity: 0;
+}
+
+.popover-panel[data-status='initial'][data-placement^='top'],
+.popover-panel[data-status='close'][data-placement^='top'] {
+  transform: translateY(10px);
+}
+
+.popover-panel[data-status='initial'][data-placement^='bottom'],
+.popover-panel[data-status='close'][data-placement^='bottom'] {
+  transform: translateY(-10px);
+}
+
+:root {
+  --toastify-toast-width: auto;
+  --toastify-toast-background: var(--color-background);
+  --toastify-toast-min-height: 0;
+  --toastify-toast-max-height: 800px;
+  --toastify-font-family: inherit;
+}
+
+.emoji-toast {
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  border: 1px solid rgba(62, 62, 62, 1);
+  border-radius: 2rem;
+  padding: 0.25rem;
+  min-height: 0;
+  width: auto;
+  white-space: nowrap;
+}
+
+.emoji-toast .icon {
+  border-radius: 50%;
 }

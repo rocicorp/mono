@@ -88,7 +88,7 @@ describe('view-syncer/cvr-store', () => {
     await db`UPDATE cvr.instances SET version = '02'`;
 
     // start a CVR load.
-    const loading = store.load(CONNECT_TIME);
+    const loading = store.load(lc, CONNECT_TIME);
 
     await sleep(1);
 
@@ -110,9 +110,9 @@ describe('view-syncer/cvr-store', () => {
     await db`UPDATE cvr.instances SET version = '02'`;
 
     await expect(
-      store.load(CONNECT_TIME),
+      store.load(lc, CONNECT_TIME),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[Error: ["error","ClientNotFound","max attempts exceeded waiting for CVR@02 to catch up from 01"]]`,
+      `[Error: {"kind":"ClientNotFound","message":"max attempts exceeded waiting for CVR@02 to catch up from 01"}]`,
     );
 
     // Verify that the store signaled an ownership change to 'my-task' at CONNECT_TIME.
@@ -136,7 +136,7 @@ describe('view-syncer/cvr-store', () => {
       CONNECT_TIME + 1
     }`;
 
-    await expect(store.load(CONNECT_TIME)).rejects.toThrow(OwnershipError);
+    await expect(store.load(lc, CONNECT_TIME)).rejects.toThrow(OwnershipError);
 
     // Verify that no ownership change was signaled.
     expect(await db`SELECT * FROM cvr.instances`).toMatchInlineSnapshot(`
@@ -325,7 +325,7 @@ describe('view-syncer/cvr-store', () => {
 
   test('deferred row updates', async () => {
     const now = Date.UTC(2024, 10, 23);
-    let cvr = await store.load(CONNECT_TIME);
+    let cvr = await store.load(lc, CONNECT_TIME);
 
     // 12 rows set up in beforeEach().
     expect(await db`SELECT COUNT(*) FROM cvr.rows`).toEqual([{count: 12n}]);
@@ -443,7 +443,7 @@ describe('view-syncer/cvr-store', () => {
 
   test('deferred row stress test', async () => {
     const now = Date.UTC(2024, 10, 23);
-    let cvr = await store.load(CONNECT_TIME);
+    let cvr = await store.load(lc, CONNECT_TIME);
 
     // Use real setTimeout.
     setTimeoutFn.mockImplementation((cb, ms) => setTimeout(cb, ms));
@@ -491,7 +491,7 @@ describe('view-syncer/cvr-store', () => {
     `);
 
     // Should block until all pending rows are flushed.
-    await store.flushed();
+    await store.flushed(lc);
 
     // rowsVersion should match cvr.instances version
     expect(await db`SELECT * FROM cvr."rowsVersion"`).toMatchInlineSnapshot(`
@@ -509,7 +509,7 @@ describe('view-syncer/cvr-store', () => {
 
   test('deferred row stress test with empty updates', async () => {
     const now = Date.UTC(2024, 10, 23);
-    let cvr = await store.load(CONNECT_TIME);
+    let cvr = await store.load(lc, CONNECT_TIME);
 
     // Use real setTimeout.
     setTimeoutFn.mockImplementation((cb, ms) => setTimeout(cb, ms));
@@ -573,7 +573,7 @@ describe('view-syncer/cvr-store', () => {
     `);
 
     // Should block until all pending rows are flushed.
-    await store.flushed();
+    await store.flushed(lc);
 
     // rowsVersion should match cvr.instances version
     expect(await db`SELECT * FROM cvr."rowsVersion"`).toMatchInlineSnapshot(`

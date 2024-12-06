@@ -53,6 +53,7 @@ import {
   encodeSecProtocols,
   nullableVersionSchema,
 } from '../../../zero-protocol/src/mod.js';
+import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.js';
 import type {
   PullRequestMessage,
   PullResponseBody,
@@ -98,7 +99,6 @@ import type {
   ZeroAdvancedOptions,
   ZeroOptions,
 } from './options.js';
-import {PROTOCOL_VERSION} from './protocol-version.js';
 import {QueryManager} from './query-manager.js';
 import {
   reloadScheduled,
@@ -106,7 +106,12 @@ import {
   reportReloadReason,
   resetBackoff,
 } from './reload-error-handler.js';
-import {ServerError, isAuthError, isServerError} from './server-error.js';
+import {
+  ServerError,
+  isAuthError,
+  isServerError,
+  isServerOverloadedError,
+} from './server-error.js';
 import {getServer} from './server-option.js';
 import {version} from './version.js';
 import {PokeHandler} from './zero-poke-handler.js';
@@ -403,7 +408,9 @@ export class Zero<const S extends Schema> {
     };
 
     const replicacheOptions: ReplicacheOptions<WithCRUD<MutatorDefs>> = {
-      schemaVersion: normalizedSchema.version.toString(),
+      // The schema stored in IDB is dependent upon both the application schema
+      // and the AST schema (i.e. PROTOCOL_VERSION).
+      schemaVersion: `${normalizedSchema.version}.${PROTOCOL_VERSION}`,
       logLevel: logOptions.logLevel,
       logSinks: [logOptions.logSink],
       mutators: replicacheMutators,
@@ -741,7 +748,7 @@ export class Zero<const S extends Schema> {
     lc: LogContext,
     downMessage: ErrorMessage,
   ): Promise<void> {
-    const [, kind, message] = downMessage;
+    const [, {kind, message}] = downMessage;
 
     // Rate limit errors are not fatal to the connection.
     // We really don't want to disconnect and reconnect a rate limited user as
@@ -753,7 +760,7 @@ export class Zero<const S extends Schema> {
     }
 
     lc.info?.(`${kind}: ${message}}`);
-    const error = new ServerError(kind, message);
+    const error = new ServerError(downMessage[1]);
 
     this.#rejectMessageError?.reject(error);
     lc.debug?.('Rejecting connect resolver due to error', error);
@@ -1171,7 +1178,9 @@ export class Zero<const S extends Schema> {
     error?: 'invalid-token',
   ): Promise<void> {
     const {auth: authOption} = this.#options;
-    const auth = await authOption?.(error);
+    const auth = await (typeof authOption === 'function'
+      ? authOption(error)
+      : authOption);
     if (auth) {
       lc.debug?.('Got auth token');
       this.#rep.auth = auth;
@@ -1200,10 +1209,12 @@ export class Zero<const S extends Schema> {
 
     let needsReauth = false;
     let gotError = false;
+    let backoffMs = RUN_LOOP_INTERVAL_MS;
 
     while (!this.closed) {
       runLoopCounter++;
       let lc = getLogContext();
+      backoffMs = RUN_LOOP_INTERVAL_MS;
 
       try {
         switch (this.#connectionState) {
@@ -1339,6 +1350,11 @@ export class Zero<const S extends Schema> {
         ) {
           gotError = true;
         }
+
+        const overloaded = isServerOverloadedError(ex);
+        if (overloaded && overloaded.minBackoffMs) {
+          backoffMs = Math.max(backoffMs, overloaded.minBackoffMs);
+        }
       }
 
       // Only authentication errors are retried immediately the first time they
@@ -1361,14 +1377,13 @@ export class Zero<const S extends Schema> {
         //   .catch(_ => {
         //     cfGetCheckSucceeded = false;
         //   });
-
         lc.debug?.(
           'Sleeping',
-          RUN_LOOP_INTERVAL_MS,
+          backoffMs,
           'ms before reconnecting due to error, state:',
           this.#connectionState,
         );
-        await sleep(RUN_LOOP_INTERVAL_MS);
+        await sleep(backoffMs);
         // cfGetCheckController.abort();
         // if (!cfGetCheckSucceeded) {
         //   lc.info?.(

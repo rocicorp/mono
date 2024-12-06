@@ -103,7 +103,7 @@ export class ClientHandler {
     this.clientID = clientID;
     this.wsID = wsID;
     this.#zeroClientsTable = `${schema(shardID)}.clients`;
-    this.#lc = lc.withContext('clientID', clientID);
+    this.#lc = lc;
     this.#pokes = pokes;
     this.#baseVersion = cookieToVersion(baseCookie);
     this.#schemaVersion = schemaVersion;
@@ -117,7 +117,8 @@ export class ClientHandler {
     this.#pokes.fail(e instanceof Error ? e : new Error(String(e)));
   }
 
-  close() {
+  close(reason: string) {
+    this.#lc.debug?.(`view-syncer closing connection: ${reason}`);
     this.#pokes.cancel();
   }
 

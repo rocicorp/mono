@@ -168,8 +168,8 @@ export class TestZero<const S extends Schema> extends Zero<S> {
     return this.triggerMessage(msg);
   }
 
-  triggerError(kind: ErrorKind, message: string): Promise<void> {
-    const msg: ErrorMessage = ['error', kind, message];
+  triggerError(kind: ErrorKind, message: string, body = {}): Promise<void> {
+    const msg: ErrorMessage = ['error', {kind, message, ...body}];
     return this.triggerMessage(msg);
   }
 

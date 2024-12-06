@@ -1,16 +1,16 @@
-import {test, beforeEach, afterEach, expect} from 'vitest';
-import type {PostgresDB} from '../../types/pg.js';
-import {testDBs} from '../../test/db.js';
+import {afterEach, beforeEach, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
+import {MutationType} from '../../../../zero-protocol/src/push.js';
+import {definePermissions} from '../../../../zero-schema/src/permissions.js';
 import {createSchema} from '../../../../zero-schema/src/schema.js';
 import type {TableSchema} from '../../../../zero-schema/src/table-schema.js';
-import {Database} from '../../../../zqlite/src/db.js';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import {processMutation} from './mutagen.js';
-import {WriteAuthorizerImpl} from '../../auth/write-authorizer.js';
-import {MutationType} from '../../../../zero-protocol/src/push.js';
-import {zeroSchema} from './mutagen-test-shared.js';
-import {definePermissions} from '../../../../zero-schema/src/permissions.js';
 import {ExpressionBuilder} from '../../../../zql/src/query/expression.js';
+import {Database} from '../../../../zqlite/src/db.js';
+import {WriteAuthorizerImpl} from '../../auth/write-authorizer.js';
+import {testDBs} from '../../test/db.js';
+import type {PostgresDB} from '../../types/pg.js';
+import {zeroSchema} from './mutagen-test-shared.js';
+import {processMutation} from './mutagen.js';
 
 const SHARD_ID = '0';
 const CG_ID = 'abc';
@@ -283,7 +283,7 @@ function procMutation(
   uid: string | undefined = undefined,
 ) {
   return processMutation(
-    undefined,
+    lc,
     uid === undefined
       ? undefined
       : {sub: uid, role: uid === 'admn' ? 'admin' : 'user'},

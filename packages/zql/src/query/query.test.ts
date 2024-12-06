@@ -4,12 +4,11 @@ import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 import type {
   Supertype,
   TableSchema,
-  TableSchemaToRow,
 } from '../../../zero-schema/src/table-schema.js';
 import type {ExpressionFactory} from './expression.js';
 import {staticParam} from './query-impl.js';
 import type {AdvancedQuery} from './query-internal.js';
-import {type Query, type QueryType} from './query.js';
+import {type Query, type QueryType, type Row} from './query.js';
 
 const mockQuery = {
   select() {
@@ -111,7 +110,7 @@ describe('types', () => {
 
     // no select? All fields are returned.
     expectTypeOf(query.materialize().data).toMatchTypeOf<
-      Array<TableSchemaToRow<TestSchema>>
+      Array<Row<TestSchema>>
     >();
   });
 
@@ -125,8 +124,8 @@ describe('types', () => {
 
     expectTypeOf(query2.materialize().data).toMatchTypeOf<
       Array<
-        TableSchemaToRow<TestSchemaWithMoreRelationships> & {
-          test: Array<TableSchemaToRow<TestSchema>>;
+        Row<TestSchemaWithMoreRelationships> & {
+          test: Array<Row<TestSchema>>;
         }
       >
     >();
@@ -309,10 +308,10 @@ describe('types', () => {
 
     expectTypeOf(query2.materialize().data).toMatchTypeOf<
       Array<
-        TableSchemaToRow<TestSchemaWithMoreRelationships> & {
+        Row<TestSchemaWithMoreRelationships> & {
           self: Array<
-            TableSchemaToRow<TestSchemaWithMoreRelationships> & {
-              test: Array<TableSchemaToRow<TestSchema>>;
+            Row<TestSchemaWithMoreRelationships> & {
+              test: Array<Row<TestSchema>>;
             }
           >;
         }
@@ -332,7 +331,7 @@ describe('types', () => {
     query.where('b', '=', 'false');
 
     expectTypeOf(query.where('b', '=', true).materialize().data).toMatchTypeOf<
-      Array<TableSchemaToRow<TestSchema>>
+      Array<Row<TestSchema>>
     >();
   });
 
@@ -360,7 +359,7 @@ describe('types', () => {
     query.where('b', 'false');
 
     expectTypeOf(query.where('b', true).materialize().data).toMatchTypeOf<
-      Array<TableSchemaToRow<TestSchema>>
+      Array<Row<TestSchema>>
     >();
   });
 

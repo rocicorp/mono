@@ -9,9 +9,7 @@ import {installWebSocketHandoff} from './websocket-handoff.js';
 
 // The server allows the client to use any /:base/ path to facilitate
 // servicing requests on the same domain as the application.
-const CONNECT_URL_PATTERN = new UrlPattern('(/:base)/sync/:version/connect');
-
-const SUPPORTED_VERSION = 'v1';
+const CONNECT_URL_PATTERN = new UrlPattern('(/:base)/sync/v:version/connect');
 
 export type Workers = {
   syncers: Worker[];
@@ -41,10 +39,11 @@ export class Dispatcher extends HttpService {
     if (!syncPath) {
       throw new Error(`Invalid sync URL: ${u}`);
     }
-    if (syncPath.version !== SUPPORTED_VERSION) {
-      throw new Error(`Unsupported sync version: ${u}`);
+    const version = Number(syncPath.version);
+    if (Number.isNaN(version)) {
+      throw new Error(`Invalid sync version: ${u}`);
     }
-    const {params, error} = getConnectParams(url, headers);
+    const {params, error} = getConnectParams(version, url, headers);
     if (error !== null) {
       throw new Error(error);
     }

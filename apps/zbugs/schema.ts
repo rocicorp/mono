@@ -4,7 +4,7 @@ import {
   definePermissions,
   type ExpressionBuilder,
   type TableSchema,
-  type TableSchemaToRow,
+  type Row,
 } from '@rocicorp/zero';
 import type {Condition} from 'zero-protocol/src/ast.js';
 
@@ -180,8 +180,8 @@ const userPrefSchema = createTableSchema({
   primaryKey: ['userID', 'key'],
 });
 
-export type IssueRow = TableSchemaToRow<typeof issueSchema>;
-export type CommentRow = TableSchemaToRow<typeof commentSchema>;
+export type IssueRow = Row<typeof issueSchema>;
+export type CommentRow = Row<typeof commentSchema>;
 export type Schema = typeof schema;
 
 /** The contents of the zbugs JWT */
@@ -358,7 +358,7 @@ export const permissions: ReturnType<typeof definePermissions> =
           insert: [allowIfUserIDMatchesLoggedInUser],
           update: {
             preMutation: [allowIfUserIDMatchesLoggedInUser],
-            postProposedMutation: [allowIfUserIDMatchesLoggedInUser],
+            postMutation: [allowIfUserIDMatchesLoggedInUser],
           },
           // view state cannot be deleted
           delete: [],

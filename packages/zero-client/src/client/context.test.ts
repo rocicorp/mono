@@ -240,6 +240,7 @@ test('transactions', () => {
     childKey: ['serverID'],
     hidden: false,
     relationshipName: 'flair',
+    system: 'client',
   });
   const out = new Catch(join);
 

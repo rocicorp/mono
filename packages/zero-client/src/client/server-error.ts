@@ -1,14 +1,22 @@
-import {ErrorKind} from '../../../zero-protocol/src/mod.js';
+import {
+  ErrorKind,
+  type ErrorBody,
+  type ServerOverloadedBody,
+} from '../../../zero-protocol/src/error.js';
 
 /**
  * Represents an error sent by server as part of Zero protocol.
  */
 export class ServerError<K extends ErrorKind = ErrorKind> extends Error {
-  readonly kind: K;
   readonly name = 'ServerError';
-  constructor(kind: K, message: string) {
-    super(kind + ': ' + message);
-    this.kind = kind;
+  readonly errorBody: ErrorBody;
+  get kind(): K {
+    return this.errorBody.kind as K;
+  }
+
+  constructor(errorBody: ErrorBody) {
+    super(errorBody.kind + ': ' + errorBody.message);
+    this.errorBody = errorBody;
   }
 }
 
@@ -28,4 +36,12 @@ function isAuthErrorKind(
   kind: ErrorKind,
 ): kind is ErrorKind.AuthInvalidated | ErrorKind.Unauthorized {
   return kind === ErrorKind.AuthInvalidated || kind === ErrorKind.Unauthorized;
+}
+
+export function isServerOverloadedError(
+  ex: unknown,
+): ServerOverloadedBody | undefined {
+  return isServerError(ex) && ex.errorBody.kind === ErrorKind.ServerOverloaded
+    ? ex.errorBody
+    : undefined;
 }

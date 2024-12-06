@@ -1,5 +1,5 @@
 import {assert, unreachable} from '../../../shared/src/asserts.js';
-import type {CompoundKey} from '../../../zero-protocol/src/ast.js';
+import type {CompoundKey, System} from '../../../zero-protocol/src/ast.js';
 import type {Row, Value} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
 import type {Change, ChildChange} from './change.js';
@@ -21,6 +21,7 @@ type Args = {
 
   relationshipName: string;
   hidden: boolean;
+  system: System;
 };
 /**
  * The Join operator joins the output from two upstream inputs. Zero's join
@@ -51,6 +52,7 @@ export class Join implements Input {
     childKey,
     relationshipName,
     hidden,
+    system,
   }: Args) {
     assert(parent !== child, 'Parent and child must be different operators');
     assert(
@@ -71,7 +73,10 @@ export class Join implements Input {
       isHidden: hidden,
       relationships: {
         ...parentSchema.relationships,
-        [relationshipName]: childSchema,
+        [relationshipName]: {
+          ...childSchema,
+          system,
+        },
       },
     };
 

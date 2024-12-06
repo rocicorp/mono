@@ -2,7 +2,7 @@ import pg from 'pg';
 import type postgres from 'postgres';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../test/db.js';
-import {typeNameByOID} from './pg.js';
+import {timestampToFpMillis, typeNameByOID} from './pg.js';
 
 describe('types/pg-types', () => {
   test('typeNameByIOD', () => {
@@ -108,5 +108,16 @@ describe('types/pg', () => {
       d: expected,
       ds: [expected, expected],
     });
+  });
+
+  test.each([
+    ['2004-10-19 10:23:54.654321', 1098181434654.321],
+    ['2004-10-19 10:23:54.654321+00', 1098181434654.321],
+    ['2004-10-19 10:23:54.654321+00:00', 1098181434654.321],
+    ['2004-10-19 10:23:54.654321+02', 1098174234654],
+    ['2024-12-05 16:38:21.907-05', 1733434701907],
+    ['2024-12-05 16:38:21.907-05:30', 1733436501907],
+  ])('parse timestamp: %s', (timestamp, result) => {
+    expect(timestampToFpMillis(timestamp)).toBe(result);
   });
 });

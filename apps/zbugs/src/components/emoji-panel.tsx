@@ -1,29 +1,45 @@
 import {
-  Popover,
-  PopoverButton,
-  PopoverPanel,
-  useClose,
-} from '@headlessui/react';
-import * as Tooltip from '@radix-ui/react-tooltip';
-import type {TableSchemaToRow} from '@rocicorp/zero';
+  autoUpdate,
+  flip,
+  FloatingDelayGroup,
+  FloatingFocusManager,
+  FloatingPortal,
+  shift,
+  useDismiss,
+  useFloating,
+  useInteractions,
+  useRole,
+  useTransitionStatus,
+} from '@floating-ui/react';
+import type {Row} from '@rocicorp/zero';
 import classNames from 'classnames';
 import {nanoid} from 'nanoid';
-import {useCallback} from 'react';
+import {
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ForwardedRef,
+} from 'react';
+import {toast} from 'react-toastify';
 import {useQuery} from 'zero-react/src/use-query.js';
 import type {Schema} from '../../schema.js';
 import addEmojiIcon from '../assets/icons/add-emoji.svg';
-import {formatEmojiTooltipText} from '../emoji-utils.js';
+import {formatEmojiCreatorList} from '../emoji-utils.js';
 import {useLogin} from '../hooks/use-login.js';
 import {useNumericPref} from '../hooks/use-user-pref.js';
 import {useZero} from '../hooks/use-zero.js';
 import {ButtonWithLoginCheck} from './button-with-login-check.js';
+import {type ButtonProps} from './button.js';
 import {EmojiPicker, SKIN_TONE_PREF} from './emoji-picker.js';
-import './emoji.css';
+import {Tooltip, TooltipContent, TooltipTrigger} from './tooltip.jsx';
 
 const loginMessage = 'You need to be logged in to modify emoji reactions.';
 
-export type Emoji = TableSchemaToRow<Schema['tables']['emoji']> & {
-  creator: TableSchemaToRow<Schema['tables']['user']> | undefined;
+export type Emoji = Row<Schema['tables']['emoji']> & {
+  creator: Row<Schema['tables']['user']> | undefined;
 };
 
 type Props = {
@@ -31,7 +47,7 @@ type Props = {
   commentID?: string | undefined;
 };
 
-export function EmojiPanel({issueID, commentID}: Props) {
+export const EmojiPanel = memo(({issueID, commentID}: Props) => {
   const subjectID = commentID ?? issueID;
   const z = useZero();
   const q = z.query.emoji
@@ -82,19 +98,33 @@ export function EmojiPanel({issueID, commentID}: Props) {
 
   const login = useLogin();
 
-  const button = (
-    <ButtonWithLoginCheck
-      className="add-emoji-button"
-      eventName="Add new emoji reaction"
-      loginMessage={loginMessage}
-    >
-      <img src={addEmojiIcon} />
-    </ButtonWithLoginCheck>
+  const handleEmojiChange = useCallback(
+    (changedEmojis: Emoji[]) => {
+      console.log('changedEmojis', changedEmojis);
+      for (const emoji of changedEmojis) {
+        if (emoji.creatorID !== z.userID) {
+          toast(
+            emoji.creator?.login + ' reacted on a comment: ' + emoji.value,
+            {
+              position: 'bottom-center',
+              containerId: 'bottom',
+              className: 'emoji-toast',
+              // TODO: Scroll into view and show tooltip where it was added
+              closeOnClick: true,
+              icon: () => <img className="icon" src={emoji.creator?.avatar} />,
+            },
+          );
+        }
+      }
+    },
+    [z.userID],
   );
 
+  useEmojiChangeListener(emojis, z.userID, handleEmojiChange);
+
   return (
-    <div className="flex gap-2 items-center emoji-reaction-container">
-      <Tooltip.Provider>
+    <FloatingDelayGroup delay={1000}>
+      <div className="flex gap-2 items-center emoji-reaction-container">
         {Object.entries(groups).map(([normalizedEmoji, emojis]) => (
           <EmojiPill
             key={normalizedEmoji}
@@ -103,39 +133,91 @@ export function EmojiPanel({issueID, commentID}: Props) {
             addOrRemoveEmoji={addOrRemoveEmoji}
           />
         ))}
-      </Tooltip.Provider>
-
-      {login.loginState !== undefined ? (
-        <Popover>
-          <PopoverButton as="div">{button}</PopoverButton>
-          <PopoverPanel anchor="bottom start" className="popover-panel">
-            <PopoverContent onChange={addOrRemoveEmoji} />
-          </PopoverPanel>
-        </Popover>
-      ) : (
-        button
-      )}
-    </div>
+        {login.loginState === undefined ? (
+          <EmojiButton />
+        ) : (
+          <EmojiMenuButton onEmojiChange={addOrRemoveEmoji} />
+        )}
+      </div>
+    </FloatingDelayGroup>
   );
-}
+});
 
-function PopoverContent({
-  onChange,
-}: {
-  onChange: (emoji: {unicode: string; annotation: string}) => void;
-}) {
-  const close = useClose();
+const EmojiButton = memo(
+  forwardRef((props: ButtonProps, ref: ForwardedRef<HTMLButtonElement>) => (
+    <ButtonWithLoginCheck
+      ref={ref}
+      {...props}
+      className="add-emoji-button"
+      eventName="Add new emoji reaction"
+      loginMessage={loginMessage}
+    >
+      <img src={addEmojiIcon} />
+    </ButtonWithLoginCheck>
+  )),
+);
 
-  const onEmojiChange = useCallback(
-    (details: {unicode: string; annotation: string}) => {
-      onChange(details);
-      close();
-    },
-    [close, onChange],
-  );
+const EmojiMenuButton = memo(
+  ({onEmojiChange}: {onEmojiChange: AddOrRemoveEmoji}) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const {refs, floatingStyles, placement, context} = useFloating({
+      open: isOpen,
+      onOpenChange: setIsOpen,
+      middleware: [flip(), shift()],
+      placement: 'bottom-start',
+      whileElementsMounted: autoUpdate,
 
-  return <EmojiPicker onEmojiChange={onEmojiChange} />;
-}
+      // We don't want to position using transforms because we use transforms for
+      // the show/hide animations.
+      transform: false,
+    });
+    const dismiss = useDismiss(context);
+    const role = useRole(context);
+    const {getReferenceProps, getFloatingProps} = useInteractions([
+      dismiss,
+      role,
+    ]);
+
+    const {isMounted, status} = useTransitionStatus(context);
+
+    const onChange = useCallback(
+      (details: {unicode: string; annotation: string}) => {
+        setIsOpen(false);
+        onEmojiChange(details);
+      },
+      [onEmojiChange],
+    );
+
+    // The instructions explicitly says only render the portal when the popup is
+    // rendered. However, if doing that the virtual scrolling jumps around when
+    // the portal element is removed
+    return (
+      <>
+        <EmojiButton
+          ref={refs.setReference}
+          onAction={() => setIsOpen(v => !v)}
+          {...getReferenceProps()}
+        />
+        <FloatingPortal id="root-modal">
+          {isMounted && (
+            <FloatingFocusManager context={context} modal={true}>
+              <div
+                className="popover-panel"
+                ref={refs.setFloating}
+                style={floatingStyles}
+                {...getFloatingProps()}
+                data-placement={placement}
+                data-status={status}
+              >
+                <EmojiPicker onEmojiChange={onChange} />
+              </div>
+            </FloatingFocusManager>
+          )}
+        </FloatingPortal>
+      </>
+    );
+  },
+);
 
 function normalizeEmoji(emoji: string): string {
   // Skin tone modifiers range from U+1F3FB to U+1F3FF
@@ -202,8 +284,8 @@ function EmojiPill({
   const mine = findEmojiForCreator(emojis, z.userID) !== undefined;
 
   return (
-    <Tooltip.Root>
-      <Tooltip.Trigger asChild>
+    <Tooltip>
+      <TooltipTrigger>
         <ButtonWithLoginCheck
           className={classNames('emoji-pill', {mine})}
           eventName="Add to existing emoji reaction"
@@ -221,29 +303,47 @@ function EmojiPill({
           ))}
           {' ' + emojis.length}
         </ButtonWithLoginCheck>
-      </Tooltip.Trigger>
-      <Tooltip.Portal>
-        <Tooltip.Content className="tooltip-content">
-          <Tooltip.Arrow className="tooltip-arrow" />
-          <EmojiTooltipContent emojis={emojis} userID={z.userID} />
-        </Tooltip.Content>
-      </Tooltip.Portal>
-    </Tooltip.Root>
+      </TooltipTrigger>
+
+      <TooltipContent>
+        {formatEmojiCreatorList(emojis, z.userID)}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
-function EmojiTooltipContent({
-  emojis,
-  userID,
-}: {
-  emojis: Emoji[];
-  userID: string;
-}) {
-  const emoji = emojis[0];
-  return (
-    <>
-      <div className="emoji-icon">{emoji.value}</div>
-      <div>{formatEmojiTooltipText(emojis, userID)}</div>
-    </>
+/**
+ *@param delay The amount of time in milliseconds to
+ * wait before considering changes to the emojis as being new. This allows
+ * ignoring changes due to unstable rendering.
+ */
+function useEmojiChangeListener(
+  emojis: Emoji[],
+  userID: string,
+  cb: (changedEmojis: Emoji[]) => void,
+  delay = 500,
+) {
+  const initialTime = useRef(Date.now());
+  const lastEmojis = useRef(
+    new Map<string, Emoji>(emojis.map(emoji => [emoji.id, emoji])),
   );
+  useEffect(() => {
+    const newEmojis = new Map<string, Emoji>(
+      emojis.map(emoji => [emoji.id, emoji]),
+    );
+    const changedEmojis: Emoji[] = [];
+    for (const [id, emoji] of newEmojis) {
+      if (!lastEmojis.current.has(id)) {
+        changedEmojis.push(emoji);
+      }
+    }
+
+    lastEmojis.current = newEmojis;
+
+    // Ignore if just rendered/mounted
+    if (Date.now() - initialTime.current < delay) {
+      return;
+    }
+    cb(changedEmojis);
+  }, [cb, delay, emojis, userID]);
 }

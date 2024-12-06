@@ -1,20 +1,22 @@
+import {trace} from '@opentelemetry/api';
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import type {JWTPayload} from 'jose';
 import type {CloseEvent, Data, ErrorEvent} from 'ws';
 import WebSocket from 'ws';
+import {startAsyncSpan, startSpan} from '../../../otel/src/span.js';
+import {version} from '../../../otel/src/version.js';
 import {unreachable} from '../../../shared/src/asserts.js';
-import {randomCharacters} from '../../../shared/src/random-values.js';
 import * as valita from '../../../shared/src/valita.js';
+import {type ErrorBody} from '../../../zero-protocol/src/error.js';
 import {
   type ConnectedMessage,
   type Downstream,
   ErrorKind,
-  type ErrorMessage,
   type PongMessage,
   upstreamSchema,
 } from '../../../zero-protocol/src/mod.js';
-import type {ZeroConfig} from '../config/zero-config.js';
+import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.js';
 import type {ConnectParams} from '../services/dispatcher/connect-params.js';
 import type {Mutagen} from '../services/mutagen/mutagen.js';
 import type {
@@ -24,6 +26,8 @@ import type {
 } from '../services/view-syncer/view-syncer.js';
 import {findErrorForClient} from '../types/error-for-client.js';
 import type {Source} from '../types/streams.js';
+
+const tracer = trace.getTracer('syncer-ws-server', version);
 
 /**
  * Represents a connection between the client and server.
@@ -35,6 +39,8 @@ import type {Source} from '../types/streams.js';
  */
 export class Connection {
   readonly #ws: WebSocket;
+  readonly #wsID: string;
+  readonly #protocolVersion: number;
   readonly #clientGroupID: string;
   readonly #syncContext: SyncContext;
   readonly #lc: LogContext;
@@ -50,7 +56,6 @@ export class Connection {
 
   constructor(
     lc: LogContext,
-    config: ZeroConfig,
     tokenData: TokenData | undefined,
     viewSyncer: ViewSyncer,
     mutagen: Mutagen,
@@ -58,10 +63,19 @@ export class Connection {
     ws: WebSocket,
     onClose: () => void,
   ) {
+    const {
+      clientGroupID,
+      clientID,
+      wsID,
+      baseCookie,
+      protocolVersion,
+      schemaVersion,
+    } = connectParams;
+
     this.#ws = ws;
     this.#authData = tokenData?.decoded;
-    const {clientGroupID, clientID, wsID, baseCookie, schemaVersion} =
-      connectParams;
+    this.#wsID = wsID;
+    this.#protocolVersion = protocolVersion;
     this.#clientGroupID = clientGroupID;
     this.#syncContext = {clientID, wsID, baseCookie, schemaVersion, tokenData};
     this.#lc = lc
@@ -77,21 +91,41 @@ export class Connection {
     this.#ws.addEventListener('message', this.#handleMessage);
     this.#ws.addEventListener('close', this.#handleClose);
     this.#ws.addEventListener('error', this.#handleError);
-
-    const connectedMessage: ConnectedMessage = [
-      'connected',
-      {wsid: wsID, timestamp: Date.now()},
-    ];
-    send(ws, connectedMessage);
-    this.#warmConnection(config);
   }
 
-  close() {
+  /**
+   * Checks the protocol version and errors for unsupported protocols,
+   * sending the initial `connected` response on success.
+   *
+   * This is early in the connection lifecycle because {@link #handleMessage}
+   * will only parse messages with schema(s) of supported protocol versions.
+   */
+  init() {
+    if (
+      this.#protocolVersion !== PROTOCOL_VERSION &&
+      this.#protocolVersion !== PROTOCOL_VERSION - 1
+    ) {
+      this.#closeWithError({
+        kind: ErrorKind.VersionNotSupported,
+        message: `server supports v${
+          PROTOCOL_VERSION - 1
+        } and v${PROTOCOL_VERSION} protocols`,
+      });
+    } else {
+      const connectedMessage: ConnectedMessage = [
+        'connected',
+        {wsid: this.#wsID, timestamp: Date.now()},
+      ];
+      send(this.#ws, connectedMessage);
+    }
+  }
+
+  close(reason: string, ...args: unknown[]) {
     if (this.#closed) {
       return;
     }
-    this.#lc.debug?.('close');
     this.#closed = true;
+    this.#lc.info?.(`closing connection: ${reason}`, ...args);
     this.#ws.removeEventListener('message', this.#handleMessage);
     this.#ws.removeEventListener('close', this.#handleClose);
     this.#ws.removeEventListener('error', this.#handleError);
@@ -104,20 +138,6 @@ export class Connection {
 
     // spin down services if we have
     // no more client connections for the client group?
-  }
-
-  // Landing this to gather some data on time savings, if any.
-  #warmConnection(config: ZeroConfig) {
-    if (config.warmWebsocket) {
-      for (let i = 0; i < config.warmWebsocket; i++) {
-        send(this.#ws, [
-          'warm',
-          {
-            payload: randomCharacters(1024),
-          },
-        ]);
-      }
-    }
   }
 
   handleInitConnection(initConnectionMsg: string) {
@@ -139,7 +159,10 @@ export class Connection {
       msg = valita.parse(value, upstreamSchema);
     } catch (e) {
       this.#lc.warn?.(`failed to parse message "${data}": ${String(e)}`);
-      this.#closeWithError(['error', ErrorKind.InvalidMessage, String(e)], e);
+      this.#closeWithError(
+        {kind: ErrorKind.InvalidMessage, message: String(e)},
+        e,
+      );
       return;
     }
     try {
@@ -149,29 +172,31 @@ export class Connection {
           this.send(['pong', {}] satisfies PongMessage);
           break;
         case 'push': {
-          const {clientGroupID, mutations, schemaVersion} = msg[1];
-          if (clientGroupID !== this.#clientGroupID) {
-            this.#closeWithError([
-              'error',
-              ErrorKind.InvalidPush,
-              `clientGroupID in mutation "${clientGroupID}" does not match ` +
-                `clientGroupID of connection "${this.#clientGroupID}`,
-            ]);
-          }
-          // Hold a connection-level lock while processing mutations so that:
-          // 1. Mutations are processed in the order in which they are received and
-          // 2. A single view syncer connection cannot hog multiple upstream connections.
-          await this.#mutationLock.withLock(async () => {
-            for (const mutation of mutations) {
-              const maybeError = await this.#mutagen.processMutation(
-                mutation,
-                this.#authData,
-                schemaVersion,
-              );
-              if (maybeError !== undefined) {
-                this.sendError(['error', maybeError[0], maybeError[1]]);
-              }
+          await startAsyncSpan(tracer, 'connection.push', async () => {
+            const {clientGroupID, mutations, schemaVersion} = msg[1];
+            if (clientGroupID !== this.#clientGroupID) {
+              this.#closeWithError({
+                kind: ErrorKind.InvalidPush,
+                message:
+                  `clientGroupID in mutation "${clientGroupID}" does not match ` +
+                  `clientGroupID of connection "${this.#clientGroupID}`,
+              });
             }
+            // Hold a connection-level lock while processing mutations so that:
+            // 1. Mutations are processed in the order in which they are received and
+            // 2. A single view syncer connection cannot hog multiple upstream connections.
+            await this.#mutationLock.withLock(async () => {
+              for (const mutation of mutations) {
+                const maybeError = await this.#mutagen.processMutation(
+                  mutation,
+                  this.#authData,
+                  schemaVersion,
+                );
+                if (maybeError !== undefined) {
+                  this.sendError({kind: maybeError[0], message: maybeError[1]});
+                }
+              }
+            });
           });
           break;
         }
@@ -179,22 +204,25 @@ export class Connection {
           lc.error?.('TODO: implement pull');
           break;
         case 'changeDesiredQueries':
-          await viewSyncer.changeDesiredQueries(this.#syncContext, msg);
+          await startAsyncSpan(
+            tracer,
+            'connection.changeDesiredQueries',
+            async () => {
+              await viewSyncer.changeDesiredQueries(this.#syncContext, msg);
+            },
+          );
           break;
         case 'deleteClients':
           lc.error?.('TODO: implement deleteClients');
           break;
         case 'initConnection': {
           // TODO (mlaw): tell mutagens about the new token too
-          this.#outboundStream = await viewSyncer.initConnection(
-            this.#syncContext,
-            msg,
+          this.#outboundStream = startSpan(
+            tracer,
+            'connection.initConnection',
+            () => viewSyncer.initConnection(this.#syncContext, msg),
           );
-          if (this.#closed) {
-            this.#outboundStream.cancel();
-          } else {
-            void this.#proxyOutbound(this.#outboundStream);
-          }
+          void this.#proxyOutbound(this.#outboundStream);
           break;
         }
         default:
@@ -207,8 +235,7 @@ export class Connection {
 
   #handleClose = (e: CloseEvent) => {
     const {code, reason, wasClean} = e;
-    this.#lc.info?.('WebSocket close event', {code, reason, wasClean});
-    this.close();
+    this.close('WebSocket close event', {code, reason, wasClean});
   };
 
   #handleError = (e: ErrorEvent) => {
@@ -220,33 +247,32 @@ export class Connection {
       for await (const outMsg of outboundStream) {
         this.send(outMsg);
       }
-      this.#lc.info?.('downstream closed by ViewSyncer');
-      this.close();
+      this.close('downstream closed by ViewSyncer');
     } catch (e) {
       this.#closeWithThrown(e);
     }
   }
 
   #closeWithThrown(e: unknown) {
-    const errorMessage = findErrorForClient(e)?.errorMessage ?? [
-      'error',
-      ErrorKind.Internal,
-      String(e),
-    ];
-    this.#closeWithError(errorMessage, e);
+    const errorBody = findErrorForClient(e)?.errorBody ?? {
+      kind: ErrorKind.Internal,
+      message: String(e),
+    };
+
+    this.#closeWithError(errorBody, e);
   }
 
-  #closeWithError(errorMessage: ErrorMessage, thrown?: unknown) {
-    this.sendError(errorMessage, thrown);
-    this.close();
+  #closeWithError(errorBody: ErrorBody, thrown?: unknown) {
+    this.sendError(errorBody, thrown);
+    this.close(`client error: ${errorBody.kind}`, errorBody);
   }
 
   send(data: Downstream) {
     send(this.#ws, data);
   }
 
-  sendError(errorMessage: ErrorMessage, thrown?: unknown) {
-    sendError(this.#lc, this.#ws, errorMessage, thrown);
+  sendError(errorBody: ErrorBody, thrown?: unknown) {
+    sendError(this.#lc, this.#ws, errorBody, thrown);
   }
 }
 
@@ -257,11 +283,11 @@ export function send(ws: WebSocket, data: Downstream) {
 export function sendError(
   lc: LogContext,
   ws: WebSocket,
-  errorMessage: ErrorMessage,
+  errorBody: ErrorBody,
   thrown?: unknown,
 ) {
-  lc = lc.withContext('errorKind', errorMessage[1]);
+  lc = lc.withContext('errorKind', errorBody.kind);
   const logLevel = thrown ? 'error' : 'info';
-  lc[logLevel]?.('Sending error on WebSocket', errorMessage, thrown ?? '');
-  send(ws, errorMessage);
+  lc[logLevel]?.('Sending error on WebSocket', errorBody, thrown ?? '');
+  send(ws, ['error', errorBody]);
 }

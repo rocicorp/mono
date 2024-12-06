@@ -94,7 +94,7 @@ test('permission rules create query ASTs', async () => {
           ],
           "select": undefined,
           "update": {
-            "postProposedMutation": undefined,
+            "postMutation": undefined,
             "preMutation": [
               [
                 "allow",
