@@ -128,6 +128,7 @@ export function dataTypeToZqlValueType(
 
     case 'date':
     case 'timestamp':
+    case 'timestamptz':
     case 'timestamp with time zone':
     case 'timestamp without time zone':
       // Timestamps are represented as epoch milliseconds (at microsecond resolution using floating point),
