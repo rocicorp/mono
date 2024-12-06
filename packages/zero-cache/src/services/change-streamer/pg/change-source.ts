@@ -1,4 +1,7 @@
-import {PG_ADMIN_SHUTDOWN} from '@drdgvhbh/postgres-error-codes';
+import {
+  PG_ADMIN_SHUTDOWN,
+  PG_OBJECT_IN_USE,
+} from '@drdgvhbh/postgres-error-codes';
 import {Lock} from '@rocicorp/lock';
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
@@ -110,6 +113,8 @@ export async function initializeChangeSource(
   return {replicationConfig, changeSource};
 }
 
+const MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE = 5;
+
 /**
  * Postgres implementation of a {@link ChangeSource} backed by a logical
  * replication stream.
@@ -138,30 +143,44 @@ class PostgresChangeSource implements ChangeSource {
     const clientStart = oneAfter(clientWatermark);
 
     try {
-      await this.#stopExistingReplicationSlotSubscriber(db, slot);
-
       // Perform any shard schema updates
       await updateShardSchema(this.#lc, db, {
         id: this.#shardID,
         publications: this.#replicationConfig.publications,
       });
-
       const config = await getInternalShardConfig(db, this.#shardID);
-
       this.#lc.info?.(`starting replication stream @${slot}`);
 
-      // Unlike the postgres.js client, the pg client does not have an option to
-      // only use SSL if the server supports it. We achieve it manually by
-      // trying SSL first, and then falling back to connecting without SSL.
-      try {
-        return await this.#startStream(db, slot, clientStart, config, true);
-      } catch (e) {
-        if (e instanceof SSLUnsupportedError) {
-          this.#lc.info?.('retrying upstream connection without SSL');
-          return await this.#startStream(db, slot, clientStart, config, false);
+      let useSSL = true;
+      for (let i = 0; i < MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE; i++) {
+        try {
+          await this.#stopExistingReplicationSlotSubscriber(db, slot);
+
+          // Unlike the postgres.js client, the pg client does not have an option to
+          // only use SSL if the server supports it. We achieve it manually by
+          // trying SSL first, and then falling back to connecting without SSL.
+          return await this.#startStream(db, slot, clientStart, config, useSSL);
+        } catch (e) {
+          if (e instanceof SSLUnsupportedError) {
+            this.#lc.info?.('retrying upstream connection without SSL');
+            useSSL = false;
+            i--; // don't use up an attempt.
+          } else if (
+            // error: replication slot "zero_slot_change_source_test_id" is active for PID 268
+            e instanceof DatabaseError &&
+            e.code === PG_OBJECT_IN_USE
+          ) {
+            // The freeing up of the replication slot is not transaction;
+            // sometimes it takes time for Postgres to consider the slot
+            // inactive.
+            this.#lc.warn?.(`attempt ${i + 1}: ${String(e)}`, e);
+            await sleep(5);
+          } else {
+            throw e;
+          }
         }
-        throw e;
       }
+      throw new Error('exceeded max attempts to start the Postgres stream');
     } finally {
       await db.end();
     }
@@ -274,15 +293,6 @@ class PostgresChangeSource implements ChangeSource {
     } else {
       const {pid} = result[0];
       this.#lc.info?.(`signaled subscriber ${pid} to shut down`);
-
-      // This reduces flakiness in which unit tests often fail with
-      // an error when starting the replication stream:
-      //
-      // error: replication slot "zero_slot_change_source_test_id" is active for PID 268
-      //
-      // Presumably, waiting for small interval before connecting to Postgres
-      // would also reduce this occurrence in production.
-      await sleep(5);
     }
   }
 
