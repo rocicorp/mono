@@ -19,18 +19,18 @@ import {
 import {createContext, forwardRef, useContext, useRef, useState} from 'react';
 import './tooltip.css';
 
-/////
 type ContextType = ReturnType<typeof useTooltip> | null;
+
 const TooltipContext = createContext<ContextType>(null);
+
 const useTooltipContext = () => {
   const context = useContext(TooltipContext);
-
   if (context == null) {
     throw new Error('Tooltip components must be wrapped in <Tooltip />');
   }
-
   return context;
 };
+
 function useTooltip() {
   const padding = 10;
   const [isOpen, setIsOpen] = useState(false);
@@ -79,6 +79,7 @@ function useTooltip() {
     context,
   };
 }
+
 export function Tooltip({children}: {children: React.ReactNode}) {
   const context = useTooltip();
   return (
@@ -87,6 +88,7 @@ export function Tooltip({children}: {children: React.ReactNode}) {
     </TooltipContext.Provider>
   );
 }
+
 export const TooltipTrigger = forwardRef<
   HTMLDivElement,
   React.HTMLProps<HTMLDivElement>
@@ -99,6 +101,7 @@ export const TooltipTrigger = forwardRef<
     </div>
   );
 });
+
 export const TooltipContent = forwardRef<
   HTMLDivElement,
   React.HTMLProps<HTMLDivElement>
