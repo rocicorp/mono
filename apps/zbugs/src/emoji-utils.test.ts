@@ -1,3 +1,4 @@
+import type {Writable} from 'shared/src/writable.js';
 import {expect, test} from 'vitest';
 import type {Emoji} from './components/emoji-panel.js';
 import {formatEmojiCreatorList, formatEmojiTooltipText} from './emoji-utils.js';
@@ -25,7 +26,7 @@ test('formatEmojiCreatorList', () => {
 
   // Missing creator
   const badEmoji = makeEmoji('a', 'holden');
-  badEmoji.creator = undefined;
+  (badEmoji as Writable<Emoji>).creator = undefined;
   expect(() => formatEmojiCreatorList([badEmoji], 'me-id')).toThrow();
 
   expect(formatEmojiCreatorList([makeEmoji('a', 'holden')], 'b')).toBe(
