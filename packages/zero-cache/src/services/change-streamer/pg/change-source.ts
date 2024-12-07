@@ -218,7 +218,9 @@ class PostgresChangeSource implements ChangeSource {
       if (
         useSSL &&
         // https://github.com/brianc/node-postgres/blob/8b2768f91d284ff6b97070aaf6602560addac852/packages/pg/lib/connection.js#L74
-        err.message === 'The server does not support SSL connections'
+        (err.message === 'The server does not support SSL connections' ||
+          // TLSSocket: Client network socket disconnected before secure TLS connection was established
+          ('code' in err && err.code === 'ECONNRESET'))
       ) {
         reject(new SSLUnsupportedError());
       } else {
