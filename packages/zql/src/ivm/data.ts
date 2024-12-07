@@ -78,14 +78,18 @@ export function normalizeUndefined(v: Value): NormalizedValue {
 
 export type Comparator = (r1: Row, r2: Row) => number;
 
-export function makeComparator(order: Ordering): Comparator {
+export function makeComparator(
+  order: Ordering,
+  reverse?: boolean | undefined,
+): Comparator {
   return (a, b) => {
     // Skip destructuring here since it is hot code.
     for (const ord of order) {
       const field = ord[0];
       const comp = compareValues(a[field], b[field]);
       if (comp !== 0) {
-        return ord[1] === 'asc' ? comp : -comp;
+        const result = ord[1] === 'asc' ? comp : -comp;
+        return reverse ? -result : result;
       }
     }
     return 0;

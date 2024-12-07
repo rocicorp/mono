@@ -35,11 +35,29 @@ export class Skip implements Operator {
   }
 
   fetch(req: FetchRequest): Stream<Node> {
-    return this.#input.fetch({...req, start: this.#getStart(req)});
+    return this.#fetchOrCleanup('fetch', req);
   }
 
   cleanup(req: FetchRequest): Stream<Node> {
-    return this.#input.cleanup({...req, start: this.#getStart(req)});
+    return this.#fetchOrCleanup('fetch', req);
+  }
+
+  *#fetchOrCleanup(method: 'fetch' | 'cleanup', req: FetchRequest) {
+    const start = this.#getStart(req);
+    if (start === 'empty') {
+      return;
+    }
+    const nodes = this.#input[method]({...req, start});
+    if (!req.reverse) {
+      yield* nodes;
+      return;
+    }
+    for (const node of nodes) {
+      if (!this.#shouldBePresent(node.row)) {
+        return;
+      }
+      yield node;
+    }
   }
 
   setOutput(output: Output): void {
@@ -50,14 +68,15 @@ export class Skip implements Operator {
     this.#input.destroy();
   }
 
+  #shouldBePresent(row: Row): boolean {
+    const cmp = this.#comparator(this.#bound.row, row);
+    return cmp < 0 || (cmp === 0 && !this.#bound.exclusive);
+  }
+
   push(change: Change): void {
     assert(this.#output, 'Output not set');
 
-    const shouldBePresent = (row: Row) => {
-      const cmp = this.#comparator(this.#bound.row, row);
-      return cmp < 0 || (cmp === 0 && !this.#bound.exclusive);
-    };
-
+    const shouldBePresent = (row: Row) => this.#shouldBePresent(row);
     if (change.type === 'edit') {
       maybeSplitAndPushEditChange(change, shouldBePresent, this.#output);
       return;
@@ -71,78 +90,64 @@ export class Skip implements Operator {
     }
   }
 
-  #getStart(req: FetchRequest): Start | undefined {
+  #getStart(req: FetchRequest): Start | undefined | 'empty' {
     const boundStart = {
       row: this.#bound.row,
       basis: this.#bound.exclusive ? 'after' : 'at',
     } as const;
 
     if (!req.start) {
+      if (req.reverse) {
+        return undefined;
+      }
       return boundStart;
     }
 
     const cmp = this.#comparator(this.#bound.row, req.start.row);
 
-    // The skip bound is after the requested bound. The requested bound cannot
-    // be relevant because even if it was basis: 'after', the skip bound is
-    // itself after the requested bound. Return the skip bound.
-    if (cmp > 0) {
-      return boundStart;
-    }
-
-    // The skip bound and requested bound are equal. If either is exclusive,
-    // return that bound with exclusive. Otherwise, return the skip bound.
-    // There is the case where the requested bound is basis: 'before', but
-    // that cannot be relevant.
-    if (cmp === 0) {
-      if (this.#bound.exclusive || req.start.basis === 'after') {
-        return {
-          row: this.#bound.row,
-          basis: 'after',
-        };
+    if (!req.reverse) {
+      // The skip bound is after the requested bound. The requested bound cannot
+      // be relevant because even if it was basis: 'after', the skip bound is
+      // itself after the requested bound. Return the skip bound.
+      if (cmp > 0) {
+        return boundStart;
       }
-      return boundStart;
-    }
 
-    assert(cmp < 0);
+      // The skip bound and requested bound are equal. If either is exclusive,
+      // return that bound with exclusive. Otherwise, return the skip bound.
+      if (cmp === 0) {
+        if (this.#bound.exclusive || req.start.basis === 'after') {
+          return {
+            row: this.#bound.row,
+            basis: 'after',
+          };
+        }
+        return boundStart;
+      }
 
-    // The skip bound is before the requested bound. If the requested bound is
-    // either 'at' or 'after', the skip bound cannot be relevant. Return the
-    // requested bound.
-    if (req.start.basis === 'at' || req.start.basis === 'after') {
       return req.start;
     }
 
-    // That leaves the one interesting case: the skip bound is before the
-    // requested bound, but the requested bound is basis: 'before'. It is
-    // possible that the first element before the requested bound is itself the
-    // skip bound, or there could be some other element between. We'll have to
-    // fetch to find out.
-    req.start.basis satisfies 'before';
+    req.reverse satisfies true;
 
-    const [node] = this.#input.fetch(req) as Array<Node | undefined>;
-
-    // There's no element at all before the requested bound, not even the skip
-    // bound. In this case we may as well return the requested bound with 'at'
-    // to simplify work for the source.
-    if (!node) {
-      return {
-        row: req.start.row,
-        basis: 'at',
-      };
+    // bound is after the start, but request is for reverse so results
+    // must be empty
+    if (cmp > 0) {
+      return 'empty';
     }
 
-    // If there's an element before the requested bound, but it's before the
-    // skip bound, then we'll use the skip bound afterall.
-    if (this.#comparator(node.row, this.#bound.row) <= 0) {
-      return boundStart;
+    if (cmp === 0) {
+      // if both are inclusive, the result can be the single row at bound
+      // return it as start
+      if (!this.#bound.exclusive && req.start.basis === 'at') {
+        return boundStart;
+      }
+      // otherwise the results must be empty, one or both are exclusive
+      // in opposite directions
+      return 'empty';
     }
 
-    // Finally, if there's an element before the requested bound, and it's after
-    // the skip bound, then that's the element we should start at.
-    return {
-      row: node.row,
-      basis: 'at',
-    };
+    // bound is before the start, return start
+    return req.start;
   }
 }
