@@ -11,7 +11,6 @@ import type {Row, Value} from '../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
 import {assertOrderingIncludesPK} from '../../zql/src/builder/builder.js';
 import type {Change} from '../../zql/src/ivm/change.js';
-import type {Constraint} from '../../zql/src/ivm/constraint.js';
 import {
   makeComparator,
   type Comparator,
