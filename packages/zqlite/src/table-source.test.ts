@@ -66,24 +66,6 @@ describe('fetching from a table source', () => {
       expectedRows: allRows.filter(r => r.a === 2),
     },
     {
-      name: 'simple source with `id` order and start `before`',
-      sourceArgs: ['foo', columns, [['id', 'asc']]],
-      fetchArgs: {
-        constraint: undefined,
-        start: {row: allRows[4], basis: 'before'},
-      },
-      expectedRows: allRows.slice(3),
-    },
-    {
-      name: 'simple source with `id` order and start `before` and constraint',
-      sourceArgs: ['foo', columns, [['id', 'asc']]],
-      fetchArgs: {
-        constraint: {b: 2},
-        start: {row: allRows[4], basis: 'before'},
-      },
-      expectedRows: allRows.slice(3).filter(r => r.b === 2),
-    },
-    {
       name: 'simple source with `id` order and start `after`',
       sourceArgs: ['foo', columns, [['id', 'asc']]],
       fetchArgs: {
@@ -130,27 +112,6 @@ describe('fetching from a table source', () => {
       sourceArgs: ['foo', columns, compoundOrder],
       fetchArgs: {constraint: {a: 2}, start: undefined},
       expectedRows: allRows.filter(r => r.a === 2).sort(compoundComparator),
-    },
-    {
-      name: 'complex source with compound order and start `before`',
-      sourceArgs: ['foo', columns, compoundOrder],
-      fetchArgs: {
-        constraint: undefined,
-        start: {row: allRows[4], basis: 'before'},
-      },
-      expectedRows: allRows.slice().sort(compoundComparator).slice(3),
-    },
-    {
-      name: 'complex source with compound order and start `before` and constraint',
-      sourceArgs: ['foo', columns, compoundOrder],
-      fetchArgs: {
-        constraint: {b: 2},
-        start: {row: allRows[4], basis: 'before'},
-      },
-      expectedRows: allRows
-        .slice(3)
-        .filter(r => r.b === 2)
-        .sort(compoundComparator),
     },
     {
       name: 'complex source with compound order and start `after`',

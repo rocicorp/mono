@@ -246,8 +246,9 @@ suite('take with no partition', () => {
             "fetch",
             {
               "constraint": undefined,
+              "reverse": true,
               "start": {
-                "basis": "before",
+                "basis": "at",
                 "row": {
                   "created": 300,
                   "id": "i3",
@@ -328,8 +329,9 @@ suite('take with no partition', () => {
             "fetch",
             {
               "constraint": undefined,
+              "reverse": true,
               "start": {
-                "basis": "before",
+                "basis": "at",
                 "row": {
                   "created": 300,
                   "id": "i3",
@@ -441,8 +443,23 @@ suite('take with no partition', () => {
             "fetch",
             {
               "constraint": undefined,
+              "reverse": true,
               "start": {
-                "basis": "before",
+                "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                },
+              },
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "at",
                 "row": {
                   "created": 300,
                   "id": "i3",
@@ -512,8 +529,23 @@ suite('take with no partition', () => {
             "fetch",
             {
               "constraint": undefined,
+              "reverse": true,
               "start": {
-                "basis": "before",
+                "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                },
+              },
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "at",
                 "row": {
                   "created": 300,
                   "id": "i3",
@@ -629,8 +661,23 @@ suite('take with no partition', () => {
             "fetch",
             {
               "constraint": undefined,
+              "reverse": true,
               "start": {
-                "basis": "before",
+                "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                },
+              },
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "at",
                 "row": {
                   "created": 300,
                   "id": "i3",
@@ -711,8 +758,23 @@ suite('take with no partition', () => {
             "fetch",
             {
               "constraint": undefined,
+              "reverse": true,
               "start": {
-                "basis": "before",
+                "basis": "after",
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                },
+              },
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "at",
                 "row": {
                   "created": 200,
                   "id": "i2",
@@ -793,8 +855,23 @@ suite('take with no partition', () => {
             "fetch",
             {
               "constraint": undefined,
+              "reverse": true,
               "start": {
-                "basis": "before",
+                "basis": "after",
+                "row": {
+                  "created": 100,
+                  "id": "i1",
+                },
+              },
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "at",
                 "row": {
                   "created": 100,
                   "id": "i1",
@@ -874,8 +951,23 @@ suite('take with no partition', () => {
             "fetch",
             {
               "constraint": undefined,
+              "reverse": true,
               "start": {
-                "basis": "before",
+                "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                },
+              },
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "at",
                 "row": {
                   "created": 300,
                   "id": "i3",
@@ -946,8 +1038,23 @@ suite('take with no partition', () => {
             "fetch",
             {
               "constraint": undefined,
+              "reverse": true,
               "start": {
-                "basis": "before",
+                "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                },
+              },
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "at",
                 "row": {
                   "created": 300,
                   "id": "i3",
@@ -1027,8 +1134,23 @@ suite('take with no partition', () => {
             "fetch",
             {
               "constraint": undefined,
+              "reverse": true,
               "start": {
-                "basis": "before",
+                "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                },
+              },
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "at",
                 "row": {
                   "created": 300,
                   "id": "i3",
@@ -1565,8 +1687,9 @@ suite('take with no partition', () => {
               "fetch",
               {
                 "constraint": undefined,
+                "reverse": true,
                 "start": {
-                  "basis": "before",
+                  "basis": "at",
                   "row": {
                     "created": 300,
                     "id": "i3",
@@ -2038,8 +2161,9 @@ suite('take with partition', () => {
               "constraint": {
                 "issueID": "i2",
               },
+              "reverse": true,
               "start": {
-                "basis": "before",
+                "basis": "at",
                 "row": {
                   "created": 600,
                   "id": "c6",
@@ -2243,8 +2367,26 @@ suite('take with partition', () => {
               "constraint": {
                 "issueID": "i1",
               },
+              "reverse": true,
               "start": {
-                "basis": "before",
+                "basis": "after",
+                "row": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                },
+              },
+            },
+          ],
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+              "start": {
+                "basis": "at",
                 "row": {
                   "created": 300,
                   "id": "c3",
@@ -2876,8 +3018,9 @@ suite('take with partition', () => {
                 "constraint": {
                   "issueID": "i1",
                 },
+                "reverse": true,
                 "start": {
-                  "basis": "before",
+                  "basis": "after",
                   "row": {
                     "created": 300,
                     "id": "c3",
@@ -3173,8 +3316,9 @@ suite('take with partition', () => {
                 "constraint": {
                   "issueID": "i1",
                 },
+                "reverse": true,
                 "start": {
-                  "basis": "before",
+                  "basis": "at",
                   "row": {
                     "created": 200,
                     "id": "c2",
@@ -3499,8 +3643,27 @@ suite('take with partition', () => {
                 "constraint": {
                   "issueID": "i1",
                 },
+                "reverse": true,
                 "start": {
-                  "basis": "before",
+                  "basis": "after",
+                  "row": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b",
+                  },
+                },
+              },
+            ],
+            [
+              "takeSnitch",
+              "fetch",
+              {
+                "constraint": {
+                  "issueID": "i1",
+                },
+                "start": {
+                  "basis": "at",
                   "row": {
                     "created": 200,
                     "id": "c2",
@@ -3517,8 +3680,9 @@ suite('take with partition', () => {
                 "constraint": {
                   "issueID": "i2",
                 },
+                "reverse": true,
                 "start": {
-                  "basis": "before",
+                  "basis": "at",
                   "row": {
                     "created": 500,
                     "id": "c5",

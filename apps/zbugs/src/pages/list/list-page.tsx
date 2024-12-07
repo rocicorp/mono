@@ -18,11 +18,13 @@ import IssueLink from '../../components/issue-link.js';
 import {Link} from '../../components/link.js';
 import RelativeTime from '../../components/relative-time.js';
 import {useClickOutside} from '../../hooks/use-click-outside.js';
+import {useElementSize} from '../../hooks/use-element-size.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {mark} from '../../perf-log.js';
 import type {ListContext} from '../../routes.js';
+import {preload} from '../../zero-setup.js';
 
 let firstRowRendered = false;
 const itemSize = 56;
@@ -87,7 +89,13 @@ export default function ListPage() {
     q = q.whereExists('labels', q => q.where('name', label));
   }
 
-  const issues = useQuery(q);
+  const [issues, issuesResult] = useQuery(q);
+
+  useEffect(() => {
+    if (issuesResult.type === 'complete') {
+      preload(z);
+    }
+  }, [issuesResult.type, z]);
 
   let title;
   if (creator || assignee || labels.length > 0 || textFilter) {
@@ -212,14 +220,16 @@ export default function ListPage() {
     );
   };
 
+  const listRef = useRef<HTMLDivElement>(null);
   const tableWrapperRef = useRef<HTMLDivElement>(null);
+  const size = useElementSize(tableWrapperRef.current);
 
   const virtualizer = useVirtualizer({
     count: issues.length,
     estimateSize: () => itemSize,
     overscan: 5,
     getItemKey: index => issues[index].id,
-    getScrollElement: () => tableWrapperRef.current,
+    getScrollElement: () => listRef.current,
   });
 
   const [forceSearchMode, setForceSearchMode] = useState(false);
@@ -310,20 +320,27 @@ export default function ListPage() {
       </div>
 
       <div className="issue-list" ref={tableWrapperRef}>
-        <div
-          className="virtual-list"
-          style={{height: virtualizer.getTotalSize()}}
-        >
-          {virtualizer.getVirtualItems().map(virtualRow => (
-            <Row
-              key={virtualRow.key + ''}
-              index={virtualRow.index}
-              style={{
-                transform: `translateY(${virtualRow.start}px)`,
-              }}
-            />
-          ))}
-        </div>
+        {size && issues.length > 0 ? (
+          <div
+            style={{width: size.width, height: size.height, overflow: 'auto'}}
+            ref={listRef}
+          >
+            <div
+              className="virtual-list"
+              style={{height: virtualizer.getTotalSize()}}
+            >
+              {virtualizer.getVirtualItems().map(virtualRow => (
+                <Row
+                  key={virtualRow.key + ''}
+                  index={virtualRow.index}
+                  style={{
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
     </>
   );

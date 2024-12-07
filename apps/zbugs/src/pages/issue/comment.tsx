@@ -36,7 +36,7 @@ const Comment = memo(({id, issueID, height}: Props) => {
     .where('id', id)
     .related('creator', creator => creator.one())
     .one();
-  const comment = useQuery(q);
+  const [comment] = useQuery(q);
   const [editing, setEditing] = useState(false);
   const login = useLogin();
   const [deleteConfirmationShown, setDeleteConfirmationShown] = useState(false);
