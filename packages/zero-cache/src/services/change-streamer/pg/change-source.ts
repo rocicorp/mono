@@ -151,7 +151,10 @@ class PostgresChangeSource implements ChangeSource {
       const config = await getInternalShardConfig(db, this.#shardID);
       this.#lc.info?.(`starting replication stream @${slot}`);
 
-      let useSSL = true;
+      const url = new URL(this.#upstreamUri);
+      let useSSL =
+        url.searchParams.get('ssl') !== 'false' &&
+        url.searchParams.get('sslmode') !== 'false';
       for (let i = 0; i < MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE; i++) {
         try {
           await this.#stopExistingReplicationSlotSubscriber(db, slot);
@@ -218,9 +221,7 @@ class PostgresChangeSource implements ChangeSource {
       if (
         useSSL &&
         // https://github.com/brianc/node-postgres/blob/8b2768f91d284ff6b97070aaf6602560addac852/packages/pg/lib/connection.js#L74
-        (err.message === 'The server does not support SSL connections' ||
-          // TLSSocket: Client network socket disconnected before secure TLS connection was established
-          ('code' in err && err.code === 'ECONNRESET'))
+        err.message === 'The server does not support SSL connections'
       ) {
         reject(new SSLUnsupportedError());
       } else {
