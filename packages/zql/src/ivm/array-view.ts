@@ -31,10 +31,12 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   onDestroy: (() => void) | undefined;
 
   #dirty = false;
+  #complete = false;
 
   constructor(
     input: Input,
     format: Format = {singular: false, relationships: {}},
+    queryComplete: true | Promise<true> = true,
   ) {
     this.#input = input;
     this.#schema = input.getSchema();
@@ -42,6 +44,14 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
     this.#root = {'': format.singular ? undefined : []};
     input.setOutput(this);
 
+    if (queryComplete === true) {
+      this.#complete = true;
+    } else {
+      void queryComplete.then(() => {
+        this.#complete = true;
+        this.#fireListeners();
+      });
+    }
     this.#hydrate();
   }
 
@@ -53,7 +63,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
     assert(!this.#listeners.has(listener), 'Listener already registered');
     this.#listeners.add(listener);
 
-    listener(this.data as Immutable<V>);
+    this.#fireListener(listener);
 
     return () => {
       this.#listeners.delete(listener);
@@ -62,8 +72,15 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   #fireListeners() {
     for (const listener of this.#listeners) {
-      listener(this.data as Immutable<V>);
+      this.#fireListener(listener);
     }
+  }
+
+  #fireListener(listener: Listener<V>) {
+    listener(
+      this.data as Immutable<V>,
+      this.#complete ? 'complete' : 'unknown',
+    );
   }
 
   destroy() {

@@ -193,7 +193,7 @@ test('getQueriesPatch', async () => {
   expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
 });
 
-test('gotCallback, query already got', async () => {
+test('gotCallback, query already got', () => {
   const queryHash = '1m2bs2hhq3g1e';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
@@ -238,24 +238,17 @@ test('gotCallback, query already got', async () => {
     },
   ]);
 
-  expect(gotCalback1).toBeCalledTimes(0);
-
-  await new Promise(resolve => setTimeout(resolve, 0));
-
   expect(gotCalback1).nthCalledWith(1, true);
 
   const gotCalback2 = vi.fn<(got: boolean) => void>();
   queryManager.add(ast, gotCalback2);
   expect(send).toBeCalledTimes(1);
 
-  expect(gotCalback2).toBeCalledTimes(0);
-  await new Promise(resolve => setTimeout(resolve, 0));
-
   expect(gotCalback2).nthCalledWith(1, true);
   expect(gotCalback1).toBeCalledTimes(1);
 });
 
-test('gotCallback, query got after add', async () => {
+test('gotCallback, query got after add', () => {
   const queryHash = '1m2bs2hhq3g1e';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
@@ -292,10 +285,6 @@ test('gotCallback, query got after add', async () => {
       ],
     },
   ]);
-
-  expect(gotCalback1).toBeCalledTimes(0);
-
-  await new Promise(resolve => setTimeout(resolve, 0));
 
   expect(gotCalback1).nthCalledWith(1, false);
 
@@ -310,7 +299,7 @@ test('gotCallback, query got after add', async () => {
   expect(gotCalback1).nthCalledWith(2, true);
 });
 
-test('gotCallback, query got after add then removed', async () => {
+test('gotCallback, query got after add then removed', () => {
   const queryHash = '1m2bs2hhq3g1e';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
@@ -347,10 +336,6 @@ test('gotCallback, query got after add then removed', async () => {
       ],
     },
   ]);
-
-  expect(gotCalback1).toBeCalledTimes(0);
-
-  await new Promise(resolve => setTimeout(resolve, 0));
 
   expect(gotCalback1).nthCalledWith(1, false);
 
@@ -375,7 +360,7 @@ test('gotCallback, query got after add then removed', async () => {
   expect(gotCalback1).nthCalledWith(3, false);
 });
 
-test('gotCallback, query got after subscription removed', async () => {
+test('gotCallback, query got after subscription removed', () => {
   const queryHash = '1m2bs2hhq3g1e';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(q: ChangeDesiredQueriesMessage) => void>();
@@ -412,10 +397,6 @@ test('gotCallback, query got after subscription removed', async () => {
       ],
     },
   ]);
-
-  expect(gotCalback1).toBeCalledTimes(0);
-
-  await new Promise(resolve => setTimeout(resolve, 0));
 
   expect(gotCalback1).nthCalledWith(1, false);
 

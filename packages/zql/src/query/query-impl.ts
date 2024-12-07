@@ -536,7 +536,14 @@ export class QueryImpl<
 
   materialize<T>(factory?: ViewFactory<TSchema, TReturn, T>): T {
     const ast = this._completeAst();
-    const removeServerQuery = this.#delegate.addServerQuery(ast);
+    const queryCompleteResolver = resolver<true>();
+    let queryGot = false;
+    const removeServerQuery = this.#delegate.addServerQuery(ast, got => {
+      if (got) {
+        queryGot = true;
+        queryCompleteResolver.resolve(true);
+      }
+    });
 
     const input = buildPipeline(ast, this.#delegate);
     let removeCommitObserver: (() => void) | undefined;
@@ -548,9 +555,16 @@ export class QueryImpl<
     };
 
     const view = this.#delegate.batchViewUpdates(() =>
-      (factory ?? arrayViewFactory)(this, input, this.format, onDestroy, cb => {
-        removeCommitObserver = this.#delegate.onTransactionCommit(cb);
-      }),
+      (factory ?? arrayViewFactory)(
+        this,
+        input,
+        this.format,
+        onDestroy,
+        cb => {
+          removeCommitObserver = this.#delegate.onTransactionCommit(cb);
+        },
+        queryGot || queryCompleteResolver.promise,
+      ),
     );
 
     return view as T;
@@ -619,8 +633,9 @@ function arrayViewFactory<
   format: Format,
   onDestroy: () => void,
   onTransactionCommit: (cb: () => void) => void,
+  queryComplete: true | Promise<true>,
 ): TypedView<Smash<TReturn>> {
-  const v = new ArrayView<Smash<TReturn>>(input, format);
+  const v = new ArrayView<Smash<TReturn>>(input, format, queryComplete);
   v.onDestroy = onDestroy;
   onTransactionCommit(() => {
     v.flush();

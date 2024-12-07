@@ -6,7 +6,7 @@ export function useCanEdit(ownerUserID: string | undefined): boolean {
   const login = useLogin();
   const z = useZero();
   const currentUserID = login.loginState?.decoded.sub;
-  const isCrew = useQuery(
+  const [isCrew] = useQuery(
     z.query.user
       .where('id', currentUserID || '')
       .where('role', 'crew')

@@ -31,6 +31,7 @@ import {LRUCache} from '../../lru-cache.js';
 import {links, type ListContext, type ZbugsHistoryState} from '../../routes.js';
 import CommentComposer from './comment-composer.js';
 import Comment, {parsePermalink} from './comment.js';
+import {preload} from '../../zero-setup.js';
 
 export default function IssuePage() {
   const z = useZero();
@@ -51,8 +52,14 @@ export default function IssuePage() {
     .related('viewState', q => q.where('userID', z.userID).one())
     .related('comments', q => q.orderBy('created', 'asc'))
     .one();
-  const issue = useQuery(q);
+  const [issue, issueResult] = useQuery(q);
   const login = useLogin();
+
+  useEffect(() => {
+    if (issueResult.type === 'complete') {
+      preload(z);
+    }
+  }, [issueResult.type, z]);
 
   useEffect(() => {
     // only push viewed forward if the issue has been modified since the last viewing
@@ -110,7 +117,7 @@ export default function IssuePage() {
   ) {
     setIssueSnapshot(issue);
   }
-  const next = useQuery(
+  const [next] = useQuery(
     buildListQuery(z, listContext, issue, 'next'),
     listContext !== undefined && issueSnapshot !== undefined,
   );
@@ -120,7 +127,7 @@ export default function IssuePage() {
     }
   });
 
-  const prev = useQuery(
+  const [prev] = useQuery(
     buildListQuery(z, listContext, issue, 'prev'),
     listContext !== undefined && issueSnapshot !== undefined,
   );
@@ -599,7 +606,7 @@ function useEmojiChangeListener(
   const enable = issue !== undefined;
   const issueID = issue?.id ?? '';
   const commentIDs = issue?.comments.map(c => c.id) ?? [];
-  const emojis: Emoji[] = useQuery(
+  const [emojis] = useQuery(
     z.query.emoji
       .where(({cmp, or}) =>
         or(cmp('subjectID', 'IN', commentIDs), cmp('subjectID', issueID)),

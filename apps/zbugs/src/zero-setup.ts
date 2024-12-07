@@ -46,6 +46,16 @@ authAtom.onChange(auth => {
   zeroAtom.value = z;
 
   exposeDevHooks(z);
+});
+
+let didPreload = false;
+
+export function preload(z: Zero<Schema>) {
+  if (didPreload) {
+    return;
+  }
+
+  didPreload = true;
 
   const baseIssueQuery = z.query.issue
     .related('creator')
@@ -65,7 +75,7 @@ authAtom.onChange(auth => {
 
   z.query.user.preload();
   z.query.label.preload();
-});
+}
 
 // To enable accessing zero in the devtools easily.
 function exposeDevHooks(z: Zero<Schema>) {

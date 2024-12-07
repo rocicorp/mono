@@ -9,9 +9,9 @@ import './index.css';
 import Root from './root.js';
 
 createRoot(must(document.getElementById('root'))).render(
-  <StrictMode>
-    <LoginProvider>
+  <LoginProvider>
+    <StrictMode>
       <Root />
-    </LoginProvider>
-  </StrictMode>,
+    </StrictMode>
+  </LoginProvider>,
 );

@@ -29,7 +29,7 @@ export function Nav() {
   const [isMobile, setIsMobile] = useState(false);
   const [showUserPanel, setShowUserPanel] = useState(false); // State to control visibility of user-panel-mobile
   const zero = useZero();
-  const user = useQuery(
+  const [user] = useQuery(
     zero.query.user.where('id', login.loginState?.decoded.sub ?? '').one(),
   );
 

@@ -25,7 +25,7 @@ export default function UserPicker({
 }: Props) {
   const z = useZero();
 
-  const users = useQuery(z.query.user);
+  const [users] = useQuery(z.query.user);
   // TODO: Support case-insensitive sorting in ZQL.
   users.sort((a, b) => a.login.localeCompare(b.login));
 

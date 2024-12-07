@@ -11,11 +11,21 @@ import type {
 import type {AdvancedQuery} from '../../zql/src/query/query-internal.js';
 import {useZero} from './use-zero.js';
 import type {TableSchema} from '../../zero-schema/src/table-schema.js';
+import type {ResultType} from '../../zql/src/query/typed-view.js';
+
+export type QueryResultDetails = {
+  type: ResultType;
+};
+
+export type QueryResult<TReturn extends QueryType> = [
+  Smash<TReturn>,
+  QueryResultDetails,
+];
 
 export function useQuery<
   TSchema extends TableSchema,
   TReturn extends QueryType,
->(q: Query<TSchema, TReturn>, enable: boolean = true): Smash<TReturn> {
+>(q: Query<TSchema, TReturn>, enable: boolean = true): QueryResult<TReturn> {
   const z = useZero();
   const view = viewStore.getView(
     z.clientID,
@@ -28,6 +38,19 @@ export function useQuery<
 
 const emptyArray: unknown[] = [];
 const disabledSubscriber = () => () => {};
+
+const defaultSnapshots = {
+  singular: [undefined, {type: 'unknown'}] as const,
+  plural: [emptyArray, {type: 'unknown'}] as const,
+};
+
+function getDefaultSnapshot<TReturn extends QueryType>(
+  singular: boolean,
+): QueryResult<TReturn> {
+  return (
+    singular ? defaultSnapshots.singular : defaultSnapshots.plural
+  ) as QueryResult<TReturn>;
+}
 
 /**
  * A global store of all active views.
@@ -86,13 +109,12 @@ class ViewStore {
     query: AdvancedQuery<TSchema, TReturn>,
     enabled: boolean,
   ): {
-    getSnapshot: () => Smash<TReturn>;
+    getSnapshot: () => QueryResult<TReturn>;
     subscribeReactInternals: (internals: () => void) => () => void;
   } {
     if (!enabled) {
       return {
-        getSnapshot: () =>
-          (query.format.singular ? undefined : emptyArray) as Smash<TReturn>,
+        getSnapshot: () => getDefaultSnapshot(query.format.singular),
         subscribeReactInternals: disabledSubscriber,
       };
     }
@@ -151,11 +173,10 @@ const viewStore = new ViewStore();
  */
 class ViewWrapper<TSchema extends TableSchema, TReturn extends QueryType> {
   #view: TypedView<Smash<TReturn>> | undefined;
-  readonly #defaultSnapshot: Smash<TReturn>;
   readonly #onDematerialized;
   readonly #onMaterialized;
   readonly #query: AdvancedQuery<TSchema, TReturn>;
-  #snapshot: Smash<TReturn>;
+  #snapshot: QueryResult<TReturn>;
   #reactInternals: Set<() => void>;
 
   constructor(
@@ -163,20 +184,19 @@ class ViewWrapper<TSchema extends TableSchema, TReturn extends QueryType> {
     onMaterialized: (view: ViewWrapper<TSchema, TReturn>) => void,
     onDematerialized: () => void,
   ) {
-    this.#defaultSnapshot = (query.format.singular
-      ? undefined
-      : emptyArray) as unknown as Smash<TReturn>;
-    this.#snapshot = this.#defaultSnapshot;
+    this.#snapshot = getDefaultSnapshot(query.format.singular);
     this.#onMaterialized = onMaterialized;
     this.#onDematerialized = onDematerialized;
     this.#reactInternals = new Set();
     this.#query = query;
   }
 
-  #onData = (snap: Immutable<Smash<TReturn>>) => {
-    this.#snapshot = (
-      snap === undefined ? snap : deepClone(snap as ReadonlyJSONValue)
-    ) as Smash<TReturn>;
+  #onData = (snap: Immutable<Smash<TReturn>>, resultType: ResultType) => {
+    const data =
+      snap === undefined
+        ? snap
+        : (deepClone(snap as ReadonlyJSONValue) as Smash<TReturn>);
+    this.#snapshot = [data, {type: resultType}] as QueryResult<TReturn>;
     for (const internals of this.#reactInternals) {
       internals();
     }

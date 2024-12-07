@@ -23,6 +23,7 @@ import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {mark} from '../../perf-log.js';
 import type {ListContext} from '../../routes.js';
+import {preload} from '../../zero-setup.js';
 
 let firstRowRendered = false;
 const itemSize = 56;
@@ -87,7 +88,13 @@ export default function ListPage() {
     q = q.whereExists('labels', q => q.where('name', label));
   }
 
-  const issues = useQuery(q);
+  const [issues, issuesResult] = useQuery(q);
+
+  useEffect(() => {
+    if (issuesResult.type === 'complete') {
+      preload(z);
+    }
+  }, [issuesResult.type, z]);
 
   let title;
   if (creator || assignee || labels.length > 0 || textFilter) {

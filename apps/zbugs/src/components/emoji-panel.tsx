@@ -53,7 +53,7 @@ export const EmojiPanel = memo(
         .where('subjectID', subjectID)
         .related('creator', creator => creator.one());
 
-      const emojis: Emoji[] = useQuery(q);
+      const [emojis] = useQuery(q);
 
       const addEmoji = useCallback(
         (unicode: string, annotation: string) => {
