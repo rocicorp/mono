@@ -27,7 +27,7 @@ import type {Input, Storage} from '../ivm/operator.js';
 import {Skip} from '../ivm/skip.js';
 import type {Source} from '../ivm/source.js';
 import {Take} from '../ivm/take.js';
-import {createPredicate} from './filter.js';
+import {createPredicate, type NoSubqueryCondition} from './filter.js';
 
 export type StaticQueryParameters = {
   authData: Record<string, JSONValue>;
@@ -215,17 +215,77 @@ function applyAnd(
   return input;
 }
 
-function applyOr(
+export function applyOr(
   input: Input,
   condition: Disjunction,
   appliedFilters: boolean,
   delegate: BuilderDelegate,
 ): Input {
+  console.log(condition);
+  const [subqueryConditions, otherConditions] =
+    groupSubqueryConditions(condition);
+
+  // if there are no subquery conditions, no fan-in / fan-out is needed
+  if (subqueryConditions.length === 0) {
+    return otherConditions.length > 0
+      ? new Filter(
+          input,
+          appliedFilters ? 'push-only' : 'all',
+          createPredicate({
+            type: 'or',
+            conditions: otherConditions,
+          }),
+        )
+      : input;
+  }
+
   const fanOut = new FanOut(input);
-  const branches = condition.conditions.map(subCondition =>
+  const branches = subqueryConditions.map(subCondition =>
     applyWhere(fanOut, subCondition, appliedFilters, delegate),
   );
+
+  if (otherConditions.length > 0) {
+    branches.push(
+      new Filter(
+        input,
+        appliedFilters ? 'push-only' : 'all',
+        createPredicate({
+          type: 'or',
+          conditions: otherConditions,
+        }),
+      ),
+    );
+  }
+
   return new FanIn(fanOut, branches);
+}
+
+export function groupSubqueryConditions(condition: Disjunction) {
+  const partitioned: [
+    subqueryConditions: Condition[],
+    otherConditions: NoSubqueryCondition[],
+  ] = [[], []];
+  for (const subCondition of condition.conditions) {
+    if (isNotAndDoesNotContainSubquery(subCondition)) {
+      partitioned[1].push(subCondition);
+    } else {
+      partitioned[0].push(subCondition);
+    }
+  }
+  return partitioned;
+}
+
+export function isNotAndDoesNotContainSubquery(
+  condition: Condition,
+): condition is NoSubqueryCondition {
+  if (condition.type === 'correlatedSubquery') {
+    return false;
+  }
+  if (condition.type === 'and') {
+    return condition.conditions.every(isNotAndDoesNotContainSubquery);
+  }
+  assert(condition.type !== 'or', 'where conditions are expected to be in DNF');
+  return true;
 }
 
 function applySimpleCondition(
