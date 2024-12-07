@@ -182,7 +182,7 @@ export function pgClient(
   return postgres(connectionURI, {
     ...postgresTypeConfig(),
     onnotice,
-    ssl: ssl as 'prefer',
+    ssl: ssl === 'disable' || ssl === 'false' ? false : (ssl as 'prefer'),
     ...options,
   });
 }
