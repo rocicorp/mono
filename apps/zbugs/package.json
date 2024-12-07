@@ -23,7 +23,7 @@
     "@floating-ui/react": "^0.26.28",
     "@headlessui/react": "^2.1.8",
     "@octokit/core": "^6.1.2",
-    "@rocicorp/zero": "0.7.2024120400+c18ae6",
+    "@rocicorp/zero": "0.7.2024120700+5421b9",
     "@schickling/fps-meter": "^0.1.2",
     "@tanstack/react-virtual": "^3.10.9",
     "classnames": "^2.5.1",
