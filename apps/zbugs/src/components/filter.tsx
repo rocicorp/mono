@@ -1,6 +1,6 @@
 import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
-import {useState} from 'react';
+import {memo, useState} from 'react';
 import labelIcon from '../assets/icons/label.svg';
 import {useZero} from '../hooks/use-zero.js';
 import {Button} from './button.js';
@@ -16,7 +16,7 @@ type Props = {
   onSelect?: ((selection: Selection) => void) | undefined;
 };
 
-export default function Filter({onSelect}: Props) {
+export const Filter = memo(function Filter({onSelect}: Props) {
   const z = useZero();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -88,4 +88,4 @@ export default function Filter({onSelect}: Props) {
       )}
     </div>
   );
-}
+});

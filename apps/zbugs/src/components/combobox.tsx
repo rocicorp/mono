@@ -1,5 +1,13 @@
 import classNames from 'classnames';
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import {
+  type KeyboardEvent,
+  memo,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import DropdownArrow from '../assets/icons/dropdown-arrow.svg?react';
 import {umami} from '../umami.js';
 import styles from './combobox.module.css';
@@ -21,7 +29,7 @@ interface Props<T> {
   editable?: boolean | undefined;
 }
 
-export function Combobox<T>({
+function Combobox<T>({
   items = [],
   selectedValue: value,
   onChange,
@@ -42,7 +50,7 @@ export function Combobox<T>({
 
   const selectedItem = items.find(option => option.value === value);
 
-  const setMenuOpen = (b: boolean) => {
+  const setMenuOpen = useCallback((b: boolean) => {
     if (b) {
       openTimeRef.current = Date.now();
       umami.track('Combobox opened'); // Track open action
@@ -50,12 +58,12 @@ export function Combobox<T>({
       umami.track('Combobox closed'); // Track close action
     }
     setIsOpen(b);
-  };
+  }, []);
 
   const toggleDropdown = useCallback(() => {
     console.log('toggleDropdown', isOpen);
     setMenuOpen(!isOpen);
-  }, [isOpen]);
+  }, [isOpen, setMenuOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -108,7 +116,7 @@ export function Combobox<T>({
   );
 
   const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent) => {
+    (event: KeyboardEvent) => {
       switch (event.key) {
         case 'ArrowDown':
           event.preventDefault();
@@ -136,7 +144,14 @@ export function Combobox<T>({
           break;
       }
     },
-    [isOpen, selectIndex, selectedIndex, filteredOptions, handleSelect],
+    [
+      isOpen,
+      selectIndex,
+      selectedIndex,
+      filteredOptions,
+      setMenuOpen,
+      handleSelect,
+    ],
   );
 
   const iconItem =
@@ -159,7 +174,7 @@ export function Combobox<T>({
         )}
         {editable ? (
           <input
-            ref={inputRef as React.RefObject<HTMLInputElement>}
+            ref={inputRef as RefObject<HTMLInputElement>}
             disabled={disabled}
             type="text"
             className={classNames(styles.input, {
@@ -186,7 +201,7 @@ export function Combobox<T>({
           />
         ) : (
           <button
-            ref={inputRef as React.RefObject<HTMLButtonElement>}
+            ref={inputRef as RefObject<HTMLButtonElement>}
             className={styles.input}
             role="combobox"
             aria-expanded={isOpen}
@@ -254,3 +269,6 @@ export function Combobox<T>({
     </div>
   );
 }
+
+const ComboboxMemo = memo(Combobox) as typeof Combobox;
+export {ComboboxMemo as Combobox};

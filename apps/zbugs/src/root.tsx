@@ -2,11 +2,11 @@ import {ZeroProvider} from '@rocicorp/zero/react';
 import {useCallback, useSyncExternalStore} from 'react';
 import {Route, Switch} from 'wouter';
 import {Nav} from './components/nav.js';
-import ErrorPage from './pages/error/error-page.js';
-import IssuePage from './pages/issue/issue-page.js';
-import ListPage from './pages/list/list-page.js';
-import {zeroRef} from './zero-setup.js';
+import {ErrorPage} from './pages/error/error-page.js';
+import {IssuePage} from './pages/issue/issue-page.js';
+import {ListPage} from './pages/list/list-page.js';
 import {routes} from './routes.js';
+import {zeroRef} from './zero-setup.js';
 
 export default function Root() {
   const z = useSyncExternalStore(

@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  memo,
   useCallback,
   type CSSProperties,
   type ForwardedRef,
@@ -18,8 +19,8 @@ export interface ButtonProps {
   autoFocus?: boolean | undefined;
 }
 
-export const Button = forwardRef(
-  (props: ButtonProps, ref: ForwardedRef<HTMLButtonElement>) => {
+export const Button = memo(
+  forwardRef((props: ButtonProps, ref: ForwardedRef<HTMLButtonElement>) => {
     const {onAction, eventName, ...rest} = props;
 
     const handleMouseDown = useCallback(
@@ -62,5 +63,5 @@ export const Button = forwardRef(
         {props.children}
       </button>
     );
-  },
+  }),
 );
