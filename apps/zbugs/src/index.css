@@ -1267,25 +1267,33 @@ emoji-picker {
   transform: translateY(-10px);
 }
 
-:root {
-  --toastify-toast-width: auto;
-  --toastify-toast-background: var(--color-background);
-  --toastify-toast-min-height: 0;
-  --toastify-toast-max-height: 800px;
-  --toastify-font-family: inherit;
+.Toastify__toast {
+  padding: 0;
+  min-height: 0;
+  background-color: transparent;
+  box-shadow: none;
+  margin: 0;
 }
 
-.emoji-toast {
+.Toastify__toast-body {
+  margin: auto;
+  border: 1px solid var(--color-tooltip-outline);
+  border-radius: 2rem;
+  flex: 0;
   background: var(--color-background);
   color: var(--color-text-primary);
-  border: 1px solid rgba(62, 62, 62, 1);
-  border-radius: 2rem;
-  padding: 0.25rem;
-  min-height: 0;
-  width: auto;
+  padding: 0.25rem 0.5rem;
   white-space: nowrap;
 }
 
-.emoji-toast .icon {
+.Toastify__toast-icon img {
   border-radius: 50%;
+}
+
+.Toastify__toast--stacked[data-collapsed='true']:not(:last-child) > * {
+  opacity: 0.9;
+}
+
+.Toastify__progress-bar--wrp {
+  display: none;
 }

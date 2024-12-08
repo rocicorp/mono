@@ -1,11 +1,12 @@
 import type {Zero} from '@rocicorp/zero';
 import {escapeLike, type Row} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
-import {useWindowVirtualizer} from '@tanstack/react-virtual';
+import {useWindowVirtualizer, type Virtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {toast, ToastContainer} from 'react-toastify';
+import {assert} from 'shared/src/asserts.js';
 import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.js';
@@ -171,37 +172,14 @@ export function IssuePage() {
 
   const handleEmojiChange = useCallback(
     (changedEmojis: readonly Emoji[]) => {
+      assert(issue);
       for (const emoji of changedEmojis) {
         if (emoji.creatorID !== z.userID) {
-          toast(
-            emoji.creator?.login + ' reacted on a comment: ' + emoji.value,
-            {
-              position: 'bottom-center',
-              containerId: 'bottom',
-              className: 'emoji-toast',
-              closeOnClick: true,
-              icon: () => <img className="icon" src={emoji.creator?.avatar} />,
-              onClick: () => {
-                const index =
-                  issue?.comments.findIndex(c => c.id === emoji.subjectID) ??
-                  -1;
-                if (index !== -1) {
-                  virtualizer.scrollToIndex(index, {
-                    align: 'end',
-                  });
-                } else if (emoji.subjectID === issue?.id) {
-                  issueEmojiRef.current?.scrollIntoView({
-                    block: 'end',
-                    behavior: 'smooth',
-                  });
-                }
-              },
-            },
-          );
+          showToastForEmoji(emoji, issue, virtualizer, issueEmojiRef.current);
         }
       }
     },
-    [issue?.comments, issue?.id, virtualizer, z.userID],
+    [issue, virtualizer, z.userID],
   );
 
   useEmojiChangeListener(issue, handleEmojiChange);
@@ -233,9 +211,15 @@ export function IssuePage() {
         <ToastContainer
           hideProgressBar={true}
           theme="dark"
+          stacked={true}
           containerId="bottom"
           newestOnTop={true}
           closeButton={false}
+          position="bottom-center"
+          closeOnClick={true}
+          limit={10}
+          // Auto close is broken. So we will manage it ourselves.
+          autoClose={false}
         />
         {/* Center column of info */}
         <div className="issue-detail">
@@ -505,6 +489,71 @@ export function IssuePage() {
 // This cache is stored outside the state so that it can be used between renders.
 const commentSizeCache = new LRUCache<string, number>(1000);
 
+function showToastForEmoji(
+  emoji: Emoji,
+  issue: IssueRow & {comments: CommentRow[]},
+  virtualizer: Virtualizer<Window, HTMLElement>,
+  emojiElement: HTMLDivElement | null,
+) {
+  let closed = false;
+  const toastID = toast(
+    emoji.creator?.login +
+      ' reacted on ' +
+      (emoji.subjectID === issue.id ? 'this issue' : 'on a comment') +
+      ': ' +
+      emoji.value,
+    {
+      containerId: 'bottom',
+      icon: () => <img className="icon" src={emoji.creator?.avatar} />,
+      onClick: () => {
+        const index = issue.comments.findIndex(c => c.id === emoji.subjectID);
+        if (index !== -1) {
+          virtualizer.scrollToIndex(index, {
+            align: 'end',
+          });
+        } else if (emoji.subjectID === issue.id) {
+          emojiElement?.scrollIntoView({
+            block: 'end',
+            behavior: 'smooth',
+          });
+        }
+      },
+      onClose: () => {
+        closed = true;
+        clearTimeout(timeoutID);
+      },
+    },
+  );
+
+  // If the window is not focused then we do not auto-close the toast.
+  // If it is focused then we auto-close after 5 seconds.
+  let timeoutID: ReturnType<typeof setTimeout> | undefined;
+
+  const addFocusListener = () =>
+    window.addEventListener('focus', () => startTimeout(), {once: true});
+
+  const startTimeout = () => {
+    timeoutID = setTimeout(() => {
+      if (!closed) {
+        toast.dismiss(toastID);
+      }
+    }, 5000);
+    window.addEventListener(
+      'blur',
+      () => {
+        clearTimeout(timeoutID);
+        addFocusListener();
+      },
+      {once: true},
+    );
+  };
+  if (document.hasFocus()) {
+    startTimeout();
+  } else {
+    addFocusListener();
+  }
+}
+
 function useVirtualComments<T extends {id: string}>(comments: T[]) {
   const defaultHeight = 500;
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -592,21 +641,15 @@ type Issue = IssueRow & {
   readonly comments: readonly CommentRow[];
 };
 
-/**
- *@param delay The amount of time in milliseconds to
- * wait before considering changes to the emojis as being new. This allows
- * ignoring changes due to unstable rendering.
- */
 function useEmojiChangeListener(
   issue: Issue | undefined,
   cb: (details: readonly Emoji[]) => void,
-  delay = 500,
 ) {
   const z = useZero();
   const enable = issue !== undefined;
   const issueID = issue?.id ?? '';
   const commentIDs = issue?.comments.map(c => c.id) ?? [];
-  const [emojis] = useQuery(
+  const [emojis, result] = useQuery(
     z.query.emoji
       .where(({cmp, or}) =>
         or(cmp('subjectID', 'IN', commentIDs), cmp('subjectID', issueID)),
@@ -615,16 +658,24 @@ function useEmojiChangeListener(
     enable,
   );
 
-  const initialTime = useRef(Date.now());
-  const lastEmojis = useRef(
-    new Map<string, Emoji>(emojis.map(emoji => [emoji.id, emoji])),
-  );
+  // We only set lastEmojis when we got the first complete result.
+  const lastEmojis = useRef<Map<string, Emoji> | null>(null);
 
   useEffect(() => {
-    const newEmojis = new Map<string, Emoji>(
-      emojis.map(emoji => [emoji.id, emoji]),
-    );
+    const newEmojis = new Map(emojis.map(emoji => [emoji.id, emoji]));
+
+    if (result.type === 'unknown') {
+      return;
+    }
+
+    // First time we get the complete emojis, we just store them.
+    if (lastEmojis.current === null) {
+      lastEmojis.current = newEmojis;
+      return;
+    }
+
     const changedEmojis: Emoji[] = [];
+
     for (const [id, emoji] of newEmojis) {
       if (!lastEmojis.current.has(id)) {
         changedEmojis.push(emoji);
@@ -633,13 +684,10 @@ function useEmojiChangeListener(
 
     lastEmojis.current = newEmojis;
 
-    if (
-      changedEmojis.length === 0 ||
-      // Ignore if just rendered/mounted
-      Date.now() - initialTime.current < delay
-    ) {
+    if (changedEmojis.length === 0) {
       return;
     }
+
     cb(changedEmojis);
-  }, [cb, delay, emojis]);
+  }, [cb, emojis, result.type]);
 }
