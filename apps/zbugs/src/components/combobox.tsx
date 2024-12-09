@@ -60,7 +60,6 @@ function Combobox<T>({
   };
 
   const toggleDropdown = () => {
-    console.log('toggleDropdown', isOpen);
     setMenuOpen(!isOpen);
   };
 

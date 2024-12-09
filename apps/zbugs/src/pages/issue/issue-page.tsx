@@ -1,11 +1,19 @@
 import type {Zero} from '@rocicorp/zero';
 import {escapeLike, type Row} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
-import {useWindowVirtualizer} from '@tanstack/react-virtual';
+import {useWindowVirtualizer, type Virtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {toast, ToastContainer} from 'react-toastify';
+import {assert} from 'shared/src/asserts.js';
 import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.js';
@@ -23,6 +31,7 @@ import Markdown from '../../components/markdown.js';
 import RelativeTime from '../../components/relative-time.js';
 import UserPicker from '../../components/user-picker.js';
 import {useCanEdit} from '../../hooks/use-can-edit.js';
+import {useDocumentHasFocus} from '../../hooks/use-document-has-focus.js';
 import {useHash} from '../../hooks/use-hash.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useLogin} from '../../hooks/use-login.js';
@@ -170,38 +179,19 @@ export function IssuePage() {
   const issueEmojiRef = useRef<HTMLDivElement>(null);
 
   const handleEmojiChange = useCallback(
-    (changedEmojis: readonly Emoji[]) => {
-      for (const emoji of changedEmojis) {
+    (added: readonly Emoji[], removed: readonly Emoji[]) => {
+      assert(issue);
+      for (const emoji of added) {
         if (emoji.creatorID !== z.userID) {
-          toast(
-            emoji.creator?.login + ' reacted on a comment: ' + emoji.value,
-            {
-              position: 'bottom-center',
-              containerId: 'bottom',
-              className: 'emoji-toast',
-              closeOnClick: true,
-              icon: () => <img className="icon" src={emoji.creator?.avatar} />,
-              onClick: () => {
-                const index =
-                  issue?.comments.findIndex(c => c.id === emoji.subjectID) ??
-                  -1;
-                if (index !== -1) {
-                  virtualizer.scrollToIndex(index, {
-                    align: 'end',
-                  });
-                } else if (emoji.subjectID === issue?.id) {
-                  issueEmojiRef.current?.scrollIntoView({
-                    block: 'end',
-                    behavior: 'smooth',
-                  });
-                }
-              },
-            },
-          );
+          showToastForEmoji(emoji, issue, virtualizer, issueEmojiRef.current);
         }
       }
+      for (const emoji of removed) {
+        // toast.dismiss is fine to call with non existing toast IDs
+        toast.dismiss(emoji.id);
+      }
     },
-    [issue?.comments, issue?.id, virtualizer, z.userID],
+    [issue, virtualizer, z.userID],
   );
 
   useEmojiChangeListener(issue, handleEmojiChange);
@@ -233,9 +223,15 @@ export function IssuePage() {
         <ToastContainer
           hideProgressBar={true}
           theme="dark"
+          stacked={true}
           containerId="bottom"
           newestOnTop={true}
           closeButton={false}
+          position="bottom-center"
+          closeOnClick={true}
+          limit={10}
+          // Auto close is broken. So we will manage it ourselves.
+          autoClose={false}
         />
         {/* Center column of info */}
         <div className="issue-detail">
@@ -505,6 +501,74 @@ export function IssuePage() {
 // This cache is stored outside the state so that it can be used between renders.
 const commentSizeCache = new LRUCache<string, number>(1000);
 
+function showToastForEmoji(
+  emoji: Emoji,
+  issue: IssueRow & {comments: CommentRow[]},
+  virtualizer: Virtualizer<Window, HTMLElement>,
+  emojiElement: HTMLDivElement | null,
+) {
+  const toastID = emoji.id;
+  const {creator} = emoji;
+  assert(creator);
+  toast(
+    <ToastContent toastID={toastID}>
+      <img className="toast-emoji-icon" src={creator.avatar} />
+      {creator.login +
+        ' reacted on ' +
+        (emoji.subjectID === issue.id ? 'this issue' : 'a comment') +
+        ': ' +
+        emoji.value}
+    </ToastContent>,
+    {
+      toastId: toastID,
+      containerId: 'bottom',
+      onClick: () => {
+        const index = issue.comments.findIndex(c => c.id === emoji.subjectID);
+        if (index !== -1) {
+          virtualizer.scrollToIndex(index, {
+            align: 'end',
+          });
+        } else if (emoji.subjectID === issue.id) {
+          emojiElement?.scrollIntoView({
+            block: 'end',
+            behavior: 'smooth',
+          });
+        }
+      },
+    },
+  );
+}
+
+function ToastContent({
+  children,
+  toastID,
+}: {
+  children: ReactNode;
+  toastID: string;
+}) {
+  const docFocused = useDocumentHasFocus();
+  const [hover, setHover] = useState(false);
+
+  useEffect(() => {
+    if (docFocused && !hover) {
+      const id = setTimeout(() => {
+        toast.dismiss(toastID);
+      }, 5_000);
+      return () => clearTimeout(id);
+    }
+    return () => void 0;
+  }, [docFocused, hover, toastID]);
+
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      {children}
+    </div>
+  );
+}
+
 function useVirtualComments<T extends {id: string}>(comments: T[]) {
   const defaultHeight = 500;
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -592,21 +656,15 @@ type Issue = IssueRow & {
   readonly comments: readonly CommentRow[];
 };
 
-/**
- *@param delay The amount of time in milliseconds to
- * wait before considering changes to the emojis as being new. This allows
- * ignoring changes due to unstable rendering.
- */
 function useEmojiChangeListener(
   issue: Issue | undefined,
-  cb: (details: readonly Emoji[]) => void,
-  delay = 500,
+  cb: (added: readonly Emoji[], removed: readonly Emoji[]) => void,
 ) {
   const z = useZero();
   const enable = issue !== undefined;
   const issueID = issue?.id ?? '';
   const commentIDs = issue?.comments.map(c => c.id) ?? [];
-  const [emojis] = useQuery(
+  const [emojis, result] = useQuery(
     z.query.emoji
       .where(({cmp, or}) =>
         or(cmp('subjectID', 'IN', commentIDs), cmp('subjectID', issueID)),
@@ -615,31 +673,43 @@ function useEmojiChangeListener(
     enable,
   );
 
-  const initialTime = useRef(Date.now());
-  const lastEmojis = useRef(
-    new Map<string, Emoji>(emojis.map(emoji => [emoji.id, emoji])),
-  );
+  // We only set lastEmojis when we got the first complete result.
+  const lastEmojis = useRef<Map<string, Emoji> | null>(null);
 
   useEffect(() => {
-    const newEmojis = new Map<string, Emoji>(
-      emojis.map(emoji => [emoji.id, emoji]),
-    );
-    const changedEmojis: Emoji[] = [];
+    const newEmojis = new Map(emojis.map(emoji => [emoji.id, emoji]));
+
+    if (result.type === 'unknown') {
+      return;
+    }
+
+    // First time we get the complete emojis, we just store them.
+    if (lastEmojis.current === null) {
+      lastEmojis.current = newEmojis;
+      return;
+    }
+
+    const added: Emoji[] = [];
+    const removed: Emoji[] = [];
+
     for (const [id, emoji] of newEmojis) {
       if (!lastEmojis.current.has(id)) {
-        changedEmojis.push(emoji);
+        added.push(emoji);
+      }
+    }
+
+    for (const [id, emoji] of lastEmojis.current) {
+      if (!newEmojis.has(id)) {
+        removed.push(emoji);
       }
     }
 
     lastEmojis.current = newEmojis;
 
-    if (
-      changedEmojis.length === 0 ||
-      // Ignore if just rendered/mounted
-      Date.now() - initialTime.current < delay
-    ) {
+    if (added.length === 0 && removed.length === 0) {
       return;
     }
-    cb(changedEmojis);
-  }, [cb, delay, emojis]);
+
+    cb(added, removed);
+  }, [cb, emojis, result.type]);
 }
