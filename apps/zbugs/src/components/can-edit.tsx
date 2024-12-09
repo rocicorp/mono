@@ -1,3 +1,4 @@
+import {memo} from 'react';
 import {useCanEdit} from '../hooks/use-can-edit.js';
 
 interface Props {
@@ -5,10 +6,10 @@ interface Props {
   ownerID: string;
 }
 
-export function CanEdit({children, ownerID}: Props) {
+export const CanEdit = memo(({children, ownerID}: Props) => {
   const canEdit = useCanEdit(ownerID);
   if (canEdit) {
     return children;
   }
   return null;
-}
+});

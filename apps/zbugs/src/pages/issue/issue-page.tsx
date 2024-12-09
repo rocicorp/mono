@@ -29,11 +29,11 @@ import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {LRUCache} from '../../lru-cache.js';
 import {links, type ListContext, type ZbugsHistoryState} from '../../routes.js';
+import {preload} from '../../zero-setup.js';
 import CommentComposer from './comment-composer.js';
 import Comment, {parsePermalink} from './comment.js';
-import {preload} from '../../zero-setup.js';
 
-export default function IssuePage() {
+export function IssuePage() {
   const z = useZero();
   const params = useParams();
 
@@ -515,7 +515,7 @@ function useVirtualComments<T extends {id: string}>(comments: T[]) {
       const {id} = comments[index];
       return commentSizeCache.get(id) || estimateAverage.current;
     },
-    overscan: 5,
+    overscan: 2,
     scrollMargin: listRef.current?.offsetTop ?? 0,
     measureElement: (el: HTMLElement) => {
       const height = el.offsetHeight;

@@ -1,3 +1,3 @@
-export default function ErrorPage() {
+export function ErrorPage() {
   return <div>404</div>;
 }
