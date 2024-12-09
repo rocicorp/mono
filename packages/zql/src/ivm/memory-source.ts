@@ -263,20 +263,7 @@ export class MemorySource implements Source {
       }
     }
 
-    const {constraint} = req;
-    const matchesConstraint = constraint
-      ? (row: Row) => constraintMatchesRow(constraint, row)
-      : (_: Row) => true;
-
     const startAt = req.start?.row;
-    if (startAt) {
-      if (req.constraint) {
-        // There's no problem supporting startAt outside of constraints, but I
-        // don't think we have a use case for this – if we see it, it's probably
-        // a bug.
-        assert(matchesConstraint(startAt), 'Start row must match constraint');
-      }
-    }
 
     // If there is a constraint, we want to start our scan at the first row that
     // matches the constraint. But because the next OrderPart can be `desc`,
