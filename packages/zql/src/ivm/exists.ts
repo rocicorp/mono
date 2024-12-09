@@ -15,10 +15,14 @@ import type {
 import type {SourceSchema} from './schema.js';
 import {first} from './stream.js';
 
+type SizeStorageKey = `row/${string}/${string}`;
+type CacheStorageKey = `row/${string}`;
+
 interface ExistsStorage {
-  get(key: string): number | undefined;
-  set(key: string, value: number): void;
-  del(key: string): void;
+  get(key: SizeStorageKey | CacheStorageKey): number | undefined;
+  set(key: SizeStorageKey | CacheStorageKey, value: number): void;
+  del(key: SizeStorageKey | CacheStorageKey): void;
+  scan({prefix}: {prefix: `${CacheStorageKey}/`}): Iterable<[string, number]>;
 }
 
 /**
@@ -82,7 +86,7 @@ export class Exists implements Operator {
       if (this.#filter(node.row)) {
         yield node;
       }
-      this.#delSize(node.row, this.#decrementRefCount(node.row));
+      this.#delSize(node.row);
     }
   }
 
@@ -108,9 +112,8 @@ export class Exists implements Operator {
           return;
         }
 
-        const refCount = this.#decrementRefCount(change.node.row);
         this.#pushWithFilter(change, size);
-        this.#delSize(change.node.row, refCount);
+        this.#delSize(change.node.row);
         return;
       }
       case 'child':
@@ -225,6 +228,7 @@ export class Exists implements Operator {
     if (this.#skipCache) {
       return;
     }
+
     this.#storage.set(this.#makeCacheStorageKey(row), size);
   }
 
@@ -232,44 +236,17 @@ export class Exists implements Operator {
     if (this.#skipCache) {
       return undefined;
     }
+
     return this.#storage.get(this.#makeCacheStorageKey(row));
   }
 
-  #incrementRefCount(row: Row) {
-    if (this.#skipCache) {
-      return;
-    }
-    const key = this.#makeRefcountKey(row);
-    const refCount = (this.#storage.get(key) ?? 0) + 1;
-    this.#storage.set(key, refCount);
-
-    return refCount;
-  }
-
-  #decrementRefCount(row: Row) {
-    if (this.#skipCache) {
-      return;
-    }
-    const key = this.#makeRefcountKey(row);
-    const refCount = must(this.#storage.get(key)) - 1;
-    if (refCount === 0) {
-      this.#storage.del(key);
-    } else {
-      this.#storage.set(key, refCount);
-    }
-
-    return refCount;
-  }
-
-  #delSize(row: Row, refCount: number | undefined) {
+  #delSize(row: Row) {
     this.#storage.del(this.#makeSizeStorageKey(row));
-    if (this.#skipCache) {
-      assert(refCount === undefined);
-      return;
-    }
-    assert(refCount !== undefined);
-    if (refCount === 0) {
-      this.#storage.del(this.#makeCacheStorageKey(row));
+    if (!this.#skipCache) {
+      const cacheKey = this.#makeCacheStorageKey(row);
+      if (first(this.#storage.scan({prefix: `${cacheKey}/`})) === undefined) {
+        this.#storage.del(cacheKey);
+      }
     }
   }
 
@@ -286,7 +263,6 @@ export class Exists implements Operator {
   }
 
   #fetchSize(row: Row) {
-    this.#incrementRefCount(row);
     const cachedSize = this.#getCachedSize(row);
     if (cachedSize !== undefined) {
       this.#setSize(row, cachedSize);
@@ -300,6 +276,7 @@ export class Exists implements Operator {
     for (const _relatedNode of relationship) {
       size++;
     }
+
     this.#setCachedSize(row, size);
     this.#setSize(row, size);
     return size;
@@ -323,27 +300,27 @@ export class Exists implements Operator {
     return fetched;
   }
 
-  #makeCacheStorageKey(row: Row) {
-    const storageKey: NormalizedValue[] = [];
-    for (const key of this.#parentJoinKey) {
-      storageKey.push(normalizeUndefined(row[key]));
-    }
-    return JSON.stringify(['cache', storageKey]);
+  #makeCacheStorageKey(row: Row): CacheStorageKey {
+    return `row/${JSON.stringify(
+      this.#getKeyValues(row, this.#parentJoinKey),
+    )}`;
   }
 
-  #makeSizeStorageKey(row: Row) {
-    const storageKey: NormalizedValue[] = [];
-    for (const key of this.#input.getSchema().primaryKey) {
-      storageKey.push(normalizeUndefined(row[key]));
-    }
-    return JSON.stringify(['size', storageKey]);
+  #makeSizeStorageKey(row: Row): SizeStorageKey {
+    return `row/${
+      this.#skipCache
+        ? ''
+        : JSON.stringify(this.#getKeyValues(row, this.#parentJoinKey))
+    }/${JSON.stringify(
+      this.#getKeyValues(row, this.#input.getSchema().primaryKey),
+    )}`;
   }
 
-  #makeRefcountKey(row: Row) {
-    const storageKey: NormalizedValue[] = [];
-    for (const key of this.#parentJoinKey) {
-      storageKey.push(normalizeUndefined(row[key]));
+  #getKeyValues(row: Row, def: CompoundKey): NormalizedValue[] {
+    const values: NormalizedValue[] = [];
+    for (const key of def) {
+      values.push(normalizeUndefined(row[key]));
     }
-    return JSON.stringify(['refcount', storageKey]);
+    return values;
   }
 }
