@@ -3,10 +3,6 @@ Transform: AWS::Serverless-2016-10-31
 Description: ZeroCache and ReplicationManager AWS Fargate with VPC, ALB, and ECR
 
 Parameters:
-  ImageTag:
-    Description: zero-cache
-    Type: String
-    Default: latest
   CertificateArn:
     Type: String
     Description: ARN of the SSL certificate
@@ -14,22 +10,22 @@ Parameters:
     Type: String
     Description: Docker image tag
     Default: latest
-  ZERO_UPSTREAM_DB:
+  ZeroUpstreamDB:
     Type: String
     NoEcho: true
-  ZERO_CVR_DB:
+  ZeroCvrDB:
     Type: String
     NoEcho: true
-  ZERO_CHANGE_DB:
+  ZeroChangeDb:
     Type: String
     NoEcho: true
-  ZERO_JWT_SECRET:
+  ZeroJwtSecret:
     Type: String
     NoEcho: true
-  AWS_ACCESS_KEY_ID:
+  AwsAccessKeyID:
     Type: String
     NoEcho: true
-  AWS_SECRET_ACCESS_KEY:
+  AwsSecretAccessKey:
     Type: String
     NoEcho: true
 Globals:
@@ -122,16 +118,15 @@ Resources:
   ZeroCacheSecrets:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: /zbugs/zero-cache/secrets
       Description: "Secrets for Zero Cache Service"
       SecretString: !Sub |
         {
-          "ZERO_UPSTREAM_DB": "${ZERO_UPSTREAM_DB}",
-          "ZERO_CVR_DB": "${ZERO_CVR_DB}",
-          "ZERO_CHANGE_DB": "${ZERO_CHANGE_DB}",
-          "ZERO_JWT_SECRET": "${ZERO_JWT_SECRET}",
-          "AWS_ACCESS_KEY_ID": "${AWS_ACCESS_KEY_ID}",
-          "AWS_SECRET_ACCESS_KEY": "${AWS_SECRET_ACCESS_KEY}"
+          "ZERO_UPSTREAM_DB": "${ZeroUpstreamDB}",
+          "ZERO_CVR_DB": "${ZeroCvrDB}",
+          "ZERO_CHANGE_DB": "${ZeroChangeDb}",
+          "ZERO_JWT_SECRET": "${ZeroJwtSecret}",
+          "AWS_ACCESS_KEY_ID": "${AwsAccessKeyID}",
+          "AWS_SECRET_ACCESS_KEY": "${AwsSecretAccessKey}"
         }
 
   # Update the task execution role to allow reading SSM parameters
@@ -187,7 +182,7 @@ Resources:
         - Name: zero-cache-container
           Cpu: 1024
           Memory: 8192
-          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/sandbox-zero-cache
+          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/zero-zbugs
           PortMappings:
             - Name: "4848"
               ContainerPort: 4848
@@ -197,15 +192,13 @@ Resources:
           Essential: true
           Environment:
             - Name: ZERO_CHANGE_STREAMER_URI
-              Value: ws://replication-manager.internal.local:4849
+              Value: ws://replication-manager.internal.local:4848
             - Name: ZERO_LOG_FORMAT
               Value: json
             - Name: ZERO_REPLICA_FILE
               Value: /data/db/sync-replica.db
-            - Name: ZERO_CONFIG_PATH
-              Value: /opt/app/apps/zbugs/zero.config.ts
             - Name: REPLICA_URL
-              Value: !Sub "s3://${ApplicationBucket}/1028"
+              Value: !Sub "s3://${ApplicationBucket}/1208"
             - Name: ZERO_LOG_LEVEL
               Value: debug
             - Name: ZERO_UPSTREAM_MAX_CONNS
@@ -214,6 +207,8 @@ Resources:
               Value: 275
             - Name: ZERO_CHANGE_MAX_CONNS
               Value: 3
+            - Name: ZERO_SCHEMA_FILE
+              Value: /opt/app/packages/zero/zero-schema.json
           Secrets:
             - Name: ZERO_UPSTREAM_DB
               ValueFrom: !Sub "${ZeroCacheSecrets}:ZERO_UPSTREAM_DB::"
@@ -224,10 +219,9 @@ Resources:
             - Name: ZERO_JWT_SECRET
               ValueFrom: !Sub "${ZeroCacheSecrets}:ZERO_JWT_SECRET::"
             - Name: AWS_ACCESS_KEY_ID
-              ValueFrom: !Sub "${ReplicationManagerSecrets}:AWS_ACCESS_KEY_ID::"
+              ValueFrom: !Sub "${ZeroCacheSecrets}:AWS_ACCESS_KEY_ID::"
             - Name: AWS_SECRET_ACCESS_KEY
-              ValueFrom: !Sub "${ReplicationManagerSecrets}:AWS_SECRET_ACCESS_KEY::"
-  
+              ValueFrom: !Sub "${ZeroCacheSecrets}:AWS_SECRET_ACCESS_KEY::"
           LinuxParameters:
             InitProcessEnabled: true
           StopTimeout: 120
@@ -291,7 +285,6 @@ Resources:
       Cluster: !Ref Cluster
       LaunchType: FARGATE
       EnableExecuteCommand: true
-      HealthCheckGracePeriodSeconds: 5
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
@@ -310,16 +303,15 @@ Resources:
   ReplicationManagerSecrets:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: /zbugs/replication-manager/secrets
       Description: "Secrets for Replication Manager Service"
       SecretString: !Sub |
         {
-          "ZERO_UPSTREAM_DB": "${ZERO_UPSTREAM_DB}",
-          "ZERO_CVR_DB": "${ZERO_CVR_DB}",
-          "ZERO_CHANGE_DB": "${ZERO_CHANGE_DB}",
-          "ZERO_JWT_SECRET": "${ZERO_JWT_SECRET}",
-          "AWS_ACCESS_KEY_ID": "${AWS_ACCESS_KEY_ID}",
-          "AWS_SECRET_ACCESS_KEY": "${AWS_SECRET_ACCESS_KEY}"
+          "ZERO_UPSTREAM_DB": "${ZeroUpstreamDB}",
+          "ZERO_CVR_DB": "${ZeroCvrDB}",
+          "ZERO_CHANGE_DB": "${ZeroChangeDb}",
+          "ZERO_JWT_SECRET": "${ZeroJwtSecret}",
+          "AWS_ACCESS_KEY_ID": "${AwsAccessKeyID}",
+          "AWS_SECRET_ACCESS_KEY": "${AwsSecretAccessKey}"
         }
 
   TaskDefinitionReplicationManager:
@@ -340,11 +332,11 @@ Resources:
         - Name: replication-manager-container
           Cpu: 1024
           Memory: 8192
-          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/sandbox-replication-manager
+          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/zero-zbugs
           PortMappings:
-            - Name: "4849"
-              ContainerPort: 4849
-              HostPort: 4849
+            - Name: "4848"
+              ContainerPort: 4848
+              HostPort: 4848
               Protocol: tcp
               AppProtocol: http
           Essential: true
@@ -354,13 +346,11 @@ Resources:
             - Name: ZERO_LITESTREAM
               Value: "1"
             - Name: REPLICA_URL
-              Value: !Sub "s3://${ApplicationBucket}/1028"
+              Value: !Sub "s3://${ApplicationBucket}/1208"
             - Name: ZERO_LOG_FORMAT
               Value: json
             - Name: ZERO_REPLICA_FILE
               Value: /data/db/sync-replica.db
-            - Name: ZERO_CONFIG_PATH
-              Value: /opt/app/apps/zbugs/zero.config.ts
             - Name: ZERO_LOG_LEVEL
               Value: debug
             - Name: ZERO_UPSTREAM_MAX_CONNS
@@ -369,6 +359,8 @@ Resources:
               Value: 275
             - Name: ZERO_CHANGE_MAX_CONNS
               Value: 3
+            - Name: ZERO_SCHEMA_FILE
+              Value: /opt/app/packages/zero/zero-schema.json
           Secrets:
             - Name: ZERO_UPSTREAM_DB
               ValueFrom: !Sub "${ReplicationManagerSecrets}:ZERO_UPSTREAM_DB::"
@@ -393,7 +385,7 @@ Resources:
           HealthCheck:
             Command:
               - CMD-SHELL
-              - curl -f http://localhost:4849/ || exit 1
+              - curl -f http://localhost:4848/ || exit 1
             Interval: 300
             Timeout: 60
             Retries: 5
@@ -407,6 +399,7 @@ Resources:
   # S3 Bucket for application data
   ApplicationBucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
     Properties:
       BucketName: !Sub ${AWS::StackName}-data-bucket
       VersioningConfiguration:
@@ -420,8 +413,6 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-
-
 Outputs:
   ClusterName:
     Description: Amazon ECS Cluster Name

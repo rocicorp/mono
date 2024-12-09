@@ -4,7 +4,7 @@ version = 0.1
 
 [default]
 [default.global.parameters]
-stack_name = "zbugs"
+stack_name = "zbugs-test"
 
 [default.build.parameters]
 cached = true
@@ -17,9 +17,8 @@ lint = true
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = false
 resolve_s3 = true
-s3_prefix = "zbugs"
+s3_prefix = "zbugs-test"
 region = "us-east-1"
-parameter_overrides = "file://parameters.json"
 image_repositories = []
 
 [default.package.parameters]
