@@ -3,7 +3,6 @@ import {
   type KeyboardEvent,
   memo,
   type RefObject,
-  useCallback,
   useEffect,
   useRef,
   useState,
@@ -50,7 +49,7 @@ function Combobox<T>({
 
   const selectedItem = items.find(option => option.value === value);
 
-  const setMenuOpen = useCallback((b: boolean) => {
+  const setMenuOpen = (b: boolean) => {
     if (b) {
       openTimeRef.current = Date.now();
       umami.track('Combobox opened'); // Track open action
@@ -58,12 +57,12 @@ function Combobox<T>({
       umami.track('Combobox closed'); // Track close action
     }
     setIsOpen(b);
-  }, []);
+  };
 
-  const toggleDropdown = useCallback(() => {
+  const toggleDropdown = () => {
     console.log('toggleDropdown', isOpen);
     setMenuOpen(!isOpen);
-  }, [isOpen, setMenuOpen]);
+  };
 
   useEffect(() => {
     if (!isOpen) {
@@ -86,73 +85,55 @@ function Combobox<T>({
     return () => document.removeEventListener('mousedown', handleMouseDown);
   }, []);
 
-  const selectIndex = useCallback((index: number) => {
+  const selectIndex = (index: number) => {
     setSelectedIndex(index);
     listboxRef.current?.children[index]?.scrollIntoView({
       behavior: 'smooth',
       block: 'nearest',
     });
-  }, []);
+  };
 
-  const handleSelect = useCallback(
-    (value: T) => {
-      onChange?.(value);
-      setIsOpen(false);
-      const selectedText =
-        items?.find(item => item.value === value)?.text || 'Unknown';
-      umami.track('Selector selection made', {selection: selectedText}); // Track selection with data
-    },
-    [onChange, items],
-  );
+  const handleSelect = (value: T) => {
+    onChange?.(value);
+    setIsOpen(false);
+    const selectedText =
+      items?.find(item => item.value === value)?.text || 'Unknown';
+    umami.track('Selector selection made', {selection: selectedText}); // Track selection with data
+  };
 
-  const onMouseUp = useCallback(
-    (value: T) => {
-      const now = Date.now();
-      if (!(now - openTimeRef.current < 500)) {
-        handleSelect(value);
-      }
-    },
-    [openTimeRef, handleSelect],
-  );
+  const onMouseUp = (value: T) => {
+    const now = Date.now();
+    if (!(now - openTimeRef.current < 500)) {
+      handleSelect(value);
+    }
+  };
 
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent) => {
-      switch (event.key) {
-        case 'ArrowDown':
-          event.preventDefault();
-          if (!isOpen) {
-            setMenuOpen(true);
-          } else {
-            selectIndex(
-              Math.min(selectedIndex + 1, filteredOptions.length - 1),
-            );
-          }
-          break;
-        case 'ArrowUp':
-          event.preventDefault();
-          selectIndex(Math.max(selectedIndex - 1, 0));
-          break;
-        case 'Enter':
-          event.preventDefault();
-          if (isOpen && filteredOptions[selectedIndex]) {
-            handleSelect(filteredOptions[selectedIndex]?.value);
-          }
-          break;
-        case 'Escape':
-          event.preventDefault();
-          setMenuOpen(false);
-          break;
-      }
-    },
-    [
-      isOpen,
-      selectIndex,
-      selectedIndex,
-      filteredOptions,
-      setMenuOpen,
-      handleSelect,
-    ],
-  );
+  const handleKeyDown = (event: KeyboardEvent) => {
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        if (!isOpen) {
+          setMenuOpen(true);
+        } else {
+          selectIndex(Math.min(selectedIndex + 1, filteredOptions.length - 1));
+        }
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        selectIndex(Math.max(selectedIndex - 1, 0));
+        break;
+      case 'Enter':
+        event.preventDefault();
+        if (isOpen && filteredOptions[selectedIndex]) {
+          handleSelect(filteredOptions[selectedIndex]?.value);
+        }
+        break;
+      case 'Escape':
+        event.preventDefault();
+        setMenuOpen(false);
+        break;
+    }
+  };
 
   const iconItem =
     editable && isOpen ? defaultItem : selectedItem ?? defaultItem;

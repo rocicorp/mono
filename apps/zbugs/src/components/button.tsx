@@ -1,7 +1,6 @@
 import {
   forwardRef,
   memo,
-  useCallback,
   type CSSProperties,
   type ForwardedRef,
   type ReactNode,
@@ -23,18 +22,15 @@ export const Button = memo(
   forwardRef((props: ButtonProps, ref: ForwardedRef<HTMLButtonElement>) => {
     const {onAction, eventName, ...rest} = props;
 
-    const handleMouseDown = useCallback(
-      (e: React.MouseEvent) => {
-        onAction?.();
-        if (eventName) {
-          umami.track(eventName);
-        }
-        // Prevent default to avoid the button taking focus on click, which
-        // will steal focus from anything focused in response to onAction.
-        e.preventDefault();
-      },
-      [onAction, eventName],
-    );
+    const handleMouseDown = (e: React.MouseEvent) => {
+      onAction?.();
+      if (eventName) {
+        umami.track(eventName);
+      }
+      // Prevent default to avoid the button taking focus on click, which
+      // will steal focus from anything focused in response to onAction.
+      e.preventDefault();
+    };
 
     const actionProps = onAction
       ? {

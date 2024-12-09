@@ -1,4 +1,4 @@
-import {memo, useCallback, type ReactNode} from 'react';
+import {memo, type ReactNode} from 'react';
 import {navigate} from 'wouter/use-browser-location';
 import type {ZbugsHistoryState} from '../routes.js';
 import {umami} from '../umami.js';
@@ -23,35 +23,29 @@ export const Link = memo(
       }
       return true;
     };
-    const onMouseDown = useCallback(
-      (e: React.MouseEvent) => {
-        if (isPrimary(e)) {
-          navigate(href, {state});
-          if (eventName) {
-            umami.track(eventName);
-          }
+    const onMouseDown = (e: React.MouseEvent) => {
+      if (isPrimary(e)) {
+        navigate(href, {state});
+        if (eventName) {
+          umami.track(eventName);
         }
-      },
-      [eventName, href, state],
-    );
-    const onClick = useCallback((e: React.MouseEvent) => {
+      }
+    };
+    const onClick = (e: React.MouseEvent) => {
       if (isPrimary(e) && !e.defaultPrevented) {
         e.preventDefault();
       }
-    }, []);
+    };
 
-    const onKeyDown = useCallback(
-      (e: React.KeyboardEvent) => {
-        // In html links are not activated by space key, but we want to it to be
-        // more consistent with buttons, especially since it is hard to determine
-        // what is a link vs a button in our UI.
-        if (e.key === 'Enter' || e.key === ' ') {
-          navigate(href, {state});
-          e.preventDefault();
-        }
-      },
-      [href, state],
-    );
+    const onKeyDown = (e: React.KeyboardEvent) => {
+      // In html links are not activated by space key, but we want to it to be
+      // more consistent with buttons, especially since it is hard to determine
+      // what is a link vs a button in our UI.
+      if (e.key === 'Enter' || e.key === ' ') {
+        navigate(href, {state});
+        e.preventDefault();
+      }
+    };
 
     return (
       <a
