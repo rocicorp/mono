@@ -1,6 +1,6 @@
 exec: npx tsx ./src/server/main.ts
 dbs:
-  - path: /data/db/sync-replica.db
+  - path: ${ZERO_REPLICA_FILE}
     replicas:
       - url: ${REPLICA_URL}
     checkpoint-interval: 10s

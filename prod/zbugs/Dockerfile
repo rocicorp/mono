@@ -1,10 +1,9 @@
-FROM --platform=linux/amd64 node:22.11.0-alpine3.20
+FROM --platform=linux/amd64 node:18.20.4-alpine3.20
 RUN apk add g++ make py3-pip
 ARG NPM_TOKEN
-RUN test -n "$NPM_TOKEN"
-RUN mkdir -p /root/.npm && echo "${NPM_TOKEN}" > /root/.npmrc
 RUN mkdir -p /opt/app
 RUN mkdir -p /data/db
+WORKDIR /opt/app
 COPY . ./
 ADD https://github.com/benbjohnson/litestream/releases/download/v0.3.13/litestream-v0.3.13-linux-amd64.tar.gz /tmp/litestream.tar.gz
 RUN tar -C /usr/local/bin -xzf /tmp/litestream.tar.gz
@@ -16,7 +15,6 @@ RUN apk add --update curl
 WORKDIR /opt/app/packages/zero-cache
 RUN chmod +x ./start-dual.sh
 EXPOSE 4848
-
 ENTRYPOINT ["/bin/sh", "-c"]
 ENV ZERO_LOG_LEVEL=debug
 ENV ZERO_LOG_FORMAT=json
