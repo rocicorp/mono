@@ -251,5 +251,6 @@ function Combobox<T>({
   );
 }
 
+// This odd dance is because Combobox is a generic component.
 const ComboboxMemo = memo(Combobox) as typeof Combobox;
 export {ComboboxMemo as Combobox};
