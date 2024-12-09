@@ -14,7 +14,7 @@ RUN echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc && \
 RUN apk add --update curl
 WORKDIR /opt/app/packages/zero-cache
 RUN chmod +x ./start-dual.sh
-EXPOSE 4848
+EXPOSE 4848 4849
 ENTRYPOINT ["/bin/sh", "-c"]
 ENV ZERO_LOG_LEVEL=debug
 ENV ZERO_LOG_FORMAT=json

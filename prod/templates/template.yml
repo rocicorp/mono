@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: ZeroCache and ReplicationManager AWS Fargate with VPC, ALB, and ECR
+Description: ZeroCache - ViewSyncer and ReplicationManager AWS Fargate with VPC, ALB, and ECR
 
 Parameters:
   CertificateArn:
@@ -89,10 +89,10 @@ Resources:
           - Type: A
             TTL: 300
 
-  ServiceZeroCache:
+  ServiceViewSyncer:
     Type: AWS::ECS::Service
     Properties:
-      ServiceName: "zero-cache"
+      ServiceName: "view-syncer"
       Cluster: !Ref Cluster
       LaunchType: FARGATE
       EnableExecuteCommand: true
@@ -108,14 +108,14 @@ Resources:
         MaximumPercent: 200
         MinimumHealthyPercent: 50
       DesiredCount: 1
-      TaskDefinition: !Ref "TaskDefinitionZeroCache"
+      TaskDefinition: !Ref "TaskDefinitionViewSyncer"
       LoadBalancers:
-        - ContainerName: "zero-cache-container"
+        - ContainerName: "view-syncer-container"
           ContainerPort: 4848
           TargetGroupArn: !GetAtt VPC.Outputs.PublicLBTargetGroup
  
   # First, create the secure parameters
-  ZeroCacheSecrets:
+  ViewSyncerSecrets:
     Type: AWS::SecretsManager::Secret
     Properties:
       Description: "Secrets for Zero Cache Service"
@@ -151,7 +151,7 @@ Resources:
                 Action:
                   - ssm:GetParameters
                   - ssm:GetParameter
-                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/zbugs/zero-cache/*
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/zbugs/view-syncer/*
         - PolicyName: SecretsManagerAccess
           PolicyDocument:
             Version: '2012-10-17'
@@ -160,14 +160,14 @@ Resources:
                 Action:
                   - secretsmanager:GetSecretValue
                 Resource: 
-                  - !Ref ZeroCacheSecrets
+                  - !Ref ViewSyncerSecrets
                   - !Ref ReplicationManagerSecrets
 
   # The secure task definition
-  TaskDefinitionZeroCache:
+  TaskDefinitionViewSyncer:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: zero-cache-task-definition
+      Family: view-syncer-task-definition
       Cpu: 1024
       Memory: 8192
       NetworkMode: awsvpc
@@ -179,7 +179,7 @@ Resources:
         CpuArchitecture: X86_64
         OperatingSystemFamily: LINUX
       ContainerDefinitions:
-        - Name: zero-cache-container
+        - Name: view-syncer-container
           Cpu: 1024
           Memory: 8192
           Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/zero-zbugs
@@ -192,7 +192,7 @@ Resources:
           Essential: true
           Environment:
             - Name: ZERO_CHANGE_STREAMER_URI
-              Value: ws://replication-manager.internal.local:4848
+              Value: ws://replication-manager.internal.local:4849
             - Name: ZERO_LOG_FORMAT
               Value: json
             - Name: ZERO_REPLICA_FILE
@@ -208,20 +208,20 @@ Resources:
             - Name: ZERO_CHANGE_MAX_CONNS
               Value: 3
             - Name: ZERO_SCHEMA_FILE
-              Value: /opt/app/packages/zero/zero-schema.json
+              Value: /opt/app/packages/zero-cache/zero-schema.json
           Secrets:
             - Name: ZERO_UPSTREAM_DB
-              ValueFrom: !Sub "${ZeroCacheSecrets}:ZERO_UPSTREAM_DB::"
+              ValueFrom: !Sub "${ViewSyncerSecrets}:ZERO_UPSTREAM_DB::"
             - Name: ZERO_CVR_DB
-              ValueFrom: !Sub "${ZeroCacheSecrets}:ZERO_CVR_DB::"
+              ValueFrom: !Sub "${ViewSyncerSecrets}:ZERO_CVR_DB::"
             - Name: ZERO_CHANGE_DB
-              ValueFrom: !Sub "${ZeroCacheSecrets}:ZERO_CHANGE_DB::"
+              ValueFrom: !Sub "${ViewSyncerSecrets}:ZERO_CHANGE_DB::"
             - Name: ZERO_JWT_SECRET
-              ValueFrom: !Sub "${ZeroCacheSecrets}:ZERO_JWT_SECRET::"
+              ValueFrom: !Sub "${ViewSyncerSecrets}:ZERO_JWT_SECRET::"
             - Name: AWS_ACCESS_KEY_ID
-              ValueFrom: !Sub "${ZeroCacheSecrets}:AWS_ACCESS_KEY_ID::"
+              ValueFrom: !Sub "${ViewSyncerSecrets}:AWS_ACCESS_KEY_ID::"
             - Name: AWS_SECRET_ACCESS_KEY
-              ValueFrom: !Sub "${ZeroCacheSecrets}:AWS_SECRET_ACCESS_KEY::"
+              ValueFrom: !Sub "${ViewSyncerSecrets}:AWS_SECRET_ACCESS_KEY::"
           LinuxParameters:
             InitProcessEnabled: true
           StopTimeout: 120
@@ -230,7 +230,7 @@ Resources:
             Options:
               mode: non-blocking
               max-buffer-size: 25m
-              awslogs-group: !Ref LogGroupZeroCache
+              awslogs-group: !Ref LogGroupViewSyncer
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: ecs
           HealthCheck:
@@ -242,10 +242,10 @@ Resources:
             Retries: 10
             StartPeriod: 10
 
-  LogGroupZeroCache:
+  LogGroupViewSyncer:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: /zero-cache
+      LogGroupName: /view-syncer
 
   ECSTaskRole:
     Type: AWS::IAM::Role
@@ -334,9 +334,9 @@ Resources:
           Memory: 8192
           Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/zero-zbugs
           PortMappings:
-            - Name: "4848"
-              ContainerPort: 4848
-              HostPort: 4848
+            - Name: "4849"
+              ContainerPort: 4849
+              HostPort: 4849
               Protocol: tcp
               AppProtocol: http
           Essential: true
@@ -360,7 +360,7 @@ Resources:
             - Name: ZERO_CHANGE_MAX_CONNS
               Value: 3
             - Name: ZERO_SCHEMA_FILE
-              Value: /opt/app/packages/zero/zero-schema.json
+              Value: /opt/app/packages/zero-cache/zero-schema.json
           Secrets:
             - Name: ZERO_UPSTREAM_DB
               ValueFrom: !Sub "${ReplicationManagerSecrets}:ZERO_UPSTREAM_DB::"
@@ -385,7 +385,7 @@ Resources:
           HealthCheck:
             Command:
               - CMD-SHELL
-              - curl -f http://localhost:4848/ || exit 1
+              - curl -f http://localhost:4849/ || exit 1
             Interval: 300
             Timeout: 60
             Retries: 5
@@ -417,9 +417,9 @@ Outputs:
   ClusterName:
     Description: Amazon ECS Cluster Name
     Value: !Ref Cluster
-  ZeroCacheServiceName:
-    Description: ZeroCache Service Name
-    Value: !GetAtt ServiceZeroCache.Name
+  ViewSyncerServiceName:
+    Description: ViewSyncer Service Name
+    Value: !GetAtt ServiceViewSyncer.Name
   ReplicationManagerServiceName:
     Description: Replication Manager Service Name
     Value: !GetAtt ServiceReplicationManager.Name
