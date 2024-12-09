@@ -3,7 +3,14 @@ import {escapeLike, type Row} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {useWindowVirtualizer, type Virtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {toast, ToastContainer} from 'react-toastify';
 import {assert} from 'shared/src/asserts.js';
@@ -24,6 +31,7 @@ import Markdown from '../../components/markdown.js';
 import RelativeTime from '../../components/relative-time.js';
 import UserPicker from '../../components/user-picker.js';
 import {useCanEdit} from '../../hooks/use-can-edit.js';
+import {useDocumentHasFocus} from '../../hooks/use-document-has-focus.js';
 import {useHash} from '../../hooks/use-hash.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useLogin} from '../../hooks/use-login.js';
@@ -171,12 +179,16 @@ export function IssuePage() {
   const issueEmojiRef = useRef<HTMLDivElement>(null);
 
   const handleEmojiChange = useCallback(
-    (changedEmojis: readonly Emoji[]) => {
+    (added: readonly Emoji[], removed: readonly Emoji[]) => {
       assert(issue);
-      for (const emoji of changedEmojis) {
+      for (const emoji of added) {
         if (emoji.creatorID !== z.userID) {
           showToastForEmoji(emoji, issue, virtualizer, issueEmojiRef.current);
         }
+      }
+      for (const emoji of removed) {
+        // toast.dismiss is fine to call with non existing toast IDs
+        toast.dismiss(emoji.id);
       }
     },
     [issue, virtualizer, z.userID],
@@ -495,16 +507,21 @@ function showToastForEmoji(
   virtualizer: Virtualizer<Window, HTMLElement>,
   emojiElement: HTMLDivElement | null,
 ) {
-  let closed = false;
-  const toastID = toast(
-    emoji.creator?.login +
-      ' reacted on ' +
-      (emoji.subjectID === issue.id ? 'this issue' : 'on a comment') +
-      ': ' +
-      emoji.value,
+  const toastID = emoji.id;
+  const {creator} = emoji;
+  assert(creator);
+  toast(
+    <ToastContent toastID={toastID}>
+      <img className="toast-emoji-icon" src={creator.avatar} />
+      {creator.login +
+        ' reacted on ' +
+        (emoji.subjectID === issue.id ? 'this issue' : 'a comment') +
+        ': ' +
+        emoji.value}
+    </ToastContent>,
     {
+      toastId: toastID,
       containerId: 'bottom',
-      icon: () => <img className="icon" src={emoji.creator?.avatar} />,
       onClick: () => {
         const index = issue.comments.findIndex(c => c.id === emoji.subjectID);
         if (index !== -1) {
@@ -518,40 +535,38 @@ function showToastForEmoji(
           });
         }
       },
-      onClose: () => {
-        closed = true;
-        clearTimeout(timeoutID);
-      },
     },
   );
+}
 
-  // If the window is not focused then we do not auto-close the toast.
-  // If it is focused then we auto-close after 5 seconds.
-  let timeoutID: ReturnType<typeof setTimeout> | undefined;
+function ToastContent({
+  children,
+  toastID,
+}: {
+  children: ReactNode;
+  toastID: string;
+}) {
+  const docFocused = useDocumentHasFocus();
+  const [hover, setHover] = useState(false);
 
-  const addFocusListener = () =>
-    window.addEventListener('focus', () => startTimeout(), {once: true});
-
-  const startTimeout = () => {
-    timeoutID = setTimeout(() => {
-      if (!closed) {
+  useEffect(() => {
+    if (docFocused && !hover) {
+      const id = setTimeout(() => {
         toast.dismiss(toastID);
-      }
-    }, 5000);
-    window.addEventListener(
-      'blur',
-      () => {
-        clearTimeout(timeoutID);
-        addFocusListener();
-      },
-      {once: true},
-    );
-  };
-  if (document.hasFocus()) {
-    startTimeout();
-  } else {
-    addFocusListener();
-  }
+      }, 5_000);
+      return () => clearTimeout(id);
+    }
+    return () => void 0;
+  }, [docFocused, hover, toastID]);
+
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      {children}
+    </div>
+  );
 }
 
 function useVirtualComments<T extends {id: string}>(comments: T[]) {
@@ -643,7 +658,7 @@ type Issue = IssueRow & {
 
 function useEmojiChangeListener(
   issue: Issue | undefined,
-  cb: (details: readonly Emoji[]) => void,
+  cb: (added: readonly Emoji[], removed: readonly Emoji[]) => void,
 ) {
   const z = useZero();
   const enable = issue !== undefined;
@@ -674,20 +689,27 @@ function useEmojiChangeListener(
       return;
     }
 
-    const changedEmojis: Emoji[] = [];
+    const added: Emoji[] = [];
+    const removed: Emoji[] = [];
 
     for (const [id, emoji] of newEmojis) {
       if (!lastEmojis.current.has(id)) {
-        changedEmojis.push(emoji);
+        added.push(emoji);
+      }
+    }
+
+    for (const [id, emoji] of lastEmojis.current) {
+      if (!newEmojis.has(id)) {
+        removed.push(emoji);
       }
     }
 
     lastEmojis.current = newEmojis;
 
-    if (changedEmojis.length === 0) {
+    if (added.length === 0 && removed.length === 0) {
       return;
     }
 
-    cb(changedEmojis);
+    cb(added, removed);
   }, [cb, emojis, result.type]);
 }

@@ -766,6 +766,7 @@ textarea.autoResize {
   opacity: 1;
 }
 
+.toast-emoji-icon,
 .issue-creator-avatar {
   width: 1.4rem;
   height: 1.4rem;
@@ -1267,6 +1268,10 @@ emoji-picker {
   transform: translateY(-10px);
 }
 
+.Toastify__toast-container {
+  --toastify-toast-width: 100vw;
+}
+
 .Toastify__toast {
   padding: 0;
   min-height: 0;
@@ -1286,8 +1291,14 @@ emoji-picker {
   white-space: nowrap;
 }
 
-.Toastify__toast-icon img {
+.Toastify__toast-body > div {
+  width: max-content;
+}
+
+.Toastify__toast .emoji-icon {
   border-radius: 50%;
+  width: 16px;
+  height: 16px;
 }
 
 .Toastify__toast--stacked[data-collapsed='true']:not(:last-child) > * {
