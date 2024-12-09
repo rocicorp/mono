@@ -223,13 +223,12 @@ export function IssuePage() {
         <ToastContainer
           hideProgressBar={true}
           theme="dark"
-          stacked={true}
           containerId="bottom"
           newestOnTop={true}
           closeButton={false}
           position="bottom-center"
           closeOnClick={true}
-          limit={10}
+          limit={3}
           // Auto close is broken. So we will manage it ourselves.
           autoClose={false}
         />
