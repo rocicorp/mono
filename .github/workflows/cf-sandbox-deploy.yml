@@ -2,7 +2,7 @@ name: Build and Deploy Sandbox Zero-Cache AWS CF
 
 on:
   push:
-    branches: [sandbox]
+    branches: [cesara/sandbox_cloudformation]
     # paths:
     #   - 'packages/zero-cache/**'
 env:
