@@ -5,6 +5,7 @@ import {
   type ExpressionBuilder,
   type TableSchema,
   type Row,
+  NOBODY_CAN,
 } from '@rocicorp/zero';
 import type {Condition} from 'zero-protocol/src/ast.js';
 
@@ -304,10 +305,11 @@ export const permissions: ReturnType<typeof definePermissions> =
       user: {
         // Only the authentication system can write to the user table.
         row: {
-          insert: [],
+          insert: NOBODY_CAN,
           update: {
-            preMutation: [],
+            preMutation: NOBODY_CAN,
           },
+          delete: NOBODY_CAN,
         },
       },
       issue: {
@@ -319,7 +321,7 @@ export const permissions: ReturnType<typeof definePermissions> =
           ],
           update: {
             preMutation: [loggedInUserIsCreator, loggedInUserIsAdmin],
-            postProposedMutation: [loggedInUserIsCreator, loggedInUserIsAdmin],
+            postMutation: [loggedInUserIsCreator, loggedInUserIsAdmin],
           },
           delete: [loggedInUserIsCreator, loggedInUserIsAdmin],
           select: [canSeeIssue],
@@ -360,15 +362,14 @@ export const permissions: ReturnType<typeof definePermissions> =
             preMutation: [allowIfUserIDMatchesLoggedInUser],
             postMutation: [allowIfUserIDMatchesLoggedInUser],
           },
-          // view state cannot be deleted
-          delete: [],
+          delete: NOBODY_CAN,
         },
       },
       issueLabel: {
         row: {
           insert: [and(canSeeIssueLabel, allowIfAdminOrIssueCreator)],
           update: {
-            preMutation: [],
+            preMutation: NOBODY_CAN,
           },
           delete: [and(canSeeIssueLabel, allowIfAdminOrIssueCreator)],
           select: [canSeeIssueLabel],
@@ -382,7 +383,7 @@ export const permissions: ReturnType<typeof definePermissions> =
           // Can only update their own emoji.
           update: {
             preMutation: [and(canSeeEmoji, loggedInUserIsCreator)],
-            postProposedMutation: [and(canSeeEmoji, loggedInUserIsCreator)],
+            postMutation: [and(canSeeEmoji, loggedInUserIsCreator)],
           },
           delete: [and(canSeeEmoji, loggedInUserIsCreator)],
           select: [canSeeEmoji],
@@ -393,7 +394,7 @@ export const permissions: ReturnType<typeof definePermissions> =
           insert: [allowIfUserIDMatchesLoggedInUser],
           update: {
             preMutation: [allowIfUserIDMatchesLoggedInUser],
-            postProposedMutation: [allowIfUserIDMatchesLoggedInUser],
+            postMutation: [allowIfUserIDMatchesLoggedInUser],
           },
           delete: [allowIfUserIDMatchesLoggedInUser],
         },
