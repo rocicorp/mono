@@ -726,8 +726,14 @@ function* mapFromSQLiteTypes(
 }
 
 function fromSQLiteTypes(valueTypes: Record<string, SchemaValue>, row: Row) {
-  for (const key in row) {
-    row[key] = fromSQLiteType(valueTypes[key].type, row[key]);
+  for (const key of Object.keys(row)) {
+    const valueType = valueTypes[key];
+    if (valueType === undefined) {
+      throw new Error(
+        `Postgres is missing the column "${key}" but that column was part of a row.`,
+      );
+    }
+    row[key] = fromSQLiteType(valueType.type, row[key]);
   }
 }
 
