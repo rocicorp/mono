@@ -1,0 +1,10 @@
+{
+    "ZERO_UPSTREAM_DB": "postgresql://user:password@host:port/database",
+    "ZERO_CVR_DB": "postgresql://user:password@host:port/database",
+    "ZERO_CHANGE_DB": "postgresql://user:password@host:port/database",
+    "ZERO_JWT_SECRET": "secret",
+    "AWS_ACCESS_KEY_ID": "aws_access_key_id",
+    "AWS_SECRET_ACCESS_KEY": "aws_secret_access_key",
+    "Tag": "latest",
+    "CertificateArn": "arn:aws:acm:us-east-1:<your-aws-account-id>:certificate/<certificate-id>"
+} 

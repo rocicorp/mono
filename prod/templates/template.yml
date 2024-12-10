@@ -1,0 +1,434 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: ZeroCache - ViewSyncer and ReplicationManager AWS Fargate with VPC, ALB, and ECR
+
+Parameters:
+  CertificateArn:
+    Type: String
+    Description: ARN of the SSL certificate
+  Tag:
+    Type: String
+    Description: Docker image tag
+    Default: latest
+  ZeroUpstreamDB:
+    Type: String
+    NoEcho: true
+  ZeroCvrDB:
+    Type: String
+    NoEcho: true
+  ZeroChangeDb:
+    Type: String
+    NoEcho: true
+  ZeroJwtSecret:
+    Type: String
+    NoEcho: true
+  AwsAccessKeyID:
+    Type: String
+    NoEcho: true
+  AwsSecretAccessKey:
+    Type: String
+    NoEcho: true
+Globals:
+  Function:
+    Timeout: 3
+    MemorySize: 128
+
+Resources:  
+  VPC:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: ./vpc.yml
+      Parameters:
+        CertificateArn: !Ref CertificateArn
+        
+
+  ECRRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      EmptyOnDelete: true
+
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties: 
+      CapacityProviders: 
+        - FARGATE
+  
+  # Security Group for internal service communication
+  InternalServicesSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for internal service communication
+      VpcId: !GetAtt VPC.Outputs.VPCID
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 4848
+          ToPort: 4848
+          CidrIp: 10.0.0.0/16
+        - IpProtocol: tcp
+          FromPort: 4849
+          ToPort: 4849
+          CidrIp: 10.0.0.0/16
+      Tags:
+        - Key: Name
+          Value: internal-services-sg
+  # Create a private DNS namespace
+  ServiceDiscoveryNamespace:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    Properties:
+      Name: internal.local
+      Vpc: !GetAtt VPC.Outputs.VPCID
+
+  # Service Discovery for Replication Manager
+  ReplicationManagerRegistry:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Name: replication-manager
+      DnsConfig:
+        NamespaceId: !Ref ServiceDiscoveryNamespace
+        DnsRecords:
+          - Type: A
+            TTL: 300
+
+  ServiceViewSyncer:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: "view-syncer"
+      Cluster: !Ref Cluster
+      LaunchType: FARGATE
+      EnableExecuteCommand: true
+      HealthCheckGracePeriodSeconds: 5
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets: [!GetAtt "VPC.Outputs.PublicSubnet1", !GetAtt VPC.Outputs.PublicSubnet2]
+          SecurityGroups: 
+            - !GetAtt VPC.Outputs.SG
+            - !Ref InternalServicesSG
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 50
+      DesiredCount: 1
+      TaskDefinition: !Ref "TaskDefinitionViewSyncer"
+      LoadBalancers:
+        - ContainerName: "view-syncer-container"
+          ContainerPort: 4848
+          TargetGroupArn: !GetAtt VPC.Outputs.PublicLBTargetGroup
+ 
+  # First, create the secure parameters
+  ViewSyncerSecrets:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: "Secrets for Zero Cache Service"
+      SecretString: !Sub |
+        {
+          "ZERO_UPSTREAM_DB": "${ZeroUpstreamDB}",
+          "ZERO_CVR_DB": "${ZeroCvrDB}",
+          "ZERO_CHANGE_DB": "${ZeroChangeDb}",
+          "ZERO_JWT_SECRET": "${ZeroJwtSecret}",
+          "AWS_ACCESS_KEY_ID": "${AwsAccessKeyID}",
+          "AWS_SECRET_ACCESS_KEY": "${AwsSecretAccessKey}"
+        }
+
+  # Update the task execution role to allow reading SSM parameters
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: ReadSSMParameters
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameters
+                  - ssm:GetParameter
+                Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/zbugs/view-syncer/*
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: 
+                  - !Ref ViewSyncerSecrets
+                  - !Ref ReplicationManagerSecrets
+
+  # The secure task definition
+  TaskDefinitionViewSyncer:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: view-syncer-task-definition
+      Cpu: 16384
+      Memory: 32768
+      NetworkMode: awsvpc
+      RequiresCompatibilities: 
+        - FARGATE
+      TaskRoleArn: !Ref ECSTaskRole
+      ExecutionRoleArn: !Ref ECSTaskExecutionRole
+      RuntimePlatform:
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX
+      ContainerDefinitions:
+        - Name: view-syncer-container
+          Cpu: 16384
+          Memory: 32768
+          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/zero-zbugs
+          PortMappings:
+            - Name: "4848"
+              ContainerPort: 4848
+              HostPort: 4848
+              Protocol: tcp
+              AppProtocol: http
+          Essential: true
+          Environment:
+            - Name: ZERO_CHANGE_STREAMER_URI
+              Value: ws://replication-manager.internal.local:4849
+            - Name: ZERO_LOG_FORMAT
+              Value: json
+            - Name: ZERO_REPLICA_FILE
+              Value: /data/db/sync-replica.db
+            - Name: REPLICA_URL
+              Value: !Sub "s3://${ApplicationBucket}/1208b"
+            - Name: ZERO_LOG_LEVEL
+              Value: debug
+            - Name: ZERO_UPSTREAM_MAX_CONNS
+              Value: 60
+            - Name: ZERO_CVR_MAX_CONNS
+              Value: 275
+            - Name: ZERO_CHANGE_MAX_CONNS
+              Value: 3
+            - Name: ZERO_SCHEMA_FILE
+              Value: /opt/app/packages/zero-cache/zero-schema.json
+          Secrets:
+            - Name: ZERO_UPSTREAM_DB
+              ValueFrom: !Sub "${ViewSyncerSecrets}:ZERO_UPSTREAM_DB::"
+            - Name: ZERO_CVR_DB
+              ValueFrom: !Sub "${ViewSyncerSecrets}:ZERO_CVR_DB::"
+            - Name: ZERO_CHANGE_DB
+              ValueFrom: !Sub "${ViewSyncerSecrets}:ZERO_CHANGE_DB::"
+            - Name: ZERO_JWT_SECRET
+              ValueFrom: !Sub "${ViewSyncerSecrets}:ZERO_JWT_SECRET::"
+            - Name: AWS_ACCESS_KEY_ID
+              ValueFrom: !Sub "${ViewSyncerSecrets}:AWS_ACCESS_KEY_ID::"
+            - Name: AWS_SECRET_ACCESS_KEY
+              ValueFrom: !Sub "${ViewSyncerSecrets}:AWS_SECRET_ACCESS_KEY::"
+          LinuxParameters:
+            InitProcessEnabled: true
+          StopTimeout: 120
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              mode: non-blocking
+              max-buffer-size: 25m
+              awslogs-group: !Ref LogGroupViewSyncer
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - curl -f http://localhost:4848/ || exit 1
+            Interval: 10
+            Timeout: 60
+            Retries: 10
+            StartPeriod: 10
+
+  LogGroupViewSyncer:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /view-syncer
+
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ecs-tasks.amazonaws.com]
+          Action: ['sts:AssumeRole']
+          Condition:
+            ArnLike:
+              aws:SourceArn: !Sub arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:*
+            StringEquals:
+              aws:SourceAccount: !Ref AWS::AccountId
+      Path: /
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "arn:aws:s3:::${ApplicationBucket}"
+                  - !Sub "arn:aws:s3:::${ApplicationBucket}/*"
+
+  ServiceReplicationManager:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - ServiceDiscoveryNamespace
+    Properties:
+      ServiceName: "replication-manager"
+      Cluster: !Ref Cluster
+      LaunchType: FARGATE
+      EnableExecuteCommand: true
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets: [!GetAtt "VPC.Outputs.PrivateSubnet1", !GetAtt VPC.Outputs.PrivateSubnet2]
+          SecurityGroups: 
+            - !GetAtt VPC.Outputs.SG
+            - !Ref InternalServicesSG
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 50
+      DesiredCount: 1
+      TaskDefinition: !Ref "TaskDefinitionReplicationManager"
+      ServiceRegistries:
+        - RegistryArn: !GetAtt ReplicationManagerRegistry.Arn
+
+  ReplicationManagerSecrets:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: "Secrets for Replication Manager Service"
+      SecretString: !Sub |
+        {
+          "ZERO_UPSTREAM_DB": "${ZeroUpstreamDB}",
+          "ZERO_CVR_DB": "${ZeroCvrDB}",
+          "ZERO_CHANGE_DB": "${ZeroChangeDb}",
+          "ZERO_JWT_SECRET": "${ZeroJwtSecret}",
+          "AWS_ACCESS_KEY_ID": "${AwsAccessKeyID}",
+          "AWS_SECRET_ACCESS_KEY": "${AwsSecretAccessKey}"
+        }
+
+  TaskDefinitionReplicationManager:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: replication-manager-task-definition
+      Cpu: 2048
+      Memory: 8192
+      NetworkMode: awsvpc
+      RequiresCompatibilities: 
+        - FARGATE
+      ExecutionRoleArn: !Ref ECSTaskExecutionRole
+      TaskRoleArn: !Ref ECSTaskRole
+      RuntimePlatform:
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX
+      ContainerDefinitions:
+        - Name: replication-manager-container
+          Cpu: 2048
+          Memory: 8192
+          Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/zero-zbugs
+          PortMappings:
+            - Name: "4849"
+              ContainerPort: 4849
+              HostPort: 4849
+              Protocol: tcp
+              AppProtocol: http
+          Essential: true
+          Environment:
+            - Name: ZERO_NUM_SYNC_WORKERS
+              Value: "0"
+            - Name: ZERO_LITESTREAM
+              Value: "1"
+            - Name: REPLICA_URL
+              Value: !Sub "s3://${ApplicationBucket}/1208b"
+            - Name: ZERO_LOG_FORMAT
+              Value: json
+            - Name: ZERO_REPLICA_FILE
+              Value: /data/db/sync-replica.db
+            - Name: ZERO_LOG_LEVEL
+              Value: debug
+            - Name: ZERO_UPSTREAM_MAX_CONNS
+              Value: 60
+            - Name: ZERO_CVR_MAX_CONNS
+              Value: 275
+            - Name: ZERO_CHANGE_MAX_CONNS
+              Value: 3
+            - Name: ZERO_SCHEMA_FILE
+              Value: /opt/app/packages/zero-cache/zero-schema.json
+          Secrets:
+            - Name: ZERO_UPSTREAM_DB
+              ValueFrom: !Sub "${ReplicationManagerSecrets}:ZERO_UPSTREAM_DB::"
+            - Name: ZERO_CVR_DB
+              ValueFrom: !Sub "${ReplicationManagerSecrets}:ZERO_CVR_DB::"
+            - Name: ZERO_CHANGE_DB
+              ValueFrom: !Sub "${ReplicationManagerSecrets}:ZERO_CHANGE_DB::"
+            - Name: ZERO_JWT_SECRET
+              ValueFrom: !Sub "${ReplicationManagerSecrets}:ZERO_JWT_SECRET::"
+            - Name: AWS_ACCESS_KEY_ID
+              ValueFrom: !Sub "${ReplicationManagerSecrets}:AWS_ACCESS_KEY_ID::"
+            - Name: AWS_SECRET_ACCESS_KEY
+              ValueFrom: !Sub "${ReplicationManagerSecrets}:AWS_SECRET_ACCESS_KEY::"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              mode: non-blocking
+              max-buffer-size: 25m
+              awslogs-group: !Ref LogGroupReplicationManager
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: replication-manager
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - curl -f http://localhost:4849/ || exit 1
+            Interval: 300
+            Timeout: 60
+            Retries: 5
+            StartPeriod: 300
+
+  LogGroupReplicationManager:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /replication-manager
+
+  # S3 Bucket for application data
+  ApplicationBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      BucketName: !Sub ${AWS::StackName}-data-bucket
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+Outputs:
+  ClusterName:
+    Description: Amazon ECS Cluster Name
+    Value: !Ref Cluster
+  ViewSyncerServiceName:
+    Description: ViewSyncer Service Name
+    Value: !GetAtt ServiceViewSyncer.Name
+  ReplicationManagerServiceName:
+    Description: Replication Manager Service Name
+    Value: !GetAtt ServiceReplicationManager.Name
+  FQDN:
+    Description: URL for your application
+    Value: !GetAtt VPC.Outputs.PublicLBFQDN
+  RepositoryUrl:
+    Description: URL of the repo
+    Value: !GetAtt ECRRepo.RepositoryUri
+  BucketName:
+    Description: Name of the created S3 bucket
+    Value: !Ref ApplicationBucket
