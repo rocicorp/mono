@@ -1,6 +1,7 @@
 import classNames from 'classnames';
 import {useEffect, useState} from 'react';
 import {useIntersectionObserver} from 'usehooks-ts';
+import type {Emoji} from '../emoji-utils.js';
 import {
   findEmojiForCreator,
   formatEmojiCreatorList,
@@ -10,7 +11,6 @@ import {useDocumentHasFocus} from '../hooks/use-document-has-focus.js';
 import {useNumericPref} from '../hooks/use-user-pref.js';
 import {useZero} from '../hooks/use-zero.js';
 import {ButtonWithLoginCheck} from './button-with-login-check.js';
-import type {Emoji} from './emoji-panel.js';
 import {SKIN_TONE_PREF} from './emoji-picker.js';
 import {Tooltip, TooltipContent, TooltipTrigger} from './tooltip.jsx';
 

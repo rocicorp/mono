@@ -11,7 +11,6 @@ import {
   useRole,
   useTransitionStatus,
 } from '@floating-ui/react';
-import type {Row} from '@rocicorp/zero';
 import {nanoid} from 'nanoid';
 import {
   forwardRef,
@@ -21,9 +20,12 @@ import {
   type ForwardedRef,
 } from 'react';
 import {useQuery} from 'zero-react/src/use-query.js';
-import type {Schema} from '../../schema.js';
 import addEmojiIcon from '../assets/icons/add-emoji.svg';
-import {findEmojiForCreator, normalizeEmoji} from '../emoji-utils.js';
+import {
+  findEmojiForCreator,
+  normalizeEmoji,
+  type Emoji,
+} from '../emoji-utils.js';
 import {useLogin} from '../hooks/use-login.js';
 import {useZero} from '../hooks/use-zero.js';
 import {ButtonWithLoginCheck} from './button-with-login-check.js';
@@ -32,10 +34,6 @@ import {EmojiPicker} from './emoji-picker.js';
 import {EmojiPill} from './emoji-pill.js';
 
 const loginMessage = 'You need to be logged in to modify emoji reactions.';
-
-export type Emoji = Row<Schema['tables']['emoji']> & {
-  readonly creator: Row<Schema['tables']['user']> | undefined;
-};
 
 type Props = {
   issueID: string;
