@@ -191,10 +191,60 @@ function configSchema<T extends Options>(options: T): v.Type<Config<T>> {
   return makeObjectType(options) as v.Type<Config<T>>;
 }
 
+/**
+ * Converts an Options instance into an "env schema", which is an object with
+ * ENV names as its keys, mapped to optional or required string values
+ * (corresponding to the optionality of the corresponding options).
+ *
+ * This is used as a format for encoding options for a multi-tenant version
+ * of an app, with an envSchema for each tenant.
+ */
+export function envSchema<T extends Options>(options: T, envNamePrefix = '') {
+  const fields: [string, v.Type<string> | v.Optional<string>][] = [];
+
+  function addField(name: string, type: OptionType, group?: string) {
+    const flag = group ? `${group}_${name}` : name;
+    const env = snakeCase(`${envNamePrefix}${flag}`).toUpperCase();
+
+    const {required} = getRequiredOrDefault(type);
+    fields.push([env, required ? v.string() : v.string().optional()]);
+  }
+
+  function addFields(o: Options | Group, group?: string) {
+    Object.entries(o).forEach(([name, value]) => {
+      // OptionType
+      if (v.instanceOfAbstractType(value)) {
+        addField(name, value, group);
+        return;
+      }
+      // WrappedOptionType
+      const {type} = value;
+      if (v.instanceOfAbstractType(type)) {
+        addField(name, type, group);
+        return;
+      }
+      // OptionGroup
+      addFields(value as Group, name);
+    });
+  }
+
+  addFields(options);
+
+  return v.object(Object.fromEntries(fields));
+}
+
 // type TerminalType is not exported from badrap/valita
 type TerminalType = Parameters<
   Parameters<v.Type<unknown>['toTerminals']>[0]
 >[0];
+
+function getRequiredOrDefault(type: OptionType) {
+  const defaultResult = v.testOptional<Value>(undefined, type);
+  return {
+    required: !defaultResult.ok,
+    defaultValue: defaultResult.ok ? defaultResult.value : undefined,
+  };
+}
 
 export function parseOptions<T extends Options>(
   options: T,
@@ -212,10 +262,7 @@ export function parseOptions<T extends Options>(
     const flag = group ? kebabcase(`${group}-${name}`) : kebabcase(name);
     flagToField.set(flag, name);
 
-    const defaultResult = v.testOptional<Value>(undefined, type);
-    const required = !defaultResult.ok;
-    const defaultValue = defaultResult.ok ? defaultResult.value : undefined;
-
+    const {required, defaultValue} = getRequiredOrDefault(type);
     let multiple = type.name === 'array';
     const literals = new Set<string>();
     const terminalTypes = new Set<string>();

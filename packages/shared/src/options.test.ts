@@ -1,7 +1,7 @@
 import {SilentLogger} from '@rocicorp/logger';
 import stripAnsi from 'strip-ansi';
 import {expect, test, vi} from 'vitest';
-import {parseOptions, type Config, type Options} from './options.js';
+import {envSchema, parseOptions, type Config, type Options} from './options.js';
 import * as v from './valita.js';
 
 const options = {
@@ -309,6 +309,142 @@ test.each([
     expect(parseOptions(options, argv, 'Z_', env)).toEqual(result);
   },
 );
+
+test('envSchema', () => {
+  const schema = envSchema(options, 'ZERO_');
+  expect(JSON.stringify(schema, null, 2)).toMatchInlineSnapshot(`
+      "{
+        "shape": {
+          "ZERO_PORT": {
+            "type": {
+              "name": "string",
+              "issue": {
+                "ok": false,
+                "code": "invalid_type",
+                "expected": [
+                  "string"
+                ]
+              }
+            },
+            "name": "optional"
+          },
+          "ZERO_REPLICA_DB_FILE": {
+            "name": "string",
+            "issue": {
+              "ok": false,
+              "code": "invalid_type",
+              "expected": [
+                "string"
+              ]
+            }
+          },
+          "ZERO_LITESTREAM": {
+            "type": {
+              "name": "string",
+              "issue": {
+                "ok": false,
+                "code": "invalid_type",
+                "expected": [
+                  "string"
+                ]
+              }
+            },
+            "name": "optional"
+          },
+          "ZERO_LOG_FORMAT": {
+            "type": {
+              "name": "string",
+              "issue": {
+                "ok": false,
+                "code": "invalid_type",
+                "expected": [
+                  "string"
+                ]
+              }
+            },
+            "name": "optional"
+          },
+          "ZERO_SHARD_ID": {
+            "type": {
+              "name": "string",
+              "issue": {
+                "ok": false,
+                "code": "invalid_type",
+                "expected": [
+                  "string"
+                ]
+              }
+            },
+            "name": "optional"
+          },
+          "ZERO_SHARD_PUBLICATIONS": {
+            "type": {
+              "name": "string",
+              "issue": {
+                "ok": false,
+                "code": "invalid_type",
+                "expected": [
+                  "string"
+                ]
+              }
+            },
+            "name": "optional"
+          },
+          "ZERO_TUPLE": {
+            "type": {
+              "name": "string",
+              "issue": {
+                "ok": false,
+                "code": "invalid_type",
+                "expected": [
+                  "string"
+                ]
+              }
+            },
+            "name": "optional"
+          },
+          "ZERO_HIDE_ME": {
+            "type": {
+              "name": "string",
+              "issue": {
+                "ok": false,
+                "code": "invalid_type",
+                "expected": [
+                  "string"
+                ]
+              }
+            },
+            "name": "optional"
+          }
+        },
+        "name": "object",
+        "_invalidType": {
+          "ok": false,
+          "code": "invalid_type",
+          "expected": [
+            "object"
+          ]
+        }
+      }"
+    `);
+
+  expect(
+    v.test(
+      {
+        ['ZERO_PORT']: '1234',
+        ['ZERO_REPLICA_DB_FILE']: '/foo/bar.db',
+      },
+      schema,
+    ).ok,
+  ).toBe(true);
+
+  expect(v.test({['ZERO_PORT']: '/foo/bar.db'}, schema)).toMatchInlineSnapshot(`
+    {
+      "error": "Missing property ZERO_REPLICA_DB_FILE",
+      "ok": false,
+    }
+  `);
+});
 
 test.each([
   [
