@@ -134,7 +134,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
           case 'insert': {
             source.push({
               type: 'add',
-              row: op.value,
+              row: source.toSQLiteRow(op.value),
             });
             break;
           }
