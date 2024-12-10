@@ -461,9 +461,7 @@ class ChangeMaker {
       case 'relation':
         return this.#handleRelation(msg);
       case 'type':
-        throw new Error(
-          `Custom types are not supported (received "${msg.typeName}")`,
-        );
+        return []; // Nothing need be done for custom types.
       case 'origin':
         // We do not set the `origin` option in the pgoutput parameters:
         // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS

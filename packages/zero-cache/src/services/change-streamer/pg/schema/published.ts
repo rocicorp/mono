@@ -14,6 +14,7 @@ WITH published_columns AS (SELECT
   attname AS "col", 
   pt.typname AS "type", 
   atttypid::int8 AS "typeOID", 
+  typtype,
   NULLIF(atttypmod, -1) AS "maxLen", 
   attndims "arrayDims", 
   attnotnull AS "notNull",
@@ -46,6 +47,7 @@ tables AS (SELECT json_build_object(
       'dataType', CASE WHEN "arrayDims" = 0 
                        THEN "type" 
                        ELSE substring("type" from 2) || repeat('[]', "arrayDims") END,
+      'pgTypeClass', "typtype",
       'typeOID', "typeOID",
       -- https://stackoverflow.com/a/52376230
       'characterMaximumLength', CASE WHEN "typeOID" = 1043 OR "typeOID" = 1042 

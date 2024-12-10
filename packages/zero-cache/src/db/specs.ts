@@ -1,9 +1,31 @@
 import type {DeepReadonly} from '../../../shared/src/json.js';
 import * as v from '../../../shared/src/valita.js';
 
+// Values of the `typtype` column in https://www.postgresql.org/docs/17/catalog-pg-type.html#CATALOG-PG-TYPE
+export enum PostgresTypeClass {
+  Base = 'b',
+  Composite = 'c',
+  Domain = 'd',
+  Enum = 'e',
+  Pseudo = 'p',
+  Range = 'r',
+  Multirange = 'm',
+}
+
+export const pgTypeClassSchema = v.union(
+  v.literal(PostgresTypeClass.Base),
+  v.literal(PostgresTypeClass.Composite),
+  v.literal(PostgresTypeClass.Domain),
+  v.literal(PostgresTypeClass.Enum),
+  v.literal(PostgresTypeClass.Pseudo),
+  v.literal(PostgresTypeClass.Range),
+  v.literal(PostgresTypeClass.Multirange),
+);
+
 export const columnSpec = v.object({
   pos: v.number(),
   dataType: v.string(),
+  pgTypeClass: pgTypeClassSchema.optional(),
   characterMaximumLength: v.number().nullable().optional(),
   notNull: v.boolean().nullable().optional(),
   dflt: v.string().nullable().optional(),

@@ -1,13 +1,14 @@
 import type {LogContext} from '@rocicorp/logger';
 import {ZERO_VERSION_COLUMN_NAME} from '../services/replicator/schema/replication-state.js';
-import {dataTypeToZqlValueType} from '../types/lite.js';
+import {dataTypeToZqlValueType, textEnumTypeName} from '../types/lite.js';
 import {liteTableName} from '../types/names.js';
-import type {
-  ColumnSpec,
-  IndexSpec,
-  LiteIndexSpec,
-  LiteTableSpec,
-  TableSpec,
+import {
+  PostgresTypeClass,
+  type ColumnSpec,
+  type IndexSpec,
+  type LiteIndexSpec,
+  type LiteTableSpec,
+  type TableSpec,
 } from './specs.js';
 
 export const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {
@@ -72,10 +73,13 @@ export function mapPostgresToLiteColumn(
   column: {name: string; spec: ColumnSpec},
   ignoreDefault?: 'ignore-default',
 ): ColumnSpec {
-  const {pos, dataType, dflt} = column.spec;
+  const {pos, dataType, pgTypeClass, dflt} = column.spec;
   return {
     pos,
-    dataType,
+    dataType:
+      pgTypeClass === PostgresTypeClass.Enum
+        ? textEnumTypeName(dataType)
+        : dataType,
     characterMaximumLength: null,
     // Note: NOT NULL constraints are always ignored for SQLite (replica) tables.
     // 1. They are enforced by the replication stream.
