@@ -168,8 +168,8 @@ Resources:
     Type: AWS::ECS::TaskDefinition
     Properties:
       Family: view-syncer-task-definition
-      Cpu: 1024
-      Memory: 8192
+      Cpu: 16384
+      Memory: 32768
       NetworkMode: awsvpc
       RequiresCompatibilities: 
         - FARGATE
@@ -180,8 +180,8 @@ Resources:
         OperatingSystemFamily: LINUX
       ContainerDefinitions:
         - Name: view-syncer-container
-          Cpu: 1024
-          Memory: 8192
+          Cpu: 16384
+          Memory: 32768
           Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/zero-zbugs
           PortMappings:
             - Name: "4848"
@@ -198,7 +198,7 @@ Resources:
             - Name: ZERO_REPLICA_FILE
               Value: /data/db/sync-replica.db
             - Name: REPLICA_URL
-              Value: !Sub "s3://${ApplicationBucket}/1208"
+              Value: !Sub "s3://${ApplicationBucket}/1208b"
             - Name: ZERO_LOG_LEVEL
               Value: debug
             - Name: ZERO_UPSTREAM_MAX_CONNS
@@ -318,7 +318,7 @@ Resources:
     Type: AWS::ECS::TaskDefinition
     Properties:
       Family: replication-manager-task-definition
-      Cpu: 1024
+      Cpu: 2048
       Memory: 8192
       NetworkMode: awsvpc
       RequiresCompatibilities: 
@@ -330,7 +330,7 @@ Resources:
         OperatingSystemFamily: LINUX
       ContainerDefinitions:
         - Name: replication-manager-container
-          Cpu: 1024
+          Cpu: 2048
           Memory: 8192
           Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/zero-zbugs
           PortMappings:
@@ -346,7 +346,7 @@ Resources:
             - Name: ZERO_LITESTREAM
               Value: "1"
             - Name: REPLICA_URL
-              Value: !Sub "s3://${ApplicationBucket}/1208"
+              Value: !Sub "s3://${ApplicationBucket}/1208b"
             - Name: ZERO_LOG_FORMAT
               Value: json
             - Name: ZERO_REPLICA_FILE
