@@ -4,6 +4,7 @@ import {useQuery} from '@rocicorp/zero/react';
 import {useWindowVirtualizer, type Virtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -244,18 +245,8 @@ export function IssuePage() {
   return (
     <>
       <div className="issue-detail-container">
-        <ToastContainer
-          hideProgressBar={true}
-          theme="dark"
-          containerId="bottom"
-          newestOnTop={true}
-          closeButton={false}
-          position="bottom-center"
-          closeOnClick={true}
-          limit={3}
-          // Auto close is broken. So we will manage it ourselves.
-          autoClose={false}
-        />
+        <MyToastContainer position="bottom" />
+        <MyToastContainer position="top" />
         {/* Center column of info */}
         <div className="issue-detail">
           <div className="issue-topbar">
@@ -528,6 +519,23 @@ export function IssuePage() {
   );
 }
 
+const MyToastContainer = memo(({position}: {position: 'top' | 'bottom'}) => {
+  return (
+    <ToastContainer
+      hideProgressBar={true}
+      theme="dark"
+      containerId={position}
+      newestOnTop={position === 'bottom'}
+      closeButton={false}
+      position={`${position}-center`}
+      closeOnClick={true}
+      limit={3}
+      // Auto close is broken. So we will manage it ourselves.
+      autoClose={false}
+    />
+  );
+});
+
 // This cache is stored outside the state so that it can be used between renders.
 const commentSizeCache = new LRUCache<string, number>(1000);
 
@@ -541,6 +549,46 @@ function showToastForEmoji(
   const toastID = emoji.id;
   const {creator} = emoji;
   assert(creator);
+
+  // Determine if we should show a toast:
+  // - at the top (the emoji is above the viewport)
+  // - at the bottom (the emoji is below the viewport)
+  // - no toast. Just the tooltip (which is always shown)
+  let containerID: 'top' | 'bottom' | undefined;
+
+  const index = issue.comments.findIndex(c => c.id === emoji.subjectID);
+  if (index === -1) {
+    // Is the emoji on the issue itself?
+    if (emoji.subjectID === issue.id && emojiElement !== null) {
+      // The emoji is on the issue itself.
+      // We will scroll to the issue itself.
+      // We don't need to show a toast for this.
+
+      const rect = emojiElement.getBoundingClientRect();
+      const {scrollRect} = virtualizer;
+      if (scrollRect) {
+        if (rect.bottom < 0) {
+          containerID = 'top';
+        } else if (rect.top > scrollRect.height) {
+          containerID = 'bottom';
+        }
+      }
+    }
+  } else {
+    const toastPosition = virtualizer.getOffsetForIndex(index);
+    if (toastPosition !== undefined) {
+      if (toastPosition[1] === 'start') {
+        containerID = 'top';
+      } else if (toastPosition[1] === 'end') {
+        containerID = 'bottom';
+      }
+    }
+  }
+
+  if (containerID === undefined) {
+    return;
+  }
+
   toast(
     <ToastContent toastID={toastID}>
       <img className="toast-emoji-icon" src={creator.avatar} />
@@ -552,7 +600,7 @@ function showToastForEmoji(
     </ToastContent>,
     {
       toastId: toastID,
-      containerId: 'bottom',
+      containerId: containerID,
       onClick: () => {
         // Put the emoji that was clicked first in the recent emojis list.
         // This is so that the emoji that was clicked first is the one that is
