@@ -22,6 +22,7 @@
   --color-text-dimmed-label: rgba(255, 255, 255, 0.5);
   --color-primary-cta: rgba(255, 92, 0, 1);
   --color-primary-cta-dimmed: rgba(255, 92, 0, 0.2);
+  --color-primary-cta-text: rgba(255, 255, 255, 1);
   --color-primary-cta-outline: rgba(255, 255, 255, 0.2);
   --color-light-outline: rgba(62, 62, 62, 0.39);
   --color-row-hover: rgba(62, 62, 62, 0.2);
@@ -85,6 +86,10 @@ textarea.autoResize {
   width: 100vw;
 }
 
+.svg-icon {
+  fill: var(--color-primary-cta);
+}
+
 .modal-background {
   background-color: rgba(0, 0, 0, 0.8);
 }
@@ -126,7 +131,7 @@ textarea.autoResize {
 }
 
 .primary-cta {
-  color: var(--color-text-primary-active);
+  color: var(--color-primary-cta-text);
   flex: 0 0 auto;
   border-radius: 0.5rem;
   background-color: var(--color-primary-cta);

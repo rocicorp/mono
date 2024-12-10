@@ -7,6 +7,7 @@ import {IssuePage} from './pages/issue/issue-page.js';
 import {ListPage} from './pages/list/list-page.js';
 import {routes} from './routes.js';
 import {zeroRef} from './zero-setup.js';
+import ColorTester from './components/ColorTester.js'; // Import the ColorTester component
 
 export default function Root() {
   const z = useSyncExternalStore(
@@ -31,6 +32,8 @@ export default function Root() {
             <Route component={ErrorPage} />
           </Switch>
         </div>
+        {/* Add the ColorTester component */}
+        <ColorTester />
       </div>
     </ZeroProvider>
   );
