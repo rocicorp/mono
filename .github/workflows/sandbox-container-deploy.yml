@@ -2,7 +2,7 @@ name: Build and Deploy Zero-Cache to ECS Sandbox
 
 on:
   push:
-    branches: [sandbox]
+    branches: [disable]
     # paths:
     #   - 'packages/zero-cache/**'
 env:
