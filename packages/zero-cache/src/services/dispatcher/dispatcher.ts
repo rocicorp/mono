@@ -26,7 +26,7 @@ export class Dispatcher extends HttpService {
   ) {
     super('dispatcher', lc, opts, fastify => {
       fastify.get('/', (_req, res) => res.send('OK'));
-      installWebSocketHandoff(fastify.server, req => this.#handoff(req));
+      installWebSocketHandoff(lc, fastify.server, req => this.#handoff(req));
     });
 
     this.#workersByHostname = workersByHostname;
