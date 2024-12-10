@@ -239,6 +239,15 @@ export class TableSource implements Source {
     return input;
   }
 
+  toSQLiteRow(row: Row): Row {
+    return Object.fromEntries(
+      Object.entries(row).map(([key, value]) => [
+        key,
+        toSQLiteType(value, this.#columns[key].type),
+      ]),
+    ) as Row;
+  }
+
   #cleanup(req: FetchRequest, connection: Connection): Stream<Node> {
     return this.#fetch(req, connection);
   }
