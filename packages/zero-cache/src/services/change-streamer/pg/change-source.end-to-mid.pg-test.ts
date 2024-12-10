@@ -43,6 +43,7 @@ describe('change-source/pg/end-to-mid-test', () => {
 
     const upstreamURI = getConnectionURI(upstream);
     await upstream.unsafe(`
+    CREATE TYPE ENUMZ AS ENUM ('1', '2', '3');
     CREATE TABLE foo(
       id TEXT PRIMARY KEY,
       int INT4,
@@ -54,7 +55,8 @@ describe('change-source/pg/end-to-mid-test', () => {
       date DATE,
       time TIME,
       json JSON,
-      jsonb JSONB
+      jsonb JSONB,
+      numz ENUMZ
     );
 
     -- Use the internal zero schema to test tables in a different schema,
@@ -751,9 +753,9 @@ describe('change-source/pg/end-to-mid-test', () => {
       'data types',
       `
       ALTER PUBLICATION zero_some_public SET TABLE foo (
-        id, int, big, flt, bool, timea, date, json, jsonb);
+        id, int, big, flt, bool, timea, date, json, jsonb, numz);
 
-      INSERT INTO foo (id, int, big, flt, bool, timea, date, json, jsonb)
+      INSERT INTO foo (id, int, big, flt, bool, timea, date, json, jsonb, numz)
          VALUES (
           'abc', 
           -2, 
@@ -763,10 +765,12 @@ describe('change-source/pg/end-to-mid-test', () => {
           '2019-01-12T00:30:35.381101032Z', 
           'April 12, 2003',
           '[{"foo":"bar","bar":"foo"},123]',
-          '{"far": 456, "boo" : {"baz": 123}}'
+          '{"far": 456, "boo" : {"baz": 123}}',
+          '2'
         );
       `,
       [
+        {tag: 'add-column'},
         {tag: 'add-column'},
         {tag: 'add-column'},
         {tag: 'add-column'},
@@ -785,6 +789,7 @@ describe('change-source/pg/end-to-mid-test', () => {
             date: 1050105600000,
             json: [{foo: 'bar', bar: 'foo'}, 123],
             jsonb: {boo: {baz: 123}, far: 456},
+            numz: '2',
           },
         },
       ],
@@ -800,6 +805,7 @@ describe('change-source/pg/end-to-mid-test', () => {
             date: 1050105600000n,
             json: '[{"foo":"bar","bar":"foo"},123]',
             jsonb: '{"boo":{"baz":123},"far":456}',
+            numz: '2', // Verifies TEXT affinity
             ['_0_version']: expect.stringMatching(/[a-z0-9]+/),
           },
         ],
@@ -864,12 +870,19 @@ describe('change-source/pg/end-to-mid-test', () => {
               notNull: false,
               pos: 9,
             },
+            numz: {
+              characterMaximumLength: null,
+              dataType: 'TEXT_ENUM_enumz',
+              dflt: null,
+              notNull: false,
+              pos: 10,
+            },
             timea: {
               characterMaximumLength: null,
               dataType: 'timestamptz',
               dflt: null,
               notNull: false,
-              pos: 10,
+              pos: 11,
             },
             ['_0_version']: {
               characterMaximumLength: null,

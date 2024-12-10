@@ -176,10 +176,13 @@ export function pgClient(
         lc.info?.(n);
     }
   };
+  const url = new URL(connectionURI);
+  const ssl =
+    url.searchParams.get('ssl') ?? url.searchParams.get('sslmode') ?? 'prefer';
   return postgres(connectionURI, {
     ...postgresTypeConfig(),
     onnotice,
-    ssl: 'prefer',
+    ssl: ssl === 'disable' || ssl === 'false' ? false : (ssl as 'prefer'),
     ...options,
   });
 }

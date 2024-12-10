@@ -138,9 +138,6 @@ test('fetch-start', () => {
   );
   const out = new Catch(s.connect(sort));
 
-  expect(out.fetch({start: {row: {a: 2}, basis: 'before'}})).toEqual(
-    asNodes([]),
-  );
   expect(out.fetch({start: {row: {a: 2}, basis: 'at'}})).toEqual(asNodes([]));
   expect(out.fetch({start: {row: {a: 2}, basis: 'after'}})).toEqual(
     asNodes([]),
@@ -148,9 +145,6 @@ test('fetch-start', () => {
 
   s.push({type: 'add', row: {a: 2}});
   s.push({type: 'add', row: {a: 3}});
-  expect(out.fetch({start: {row: {a: 2}, basis: 'before'}})).toEqual(
-    asNodes([{a: 2}, {a: 3}]),
-  );
   expect(out.fetch({start: {row: {a: 2}, basis: 'at'}})).toEqual(
     asNodes([{a: 2}, {a: 3}]),
   );
@@ -158,9 +152,6 @@ test('fetch-start', () => {
     asNodes([{a: 3}]),
   );
 
-  expect(out.fetch({start: {row: {a: 3}, basis: 'before'}})).toEqual(
-    asNodes([{a: 2}, {a: 3}]),
-  );
   expect(out.fetch({start: {row: {a: 3}, basis: 'at'}})).toEqual(
     asNodes([{a: 3}]),
   );
@@ -169,9 +160,6 @@ test('fetch-start', () => {
   );
 
   s.push({type: 'remove', row: {a: 3}});
-  expect(out.fetch({start: {row: {a: 2}, basis: 'before'}})).toEqual(
-    asNodes([{a: 2}]),
-  );
   expect(out.fetch({start: {row: {a: 2}, basis: 'at'}})).toEqual(
     asNodes([{a: 2}]),
   );
@@ -180,12 +168,56 @@ test('fetch-start', () => {
   );
 });
 
+test('fetch-start reverse', () => {
+  const sort = [['a', 'asc']] as const;
+  const s = createSource(
+    'table',
+    {
+      a: {type: 'number'},
+    },
+    ['a'],
+  );
+  const out = new Catch(s.connect(sort));
+
+  expect(out.fetch({start: {row: {a: 2}, basis: 'at'}, reverse: true})).toEqual(
+    asNodes([]),
+  );
+  expect(
+    out.fetch({start: {row: {a: 2}, basis: 'after'}, reverse: true}),
+  ).toEqual(asNodes([]));
+
+  s.push({type: 'add', row: {a: 2}});
+  s.push({type: 'add', row: {a: 3}});
+  expect(out.fetch({start: {row: {a: 2}, basis: 'at'}, reverse: true})).toEqual(
+    asNodes([{a: 2}]),
+  );
+  expect(
+    out.fetch({start: {row: {a: 2}, basis: 'after'}, reverse: true}),
+  ).toEqual(asNodes([]));
+
+  expect(out.fetch({start: {row: {a: 3}, basis: 'at'}, reverse: true})).toEqual(
+    asNodes([{a: 3}, {a: 2}]),
+  );
+  expect(
+    out.fetch({start: {row: {a: 3}, basis: 'after'}, reverse: true}),
+  ).toEqual(asNodes([{a: 2}]));
+
+  s.push({type: 'remove', row: {a: 3}});
+  expect(out.fetch({start: {row: {a: 2}, basis: 'at'}, reverse: true})).toEqual(
+    asNodes([{a: 2}]),
+  );
+  expect(
+    out.fetch({start: {row: {a: 2}, basis: 'after'}, reverse: true}),
+  ).toEqual(asNodes([]));
+});
+
 suite('fetch-with-constraint-and-start', () => {
   function t(c: {
     columns?: Record<string, SchemaValue> | undefined;
     startData: Row[];
     start: Start;
     constraint: Constraint;
+    reverse?: boolean | undefined;
   }) {
     const sort = [['a', 'asc']] as const;
     const s = createSource(
@@ -200,50 +232,12 @@ suite('fetch-with-constraint-and-start', () => {
       s.push({type: 'add', row});
     }
     const out = new Catch(s.connect(sort));
-    return out.fetch({constraint: c.constraint, start: c.start});
+    return out.fetch({
+      constraint: c.constraint,
+      start: c.start,
+      reverse: c.reverse,
+    });
   }
-  test('c1', () => {
-    expect(
-      t({
-        startData: [
-          {a: 2, b: false},
-          {a: 3, b: false},
-          {a: 5, b: true},
-          {a: 6, b: false},
-          {a: 7, b: false},
-        ],
-        start: {
-          row: {a: 6, b: false},
-          basis: 'before',
-        },
-        constraint: {b: false},
-      }),
-    ).toMatchInlineSnapshot(`
-      [
-        {
-          "relationships": {},
-          "row": {
-            "a": 3,
-            "b": false,
-          },
-        },
-        {
-          "relationships": {},
-          "row": {
-            "a": 6,
-            "b": false,
-          },
-        },
-        {
-          "relationships": {},
-          "row": {
-            "a": 7,
-            "b": false,
-          },
-        },
-      ]
-    `);
-  });
 
   test('c2', () => {
     expect(
@@ -274,6 +268,50 @@ suite('fetch-with-constraint-and-start', () => {
           "relationships": {},
           "row": {
             "a": 7,
+            "b": false,
+          },
+        },
+      ]
+    `);
+  });
+
+  test('c2 reverse', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 6, b: false},
+          basis: 'at',
+        },
+        constraint: {b: false},
+        reverse: true,
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 6,
+            "b": false,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": false,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
             "b": false,
           },
         },
@@ -319,6 +357,45 @@ suite('fetch-with-constraint-and-start', () => {
     `);
   });
 
+  test('c3 reverse', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+          {a: 8, b: true},
+          {a: 9, b: false},
+        ],
+        start: {
+          row: {a: 6, b: false},
+          basis: 'after',
+        },
+        constraint: {b: false},
+        reverse: true,
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": false,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": false,
+          },
+        },
+      ]
+    `);
+  });
+
   test('c4', () => {
     expect(
       t({
@@ -348,6 +425,52 @@ suite('fetch-with-constraint-and-start', () => {
           "relationships": {},
           "row": {
             "a": 6,
+            "b": false,
+            "c": 1,
+          },
+        },
+      ]
+    `);
+  });
+
+  test('c4 reverse', () => {
+    expect(
+      t({
+        columns: {
+          a: {type: 'number'},
+          b: {type: 'boolean'},
+          c: {type: 'number'},
+        },
+        startData: [
+          {a: 2, b: false, c: 2},
+          {a: 3, b: false, c: 1},
+          {a: 5, b: true, c: 2},
+          {a: 6, b: false, c: 1},
+          {a: 7, b: false, c: 2},
+          {a: 8, b: true, c: 1},
+          {a: 9, b: false, c: 2},
+        ],
+        start: {
+          row: {a: 6, b: false, c: 1},
+          basis: 'at',
+        },
+        constraint: {b: false, c: 1},
+        reverse: true,
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 6,
+            "b": false,
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
             "b": false,
             "c": 1,
           },
@@ -436,7 +559,12 @@ test('overlay-source-isolation', () => {
 });
 
 suite('overlay-vs-fetch-start', () => {
-  function t(c: {startData: Row[]; start: Start; change: SourceChange}) {
+  function t(c: {
+    startData: Row[];
+    start: Start;
+    reverse?: boolean | undefined;
+    change: SourceChange;
+  }) {
     const sort = [['a', 'asc']] as const;
     const s = createSource('table', {a: {type: 'number'}}, ['a']);
     for (const row of c.startData) {
@@ -446,6 +574,7 @@ suite('overlay-vs-fetch-start', () => {
     out.onPush = () =>
       out.fetch({
         start: c.start,
+        reverse: c.reverse,
       });
     try {
       s.push(c.change);
@@ -456,262 +585,6 @@ suite('overlay-vs-fetch-start', () => {
     }
     return out.fetches;
   }
-  test('c1', () => {
-    expect(
-      t({
-        startData: [{a: 2}, {a: 4}],
-        start: {
-          row: {a: 1},
-          basis: 'before',
-        },
-        change: {type: 'add', row: {a: 1}},
-      }),
-    ).toMatchInlineSnapshot(`
-      [
-        [
-          {
-            "relationships": {},
-            "row": {
-              "a": 1,
-            },
-          },
-          {
-            "relationships": {},
-            "row": {
-              "a": 2,
-            },
-          },
-          {
-            "relationships": {},
-            "row": {
-              "a": 4,
-            },
-          },
-        ],
-      ]
-    `);
-  });
-
-  test('c2', () => {
-    expect(
-      t({
-        startData: [{a: 2}, {a: 4}],
-        start: {
-          row: {a: 2},
-          basis: 'before',
-        },
-        change: {type: 'add', row: {a: 1}},
-      }),
-    ).toMatchInlineSnapshot(`
-      [
-        [
-          {
-            "relationships": {},
-            "row": {
-              "a": 1,
-            },
-          },
-          {
-            "relationships": {},
-            "row": {
-              "a": 2,
-            },
-          },
-          {
-            "relationships": {},
-            "row": {
-              "a": 4,
-            },
-          },
-        ],
-      ]
-    `);
-  });
-
-  test('c3', () => {
-    expect(
-      t({
-        startData: [{a: 2}, {a: 4}],
-        start: {
-          row: {a: 2},
-          basis: 'before',
-        },
-        change: {type: 'add', row: {a: 2}},
-      }),
-    ).toMatchInlineSnapshot(`
-      {
-        "e": "Row already exists {"type":"add","row":{"a":2}}",
-      }
-    `);
-  });
-
-  test('c4', () => {
-    expect(
-      t({
-        startData: [{a: 2}, {a: 4}],
-        start: {
-          row: {a: 2},
-          basis: 'before',
-        },
-        change: {type: 'add', row: {a: 3}},
-      }),
-    ).toMatchInlineSnapshot(`
-      [
-        [
-          {
-            "relationships": {},
-            "row": {
-              "a": 2,
-            },
-          },
-          {
-            "relationships": {},
-            "row": {
-              "a": 3,
-            },
-          },
-          {
-            "relationships": {},
-            "row": {
-              "a": 4,
-            },
-          },
-        ],
-      ]
-    `);
-  });
-
-  test('c5', () => {
-    expect(
-      t({
-        startData: [{a: 2}, {a: 4}],
-        start: {
-          row: {a: 2},
-          basis: 'before',
-        },
-        change: {type: 'add', row: {a: 5}},
-      }),
-    ).toMatchInlineSnapshot(`
-      [
-        [
-          {
-            "relationships": {},
-            "row": {
-              "a": 2,
-            },
-          },
-          {
-            "relationships": {},
-            "row": {
-              "a": 4,
-            },
-          },
-          {
-            "relationships": {},
-            "row": {
-              "a": 5,
-            },
-          },
-        ],
-      ]
-    `);
-  });
-
-  test('c6', () => {
-    expect(
-      t({
-        startData: [{a: 2}, {a: 4}],
-        start: {
-          row: {a: 4},
-          basis: 'before',
-        },
-        change: {type: 'add', row: {a: 0}},
-      }),
-    ).toMatchInlineSnapshot(`
-      [
-        [
-          {
-            "relationships": {},
-            "row": {
-              "a": 2,
-            },
-          },
-          {
-            "relationships": {},
-            "row": {
-              "a": 4,
-            },
-          },
-        ],
-      ]
-    `);
-  });
-
-  test('c7', () => {
-    expect(
-      t({
-        startData: [{a: 2}, {a: 4}],
-        start: {
-          row: {a: 4},
-          basis: 'before',
-        },
-        change: {type: 'add', row: {a: 3}},
-      }),
-    ).toMatchInlineSnapshot(`
-      [
-        [
-          {
-            "relationships": {},
-            "row": {
-              "a": 3,
-            },
-          },
-          {
-            "relationships": {},
-            "row": {
-              "a": 4,
-            },
-          },
-        ],
-      ]
-    `);
-  });
-
-  test('c8', () => {
-    expect(
-      t({
-        startData: [{a: 2}, {a: 4}],
-        start: {
-          row: {a: 4},
-          basis: 'before',
-        },
-        change: {type: 'add', row: {a: 5}},
-      }),
-    ).toMatchInlineSnapshot(`
-      [
-        [
-          {
-            "relationships": {},
-            "row": {
-              "a": 2,
-            },
-          },
-          {
-            "relationships": {},
-            "row": {
-              "a": 4,
-            },
-          },
-          {
-            "relationships": {},
-            "row": {
-              "a": 5,
-            },
-          },
-        ],
-      ]
-    `);
-  });
 
   test('c9', () => {
     expect(
@@ -736,6 +609,37 @@ suite('overlay-vs-fetch-start', () => {
             "relationships": {},
             "row": {
               "a": 4,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c9 reverse', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'at',
+        },
+        reverse: true,
+        change: {type: 'add', row: {a: 1}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 2,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 1,
             },
           },
         ],
@@ -779,6 +683,31 @@ suite('overlay-vs-fetch-start', () => {
     `);
   });
 
+  test('c10 reverse', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'at',
+        },
+        reverse: true,
+        change: {type: 'add', row: {a: 3}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 2,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
   test('c11', () => {
     expect(
       t({
@@ -815,6 +744,31 @@ suite('overlay-vs-fetch-start', () => {
     `);
   });
 
+  test('c11 reverse', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'at',
+        },
+        reverse: true,
+        change: {type: 'add', row: {a: 5}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 2,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
   test('c12', () => {
     expect(
       t({
@@ -832,6 +786,31 @@ suite('overlay-vs-fetch-start', () => {
             "relationships": {},
             "row": {
               "a": 4,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c12 reverse', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'after',
+        },
+        reverse: true,
+        change: {type: 'add', row: {a: 1}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 1,
             },
           },
         ],
@@ -869,6 +848,24 @@ suite('overlay-vs-fetch-start', () => {
     `);
   });
 
+  test('c13 reverse', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'after',
+        },
+        reverse: true,
+        change: {type: 'add', row: {a: 3}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [],
+      ]
+    `);
+  });
+
   test('c14', () => {
     expect(
       t({
@@ -899,6 +896,24 @@ suite('overlay-vs-fetch-start', () => {
     `);
   });
 
+  test('c14 reverse', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'after',
+        },
+        reverse: true,
+        change: {type: 'add', row: {a: 5}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [],
+      ]
+    `);
+  });
+
   test('c15', () => {
     expect(
       t({
@@ -912,6 +927,37 @@ suite('overlay-vs-fetch-start', () => {
     ).toMatchInlineSnapshot(`
       [
         [],
+      ]
+    `);
+  });
+
+  test('c15 reverse', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 4},
+          basis: 'after',
+        },
+        reverse: true,
+        change: {type: 'add', row: {a: 3}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 3,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 2,
+            },
+          },
+        ],
       ]
     `);
   });
@@ -940,121 +986,16 @@ suite('overlay-vs-fetch-start', () => {
     `);
   });
 
-  test('c17', () => {
-    expect(
-      t({
-        startData: [{a: 2}, {a: 4}],
-        start: {
-          row: {a: 2},
-          basis: 'before',
-        },
-        change: {type: 'remove', row: {a: 1}},
-      }),
-    ).toMatchInlineSnapshot(`
-      {
-        "e": "Row not found {"type":"remove","row":{"a":1}}",
-      }
-    `);
-  });
-
-  test('c18', () => {
-    expect(
-      t({
-        startData: [{a: 2}],
-        start: {
-          row: {a: 2},
-          basis: 'before',
-        },
-        change: {type: 'remove', row: {a: 2}},
-      }),
-    ).toMatchInlineSnapshot(`
-      [
-        [],
-      ]
-    `);
-  });
-
-  test('c19', () => {
-    expect(
-      t({
-        startData: [{a: 2}, {a: 4}],
-        start: {
-          row: {a: 2},
-          basis: 'before',
-        },
-        change: {type: 'remove', row: {a: 2}},
-      }),
-    ).toMatchInlineSnapshot(`
-      [
-        [
-          {
-            "relationships": {},
-            "row": {
-              "a": 4,
-            },
-          },
-        ],
-      ]
-    `);
-  });
-
-  test('c20', () => {
-    expect(
-      t({
-        startData: [{a: 2}, {a: 4}],
-        start: {
-          row: {a: 2},
-          basis: 'before',
-        },
-        change: {type: 'remove', row: {a: 4}},
-      }),
-    ).toMatchInlineSnapshot(`
-      [
-        [
-          {
-            "relationships": {},
-            "row": {
-              "a": 2,
-            },
-          },
-        ],
-      ]
-    `);
-  });
-
-  test('c21', () => {
+  test('c16 reverse', () => {
     expect(
       t({
         startData: [{a: 2}, {a: 4}],
         start: {
           row: {a: 4},
-          basis: 'before',
+          basis: 'after',
         },
-        change: {type: 'remove', row: {a: 2}},
-      }),
-    ).toMatchInlineSnapshot(`
-      [
-        [
-          {
-            "relationships": {},
-            "row": {
-              "a": 4,
-            },
-          },
-        ],
-      ]
-    `);
-  });
-
-  test('c22', () => {
-    expect(
-      t({
-        startData: [{a: 2}, {a: 4}],
-        start: {
-          row: {a: 4},
-          basis: 'before',
-        },
-        change: {type: 'remove', row: {a: 4}},
+        reverse: true,
+        change: {type: 'add', row: {a: 5}},
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1094,6 +1035,24 @@ suite('overlay-vs-fetch-start', () => {
     `);
   });
 
+  test('c23 reverse', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'at',
+        },
+        reverse: true,
+        change: {type: 'remove', row: {a: 2}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [],
+      ]
+    `);
+  });
+
   test('c24', () => {
     expect(
       t({
@@ -1102,6 +1061,31 @@ suite('overlay-vs-fetch-start', () => {
           row: {a: 2},
           basis: 'at',
         },
+        change: {type: 'remove', row: {a: 4}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 2,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c24 reverse', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'at',
+        },
+        reverse: true,
         change: {type: 'remove', row: {a: 4}},
       }),
     ).toMatchInlineSnapshot(`
@@ -1142,6 +1126,31 @@ suite('overlay-vs-fetch-start', () => {
     `);
   });
 
+  test('c25 reverse', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 4},
+          basis: 'at',
+        },
+        reverse: true,
+        change: {type: 'remove', row: {a: 2}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 4,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
   test('c26', () => {
     expect(
       t({
@@ -1155,6 +1164,31 @@ suite('overlay-vs-fetch-start', () => {
     ).toMatchInlineSnapshot(`
       [
         [],
+      ]
+    `);
+  });
+
+  test('c26 reverse', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 4},
+          basis: 'at',
+        },
+        reverse: true,
+        change: {type: 'remove', row: {a: 4}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 2,
+            },
+          },
+        ],
       ]
     `);
   });
@@ -1179,6 +1213,24 @@ suite('overlay-vs-fetch-start', () => {
             },
           },
         ],
+      ]
+    `);
+  });
+
+  test('c27 reverse', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 2},
+          basis: 'after',
+        },
+        reverse: true,
+        change: {type: 'remove', row: {a: 2}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [],
       ]
     `);
   });
@@ -1217,6 +1269,23 @@ suite('overlay-vs-fetch-start', () => {
     `);
   });
 
+  test('c29 reverse', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 4},
+          basis: 'after',
+        },
+        change: {type: 'remove', row: {a: 2}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [],
+      ]
+    `);
+  });
+
   test('c30', () => {
     expect(
       t({
@@ -1230,6 +1299,31 @@ suite('overlay-vs-fetch-start', () => {
     ).toMatchInlineSnapshot(`
       [
         [],
+      ]
+    `);
+  });
+
+  test('c30 reverse', () => {
+    expect(
+      t({
+        startData: [{a: 2}, {a: 4}],
+        start: {
+          row: {a: 4},
+          basis: 'after',
+        },
+        reverse: true,
+        change: {type: 'remove', row: {a: 4}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 2,
+            },
+          },
+        ],
       ]
     `);
   });
@@ -1826,6 +1920,7 @@ suite('overlay-vs-constraint-and-start', () => {
     startData: Row[];
     columns?: Record<string, SchemaValue> | undefined;
     start: Start;
+    reverse?: boolean | undefined;
     constraint: Constraint;
     change: SourceChange;
   }) {
@@ -1857,98 +1952,6 @@ suite('overlay-vs-constraint-and-start', () => {
     return out.fetches;
   }
 
-  test('c1', () => {
-    expect(
-      t({
-        startData: [
-          {a: 2, b: false},
-          {a: 3, b: false},
-          {a: 5, b: true},
-          {a: 6, b: false},
-          {a: 7, b: false},
-        ],
-        start: {
-          row: {a: 6, b: false},
-          basis: 'before',
-        },
-        constraint: {b: false},
-        change: {type: 'add', row: {a: 4, b: false}},
-      }),
-    ).toMatchInlineSnapshot(`
-      [
-        [
-          {
-            "relationships": {},
-            "row": {
-              "a": 4,
-              "b": false,
-            },
-          },
-          {
-            "relationships": {},
-            "row": {
-              "a": 6,
-              "b": false,
-            },
-          },
-          {
-            "relationships": {},
-            "row": {
-              "a": 7,
-              "b": false,
-            },
-          },
-        ],
-      ]
-    `);
-  });
-
-  test('c2', () => {
-    expect(
-      t({
-        startData: [
-          {a: 2, b: false},
-          {a: 3, b: false},
-          {a: 5, b: true},
-          {a: 6, b: false},
-          {a: 7, b: false},
-        ],
-        start: {
-          row: {a: 6, b: false},
-          basis: 'before',
-        },
-        constraint: {b: false},
-        change: {type: 'add', row: {a: 2.5, b: false}},
-      }),
-    ).toMatchInlineSnapshot(`
-      [
-        [
-          {
-            "relationships": {},
-            "row": {
-              "a": 3,
-              "b": false,
-            },
-          },
-          {
-            "relationships": {},
-            "row": {
-              "a": 6,
-              "b": false,
-            },
-          },
-          {
-            "relationships": {},
-            "row": {
-              "a": 7,
-              "b": false,
-            },
-          },
-        ],
-      ]
-    `);
-  });
-
   test('c3', () => {
     expect(
       t({
@@ -1963,6 +1966,53 @@ suite('overlay-vs-constraint-and-start', () => {
           row: {a: 5.5, b: false},
           basis: 'at',
         },
+        constraint: {b: false},
+        change: {type: 'add', row: {a: 5.75, b: false}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 5.75,
+              "b": false,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 6,
+              "b": false,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 7,
+              "b": false,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c3 reverse', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 5.5, b: false},
+          basis: 'at',
+        },
+        reverse: true,
         constraint: {b: false},
         change: {type: 'add', row: {a: 5.75, b: false}},
       }),
@@ -2034,6 +2084,46 @@ suite('overlay-vs-constraint-and-start', () => {
     `);
   });
 
+  test('c4 reverse', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 5.5, b: false},
+          basis: 'at',
+        },
+        reverse: true,
+        constraint: {b: false},
+        change: {type: 'add', row: {a: 4, b: false}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 6,
+              "b": false,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 7,
+              "b": false,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
   test('c5', () => {
     expect(
       t({
@@ -2048,6 +2138,53 @@ suite('overlay-vs-constraint-and-start', () => {
           row: {a: 5.5, b: false},
           basis: 'at',
         },
+        constraint: {b: false},
+        change: {type: 'add', row: {a: 8, b: false}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 6,
+              "b": false,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 7,
+              "b": false,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 8,
+              "b": false,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c5 reverse', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 5.5, b: false},
+          basis: 'at',
+        },
+        reverse: true,
         constraint: {b: false},
         change: {type: 'add', row: {a: 8, b: false}},
       }),
@@ -2126,6 +2263,53 @@ suite('overlay-vs-constraint-and-start', () => {
     `);
   });
 
+  test('c6 reverse', () => {
+    expect(
+      t({
+        startData: [
+          {a: 2, b: false},
+          {a: 3, b: false},
+          {a: 5, b: true},
+          {a: 6, b: false},
+          {a: 7, b: false},
+        ],
+        start: {
+          row: {a: 5.5, b: false},
+          basis: 'after',
+        },
+        reverse: true,
+        constraint: {b: false},
+        change: {type: 'add', row: {a: 6.5, b: false}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 6,
+              "b": false,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 6.5,
+              "b": false,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 7,
+              "b": false,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
   test('c7', () => {
     expect(
       t({
@@ -2145,6 +2329,53 @@ suite('overlay-vs-constraint-and-start', () => {
           row: {a: 5, b: true, c: 1},
           basis: 'at',
         },
+        constraint: {b: true, c: 1},
+        change: {type: 'add', row: {a: 5.5, b: true, c: 1}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        [
+          {
+            "relationships": {},
+            "row": {
+              "a": 5,
+              "b": true,
+              "c": 1,
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "a": 5.5,
+              "b": true,
+              "c": 1,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('c7 reverse', () => {
+    expect(
+      t({
+        columns: {
+          a: {type: 'number'},
+          b: {type: 'boolean'},
+          c: {type: 'number'},
+        },
+        startData: [
+          {a: 2, b: false, c: 1},
+          {a: 3, b: false, c: 1},
+          {a: 5, b: true, c: 1},
+          {a: 6, b: true, c: 2},
+          {a: 7, b: false, c: 2},
+        ],
+        start: {
+          row: {a: 5, b: true, c: 1},
+          basis: 'at',
+        },
+        reverse: true,
         constraint: {b: true, c: 1},
         change: {type: 'add', row: {a: 5.5, b: true, c: 1}},
       }),

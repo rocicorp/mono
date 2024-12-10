@@ -1,3 +1,4 @@
+import type {LogContext} from '@rocicorp/logger';
 import {IncomingMessage, Server} from 'node:http';
 import {Socket} from 'node:net';
 import type {WebSocket, WebSocketServer} from 'ws';
@@ -15,6 +16,7 @@ export type WebSocketHandoff<P> = (message: IncomingMessage) => {
 export type WebSocketReceiver<P> = (ws: WebSocket, payload: P) => void;
 
 export function installWebSocketHandoff<P>(
+  lc: LogContext,
   server: Server,
   handoff: WebSocketHandoff<P>,
 ) {
@@ -36,6 +38,7 @@ export function installWebSocketHandoff<P>(
       // https://nodejs.org/api/http.html#event-upgrade
       receiver.send(data, socket as Socket);
     } catch (error) {
+      lc.warn?.(`dispatch error: ${String(error)}`, error);
       socket.write(`HTTP/1.1 400 Bad Request\r\n${String(error)}`);
       return;
     }

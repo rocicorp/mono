@@ -274,9 +274,4 @@ CREATE INDEX issue_open_modified_idx ON issue (open, modified);
 
 CREATE INDEX comment_issueid_idx ON "comment" ("issueID");
 
-SELECT
-    *
-FROM
-    pg_create_logical_replication_slot('zero_0', 'pgoutput');
-
 VACUUM;

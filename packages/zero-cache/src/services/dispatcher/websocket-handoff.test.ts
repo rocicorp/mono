@@ -1,8 +1,9 @@
 import {resolver} from '@rocicorp/resolver';
 import {Server} from 'node:http';
-import {randInt} from '../../../../shared/src/rand.js';
 import {afterAll, afterEach, beforeAll, describe, expect, test} from 'vitest';
 import {WebSocket, WebSocketServer, type RawData} from 'ws';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
+import {randInt} from '../../../../shared/src/rand.js';
 import {inProcChannel} from '../../types/processes.js';
 import {
   installWebSocketHandoff,
@@ -33,7 +34,7 @@ describe('dispatcher/websocket-handoff', () => {
   test('handoff', async () => {
     const [parent, child] = inProcChannel();
 
-    installWebSocketHandoff(server, () => ({
+    installWebSocketHandoff(createSilentLogContext(), server, () => ({
       payload: {foo: 'boo'},
       receiver: child,
     }));

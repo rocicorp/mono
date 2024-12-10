@@ -11,8 +11,6 @@ import {
   useRole,
   useTransitionStatus,
 } from '@floating-ui/react';
-import type {Row} from '@rocicorp/zero';
-import classNames from 'classnames';
 import {nanoid} from 'nanoid';
 import {
   forwardRef,
@@ -22,38 +20,41 @@ import {
   type ForwardedRef,
 } from 'react';
 import {useQuery} from 'zero-react/src/use-query.js';
-import type {Schema} from '../../schema.js';
 import addEmojiIcon from '../assets/icons/add-emoji.svg';
-import {formatEmojiCreatorList} from '../emoji-utils.js';
+import {
+  findEmojiForCreator,
+  normalizeEmoji,
+  type Emoji,
+} from '../emoji-utils.js';
 import {useLogin} from '../hooks/use-login.js';
-import {useNumericPref} from '../hooks/use-user-pref.js';
 import {useZero} from '../hooks/use-zero.js';
 import {ButtonWithLoginCheck} from './button-with-login-check.js';
 import {type ButtonProps} from './button.js';
-import {EmojiPicker, SKIN_TONE_PREF} from './emoji-picker.js';
-import {Tooltip, TooltipContent, TooltipTrigger} from './tooltip.jsx';
+import {EmojiPicker} from './emoji-picker.js';
+import {EmojiPill} from './emoji-pill.js';
 
 const loginMessage = 'You need to be logged in to modify emoji reactions.';
-
-export type Emoji = Row<Schema['tables']['emoji']> & {
-  readonly creator: Row<Schema['tables']['user']> | undefined;
-};
 
 type Props = {
   issueID: string;
   commentID?: string | undefined;
+  recentEmojis: readonly Emoji[];
+  removeRecentEmoji: (id: string) => void;
 };
 
 export const EmojiPanel = memo(
   forwardRef(
-    ({issueID, commentID}: Props, ref: ForwardedRef<HTMLDivElement>) => {
+    (
+      {issueID, commentID, recentEmojis, removeRecentEmoji}: Props,
+      ref: ForwardedRef<HTMLDivElement>,
+    ) => {
       const subjectID = commentID ?? issueID;
       const z = useZero();
       const q = z.query.emoji
         .where('subjectID', subjectID)
         .related('creator', creator => creator.one());
 
-      const emojis: Emoji[] = useQuery(q);
+      const [emojis] = useQuery(q);
 
       const addEmoji = useCallback(
         (unicode: string, annotation: string) => {
@@ -109,6 +110,9 @@ export const EmojiPanel = memo(
                 normalizedEmoji={normalizedEmoji}
                 emojis={emojis}
                 addOrRemoveEmoji={addOrRemoveEmoji}
+                recentEmojis={recentEmojis}
+                removeRecentEmoji={removeRecentEmoji}
+                subjectID={subjectID}
               />
             ))}
             {login.loginState === undefined ? (
@@ -199,11 +203,6 @@ const EmojiMenuButton = memo(
   },
 );
 
-function normalizeEmoji(emoji: string): string {
-  // Skin tone modifiers range from U+1F3FB to U+1F3FF
-  return emoji.replace(/[\u{1F3FB}-\u{1F3FF}]/gu, '');
-}
-
 function groupAndSortEmojis(emojis: Emoji[]): Record<string, Emoji[]> {
   // Sort the emojis by creation time. Not sure how to sort this with ZQL.
   const sortedEmojis = [...emojis].sort((a, b) => a.created - b.created);
@@ -219,75 +218,7 @@ function groupAndSortEmojis(emojis: Emoji[]): Record<string, Emoji[]> {
   return rv;
 }
 
-function findEmojiForCreator(
-  emojis: Emoji[],
-  userID: string,
-): string | undefined {
-  for (const emoji of emojis) {
-    if (emoji.creatorID === userID) {
-      return emoji.id;
-    }
-  }
-  return undefined;
-}
-
-function unique(emojis: Emoji[]): string[] {
-  return [...new Set(emojis.map(emoji => emoji.value))];
-}
-
-function setSkinTone(emoji: string, skinTone: number): string {
-  const normalizedEmoji = normalizeEmoji(emoji);
-  if (skinTone === 0) {
-    return normalizedEmoji;
-  }
-
-  // Skin tone modifiers range from U+1F3FB to U+1F3FF
-  return normalizedEmoji + String.fromCodePoint(0x1f3fa + skinTone);
-}
-
 type AddOrRemoveEmoji = (details: {
   unicode: string;
   annotation: string;
 }) => void;
-
-function EmojiPill({
-  normalizedEmoji,
-  emojis,
-  addOrRemoveEmoji,
-}: {
-  normalizedEmoji: string;
-  emojis: Emoji[];
-  addOrRemoveEmoji: AddOrRemoveEmoji;
-}) {
-  const z = useZero();
-  const skinTone = useNumericPref(SKIN_TONE_PREF, 0);
-  const mine = findEmojiForCreator(emojis, z.userID) !== undefined;
-
-  return (
-    <Tooltip>
-      <TooltipTrigger>
-        <ButtonWithLoginCheck
-          className={classNames('emoji-pill', {mine})}
-          eventName="Add to existing emoji reaction"
-          key={normalizedEmoji}
-          loginMessage={loginMessage}
-          onAction={() =>
-            addOrRemoveEmoji({
-              unicode: setSkinTone(normalizedEmoji, skinTone),
-              annotation: emojis[0].annotation ?? '',
-            })
-          }
-        >
-          {unique(emojis).map(value => (
-            <span key={value}>{value}</span>
-          ))}
-          {' ' + emojis.length}
-        </ButtonWithLoginCheck>
-      </TooltipTrigger>
-
-      <TooltipContent>
-        {formatEmojiCreatorList(emojis, z.userID)}
-      </TooltipContent>
-    </Tooltip>
-  );
-}

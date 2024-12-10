@@ -134,7 +134,7 @@ suite('EXISTS', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 1,
+        "row//["i1"]": 1,
       }
     `);
     expect(hydrate).toMatchInlineSnapshot(`
@@ -158,6 +158,114 @@ suite('EXISTS', () => {
       ]
     `);
   });
+
+  test('one parent with child - reversed', () => {
+    const {messages, storage, hydrate} = fetchTest(
+      oneParentWithChildTest,
+      true,
+    );
+    expect(messages).toMatchInlineSnapshot(`
+      {
+        "cleanup": [
+          [
+            "1",
+            "cleanup",
+            {},
+          ],
+          [
+            "0",
+            "cleanup",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+        ],
+        "fetch": [
+          [
+            "1",
+            "fetch",
+            {},
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+        ],
+        "initialFetch": [
+          [
+            "1",
+            "fetch",
+            {},
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "start": {
+                "basis": "at",
+                "row": {
+                  "id": "c1",
+                  "issueID": "i1",
+                },
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+        ],
+      }
+    `);
+    expect(storage).toMatchInlineSnapshot(`
+      {
+        "row/["i1"]": 1,
+        "row/["i1"]/["c1"]": 1,
+      }
+    `);
+    expect(hydrate).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {
+            "from_comments": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": "i1",
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": "c1",
+            "issueID": "i1",
+          },
+        },
+      ]
+    `);
+  });
+
   test('one parent no child', () => {
     const {messages, storage, hydrate} = fetchTest(oneParentNoChildTest);
     expect(messages).toMatchInlineSnapshot(`
@@ -235,11 +343,43 @@ suite('EXISTS', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 0,
+        "row//["i1"]": 0,
       }
     `);
     expect(hydrate).toMatchInlineSnapshot(`[]`);
   });
+
+  test('one parent no child - reversed', () => {
+    const {messages, storage, hydrate} = fetchTest(oneParentNoChildTest, true);
+    expect(messages).toMatchInlineSnapshot(`
+      {
+        "cleanup": [
+          [
+            "1",
+            "cleanup",
+            {},
+          ],
+        ],
+        "fetch": [
+          [
+            "1",
+            "fetch",
+            {},
+          ],
+        ],
+        "initialFetch": [
+          [
+            "1",
+            "fetch",
+            {},
+          ],
+        ],
+      }
+    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
+    expect(hydrate).toMatchInlineSnapshot(`[]`);
+  });
+
   test('three parents, two with children', () => {
     const {messages, storage, hydrate} = fetchTest(
       threeParentsTwoWithChildrenTest,
@@ -415,9 +555,9 @@ suite('EXISTS', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 1,
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 1,
+        "row//["i1"]": 1,
+        "row//["i2"]": 0,
+        "row//["i3"]": 1,
       }
     `);
     expect(hydrate).toMatchInlineSnapshot(`
@@ -457,6 +597,182 @@ suite('EXISTS', () => {
       ]
     `);
   });
+
+  test('three parents, two children - reversed', () => {
+    const {messages, storage, hydrate} = fetchTest(
+      threeParentsTwoWithChildrenTest,
+      true,
+    );
+
+    expect(messages).toMatchInlineSnapshot(`
+      {
+        "cleanup": [
+          [
+            "1",
+            "cleanup",
+            {},
+          ],
+          [
+            "0",
+            "cleanup",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            "0",
+            "cleanup",
+            {
+              "constraint": {
+                "id": "i3",
+              },
+            },
+          ],
+        ],
+        "fetch": [
+          [
+            "1",
+            "fetch",
+            {},
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i3",
+              },
+            },
+          ],
+        ],
+        "initialFetch": [
+          [
+            "1",
+            "fetch",
+            {},
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "start": {
+                "basis": "at",
+                "row": {
+                  "id": "c1",
+                  "issueID": "i1",
+                },
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i3",
+              },
+            },
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "start": {
+                "basis": "at",
+                "row": {
+                  "id": "c2",
+                  "issueID": "i3",
+                },
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i3",
+              },
+            },
+          ],
+        ],
+      }
+    `);
+    expect(storage).toMatchInlineSnapshot(`
+      {
+        "row/["i1"]": 1,
+        "row/["i1"]/["c1"]": 1,
+        "row/["i3"]": 1,
+        "row/["i3"]/["c2"]": 1,
+      }
+    `);
+    expect(hydrate).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {
+            "from_comments": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": "i1",
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": "c1",
+            "issueID": "i1",
+          },
+        },
+        {
+          "relationships": {
+            "from_comments": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": "i3",
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": "c2",
+            "issueID": "i3",
+          },
+        },
+      ]
+    `);
+  });
+
   test('three parents no children', () => {
     const {messages, storage, hydrate} = fetchTest(threeParentsNoChildrenTest);
     expect(messages).toMatchInlineSnapshot(`
@@ -630,11 +946,46 @@ suite('EXISTS', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 0,
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 0,
+        "row//["i1"]": 0,
+        "row//["i2"]": 0,
+        "row//["i3"]": 0,
       }
     `);
+    expect(hydrate).toMatchInlineSnapshot(`[]`);
+  });
+
+  test('three parents no children - reversed', () => {
+    const {messages, storage, hydrate} = fetchTest(
+      threeParentsNoChildrenTest,
+      true,
+    );
+
+    expect(messages).toMatchInlineSnapshot(`
+      {
+        "cleanup": [
+          [
+            "1",
+            "cleanup",
+            {},
+          ],
+        ],
+        "fetch": [
+          [
+            "1",
+            "fetch",
+            {},
+          ],
+        ],
+        "initialFetch": [
+          [
+            "1",
+            "fetch",
+            {},
+          ],
+        ],
+      }
+    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
     expect(hydrate).toMatchInlineSnapshot(`[]`);
   });
 });
@@ -720,11 +1071,104 @@ suite('NOT EXISTS', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 1,
+        "row//["i1"]": 1,
       }
     `);
     expect(hydrate).toMatchInlineSnapshot(`[]`);
   });
+
+  test('one parent with child - reversed', () => {
+    const {messages, storage, hydrate} = fetchTest(
+      {
+        ...oneParentWithChildTest,
+        existsType: 'NOT EXISTS',
+      },
+      true,
+    );
+
+    expect(messages).toMatchInlineSnapshot(`
+      {
+        "cleanup": [
+          [
+            "1",
+            "cleanup",
+            {},
+          ],
+          [
+            "0",
+            "cleanup",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+        ],
+        "fetch": [
+          [
+            "1",
+            "fetch",
+            {},
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+        ],
+        "initialFetch": [
+          [
+            "1",
+            "fetch",
+            {},
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "start": {
+                "basis": "at",
+                "row": {
+                  "id": "c1",
+                  "issueID": "i1",
+                },
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+        ],
+      }
+    `);
+    expect(storage).toMatchInlineSnapshot(`
+      {
+        "row/["i1"]": 1,
+        "row/["i1"]/["c1"]": 1,
+      }
+    `);
+    expect(hydrate).toMatchInlineSnapshot(`[]`);
+  });
+
   test('one parent no child', () => {
     const {messages, storage, hydrate} = fetchTest({
       ...oneParentNoChildTest,
@@ -805,7 +1249,7 @@ suite('NOT EXISTS', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 0,
+        "row//["i1"]": 0,
       }
     `);
     expect(hydrate).toMatchInlineSnapshot(`
@@ -821,6 +1265,45 @@ suite('NOT EXISTS', () => {
       ]
     `);
   });
+
+  test('one parent, no child - reversed', () => {
+    const {messages, storage, hydrate} = fetchTest(
+      {
+        ...oneParentNoChildTest,
+        existsType: 'NOT EXISTS',
+      },
+      true,
+    );
+
+    expect(messages).toMatchInlineSnapshot(`
+      {
+        "cleanup": [
+          [
+            "1",
+            "cleanup",
+            {},
+          ],
+        ],
+        "fetch": [
+          [
+            "1",
+            "fetch",
+            {},
+          ],
+        ],
+        "initialFetch": [
+          [
+            "1",
+            "fetch",
+            {},
+          ],
+        ],
+      }
+    `);
+    expect(storage).toMatchInlineSnapshot(`{}`);
+    expect(hydrate).toMatchInlineSnapshot(`[]`);
+  });
+
   test('three parents, two with children', () => {
     const {messages, storage, hydrate} = fetchTest({
       ...threeParentsTwoWithChildrenTest,
@@ -997,9 +1480,9 @@ suite('NOT EXISTS', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 1,
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 1,
+        "row//["i1"]": 1,
+        "row//["i2"]": 0,
+        "row//["i3"]": 1,
       }
     `);
     expect(hydrate).toMatchInlineSnapshot(`
@@ -1015,7 +1498,150 @@ suite('NOT EXISTS', () => {
       ]
     `);
   });
-  test('three parents no children', () => {
+
+  test('three parents, two with children - reversed', () => {
+    const {messages, storage, hydrate} = fetchTest(
+      {
+        ...threeParentsTwoWithChildrenTest,
+        existsType: 'NOT EXISTS',
+      },
+      true,
+    );
+    expect(messages).toMatchInlineSnapshot(`
+      {
+        "cleanup": [
+          [
+            "1",
+            "cleanup",
+            {},
+          ],
+          [
+            "0",
+            "cleanup",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            "0",
+            "cleanup",
+            {
+              "constraint": {
+                "id": "i3",
+              },
+            },
+          ],
+        ],
+        "fetch": [
+          [
+            "1",
+            "fetch",
+            {},
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i3",
+              },
+            },
+          ],
+        ],
+        "initialFetch": [
+          [
+            "1",
+            "fetch",
+            {},
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "start": {
+                "basis": "at",
+                "row": {
+                  "id": "c1",
+                  "issueID": "i1",
+                },
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i3",
+              },
+            },
+          ],
+          [
+            "1",
+            "fetch",
+            {
+              "start": {
+                "basis": "at",
+                "row": {
+                  "id": "c2",
+                  "issueID": "i3",
+                },
+              },
+            },
+          ],
+          [
+            "0",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i3",
+              },
+            },
+          ],
+        ],
+      }
+    `);
+    expect(storage).toMatchInlineSnapshot(`
+      {
+        "row/["i1"]": 1,
+        "row/["i1"]/["c1"]": 1,
+        "row/["i3"]": 1,
+        "row/["i3"]/["c2"]": 1,
+      }
+    `);
+    expect(hydrate).toMatchInlineSnapshot(`[]`);
+  });
+
+  test('three parents, no children', () => {
     const {messages, storage, hydrate} = fetchTest({
       ...threeParentsNoChildrenTest,
       existsType: 'NOT EXISTS',
@@ -1191,9 +1817,9 @@ suite('NOT EXISTS', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 0,
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 0,
+        "row//["i1"]": 0,
+        "row//["i2"]": 0,
+        "row//["i3"]": 0,
       }
     `);
     expect(hydrate).toMatchInlineSnapshot(`
@@ -1227,9 +1853,47 @@ suite('NOT EXISTS', () => {
   });
 });
 
+test('three parents, no children - reversed', () => {
+  const {messages, storage, hydrate} = fetchTest(
+    {
+      ...threeParentsNoChildrenTest,
+      existsType: 'NOT EXISTS',
+    },
+    true,
+  );
+
+  expect(messages).toMatchInlineSnapshot(`
+    {
+      "cleanup": [
+        [
+          "1",
+          "cleanup",
+          {},
+        ],
+      ],
+      "fetch": [
+        [
+          "1",
+          "fetch",
+          {},
+        ],
+      ],
+      "initialFetch": [
+        [
+          "1",
+          "fetch",
+          {},
+        ],
+      ],
+    }
+  `);
+  expect(storage).toMatchInlineSnapshot(`{}`);
+  expect(hydrate).toMatchInlineSnapshot(`[]`);
+});
+
 // This test runs the join through three phases:
 // initial fetch, fetch, and cleanup.
-function fetchTest(t: FetchTest): FetchTestResults {
+function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
   const log: SnitchMessage[] = [];
 
   const sources = t.sources.map((rows, i) => {
@@ -1245,18 +1909,29 @@ function fetchTest(t: FetchTest): FetchTestResults {
     };
   });
 
+  if (reverse) {
+    sources.reverse();
+  }
+
   const existsStorage = new MemoryStorage();
   const exists = new Exists(
     new Join({
       parent: sources[0].snitch,
       child: sources[1].snitch,
       storage: new MemoryStorage(),
-      ...t.join,
+      ...(reverse
+        ? {
+            parentKey: t.join.childKey,
+            childKey: t.join.parentKey,
+            relationshipName: 'from_' + t.join.relationshipName,
+          }
+        : t.join),
       hidden: false,
       system: 'client',
     }),
     existsStorage,
-    t.join.relationshipName,
+    reverse ? 'from_' + t.join.relationshipName : t.join.relationshipName,
+    reverse ? t.join.childKey : t.join.parentKey,
     t.existsType,
   );
 

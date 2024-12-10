@@ -143,6 +143,8 @@ class PostgresChangeSource implements ChangeSource {
     const clientStart = oneAfter(clientWatermark);
 
     try {
+      await this.#stopExistingReplicationSlotSubscriber(db, slot);
+
       // Perform any shard schema updates
       await updateShardSchema(this.#lc, db, {
         id: this.#shardID,
@@ -151,11 +153,16 @@ class PostgresChangeSource implements ChangeSource {
       const config = await getInternalShardConfig(db, this.#shardID);
       this.#lc.info?.(`starting replication stream @${slot}`);
 
-      let useSSL = true;
+      // Enabling ssl according to the logic in:
+      // https://github.com/brianc/node-postgres/blob/95d7e620ef8b51743b4cbca05dd3c3ce858ecea7/packages/pg-connection-string/index.js#L90
+      const url = new URL(this.#upstreamUri);
+      let useSSL =
+        url.searchParams.get('ssl') !== '0' &&
+        url.searchParams.get('sslmode') !== 'disable';
+      this.#lc.debug?.(`connecting with ssl=${useSSL} ${url.search}`);
+
       for (let i = 0; i < MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE; i++) {
         try {
-          await this.#stopExistingReplicationSlotSubscriber(db, slot);
-
           // Unlike the postgres.js client, the pg client does not have an option to
           // only use SSL if the server supports it. We achieve it manually by
           // trying SSL first, and then falling back to connecting without SSL.
@@ -165,6 +172,7 @@ class PostgresChangeSource implements ChangeSource {
             this.#lc.info?.('retrying upstream connection without SSL');
             useSSL = false;
             i--; // don't use up an attempt.
+            await this.#stopExistingReplicationSlotSubscriber(db, slot); // Send another SIGTERM to the process
           } else if (
             // error: replication slot "zero_slot_change_source_test_id" is active for PID 268
             e instanceof DatabaseError &&
@@ -285,13 +293,16 @@ class PostgresChangeSource implements ChangeSource {
     db: PostgresDB,
     slot: string,
   ): Promise<void> {
-    const result = await db<{pid: string}[]>`
+    const result = await db<{pid: string | null}[]>`
     SELECT pg_terminate_backend(active_pid), active_pid as pid
-      FROM pg_replication_slots WHERE slot_name = ${slot} and active = true`;
+      FROM pg_replication_slots WHERE slot_name = ${slot}`;
     if (result.length === 0) {
-      this.#lc.debug?.(`no existing subscriber to replication slot`);
-    } else {
-      const {pid} = result[0];
+      throw new Error(
+        `replication slot ${slot} is missing. Delete the replica and resync.`,
+      );
+    }
+    const {pid} = result[0];
+    if (pid) {
       this.#lc.info?.(`signaled subscriber ${pid} to shut down`);
     }
   }
@@ -450,9 +461,7 @@ class ChangeMaker {
       case 'relation':
         return this.#handleRelation(msg);
       case 'type':
-        throw new Error(
-          `Custom types are not supported (received "${msg.typeName}")`,
-        );
+        return []; // Nothing need be done for custom types.
       case 'origin':
         // We do not set the `origin` option in the pgoutput parameters:
         // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS

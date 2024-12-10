@@ -27,8 +27,12 @@ import {
   type Comparator,
   type Node,
 } from './data.js';
-import {LookaheadIterator} from './lookahead-iterator.js';
-import {type FetchRequest, type Input, type Output} from './operator.js';
+import {
+  type FetchRequest,
+  type Input,
+  type Output,
+  type Start,
+} from './operator.js';
 import type {SourceSchema} from './schema.js';
 import type {Source, SourceChange, SourceInput} from './source.js';
 import type {Stream} from './stream.js';
@@ -246,7 +250,9 @@ export class MemorySource implements Source {
     }
 
     const index = this.#getOrCreateIndex(indexSort, from);
-    const {data, comparator} = index;
+    const {data, comparator: compare} = index;
+    const comparator = (r1: Row, r2: Row) =>
+      compare(r1, r2) * (req.reverse ? -1 : 1);
 
     // When we receive a push, we send it to each output one at a time. Once the
     // push is sent to an output, it should keep being sent until all datastores
@@ -257,48 +263,7 @@ export class MemorySource implements Source {
       }
     }
 
-    const {constraint} = req;
-    const matchesConstraint = constraint
-      ? (row: Row) => constraintMatchesRow(constraint, row)
-      : (_: Row) => true;
-
-    const predicate = conn.filters?.predicate;
-    const matchesConstraintAndFilters = predicate
-      ? (row: Row) => matchesConstraint(row) && predicate(row)
-      : matchesConstraint;
-    const nextLowerKey = (row: Row | undefined) => {
-      if (!row) {
-        return undefined;
-      }
-      let o = overlay;
-      if (o) {
-        if (comparator(o.change.row, row) >= 0) {
-          o = undefined;
-        }
-      }
-      while (row !== undefined) {
-        row = data.nextLowerKey(row);
-        if (row && matchesConstraintAndFilters(row)) {
-          if (o && comparator(o.change.row, row) >= 0) {
-            return o.change.row;
-          }
-          return row;
-        }
-      }
-      return o?.change.row;
-    };
-    let startAt = req.start?.row;
-    if (startAt) {
-      if (req.constraint) {
-        // There's no problem supporting startAt outside of constraints, but I
-        // don't think we have a use case for this – if we see it, it's probably
-        // a bug.
-        assert(matchesConstraint(startAt), 'Start row must match constraint');
-      }
-      if (req.start!.basis === 'before') {
-        startAt = nextLowerKey(startAt);
-      }
-    }
+    const startAt = req.start?.row;
 
     // If there is a constraint, we want to start our scan at the first row that
     // matches the constraint. But because the next OrderPart can be `desc`,
@@ -317,7 +282,11 @@ export class MemorySource implements Source {
         if (hasOwn(req.constraint, key)) {
           scanStart[key] = req.constraint[key];
         } else {
-          scanStart[key] = dir === 'asc' ? minValue : maxValue;
+          if (req.reverse) {
+            scanStart[key] = dir === 'asc' ? maxValue : minValue;
+          } else {
+            scanStart[key] = dir === 'asc' ? minValue : maxValue;
+          }
         }
       }
     } else {
@@ -326,9 +295,7 @@ export class MemorySource implements Source {
 
     const withOverlay = generateWithOverlay(
       startAt,
-      // 😬 - btree library doesn't support ideas like start "before" this
-      // key.
-      data.keys(scanStart as Row),
+      generateRows(data, scanStart, req.reverse),
       req.constraint,
       overlay,
       comparator,
@@ -336,7 +303,7 @@ export class MemorySource implements Source {
     );
 
     const withConstraint = generateWithConstraint(
-      generateWithStart(withOverlay, req, comparator),
+      generateWithStart(withOverlay, req.start, comparator),
       req.constraint,
     );
 
@@ -463,44 +430,30 @@ function* generateWithFilter(it: Stream<Node>, filter: (row: Row) => boolean) {
   }
 }
 
-/**
- * If the request basis was `before` then the overlay might be the starting point of the stream.
- *
- * This can happen in a case like the following:
- * Store = [1,2,3, 5,6,7]
- * Overlay = [4]
- * Request = fetch starting before 5
- *
- * In this case, the overlay value of `4` should be the starting point of the stream, not `3`.
- */
 export function* generateWithStart(
-  it: Iterator<Node>,
-  req: FetchRequest,
+  nodes: Iterable<Node>,
+  start: Start | undefined,
   compare: (r1: Row, r2: Row) => number,
 ): Stream<Node> {
-  // Figure out the start row.
-  const cursor = new LookaheadIterator(it, 2);
-
-  let started = req.start === undefined ? true : false;
-  for (const [curr, next] of cursor) {
+  if (!start) {
+    yield* nodes;
+    return;
+  }
+  let started = false;
+  for (const node of nodes) {
     if (!started) {
-      assert(req.start);
-      if (req.start.basis === 'before') {
-        if (next === undefined || compare(next.row, req.start.row) >= 0) {
+      if (start.basis === 'at') {
+        if (compare(node.row, start.row) >= 0) {
           started = true;
         }
-      } else if (req.start.basis === 'at') {
-        if (compare(curr.row, req.start.row) >= 0) {
-          started = true;
-        }
-      } else if (req.start.basis === 'after') {
-        if (compare(curr.row, req.start.row) > 0) {
+      } else if (start.basis === 'after') {
+        if (compare(node.row, start.row) > 0) {
           started = true;
         }
       }
     }
     if (started) {
-      yield curr;
+      yield node;
     }
   }
 }
@@ -701,4 +654,17 @@ function compareBounds(a: Bound, b: Bound): number {
     return -1;
   }
   return compareValues(a, b);
+}
+
+function* generateRows(
+  data: BTree<Row, undefined>,
+  scanStart: RowBound | undefined,
+  reverse: boolean | undefined,
+) {
+  for (const entry of data[reverse ? 'entriesReversed' : 'entries'](
+    scanStart as Row,
+    [],
+  )) {
+    yield entry[0];
+  }
 }

@@ -1,10 +1,14 @@
 import {expect, test} from 'vitest';
-import type {AST} from '../../../zero-protocol/src/ast.js';
+import type {AST, Disjunction} from '../../../zero-protocol/src/ast.js';
 import {Catch} from '../ivm/catch.js';
 import {MemoryStorage} from '../ivm/memory-storage.js';
 import type {Source} from '../ivm/source.js';
 import {createSource} from '../ivm/test/source-factory.js';
-import {bindStaticParameters, buildPipeline} from './builder.js';
+import {
+  bindStaticParameters,
+  buildPipeline,
+  groupSubqueryConditions,
+} from './builder.js';
 
 export function testSources() {
   const users = createSource(
@@ -1558,5 +1562,87 @@ test('always true literal comparison - everything goes through', () => {
       },
       type: 'add',
     },
+  ]);
+});
+
+test('groupSubqueryConditions', () => {
+  const empty: Disjunction = {
+    type: 'or',
+    conditions: [],
+  };
+
+  expect(groupSubqueryConditions(empty)).toEqual([[], []]);
+
+  const oneSimple: Disjunction = {
+    type: 'or',
+    conditions: [
+      {
+        type: 'simple',
+        left: {type: 'column', name: 'id'},
+        op: '=',
+        right: {type: 'literal', value: 1},
+      },
+    ],
+  };
+
+  expect(groupSubqueryConditions(oneSimple)).toEqual([
+    [],
+    [oneSimple.conditions[0]],
+  ]);
+
+  const oneSubquery: Disjunction = {
+    type: 'or',
+    conditions: [
+      {
+        type: 'correlatedSubquery',
+        op: 'EXISTS',
+        related: {
+          system: 'client',
+          correlation: {parentField: ['id'], childField: ['userID']},
+          subquery: {
+            table: 'userStates',
+            alias: 'userStates',
+            orderBy: [
+              ['userID', 'asc'],
+              ['stateCode', 'asc'],
+            ],
+          },
+        },
+      },
+    ],
+  };
+
+  expect(groupSubqueryConditions(oneSubquery)).toEqual([
+    [oneSubquery.conditions[0]],
+    [],
+  ]);
+
+  const oneEach: Disjunction = {
+    type: 'or',
+    conditions: [oneSimple.conditions[0], oneSubquery.conditions[0]],
+  };
+
+  expect(groupSubqueryConditions(oneEach)).toEqual([
+    [oneSubquery.conditions[0]],
+    [oneSimple.conditions[0]],
+  ]);
+
+  const subqueryInAnd: Disjunction = {
+    type: 'or',
+    conditions: [
+      {
+        type: 'and',
+        conditions: [oneSubquery.conditions[0]],
+      },
+      {
+        type: 'and',
+        conditions: [oneSimple.conditions[0]],
+      },
+    ],
+  };
+
+  expect(groupSubqueryConditions(subqueryInAnd)).toEqual([
+    [subqueryInAnd.conditions[0]],
+    [subqueryInAnd.conditions[1]],
   ]);
 });

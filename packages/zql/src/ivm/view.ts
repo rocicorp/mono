@@ -22,4 +22,5 @@ export type ViewFactory<
   format: Format,
   onDestroy: () => void,
   onTransactionCommit: (cb: () => void) => void,
+  queryComplete: true | Promise<true>,
 ) => T;

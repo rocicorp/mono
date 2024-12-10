@@ -95,6 +95,19 @@ function mapLiteDataTypeToZqlValueType(dataType: string): ValueType {
 }
 
 /**
+ * Creates an SQLite type name for encoding postgres enums.
+ * The presence of the "TEXT" string in the type name results in
+ * an SQLite textual type affinity.
+ *
+ * https://www.sqlite.org/datatype3.html
+ * */
+export function textEnumTypeName(name: string) {
+  return TEXT_ENUM_PREFIX + name;
+}
+
+const TEXT_ENUM_PREFIX = 'TEXT_ENUM_';
+
+/**
  * Returns the value type for the `pgDataType` if it is supported by ZQL.
  * (Note that `pgDataType` values are stored as-is in the SQLite column defs).
  *
@@ -152,10 +165,10 @@ export function dataTypeToZqlValueType(
 
     // TODO: Add support for these.
     // case 'bytea':
-    // case 'time':
-    // case 'time with time zone':
-    // case 'time without time zone':
     default:
+      if (pgDataType.startsWith(TEXT_ENUM_PREFIX)) {
+        return 'string';
+      }
       return undefined;
   }
 }

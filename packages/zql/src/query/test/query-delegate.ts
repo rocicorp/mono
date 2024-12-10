@@ -3,7 +3,11 @@ import {normalizeTables} from '../../../../zero-schema/src/normalize-table-schem
 import {MemorySource} from '../../ivm/memory-source.js';
 import {MemoryStorage} from '../../ivm/memory-storage.js';
 import type {Source} from '../../ivm/source.js';
-import type {CommitListener, QueryDelegate} from '../query-impl.js';
+import type {
+  CommitListener,
+  GotCallback,
+  QueryDelegate,
+} from '../query-impl.js';
 import {
   commentSchema,
   issueLabelSchema,
@@ -18,6 +22,8 @@ export class QueryDelegateImpl implements QueryDelegate {
   readonly #commitListeners: Set<CommitListener> = new Set();
 
   readonly addedServerQueries: AST[] = [];
+  readonly gotCallbacks: (GotCallback | undefined)[] = [];
+  synchronouslyCallNextGotCallback = false;
 
   constructor(sources?: Record<string, Source>) {
     this.#sources = sources ?? makeSources();
@@ -39,8 +45,13 @@ export class QueryDelegateImpl implements QueryDelegate {
       listener();
     }
   }
-  addServerQuery(ast: AST): () => void {
+  addServerQuery(ast: AST, gotCallback?: GotCallback | undefined): () => void {
     this.addedServerQueries.push(ast);
+    this.gotCallbacks.push(gotCallback);
+    if (this.synchronouslyCallNextGotCallback) {
+      this.synchronouslyCallNextGotCallback = false;
+      gotCallback?.(true);
+    }
     return () => {};
   }
   getSource(name: string): Source {

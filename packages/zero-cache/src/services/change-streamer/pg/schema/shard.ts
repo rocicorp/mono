@@ -148,7 +148,7 @@ export async function getInternalShardConfig(
       FROM ${db(unescapedSchema(shardID))}."shardConfig";
   `;
   assert(result.length === 1);
-  return v.parse(result[0], internalShardConfigSchema);
+  return v.parse(result[0], internalShardConfigSchema, 'passthrough');
 }
 
 /**

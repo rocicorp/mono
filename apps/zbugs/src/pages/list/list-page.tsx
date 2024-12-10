@@ -5,7 +5,9 @@ import classNames from 'classnames';
 import React, {
   type CSSProperties,
   type KeyboardEvent,
+  useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -13,24 +15,27 @@ import {useDebouncedCallback} from 'use-debounce';
 import {useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
 import {Button} from '../../components/button.js';
-import Filter, {type Selection} from '../../components/filter.js';
+import {Filter, type Selection} from '../../components/filter.js';
 import IssueLink from '../../components/issue-link.js';
 import {Link} from '../../components/link.js';
 import RelativeTime from '../../components/relative-time.js';
 import {useClickOutside} from '../../hooks/use-click-outside.js';
+import {useElementSize} from '../../hooks/use-element-size.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {mark} from '../../perf-log.js';
 import type {ListContext} from '../../routes.js';
+import {preload} from '../../zero-setup.js';
 
 let firstRowRendered = false;
 const itemSize = 56;
 
-export default function ListPage() {
+export function ListPage() {
   const z = useZero();
   const login = useLogin();
-  const qs = new URLSearchParams(useSearch());
+  const search = useSearch();
+  const qs = useMemo(() => new URLSearchParams(search), [search]);
 
   const status = qs.get('status')?.toLowerCase() ?? 'open';
   const creator = qs.get('creator') ?? undefined;
@@ -87,7 +92,13 @@ export default function ListPage() {
     q = q.whereExists('labels', q => q.where('name', label));
   }
 
-  const issues = useQuery(q);
+  const [issues, issuesResult] = useQuery(q);
+
+  useEffect(() => {
+    if (issuesResult.type === 'complete') {
+      preload(z);
+    }
+  }, [issuesResult.type, z]);
 
   let title;
   if (creator || assignee || labels.length > 0 || textFilter) {
@@ -122,17 +133,20 @@ export default function ListPage() {
     navigate('?' + new URLSearchParams(entries).toString());
   };
 
-  const onFilter = (selection: Selection) => {
-    if ('creator' in selection) {
-      navigate(addParam(qs, 'creator', selection.creator, 'exclusive'));
-    } else if ('assignee' in selection) {
-      navigate(addParam(qs, 'assignee', selection.assignee, 'exclusive'));
-    } else {
-      navigate(addParam(qs, 'label', selection.label));
-    }
-  };
+  const onFilter = useCallback(
+    (selection: Selection) => {
+      if ('creator' in selection) {
+        navigate(addParam(qs, 'creator', selection.creator, 'exclusive'));
+      } else if ('assignee' in selection) {
+        navigate(addParam(qs, 'assignee', selection.assignee, 'exclusive'));
+      } else {
+        navigate(addParam(qs, 'label', selection.label));
+      }
+    },
+    [qs],
+  );
 
-  const toggleSortField = () => {
+  const toggleSortField = useCallback(() => {
     navigate(
       addParam(
         qs,
@@ -141,9 +155,9 @@ export default function ListPage() {
         'exclusive',
       ),
     );
-  };
+  }, [qs, sortField]);
 
-  const toggleSortDirection = () => {
+  const toggleSortDirection = useCallback(() => {
     navigate(
       addParam(
         qs,
@@ -152,7 +166,7 @@ export default function ListPage() {
         'exclusive',
       ),
     );
-  };
+  }, [qs, sortDirection]);
 
   const updateTextFilterQueryString = useDebouncedCallback((text: string) => {
     navigate(addParam(qs, 'q', text, 'exclusive'));
@@ -212,14 +226,16 @@ export default function ListPage() {
     );
   };
 
+  const listRef = useRef<HTMLDivElement>(null);
   const tableWrapperRef = useRef<HTMLDivElement>(null);
+  const size = useElementSize(tableWrapperRef.current);
 
   const virtualizer = useVirtualizer({
     count: issues.length,
     estimateSize: () => itemSize,
     overscan: 5,
     getItemKey: index => issues[index].id,
-    getScrollElement: () => tableWrapperRef.current,
+    getScrollElement: () => listRef.current,
   });
 
   const [forceSearchMode, setForceSearchMode] = useState(false);
@@ -310,20 +326,27 @@ export default function ListPage() {
       </div>
 
       <div className="issue-list" ref={tableWrapperRef}>
-        <div
-          className="virtual-list"
-          style={{height: virtualizer.getTotalSize()}}
-        >
-          {virtualizer.getVirtualItems().map(virtualRow => (
-            <Row
-              key={virtualRow.key + ''}
-              index={virtualRow.index}
-              style={{
-                transform: `translateY(${virtualRow.start}px)`,
-              }}
-            />
-          ))}
-        </div>
+        {size && issues.length > 0 ? (
+          <div
+            style={{width: size.width, height: size.height, overflow: 'auto'}}
+            ref={listRef}
+          >
+            <div
+              className="virtual-list"
+              style={{height: virtualizer.getTotalSize()}}
+            >
+              {virtualizer.getVirtualItems().map(virtualRow => (
+                <Row
+                  key={virtualRow.key + ''}
+                  index={virtualRow.index}
+                  style={{
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
     </>
   );

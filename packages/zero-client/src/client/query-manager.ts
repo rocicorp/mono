@@ -146,9 +146,7 @@ export class QueryManager {
     }
 
     if (gotCallback) {
-      queueMicrotask(() => {
-        gotCallback(this.#gotQueries.has(astHash));
-      });
+      gotCallback(this.#gotQueries.has(astHash));
     }
 
     let removed = false;
