@@ -11,6 +11,9 @@ import type {Condition} from '../../zero-protocol/src/ast.js';
 import {staticParam} from '../../zql/src/query/query-impl.js';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.js';
 
+export const ANYONE_CAN = undefined;
+export const NOBODY_CAN = [];
+
 export type Queries<TSchema extends Schema> = {
   [K in keyof TSchema['tables']]: Query<TSchema['tables'][K]>;
 };
