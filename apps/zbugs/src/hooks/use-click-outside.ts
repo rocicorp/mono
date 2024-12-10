@@ -1,20 +1,24 @@
 import {type RefObject, useCallback, useEffect} from 'react';
 
 export const useClickOutside = (
-  ref: RefObject<Element>,
+  ref: RefObject<Node> | RefObject<Node>[],
   callback: (event: MouseEvent | TouchEvent) => void,
-  outerRef?: RefObject<Element>,
 ): void => {
   const handleClick = useCallback(
     (event: MouseEvent | TouchEvent) => {
-      if (!event.target || outerRef?.current?.contains(event.target as Node)) {
-        return;
-      }
-      if (ref.current && !ref.current.contains(event.target as Node)) {
+      const target = event.target as Node | null;
+      const isOutside = Array.isArray(ref)
+        ? ref
+            .map(r => r.current)
+            .filter(c => c !== null)
+            .every(c => !c.contains(target))
+        : !ref.current?.contains(target);
+
+      if (isOutside) {
         callback(event);
       }
     },
-    [callback, ref, outerRef],
+    [callback, ref],
   );
   useEffect(() => {
     document.addEventListener('mousedown', handleClick);

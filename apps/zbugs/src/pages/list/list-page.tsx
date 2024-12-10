@@ -241,8 +241,11 @@ export function ListPage() {
   const [forceSearchMode, setForceSearchMode] = useState(false);
   const searchMode = forceSearchMode || Boolean(textFilter);
   const searchBox = useRef<HTMLHeadingElement>(null);
+  const startSearchButton = useRef<HTMLButtonElement>(null);
   useKeypress('/', () => startSearch());
-  useClickOutside(searchBox, () => setForceSearchMode(false));
+  useClickOutside([searchBox, startSearchButton], () =>
+    setForceSearchMode(false),
+  );
   const startSearch = () => {
     setForceSearchMode(true);
     setTimeout(() => searchBox.current?.querySelector('input')?.focus(), 0);
@@ -286,6 +289,7 @@ export function ListPage() {
           <span className="issue-count">{issues.length}</span>
         </h1>
         <Button
+          ref={startSearchButton}
           className="search-toggle"
           eventName="Toggle Search"
           onAction={startSearch}
