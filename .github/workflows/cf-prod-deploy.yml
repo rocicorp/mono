@@ -57,7 +57,7 @@ jobs:
       - name: Validate SAM template
         run: sam validate -t ./prod/templates/template.yml
       - name: Sync SAM application
-        run: sam sync --no-watch --skip-deploy-sync -t ./prod/templates/template.yml --parameter-overrides ZeroUpstreamDB=${{ secrets.PROD_ZERO_UPSTREAM_DB }} ZeroCvrDB=${{ secrets.PROD_ZERO_CVR_DB }} ZeroChangeDb=${{ secrets.PROD_ZERO_CHANGE_DB }} ZeroJwtSecret=${{ secrets.PROD_ZERO_JWT_SECRET }} AwsAccessKeyID=${{ secrets.AWS_ACCESS_KEY_ID }} AwsSecretAccessKey=${{ secrets.AWS_SECRET_ACCESS_KEY }} CertificateArn=${{ vars.PROD_CERTIFICATE_ARN }}
+        run: sam sync --no-watch -t ./prod/templates/template.yml --parameter-overrides ZeroUpstreamDB=${{ secrets.PROD_ZERO_UPSTREAM_DB }} ZeroCvrDB=${{ secrets.PROD_ZERO_CVR_DB }} ZeroChangeDb=${{ secrets.PROD_ZERO_CHANGE_DB }} ZeroJwtSecret=${{ secrets.PROD_ZERO_JWT_SECRET }} AwsAccessKeyID=${{ secrets.AWS_ACCESS_KEY_ID }} AwsSecretAccessKey=${{ secrets.AWS_SECRET_ACCESS_KEY }} CertificateArn=${{ vars.PROD_CERTIFICATE_ARN }}
       - name: Deploy to ECS replication-manager
         uses: imehedi/actions-awscli-v2@latest
         with:
