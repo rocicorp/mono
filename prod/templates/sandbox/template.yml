@@ -198,7 +198,7 @@ Resources:
             - Name: ZERO_REPLICA_FILE
               Value: /data/db/sync-replica.db
             - Name: REPLICA_URL
-              Value: !Sub "s3://${ApplicationBucket}/1208b"
+              Value: !Sub "s3://${ApplicationBucket}/1210"
             - Name: ZERO_LOG_LEVEL
               Value: debug
             - Name: ZERO_UPSTREAM_MAX_CONNS
@@ -346,7 +346,7 @@ Resources:
             - Name: ZERO_LITESTREAM
               Value: "1"
             - Name: REPLICA_URL
-              Value: !Sub "s3://${ApplicationBucket}/1208b"
+              Value: !Sub "s3://${ApplicationBucket}/1210"
             - Name: ZERO_LOG_FORMAT
               Value: json
             - Name: ZERO_REPLICA_FILE
