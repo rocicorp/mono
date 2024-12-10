@@ -265,6 +265,7 @@ export function ListPage() {
           {searchMode ? (
             <input
               type="text"
+              className="search-input"
               value={textFilter ?? ''}
               onChange={e => onTextFilterChange(e.target.value)}
               onFocus={() => setForceSearchMode(true)}
@@ -284,6 +285,11 @@ export function ListPage() {
           )}
           <span className="issue-count">{issues.length}</span>
         </h1>
+        <Button
+          className="search-toggle"
+          eventName="Toggle Search"
+          onAction={startSearch}
+        ></Button>
       </div>
       <div className="list-view-filter-container">
         <span className="filter-label">Filtered by:</span>
