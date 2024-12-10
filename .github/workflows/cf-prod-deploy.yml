@@ -48,8 +48,13 @@ jobs:
           docker buildx build --platform linux/amd64 --build-arg NPM_TOKEN=${{ secrets.NPM_TOKEN }} -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE_ZERO_CACHE:latest -f ./prod/zbugs/Dockerfile --push .
       - name: Deploy AWS CF sam
         uses: actions/checkout@v3
+      - name: Set up Python
         uses: actions/setup-python@v3
+      - name: Set up AWS SAM
         uses: aws-actions/setup-sam@v2
+      - name: Build SAM application
         run: sam build -t ./prod/templates/template.yml
+      - name: Validate SAM template
         run: sam validate -t ./prod/templates/template.yml
+      - name: Sync SAM application
         run: sam sync --no-watch --skip-deploy -t ./prod/templates/template.yml --parameter-overrides ZeroUpstreamDB=${{ secrets.PROD_ZERO_UPSTREAM_DB }} ZeroCvrDB=${{ secrets.PROD_ZERO_CVR_DB }} ZeroChangeDb=${{ secrets.PROD_ZERO_CHANGE_DB }} ZeroJwtSecret=${{ secrets.PROD_ZERO_JWT_SECRET }} AwsAccessKeyID=${{ secrets.AWS_ACCESS_KEY_ID }} AwsSecretAccessKey=${{ secrets.AWS_SECRET_ACCESS_KEY }} CertificateArn=${{ vars.PROD_CERTIFICATE_ARN }}
