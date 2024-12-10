@@ -9,7 +9,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
   type ReactNode,
+  type SetStateAction,
 } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {toast, ToastContainer} from 'react-toastify';
@@ -24,12 +26,13 @@ import {Button} from '../../components/button.js';
 import {CanEdit} from '../../components/can-edit.js';
 import {Combobox} from '../../components/combobox.js';
 import {Confirm} from '../../components/confirm.js';
-import {EmojiPanel, type Emoji} from '../../components/emoji-panel.js';
+import {EmojiPanel} from '../../components/emoji-panel.js';
 import LabelPicker from '../../components/label-picker.js';
 import {Link} from '../../components/link.js';
 import Markdown from '../../components/markdown.js';
 import RelativeTime from '../../components/relative-time.js';
 import UserPicker from '../../components/user-picker.js';
+import {type Emoji} from '../../emoji-utils.js';
 import {useCanEdit} from '../../hooks/use-can-edit.js';
 import {useDocumentHasFocus} from '../../hooks/use-document-has-focus.js';
 import {useHash} from '../../hooks/use-hash.js';
@@ -41,6 +44,8 @@ import {links, type ListContext, type ZbugsHistoryState} from '../../routes.js';
 import {preload} from '../../zero-setup.js';
 import CommentComposer from './comment-composer.js';
 import Comment, {parsePermalink} from './comment.js';
+
+const emojiToastShowDuration = 3_000;
 
 export function IssuePage() {
   const z = useZero();
@@ -178,21 +183,40 @@ export function IssuePage() {
 
   const issueEmojiRef = useRef<HTMLDivElement>(null);
 
+  const [recentEmojis, setRecentEmojis] = useState<Emoji[]>([]);
+
   const handleEmojiChange = useCallback(
     (added: readonly Emoji[], removed: readonly Emoji[]) => {
       assert(issue);
+      const newRecentEmojis = new Map(recentEmojis.map(e => [e.id, e]));
+
       for (const emoji of added) {
         if (emoji.creatorID !== z.userID) {
-          showToastForEmoji(emoji, issue, virtualizer, issueEmojiRef.current);
+          showToastForEmoji(
+            emoji,
+            issue,
+            virtualizer,
+            issueEmojiRef.current,
+            setRecentEmojis,
+          );
+          newRecentEmojis.set(emoji.id, emoji);
         }
       }
       for (const emoji of removed) {
         // toast.dismiss is fine to call with non existing toast IDs
         toast.dismiss(emoji.id);
+        newRecentEmojis.delete(emoji.id);
       }
+
+      setRecentEmojis([...newRecentEmojis.values()]);
     },
-    [issue, virtualizer, z.userID],
+    [issue, recentEmojis, virtualizer, z.userID],
   );
+
+  const removeRecentEmoji = useCallback((id: string) => {
+    toast.dismiss(id);
+    setRecentEmojis(recentEmojis => recentEmojis.filter(e => e.id !== id));
+  }, []);
 
   useEmojiChangeListener(issue, handleEmojiChange);
 
@@ -309,7 +333,12 @@ export function IssuePage() {
           {!editing ? (
             <div className="description-container markdown-container">
               <Markdown>{rendering.description}</Markdown>
-              <EmojiPanel issueID={issue.id} ref={issueEmojiRef} />
+              <EmojiPanel
+                issueID={issue.id}
+                ref={issueEmojiRef}
+                recentEmojis={recentEmojis}
+                removeRecentEmoji={removeRecentEmoji}
+              />
             </div>
           ) : (
             <div className="edit-description-container">
@@ -466,6 +495,8 @@ export function IssuePage() {
                     id={issue.comments[item.index].id}
                     issueID={issue.id}
                     height={item.size}
+                    recentEmojis={recentEmojis}
+                    removeRecentEmoji={removeRecentEmoji}
                   />
                 </div>
               ))}
@@ -505,6 +536,7 @@ function showToastForEmoji(
   issue: IssueRow & {comments: CommentRow[]},
   virtualizer: Virtualizer<Window, HTMLElement>,
   emojiElement: HTMLDivElement | null,
+  setRecentEmojis: Dispatch<SetStateAction<Emoji[]>>,
 ) {
   const toastID = emoji.id;
   const {creator} = emoji;
@@ -522,6 +554,14 @@ function showToastForEmoji(
       toastId: toastID,
       containerId: 'bottom',
       onClick: () => {
+        // Put the emoji that was clicked first in the recent emojis list.
+        // This is so that the emoji that was clicked first is the one that is
+        // shown in the tooltip.
+        setRecentEmojis(emojis => [
+          emoji,
+          ...emojis.filter(e => e.id !== emoji.id),
+        ]);
+
         const index = issue.comments.findIndex(c => c.id === emoji.subjectID);
         if (index !== -1) {
           virtualizer.scrollToIndex(index, {
@@ -552,7 +592,7 @@ function ToastContent({
     if (docFocused && !hover) {
       const id = setTimeout(() => {
         toast.dismiss(toastID);
-      }, 5_000);
+      }, emojiToastShowDuration);
       return () => clearTimeout(id);
     }
     return () => void 0;

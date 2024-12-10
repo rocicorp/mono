@@ -767,6 +767,7 @@ textarea.autoResize {
 }
 
 .toast-emoji-icon,
+.tooltip-emoji-icon,
 .issue-creator-avatar {
   width: 1.4rem;
   height: 1.4rem;
@@ -1307,3 +1308,22 @@ emoji-picker {
 .Toastify__progress-bar--wrp {
   display: none;
 }
+
+.tooltip-content.triggered {
+  padding: 0.25rem 0.5rem;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+
+  .tooltip-emoji-icon {
+    margin: 0;
+    margin-right: 0.5rem;
+  }
+}
+
+/*
+.emoji-pill.triggered {
+}
+.emoji-pill.mine {
+}
+*/
