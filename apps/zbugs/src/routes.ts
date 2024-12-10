@@ -4,7 +4,7 @@ export const links = {
     return '/';
   },
   issue({id, shortID}: {id: string; shortID?: number | null}) {
-    return shortID ? `/issue/${shortID}` : `/issue/${id}`;
+    return shortID != null ? `/issue/${shortID}` : `/issue/${id}`;
   },
   login(pathname: string, search: string | null) {
     return (
