@@ -16,7 +16,17 @@ import {
   useRole,
   useTransitionStatus,
 } from '@floating-ui/react';
-import {createContext, forwardRef, useContext, useRef, useState} from 'react';
+import classNames from 'classnames';
+import {
+  createContext,
+  forwardRef,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+  type HTMLProps,
+  type ReactNode,
+} from 'react';
 import './tooltip.css';
 
 type ContextType = ReturnType<typeof useTooltip> | null;
@@ -31,13 +41,25 @@ const useTooltipContext = () => {
   return context;
 };
 
-function useTooltip() {
+interface TooltipOptions {
+  initialOpen?: boolean | undefined;
+  open?: boolean | undefined;
+  onOpenChange?: ((open: boolean) => void) | undefined;
+}
+
+function useTooltip({
+  initialOpen = false,
+  open: controlledOpen,
+  onOpenChange: setControlledOpen,
+}: TooltipOptions = {}) {
   const padding = 10;
-  const [isOpen, setIsOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(initialOpen);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = setControlledOpen ?? setUncontrolledOpen;
   const arrowRef = useRef<SVGSVGElement>(null);
-  const {refs, floatingStyles, context, placement} = useFloating({
-    open: isOpen,
-    onOpenChange: setIsOpen,
+  const floatingData = useFloating({
+    open: open,
+    onOpenChange: setOpen,
     placement: 'top',
     middleware: [
       offset(padding),
@@ -51,37 +73,41 @@ function useTooltip() {
     whileElementsMounted: autoUpdate,
     transform: false,
   });
+  const {context} = floatingData;
   const {isMounted, status} = useTransitionStatus(context);
   const {delay} = useDelayGroup(context);
-  const hover = useHover(context, {move: false, delay});
-  const focus = useFocus(context);
+  const hover = useHover(context, {
+    move: false,
+    delay,
+    enabled: controlledOpen == null,
+  });
+  const focus = useFocus(context, {
+    enabled: controlledOpen == null,
+  });
   const dismiss = useDismiss(context);
   const role = useRole(context, {
     role: 'label',
   });
 
-  const {getReferenceProps, getFloatingProps} = useInteractions([
-    hover,
-    focus,
-    dismiss,
-    role,
-  ]);
+  const interactions = useInteractions([hover, focus, dismiss, role]);
 
-  return {
-    refs,
-    getReferenceProps,
-    floatingStyles,
-    placement,
-    isMounted,
-    status,
-    getFloatingProps,
-    arrowRef,
-    context,
-  };
+  return useMemo(
+    () => ({
+      ...floatingData,
+      ...interactions,
+      isMounted,
+      status,
+      arrowRef,
+    }),
+    [floatingData, interactions, isMounted, status],
+  );
 }
 
-export function Tooltip({children}: {children: React.ReactNode}) {
-  const context = useTooltip();
+export function Tooltip({
+  children,
+  ...options
+}: {children: ReactNode} & TooltipOptions) {
+  const context = useTooltip(options);
   return (
     <TooltipContext.Provider value={context}>
       {children}
@@ -91,7 +117,7 @@ export function Tooltip({children}: {children: React.ReactNode}) {
 
 export const TooltipTrigger = forwardRef<
   HTMLDivElement,
-  React.HTMLProps<HTMLDivElement>
+  HTMLProps<HTMLDivElement>
 >(({children, ...props}, propRef) => {
   const context = useTooltipContext();
   const ref = useMergeRefs([context.refs.setReference, propRef]);
@@ -104,7 +130,7 @@ export const TooltipTrigger = forwardRef<
 
 export const TooltipContent = forwardRef<
   HTMLDivElement,
-  React.HTMLProps<HTMLDivElement>
+  HTMLProps<HTMLDivElement>
 >(({children, ...props}, propRef) => {
   const context = useTooltipContext();
   const ref = useMergeRefs([context.refs.setFloating, propRef]);
@@ -115,11 +141,11 @@ export const TooltipContent = forwardRef<
     <FloatingPortal>
       <div
         ref={ref}
-        className="tooltip-content"
         style={{
           ...context.floatingStyles,
         }}
         {...context.getFloatingProps(props)}
+        className={classNames('tooltip-content', props.className)}
         data-placement={context.placement}
         data-status={context.status}
       >
