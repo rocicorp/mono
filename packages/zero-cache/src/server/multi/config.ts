@@ -12,12 +12,16 @@ const multiConfigSchema = {
   tenantConfigsJSON: {
     type: v.string(),
     desc: [
-      `JSON encoding TenantConfigs, which define the ENV variables`,
-      `used to configure each tenant's logical zero-cache:`,
+      `JSON encoding of TenantConfigs, which define the configuration of each`,
+      `tenant's logical zero-cache:`,
       ``,
       `\\{`,
       `  /** ENV variables inherited by all tenants, unless overridden. */`,
-      `  baseEnv?: \\{[env: string]: string\\};`,
+      `  baseEnv?: \\{`,
+      `    ZERO_LOG_LEVEL: string`,
+      `    ZERO_LOG_FORMAT: string`,
+      `    ...`,
+      `  \\}`,
       ``,
       `  /**`,
       `   * Requests are dispatched to the first tenant with a matching host and path,`,
@@ -25,7 +29,7 @@ const multiConfigSchema = {
       `   * both must match for the request to be dispatched to that tenant.`,
       `   */`,
       `  tenants: \\{`,
-      `     name: string;   // appears in debug logs`,
+      `     id: string;     // value of the "tid" context key in debug logs`,
       `     host?: string;  // case-insensitive full Host: header match`,
       `     path?: string;  // first path component, with or without leading slash`,
       ``,
@@ -68,7 +72,7 @@ const multiConfigSchema = {
 const zeroEnvSchema = envSchema(zeroOptions, ENV_VAR_PREFIX);
 
 const tenantSchema = v.object({
-  name: v.string(),
+  id: v.string(),
   host: v
     .string()
     .map(h => h.toLowerCase())
@@ -94,7 +98,7 @@ const tenantConfigsSchema = v
     const {baseEnv, ...config} = c;
     for (const tenant of config.tenants) {
       if (tenant.host === undefined && tenant.path === undefined) {
-        return v.err(`Tenant "${tenant.name}" is missing a host or path field`);
+        return v.err(`Tenant "${tenant.id}" is missing a host or path field`);
       }
       const mergedEnv = v.test({...baseEnv, ...tenant.env}, zeroEnvSchema);
       if (!mergedEnv.ok) {

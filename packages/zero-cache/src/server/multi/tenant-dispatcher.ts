@@ -5,7 +5,7 @@ import type {IncomingMessageSubset} from '../../types/http.js';
 import type {Worker} from '../../types/processes.js';
 
 type Tenant = {
-  name: string;
+  id: string;
   host?: string | undefined;
   path?: string | undefined;
   worker: Worker;
@@ -36,9 +36,9 @@ export class TenantDispatcher extends HttpService {
       if (t.path && pathname !== t.path && !pathname.startsWith(t.path + '/')) {
         continue;
       }
-      this._lc.debug?.(`connecting ${host}${pathname} to ${t.name}`);
+      this._lc.debug?.(`connecting ${host}${pathname} to ${t.id}`);
 
-      return {payload: t.name, receiver: t.worker};
+      return {payload: t.id, receiver: t.worker};
     }
     throw new Error(`no matching tenant for: ${u}`);
   }

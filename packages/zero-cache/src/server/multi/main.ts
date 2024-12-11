@@ -30,15 +30,18 @@ export default async function runWorker(
   const tenants = config.tenants.map(tenant => ({
     ...tenant,
     worker: childWorker('./server/main.ts', {
-      ...tenant.env,
-      ['ZERO_TENANT_ID']: tenant.name,
+      // defaults
+      ['ZERO_TENANT_ID']: tenant.id,
       ['ZERO_PORT']: String((tenantPort += 3)),
+      ['ZERO_LOG_LEVEL']: config.log.level,
+      ['ZERO_LOG_FORMAT']: config.log.format,
+      ...tenant.env,
     }),
   }));
 
   const terminator = new Terminator(lc);
   for (const tenant of tenants) {
-    terminator.addWorker(tenant.worker, 'user-facing', tenant.name);
+    terminator.addWorker(tenant.worker, 'user-facing', tenant.id);
   }
 
   lc.info?.('waiting for tenants to be ready ...');

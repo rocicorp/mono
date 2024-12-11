@@ -13,18 +13,18 @@ test('env merging', () => {
         },
         tenants: [
           {
-            name: 'tenboo',
+            id: 'tenboo',
             host: 'Normalize.ME',
             path: 'tenboo',
             env: {['ZERO_REPLICA_FILE']: 'tenboo.db'},
           },
           {
-            name: 'tenbar',
+            id: 'tenbar',
             path: '/tenbar',
             env: {['ZERO_REPLICA_FILE']: 'tenbar.db'},
           },
           {
-            name: 'tenbaz',
+            id: 'tenbaz',
             path: '/tenbaz',
             env: {
               ['ZERO_REPLICA_FILE']: 'tenbar.db',
@@ -50,7 +50,7 @@ test('env merging', () => {
             "ZERO_UPSTREAM_DB": "foo",
           },
           "host": "normalize.me",
-          "name": "tenboo",
+          "id": "tenboo",
           "path": "/tenboo",
         },
         {
@@ -60,7 +60,7 @@ test('env merging', () => {
             "ZERO_REPLICA_FILE": "tenbar.db",
             "ZERO_UPSTREAM_DB": "foo",
           },
-          "name": "tenbar",
+          "id": "tenbar",
           "path": "/tenbar",
         },
         {
@@ -70,7 +70,7 @@ test('env merging', () => {
             "ZERO_REPLICA_FILE": "tenbar.db",
             "ZERO_UPSTREAM_DB": "foo",
           },
-          "name": "tenbaz",
+          "id": "tenbaz",
           "path": "/tenbaz",
         },
       ],
@@ -82,7 +82,7 @@ test.each([
   [
     'Missing property ZERO_REPLICA_FILE',
     {
-      name: 'tenboo',
+      id: 'tenboo',
       path: '/tenboo',
       env: {},
     },
@@ -90,14 +90,14 @@ test.each([
   [
     'Tenant "tenboo" is missing a host or path field',
     {
-      name: 'tenboo',
+      id: 'tenboo',
       env: {['ZERO_REPLICA_FILE']: 'foo.db'},
     },
   ],
   [
     'Only a single path component may be specified',
     {
-      name: 'tenboo',
+      id: 'tenboo',
       path: '/too/many-slashes',
       env: {['ZERO_REPLICA_FILE']: 'foo.db'},
     },

@@ -25,7 +25,6 @@ describe('integration', () => {
   let changeDB: PostgresDB;
   let replicaDbFile: DbFile;
   let env: Record<string, string>;
-  let multiEnv: Record<string, string>;
   let port: number;
 
   const SCHEMA = {
@@ -69,14 +68,6 @@ describe('integration', () => {
       ['ZERO_SCHEMA_JSON']: JSON.stringify(SCHEMA),
       ['ZERO_NUM_SYNC_WORKERS']: '1',
     };
-
-    multiEnv = {
-      ['ZERO_PORT']: String(port),
-      ['ZERO_LOG_LEVEL']: 'error',
-      ['ZERO_TENANT_CONFIGS_JSON']: JSON.stringify({
-        tenants: [{name: 'tenant', path: '/zero', env}],
-      }),
-    };
   });
 
   const FOO_QUERY: AST = {
@@ -85,11 +76,11 @@ describe('integration', () => {
   };
 
   async function startZero(module: string, env: NodeJS.ProcessEnv) {
-    const zeroReady = resolver<unknown>();
+    const {promise, resolve} = resolver<unknown>();
 
     const zero = childWorker(module, env);
-    zero.onMessageType('ready', zeroReady.resolve);
-    await zeroReady.promise;
+    zero.onMessageType('ready', resolve);
+    await promise;
   }
 
   afterEach(async () => {
@@ -99,7 +90,34 @@ describe('integration', () => {
 
   test.each([
     ['standalone', './server/main.ts', () => env],
-    ['multi-tenant', './server/multi/main.ts', () => multiEnv],
+    [
+      'multi-tenant, direct-dispatch',
+      './server/multi/main.ts',
+      () => ({
+        ['ZERO_PORT']: String(port - 3),
+        ['ZERO_LOG_LEVEL']: 'error',
+        ['ZERO_TENANT_CONFIGS_JSON']: JSON.stringify({
+          tenants: [{id: 'tenant', path: '/zero', env}],
+        }),
+      }),
+    ],
+    [
+      'multi-tenant, double-dispatch',
+      './server/multi/main.ts',
+      () => ({
+        ['ZERO_PORT']: String(port),
+        ['ZERO_LOG_LEVEL']: 'error',
+        ['ZERO_TENANT_CONFIGS_JSON']: JSON.stringify({
+          tenants: [
+            {
+              id: 'tenant',
+              path: '/zero',
+              env: {...env, ['ZERO_PORT']: String(port + 3)},
+            },
+          ],
+        }),
+      }),
+    ],
   ])('%s', async (_name, module, makeEnv) => {
     await startZero(module, makeEnv());
 
@@ -107,7 +125,7 @@ describe('integration', () => {
     const ws = new WebSocket(
       `ws://localhost:${port}/zero/sync/v${PROTOCOL_VERSION}/connect` +
         `?clientGroupID=abc&clientID=def&wsid=123&schemaVersion=1&baseCookie=&ts=123456789&lmid=1`,
-      encodeURIComponent(btoa('{}')),
+      encodeURIComponent(btoa('{}')), // auth token
     );
     ws.on('message', data =>
       downstream.enqueue(JSON.parse(data.toString('utf-8'))),
