@@ -30,6 +30,7 @@ export class Database {
           this.#lc.withContext('class', 'Statement').withContext('sql', sql),
           this.#db.prepare(sql),
           this.#threshold,
+          sql,
         ),
     );
   }
@@ -81,11 +82,18 @@ export class Statement {
   readonly #stmt: SQLite3Statement;
   readonly #lc: LogContext;
   readonly #threshold: number;
+  readonly sql: string;
 
-  constructor(lc: LogContext, stmt: SQLite3Statement, threshold: number) {
+  constructor(
+    lc: LogContext,
+    stmt: SQLite3Statement,
+    threshold: number,
+    sql: string,
+  ) {
     this.#lc = lc;
     this.#stmt = stmt;
     this.#threshold = threshold;
+    this.sql = sql;
   }
 
   safeIntegers(useBigInt: boolean): this {
