@@ -62,6 +62,7 @@ test.each([
     'defaults',
     ['--replica-db-file', '/tmp/replica.db'],
     {},
+    false,
     {
       port: 4848,
       replicaDBFile: '/tmp/replica.db',
@@ -92,6 +93,7 @@ test.each([
       ['Z_TUPLE']: 'c,d',
       ['Z_HIDE_ME']: 'hello!',
     },
+    false,
     {
       port: 6000,
       replicaDBFile: '/tmp/env-replica.db',
@@ -125,6 +127,7 @@ test.each([
       ['Z_SHARD_PUBLICATIONS']: 'zero_foo,zero_bar',
       ['Z_TUPLE']: 'e,f',
     },
+    false,
     {
       port: 6000,
       replicaDBFile: '/tmp/env-replica.db',
@@ -148,6 +151,7 @@ test.each([
     'argv values, short alias',
     ['-p', '6000', '--replica-db-file=/tmp/replica.db'],
     {},
+    false,
     {
       port: 6000,
       replicaDBFile: '/tmp/replica.db',
@@ -169,6 +173,7 @@ test.each([
     'argv values, hex numbers',
     ['-p', '0x1234', '--replica-db-file=/tmp/replica.db'],
     {},
+    false,
     {
       port: 4660,
       replicaDBFile: '/tmp/replica.db',
@@ -190,6 +195,7 @@ test.each([
     'argv values, scientific notation',
     ['-p', '1.234E3', '--replica-db-file=/tmp/replica.db'],
     {},
+    false,
     {
       port: 1234,
       replicaDBFile: '/tmp/replica.db',
@@ -226,6 +232,7 @@ test.each([
       'h',
     ],
     {},
+    false,
     {
       port: 6000,
       replicaDBFile: '/tmp/replica.db',
@@ -267,6 +274,7 @@ test.each([
       'j',
     ],
     {},
+    false,
     {
       port: 6000,
       replicaDBFile: '/tmp/replica.db',
@@ -312,6 +320,7 @@ test.each([
       ['Z_TUPLE']: 'e,f',
       ['Z_HIDE_ME']: 'bar',
     },
+    false,
     {
       port: 8888,
       replicaDBFile: '/tmp/env-replica.db',
@@ -337,6 +346,7 @@ test.each([
     '--bool flag',
     ['--litestream', '--replica-db-file=/tmp/replica.db'],
     {},
+    false,
     {
       port: 4848,
       replicaDBFile: '/tmp/replica.db',
@@ -360,6 +370,7 @@ test.each([
     '--bool=true flag',
     ['--litestream=true', '--replica-db-file=/tmp/replica.db'],
     {},
+    false,
     {
       port: 4848,
       replicaDBFile: '/tmp/replica.db',
@@ -383,6 +394,7 @@ test.each([
     '--bool 1 flag',
     ['--litestream', '1', '--replica-db-file=/tmp/replica.db'],
     {},
+    false,
     {
       port: 4848,
       replicaDBFile: '/tmp/replica.db',
@@ -406,6 +418,7 @@ test.each([
     '--bool=0 flag',
     ['--litestream=0', '--replica-db-file=/tmp/replica.db'],
     {},
+    false,
     {
       port: 4848,
       replicaDBFile: '/tmp/replica.db',
@@ -429,6 +442,7 @@ test.each([
     '--bool False flag',
     ['--litestream', 'False', '--replica-db-file=/tmp/replica.db'],
     {},
+    false,
     {
       port: 4848,
       replicaDBFile: '/tmp/replica.db',
@@ -452,6 +466,7 @@ test.each([
     'unknown flags',
     ['--foo', '--replica-db-file', '/tmp/replica.db', 'bar', '--baz=3'],
     {},
+    false,
     {
       port: 4848,
       replicaDBFile: '/tmp/replica.db',
@@ -469,21 +484,58 @@ test.each([
     },
     ['--foo', 'bar', '--baz=3'],
   ],
+  [
+    'partial',
+    ['--port', '4888'],
+    {},
+    true,
+    {
+      port: 4888,
+      log: {format: 'text'},
+      shard: {id: '0', publications: []},
+      tuple: ['a', 'b'],
+    },
+    {
+      Z_LOG_FORMAT: 'text',
+      Z_PORT: '4888',
+      Z_SHARD_ID: '0',
+      Z_SHARD_PUBLICATIONS: '',
+      Z_TUPLE: 'a,b',
+    },
+    undefined,
+  ],
 ] satisfies [
   string,
   string[],
   Record<string, string>,
-  TestConfig,
+  boolean,
+  Partial<TestConfig>,
   Record<string, string>,
   string[] | undefined,
-][])('%s', (_name, argv, env, result, envObj, unknown) => {
-  const parsed = parseOptionsAdvanced(options, argv, 'Z_', true, env);
+][])('%s', (_name, argv, env, allowPartial, result, envObj, unknown) => {
+  const parsed = parseOptionsAdvanced(
+    options,
+    argv,
+    'Z_',
+    true,
+    allowPartial,
+    env,
+  );
   expect(parsed.config).toEqual(result);
   expect(parsed.env).toEqual(envObj);
   expect(parsed.unknown).toEqual(unknown);
 
   // Sanity check: Ensure that parsing the parsed.env computes the same result.
-  expect(parseOptions(options, [], 'Z_', parsed.env)).toEqual(result);
+  const reparsed = parseOptionsAdvanced(
+    options,
+    [],
+    'Z_',
+    true,
+    allowPartial,
+    parsed.env,
+  );
+  expect(reparsed.config).toEqual(result);
+  expect(reparsed.env).toEqual(envObj);
 });
 
 test('envSchema', () => {
