@@ -269,15 +269,20 @@ test('pushing values does the correct writes and outputs', () => {
   const db1 = new Database(createSilentLogContext(), ':memory:');
   const db2 = new Database(createSilentLogContext(), ':memory:');
   db1.exec(
-    /* sql */ `CREATE TABLE foo (a, b, c, ignored, columns, PRIMARY KEY (a, b));`,
+    /* sql */ `CREATE TABLE foo (a, b, c, d, ignored, columns, PRIMARY KEY (a, b));`,
   );
   db2.exec(
-    /* sql */ `CREATE TABLE foo (a, b, c, ignored, columns, PRIMARY KEY (a, b));`,
+    /* sql */ `CREATE TABLE foo (a, b, c, d, ignored, columns, PRIMARY KEY (a, b));`,
   );
   const source = new TableSource(
     db1,
     'foo',
-    {a: {type: 'number'}, b: {type: 'number'}, c: {type: 'boolean'}},
+    {
+      a: {type: 'number'},
+      b: {type: 'number'},
+      c: {type: 'boolean'},
+      d: {type: 'json'},
+    },
     ['a', 'b'],
   );
   const outputted: Change[] = [];
@@ -291,7 +296,7 @@ test('pushing values does the correct writes and outputs', () => {
     });
 
   for (const db of [db1, db2]) {
-    const read = db.prepare('SELECT a, b, c FROM foo');
+    const read = db.prepare('SELECT a, b, c, d FROM foo');
     source.setDB(db);
 
     /**
@@ -303,7 +308,7 @@ test('pushing values does the correct writes and outputs', () => {
      */
     source.push({
       type: 'add',
-      row: {a: 1, b: 2.123, c: false},
+      row: {a: 1, b: 2.123, c: false, d: 'json string'},
     });
 
     expect(outputted.shift()).toEqual({
@@ -314,10 +319,11 @@ test('pushing values does the correct writes and outputs', () => {
           a: 1,
           b: 2.123,
           c: false,
+          d: 'json string',
         },
       },
     });
-    expect(read.all()).toEqual([{a: 1, b: 2.123, c: 0}]);
+    expect(read.all()).toEqual([{a: 1, b: 2.123, c: 0, d: '"json string"'}]);
 
     source.push({
       type: 'remove',
@@ -346,7 +352,7 @@ test('pushing values does the correct writes and outputs', () => {
 
     source.push({
       type: 'add',
-      row: {a: 1, b: 2.123, c: true},
+      row: {a: 1, b: 2.123, c: true, d: {}},
     });
 
     expect(outputted.shift()).toEqual({
@@ -357,15 +363,16 @@ test('pushing values does the correct writes and outputs', () => {
           a: 1,
           b: 2.123,
           c: true,
+          d: {},
         },
       },
     });
-    expect(read.all()).toEqual([{a: 1, b: 2.123, c: 1}]);
+    expect(read.all()).toEqual([{a: 1, b: 2.123, c: 1, d: '{}'}]);
 
     expect(() => {
       source.push({
         type: 'add',
-        row: {a: 1, b: 2.123, c: true},
+        row: {a: 1, b: 2.123, c: true, d: null},
       });
     }).toThrow();
 
@@ -376,6 +383,7 @@ test('pushing values does the correct writes and outputs', () => {
         a: BigInt(Number.MAX_SAFE_INTEGER),
         b: 3.456,
         c: true,
+        d: [],
       } as unknown as Row,
     });
 
@@ -387,13 +395,14 @@ test('pushing values does the correct writes and outputs', () => {
           a: 9007199254740991n,
           b: 3.456,
           c: true,
+          d: [],
         },
       },
     });
 
     expect(read.all()).toEqual([
-      {a: 1, b: 2.123, c: 1},
-      {a: 9007199254740991, b: 3.456, c: 1},
+      {a: 1, b: 2.123, c: 1, d: '{}'},
+      {a: 9007199254740991, b: 3.456, c: 1, d: '[]'},
     ]);
 
     source.push({
@@ -402,6 +411,7 @@ test('pushing values does the correct writes and outputs', () => {
         a: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
         b: 0,
         c: true,
+        d: true,
       } as unknown as Row,
     });
     outputted.shift();
@@ -412,23 +422,26 @@ test('pushing values does the correct writes and outputs', () => {
         a: 0,
         b: BigInt(Number.MIN_SAFE_INTEGER) - 1n,
         c: true,
+        d: false,
       } as unknown as Row,
     });
     outputted.shift();
 
     read.safeIntegers(true);
     expect(read.all()).toEqual([
-      {a: 1, b: 2.123, c: 1},
-      {a: 9007199254740991n, b: 3.456, c: 1},
+      {a: 1, b: 2.123, c: 1, d: '{}'},
+      {a: 9007199254740991n, b: 3.456, c: 1, d: '[]'},
       {
         a: 9007199254740992n,
         b: 0,
         c: 1,
+        d: 'true',
       },
       {
         a: 0,
         b: -9007199254740992n,
         c: 1,
+        d: 'false',
       },
     ]);
     read.safeIntegers(false);
@@ -456,35 +469,38 @@ test('pushing values does the correct writes and outputs', () => {
     // edit changes
     source.push({
       type: 'edit',
-      row: {a: 1, b: 2.123, c: false} as unknown as Row,
-      oldRow: {a: 1, b: 2.123, c: true} as unknown as Row,
+      row: {a: 1, b: 2.123, c: false, d: {a: true}} as unknown as Row,
+      oldRow: {a: 1, b: 2.123, c: true, d: {}} as unknown as Row,
     });
 
     expect(outputted.shift()).toEqual({
       type: 'edit',
-      oldNode: {row: {a: 1, b: 2.123, c: true}, relationships: {}},
-      node: {row: {a: 1, b: 2.123, c: false}, relationships: {}},
+      oldNode: {row: {a: 1, b: 2.123, c: true, d: {}}, relationships: {}},
+      node: {row: {a: 1, b: 2.123, c: false, d: {a: true}}, relationships: {}},
     });
 
     expect(read.all()).toEqual([
-      {a: 1, b: 2.123, c: 0},
-      {a: 9007199254740991, b: 3.456, c: 1},
+      {a: 1, b: 2.123, c: 0, d: '{"a":true}'},
+      {a: 9007199254740991, b: 3.456, c: 1, d: '[]'},
     ]);
 
     // edit pk should fall back to remove and insert
     source.push({
       type: 'edit',
-      oldRow: {a: 1, b: 2.123, c: false},
-      row: {a: 1, b: 3, c: false},
+      oldRow: {a: 1, b: 2.123, c: false, d: {a: true}},
+      row: {a: 1, b: 3, c: false, d: {a: true}},
     });
     expect(outputted.shift()).toEqual({
       type: 'edit',
-      oldNode: {row: {a: 1, b: 2.123, c: false}, relationships: {}},
-      node: {row: {a: 1, b: 3, c: false}, relationships: {}},
+      oldNode: {
+        row: {a: 1, b: 2.123, c: false, d: {a: true}},
+        relationships: {},
+      },
+      node: {row: {a: 1, b: 3, c: false, d: {a: true}}, relationships: {}},
     });
     expect(read.all()).toEqual([
-      {a: 9007199254740991, b: 3.456, c: 1},
-      {a: 1, b: 3, c: 0},
+      {a: 9007199254740991, b: 3.456, c: 1, d: '[]'},
+      {a: 1, b: 3, c: 0, d: '{"a":true}'},
     ]);
 
     // non existing old row
