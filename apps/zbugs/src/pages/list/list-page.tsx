@@ -241,11 +241,21 @@ export function ListPage() {
   const [forceSearchMode, setForceSearchMode] = useState(false);
   const searchMode = forceSearchMode || Boolean(textFilter);
   const searchBox = useRef<HTMLHeadingElement>(null);
+  const startSearchButton = useRef<HTMLButtonElement>(null);
   useKeypress('/', () => startSearch());
-  useClickOutside(searchBox, () => setForceSearchMode(false));
+  useClickOutside([searchBox, startSearchButton], () =>
+    setForceSearchMode(false),
+  );
   const startSearch = () => {
-    setForceSearchMode(true);
-    setTimeout(() => searchBox.current?.querySelector('input')?.focus(), 0);
+    if (forceSearchMode) {
+      // If already in search mode, toggle it off
+      setForceSearchMode(false);
+      searchBox.current?.querySelector('input')?.blur(); // Remove focus from input
+    } else {
+      // If not in search mode, activate it
+      setForceSearchMode(true);
+      setTimeout(() => searchBox.current?.querySelector('input')?.focus(), 0);
+    }
   };
   const handleSearchKeyUp = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -263,27 +273,39 @@ export function ListPage() {
           ref={searchBox}
         >
           {searchMode ? (
-            <input
-              type="text"
-              value={textFilter ?? ''}
-              onChange={e => onTextFilterChange(e.target.value)}
-              onFocus={() => setForceSearchMode(true)}
-              onBlur={() => setForceSearchMode(false)}
-              onKeyUp={handleSearchKeyUp}
-              placeholder="Search…"
-            />
+            <div className="search-input-container">
+              <input
+                type="text"
+                className="search-input"
+                value={textFilter ?? ''}
+                onChange={e => onTextFilterChange(e.target.value)}
+                onFocus={() => setForceSearchMode(true)}
+                onBlur={() => setForceSearchMode(false)}
+                onKeyUp={handleSearchKeyUp}
+                placeholder="Search…"
+              />
+              {textFilter && (
+                <div
+                  className="clear-search"
+                  onClick={() => onTextFilterChange('')} // Clear the search field
+                  role="button"
+                  aria-label="Clear search"
+                >
+                  &times;
+                </div>
+              )}
+            </div>
           ) : (
-            <span
-              onMouseDown={e => {
-                startSearch();
-                e.stopPropagation();
-              }}
-            >
-              {title}
-            </span>
+            <span>{title}</span>
           )}
           <span className="issue-count">{issues.length}</span>
         </h1>
+        <Button
+          ref={startSearchButton}
+          className="search-toggle"
+          eventName="Toggle Search"
+          onAction={startSearch}
+        ></Button>
       </div>
       <div className="list-view-filter-container">
         <span className="filter-label">Filtered by:</span>

@@ -288,9 +288,60 @@ textarea.autoResize {
 
 .list-view-header-container {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  flex-direction: row;
   flex: 0;
   margin-bottom: 1.5rem;
+}
+
+.search-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-input {
+  width: 100%;
+  padding-right: 2rem; /* Adjust padding for clear button */
+}
+
+.clear-search {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1.3rem;
+  height: 1.3rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 800;
+  padding-bottom: 1px;
+  color: #fff;
+}
+
+.clear-search:hover {
+  background-color: rgba(255, 255, 255, 0.3); /* Slightly darker on hover */
+}
+
+.search-toggle {
+  margin-left: auto;
+  opacity: 0.8;
+  display: block;
+  height: 1.5rem;
+  width: 1.5rem;
+  padding: 1.25rem;
+  border-radius: 2rem;
+  background: var(--color-light-outline) url(assets/icons/search.svg) no-repeat
+    center center;
+}
+
+.search-toggle:hover {
+  opacity: 1;
 }
 
 .list-view-header {
