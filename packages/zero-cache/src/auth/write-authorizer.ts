@@ -26,13 +26,16 @@ import {
 } from '../../../zql/src/builder/builder.js';
 import {Database} from '../../../zqlite/src/db.js';
 import {compile, sql} from '../../../zqlite/src/internal/sql.js';
-import {TableSource} from '../../../zqlite/src/table-source.js';
+import {
+  fromSQLiteTypes,
+  TableSource,
+} from '../../../zqlite/src/table-source.js';
 import type {ZeroConfig} from '../config/zero-config.js';
 import {listTables} from '../db/lite-tables.js';
 import {mapLiteDataTypeToZqlSchemaValue} from '../types/lite.js';
 import {DatabaseStorage} from '../services/view-syncer/database-storage.js';
 import type {NormalizedTableSpec} from '../services/view-syncer/pipeline-driver.js';
-import {normalize} from '../services/view-syncer/pipeline-driver.js';
+import {setSpecs} from '../services/view-syncer/pipeline-driver.js';
 import type {
   PermissionsConfig,
   Policy,
@@ -42,7 +45,10 @@ import type {Schema} from '../../../zero-schema/src/schema.js';
 import {AuthQuery, authQuery} from '../../../zql/src/query/auth-query.js';
 import {must} from '../../../shared/src/must.js';
 import type {Query} from '../../../zql/src/query/query.js';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
+import type {
+  SchemaValue,
+  TableSchema,
+} from '../../../zero-schema/src/table-schema.js';
 import type {Condition} from '../../../zero-protocol/src/ast.js';
 import {dnf} from '../../../zql/src/query/dnf.js';
 
@@ -65,7 +71,13 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   readonly #permissionsConfig: PermissionsConfig;
   readonly #replica: Database;
   readonly #builderDelegate: BuilderDelegate;
-  readonly #tableSpecs: Map<string, NormalizedTableSpec>;
+  readonly #tableSpecs: Map<
+    string,
+    {
+      tableSpec: NormalizedTableSpec;
+      zqlSpec: Record<string, SchemaValue>;
+    }
+  >;
   readonly #tables = new Map<string, TableSource>();
   readonly #statementRunner: StatementRunner;
   readonly #lc: LogContext;
@@ -92,9 +104,8 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       getSource: name => this.#getSource(name),
       createStorage: () => cgStorage.createStorage(),
     };
-    this.#tableSpecs = new Map(
-      listTables(replica).map(spec => [spec.name, normalize(spec)]),
-    );
+    this.#tableSpecs = new Map();
+    setSpecs(listTables(replica), this.#tableSpecs);
     this.#statementRunner = new StatementRunner(replica);
   }
 
@@ -142,7 +153,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
           case 'update': {
             source.push({
               type: 'edit',
-              oldRow: this.#getPreMutationRow(op),
+              oldRow: this.#requirePreMutationRow(op),
               row: op.value,
             });
             break;
@@ -150,7 +161,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
           case 'delete': {
             source.push({
               type: 'remove',
-              row: this.#getPreMutationRow(op),
+              row: this.#requirePreMutationRow(op),
             });
             break;
           }
@@ -225,7 +236,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     if (!tableSpec) {
       throw new Error(`Table ${tableName} not found`);
     }
-    const {columns, primaryKey} = tableSpec;
+    const {columns, primaryKey} = tableSpec.tableSpec;
     assert(primaryKey.length);
     source = new TableSource(
       this.#replica,
@@ -378,7 +389,12 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       values.push(v.parse(value[pk], primaryKeyValueSchema));
     }
 
-    return this.#statementRunner.get(
+    const spec = this.#tableSpecs.get(op.tableName);
+    if (spec === undefined) {
+      throw new Error(`Table ${op.tableName} not found`);
+    }
+
+    const ret = this.#statementRunner.get(
       compile(
         sql`SELECT * FROM ${sql.ident(op.tableName)} WHERE ${sql.join(
           conditions,
@@ -387,6 +403,20 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       ),
       ...values,
     );
+    if (ret === undefined) {
+      return ret;
+    }
+    fromSQLiteTypes(spec.zqlSpec, ret);
+    return ret;
+  }
+
+  #requirePreMutationRow(op: UpdateOp | DeleteOp) {
+    const ret = this.#getPreMutationRow(op);
+    assert(
+      ret !== undefined,
+      () => `Pre-mutation row not found for ${JSON.stringify(op.value)}`,
+    );
+    return ret;
   }
 
   #passesPolicyGroup(

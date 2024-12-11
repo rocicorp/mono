@@ -380,10 +380,15 @@ export class TableSource implements Source {
             this.#primaryKey,
           )
         ) {
-          must(this.#stmts.update).run(
-            ...nonPrimaryValues(this.#columns, this.#primaryKey, change.row),
-            ...toSQLiteTypes(this.#primaryKey, change.row, this.#columns),
-          );
+          const mergedRow = {
+            ...change.oldRow,
+            ...change.row,
+          };
+          const params = [
+            ...nonPrimaryValues(this.#columns, this.#primaryKey, mergedRow),
+            ...toSQLiteTypes(this.#primaryKey, mergedRow, this.#columns),
+          ];
+          must(this.#stmts.update).run(params);
         } else {
           this.#stmts.delete.run(
             ...toSQLiteTypes(this.#primaryKey, change.oldRow, this.#columns),
@@ -720,7 +725,10 @@ export function* mapFromSQLiteTypes(
   }
 }
 
-function fromSQLiteTypes(valueTypes: Record<string, SchemaValue>, row: Row) {
+export function fromSQLiteTypes(
+  valueTypes: Record<string, SchemaValue>,
+  row: Row,
+) {
   for (const key of Object.keys(row)) {
     const valueType = valueTypes[key];
     if (valueType === undefined) {
