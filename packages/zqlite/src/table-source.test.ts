@@ -11,6 +11,7 @@ import {
   TableSource,
   UnsupportedValueError,
 } from './table-source.js';
+import type {JSONValue} from '../../shared/src/json.js';
 
 const columns = {
   id: {type: 'string'},
@@ -179,12 +180,13 @@ describe('fetching from a table source', () => {
 });
 
 describe('fetched value types', () => {
-  type Foo = {id: string; a: number; b: number; c: boolean};
+  type Foo = {id: string; a: number; b: number; c: boolean; d: JSONValue};
   const columns = {
     id: {type: 'string'},
     a: {type: 'number'},
     b: {type: 'number'},
     c: {type: 'boolean'},
+    d: {type: 'json'},
   } as const;
 
   type Case = {
@@ -195,14 +197,24 @@ describe('fetched value types', () => {
 
   const cases: Case[] = [
     {
-      name: 'number, float and false boolean',
-      input: ['1', 1, 2.123, 0],
-      output: {id: '1', a: 1, b: 2.123, c: false},
+      name: 'number, float, false boolean, json string',
+      input: ['1', 1, 2.123, 0, '"json string"'],
+      output: {id: '1', a: 1, b: 2.123, c: false, d: 'json string'},
     },
     {
-      name: 'bigint, float, and true boolean',
-      input: ['2', 2n, 3.456, 1n],
-      output: {id: '2', a: 2, b: 3.456, c: true},
+      name: 'bigint, float, true boolean, json null',
+      input: ['2', 2n, 3.456, 1n, 'null'],
+      output: {id: '2', a: 2, b: 3.456, c: true, d: null},
+    },
+    {
+      name: 'bigint, float, true boolean, json object',
+      input: ['2', 2n, 3.456, 1n, '{}'],
+      output: {id: '2', a: 2, b: 3.456, c: true, d: {}},
+    },
+    {
+      name: 'bigint, float, true boolean, json array',
+      input: ['2', 2n, 3.456, 1n, '[]'],
+      output: {id: '2', a: 2, b: 3.456, c: true, d: []},
     },
     {
       name: 'safe integer boundaries',
@@ -211,16 +223,23 @@ describe('fetched value types', () => {
         BigInt(Number.MAX_SAFE_INTEGER),
         BigInt(Number.MIN_SAFE_INTEGER),
         1,
+        'true',
       ],
-      output: {id: '3', a: 9007199254740991, b: -9007199254740991, c: true},
+      output: {
+        id: '3',
+        a: 9007199254740991,
+        b: -9007199254740991,
+        c: true,
+        d: true,
+      },
     },
     {
       name: 'bigint too big',
-      input: ['3', BigInt(Number.MAX_SAFE_INTEGER) + 1n, 0, 1n],
+      input: ['3', BigInt(Number.MAX_SAFE_INTEGER) + 1n, 0, 1n, '{}'],
     },
     {
       name: 'bigint too small',
-      input: ['3', BigInt(Number.MIN_SAFE_INTEGER) - 1n, 0, 1n],
+      input: ['3', BigInt(Number.MIN_SAFE_INTEGER) - 1n, 0, 1n, '{}'],
     },
   ];
 
@@ -228,10 +247,10 @@ describe('fetched value types', () => {
     test(c.name, () => {
       const db = new Database(createSilentLogContext(), ':memory:');
       db.exec(
-        /* sql */ `CREATE TABLE foo (id TEXT PRIMARY KEY, a, b, c, ignored, columns);`,
+        /* sql */ `CREATE TABLE foo (id TEXT PRIMARY KEY, a, b, c, d, ignored, columns);`,
       );
       const stmt = db.prepare(
-        /* sql */ `INSERT INTO foo (id, a, b, c) VALUES (?, ?, ?, ?);`,
+        /* sql */ `INSERT INTO foo (id, a, b, c, d) VALUES (?, ?, ?, ?, ?);`,
       );
       stmt.run(c.input);
       const source = new TableSource(db, 'foo', columns, ['id']);
