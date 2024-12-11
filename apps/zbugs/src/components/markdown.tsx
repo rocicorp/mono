@@ -17,6 +17,8 @@ const rehypeImageToVideo: Plugin = () => {
         node.properties = {
           ...node.properties,
           controls: true,
+          autoplay: true,
+          loop: true,
         };
       }
     });
