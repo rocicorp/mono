@@ -66,7 +66,7 @@ describe('view-syncer/snapshotter', () => {
     const tables = listTables(db);
     tables.forEach(t => delete (t.columns as Record<string, unknown>).ignore);
     tableSpecs = new Map();
-    setSpecs(db, tableSpecs);
+    setSpecs(tables, tableSpecs);
 
     replicator = fakeReplicator(lc, db);
     s = new Snapshotter(lc, dbFile.path).init();

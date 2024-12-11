@@ -321,7 +321,6 @@ export class TableSource implements Source {
           exists(change.oldRow),
           () => `Row not found ${stringify(change)}`,
         );
-        fromSQLiteTypes(this.#columns, change.oldRow);
         break;
       default:
         unreachable(change);

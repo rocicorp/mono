@@ -284,7 +284,7 @@ test('pushing values does the correct writes and outputs', () => {
      */
     source.push({
       type: 'add',
-      row: {a: 1, b: 2.123, c: 0},
+      row: {a: 1, b: 2.123, c: false},
     });
 
     expect(outputted.shift()).toEqual({
@@ -323,12 +323,11 @@ test('pushing values does the correct writes and outputs', () => {
         row: {a: 1, b: 2.123},
       });
     }).toThrow();
-
     expect(read.all()).toEqual([]);
 
     source.push({
       type: 'add',
-      row: {a: 1, b: 2.123, c: 1},
+      row: {a: 1, b: 2.123, c: true},
     });
 
     expect(outputted.shift()).toEqual({
@@ -347,7 +346,7 @@ test('pushing values does the correct writes and outputs', () => {
     expect(() => {
       source.push({
         type: 'add',
-        row: {a: 1, b: 2.123, c: 1},
+        row: {a: 1, b: 2.123, c: true},
       });
     }).toThrow();
 
@@ -357,7 +356,7 @@ test('pushing values does the correct writes and outputs', () => {
       row: {
         a: BigInt(Number.MAX_SAFE_INTEGER),
         b: 3.456,
-        c: 1,
+        c: true,
       } as unknown as Row,
     });
 
@@ -366,7 +365,7 @@ test('pushing values does the correct writes and outputs', () => {
       node: {
         relationships: {},
         row: {
-          a: 9007199254740991,
+          a: 9007199254740991n,
           b: 3.456,
           c: true,
         },
@@ -378,40 +377,68 @@ test('pushing values does the correct writes and outputs', () => {
       {a: 9007199254740991, b: 3.456, c: 1},
     ]);
 
-    // out of bounds
-    expect(() => {
-      source.push({
-        type: 'add',
-        row: {
-          a: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
-          b: 0,
-          c: 1,
-        } as unknown as Row,
-      });
-    }).toThrow(UnsupportedValueError);
+    source.push({
+      type: 'add',
+      row: {
+        a: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
+        b: 0,
+        c: true,
+      } as unknown as Row,
+    });
+    outputted.shift();
 
-    // out of bounds
-    expect(() => {
-      source.push({
-        type: 'add',
-        row: {
-          a: 0,
-          b: BigInt(Number.MIN_SAFE_INTEGER) - 1n,
-          c: 1,
-        } as unknown as Row,
-      });
-    }).toThrow(UnsupportedValueError);
+    source.push({
+      type: 'add',
+      row: {
+        a: 0,
+        b: BigInt(Number.MIN_SAFE_INTEGER) - 1n,
+        c: true,
+      } as unknown as Row,
+    });
+    outputted.shift();
 
+    read.safeIntegers(true);
     expect(read.all()).toEqual([
       {a: 1, b: 2.123, c: 1},
-      {a: 9007199254740991, b: 3.456, c: 1},
+      {a: 9007199254740991n, b: 3.456, c: 1},
+      {
+        a: 9007199254740992n,
+        b: 0,
+        c: 1,
+      },
+      {
+        a: 0,
+        b: -9007199254740992n,
+        c: 1,
+      },
     ]);
+    read.safeIntegers(false);
+
+    source.push({
+      type: 'remove',
+      row: {
+        a: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
+        b: 0,
+        c: true,
+      } as unknown as Row,
+    });
+    outputted.shift();
+
+    source.push({
+      type: 'remove',
+      row: {
+        a: 0,
+        b: BigInt(Number.MIN_SAFE_INTEGER) - 1n,
+        c: true,
+      } as unknown as Row,
+    });
+    outputted.shift();
 
     // edit changes
     source.push({
       type: 'edit',
-      row: {a: BigInt(1), b: 2.123, c: 0} as unknown as Row,
-      oldRow: {a: BigInt(1), b: 2.123, c: 1} as unknown as Row,
+      row: {a: 1, b: 2.123, c: false} as unknown as Row,
+      oldRow: {a: 1, b: 2.123, c: true} as unknown as Row,
     });
 
     expect(outputted.shift()).toEqual({
@@ -428,8 +455,8 @@ test('pushing values does the correct writes and outputs', () => {
     // edit pk should fall back to remove and insert
     source.push({
       type: 'edit',
-      oldRow: {a: 1, b: 2.123, c: 0},
-      row: {a: 1, b: 3, c: 0},
+      oldRow: {a: 1, b: 2.123, c: false},
+      row: {a: 1, b: 3, c: false},
     });
     expect(outputted.shift()).toEqual({
       type: 'edit',
@@ -449,23 +476,6 @@ test('pushing values does the correct writes and outputs', () => {
         oldRow: {a: 12, b: 2.123, c: 1},
       });
     }).toThrow('Row not found');
-
-    // out of bounds
-    expect(() => {
-      source.push({
-        type: 'edit',
-        row: {
-          a: BigInt(Number.MAX_SAFE_INTEGER),
-          b: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
-          c: 1,
-        } as unknown as Row,
-        oldRow: {
-          a: BigInt(Number.MAX_SAFE_INTEGER),
-          b: 3.456,
-          c: 1,
-        } as unknown as Row,
-      });
-    }).toThrow(UnsupportedValueError);
   }
 });
 
