@@ -21,6 +21,7 @@ import type {SchemaVersions} from '../../types/schema-versions.js';
 import {getSubscriptionState} from '../replicator/schema/replication-state.js';
 import type {ClientGroupStorage} from './database-storage.js';
 import {type SnapshotDiff, Snapshotter} from './snapshotter.js';
+import type {SchemaValue} from '../../../../zero-schema/src/table-schema.js';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -86,7 +87,13 @@ export class PipelineDriver {
   readonly #lc: LogContext;
   readonly #snapshotter: Snapshotter;
   readonly #storage: ClientGroupStorage;
-  #tableSpecs: Map<string, NormalizedTableSpec> | null = null;
+  #tableSpecs: Map<
+    string,
+    {
+      tableSpec: NormalizedTableSpec;
+      zqlSpec: Record<string, SchemaValue>;
+    }
+  > | null = null;
   #streamer: Streamer | null = null;
   #replicaVersion: string | null = null;
 
@@ -110,9 +117,8 @@ export class PipelineDriver {
     assert(!this.#snapshotter.initialized(), 'Already initialized');
 
     const {db} = this.#snapshotter.init().current();
-    this.#tableSpecs = new Map(
-      listTables(db.db).map(spec => [spec.name, normalize(spec)]),
-    );
+    this.#tableSpecs = new Map();
+    setSpecs(listTables(db.db), this.#tableSpecs);
     const {replicaVersion} = getSubscriptionState(db);
     this.#replicaVersion = replicaVersion;
   }
@@ -173,9 +179,7 @@ export class PipelineDriver {
     tableSpecs.clear();
 
     const {db} = this.#snapshotter.current();
-    listTables(db.db).forEach(spec =>
-      tableSpecs.set(spec.name, normalize(spec)),
-    );
+    setSpecs(listTables(db.db), tableSpecs);
     const {replicaVersion} = getSubscriptionState(db);
     this.#replicaVersion = replicaVersion;
   }
@@ -321,21 +325,14 @@ export class PipelineDriver {
     if (!tableSpec) {
       throw new Error(`Unknown table ${tableName}`);
     }
-    const {columns, primaryKey} = tableSpec;
+    const {primaryKey} = tableSpec.tableSpec;
     assert(primaryKey.length);
 
     const {db} = this.#snapshotter.current();
-    source = new TableSource(
-      db.db,
-      tableName,
-      Object.fromEntries(
-        Object.entries(columns).map(([name, {dataType}]) => [
-          name,
-          mapLiteDataTypeToZqlSchemaValue(dataType),
-        ]),
-      ),
-      [primaryKey[0], ...primaryKey.slice(1)],
-    );
+    source = new TableSource(db.db, tableName, tableSpec.zqlSpec, [
+      primaryKey[0],
+      ...primaryKey.slice(1),
+    ]);
     this.#tables.set(tableName, source);
     this.#lc.debug?.(`created TableSource for ${tableName}`);
     return source;
@@ -466,6 +463,30 @@ class Streamer {
       }
     }
   }
+}
+
+export function setSpecs(
+  specs: LiteTableSpec[],
+  tableSpecs: Map<
+    string,
+    {
+      tableSpec: NormalizedTableSpec;
+      zqlSpec: Record<string, SchemaValue>;
+    }
+  >,
+) {
+  specs.forEach(spec => {
+    const tableSpec = normalize(spec);
+    tableSpecs.set(spec.name, {
+      tableSpec,
+      zqlSpec: Object.fromEntries(
+        Object.entries(tableSpec.columns).map(([name, {dataType}]) => [
+          name,
+          mapLiteDataTypeToZqlSchemaValue(dataType),
+        ]),
+      ),
+    });
+  });
 }
 
 function* toAdds(nodes: Iterable<Node>): Iterable<Change> {

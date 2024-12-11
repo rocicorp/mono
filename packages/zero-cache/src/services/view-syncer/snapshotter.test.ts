@@ -16,12 +16,20 @@ import {
   SchemaChangeError,
   Snapshotter,
 } from './snapshotter.js';
+import {setSpecs} from './pipeline-driver.js';
+import type {SchemaValue} from '../../../../zero-schema/src/table-schema.js';
 
 describe('view-syncer/snapshotter', () => {
   let lc: LogContext;
   let dbFile: DbFile;
   let replicator: FakeReplicator;
-  let tableSpecs: Map<string, LiteTableSpec>;
+  let tableSpecs: Map<
+    string,
+    {
+      tableSpec: LiteTableSpec;
+      zqlSpec: Record<string, SchemaValue>;
+    }
+  >;
   let s: Snapshotter;
 
   beforeEach(() => {
@@ -57,7 +65,8 @@ describe('view-syncer/snapshotter', () => {
     // The 'ignore' column should not show up in the diffs.
     const tables = listTables(db);
     tables.forEach(t => delete (t.columns as Record<string, unknown>).ignore);
-    tableSpecs = new Map(tables.map(spec => [spec.name, spec]));
+    tableSpecs = new Map();
+    setSpecs(db, tableSpecs);
 
     replicator = fakeReplicator(lc, db);
     s = new Snapshotter(lc, dbFile.path).init();

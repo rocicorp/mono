@@ -306,8 +306,6 @@ export class TableSource implements Source {
         ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
       )?.exists === 1;
 
-    // need to check for the existence of the row before modifying
-    // the db so we don't push it to outputs if it does/doest not exist.
     switch (change.type) {
       case 'add':
         assert(
@@ -328,17 +326,6 @@ export class TableSource implements Source {
       default:
         unreachable(change);
     }
-
-    // Outputs should see converted types (e.g. boolean).
-    // This conversion is here because the `pipeline-driver` reads
-    // row state from the SQLite. If you try to move this
-    // conversion into pipeline-driver (where it seems like it should go)
-    // you'll run into the issue that you need to do the `exists` checks above.
-    // The exists checks need the non-converted types since they query SQLite.
-    // So:
-    // 1. exists checks should be in the source.
-    // 2. this mapping should be in pipeline driver.
-    fromSQLiteTypes(this.#columns, change.row);
 
     const outputChange: Change =
       change.type === 'edit'
@@ -724,7 +711,7 @@ export function toSQLiteTypeName(type: ValueType) {
   }
 }
 
-function* mapFromSQLiteTypes(
+export function* mapFromSQLiteTypes(
   valueTypes: Record<string, SchemaValue>,
   rowIterator: IterableIterator<Row>,
 ): IterableIterator<Row> {
