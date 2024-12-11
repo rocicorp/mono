@@ -22,7 +22,7 @@ export default async function runWorker(
 ): Promise<void> {
   const config = getZeroConfig(env);
   const port = config.changeStreamerPort ?? config.port + 1;
-  const lc = createLogContext(config.log, {worker: 'change-streamer'});
+  const lc = createLogContext(config, {worker: 'change-streamer'});
 
   // Kick off DB connection warmup in the background.
   const changeDB = pgClient(lc, config.change.db, {
