@@ -2,7 +2,7 @@ import {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {listTables} from '../../db/lite-tables.js';
-import type {LiteTableSpec} from '../../db/specs.js';
+import type {LiteAndZqlSpec} from '../../db/specs.js';
 import {DbFile, expectTables} from '../../test/lite.js';
 import {initChangeLog} from '../replicator/schema/change-log.js';
 import {initReplicationState} from '../replicator/schema/replication-state.js';
@@ -17,19 +17,12 @@ import {
   Snapshotter,
 } from './snapshotter.js';
 import {setSpecs} from './pipeline-driver.js';
-import type {SchemaValue} from '../../../../zero-schema/src/table-schema.js';
 
 describe('view-syncer/snapshotter', () => {
   let lc: LogContext;
   let dbFile: DbFile;
   let replicator: FakeReplicator;
-  let tableSpecs: Map<
-    string,
-    {
-      tableSpec: LiteTableSpec;
-      zqlSpec: Record<string, SchemaValue>;
-    }
-  >;
+  let tableSpecs: Map<string, LiteAndZqlSpec>;
   let s: Snapshotter;
 
   beforeEach(() => {

@@ -1,5 +1,6 @@
 import type {DeepReadonly} from '../../../shared/src/json.js';
 import * as v from '../../../shared/src/valita.js';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 
 // Values of the `typtype` column in https://www.postgresql.org/docs/17/catalog-pg-type.html#CATALOG-PG-TYPE
 export enum PostgresTypeClass {
@@ -54,6 +55,11 @@ export const publishedTableSpec = tableSpec.extend({
 });
 
 export type LiteTableSpec = Readonly<v.Infer<typeof liteTableSpec>>;
+
+export type LiteAndZqlSpec = {
+  tableSpec: LiteTableSpec;
+  zqlSpec: Record<string, SchemaValue>;
+};
 
 export type TableSpec = Readonly<v.Infer<typeof tableSpec>>;
 

@@ -11,7 +11,7 @@ import type {SourceSchema} from '../../../../zql/src/ivm/schema.js';
 import type {Source, SourceChange} from '../../../../zql/src/ivm/source.js';
 import {TableSource} from '../../../../zqlite/src/table-source.js';
 import {listTables} from '../../db/lite-tables.js';
-import type {LiteTableSpec} from '../../db/specs.js';
+import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.js';
 import {
   dataTypeToZqlValueType,
   mapLiteDataTypeToZqlSchemaValue,
@@ -21,7 +21,6 @@ import type {SchemaVersions} from '../../types/schema-versions.js';
 import {getSubscriptionState} from '../replicator/schema/replication-state.js';
 import type {ClientGroupStorage} from './database-storage.js';
 import {type SnapshotDiff, Snapshotter} from './snapshotter.js';
-import type {SchemaValue} from '../../../../zero-schema/src/table-schema.js';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -87,13 +86,7 @@ export class PipelineDriver {
   readonly #lc: LogContext;
   readonly #snapshotter: Snapshotter;
   readonly #storage: ClientGroupStorage;
-  #tableSpecs: Map<
-    string,
-    {
-      tableSpec: NormalizedTableSpec;
-      zqlSpec: Record<string, SchemaValue>;
-    }
-  > | null = null;
+  #tableSpecs: Map<string, LiteAndZqlSpec> | null = null;
   #streamer: Streamer | null = null;
   #replicaVersion: string | null = null;
 
@@ -467,13 +460,7 @@ class Streamer {
 
 export function setSpecs(
   specs: LiteTableSpec[],
-  tableSpecs: Map<
-    string,
-    {
-      tableSpec: NormalizedTableSpec;
-      zqlSpec: Record<string, SchemaValue>;
-    }
-  >,
+  tableSpecs: Map<string, LiteAndZqlSpec>,
 ) {
   specs.forEach(spec => {
     const tableSpec = normalize(spec);
