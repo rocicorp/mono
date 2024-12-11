@@ -74,7 +74,7 @@ function main() {
 
   // Watch for file changes
   fs.watch(options.path, async () => {
-    log(`${options.path} changed.`, LogColor.Green);
+    log(`Detected ${options.path} change.`, LogColor.Green);
     await killProcesses();
     buildSchemaAndStartZeroCache();
   });
