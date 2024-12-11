@@ -8,9 +8,9 @@ import {
 } from '../../types/http.js';
 import {
   MESSAGE_TYPES,
-  parentWorker,
   type Receiver,
   type Sender,
+  type Worker,
 } from '../../types/processes.js';
 
 export type WebSocketHandoff<P> = (message: IncomingMessageSubset) => {
@@ -21,15 +21,14 @@ export type WebSocketHandoff<P> = (message: IncomingMessageSubset) => {
 export type WebSocketReceiver<P> = (ws: WebSocket, payload: P) => void;
 
 /**
- * Installs websocket handoff logic from either or both of
- * an HTTP `server` receiving requests, or a `parent` process
+ * Installs websocket handoff logic from either an http.Server
+ * receiving requests, or a parent Worker process
  * that is handing off requests to this process.
  */
 export function installWebSocketHandoff<P>(
   lc: LogContext,
   handoff: WebSocketHandoff<P>,
-  server: Server | undefined,
-  parent = parentWorker,
+  source: Server | Worker | null,
 ) {
   const handle = (
     message: IncomingMessageSubset,
@@ -57,13 +56,16 @@ export function installWebSocketHandoff<P>(
     }
   };
 
-  server?.on('upgrade', handle);
-
-  // Double-handoff: handoff messages from this worker's parent.
-  parent?.onMessageType<Handoff<P>>('handoff', (msg, socket) => {
-    const {message, head} = msg;
-    handle(message, socket as Socket, Buffer.from(head));
-  });
+  if (source instanceof Server) {
+    // handoff messages from an HTTP server
+    source?.on('upgrade', handle);
+  } else {
+    // handoff messages from this worker's parent.
+    source?.onMessageType<Handoff<P>>('handoff', (msg, socket) => {
+      const {message, head} = msg;
+      handle(message, socket as Socket, Buffer.from(head));
+    });
+  }
 }
 
 export function installWebSocketReceiver<P>(

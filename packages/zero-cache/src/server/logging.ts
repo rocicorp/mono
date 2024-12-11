@@ -14,11 +14,15 @@ function createLogSink(config: LogConfig) {
 }
 
 export function createLogContext(
-  config: Pick<ZeroConfig, 'log'>,
+  config: Pick<ZeroConfig, 'log' | 'tenantID'>,
   context: {worker: string},
 ): LogContext {
-  const {log} = config;
-  const ctx = {...context, pid};
+  const {log, tenantID: tid} = config;
+  const ctx = {
+    ...(tid ? {tid} : {}),
+    ...context,
+    pid,
+  };
   return new LogContext(log.level, ctx, createLogSink(log));
 }
 

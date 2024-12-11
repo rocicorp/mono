@@ -156,7 +156,7 @@ export default async function runWorker(
 
   if (numSyncers) {
     const workers: Workers = {syncers};
-    mainServices.push(new Dispatcher(lc, () => workers, {port}));
+    mainServices.push(new Dispatcher(lc, parent, () => workers, {port}));
   }
 
   parent?.send(['ready', {ready: true}]);

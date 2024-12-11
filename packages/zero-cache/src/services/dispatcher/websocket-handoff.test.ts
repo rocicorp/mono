@@ -85,7 +85,6 @@ describe('dispatcher/websocket-handoff', () => {
         payload: {foo: 'boo'},
         receiver: parent2,
       }),
-      undefined,
       parent1,
     );
 
