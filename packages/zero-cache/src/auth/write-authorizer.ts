@@ -34,7 +34,6 @@ import type {ZeroConfig} from '../config/zero-config.js';
 import {listTables} from '../db/lite-tables.js';
 import {mapLiteDataTypeToZqlSchemaValue} from '../types/lite.js';
 import {DatabaseStorage} from '../services/view-syncer/database-storage.js';
-import type {NormalizedTableSpec} from '../services/view-syncer/pipeline-driver.js';
 import {setSpecs} from '../services/view-syncer/pipeline-driver.js';
 import type {
   PermissionsConfig,
@@ -45,12 +44,10 @@ import type {Schema} from '../../../zero-schema/src/schema.js';
 import {AuthQuery, authQuery} from '../../../zql/src/query/auth-query.js';
 import {must} from '../../../shared/src/must.js';
 import type {Query} from '../../../zql/src/query/query.js';
-import type {
-  SchemaValue,
-  TableSchema,
-} from '../../../zero-schema/src/table-schema.js';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 import type {Condition} from '../../../zero-protocol/src/ast.js';
 import {dnf} from '../../../zql/src/query/dnf.js';
+import type {LiteAndZqlSpec} from '../db/specs.js';
 
 type Phase = 'preMutation' | 'postMutation';
 
@@ -71,13 +68,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   readonly #permissionsConfig: PermissionsConfig;
   readonly #replica: Database;
   readonly #builderDelegate: BuilderDelegate;
-  readonly #tableSpecs: Map<
-    string,
-    {
-      tableSpec: NormalizedTableSpec;
-      zqlSpec: Record<string, SchemaValue>;
-    }
-  >;
+  readonly #tableSpecs: Map<string, LiteAndZqlSpec>;
   readonly #tables = new Map<string, TableSource>();
   readonly #statementRunner: StatementRunner;
   readonly #lc: LogContext;
