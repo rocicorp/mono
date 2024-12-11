@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
-import {IncomingMessage} from 'http';
 import UrlPattern from 'url-pattern';
 import {h32} from '../../../../shared/src/xxhash.js';
+import type {IncomingMessageSubset} from '../../types/http.js';
 import type {Worker} from '../../types/processes.js';
 import {HttpService, type Options} from '../http-service.js';
 import {getConnectParams} from './connect-params.js';
@@ -26,13 +26,13 @@ export class Dispatcher extends HttpService {
   ) {
     super('dispatcher', lc, opts, fastify => {
       fastify.get('/', (_req, res) => res.send('OK'));
-      installWebSocketHandoff(lc, fastify.server, req => this.#handoff(req));
+      installWebSocketHandoff(lc, req => this.#handoff(req), fastify.server);
     });
 
     this.#workersByHostname = workersByHostname;
   }
 
-  #handoff(req: IncomingMessage) {
+  #handoff(req: IncomingMessageSubset) {
     const {headers, url: u} = req;
     const url = new URL(u ?? '', 'http://unused/');
     const syncPath = parseSyncPath(url);
