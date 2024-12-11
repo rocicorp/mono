@@ -300,7 +300,7 @@ export function deepPartial<Shape extends ObjectShape>(
   const shape = {} as Record<string, unknown>;
   for (const [key, type] of Object.entries(s.shape)) {
     if (type.name === 'object') {
-      shape[key] = deepPartial(type as any).optional();
+      shape[key] = deepPartial(type as v.ObjectType).optional();
     } else {
       shape[key] = type.optional();
     }
