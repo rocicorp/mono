@@ -254,13 +254,32 @@ export function parseOptions<T extends Options>(
   logger: OptionalLogger = console,
   exit = process.exit,
 ): Config<T> {
+  return parseOptionsAdvanced(
+    options,
+    argv,
+    envNamePrefix,
+    false,
+    processEnv,
+    logger,
+    exit,
+  ).config;
+}
+
+export function parseOptionsAdvanced<T extends Options>(
+  options: T,
+  argv: string[],
+  envNamePrefix = '',
+  allowUnknownFlags = false,
+  processEnv = process.env,
+  logger: OptionalLogger = console,
+  exit = process.exit,
+): {config: Config<T>; env: Record<string, string>; unknown?: string[]} {
   // The main logic for converting a valita Type spec to an Option (i.e. flag) spec.
-  function addOption(name: string, option: WrappedOptionType, group?: string) {
+  function addOption(field: string, option: WrappedOptionType, group?: string) {
     const {type, desc = [], alias, hidden} = option;
 
     // The group name is prepended to the flag name.
-    const flag = group ? kebabcase(`${group}-${name}`) : kebabcase(name);
-    flagToField.set(flag, name);
+    const flag = group ? kebabcase(`${group}-${field}`) : kebabcase(field);
 
     const {required, defaultValue} = getRequiredOrDefault(type);
     let multiple = type.name === 'array';
@@ -305,6 +324,7 @@ export function parseOptions<T extends Options>(
         envArgv.push(`--${flag}`, processEnv[env]);
       }
     }
+    names.set(flag, {field, env});
 
     const spec = [
       (required
@@ -340,7 +360,7 @@ export function parseOptions<T extends Options>(
     optsWithDefaults.push({...opt, defaultValue});
   }
 
-  const flagToField = new Map<string, string>();
+  const names = new Map<string, {field: string; env: string}>();
   const optsWithDefaults: DescribedOptionDefinition[] = [];
   const optsWithoutDefaults: DescribedOptionDefinition[] = [];
   const envArgv: string[] = [];
@@ -363,14 +383,36 @@ export function parseOptions<T extends Options>(
       }
     }
 
-    const parsedArgs = merge(
-      parseArgs(optsWithDefaults, argv, flagToField, logger, exit),
-      parseArgs(optsWithoutDefaults, envArgv, flagToField, logger, exit),
-      parseArgs(optsWithoutDefaults, argv, flagToField, logger, exit),
-    );
+    const [defaults, env1, unknown] = parseArgs(optsWithDefaults, argv, names);
+    const [fromEnv, env2] = parseArgs(optsWithoutDefaults, envArgv, names);
+    const [withoutDefaults, env3] = parseArgs(optsWithoutDefaults, argv, names);
+
+    switch (unknown?.[0]) {
+      case undefined:
+        break;
+      case '--help':
+      case '-h':
+        showUsage(optsWithDefaults, logger);
+        exit(0);
+        break;
+      default:
+        if (!allowUnknownFlags) {
+          logger.error?.('Invalid arguments:', unknown);
+          showUsage(optsWithDefaults, logger);
+          exit(0);
+        }
+        break;
+    }
+
+    const parsedArgs = merge(defaults, fromEnv, withoutDefaults);
+    const env = {...env1, ...env2, ...env3};
 
     const schema = configSchema(options);
-    return v.parse(parsedArgs, schema);
+    return {
+      config: v.parse(parsedArgs, schema),
+      env,
+      ...(unknown ? {unknown} : {}),
+    };
   } catch (e) {
     logger.error?.(String(e));
     showUsage(optsWithDefaults, logger);
@@ -411,9 +453,7 @@ function valueParser(flagName: string, typeName: string) {
 function parseArgs(
   optionDefs: DescribedOptionDefinition[],
   argv: string[],
-  flagToField: Map<string, string>,
-  logger: OptionalLogger,
-  exit: (code?: number) => never,
+  names: Map<string, {field: string; env: string}>,
 ) {
   function normalizeFlagValue(value: unknown) {
     // A --flag without value is parsed by commandLineArgs() to `null`,
@@ -431,25 +471,15 @@ function parseArgs(
     partial: true,
   });
 
-  if (unknown?.length) {
-    switch (unknown[0]) {
-      case '--help':
-      case '-h':
-        break;
-      default:
-        logger.error?.('Invalid arguments:', unknown);
-    }
-    showUsage(optionDefs, logger);
-    exit(0);
-  }
-
   const result = {...config};
+  const envObj: Record<string, string> = {};
 
   // Handle ungrouped flags first
   if (ungrouped) {
     for (const [flagName, value] of Object.entries(ungrouped)) {
-      const name = must(flagToField.get(flagName));
-      result[name] = normalizeFlagValue(value);
+      const {field, env} = must(names.get(flagName));
+      result[field] = normalizeFlagValue(value);
+      envObj[env] = String(result[field]);
     }
   }
 
@@ -458,13 +488,14 @@ function parseArgs(
     if (typeof group === 'object' && group !== null) {
       result[groupName] = {};
       for (const [flagName, value] of Object.entries(group)) {
-        const name = must(flagToField.get(flagName));
-        result[groupName][name] = normalizeFlagValue(value);
+        const {field, env} = must(names.get(flagName));
+        result[groupName][field] = normalizeFlagValue(value);
+        envObj[env] = String(result[groupName][field]);
       }
     }
   }
 
-  return result;
+  return [result, envObj, unknown] as const;
 }
 
 function showUsage(

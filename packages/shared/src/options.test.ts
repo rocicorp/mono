@@ -1,7 +1,14 @@
+/* eslint-disable @typescript-eslint/naming-convention */
 import {SilentLogger} from '@rocicorp/logger';
 import stripAnsi from 'strip-ansi';
 import {expect, test, vi} from 'vitest';
-import {envSchema, parseOptions, type Config, type Options} from './options.js';
+import {
+  envSchema,
+  parseOptions,
+  parseOptionsAdvanced,
+  type Config,
+  type Options,
+} from './options.js';
 import * as v from './valita.js';
 
 const options = {
@@ -62,6 +69,15 @@ test.each([
       shard: {id: '0', publications: []},
       tuple: ['a', 'b'],
     },
+    {
+      Z_LOG_FORMAT: 'text',
+      Z_PORT: '4848',
+      Z_REPLICA_DB_FILE: '/tmp/replica.db',
+      Z_SHARD_ID: '0',
+      Z_SHARD_PUBLICATIONS: '',
+      Z_TUPLE: 'a,b',
+    },
+    undefined,
   ],
   [
     'env values',
@@ -85,6 +101,17 @@ test.each([
       tuple: ['c', 'd'],
       hideMe: 'hello!',
     },
+    {
+      Z_HIDE_ME: 'hello!',
+      Z_LITESTREAM: 'true',
+      Z_LOG_FORMAT: 'json',
+      Z_PORT: '6000',
+      Z_REPLICA_DB_FILE: '/tmp/env-replica.db',
+      Z_SHARD_ID: 'xyz',
+      Z_SHARD_PUBLICATIONS: 'zero_foo',
+      Z_TUPLE: 'c,d',
+    },
+    undefined,
   ],
   [
     'env value for array flag separated by commas',
@@ -106,6 +133,16 @@ test.each([
       shard: {id: 'xyz', publications: ['zero_foo', 'zero_bar']},
       tuple: ['e', 'f'],
     },
+    {
+      Z_LITESTREAM: 'true',
+      Z_LOG_FORMAT: 'json',
+      Z_PORT: '6000',
+      Z_REPLICA_DB_FILE: '/tmp/env-replica.db',
+      Z_SHARD_ID: 'xyz',
+      Z_SHARD_PUBLICATIONS: 'zero_foo,zero_bar',
+      Z_TUPLE: 'e,f',
+    },
+    undefined,
   ],
   [
     'argv values, short alias',
@@ -118,6 +155,15 @@ test.each([
       shard: {id: '0', publications: []},
       tuple: ['a', 'b'],
     },
+    {
+      Z_LOG_FORMAT: 'text',
+      Z_PORT: '6000',
+      Z_REPLICA_DB_FILE: '/tmp/replica.db',
+      Z_SHARD_ID: '0',
+      Z_SHARD_PUBLICATIONS: '',
+      Z_TUPLE: 'a,b',
+    },
+    undefined,
   ],
   [
     'argv values, hex numbers',
@@ -130,6 +176,15 @@ test.each([
       shard: {id: '0', publications: []},
       tuple: ['a', 'b'],
     },
+    {
+      Z_LOG_FORMAT: 'text',
+      Z_PORT: '4660',
+      Z_REPLICA_DB_FILE: '/tmp/replica.db',
+      Z_SHARD_ID: '0',
+      Z_SHARD_PUBLICATIONS: '',
+      Z_TUPLE: 'a,b',
+    },
+    undefined,
   ],
   [
     'argv values, scientific notation',
@@ -142,6 +197,15 @@ test.each([
       shard: {id: '0', publications: []},
       tuple: ['a', 'b'],
     },
+    {
+      Z_LOG_FORMAT: 'text',
+      Z_PORT: '1234',
+      Z_REPLICA_DB_FILE: '/tmp/replica.db',
+      Z_SHARD_ID: '0',
+      Z_SHARD_PUBLICATIONS: '',
+      Z_TUPLE: 'a,b',
+    },
+    undefined,
   ],
   [
     'argv values, eager multiples',
@@ -170,6 +234,16 @@ test.each([
       shard: {id: 'abc', publications: ['zero_foo', 'zero_bar']},
       tuple: ['g', 'h'],
     },
+    {
+      Z_LITESTREAM: 'true',
+      Z_LOG_FORMAT: 'json',
+      Z_PORT: '6000',
+      Z_REPLICA_DB_FILE: '/tmp/replica.db',
+      Z_SHARD_ID: 'abc',
+      Z_SHARD_PUBLICATIONS: 'zero_foo,zero_bar',
+      Z_TUPLE: 'g,h',
+    },
+    undefined,
   ],
   [
     'argv values, separate multiples',
@@ -201,6 +275,16 @@ test.each([
       shard: {id: 'abc', publications: ['zero_foo', 'zero_bar']},
       tuple: ['i', 'j'],
     },
+    {
+      Z_LITESTREAM: 'true',
+      Z_LOG_FORMAT: 'json',
+      Z_PORT: '6000',
+      Z_REPLICA_DB_FILE: '/tmp/replica.db',
+      Z_SHARD_ID: 'abc',
+      Z_SHARD_PUBLICATIONS: 'zero_foo,zero_bar',
+      Z_TUPLE: 'i,j',
+    },
+    undefined,
   ],
   [
     'argv value override env values',
@@ -237,6 +321,17 @@ test.each([
       tuple: ['k', 'l'],
       hideMe: 'foo',
     },
+    {
+      Z_HIDE_ME: 'foo',
+      Z_LITESTREAM: 'true',
+      Z_LOG_FORMAT: 'json',
+      Z_PORT: '8888',
+      Z_REPLICA_DB_FILE: '/tmp/env-replica.db',
+      Z_SHARD_ID: 'abc',
+      Z_SHARD_PUBLICATIONS: 'zero_foo,zero_bar',
+      Z_TUPLE: 'k,l',
+    },
+    undefined,
   ],
   [
     '--bool flag',
@@ -250,6 +345,16 @@ test.each([
       shard: {id: '0', publications: []},
       tuple: ['a', 'b'],
     },
+    {
+      Z_LITESTREAM: 'true',
+      Z_LOG_FORMAT: 'text',
+      Z_PORT: '4848',
+      Z_REPLICA_DB_FILE: '/tmp/replica.db',
+      Z_SHARD_ID: '0',
+      Z_SHARD_PUBLICATIONS: '',
+      Z_TUPLE: 'a,b',
+    },
+    undefined,
   ],
   [
     '--bool=true flag',
@@ -263,6 +368,16 @@ test.each([
       shard: {id: '0', publications: []},
       tuple: ['a', 'b'],
     },
+    {
+      Z_LITESTREAM: 'true',
+      Z_LOG_FORMAT: 'text',
+      Z_PORT: '4848',
+      Z_REPLICA_DB_FILE: '/tmp/replica.db',
+      Z_SHARD_ID: '0',
+      Z_SHARD_PUBLICATIONS: '',
+      Z_TUPLE: 'a,b',
+    },
+    undefined,
   ],
   [
     '--bool 1 flag',
@@ -276,6 +391,16 @@ test.each([
       shard: {id: '0', publications: []},
       tuple: ['a', 'b'],
     },
+    {
+      Z_LITESTREAM: 'true',
+      Z_LOG_FORMAT: 'text',
+      Z_PORT: '4848',
+      Z_REPLICA_DB_FILE: '/tmp/replica.db',
+      Z_SHARD_ID: '0',
+      Z_SHARD_PUBLICATIONS: '',
+      Z_TUPLE: 'a,b',
+    },
+    undefined,
   ],
   [
     '--bool=0 flag',
@@ -289,6 +414,16 @@ test.each([
       shard: {id: '0', publications: []},
       tuple: ['a', 'b'],
     },
+    {
+      Z_LITESTREAM: 'false',
+      Z_LOG_FORMAT: 'text',
+      Z_PORT: '4848',
+      Z_REPLICA_DB_FILE: '/tmp/replica.db',
+      Z_SHARD_ID: '0',
+      Z_SHARD_PUBLICATIONS: '',
+      Z_TUPLE: 'a,b',
+    },
+    undefined,
   ],
   [
     '--bool False flag',
@@ -302,13 +437,54 @@ test.each([
       shard: {id: '0', publications: []},
       tuple: ['a', 'b'],
     },
+    {
+      Z_LITESTREAM: 'false',
+      Z_LOG_FORMAT: 'text',
+      Z_PORT: '4848',
+      Z_REPLICA_DB_FILE: '/tmp/replica.db',
+      Z_SHARD_ID: '0',
+      Z_SHARD_PUBLICATIONS: '',
+      Z_TUPLE: 'a,b',
+    },
+    undefined,
   ],
-] satisfies [string, string[], Record<string, string>, TestConfig][])(
-  '%s',
-  (_name, argv, env, result) => {
-    expect(parseOptions(options, argv, 'Z_', env)).toEqual(result);
-  },
-);
+  [
+    'unknown flags',
+    ['--foo', '--replica-db-file', '/tmp/replica.db', 'bar', '--baz=3'],
+    {},
+    {
+      port: 4848,
+      replicaDBFile: '/tmp/replica.db',
+      log: {format: 'text'},
+      shard: {id: '0', publications: []},
+      tuple: ['a', 'b'],
+    },
+    {
+      Z_LOG_FORMAT: 'text',
+      Z_PORT: '4848',
+      Z_REPLICA_DB_FILE: '/tmp/replica.db',
+      Z_SHARD_ID: '0',
+      Z_SHARD_PUBLICATIONS: '',
+      Z_TUPLE: 'a,b',
+    },
+    ['--foo', 'bar', '--baz=3'],
+  ],
+] satisfies [
+  string,
+  string[],
+  Record<string, string>,
+  TestConfig,
+  Record<string, string>,
+  string[] | undefined,
+][])('%s', (_name, argv, env, result, envObj, unknown) => {
+  const parsed = parseOptionsAdvanced(options, argv, 'Z_', true, env);
+  expect(parsed.config).toEqual(result);
+  expect(parsed.env).toEqual(envObj);
+  expect(parsed.unknown).toEqual(unknown);
+
+  // Sanity check: Ensure that parsing the parsed.env computes the same result.
+  expect(parseOptions(options, [], 'Z_', parsed.env)).toEqual(result);
+});
 
 test('envSchema', () => {
   const schema = envSchema(options, 'ZERO_');
