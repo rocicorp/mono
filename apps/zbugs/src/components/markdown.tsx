@@ -19,6 +19,7 @@ const rehypeImageToVideo: Plugin = () => {
           controls: true,
           autoplay: true,
           loop: true,
+          muted: true,
         };
       }
     });
