@@ -20,8 +20,8 @@
   --color-text-primary: rgba(255, 255, 255, 0.85);
   --color-text-primary-active: rgba(255, 255, 255, 1);
   --color-text-dimmed-label: rgba(255, 255, 255, 0.5);
-  --color-primary-cta: rgba(255, 92, 0, 1);
-  --color-primary-cta-dimmed: rgba(255, 92, 0, 0.2);
+  --color-primary-cta: rgba(252, 33, 138, 1);
+  --color-primary-cta-dimmed: rgba(252, 33, 138, 0.2);
   --color-primary-cta-outline: rgba(255, 255, 255, 0.2);
   --color-light-outline: rgba(62, 62, 62, 0.39);
   --color-row-hover: rgba(62, 62, 62, 0.2);
