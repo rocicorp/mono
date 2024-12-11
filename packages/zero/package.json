@@ -29,6 +29,7 @@
     "@rocicorp/resolver": "^1.0.2",
     "@rocicorp/zero-sqlite3": "^1.0.4",
     "chalk-template": "^1.1.0",
+    "chokidar": "^4.0.1",
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
     "compare-utf8": "^0.1.1",
