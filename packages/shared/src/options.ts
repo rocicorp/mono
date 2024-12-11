@@ -269,7 +269,7 @@ export function parseOptionsAdvanced<T extends Options>(
   options: T,
   argv: string[],
   envNamePrefix = '',
-  allowUnknownFlags = false,
+  allowUnknown = false,
   processEnv = process.env,
   logger: OptionalLogger = console,
   exit = process.exit,
@@ -396,7 +396,7 @@ export function parseOptionsAdvanced<T extends Options>(
         exit(0);
         break;
       default:
-        if (!allowUnknownFlags) {
+        if (!allowUnknown) {
           logger.error?.('Invalid arguments:', unknown);
           showUsage(optsWithDefaults, logger);
           exit(0);
