@@ -1,4 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {pid} from 'process';
 import type {EventEmitter} from 'stream';
 import {HttpService, type Options} from '../services/http-service.js';
@@ -30,6 +31,8 @@ export class Terminator {
   readonly #userFacing = new Set<Worker>();
   readonly #all = new Set<Worker>();
   readonly #exitImpl: (code: number) => never;
+  readonly #start = Date.now();
+  readonly #ready: Promise<void>[] = [];
 
   #drainStart = 0;
 
@@ -81,7 +84,7 @@ export class Terminator {
     }
   }
 
-  addWorker(worker: Worker, type: WorkerType): Worker {
+  addWorker(worker: Worker, type: WorkerType, name: string): Worker {
     if (type === 'user-facing') {
       this.#userFacing.add(worker);
     }
@@ -94,7 +97,19 @@ export class Terminator {
     worker.on('close', (code, signal) =>
       this.#onExit(code, signal, null, type, worker),
     );
+
+    const {promise, resolve} = resolver();
+    this.#ready.push(promise);
+    worker.onceMessageType('ready', () => {
+      this.#lc.debug?.(`${name} ready (${Date.now() - this.#start} ms)`);
+      resolve();
+    });
+
     return worker;
+  }
+
+  async allWorkersReady() {
+    await Promise.all(this.#ready);
   }
 
   logErrorAndExit(err: unknown) {

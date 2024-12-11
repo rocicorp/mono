@@ -53,7 +53,7 @@ describe('shutdown', () => {
     const worker = new TestWorker(id, type);
     const [parentPort, childPort] = inProcChannel();
 
-    terminator.addWorker(parentPort, type);
+    terminator.addWorker(parentPort, type, id);
 
     void runUntilKilled(lc, childPort, worker).then(
       () => parentPort.emit('close', 0),
