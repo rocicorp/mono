@@ -1,6 +1,7 @@
 import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {memo, useState} from 'react';
+import {makePermalink} from '../../comment-permalink.js';
 import {Button} from '../../components/button.js';
 import {CanEdit} from '../../components/can-edit.js';
 import {Confirm} from '../../components/confirm.js';
@@ -28,12 +29,6 @@ type Props = {
   removeRecentEmoji: (id: string) => void;
 };
 
-// eslint-disable-next-line react-refresh/only-export-components
-export function parsePermalink(hash: string): string | undefined {
-  const match = hash.match(/^comment-(.+)$/);
-  return match ? match?.[1] : undefined;
-}
-
 const Comment = memo(
   ({id, issueID, height, recentEmojis, removeRecentEmoji}: Props) => {
     const z = useZero();
@@ -48,7 +43,7 @@ const Comment = memo(
       useState(false);
 
     const hash = useHash();
-    const permalink = comment ? `comment-${comment.id}` : undefined;
+    const permalink = comment && makePermalink(comment);
     const isPermalinked = hash === permalink;
 
     const edit = () => setEditing(true);
