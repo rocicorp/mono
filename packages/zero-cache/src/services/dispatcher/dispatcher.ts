@@ -2,7 +2,7 @@ import {LogContext} from '@rocicorp/logger';
 import UrlPattern from 'url-pattern';
 import {h32} from '../../../../shared/src/xxhash.js';
 import type {IncomingMessageSubset} from '../../types/http.js';
-import {type Worker} from '../../types/processes.js';
+import type {Worker} from '../../types/processes.js';
 import {HttpService, type Options} from '../http-service.js';
 import {getConnectParams} from './connect-params.js';
 import {installWebSocketHandoff} from './websocket-handoff.js';
@@ -31,7 +31,9 @@ export class Dispatcher extends HttpService {
     });
 
     this.#workersByHostname = workersByHostname;
-    installWebSocketHandoff(lc, req => this.#handoff(req), parent);
+    if (parent) {
+      installWebSocketHandoff(lc, req => this.#handoff(req), parent);
+    }
   }
 
   #handoff(req: IncomingMessageSubset) {

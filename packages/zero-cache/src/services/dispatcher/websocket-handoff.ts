@@ -28,7 +28,7 @@ export type WebSocketReceiver<P> = (ws: WebSocket, payload: P) => void;
 export function installWebSocketHandoff<P>(
   lc: LogContext,
   handoff: WebSocketHandoff<P>,
-  source: Server | Worker | null,
+  source: Server | Worker,
 ) {
   const handle = (
     message: IncomingMessageSubset,
@@ -58,10 +58,10 @@ export function installWebSocketHandoff<P>(
 
   if (source instanceof Server) {
     // handoff messages from an HTTP server
-    source?.on('upgrade', handle);
+    source.on('upgrade', handle);
   } else {
     // handoff messages from this worker's parent.
-    source?.onMessageType<Handoff<P>>('handoff', (msg, socket) => {
+    source.onMessageType<Handoff<P>>('handoff', (msg, socket) => {
       const {message, head} = msg;
       handle(message, socket as Socket, Buffer.from(head));
     });
