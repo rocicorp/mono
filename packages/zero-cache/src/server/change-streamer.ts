@@ -16,10 +16,13 @@ import {
 import {exitAfter, runUntilKilled} from './life-cycle.js';
 import {createLogContext} from './logging.js';
 
-export default async function runWorker(parent: Worker): Promise<void> {
-  const config = getZeroConfig();
+export default async function runWorker(
+  parent: Worker,
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
+  const config = getZeroConfig(env);
   const port = config.changeStreamerPort ?? config.port + 1;
-  const lc = createLogContext(config.log, {worker: 'change-streamer'});
+  const lc = createLogContext(config, {worker: 'change-streamer'});
 
   // Kick off DB connection warmup in the background.
   const changeDB = pgClient(lc, config.change.db, {
@@ -85,5 +88,5 @@ export default async function runWorker(parent: Worker): Promise<void> {
 
 // fork()
 if (!singleProcessMode()) {
-  void exitAfter(() => runWorker(must(parentWorker)));
+  void exitAfter(() => runWorker(must(parentWorker), process.env));
 }

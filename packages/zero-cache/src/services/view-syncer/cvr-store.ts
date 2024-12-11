@@ -43,6 +43,9 @@ import {
   versionString,
   versionToNullableCookie,
 } from './schema/types.js';
+import {trace} from '@opentelemetry/api';
+import {version} from '../../../../otel/src/version.js';
+import {startAsyncSpan} from '../../../../otel/src/span.js';
 
 type NotNull<T> = T extends null ? never : T;
 
@@ -55,6 +58,8 @@ export type CVRFlushStats = {
   rowsDeferred: number;
   statements: number;
 };
+
+const tracer = trace.getTracer('cvr-store', version);
 
 /**
  * The RowRecordCache is an in-memory cache of the `cvr.rows` tables that
@@ -230,7 +235,7 @@ class RowRecordCache {
           return {rows, rowsVersion};
         });
         this.#lc.debug?.(
-          `flushed ${rows} rows to ${versionString(rowsVersion)} (${
+          `flushed ${rows} rows@${versionString(rowsVersion)} (${
             Date.now() - start
           } ms)`,
         );
@@ -239,9 +244,7 @@ class RowRecordCache {
         //       which will result in looping to commit the next #pendingRowsVersion.
       }
       this.#lc.debug?.(
-        `pending rows flushed to ${versionToNullableCookie(
-          this.#flushedRowsVersion,
-        )}`,
+        `up to date rows@${versionToNullableCookie(this.#flushedRowsVersion)}`,
       );
       flushing.resolve();
       this.#flushing = null;
@@ -255,8 +258,12 @@ class RowRecordCache {
    * Returns a promise that resolves when all outstanding row-records
    * have been committed.
    */
-  flushed(): Promise<void> {
-    return this.#flushing ? this.#flushing.promise : promiseVoid;
+  flushed(lc: LogContext): Promise<void> {
+    if (this.#flushing) {
+      lc.debug?.('awaiting pending row flush');
+      return this.#flushing.promise;
+    }
+    return promiseVoid;
   }
 
   clear() {
@@ -286,7 +293,7 @@ class RowRecordCache {
     // Note that because catchupRowPatches() is called from within the
     // view syncer lock, this flush is guaranteed to complete since no
     // new CVR updates can happen while the lock is held.
-    await this.flushed();
+    await this.flushed(lc);
     const flushMs = Date.now() - startMs;
 
     const query =
@@ -317,8 +324,10 @@ class RowRecordCache {
     mode: 'allow-defer' | 'force',
   ): PendingQuery<Row[]>[] {
     if (
-      mode === 'allow-defer' && // defer if there are pending updates or
-      (this.#pending.size > 0 || // the new batch is above the limit.
+      mode === 'allow-defer' &&
+      // defer if pending rows are being flushed
+      (this.#flushing !== null ||
+        // or if the new batch is above the limit.
         rowRecordsToFlush.length > this.#deferredRowFlushThreshold)
     ) {
       return [];
@@ -395,7 +404,6 @@ const LOAD_ATTEMPT_INTERVAL_MS = 500;
 const MAX_LOAD_ATTEMPTS = 10;
 
 export class CVRStore {
-  readonly #lc: LogContext;
   readonly #taskID: string;
   readonly #id: string;
   readonly #db: PostgresDB;
@@ -424,7 +432,6 @@ export class CVRStore {
     deferredRowFlushThreshold = 100, // somewhat arbitrary
     setTimeoutFn = setTimeout,
   ) {
-    this.#lc = lc;
     this.#db = db;
     this.#taskID = taskID;
     this.#id = cvrID;
@@ -440,29 +447,33 @@ export class CVRStore {
     this.#maxLoadAttempts = maxLoadAttempts;
   }
 
-  async load(lastConnectTime: number): Promise<CVR> {
-    let err: RowsVersionBehindError | undefined;
-    for (let i = 0; i < this.#maxLoadAttempts; i++) {
-      if (i > 0) {
-        await sleep(this.#loadAttemptIntervalMs);
+  load(lc: LogContext, lastConnectTime: number): Promise<CVR> {
+    return startAsyncSpan(tracer, 'cvr.load', async () => {
+      let err: RowsVersionBehindError | undefined;
+      for (let i = 0; i < this.#maxLoadAttempts; i++) {
+        if (i > 0) {
+          await sleep(this.#loadAttemptIntervalMs);
+        }
+        const result = await this.#load(lc, lastConnectTime);
+        if (result instanceof RowsVersionBehindError) {
+          lc.info?.(`attempt ${i + 1}: ${String(result)}`);
+          err = result;
+          continue;
+        }
+        return result;
       }
-      const result = await this.#load(lastConnectTime);
-      if (result instanceof RowsVersionBehindError) {
-        this.#lc.info?.(`attempt ${i + 1}: ${String(result)}`);
-        err = result;
-        continue;
-      }
-      return result;
-    }
-    assert(err);
-    throw new ErrorForClient([
-      'error',
-      ErrorKind.ClientNotFound,
-      `max attempts exceeded waiting for CVR@${err.cvrVersion} to catch up from ${err.rowsVersion}`,
-    ]);
+      assert(err);
+      throw new ErrorForClient({
+        kind: ErrorKind.ClientNotFound,
+        message: `max attempts exceeded waiting for CVR@${err.cvrVersion} to catch up from ${err.rowsVersion}`,
+      });
+    });
   }
 
-  async #load(lastConnectTime: number): Promise<CVR | RowsVersionBehindError> {
+  async #load(
+    lc: LogContext,
+    lastConnectTime: number,
+  ): Promise<CVR | RowsVersionBehindError> {
     const start = Date.now();
 
     const id = this.#id;
@@ -571,8 +582,8 @@ export class CVRStore {
         query.desiredBy[row.clientID] = versionFromString(row.patchVersion);
       }
     }
-    this.#lc.debug?.(
-      `loaded CVR @${versionString(cvr.version)} (${Date.now() - start} ms)`,
+    lc.debug?.(
+      `loaded cvr@${versionString(cvr.version)} (${Date.now() - start} ms)`,
     );
 
     return cvr;
@@ -940,8 +951,8 @@ export class CVRStore {
   }
 
   /** Resolves when all pending updates are flushed. */
-  flushed(): Promise<void> {
-    return this.#rowCache.flushed();
+  flushed(lc: LogContext): Promise<void> {
+    return this.#rowCache.flushed(lc);
   }
 }
 

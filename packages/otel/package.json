@@ -1,0 +1,20 @@
+{
+  "name": "otel",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check-types": "tsc",
+    "check-types:watch": "tsc --watch",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0"
+  },
+  "eslintConfig": {
+    "extends": "../../eslint-config.json"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}

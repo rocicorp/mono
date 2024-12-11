@@ -52,7 +52,7 @@ describe('view-syncer/pipeline-driver', () => {
       CREATE TABLE issues (
         id TEXT PRIMARY KEY,
         closed BOOL,
-        ignored TIMESTAMPTZ,
+        ignored TIME,
         _0_version TEXT NOT NULL
       );
       CREATE TABLE comments (
@@ -92,6 +92,7 @@ describe('view-syncer/pipeline-driver', () => {
     orderBy: [['id', 'desc']],
     related: [
       {
+        system: 'client',
         correlation: {
           parentField: ['id'],
           childField: ['issueID'],
@@ -112,6 +113,7 @@ describe('view-syncer/pipeline-driver', () => {
       type: 'correlatedSubquery',
       op: 'EXISTS',
       related: {
+        system: 'client',
         correlation: {
           parentField: ['id'],
           childField: ['issueID'],
@@ -127,6 +129,111 @@ describe('view-syncer/pipeline-driver', () => {
             type: 'correlatedSubquery',
             op: 'EXISTS',
             related: {
+              system: 'client',
+              correlation: {
+                parentField: ['labelID'],
+                childField: ['id'],
+              },
+              subquery: {
+                table: 'labels',
+                alias: 'labels',
+                orderBy: [['id', 'asc']],
+                where: {
+                  type: 'simple',
+                  left: {
+                    type: 'column',
+                    name: 'name',
+                  },
+                  op: '=',
+                  right: {
+                    type: 'literal',
+                    value: 'bug',
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  const ISSUES_QUERY_WITH_EXISTS_FROM_PERMISSIONS: AST = {
+    table: 'issues',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      related: {
+        system: 'permissions',
+        correlation: {
+          parentField: ['id'],
+          childField: ['issueID'],
+        },
+        subquery: {
+          table: 'issueLabels',
+          alias: 'labels',
+          orderBy: [
+            ['issueID', 'asc'],
+            ['labelID', 'asc'],
+          ],
+          where: {
+            type: 'correlatedSubquery',
+            op: 'EXISTS',
+            related: {
+              system: 'permissions',
+              correlation: {
+                parentField: ['labelID'],
+                childField: ['id'],
+              },
+              subquery: {
+                table: 'labels',
+                alias: 'labels',
+                orderBy: [['id', 'asc']],
+                where: {
+                  type: 'simple',
+                  left: {
+                    type: 'column',
+                    name: 'name',
+                  },
+                  op: '=',
+                  right: {
+                    type: 'literal',
+                    value: 'bug',
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  const ISSUES_QUERY_WITH_EXISTS_FROM_PERMISSIONS2: AST = {
+    table: 'issues',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      related: {
+        system: 'client',
+        correlation: {
+          parentField: ['id'],
+          childField: ['issueID'],
+        },
+        subquery: {
+          table: 'issueLabels',
+          alias: 'labels',
+          orderBy: [
+            ['issueID', 'asc'],
+            ['labelID', 'asc'],
+          ],
+          where: {
+            type: 'correlatedSubquery',
+            op: 'EXISTS',
+            related: {
+              system: 'permissions',
               correlation: {
                 parentField: ['labelID'],
                 childField: ['id'],
@@ -606,6 +713,66 @@ describe('view-syncer/pipeline-driver', () => {
     `);
   });
 
+  test('whereExists added by permissions return no rows', () => {
+    pipelines.init();
+    expect([
+      ...pipelines.addQuery('hash1', ISSUES_QUERY_WITH_EXISTS_FROM_PERMISSIONS),
+    ]).toMatchInlineSnapshot(`
+      [
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "00",
+            "closed": false,
+            "id": "1",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+      ]
+    `);
+
+    expect([
+      ...pipelines.addQuery(
+        'hash2',
+        ISSUES_QUERY_WITH_EXISTS_FROM_PERMISSIONS2,
+      ),
+    ]).toMatchInlineSnapshot(`
+      [
+        {
+          "queryHash": "hash2",
+          "row": {
+            "_0_version": "00",
+            "closed": false,
+            "id": "1",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "add",
+        },
+        {
+          "queryHash": "hash2",
+          "row": {
+            "_0_version": "00",
+            "issueID": "1",
+            "labelID": "1",
+          },
+          "rowKey": {
+            "issueID": "1",
+            "labelID": "1",
+          },
+          "table": "issueLabels",
+          "type": "add",
+        },
+      ]
+    `);
+  });
+
   test('whereExists generates the correct number of add and remove changes', () => {
     const query: AST = {
       table: 'issues',
@@ -652,6 +819,7 @@ describe('view-syncer/pipeline-driver', () => {
                       },
                       orderBy: [['id', 'asc']],
                     },
+                    system: 'client',
                     correlation: {
                       childField: ['id'],
                       parentField: ['labelID'],
@@ -663,6 +831,7 @@ describe('view-syncer/pipeline-driver', () => {
                   ['labelID', 'asc'],
                 ],
               },
+              system: 'client',
               correlation: {
                 childField: ['issueID'],
                 parentField: ['id'],
@@ -689,6 +858,7 @@ describe('view-syncer/pipeline-driver', () => {
                   table: 'labels',
                   orderBy: [['id', 'asc']],
                 },
+                system: 'client',
                 correlation: {
                   childField: ['id'],
                   parentField: ['labelID'],
@@ -696,6 +866,7 @@ describe('view-syncer/pipeline-driver', () => {
               },
             ],
           },
+          system: 'client',
           correlation: {
             childField: ['issueID'],
             parentField: ['id'],

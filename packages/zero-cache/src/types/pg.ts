@@ -37,14 +37,35 @@ export function registerPostgresTypeParsers() {
   setTypeParser(builtinsDATEARRAY, val => array.parse(val, dateToUTCMidnight));
 }
 
-function timestampToFpMillis(timestamp: string): number {
+const WITH_HH_MM_TIMEZONE = /[+-]\d\d:\d\d$/;
+const WITH_HH_TIMEZONE = /[+-]\d\d$/;
+
+// exported for testing.
+export function timestampToFpMillis(timestamp: string): number {
   // Convert from PG's time string, e.g. "1999-01-08 12:05:06+00" to "Z"
   // format expected by PreciseDate.
-  timestamp = timestamp.replace(' ', 'T').replace('+00', '') + 'Z';
-  const fullTime = new PreciseDate(timestamp).getFullTime();
-  const millis = Number(fullTime / 1_000_000n);
-  const nanos = Number(fullTime % 1_000_000n);
-  return millis + nanos * 1e-6; // floating point milliseconds
+  let ts = timestamp.replace(' ', 'T');
+  if (ts.match(WITH_HH_TIMEZONE)) {
+    if (ts.endsWith('+00')) {
+      // Using 'Z' provides microsecond precision with PreciseDate.
+      ts = ts.replace('+00', 'Z');
+    } else {
+      ts += ':00'; // PG's timezone offset "HH" needs to be converted to "HH:MM"
+    }
+  } else if (ts.match(WITH_HH_MM_TIMEZONE)) {
+    // Using 'Z' provides microsecond precision with PreciseDate.
+    ts = ts.replace('+00:00', 'Z');
+  } else {
+    ts += 'Z';
+  }
+  try {
+    const fullTime = new PreciseDate(ts).getFullTime();
+    const millis = Number(fullTime / 1_000_000n);
+    const nanos = Number(fullTime % 1_000_000n);
+    return millis + nanos * 1e-6; // floating point milliseconds
+  } catch (e) {
+    throw new Error(`Error parsing ${timestamp}`, {cause: e});
+  }
 }
 
 function serializeTimestamp(val: unknown): string {
@@ -155,10 +176,13 @@ export function pgClient(
         lc.info?.(n);
     }
   };
+  const url = new URL(connectionURI);
+  const ssl =
+    url.searchParams.get('ssl') ?? url.searchParams.get('sslmode') ?? 'prefer';
   return postgres(connectionURI, {
     ...postgresTypeConfig(),
     onnotice,
-    ssl: 'prefer',
+    ssl: ssl === 'disable' || ssl === 'false' ? false : (ssl as 'prefer'),
     ...options,
   });
 }

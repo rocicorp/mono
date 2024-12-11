@@ -11,6 +11,7 @@ import {
   TableSource,
   UnsupportedValueError,
 } from './table-source.js';
+import type {JSONValue} from '../../shared/src/json.js';
 
 const columns = {
   id: {type: 'string'},
@@ -66,24 +67,6 @@ describe('fetching from a table source', () => {
       expectedRows: allRows.filter(r => r.a === 2),
     },
     {
-      name: 'simple source with `id` order and start `before`',
-      sourceArgs: ['foo', columns, [['id', 'asc']]],
-      fetchArgs: {
-        constraint: undefined,
-        start: {row: allRows[4], basis: 'before'},
-      },
-      expectedRows: allRows.slice(3),
-    },
-    {
-      name: 'simple source with `id` order and start `before` and constraint',
-      sourceArgs: ['foo', columns, [['id', 'asc']]],
-      fetchArgs: {
-        constraint: {b: 2},
-        start: {row: allRows[4], basis: 'before'},
-      },
-      expectedRows: allRows.slice(3).filter(r => r.b === 2),
-    },
-    {
       name: 'simple source with `id` order and start `after`',
       sourceArgs: ['foo', columns, [['id', 'asc']]],
       fetchArgs: {
@@ -130,27 +113,6 @@ describe('fetching from a table source', () => {
       sourceArgs: ['foo', columns, compoundOrder],
       fetchArgs: {constraint: {a: 2}, start: undefined},
       expectedRows: allRows.filter(r => r.a === 2).sort(compoundComparator),
-    },
-    {
-      name: 'complex source with compound order and start `before`',
-      sourceArgs: ['foo', columns, compoundOrder],
-      fetchArgs: {
-        constraint: undefined,
-        start: {row: allRows[4], basis: 'before'},
-      },
-      expectedRows: allRows.slice().sort(compoundComparator).slice(3),
-    },
-    {
-      name: 'complex source with compound order and start `before` and constraint',
-      sourceArgs: ['foo', columns, compoundOrder],
-      fetchArgs: {
-        constraint: {b: 2},
-        start: {row: allRows[4], basis: 'before'},
-      },
-      expectedRows: allRows
-        .slice(3)
-        .filter(r => r.b === 2)
-        .sort(compoundComparator),
     },
     {
       name: 'complex source with compound order and start `after`',
@@ -218,12 +180,13 @@ describe('fetching from a table source', () => {
 });
 
 describe('fetched value types', () => {
-  type Foo = {id: string; a: number; b: number; c: boolean};
+  type Foo = {id: string; a: number; b: number; c: boolean; d: JSONValue};
   const columns = {
     id: {type: 'string'},
     a: {type: 'number'},
     b: {type: 'number'},
     c: {type: 'boolean'},
+    d: {type: 'json'},
   } as const;
 
   type Case = {
@@ -234,14 +197,24 @@ describe('fetched value types', () => {
 
   const cases: Case[] = [
     {
-      name: 'number, float and false boolean',
-      input: ['1', 1, 2.123, 0],
-      output: {id: '1', a: 1, b: 2.123, c: false},
+      name: 'number, float, false boolean, json string',
+      input: ['1', 1, 2.123, 0, '"json string"'],
+      output: {id: '1', a: 1, b: 2.123, c: false, d: 'json string'},
     },
     {
-      name: 'bigint, float, and true boolean',
-      input: ['2', 2n, 3.456, 1n],
-      output: {id: '2', a: 2, b: 3.456, c: true},
+      name: 'bigint, float, true boolean, json null',
+      input: ['2', 2n, 3.456, 1n, 'null'],
+      output: {id: '2', a: 2, b: 3.456, c: true, d: null},
+    },
+    {
+      name: 'bigint, float, true boolean, json object',
+      input: ['2', 2n, 3.456, 1n, '{}'],
+      output: {id: '2', a: 2, b: 3.456, c: true, d: {}},
+    },
+    {
+      name: 'bigint, float, true boolean, json array',
+      input: ['2', 2n, 3.456, 1n, '[]'],
+      output: {id: '2', a: 2, b: 3.456, c: true, d: []},
     },
     {
       name: 'safe integer boundaries',
@@ -250,16 +223,23 @@ describe('fetched value types', () => {
         BigInt(Number.MAX_SAFE_INTEGER),
         BigInt(Number.MIN_SAFE_INTEGER),
         1,
+        'true',
       ],
-      output: {id: '3', a: 9007199254740991, b: -9007199254740991, c: true},
+      output: {
+        id: '3',
+        a: 9007199254740991,
+        b: -9007199254740991,
+        c: true,
+        d: true,
+      },
     },
     {
       name: 'bigint too big',
-      input: ['3', BigInt(Number.MAX_SAFE_INTEGER) + 1n, 0, 1n],
+      input: ['3', BigInt(Number.MAX_SAFE_INTEGER) + 1n, 0, 1n, '{}'],
     },
     {
       name: 'bigint too small',
-      input: ['3', BigInt(Number.MIN_SAFE_INTEGER) - 1n, 0, 1n],
+      input: ['3', BigInt(Number.MIN_SAFE_INTEGER) - 1n, 0, 1n, '{}'],
     },
   ];
 
@@ -267,10 +247,10 @@ describe('fetched value types', () => {
     test(c.name, () => {
       const db = new Database(createSilentLogContext(), ':memory:');
       db.exec(
-        /* sql */ `CREATE TABLE foo (id TEXT PRIMARY KEY, a, b, c, ignored, columns);`,
+        /* sql */ `CREATE TABLE foo (id TEXT PRIMARY KEY, a, b, c, d, ignored, columns);`,
       );
       const stmt = db.prepare(
-        /* sql */ `INSERT INTO foo (id, a, b, c) VALUES (?, ?, ?, ?);`,
+        /* sql */ `INSERT INTO foo (id, a, b, c, d) VALUES (?, ?, ?, ?, ?);`,
       );
       stmt.run(c.input);
       const source = new TableSource(db, 'foo', columns, ['id']);
@@ -289,15 +269,20 @@ test('pushing values does the correct writes and outputs', () => {
   const db1 = new Database(createSilentLogContext(), ':memory:');
   const db2 = new Database(createSilentLogContext(), ':memory:');
   db1.exec(
-    /* sql */ `CREATE TABLE foo (a, b, c, ignored, columns, PRIMARY KEY (a, b));`,
+    /* sql */ `CREATE TABLE foo (a, b, c, d, ignored, columns, PRIMARY KEY (a, b));`,
   );
   db2.exec(
-    /* sql */ `CREATE TABLE foo (a, b, c, ignored, columns, PRIMARY KEY (a, b));`,
+    /* sql */ `CREATE TABLE foo (a, b, c, d, ignored, columns, PRIMARY KEY (a, b));`,
   );
   const source = new TableSource(
     db1,
     'foo',
-    {a: {type: 'number'}, b: {type: 'number'}, c: {type: 'boolean'}},
+    {
+      a: {type: 'number'},
+      b: {type: 'number'},
+      c: {type: 'boolean'},
+      d: {type: 'json'},
+    },
     ['a', 'b'],
   );
   const outputted: Change[] = [];
@@ -311,7 +296,7 @@ test('pushing values does the correct writes and outputs', () => {
     });
 
   for (const db of [db1, db2]) {
-    const read = db.prepare('SELECT a, b, c FROM foo');
+    const read = db.prepare('SELECT a, b, c, d FROM foo');
     source.setDB(db);
 
     /**
@@ -323,7 +308,7 @@ test('pushing values does the correct writes and outputs', () => {
      */
     source.push({
       type: 'add',
-      row: {a: 1, b: 2.123, c: 0},
+      row: {a: 1, b: 2.123, c: false, d: 'json string'},
     });
 
     expect(outputted.shift()).toEqual({
@@ -334,10 +319,11 @@ test('pushing values does the correct writes and outputs', () => {
           a: 1,
           b: 2.123,
           c: false,
+          d: 'json string',
         },
       },
     });
-    expect(read.all()).toEqual([{a: 1, b: 2.123, c: 0}]);
+    expect(read.all()).toEqual([{a: 1, b: 2.123, c: 0, d: '"json string"'}]);
 
     source.push({
       type: 'remove',
@@ -362,12 +348,11 @@ test('pushing values does the correct writes and outputs', () => {
         row: {a: 1, b: 2.123},
       });
     }).toThrow();
-
     expect(read.all()).toEqual([]);
 
     source.push({
       type: 'add',
-      row: {a: 1, b: 2.123, c: 1},
+      row: {a: 1, b: 2.123, c: true, d: {}},
     });
 
     expect(outputted.shift()).toEqual({
@@ -378,15 +363,16 @@ test('pushing values does the correct writes and outputs', () => {
           a: 1,
           b: 2.123,
           c: true,
+          d: {},
         },
       },
     });
-    expect(read.all()).toEqual([{a: 1, b: 2.123, c: 1}]);
+    expect(read.all()).toEqual([{a: 1, b: 2.123, c: 1, d: '{}'}]);
 
     expect(() => {
       source.push({
         type: 'add',
-        row: {a: 1, b: 2.123, c: 1},
+        row: {a: 1, b: 2.123, c: true, d: null},
       });
     }).toThrow();
 
@@ -396,7 +382,8 @@ test('pushing values does the correct writes and outputs', () => {
       row: {
         a: BigInt(Number.MAX_SAFE_INTEGER),
         b: 3.456,
-        c: 1,
+        c: true,
+        d: [],
       } as unknown as Row,
     });
 
@@ -405,79 +392,115 @@ test('pushing values does the correct writes and outputs', () => {
       node: {
         relationships: {},
         row: {
-          a: 9007199254740991,
+          a: 9007199254740991n,
           b: 3.456,
           c: true,
+          d: [],
         },
       },
     });
 
     expect(read.all()).toEqual([
-      {a: 1, b: 2.123, c: 1},
-      {a: 9007199254740991, b: 3.456, c: 1},
+      {a: 1, b: 2.123, c: 1, d: '{}'},
+      {a: 9007199254740991, b: 3.456, c: 1, d: '[]'},
     ]);
 
-    // out of bounds
-    expect(() => {
-      source.push({
-        type: 'add',
-        row: {
-          a: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
-          b: 0,
-          c: 1,
-        } as unknown as Row,
-      });
-    }).toThrow(UnsupportedValueError);
+    source.push({
+      type: 'add',
+      row: {
+        a: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
+        b: 0,
+        c: true,
+        d: true,
+      } as unknown as Row,
+    });
+    outputted.shift();
 
-    // out of bounds
-    expect(() => {
-      source.push({
-        type: 'add',
-        row: {
-          a: 0,
-          b: BigInt(Number.MIN_SAFE_INTEGER) - 1n,
-          c: 1,
-        } as unknown as Row,
-      });
-    }).toThrow(UnsupportedValueError);
+    source.push({
+      type: 'add',
+      row: {
+        a: 0,
+        b: BigInt(Number.MIN_SAFE_INTEGER) - 1n,
+        c: true,
+        d: false,
+      } as unknown as Row,
+    });
+    outputted.shift();
 
+    read.safeIntegers(true);
     expect(read.all()).toEqual([
-      {a: 1, b: 2.123, c: 1},
-      {a: 9007199254740991, b: 3.456, c: 1},
+      {a: 1, b: 2.123, c: 1, d: '{}'},
+      {a: 9007199254740991n, b: 3.456, c: 1, d: '[]'},
+      {
+        a: 9007199254740992n,
+        b: 0,
+        c: 1,
+        d: 'true',
+      },
+      {
+        a: 0,
+        b: -9007199254740992n,
+        c: 1,
+        d: 'false',
+      },
     ]);
+    read.safeIntegers(false);
+
+    source.push({
+      type: 'remove',
+      row: {
+        a: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
+        b: 0,
+        c: true,
+      } as unknown as Row,
+    });
+    outputted.shift();
+
+    source.push({
+      type: 'remove',
+      row: {
+        a: 0,
+        b: BigInt(Number.MIN_SAFE_INTEGER) - 1n,
+        c: true,
+      } as unknown as Row,
+    });
+    outputted.shift();
 
     // edit changes
     source.push({
       type: 'edit',
-      row: {a: BigInt(1), b: 2.123, c: 0} as unknown as Row,
-      oldRow: {a: BigInt(1), b: 2.123, c: 1} as unknown as Row,
+      row: {a: 1, b: 2.123, c: false, d: {a: true}} as unknown as Row,
+      oldRow: {a: 1, b: 2.123, c: true, d: {}} as unknown as Row,
     });
 
     expect(outputted.shift()).toEqual({
       type: 'edit',
-      oldNode: {row: {a: 1, b: 2.123, c: true}, relationships: {}},
-      node: {row: {a: 1, b: 2.123, c: false}, relationships: {}},
+      oldNode: {row: {a: 1, b: 2.123, c: true, d: {}}, relationships: {}},
+      node: {row: {a: 1, b: 2.123, c: false, d: {a: true}}, relationships: {}},
     });
 
     expect(read.all()).toEqual([
-      {a: 1, b: 2.123, c: 0},
-      {a: 9007199254740991, b: 3.456, c: 1},
+      {a: 1, b: 2.123, c: 0, d: '{"a":true}'},
+      {a: 9007199254740991, b: 3.456, c: 1, d: '[]'},
     ]);
 
     // edit pk should fall back to remove and insert
     source.push({
       type: 'edit',
-      oldRow: {a: 1, b: 2.123, c: 0},
-      row: {a: 1, b: 3, c: 0},
+      oldRow: {a: 1, b: 2.123, c: false, d: {a: true}},
+      row: {a: 1, b: 3, c: false, d: {a: true}},
     });
     expect(outputted.shift()).toEqual({
       type: 'edit',
-      oldNode: {row: {a: 1, b: 2.123, c: false}, relationships: {}},
-      node: {row: {a: 1, b: 3, c: false}, relationships: {}},
+      oldNode: {
+        row: {a: 1, b: 2.123, c: false, d: {a: true}},
+        relationships: {},
+      },
+      node: {row: {a: 1, b: 3, c: false, d: {a: true}}, relationships: {}},
     });
     expect(read.all()).toEqual([
-      {a: 9007199254740991, b: 3.456, c: 1},
-      {a: 1, b: 3, c: 0},
+      {a: 9007199254740991, b: 3.456, c: 1, d: '[]'},
+      {a: 1, b: 3, c: 0, d: '{"a":true}'},
     ]);
 
     // non existing old row
@@ -488,23 +511,6 @@ test('pushing values does the correct writes and outputs', () => {
         oldRow: {a: 12, b: 2.123, c: 1},
       });
     }).toThrow('Row not found');
-
-    // out of bounds
-    expect(() => {
-      source.push({
-        type: 'edit',
-        row: {
-          a: BigInt(Number.MAX_SAFE_INTEGER),
-          b: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
-          c: 1,
-        } as unknown as Row,
-        oldRow: {
-          a: BigInt(Number.MAX_SAFE_INTEGER),
-          b: 3.456,
-          c: 1,
-        } as unknown as Row,
-      });
-    }).toThrow(UnsupportedValueError);
   }
 });
 

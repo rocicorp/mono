@@ -20,8 +20,8 @@
   --color-text-primary: rgba(255, 255, 255, 0.85);
   --color-text-primary-active: rgba(255, 255, 255, 1);
   --color-text-dimmed-label: rgba(255, 255, 255, 0.5);
-  --color-primary-cta: rgba(255, 92, 0, 1);
-  --color-primary-cta-dimmed: rgba(255, 92, 0, 0.2);
+  --color-primary-cta: rgba(252, 33, 138, 1);
+  --color-primary-cta-dimmed: rgba(252, 33, 138, 0.2);
   --color-primary-cta-outline: rgba(255, 255, 255, 0.2);
   --color-light-outline: rgba(62, 62, 62, 0.39);
   --color-row-hover: rgba(62, 62, 62, 0.2);
@@ -29,6 +29,8 @@
   --color-modal-background: rgba(18, 18, 18, 0.7);
   --color-modal-outline: rgba(62, 62, 62, 0.8);
   --color-button-outline: rgba(50, 50, 50, 1);
+  --color-tooltip-background: rgba(18, 18, 18, 1);
+  --color-tooltip-outline: rgba(62, 62, 62, 1);
 
   /* Filters */
   --filter-backdrop-blur: blur(6.5px);
@@ -286,9 +288,60 @@ textarea.autoResize {
 
 .list-view-header-container {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  flex-direction: row;
   flex: 0;
   margin-bottom: 1.5rem;
+}
+
+.search-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-input {
+  width: 100%;
+  padding-right: 2rem; /* Adjust padding for clear button */
+}
+
+.clear-search {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1.3rem;
+  height: 1.3rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 800;
+  padding-bottom: 1px;
+  color: #fff;
+}
+
+.clear-search:hover {
+  background-color: rgba(255, 255, 255, 0.3); /* Slightly darker on hover */
+}
+
+.search-toggle {
+  margin-left: auto;
+  opacity: 0.8;
+  display: block;
+  height: 1.5rem;
+  width: 1.5rem;
+  padding: 1.25rem;
+  border-radius: 2rem;
+  background: var(--color-light-outline) url(assets/icons/search.svg) no-repeat
+    center center;
+}
+
+.search-toggle:hover {
+  opacity: 1;
 }
 
 .list-view-header {
@@ -764,6 +817,8 @@ textarea.autoResize {
   opacity: 1;
 }
 
+.toast-emoji-icon,
+.tooltip-emoji-icon,
 .issue-creator-avatar {
   width: 1.4rem;
   height: 1.4rem;
@@ -1231,12 +1286,95 @@ textarea.autoResize {
 
 emoji-picker {
   --background: var(--color-modal-background);
-  backdrop-filter: var(--filter-backdrop-blur);
   --border-radius: 0.5rem;
   --border-color: var(--color-modal-outline);
   --emoji-size: 1.25rem;
 }
 
 .popover-panel {
+  backdrop-filter: var(--filter-backdrop-blur);
   z-index: var(--z-index-popover);
 }
+
+.popover-panel {
+  transition-property: opacity, transform;
+}
+
+.popover-panel[data-status='open'],
+.popover-panel[data-status='close'] {
+  transition-duration: 250ms;
+}
+
+.popover-panel[data-status='initial'],
+.popover-panel[data-status='close'] {
+  opacity: 0;
+}
+
+.popover-panel[data-status='initial'][data-placement^='top'],
+.popover-panel[data-status='close'][data-placement^='top'] {
+  transform: translateY(10px);
+}
+
+.popover-panel[data-status='initial'][data-placement^='bottom'],
+.popover-panel[data-status='close'][data-placement^='bottom'] {
+  transform: translateY(-10px);
+}
+
+.Toastify__toast-container {
+  --toastify-toast-width: 100vw;
+}
+
+.Toastify__toast {
+  padding: 0;
+  min-height: 0;
+  background-color: transparent;
+  box-shadow: none;
+}
+
+.Toastify__toast-body {
+  margin: auto;
+  border: 1px solid var(--color-tooltip-outline);
+  border-radius: 2rem;
+  flex: 0;
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  padding: 0.25rem 0.5rem;
+  white-space: nowrap;
+}
+
+.Toastify__toast-body > div {
+  width: max-content;
+}
+
+.Toastify__toast .emoji-icon {
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+}
+
+.Toastify__toast--stacked[data-collapsed='true']:not(:last-child) > * {
+  opacity: 0.9;
+}
+
+.Toastify__progress-bar--wrp {
+  display: none;
+}
+
+.tooltip-content.triggered {
+  padding: 0.25rem 0.5rem;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+
+  .tooltip-emoji-icon {
+    margin: 0;
+    margin-right: 0.5rem;
+  }
+}
+
+/*
+.emoji-pill.triggered {
+}
+.emoji-pill.mine {
+}
+*/

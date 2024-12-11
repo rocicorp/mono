@@ -1,5 +1,12 @@
 import classNames from 'classnames';
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import {
+  type KeyboardEvent,
+  memo,
+  type RefObject,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import DropdownArrow from '../assets/icons/dropdown-arrow.svg?react';
 import {umami} from '../umami.js';
 import styles from './combobox.module.css';
@@ -21,7 +28,7 @@ interface Props<T> {
   editable?: boolean | undefined;
 }
 
-export function Combobox<T>({
+function Combobox<T>({
   items = [],
   selectedValue: value,
   onChange,
@@ -52,10 +59,9 @@ export function Combobox<T>({
     setIsOpen(b);
   };
 
-  const toggleDropdown = useCallback(() => {
-    console.log('toggleDropdown', isOpen);
+  const toggleDropdown = () => {
     setMenuOpen(!isOpen);
-  }, [isOpen]);
+  };
 
   useEffect(() => {
     if (!isOpen) {
@@ -78,66 +84,55 @@ export function Combobox<T>({
     return () => document.removeEventListener('mousedown', handleMouseDown);
   }, []);
 
-  const selectIndex = useCallback((index: number) => {
+  const selectIndex = (index: number) => {
     setSelectedIndex(index);
     listboxRef.current?.children[index]?.scrollIntoView({
       behavior: 'smooth',
       block: 'nearest',
     });
-  }, []);
+  };
 
-  const handleSelect = useCallback(
-    (value: T) => {
-      onChange?.(value);
-      setIsOpen(false);
-      const selectedText =
-        items?.find(item => item.value === value)?.text || 'Unknown';
-      umami.track('Selector selection made', {selection: selectedText}); // Track selection with data
-    },
-    [onChange, items],
-  );
+  const handleSelect = (value: T) => {
+    onChange?.(value);
+    setIsOpen(false);
+    const selectedText =
+      items?.find(item => item.value === value)?.text || 'Unknown';
+    umami.track('Selector selection made', {selection: selectedText}); // Track selection with data
+  };
 
-  const onMouseUp = useCallback(
-    (value: T) => {
-      const now = Date.now();
-      if (!(now - openTimeRef.current < 500)) {
-        handleSelect(value);
-      }
-    },
-    [openTimeRef, handleSelect],
-  );
+  const onMouseUp = (value: T) => {
+    const now = Date.now();
+    if (!(now - openTimeRef.current < 500)) {
+      handleSelect(value);
+    }
+  };
 
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent) => {
-      switch (event.key) {
-        case 'ArrowDown':
-          event.preventDefault();
-          if (!isOpen) {
-            setMenuOpen(true);
-          } else {
-            selectIndex(
-              Math.min(selectedIndex + 1, filteredOptions.length - 1),
-            );
-          }
-          break;
-        case 'ArrowUp':
-          event.preventDefault();
-          selectIndex(Math.max(selectedIndex - 1, 0));
-          break;
-        case 'Enter':
-          event.preventDefault();
-          if (isOpen && filteredOptions[selectedIndex]) {
-            handleSelect(filteredOptions[selectedIndex]?.value);
-          }
-          break;
-        case 'Escape':
-          event.preventDefault();
-          setMenuOpen(false);
-          break;
-      }
-    },
-    [isOpen, selectIndex, selectedIndex, filteredOptions, handleSelect],
-  );
+  const handleKeyDown = (event: KeyboardEvent) => {
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        if (!isOpen) {
+          setMenuOpen(true);
+        } else {
+          selectIndex(Math.min(selectedIndex + 1, filteredOptions.length - 1));
+        }
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        selectIndex(Math.max(selectedIndex - 1, 0));
+        break;
+      case 'Enter':
+        event.preventDefault();
+        if (isOpen && filteredOptions[selectedIndex]) {
+          handleSelect(filteredOptions[selectedIndex]?.value);
+        }
+        break;
+      case 'Escape':
+        event.preventDefault();
+        setMenuOpen(false);
+        break;
+    }
+  };
 
   const iconItem =
     editable && isOpen ? defaultItem : selectedItem ?? defaultItem;
@@ -159,7 +154,7 @@ export function Combobox<T>({
         )}
         {editable ? (
           <input
-            ref={inputRef as React.RefObject<HTMLInputElement>}
+            ref={inputRef as RefObject<HTMLInputElement>}
             disabled={disabled}
             type="text"
             className={classNames(styles.input, {
@@ -186,7 +181,7 @@ export function Combobox<T>({
           />
         ) : (
           <button
-            ref={inputRef as React.RefObject<HTMLButtonElement>}
+            ref={inputRef as RefObject<HTMLButtonElement>}
             className={styles.input}
             role="combobox"
             aria-expanded={isOpen}
@@ -254,3 +249,7 @@ export function Combobox<T>({
     </div>
   );
 }
+
+// This odd dance is because Combobox is a generic component.
+const ComboboxMemo = memo(Combobox) as typeof Combobox;
+export {ComboboxMemo as Combobox};

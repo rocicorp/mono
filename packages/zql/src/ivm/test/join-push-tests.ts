@@ -66,7 +66,8 @@ export type NewPushTest = {
   pushes: Pushes;
   addPostJoinsOperator?:
     | ((i: Input, storage: Storage) => {name: string; op: Operator})
-    | undefined;
+    | undefined
+    | ((i: Input, storage: Storage) => {name: string; op: Operator})[];
 };
 
 export function runJoinTest(t: NewPushTest) {
@@ -112,6 +113,7 @@ export function runJoinTest(t: NewPushTest) {
         storage: joinStorage,
         relationshipName: info.relationshipName,
         hidden: false,
+        system: 'client',
       });
       const snitch = new Snitch(join, name, log);
       last = joins[name] = {
@@ -124,20 +126,31 @@ export function runJoinTest(t: NewPushTest) {
     // By convention we put them in the test bottom up. Why? Easier to think
     // left-to-right.
 
-    let lastSnitch: Snitch;
+    let lastSnitch: Snitch | undefined;
     if (t.addPostJoinsOperator !== undefined) {
-      const postOpStorage = new MemoryStorage();
-      const {name, op} = t.addPostJoinsOperator(
-        must(last).snitch,
-        postOpStorage,
-      );
-      storage[name] = postOpStorage;
-      lastSnitch = new Snitch(op, name, log);
+      const addPostJoinsOperators = Array.isArray(t.addPostJoinsOperator)
+        ? t.addPostJoinsOperator
+        : [t.addPostJoinsOperator];
+      for (let i = 0; i < addPostJoinsOperators.length; i++) {
+        const postOpStorage = new MemoryStorage();
+        const {name, op} = addPostJoinsOperators[i](
+          must(last).snitch,
+          postOpStorage,
+        );
+        storage[name] = postOpStorage;
+        last = {
+          op,
+          snitch: new Snitch(op, name, log),
+        };
+        if (i === addPostJoinsOperators.length - 1) {
+          lastSnitch = last.snitch;
+        }
+      }
     } else {
       lastSnitch = must(last).snitch;
     }
 
-    const finalOutput = makeFinalOutput(lastSnitch);
+    const finalOutput = makeFinalOutput(must(lastSnitch));
 
     log.length = 0;
 

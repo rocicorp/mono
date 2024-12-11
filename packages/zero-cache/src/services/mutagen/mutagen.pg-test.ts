@@ -311,7 +311,7 @@ describe('processMutation', () => {
         TEST_SCHEMA_VERSION,
       ),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[Error: ["error","InvalidPush","Push contains unexpected mutation id 3 for client 123. Expected mutation id 2."]]`,
+      `[Error: {"kind":"InvalidPush","message":"Push contains unexpected mutation id 3 for client 123. Expected mutation id 2."}]`,
     );
 
     await expectTables(db, {
@@ -366,7 +366,7 @@ describe('processMutation', () => {
         1,
       ),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[Error: ["error","SchemaVersionNotSupported","Schema version 1 is not in range of supported schema versions [2, 3]."]]`,
+      `[Error: {"kind":"SchemaVersionNotSupported","message":"Schema version 1 is not in range of supported schema versions [2, 3]."}]`,
     );
 
     await expectTables(db, {
@@ -421,7 +421,7 @@ describe('processMutation', () => {
         4,
       ),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[Error: ["error","SchemaVersionNotSupported","Schema version 4 is not in range of supported schema versions [2, 3]."]]`,
+      `[Error: {"kind":"SchemaVersionNotSupported","message":"Schema version 4 is not in range of supported schema versions [2, 3]."}]`,
     );
 
     await expectTables(db, {

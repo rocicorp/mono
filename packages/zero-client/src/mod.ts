@@ -57,12 +57,16 @@ export type {
   VersionNotSupportedResponse,
   WriteTransaction,
 } from '../../replicache/src/mod.js';
-export {definePermissions} from '../../zero-schema/src/permissions.js';
+export {
+  definePermissions,
+  ANYONE_CAN,
+  NOBODY_CAN,
+} from '../../zero-schema/src/permissions.js';
 export {createSchema} from '../../zero-schema/src/schema.js';
 export {
   createTableSchema,
-  type TableSchemaToRow,
   type TableSchema,
+  column,
 } from '../../zero-schema/src/table-schema.js';
 export {escapeLike} from '../../zql/src/query/escape-like.js';
 export type {
@@ -76,6 +80,8 @@ export type {
   QueryRowType,
   QueryType,
   Smash,
+  Row,
+  Rows,
 } from '../../zql/src/query/query.js';
 export type {TypedView} from '../../zql/src/query/typed-view.js';
 export type {ZeroOptions} from './client/options.js';

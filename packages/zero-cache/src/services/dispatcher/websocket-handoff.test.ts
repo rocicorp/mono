@@ -1,8 +1,9 @@
 import {resolver} from '@rocicorp/resolver';
 import {Server} from 'node:http';
-import {randInt} from '../../../../shared/src/rand.js';
 import {afterAll, afterEach, beforeAll, describe, expect, test} from 'vitest';
 import {WebSocket, WebSocketServer, type RawData} from 'ws';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
+import {randInt} from '../../../../shared/src/rand.js';
 import {inProcChannel} from '../../types/processes.js';
 import {
   installWebSocketHandoff,
@@ -33,10 +34,14 @@ describe('dispatcher/websocket-handoff', () => {
   test('handoff', async () => {
     const [parent, child] = inProcChannel();
 
-    installWebSocketHandoff(server, () => ({
-      payload: {foo: 'boo'},
-      receiver: child,
-    }));
+    installWebSocketHandoff(
+      createSilentLogContext(),
+      () => ({
+        payload: {foo: 'boo'},
+        receiver: child,
+      }),
+      server,
+    );
 
     installWebSocketReceiver(
       wss,
@@ -47,6 +52,53 @@ describe('dispatcher/websocket-handoff', () => {
         });
       },
       parent,
+    );
+
+    const {promise: reply, resolve} = resolver<RawData>();
+    const ws = new WebSocket(`ws://localhost:${port}/`);
+    ws.on('open', () => ws.send('hello'));
+    ws.on('message', msg => resolve(msg));
+
+    expect(String(await reply)).toBe(
+      'Received "hello" and payload {"foo":"boo"}',
+    );
+  });
+
+  test('double handoff', async () => {
+    const [grandParent, parent1] = inProcChannel();
+    const [parent2, child] = inProcChannel();
+
+    // server(grandParent) to parent
+    installWebSocketHandoff(
+      createSilentLogContext(),
+      () => ({
+        payload: {foo: 'boo'},
+        receiver: grandParent,
+      }),
+      server,
+    );
+
+    // parent to child
+    installWebSocketHandoff(
+      createSilentLogContext(),
+      () => ({
+        payload: {foo: 'boo'},
+        receiver: parent2,
+      }),
+      undefined,
+      parent1,
+    );
+
+    // child receives socket
+    installWebSocketReceiver(
+      wss,
+      (ws, payload) => {
+        ws.on('message', msg => {
+          ws.send(`Received "${msg}" and payload ${JSON.stringify(payload)}`);
+          ws.close();
+        });
+      },
+      child,
     );
 
     const {promise: reply, resolve} = resolver<RawData>();

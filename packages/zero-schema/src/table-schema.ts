@@ -7,9 +7,65 @@ export type ValueType = 'string' | 'number' | 'boolean' | 'null' | 'json';
  * `related` calls need to know what the available relationships are.
  * The `schema` type encodes this information.
  */
-export type SchemaValue = {
+export type SchemaValue<T = unknown> =
+  | {
+      type: ValueType;
+      optional?: boolean | undefined;
+    }
+  | EnumSchemaValue<T>
+  | SchemaValueWithCustomType<T>;
+
+type SchemaValueWithCustomType<T> = {
   type: ValueType;
-  optional?: boolean | undefined;
+  optional?: boolean;
+  customType: T;
+};
+
+type EnumSchemaValue<T> = {
+  kind: 'enum';
+  type: 'string';
+  optional?: boolean;
+  customType: T;
+};
+
+export const column = {
+  string<T extends string = string>(optional: boolean = false) {
+    return {
+      type: 'string',
+      optional,
+      customType: null as unknown as T,
+    } as const;
+  },
+  number<T extends number = number>(optional: boolean = false) {
+    return {
+      type: 'number',
+      optional,
+      customType: null as unknown as T,
+    } as const;
+  },
+  boolean<T extends boolean = boolean>(optional: boolean = false) {
+    return {
+      type: 'boolean',
+      optional,
+      customType: null as unknown as T,
+    } as const;
+  },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  json<T = any>(optional: boolean = false) {
+    return {
+      type: 'json',
+      optional,
+      customType: null as unknown as T,
+    } as const;
+  },
+  enumeration<T extends string>(optional: boolean = false) {
+    return {
+      type: 'string',
+      kind: 'enum',
+      customType: null as unknown as T,
+      optional,
+    } as const;
+  },
 };
 
 export type TableSchema = {
@@ -22,10 +78,6 @@ export type TableSchema = {
 export function createTableSchema<const T extends TableSchema>(schema: T) {
   return schema as T;
 }
-
-export type TableSchemaToRow<T extends TableSchema> = {
-  [K in keyof T['columns']]: SchemaValueToTSType<T['columns'][K]>;
-};
 
 type TypeNameToTypeMap = {
   string: string;
@@ -43,9 +95,8 @@ type TypeNameToTypeMap = {
   json: any;
 };
 
-type ColumnTypeName<T extends SchemaValue | ValueType> = T extends SchemaValue
-  ? T['type']
-  : T;
+export type ColumnTypeName<T extends SchemaValue | ValueType> =
+  T extends SchemaValue ? T['type'] : T;
 
 /**
  * Given a schema value, return the TypeScript type.
@@ -59,7 +110,13 @@ export type SchemaValueToTSType<T extends SchemaValue | ValueType> =
     : T extends {
         optional: true;
       }
-    ? TypeNameToTypeMap[ColumnTypeName<T>] | null
+    ?
+        | (T extends SchemaValueWithCustomType<infer V>
+            ? V
+            : TypeNameToTypeMap[ColumnTypeName<T>])
+        | null
+    : T extends SchemaValueWithCustomType<infer V>
+    ? V
     : TypeNameToTypeMap[ColumnTypeName<T>];
 
 export type Supertype<TSchemas extends TableSchema[]> = {

@@ -1,12 +1,11 @@
 /* eslint-disable @typescript-eslint/ban-types */
 
 import type {Expand} from '../../../shared/src/expand.js';
-import type {Row} from '../../../zero-protocol/src/data.js';
+import type {Row as IVMRow} from '../../../zero-protocol/src/data.js';
 import type {
   PullSchemaForRelationship,
   SchemaValueToTSType,
   TableSchema,
-  TableSchemaToRow,
 } from '../../../zero-schema/src/table-schema.js';
 import type {Source} from '../ivm/source.js';
 import type {ExpressionFactory} from './expression.js';
@@ -52,6 +51,16 @@ export type GetFieldTypeNoUndefined<
       null | undefined
     >[]
   : Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, undefined>;
+
+export type Row<T extends TableSchema | Query<TableSchema>> =
+  T extends TableSchema
+    ? {
+        [K in keyof T['columns']]: SchemaValueToTSType<T['columns'][K]>;
+      }
+    : QueryRowType<T & Query<TableSchema>>;
+
+export type Rows<T extends TableSchema | Query<TableSchema>> =
+  T extends TableSchema ? Row<T>[] : QueryReturnType<T & Query<TableSchema>>;
 
 export type QueryReturnType<T extends Query<TableSchema>> = T extends Query<
   TableSchema,
@@ -99,7 +108,7 @@ type InferSubreturn<TSubquery extends Query<TableSchema, QueryType>> =
  * fields have been smashed down.
  */
 export type QueryType = {
-  row: Row;
+  row: IVMRow;
   related: Record<string, QueryType>;
   singular: boolean;
 };
@@ -119,7 +128,7 @@ export type Operator =
   | 'IS NOT';
 
 export type DefaultQueryResultRow<TSchema extends TableSchema> = {
-  row: TableSchemaToRow<TSchema>;
+  row: Row<TSchema>;
   related: {};
   singular: false;
 };
@@ -210,7 +219,7 @@ export interface Query<
   ): Query<TSchema, TReturn>;
 
   start(
-    row: Partial<TableSchemaToRow<TSchema>>,
+    row: Partial<Row<TSchema>>,
     opts?: {inclusive: boolean} | undefined,
   ): Query<TSchema, TReturn>;
 

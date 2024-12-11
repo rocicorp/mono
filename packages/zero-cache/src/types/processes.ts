@@ -5,6 +5,7 @@ import {
   type Serializable,
 } from 'node:child_process';
 import EventEmitter from 'node:events';
+import path from 'node:path';
 import {pid} from 'node:process';
 
 /**
@@ -146,14 +147,27 @@ export function singleProcessMode(): boolean {
   return (process.env[SINGLE_PROCESS] ?? '0') !== '0';
 }
 
-export function childWorker(absModulePath: string, ...args: string[]): Worker {
+/**
+ *
+ * @param modulePath Path to the module file, relative to zero-cache/src/
+ */
+export function childWorker(
+  modulePath: string,
+  env?: NodeJS.ProcessEnv | undefined,
+  ...args: string[]
+): Worker {
+  const ext = path.extname(import.meta.url);
+  // modulePath is .ts. If we have been compiled, it should be changed to .js
+  modulePath = modulePath.replace(/\.ts$/, ext);
+  const absModulePath = new URL(`../${modulePath}`, import.meta.url).pathname;
+
   args.push(...process.argv.slice(2));
 
   if (singleProcessMode()) {
     const [parent, child] = inProcChannel();
     import(absModulePath)
       .then(({default: runWorker}) =>
-        runWorker(parent, ...args).then(
+        runWorker(parent, env ?? process.env, ...args).then(
           () => child.emit('close', 0),
           (err: unknown) => child.emit('error', err),
         ),
@@ -165,6 +179,7 @@ export function childWorker(absModulePath: string, ...args: string[]): Worker {
     fork(absModulePath, args, {
       detached: true, // do not automatically propagate SIGINT
       serialization: 'advanced', // use structured clone for IPC
+      env,
     }),
   );
 }

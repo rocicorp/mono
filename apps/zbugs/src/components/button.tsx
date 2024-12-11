@@ -1,13 +1,13 @@
 import {
   forwardRef,
-  useCallback,
+  memo,
   type CSSProperties,
   type ForwardedRef,
   type ReactNode,
 } from 'react';
 import {umami} from '../umami.js';
 
-export interface Props {
+export interface ButtonProps {
   onAction?: (() => void) | undefined;
   eventName?: string | undefined;
   children?: ReactNode | undefined;
@@ -18,22 +18,25 @@ export interface Props {
   autoFocus?: boolean | undefined;
 }
 
-export const Button = forwardRef(
-  (props: Props, ref: ForwardedRef<HTMLButtonElement>) => {
+export const Button = memo(
+  forwardRef((props: ButtonProps, ref: ForwardedRef<HTMLButtonElement>) => {
     const {onAction, eventName, ...rest} = props;
 
-    const handleMouseDown = useCallback(
-      (e: React.MouseEvent) => {
-        onAction?.();
-        if (eventName) {
-          umami.track(eventName);
-        }
-        // Prevent default to avoid the button taking focus on click, which
-        // will steal focus from anything focused in response to onAction.
-        e.preventDefault();
-      },
-      [onAction, eventName],
-    );
+    const handleMouseDown = (e: React.MouseEvent) => {
+      onAction?.();
+      if (eventName) {
+        umami.track(eventName);
+      }
+
+      // TODO: This is really not the right thing to do. We should only use
+      // preventDefault in the callers if they move focus.... However, this is
+      // because we are using onmousedown which is non-standard and it is easy
+      // to forget to deal with the focus case
+
+      // Prevent default to avoid the button taking focus on click, which
+      // will steal focus from anything focused in response to onAction.
+      e.preventDefault();
+    };
 
     const actionProps = onAction
       ? {
@@ -62,5 +65,5 @@ export const Button = forwardRef(
         {props.children}
       </button>
     );
-  },
+  }),
 );

@@ -1,6 +1,6 @@
 import {FPSMeter} from '@schickling/fps-meter';
 import classNames from 'classnames';
-import {useEffect, useState} from 'react';
+import {memo, useCallback, useEffect, useMemo, useState} from 'react';
 import {useRoute, useSearch} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {useQuery} from 'zero-react/src/use-query.js';
@@ -19,8 +19,9 @@ import {ButtonWithLoginCheck} from './button-with-login-check.js';
 import {Button} from './button.js';
 import {Link} from './link.js';
 
-export function Nav() {
-  const qs = new URLSearchParams(useSearch());
+export const Nav = memo(() => {
+  const search = useSearch();
+  const qs = useMemo(() => new URLSearchParams(search), [search]);
   const [isHome] = useRoute(routes.home);
   const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
   const listContext = zbugsHistoryState?.zbugsListContext;
@@ -29,7 +30,7 @@ export function Nav() {
   const [isMobile, setIsMobile] = useState(false);
   const [showUserPanel, setShowUserPanel] = useState(false); // State to control visibility of user-panel-mobile
   const zero = useZero();
-  const user = useQuery(
+  const [user] = useQuery(
     zero.query.user.where('id', login.loginState?.decoded.sub ?? '').one(),
   );
 
@@ -40,9 +41,9 @@ export function Nav() {
     window.location.search,
   );
 
-  const newIssue = () => {
+  const newIssue = useCallback(() => {
     setShowIssueModal(true);
-  };
+  }, []);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -57,9 +58,9 @@ export function Nav() {
     };
   }, []);
 
-  const handleClick = () => {
+  const handleClick = useCallback(() => {
     setShowUserPanel(!showUserPanel); // Toggle the user panel visibility
-  };
+  }, [showUserPanel]);
 
   return (
     <>
@@ -178,7 +179,7 @@ export function Nav() {
       />
     </>
   );
-}
+});
 
 const addStatusParam = (
   qs: URLSearchParams,

@@ -3,8 +3,13 @@
 import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../shared/src/asserts.js';
 import {hashOfAST} from '../../../zero-protocol/src/ast-hash.js';
-import type {AST, Condition, Ordering} from '../../../zero-protocol/src/ast.js';
-import type {Row} from '../../../zero-protocol/src/data.js';
+import type {
+  AST,
+  Condition,
+  Ordering,
+  System,
+} from '../../../zero-protocol/src/ast.js';
+import type {Row as IVMRow} from '../../../zero-protocol/src/data.js';
 import {
   normalizeTableSchema,
   type NormalizedTableSchema,
@@ -14,7 +19,6 @@ import {
   isJunctionRelationship,
   type PullSchemaForRelationship,
   type TableSchema,
-  type TableSchemaToRow,
 } from '../../../zero-schema/src/table-schema.js';
 import {buildPipeline, type BuilderDelegate} from '../builder/builder.js';
 import {ArrayView} from '../ivm/array-view.js';
@@ -38,6 +42,7 @@ import type {
   Parameter,
   Query,
   QueryType,
+  Row,
   Smash,
 } from './query.js';
 import type {TypedView} from './typed-view.js';
@@ -114,6 +119,8 @@ export abstract class AbstractQuery<
     }
     return this.#hash;
   }
+
+  protected abstract _system: System;
 
   protected abstract _newQuery<
     TSchema extends TableSchema,
@@ -204,6 +211,7 @@ export abstract class AbstractQuery<
           related: [
             ...(this.#ast.related ?? []),
             {
+              system: this._system,
               correlation: {
                 parentField: related.sourceField,
                 childField: related.destField,
@@ -245,6 +253,7 @@ export abstract class AbstractQuery<
           related: [
             ...(this.#ast.related ?? []),
             {
+              system: this._system,
               correlation: {
                 parentField: firstRelation.sourceField,
                 childField: firstRelation.destField,
@@ -255,6 +264,7 @@ export abstract class AbstractQuery<
                 orderBy: addPrimaryKeys(junctionSchema, undefined),
                 related: [
                   {
+                    system: this._system,
                     correlation: {
                       parentField: secondRelation.sourceField,
                       childField: secondRelation.destField,
@@ -313,7 +323,7 @@ export abstract class AbstractQuery<
   }
 
   start(
-    row: Partial<TableSchemaToRow<TSchema>>,
+    row: Partial<Row<TSchema>>,
     opts?: {inclusive: boolean} | undefined,
   ): Query<TSchema, TReturn> {
     return this._newQuery(
@@ -385,6 +395,7 @@ export abstract class AbstractQuery<
       return {
         type: 'correlatedSubquery',
         related: {
+          system: this._system,
           correlation: {
             parentField: related.sourceField,
             childField: related.destField,
@@ -414,6 +425,7 @@ export abstract class AbstractQuery<
       return {
         type: 'correlatedSubquery',
         related: {
+          system: this._system,
           correlation: {
             parentField: firstRelation.sourceField,
             childField: firstRelation.destField,
@@ -425,6 +437,7 @@ export abstract class AbstractQuery<
             where: {
               type: 'correlatedSubquery',
               related: {
+                system: this._system,
                 correlation: {
                   parentField: secondRelation.sourceField,
                   childField: secondRelation.destField,
@@ -450,7 +463,7 @@ export abstract class AbstractQuery<
       const finalOrderBy = addPrimaryKeys(this.#schema, this.#ast.orderBy);
       if (this.#ast.start) {
         const {row} = this.#ast.start;
-        const narrowedRow: Row = {};
+        const narrowedRow: IVMRow = {};
         for (const [field] of finalOrderBy) {
           narrowedRow[field] = row[field];
         }
@@ -502,6 +515,8 @@ export class QueryImpl<
     this.#ast = ast;
   }
 
+  protected readonly _system = 'client';
+
   // Not part of Query or QueryInternal interface
   get [astForTestingSymbol](): AST {
     return this.#ast;
@@ -521,7 +536,14 @@ export class QueryImpl<
 
   materialize<T>(factory?: ViewFactory<TSchema, TReturn, T>): T {
     const ast = this._completeAst();
-    const removeServerQuery = this.#delegate.addServerQuery(ast);
+    const queryCompleteResolver = resolver<true>();
+    let queryGot = false;
+    const removeServerQuery = this.#delegate.addServerQuery(ast, got => {
+      if (got) {
+        queryGot = true;
+        queryCompleteResolver.resolve(true);
+      }
+    });
 
     const input = buildPipeline(ast, this.#delegate);
     let removeCommitObserver: (() => void) | undefined;
@@ -533,9 +555,16 @@ export class QueryImpl<
     };
 
     const view = this.#delegate.batchViewUpdates(() =>
-      (factory ?? arrayViewFactory)(this, input, this.format, onDestroy, cb => {
-        removeCommitObserver = this.#delegate.onTransactionCommit(cb);
-      }),
+      (factory ?? arrayViewFactory)(
+        this,
+        input,
+        this.format,
+        onDestroy,
+        cb => {
+          removeCommitObserver = this.#delegate.onTransactionCommit(cb);
+        },
+        queryGot || queryCompleteResolver.promise,
+      ),
     );
 
     return view as T;
@@ -604,8 +633,9 @@ function arrayViewFactory<
   format: Format,
   onDestroy: () => void,
   onTransactionCommit: (cb: () => void) => void,
+  queryComplete: true | Promise<true>,
 ): TypedView<Smash<TReturn>> {
-  const v = new ArrayView<Smash<TReturn>>(input, format);
+  const v = new ArrayView<Smash<TReturn>>(input, format, queryComplete);
   v.onDestroy = onDestroy;
   onTransactionCommit(() => {
     v.flush();

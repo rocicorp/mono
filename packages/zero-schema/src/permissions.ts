@@ -11,6 +11,9 @@ import type {Condition} from '../../zero-protocol/src/ast.js';
 import {staticParam} from '../../zql/src/query/query-impl.js';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.js';
 
+export const ANYONE_CAN = undefined;
+export const NOBODY_CAN = [];
+
 export type Queries<TSchema extends Schema> = {
   [K in keyof TSchema['tables']]: Query<TSchema['tables'][K]>;
 };
@@ -27,7 +30,7 @@ type AssetPermissions<TAuthDataShape, TSchema extends TableSchema> = {
   update?:
     | {
         preMutation?: PermissionRule<TAuthDataShape, TSchema>[];
-        postProposedMutation?: PermissionRule<TAuthDataShape, TSchema>[];
+        postMutation?: PermissionRule<TAuthDataShape, TSchema>[];
       }
     | undefined;
   delete?: PermissionRule<TAuthDataShape, TSchema>[] | undefined;
@@ -99,8 +102,8 @@ function compileRowConfig<TAuthDataShape, TSchema extends TableSchema>(
         rowRules.update?.preMutation,
         expressionBuilder,
       ),
-      postProposedMutation: compileRules(
-        rowRules.update?.postProposedMutation,
+      postMutation: compileRules(
+        rowRules.update?.postMutation,
         expressionBuilder,
       ),
     },
@@ -146,8 +149,8 @@ function compileCellConfig<TAuthDataShape, TSchema extends TableSchema>(
       insert: compileRules(rules.insert, expressionBuilder),
       update: {
         preMutation: compileRules(rules.update?.preMutation, expressionBuilder),
-        postProposedMutation: compileRules(
-          rules.update?.postProposedMutation,
+        postMutation: compileRules(
+          rules.update?.postMutation,
           expressionBuilder,
         ),
       },

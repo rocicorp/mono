@@ -1,10 +1,10 @@
-import type {ErrorMessage} from '../../../zero-protocol/src/mod.js';
+import type {ErrorBody} from '../../../zero-protocol/src/error.js';
 
 export class ErrorForClient extends Error {
-  readonly errorMessage;
-  constructor(errorMessage: ErrorMessage, options?: ErrorOptions) {
-    super(JSON.stringify(errorMessage), options);
-    this.errorMessage = errorMessage;
+  readonly errorBody;
+  constructor(errorBody: ErrorBody, options?: ErrorOptions) {
+    super(JSON.stringify(errorBody), options);
+    this.errorBody = errorBody;
   }
 }
 

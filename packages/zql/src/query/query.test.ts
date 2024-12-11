@@ -1,15 +1,15 @@
 /* eslint-disable @typescript-eslint/ban-types */
 import {describe, expectTypeOf, test} from 'vitest';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
-import type {
-  Supertype,
-  TableSchema,
-  TableSchemaToRow,
+import {
+  column,
+  type Supertype,
+  type TableSchema,
 } from '../../../zero-schema/src/table-schema.js';
 import type {ExpressionFactory} from './expression.js';
 import {staticParam} from './query-impl.js';
 import type {AdvancedQuery} from './query-internal.js';
-import {type Query, type QueryType} from './query.js';
+import {type Query, type QueryType, type Row} from './query.js';
 
 const mockQuery = {
   select() {
@@ -37,6 +37,9 @@ const mockQuery = {
   one() {
     return this;
   },
+  run() {
+    return this;
+  },
 };
 
 type TestSchema = {
@@ -49,6 +52,58 @@ type TestSchema = {
   primaryKey: ['s'];
   relationships: {};
 };
+
+type SchemaWithEnums = {
+  tableName: 'testWithEnums';
+  columns: {
+    s: {type: 'string'};
+    e: {kind: 'enum'; type: 'string'; customType: 'open' | 'closed'};
+  };
+  primaryKey: ['s'];
+  relationships: {
+    self: {
+      sourceField: ['s'];
+      destField: ['s'];
+      destSchema: SchemaWithEnums;
+    };
+  };
+};
+
+type Opaque<BaseType, BrandType = unknown> = BaseType & {
+  readonly [base]: BaseType;
+  readonly [brand]: BrandType;
+};
+
+declare const base: unique symbol;
+declare const brand: unique symbol;
+
+type Timestamp = Opaque<number>;
+type IdOf<T> = Opaque<string, T>;
+
+function timestamp(n: number): Timestamp {
+  return n as Timestamp;
+}
+
+const {string, number, json, enumeration, boolean} = column;
+const schemaWithAdvancedTypes = {
+  tableName: 'schemaWithAdvancedTypes',
+  columns: {
+    s: string(),
+    n: number<Timestamp>(),
+    b: boolean(),
+    j: json<{foo: string; bar: boolean}>(),
+    e: enumeration<'open' | 'closed'>(),
+    otherId: string<IdOf<SchemaWithEnums>>(),
+  },
+  primaryKey: ['s'],
+  relationships: {
+    self: {
+      sourceField: ['s'],
+      destField: ['s'],
+      destSchema: () => schemaWithAdvancedTypes,
+    },
+  },
+} as const;
 
 type SchemaWithJson = {
   tableName: 'testWithJson';
@@ -111,8 +166,72 @@ describe('types', () => {
 
     // no select? All fields are returned.
     expectTypeOf(query.materialize().data).toMatchTypeOf<
-      Array<TableSchemaToRow<TestSchema>>
+      Array<Row<TestSchema>>
     >();
+  });
+
+  test('simple select with enums', () => {
+    const query = mockQuery as unknown as Query<SchemaWithEnums>;
+    expectTypeOf(query.run()).toMatchTypeOf<
+      Array<{
+        s: string;
+        e: 'open' | 'closed';
+      }>
+    >();
+
+    const q2 = mockQuery as unknown as Query<typeof schemaWithAdvancedTypes>;
+    q2.where('e', '=', 'open');
+    // @ts-expect-error - invalid enum value
+    q2.where('e', 'bogus');
+    expectTypeOf(q2.run()).toMatchTypeOf<
+      Array<{
+        s: string;
+        n: Timestamp;
+        b: boolean;
+        j: {foo: string; bar: boolean};
+        e: 'open' | 'closed';
+        otherId: IdOf<SchemaWithEnums>;
+      }>
+    >();
+
+    // @ts-expect-error - 'foo' is not an id of `SchemaWithEnums`
+    q2.where('otherId', '=', 'foo');
+
+    // @ts-expect-error - 42 is not a timestamp
+    q2.where('n', '>', 42);
+
+    q2.where('n', '>', timestamp(42));
+  });
+
+  test('related with advanced types', () => {
+    const query = mockQuery as unknown as Query<typeof schemaWithAdvancedTypes>;
+
+    const query2 = query.related('self');
+    expectTypeOf(query2.run()).toMatchTypeOf<
+      Array<{
+        s: string;
+        n: Timestamp;
+        b: boolean;
+        j: {foo: string; bar: boolean};
+        e: 'open' | 'closed';
+        otherId: IdOf<SchemaWithEnums>;
+        self: Array<{
+          s: string;
+          n: Timestamp;
+          b: boolean;
+          j: {foo: string; bar: boolean};
+          e: 'open' | 'closed';
+          otherId: IdOf<SchemaWithEnums>;
+        }>;
+      }>
+    >();
+
+    // @ts-expect-error - missing enum value
+    query2.related('self', sq => sq.where('e', 'bogus'));
+    query2.related('self', sq => sq.where('e', 'open'));
+    query2.related('self', sq =>
+      sq.related('self', sq => sq.where('e', 'open')),
+    );
   });
 
   test('related', () => {
@@ -125,8 +244,8 @@ describe('types', () => {
 
     expectTypeOf(query2.materialize().data).toMatchTypeOf<
       Array<
-        TableSchemaToRow<TestSchemaWithMoreRelationships> & {
-          test: Array<TableSchemaToRow<TestSchema>>;
+        Row<TestSchemaWithMoreRelationships> & {
+          test: Array<Row<TestSchema>>;
         }
       >
     >();
@@ -153,6 +272,28 @@ describe('types', () => {
         }>;
       }>
     >();
+  });
+
+  test('related with enums', () => {
+    const query = mockQuery as unknown as Query<SchemaWithEnums>;
+
+    const query2 = query.related('self');
+    expectTypeOf(query2.run()).toMatchTypeOf<
+      Array<
+        Row<SchemaWithEnums> & {
+          self: Array<Row<SchemaWithEnums>>;
+        }
+      >
+    >();
+  });
+
+  test('where against enum field', () => {
+    const query = mockQuery as unknown as Query<SchemaWithEnums>;
+
+    query.where('e', '=', 'open');
+    query.where('e', '=', 'closed');
+    // @ts-expect-error - invalid enum value
+    query.where('e', '=', 'bogus');
   });
 
   test('one', () => {
@@ -309,10 +450,10 @@ describe('types', () => {
 
     expectTypeOf(query2.materialize().data).toMatchTypeOf<
       Array<
-        TableSchemaToRow<TestSchemaWithMoreRelationships> & {
+        Row<TestSchemaWithMoreRelationships> & {
           self: Array<
-            TableSchemaToRow<TestSchemaWithMoreRelationships> & {
-              test: Array<TableSchemaToRow<TestSchema>>;
+            Row<TestSchemaWithMoreRelationships> & {
+              test: Array<Row<TestSchema>>;
             }
           >;
         }
@@ -332,7 +473,7 @@ describe('types', () => {
     query.where('b', '=', 'false');
 
     expectTypeOf(query.where('b', '=', true).materialize().data).toMatchTypeOf<
-      Array<TableSchemaToRow<TestSchema>>
+      Array<Row<TestSchema>>
     >();
   });
 
@@ -360,7 +501,7 @@ describe('types', () => {
     query.where('b', 'false');
 
     expectTypeOf(query.where('b', true).materialize().data).toMatchTypeOf<
-      Array<TableSchemaToRow<TestSchema>>
+      Array<Row<TestSchema>>
     >();
   });
 

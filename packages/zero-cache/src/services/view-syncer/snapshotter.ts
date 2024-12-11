@@ -3,7 +3,7 @@ import {assert} from '../../../../shared/src/asserts.js';
 import {must} from '../../../../shared/src/must.js';
 import * as v from '../../../../shared/src/valita.js';
 import {Database} from '../../../../zqlite/src/db.js';
-import type {LiteTableSpec} from '../../db/specs.js';
+import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.js';
 import {StatementRunner} from '../../db/statements.js';
 import {jsonObjectSchema, type JSONValue} from '../../types/bigint-json.js';
 import {
@@ -23,6 +23,7 @@ import {
   getReplicationVersions,
   ZERO_VERSION_COLUMN_NAME as ROW_VERSION,
 } from '../replicator/schema/replication-state.js';
+import {fromSQLiteTypes} from '../../../../zqlite/src/table-source.js';
 
 /**
  * A `Snapshotter` manages the progression of database snapshots for a
@@ -153,7 +154,7 @@ export class Snapshotter {
    * on `prev` before each iteration, and (2) rollback to the save point after
    * the iteration.
    */
-  advance(tables: Map<string, LiteTableSpec>): SnapshotDiff {
+  advance(tables: Map<string, LiteAndZqlSpec>): SnapshotDiff {
     const {prev, curr} = this.advanceWithoutDiff();
     return new Diff(tables, prev, curr);
   }
@@ -332,13 +333,13 @@ class Snapshot {
 }
 
 class Diff implements SnapshotDiff {
-  readonly tables: Map<string, LiteTableSpec>;
+  readonly tables: Map<string, LiteAndZqlSpec>;
   readonly prev: Snapshot;
   readonly curr: Snapshot;
   readonly changes: number;
 
   constructor(
-    tables: Map<string, LiteTableSpec>,
+    tables: Map<string, LiteAndZqlSpec>,
     prev: Snapshot,
     curr: Snapshot,
   ) {
@@ -384,7 +385,7 @@ class Diff implements SnapshotDiff {
               // The current map of `TableSpec`s may not have the correct or complete information.
               throw new SchemaChangeError(table);
             }
-            const tableSpec = must(this.tables.get(table));
+            const {tableSpec, zqlSpec} = must(this.tables.get(table));
             if (op === TRUNCATE_OP) {
               truncates.startTruncate(tableSpec);
               continue; // loop around to pull rows from the TruncateTracker.
@@ -405,6 +406,14 @@ class Diff implements SnapshotDiff {
               continue;
             }
 
+            // Modify the values in place when converting to ZQL rows
+            // This is safe since we're the first node in the iterator chain.
+            if (prevValue) {
+              fromSQLiteTypes(zqlSpec, prevValue);
+            }
+            if (nextValue) {
+              fromSQLiteTypes(zqlSpec, nextValue);
+            }
             return {value: {table, prevValue, nextValue} satisfies Change};
           }
         } catch (e) {

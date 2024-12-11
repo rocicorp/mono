@@ -1,12 +1,12 @@
 import {expect, suite, test} from 'vitest';
 import {Catch} from './catch.js';
-import type {Start} from './operator.js';
 import {type Bound, Skip} from './skip.js';
 import type {SourceChange} from './source.js';
 import {createSource} from './test/source-factory.js';
+import type {FetchRequest} from './operator.js';
 
 suite('fetch', () => {
-  function t(c: {skipBound: Bound; fetchBound: Start | undefined}) {
+  function t(c: {skipBound: Bound; fetchRequest: FetchRequest}) {
     const ms = createSource(
       'users',
       {
@@ -53,14 +53,14 @@ suite('fetch', () => {
 
     const skip = new Skip(conn, c.skipBound);
     const out = new Catch(skip);
-    return out.fetch({start: c.fetchBound});
+    return out.fetch(c.fetchRequest);
   }
 
   test('c1', () => {
     expect(
       t({
         skipBound: {row: {startDate: '2023-03-31', id: 5}, exclusive: false},
-        fetchBound: undefined,
+        fetchRequest: {},
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -96,7 +96,7 @@ suite('fetch', () => {
     expect(
       t({
         skipBound: {row: {startDate: '2023-03-31', id: 5}, exclusive: true},
-        fetchBound: undefined,
+        fetchRequest: {},
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -132,7 +132,7 @@ suite('fetch', () => {
     expect(
       t({
         skipBound: {row: {startDate: '2023-04-01', id: 5}, exclusive: false},
-        fetchBound: undefined,
+        fetchRequest: {},
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -168,7 +168,7 @@ suite('fetch', () => {
     expect(
       t({
         skipBound: {row: {startDate: '2023-04-01', id: 5}, exclusive: true},
-        fetchBound: undefined,
+        fetchRequest: {},
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -196,35 +196,7 @@ suite('fetch', () => {
     expect(
       t({
         skipBound: {row: {startDate: '2023-04-02', id: 4}, exclusive: false},
-        fetchBound: undefined,
-      }),
-    ).toMatchInlineSnapshot(`
-      [
-        {
-          "relationships": {},
-          "row": {
-            "id": 6,
-            "name": "Darick",
-            "startDate": "2023-09-01",
-          },
-        },
-        {
-          "relationships": {},
-          "row": {
-            "id": 7,
-            "name": "Matt",
-            "startDate": "2024-06-01",
-          },
-        },
-      ]
-    `);
-  });
-
-  test('c5', () => {
-    expect(
-      t({
-        skipBound: {row: {startDate: '2023-04-02', id: 4}, exclusive: true},
-        fetchBound: undefined,
+        fetchRequest: {},
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -251,19 +223,11 @@ suite('fetch', () => {
   test('c6', () => {
     expect(
       t({
-        skipBound: {row: {startDate: '2023-04-01', id: 5}, exclusive: false},
-        fetchBound: {row: {startDate: '2023-03-30', id: 5}, basis: 'before'},
+        skipBound: {row: {startDate: '2023-04-02', id: 4}, exclusive: true},
+        fetchRequest: {},
       }),
     ).toMatchInlineSnapshot(`
       [
-        {
-          "relationships": {},
-          "row": {
-            "id": 5,
-            "name": "Alex",
-            "startDate": "2023-04-01",
-          },
-        },
         {
           "relationships": {},
           "row": {
@@ -288,7 +252,9 @@ suite('fetch', () => {
     expect(
       t({
         skipBound: {row: {startDate: '2023-04-01', id: 5}, exclusive: false},
-        fetchBound: {row: {startDate: '2023-03-30', id: 5}, basis: 'at'},
+        fetchRequest: {
+          start: {row: {startDate: '2023-03-30', id: 5}, basis: 'at'},
+        },
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -324,43 +290,9 @@ suite('fetch', () => {
     expect(
       t({
         skipBound: {row: {startDate: '2023-04-01', id: 5}, exclusive: false},
-        fetchBound: {row: {startDate: '2023-03-30', id: 5}, basis: 'after'},
-      }),
-    ).toMatchInlineSnapshot(`
-      [
-        {
-          "relationships": {},
-          "row": {
-            "id": 5,
-            "name": "Alex",
-            "startDate": "2023-04-01",
-          },
+        fetchRequest: {
+          start: {row: {startDate: '2023-03-30', id: 5}, basis: 'after'},
         },
-        {
-          "relationships": {},
-          "row": {
-            "id": 6,
-            "name": "Darick",
-            "startDate": "2023-09-01",
-          },
-        },
-        {
-          "relationships": {},
-          "row": {
-            "id": 7,
-            "name": "Matt",
-            "startDate": "2024-06-01",
-          },
-        },
-      ]
-    `);
-  });
-
-  test('c9', () => {
-    expect(
-      t({
-        skipBound: {row: {startDate: '2023-04-01', id: 5}, exclusive: false},
-        fetchBound: {row: {startDate: '2023-04-01', id: 5}, basis: 'before'},
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -396,7 +328,9 @@ suite('fetch', () => {
     expect(
       t({
         skipBound: {row: {startDate: '2023-04-01', id: 5}, exclusive: false},
-        fetchBound: {row: {startDate: '2023-04-01', id: 5}, basis: 'at'},
+        fetchRequest: {
+          start: {row: {startDate: '2023-04-01', id: 5}, basis: 'at'},
+        },
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -432,7 +366,9 @@ suite('fetch', () => {
     expect(
       t({
         skipBound: {row: {startDate: '2023-04-01', id: 5}, exclusive: false},
-        fetchBound: {row: {startDate: '2023-04-01', id: 5}, basis: 'after'},
+        fetchRequest: {
+          start: {row: {startDate: '2023-04-01', id: 5}, basis: 'after'},
+        },
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -460,7 +396,9 @@ suite('fetch', () => {
     expect(
       t({
         skipBound: {row: {startDate: '2023-04-01', id: 5}, exclusive: true},
-        fetchBound: {row: {startDate: '2023-04-01', id: 5}, basis: 'at'},
+        fetchRequest: {
+          start: {row: {startDate: '2023-04-01', id: 5}, basis: 'at'},
+        },
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -488,7 +426,9 @@ suite('fetch', () => {
     expect(
       t({
         skipBound: {row: {startDate: '2023-04-02', id: 5}, exclusive: false},
-        fetchBound: {row: {startDate: '2023-04-01', id: 5}, basis: 'at'},
+        fetchRequest: {
+          start: {row: {startDate: '2023-04-01', id: 5}, basis: 'at'},
+        },
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -516,7 +456,9 @@ suite('fetch', () => {
     expect(
       t({
         skipBound: {row: {startDate: '2023-04-02', id: 5}, exclusive: true},
-        fetchBound: {row: {startDate: '2023-04-01', id: 5}, basis: 'at'},
+        fetchRequest: {
+          start: {row: {startDate: '2023-04-01', id: 5}, basis: 'at'},
+        },
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -543,7 +485,9 @@ suite('fetch', () => {
     expect(
       t({
         skipBound: {row: {startDate: '2023-04-02', id: 5}, exclusive: true},
-        fetchBound: {row: {startDate: '2023-04-01', id: 5}, basis: 'after'},
+        fetchRequest: {
+          start: {row: {startDate: '2023-04-01', id: 5}, basis: 'after'},
+        },
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -571,71 +515,9 @@ suite('fetch', () => {
     expect(
       t({
         skipBound: {row: {startDate: '2023-04-02', id: 5}, exclusive: true},
-        fetchBound: {row: {startDate: '2023-04-02', id: 5}, basis: 'after'},
-      }),
-    ).toMatchInlineSnapshot(`
-      [
-        {
-          "relationships": {},
-          "row": {
-            "id": 6,
-            "name": "Darick",
-            "startDate": "2023-09-01",
-          },
+        fetchRequest: {
+          start: {row: {startDate: '2023-04-02', id: 5}, basis: 'after'},
         },
-        {
-          "relationships": {},
-          "row": {
-            "id": 7,
-            "name": "Matt",
-            "startDate": "2024-06-01",
-          },
-        },
-      ]
-    `);
-  });
-
-  test('c17', () => {
-    expect(
-      t({
-        skipBound: {row: {startDate: '2023-04-01', id: 5}, exclusive: false},
-        fetchBound: {row: {startDate: '2023-04-02', id: 5}, basis: 'before'},
-      }),
-    ).toMatchInlineSnapshot(`
-      [
-        {
-          "relationships": {},
-          "row": {
-            "id": 5,
-            "name": "Alex",
-            "startDate": "2023-04-01",
-          },
-        },
-        {
-          "relationships": {},
-          "row": {
-            "id": 6,
-            "name": "Darick",
-            "startDate": "2023-09-01",
-          },
-        },
-        {
-          "relationships": {},
-          "row": {
-            "id": 7,
-            "name": "Matt",
-            "startDate": "2024-06-01",
-          },
-        },
-      ]
-    `);
-  });
-
-  test('c18', () => {
-    expect(
-      t({
-        skipBound: {row: {startDate: '2023-04-01', id: 5}, exclusive: false},
-        fetchBound: {row: {startDate: '2023-09-02', id: 6}, basis: 'before'},
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -663,9 +545,331 @@ suite('fetch', () => {
     expect(
       t({
         skipBound: {row: {startDate: '2023-04-02', id: 5}, exclusive: true},
-        fetchBound: {row: {startDate: '2030-04-02', id: 5}, basis: 'after'},
+        fetchRequest: {
+          start: {row: {startDate: '2030-04-02', id: 5}, basis: 'after'},
+        },
       }),
     ).toMatchInlineSnapshot(`[]`);
+  });
+
+  test('fetch request constraint does not match bounds', () => {
+    expect(
+      t({
+        skipBound: {row: {startDate: '2023-04-01', id: 5}, exclusive: false},
+        fetchRequest: {constraint: {id: 6}},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "id": 6,
+            "name": "Darick",
+            "startDate": "2023-09-01",
+          },
+        },
+      ]
+    `);
+  });
+
+  test('fetch request constraint does not match bounds, only row matches constraint is before bounds', () => {
+    expect(
+      t({
+        skipBound: {row: {startDate: '2023-04-01', id: 5}, exclusive: false},
+        fetchRequest: {constraint: {id: 3}},
+      }),
+    ).toMatchInlineSnapshot(`
+      []
+    `);
+  });
+
+  suite('reverse', () => {
+    test('inclusive bound, no start', () => {
+      expect(
+        t({
+          skipBound: {
+            row: {startDate: '2023-03-31', id: 5},
+            exclusive: false,
+          },
+          fetchRequest: {reverse: true},
+        }),
+      ).toMatchInlineSnapshot(`
+        [
+          {
+            "relationships": {},
+            "row": {
+              "id": 7,
+              "name": "Matt",
+              "startDate": "2024-06-01",
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "id": 6,
+              "name": "Darick",
+              "startDate": "2023-09-01",
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "id": 5,
+              "name": "Alex",
+              "startDate": "2023-04-01",
+            },
+          },
+        ]
+      `);
+    });
+
+    test('exclusive bound, no start', () => {
+      expect(
+        t({
+          skipBound: {row: {startDate: '2023-03-31', id: 5}, exclusive: true},
+          fetchRequest: {reverse: true},
+        }),
+      ).toMatchInlineSnapshot(`
+        [
+          {
+            "relationships": {},
+            "row": {
+              "id": 7,
+              "name": "Matt",
+              "startDate": "2024-06-01",
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "id": 6,
+              "name": "Darick",
+              "startDate": "2023-09-01",
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "id": 5,
+              "name": "Alex",
+              "startDate": "2023-04-01",
+            },
+          },
+        ]
+      `);
+    });
+
+    test('inclusive bound, no start, bound equals a row', () => {
+      expect(
+        t({
+          skipBound: {
+            row: {startDate: '2023-04-01', id: 5},
+            exclusive: false,
+          },
+          fetchRequest: {reverse: true},
+        }),
+      ).toMatchInlineSnapshot(`
+        [
+          {
+            "relationships": {},
+            "row": {
+              "id": 7,
+              "name": "Matt",
+              "startDate": "2024-06-01",
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "id": 6,
+              "name": "Darick",
+              "startDate": "2023-09-01",
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "id": 5,
+              "name": "Alex",
+              "startDate": "2023-04-01",
+            },
+          },
+        ]
+      `);
+    });
+
+    test('exclusive bound, no start, bound equals a row', () => {
+      expect(
+        t({
+          skipBound: {
+            row: {startDate: '2023-04-01', id: 5},
+            exclusive: true,
+          },
+          fetchRequest: {reverse: true},
+        }),
+      ).toMatchInlineSnapshot(`
+        [
+          {
+            "relationships": {},
+            "row": {
+              "id": 7,
+              "name": "Matt",
+              "startDate": "2024-06-01",
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "id": 6,
+              "name": "Darick",
+              "startDate": "2023-09-01",
+            },
+          },
+        ]
+      `);
+    });
+
+    test('inclusive bound, inclusive start', () => {
+      expect(
+        t({
+          skipBound: {
+            row: {startDate: '2023-04-01', id: 5},
+            exclusive: false,
+          },
+          fetchRequest: {
+            start: {row: {startDate: '2023-03-30', id: 5}, basis: 'at'},
+            reverse: true,
+          },
+        }),
+      ).toMatchInlineSnapshot(`[]`);
+    });
+
+    test('inclusive bound, inclusive start, bound and start equal and equal to row', () => {
+      expect(
+        t({
+          skipBound: {
+            row: {startDate: '2023-04-01', id: 5},
+            exclusive: false,
+          },
+          fetchRequest: {
+            start: {row: {startDate: '2023-04-01', id: 5}, basis: 'at'},
+            reverse: true,
+          },
+        }),
+      ).toMatchInlineSnapshot(`
+        [
+          {
+            "relationships": {},
+            "row": {
+              "id": 5,
+              "name": "Alex",
+              "startDate": "2023-04-01",
+            },
+          },
+        ]
+      `);
+    });
+
+    test('inclusive bound, exclusive start', () => {
+      expect(
+        t({
+          skipBound: {
+            row: {startDate: '2023-04-01', id: 5},
+            exclusive: false,
+          },
+          fetchRequest: {
+            start: {row: {startDate: '2023-03-30', id: 5}, basis: 'after'},
+            reverse: true,
+          },
+        }),
+      ).toMatchInlineSnapshot(`[]`);
+    });
+
+    test('exclusive bound, inclusive start, bound and start equal', () => {
+      expect(
+        t({
+          skipBound: {row: {startDate: '2023-04-01', id: 5}, exclusive: true},
+          fetchRequest: {
+            start: {row: {startDate: '2023-04-01', id: 5}, basis: 'at'},
+            reverse: true,
+          },
+        }),
+      ).toMatchInlineSnapshot(`[]`);
+    });
+
+    test('exclusive bound, exclusive start', () => {
+      expect(
+        t({
+          skipBound: {row: {startDate: '2023-04-00', id: 5}, exclusive: true},
+          fetchRequest: {
+            start: {row: {startDate: '2023-09-01', id: 5}, basis: 'after'},
+            reverse: true,
+          },
+        }),
+      ).toMatchInlineSnapshot(`
+        [
+          {
+            "relationships": {},
+            "row": {
+              "id": 5,
+              "name": "Alex",
+              "startDate": "2023-04-01",
+            },
+          },
+        ]
+      `);
+    });
+
+    test('exclusive bound, exclusive start, start and bound equal', () => {
+      expect(
+        t({
+          skipBound: {row: {startDate: '2023-04-02', id: 5}, exclusive: true},
+          fetchRequest: {
+            start: {row: {startDate: '2023-04-02', id: 5}, basis: 'after'},
+            reverse: true,
+          },
+        }),
+      ).toMatchInlineSnapshot(`[]`);
+    });
+
+    test('exclusive bound, exclusive start, start and bound equal, fairly apart', () => {
+      expect(
+        t({
+          skipBound: {row: {startDate: '2020-08-01', id: 2}, exclusive: true},
+          fetchRequest: {
+            start: {row: {startDate: '2023-06-01', id: 7}, basis: 'after'},
+            reverse: true,
+          },
+        }),
+      ).toMatchInlineSnapshot(`
+        [
+          {
+            "relationships": {},
+            "row": {
+              "id": 5,
+              "name": "Alex",
+              "startDate": "2023-04-01",
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "id": 4,
+              "name": "Cesar",
+              "startDate": "2022-12-01",
+            },
+          },
+          {
+            "relationships": {},
+            "row": {
+              "id": 3,
+              "name": "Greg",
+              "startDate": "2021-12-07",
+            },
+          },
+        ]
+      `);
+    });
   });
 });
 

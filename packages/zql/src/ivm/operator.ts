@@ -47,11 +47,14 @@ export type FetchRequest = {
   readonly constraint?: Constraint | undefined;
   /** If supplied, `start.row` must have previously been output by fetch or push. */
   readonly start?: Start | undefined;
+
+  /** Whether to fetch in reverse order of the SourceSchema's sort. */
+  readonly reverse?: boolean | undefined;
 };
 
 export type Start = {
   readonly row: Row;
-  readonly basis: 'before' | 'at' | 'after';
+  readonly basis: 'at' | 'after';
 };
 
 /**

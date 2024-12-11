@@ -18,6 +18,7 @@ export enum ErrorKind {
   Unauthorized = 'Unauthorized',
   VersionNotSupported = 'VersionNotSupported',
   SchemaVersionNotSupported = 'SchemaVersionNotSupported',
+  ServerOverloaded = 'ServerOverloaded',
   Internal = 'Internal',
 }
 
@@ -38,10 +39,29 @@ export const errorKindSchema = v.union(
   v.literal(ErrorKind.Internal),
 );
 
+const basicErrorBodySchema = v.object({
+  kind: errorKindSchema,
+  message: v.string(),
+});
+
+const serverOverloadedBodySchema = v.object({
+  kind: v.literal(ErrorKind.ServerOverloaded),
+  message: v.string(),
+  minBackoffMs: v.number().optional(),
+});
+
+export const errorBodySchema = v.union(
+  basicErrorBodySchema,
+  serverOverloadedBodySchema,
+);
+
+export type ServerOverloadedBody = v.Infer<typeof serverOverloadedBodySchema>;
+
+export type ErrorBody = v.Infer<typeof errorBodySchema>;
+
 export const errorMessageSchema: v.Type<ErrorMessage> = v.tuple([
   v.literal('error'),
-  errorKindSchema,
-  v.string(),
+  errorBodySchema,
 ]);
 
-export type ErrorMessage = ['error', ErrorKind, string];
+export type ErrorMessage = ['error', ErrorBody];

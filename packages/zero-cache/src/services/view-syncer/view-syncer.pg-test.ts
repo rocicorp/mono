@@ -5,12 +5,15 @@ import {sleep} from '../../../../shared/src/sleep.js';
 import type {AST} from '../../../../zero-protocol/src/ast.js';
 import {
   type Downstream,
+  type ErrorBody,
   ErrorKind,
-  type ErrorMessage,
   type PokePartBody,
   type PokeStartBody,
   type QueriesPatch,
 } from '../../../../zero-protocol/src/mod.js';
+import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.js';
+import {definePermissions} from '../../../../zero-schema/src/permissions.js';
+import type {ExpressionBuilder} from '../../../../zql/src/query/expression.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {StatementRunner} from '../../db/statements.js';
 import {testDBs} from '../../test/db.js';
@@ -41,9 +44,6 @@ import {PipelineDriver} from './pipeline-driver.js';
 import {initViewSyncerSchema} from './schema/init.js';
 import {Snapshotter} from './snapshotter.js';
 import {pickToken, type SyncContext, ViewSyncerService} from './view-syncer.js';
-import type {ExpressionBuilder} from '../../../../zql/src/query/expression.js';
-import {definePermissions} from '../../../../zero-schema/src/permissions.js';
-import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.js';
 
 const SHARD_ID = 'ABC';
 
@@ -92,6 +92,11 @@ const ISSUES_QUERY: AST = {
   orderBy: [['id', 'asc']],
 };
 
+const COMMENTS_QUERY: AST = {
+  table: 'comments',
+  orderBy: [['id', 'asc']],
+};
+
 const ISSUES_QUERY_WITH_EXISTS: AST = {
   table: 'issues',
   orderBy: [['id', 'asc']],
@@ -99,6 +104,7 @@ const ISSUES_QUERY_WITH_EXISTS: AST = {
     type: 'correlatedSubquery',
     op: 'EXISTS',
     related: {
+      system: 'client',
       correlation: {
         parentField: ['id'],
         childField: ['issueID'],
@@ -114,6 +120,7 @@ const ISSUES_QUERY_WITH_EXISTS: AST = {
           type: 'correlatedSubquery',
           op: 'EXISTS',
           related: {
+            system: 'client',
             correlation: {
               parentField: ['labelID'],
               childField: ['id'],
@@ -159,6 +166,7 @@ const ISSUES_QUERY_WITH_RELATED: AST = {
   },
   related: [
     {
+      system: 'client',
       correlation: {
         parentField: ['id'],
         childField: ['issueID'],
@@ -173,6 +181,7 @@ const ISSUES_QUERY_WITH_RELATED: AST = {
         ],
         related: [
           {
+            system: 'client',
             correlation: {
               parentField: ['labelID'],
               childField: ['id'],
@@ -199,22 +208,42 @@ const USERS_QUERY: AST = {
   orderBy: [['id', 'asc']],
 };
 
+const issues = {
+  tableName: 'issues',
+  columns: {
+    id: {type: 'string'},
+    title: {type: 'string'},
+    owner: {type: 'string'},
+    parent: {type: 'string'},
+    big: {type: 'number'},
+    json: {type: 'json'},
+  },
+  primaryKey: ['id'],
+  relationships: {},
+} as const;
+
+const comments = {
+  tableName: 'comments',
+  columns: {
+    id: {type: 'string'},
+    issueID: {type: 'string'},
+    text: {type: 'string'},
+  },
+  primaryKey: ['id'],
+  relationships: {
+    issue: {
+      sourceField: 'issueID',
+      destField: 'id',
+      destSchema: issues,
+    },
+  },
+} as const;
+
 const schema = {
   version: 1,
   tables: {
-    issues: {
-      tableName: 'issues',
-      columns: {
-        id: {type: 'string'},
-        title: {type: 'string'},
-        owner: {type: 'string'},
-        parent: {type: 'string'},
-        big: {type: 'number'},
-        json: {type: 'json'},
-      },
-      primaryKey: ['id'],
-      relationships: {},
-    },
+    issues,
+    comments,
   },
 } as const;
 
@@ -223,15 +252,26 @@ type AuthData = {
   role: 'user' | 'admin';
   iat: number;
 };
+const canSeeIssue = (
+  authData: AuthData,
+  eb: ExpressionBuilder<typeof schema.tables.issues>,
+) => eb.cmpLit(authData.role, '=', 'admin');
 const permissions: PermissionsConfig | undefined = await definePermissions<
   AuthData,
   typeof schema
 >(schema, () => ({
   issues: {
     row: {
+      select: [canSeeIssue],
+    },
+  },
+  comments: {
+    row: {
       select: [
-        (authData, eb: ExpressionBuilder<typeof schema.tables.issues>) =>
-          eb.cmpLit(authData.role, '=', 'admin'),
+        (authData, eb: ExpressionBuilder<typeof schema.tables.comments>) =>
+          eb.exists('issue', iq =>
+            iq.where(({eb}) => canSeeIssue(authData, eb)),
+          ),
       ],
     },
   },
@@ -289,6 +329,12 @@ async function setup(permissions: PermissionsConfig = {}) {
     name text,
     _0_version TEXT NOT NULL
   );
+  CREATE TABLE comments (
+    id TEXT PRIMARY KEY,
+    issueID TEXT,
+    text TEXT,
+    _0_version TEXT NOT NULL
+  );
 
   INSERT INTO "zero_ABC.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
     VALUES ('9876', 'foo', 42, '00');
@@ -309,6 +355,9 @@ async function setup(permissions: PermissionsConfig = {}) {
 
   INSERT INTO "issueLabels" (issueID, labelID, _0_version) VALUES ('1', '1', '00');
   INSERT INTO "labels" (id, name, _0_version) VALUES ('1', 'bug', '00');
+
+  INSERT INTO "comments" (id, issueID, text, _0_version) VALUES ('1', '1', 'comment 1', '00');
+  INSERT INTO "comments" (id, issueID, text, _0_version) VALUES ('2', '1', 'comment 2', '00');
   `);
 
   const cvrDB = await testDBs.create('view_syncer_service_test');
@@ -337,8 +386,8 @@ async function setup(permissions: PermissionsConfig = {}) {
   );
   const viewSyncerDone = vs.run();
 
-  async function connect(ctx: SyncContext, desiredQueriesPatch: QueriesPatch) {
-    const stream = await vs.initConnection(ctx, [
+  function connect(ctx: SyncContext, desiredQueriesPatch: QueriesPatch) {
+    const stream = vs.initConnection(ctx, [
       'initConnection',
       {desiredQueriesPatch},
     ]);
@@ -408,7 +457,7 @@ describe('view-syncer/service', () => {
   let connect: (
     ctx: SyncContext,
     desiredQueriesPatch: QueriesPatch,
-  ) => Promise<Queue<Downstream>>;
+  ) => Queue<Downstream>;
   let nextPoke: (client: Queue<Downstream>) => Promise<Downstream[]>;
   let expectNoPokes: (client: Queue<Downstream>) => Promise<void>;
 
@@ -456,12 +505,13 @@ describe('view-syncer/service', () => {
   });
 
   test('adds desired queries from initConnectionMessage', async () => {
-    await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
+    await nextPoke(client);
 
     const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
-    const cvr = await cvrStore.load(Date.now());
+    const cvr = await cvrStore.load(lc, Date.now());
     expect(cvr).toMatchObject({
       clients: {
         foo: {
@@ -483,7 +533,7 @@ describe('view-syncer/service', () => {
   });
 
   test('responds to changeQueriesPatch', async () => {
-    await connect(SYNC_CONTEXT, [
+    connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
 
@@ -509,7 +559,7 @@ describe('view-syncer/service', () => {
     ]);
 
     const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
-    const cvr = await cvrStore.load(Date.now());
+    const cvr = await cvrStore.load(lc, Date.now());
     expect(cvr).toMatchObject({
       clients: {
         foo: {
@@ -536,7 +586,7 @@ describe('view-syncer/service', () => {
   });
 
   test('initial hydration', async () => {
-    const client = await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
@@ -792,7 +842,7 @@ describe('view-syncer/service', () => {
   });
 
   test('initial hydration, rows in multiple queries', async () => {
-    const client = await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
       {op: 'put', hash: 'query-hash2', ast: ISSUES_QUERY2},
     ]);
@@ -1111,7 +1161,7 @@ describe('view-syncer/service', () => {
   });
 
   test('initial hydration, schemaVersion unsupported', async () => {
-    const client = await connect({...SYNC_CONTEXT, schemaVersion: 1}, [
+    const client = connect({...SYNC_CONTEXT, schemaVersion: 1}, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
@@ -1182,11 +1232,11 @@ describe('view-syncer/service', () => {
 
     const dequeuePromise = client.dequeue();
     await expect(dequeuePromise).rejects.toBeInstanceOf(ErrorForClient);
-    await expect(dequeuePromise).rejects.toHaveProperty('errorMessage', [
-      'error',
-      'SchemaVersionNotSupported',
-      'Schema version 1 is not in range of supported schema versions [2, 3].',
-    ]);
+    await expect(dequeuePromise).rejects.toHaveProperty('errorBody', {
+      kind: ErrorKind.SchemaVersionNotSupported,
+      message:
+        'Schema version 1 is not in range of supported schema versions [2, 3].',
+    });
   });
 
   test('initial hydration, schemaVersion unsupported with bad query', async () => {
@@ -1194,7 +1244,7 @@ describe('view-syncer/service', () => {
     stateChanges.push({state: 'version-ready'});
     await sleep(5);
 
-    const client = await connect({...SYNC_CONTEXT, schemaVersion: 1}, [
+    const client = connect({...SYNC_CONTEXT, schemaVersion: 1}, [
       {
         op: 'put',
         hash: 'query-hash1',
@@ -1208,17 +1258,17 @@ describe('view-syncer/service', () => {
 
     // Make sure it's the SchemaVersionNotSupported error that gets
     // propagated, and not any error related to the bad query.
-    const dequeuePromise = client.dequeue();
+    const dequeuePromise = nextPoke(client);
     await expect(dequeuePromise).rejects.toBeInstanceOf(ErrorForClient);
-    await expect(dequeuePromise).rejects.toHaveProperty('errorMessage', [
-      'error',
-      'SchemaVersionNotSupported',
-      'Schema version 1 is not in range of supported schema versions [2, 3].',
-    ]);
+    await expect(dequeuePromise).rejects.toHaveProperty('errorBody', {
+      kind: ErrorKind.SchemaVersionNotSupported,
+      message:
+        'Schema version 1 is not in range of supported schema versions [2, 3].',
+    });
   });
 
   test('process advancement', async () => {
-    const client = await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
       {op: 'put', hash: 'query-hash2', ast: ISSUES_QUERY2},
     ]);
@@ -1466,7 +1516,7 @@ describe('view-syncer/service', () => {
   });
 
   test('process advancement that results in client having an unsupported schemaVersion', async () => {
-    const client1 = await connect(SYNC_CONTEXT, [
+    const client1 = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
     expect(await nextPoke(client1)).toMatchInlineSnapshot(`
@@ -1537,7 +1587,7 @@ describe('view-syncer/service', () => {
     // Note: client2 is behind, so it does not get an immediate update on connect.
     //       It has to wait until a hydrate to catchup. However, client1 will get
     //       updated about client2.
-    const client2 = await connect(
+    const client2 = connect(
       {...SYNC_CONTEXT, clientID: 'bar', schemaVersion: 3},
       [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
     );
@@ -1659,11 +1709,11 @@ describe('view-syncer/service', () => {
     // updated schemaVersions range
     const dequeuePromise = client1.dequeue();
     await expect(dequeuePromise).rejects.toBeInstanceOf(ErrorForClient);
-    await expect(dequeuePromise).rejects.toHaveProperty('errorMessage', [
-      'error',
-      'SchemaVersionNotSupported',
-      'Schema version 2 is not in range of supported schema versions [3, 3].',
-    ]);
+    await expect(dequeuePromise).rejects.toHaveProperty('errorBody', {
+      kind: ErrorKind.SchemaVersionNotSupported,
+      message:
+        'Schema version 2 is not in range of supported schema versions [3, 3].',
+    });
 
     expect(await nextPoke(client2)).toMatchInlineSnapshot(`
       [
@@ -1717,7 +1767,7 @@ describe('view-syncer/service', () => {
   });
 
   test('process advancement with schema change', async () => {
-    const client = await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
@@ -1914,7 +1964,7 @@ describe('view-syncer/service', () => {
   });
 
   test('catch up client', async () => {
-    const client1 = await connect(SYNC_CONTEXT, [
+    const client1 = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
     expect(await nextPoke(client1)).toMatchInlineSnapshot(`
@@ -2030,7 +2080,7 @@ describe('view-syncer/service', () => {
 
     // Connect with another client (i.e. tab) at older version '00:02'
     // (i.e. pre-advancement).
-    const client2 = await connect(
+    const client2 = connect(
       {
         clientID: 'bar',
         wsID: '9382',
@@ -2206,19 +2256,241 @@ describe('view-syncer/service', () => {
                     `);
   });
 
+  test('catch up new client before advancement', async () => {
+    const client1 = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    await nextPoke(client1);
+
+    stateChanges.push({state: 'version-ready'});
+    const preAdvancement = (await nextPoke(client1))[0][1] as PokeStartBody;
+    expect(preAdvancement).toEqual({
+      baseCookie: '00:01',
+      cookie: '00:02',
+      pokeID: '00:02',
+      schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
+    });
+
+    replicator.processTransaction(
+      '123',
+      messages.update('issues', {
+        id: '1',
+        title: 'new title',
+        owner: 100,
+        parent: null,
+        big: 9007199254740991n,
+      }),
+      messages.delete('issues', {id: '2'}),
+    );
+
+    stateChanges.push({state: 'version-ready'});
+
+    // Connect a second client right as the advancement is about to be processed.
+    await sleep(0.5);
+    const client2 = connect({...SYNC_CONTEXT, clientID: 'bar'}, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+
+    // Response should catch client2 from scratch.
+    expect(await nextPoke(client2)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": null,
+            "cookie": "01:01",
+            "pokeID": "01:01",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "clientsPatch": [
+              {
+                "clientID": "foo",
+                "op": "put",
+              },
+              {
+                "clientID": "bar",
+                "op": "put",
+              },
+            ],
+            "desiredQueriesPatches": {
+              "bar": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": {
+                      "left": {
+                        "name": "id",
+                        "type": "column",
+                      },
+                      "op": "IN",
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                      "type": "simple",
+                    },
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+              "foo": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": {
+                      "left": {
+                        "name": "id",
+                        "type": "column",
+                      },
+                      "op": "IN",
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                      "type": "simple",
+                    },
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+            },
+            "gotQueriesPatch": [
+              {
+                "ast": {
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "issues",
+                  "where": {
+                    "left": {
+                      "name": "id",
+                      "type": "column",
+                    },
+                    "op": "IN",
+                    "right": {
+                      "type": "literal",
+                      "value": [
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                      ],
+                    },
+                    "type": "simple",
+                  },
+                },
+                "hash": "query-hash1",
+                "op": "put",
+              },
+            ],
+            "lastMutationIDChanges": {
+              "foo": 42,
+            },
+            "pokeID": "01:01",
+            "rowsPatch": [
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 123,
+                  "id": "3",
+                  "json": null,
+                  "owner": "102",
+                  "parent": "1",
+                  "title": "foo",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 100,
+                  "id": "4",
+                  "json": null,
+                  "owner": "101",
+                  "parent": "2",
+                  "title": "bar",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 9007199254740991,
+                  "id": "1",
+                  "json": null,
+                  "owner": "100.0",
+                  "parent": null,
+                  "title": "new title",
+                },
+              },
+              {
+                "id": {
+                  "id": "2",
+                },
+                "op": "del",
+                "tableName": "issues",
+              },
+            ],
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "01:01",
+          },
+        ],
+      ]
+    `);
+  });
+
   test('waits for replica to catch up', async () => {
     // Before connecting, artificially set the CVR version to '07',
     // which is ahead of the current replica version '00'.
     const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
     await new CVRQueryDrivenUpdater(
       cvrStore,
-      await cvrStore.load(Date.now()),
+      await cvrStore.load(lc, Date.now()),
       '07',
       REPLICA_VERSION,
     ).flush(lc, Date.now());
 
     // Connect the client.
-    const client = await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
 
@@ -2373,13 +2645,13 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
     await new CVRQueryDrivenUpdater(
       cvrStore,
-      await cvrStore.load(Date.now()),
+      await cvrStore.load(lc, Date.now()),
       '07',
       '1' + REPLICA_VERSION, // Different replica version.
     ).flush(lc, Date.now());
 
     // Connect the client.
-    const client = await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
 
@@ -2393,16 +2665,15 @@ describe('view-syncer/service', () => {
       result = e;
     }
     expect(result).toBeInstanceOf(ErrorForClient);
-    expect((result as ErrorForClient).errorMessage).toEqual([
-      'error',
-      ErrorKind.ClientNotFound,
-      'Replica Version mismatch: CVR=101, DB=01',
-    ] satisfies ErrorMessage);
+    expect((result as ErrorForClient).errorBody).toEqual({
+      kind: ErrorKind.ClientNotFound,
+      message: 'Replica Version mismatch: CVR=101, DB=01',
+    } satisfies ErrorBody);
   });
 
   test('sends client not found if CVR is not found', async () => {
     // Connect the client at a non-empty base cookie.
-    const client = await connect({...SYNC_CONTEXT, baseCookie: '00:02'}, [
+    const client = connect({...SYNC_CONTEXT, baseCookie: '00:02'}, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
 
@@ -2413,24 +2684,23 @@ describe('view-syncer/service', () => {
       result = e;
     }
     expect(result).toBeInstanceOf(ErrorForClient);
-    expect((result as ErrorForClient).errorMessage).toEqual([
-      'error',
-      ErrorKind.ClientNotFound,
-      'Client not found',
-    ] satisfies ErrorMessage);
+    expect((result as ErrorForClient).errorBody).toEqual({
+      kind: ErrorKind.ClientNotFound,
+      message: 'Client not found',
+    } satisfies ErrorBody);
   });
 
   test('sends invalid base cookie if client is ahead of CVR', async () => {
     const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
     await new CVRQueryDrivenUpdater(
       cvrStore,
-      await cvrStore.load(Date.now()),
+      await cvrStore.load(lc, Date.now()),
       '07',
       REPLICA_VERSION,
     ).flush(lc, Date.now());
 
     // Connect the client with a base cookie from the future.
-    const client = await connect({...SYNC_CONTEXT, baseCookie: '08'}, [
+    const client = connect({...SYNC_CONTEXT, baseCookie: '08'}, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
 
@@ -2441,11 +2711,10 @@ describe('view-syncer/service', () => {
       result = e;
     }
     expect(result).toBeInstanceOf(ErrorForClient);
-    expect((result as ErrorForClient).errorMessage).toEqual([
-      'error',
-      ErrorKind.InvalidConnectionRequestBaseCookie,
-      'CVR is at version 07',
-    ] satisfies ErrorMessage);
+    expect((result as ErrorForClient).errorBody).toEqual({
+      kind: ErrorKind.InvalidConnectionRequestBaseCookie,
+      message: 'CVR is at version 07',
+    } satisfies ErrorBody);
   });
 
   test('clean up operator storage on close', async () => {
@@ -2467,7 +2736,7 @@ describe('view-syncer/service', () => {
   });
 
   test('elective drain', async () => {
-    const client = await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
       {op: 'put', hash: 'query-hash2', ast: ISSUES_QUERY2},
       {op: 'put', hash: 'query-hash3', ast: USERS_QUERY},
@@ -2493,7 +2762,7 @@ describe('view-syncer/service', () => {
   });
 
   test('retracting an exists relationship', async () => {
-    const client = await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY_WITH_RELATED},
       {op: 'put', hash: 'query-hash2', ast: ISSUES_QUERY_WITH_EXISTS},
     ]);
@@ -2566,12 +2835,12 @@ describe('view-syncer/service', () => {
   });
 });
 
-describe('pipeline update after token swap', () => {
+describe('permissions', () => {
   let stateChanges: Subscription<ReplicaState>;
   let connect: (
     ctx: SyncContext,
     desiredQueriesPatch: QueriesPatch,
-  ) => Promise<Queue<Downstream>>;
+  ) => Queue<Downstream>;
   let nextPoke: (client: Queue<Downstream>) => Promise<Downstream[]>;
   let replicaDbFile: DbFile;
   let cvrDB: PostgresDB;
@@ -2609,7 +2878,7 @@ describe('pipeline update after token swap', () => {
   });
 
   test('client with no role followed by client with admin role', async () => {
-    const client = await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
     stateChanges.push({state: 'version-ready'});
@@ -2681,7 +2950,7 @@ describe('pipeline update after token swap', () => {
 
     // New client connects with same everything (client group, user id) but brings a new role.
     // This should transform their existing queries to return the data they can now see.
-    const client2 = await connect(
+    const client2 = connect(
       {
         ...SYNC_CONTEXT,
         clientID: 'bar',
@@ -2878,6 +3147,145 @@ describe('pipeline update after token swap', () => {
           "pokeEnd",
           {
             "pokeID": "00:04",
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('permissions via subquery', async () => {
+    const client = await connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: COMMENTS_QUERY},
+    ]);
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+    // Should not receive any comments b/c they cannot see any issues
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "00:01",
+            "cookie": "00:02",
+            "pokeID": "00:02",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "gotQueriesPatch": [
+              {
+                "ast": {
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "comments",
+                },
+                "hash": "query-hash1",
+                "op": "put",
+              },
+            ],
+            "lastMutationIDChanges": {
+              "foo": 42,
+            },
+            "pokeID": "00:02",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "00:02",
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('query for comments does not return issue rows as those are gotten by the permission system', async () => {
+    const client = await connect(
+      {
+        ...SYNC_CONTEXT,
+        tokenData: {
+          raw: '',
+          decoded: {sub: 'foo', role: 'admin', iat: 1},
+        },
+      },
+      [{op: 'put', hash: 'query-hash2', ast: COMMENTS_QUERY}],
+    );
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+    // Should receive comments since they can see issues as the admin
+    // but should not receive those issues since the query for them was added by
+    // the auth system.
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "00:01",
+            "cookie": "00:02",
+            "pokeID": "00:02",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "gotQueriesPatch": [
+              {
+                "ast": {
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "comments",
+                },
+                "hash": "query-hash2",
+                "op": "put",
+              },
+            ],
+            "lastMutationIDChanges": {
+              "foo": 42,
+            },
+            "pokeID": "00:02",
+            "rowsPatch": [
+              {
+                "op": "put",
+                "tableName": "comments",
+                "value": {
+                  "id": "1",
+                  "issueID": "1",
+                  "text": "comment 1",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "comments",
+                "value": {
+                  "id": "2",
+                  "issueID": "1",
+                  "text": "comment 2",
+                },
+              },
+            ],
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "00:02",
           },
         ],
       ]

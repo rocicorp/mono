@@ -20,6 +20,7 @@ const orderingElementSchema = v.readonly(
 );
 
 export const orderingSchema = v.readonlyArray(orderingElementSchema);
+export type System = 'permissions' | 'client';
 
 export const primitiveSchema = v.union(
   v.string(),
@@ -137,6 +138,7 @@ const correlationSchema = v.readonlyObject({
 export const correlatedSubquerySchemaOmitSubquery = v.readonlyObject({
   correlation: correlationSchema,
   hidden: v.boolean().optional(),
+  system: v.union(v.literal('permissions'), v.literal('client')).optional(),
 });
 
 export const correlatedSubquerySchema: v.Type<CorrelatedSubquery> =
@@ -216,6 +218,7 @@ export type CorrelatedSubquery = {
     childField: CompoundKey;
   };
   readonly subquery: AST;
+  readonly system?: System | undefined;
   // If a hop in the subquery chain should be hidden from the output view.
   // A common example is junction edges. The query API provides the illusion
   // that they don't exist: `issue.related('labels')` instead of `issue.related('issue_labels').related('labels')`.
@@ -348,6 +351,7 @@ export function normalizeAST(ast: AST): Required<AST> {
                 correlation: r.correlation,
                 hidden: r.hidden,
                 subquery: normalizeAST(r.subquery),
+                system: r.system,
               }) satisfies Required<CorrelatedSubquery>,
           ),
         )

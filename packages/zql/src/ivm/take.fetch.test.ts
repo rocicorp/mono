@@ -776,6 +776,234 @@ suite('take with partition', () => {
     `);
   });
 
+  test('cleanup partitions not previously fetched', () => {
+    const {partitions, cleanupOnlyPartitions} = takeTest({
+      ...base,
+      sourceRows: [
+        {id: 'c1', issueID: 'i1', created: 100},
+        {id: 'c2', issueID: 'i1', created: 200},
+        {id: 'c3', issueID: 'i2', created: 300},
+        {id: 'c4', issueID: 'i3', created: 400},
+        {id: 'c5', issueID: 'i4', created: 500},
+      ],
+      limit: 5,
+      partitionValues: [['i1'], ['i3']],
+      cleanupOnlyPartitionValues: [['i2'], ['i4']],
+    });
+
+    expect(partitions[0].messages).toMatchInlineSnapshot(`
+      {
+        "cleanup": [
+          [
+            "takeSnitch",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
+          ],
+        ],
+        "fetch": [
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
+          ],
+        ],
+        "hydrate": [
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
+          ],
+        ],
+      }
+    `);
+    expect(partitions[0].storage).toMatchInlineSnapshot(`
+      {
+        "["take","i1"]": {
+          "bound": {
+            "created": 200,
+            "id": "c2",
+            "issueID": "i1",
+          },
+          "size": 2,
+        },
+        "maxBound": {
+          "created": 200,
+          "id": "c2",
+          "issueID": "i1",
+        },
+      }
+    `);
+    expect(partitions[0].hydrate).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "created": 100,
+            "id": "c1",
+            "issueID": "i1",
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "created": 200,
+            "id": "c2",
+            "issueID": "i1",
+          },
+        },
+      ]
+    `);
+
+    expect(partitions[1].messages).toMatchInlineSnapshot(`
+      {
+        "cleanup": [
+          [
+            "takeSnitch",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i3",
+              },
+            },
+          ],
+        ],
+        "fetch": [
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i3",
+              },
+            },
+          ],
+        ],
+        "hydrate": [
+          [
+            "takeSnitch",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i3",
+              },
+            },
+          ],
+        ],
+      }
+    `);
+    expect(partitions[1].storage).toMatchInlineSnapshot(`
+      {
+        "["take","i3"]": {
+          "bound": {
+            "created": 400,
+            "id": "c4",
+            "issueID": "i3",
+          },
+          "size": 1,
+        },
+        "maxBound": {
+          "created": 400,
+          "id": "c4",
+          "issueID": "i3",
+        },
+      }
+    `);
+    expect(partitions[1].hydrate).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "created": 400,
+            "id": "c4",
+            "issueID": "i3",
+          },
+        },
+      ]
+    `);
+
+    expect(cleanupOnlyPartitions[0].messages).toMatchInlineSnapshot(`
+      [
+        [
+          "takeSnitch",
+          "cleanup",
+          {
+            "constraint": {
+              "issueID": "i2",
+            },
+          },
+        ],
+      ]
+    `);
+    expect(cleanupOnlyPartitions[0].nodes).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "created": 300,
+            "id": "c3",
+            "issueID": "i2",
+          },
+        },
+      ]
+    `);
+    expect(cleanupOnlyPartitions[0].storage).toMatchInlineSnapshot(`
+      {
+        "maxBound": {
+          "created": 400,
+          "id": "c4",
+          "issueID": "i3",
+        },
+      }
+    `);
+
+    expect(cleanupOnlyPartitions[1].messages).toMatchInlineSnapshot(`
+      [
+        [
+          "takeSnitch",
+          "cleanup",
+          {
+            "constraint": {
+              "issueID": "i4",
+            },
+          },
+        ],
+      ]
+    `);
+    expect(cleanupOnlyPartitions[1].nodes).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "created": 500,
+            "id": "c5",
+            "issueID": "i4",
+          },
+        },
+      ]
+    `);
+    expect(cleanupOnlyPartitions[1].storage).toMatchInlineSnapshot(`
+      {
+        "maxBound": {
+          "created": 400,
+          "id": "c4",
+          "issueID": "i3",
+        },
+      }
+    `);
+  });
+
   test('data size and limit equal', () => {
     const {partitions} = takeTest({
       ...base,
@@ -1492,6 +1720,7 @@ function takeTest(t: TakeTest): TakeTestResults {
   }
   const results: TakeTestResults = {
     partitions: [],
+    cleanupOnlyPartitions: [],
   };
   for (const partitionValue of t.partitionValues) {
     const partitionResults: PartitionTestResults = {
@@ -1542,6 +1771,27 @@ function takeTest(t: TakeTest): TakeTestResults {
       partitionResults.messages[phase] = [...log];
     }
   }
+
+  for (const partitionValue of t.cleanupOnlyPartitionValues ?? []) {
+    const cleanupOnlyPartitionResults: CleanupOnlyPartitionTestResults = {
+      messages: [],
+      storage: {},
+      nodes: [],
+    };
+    results.cleanupOnlyPartitions.push(cleanupOnlyPartitionResults);
+    log.length = 0;
+    const c = new Catch(take);
+    cleanupOnlyPartitionResults.nodes = c.cleanup(
+      partitionKey &&
+        partitionValue && {
+          constraint: Object.fromEntries(
+            partitionKey.map((k, i) => [k, partitionValue[i]]),
+          ),
+        },
+    );
+    cleanupOnlyPartitionResults.storage = storage.cloneData();
+    cleanupOnlyPartitionResults.messages = [...log];
+  }
   return results;
 }
 
@@ -1553,10 +1803,14 @@ type TakeTest = {
   limit: number;
   partitionKey: PartitionKey | undefined;
   partitionValues: readonly ([Value, ...Value[]] | undefined)[];
+  cleanupOnlyPartitionValues?:
+    | readonly ([Value, ...Value[]] | undefined)[]
+    | undefined;
 };
 
 type TakeTestResults = {
   partitions: PartitionTestResults[];
+  cleanupOnlyPartitions: CleanupOnlyPartitionTestResults[];
 };
 
 type PartitionTestResults = {
@@ -1567,4 +1821,10 @@ type PartitionTestResults = {
   };
   storage: Record<string, JSONValue>;
   hydrate: Node[];
+};
+
+type CleanupOnlyPartitionTestResults = {
+  messages: SnitchMessage[];
+  storage: Record<string, JSONValue>;
+  nodes: Node[];
 };

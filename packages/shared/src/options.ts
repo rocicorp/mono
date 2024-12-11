@@ -191,10 +191,60 @@ function configSchema<T extends Options>(options: T): v.Type<Config<T>> {
   return makeObjectType(options) as v.Type<Config<T>>;
 }
 
+/**
+ * Converts an Options instance into an "env schema", which is an object with
+ * ENV names as its keys, mapped to optional or required string values
+ * (corresponding to the optionality of the corresponding options).
+ *
+ * This is used as a format for encoding options for a multi-tenant version
+ * of an app, with an envSchema for each tenant.
+ */
+export function envSchema<T extends Options>(options: T, envNamePrefix = '') {
+  const fields: [string, v.Type<string> | v.Optional<string>][] = [];
+
+  function addField(name: string, type: OptionType, group?: string) {
+    const flag = group ? `${group}_${name}` : name;
+    const env = snakeCase(`${envNamePrefix}${flag}`).toUpperCase();
+
+    const {required} = getRequiredOrDefault(type);
+    fields.push([env, required ? v.string() : v.string().optional()]);
+  }
+
+  function addFields(o: Options | Group, group?: string) {
+    Object.entries(o).forEach(([name, value]) => {
+      // OptionType
+      if (v.instanceOfAbstractType(value)) {
+        addField(name, value, group);
+        return;
+      }
+      // WrappedOptionType
+      const {type} = value;
+      if (v.instanceOfAbstractType(type)) {
+        addField(name, type, group);
+        return;
+      }
+      // OptionGroup
+      addFields(value as Group, name);
+    });
+  }
+
+  addFields(options);
+
+  return v.object(Object.fromEntries(fields));
+}
+
 // type TerminalType is not exported from badrap/valita
 type TerminalType = Parameters<
   Parameters<v.Type<unknown>['toTerminals']>[0]
 >[0];
+
+function getRequiredOrDefault(type: OptionType) {
+  const defaultResult = v.testOptional<Value>(undefined, type);
+  return {
+    required: !defaultResult.ok,
+    defaultValue: defaultResult.ok ? defaultResult.value : undefined,
+  };
+}
 
 export function parseOptions<T extends Options>(
   options: T,
@@ -204,18 +254,36 @@ export function parseOptions<T extends Options>(
   logger: OptionalLogger = console,
   exit = process.exit,
 ): Config<T> {
+  return parseOptionsAdvanced(
+    options,
+    argv,
+    envNamePrefix,
+    false,
+    false,
+    processEnv,
+    logger,
+    exit,
+  ).config;
+}
+
+export function parseOptionsAdvanced<T extends Options>(
+  options: T,
+  argv: string[],
+  envNamePrefix = '',
+  allowUnknown = false,
+  allowPartial = false,
+  processEnv = process.env,
+  logger: OptionalLogger = console,
+  exit = process.exit,
+): {config: Config<T>; env: Record<string, string>; unknown?: string[]} {
   // The main logic for converting a valita Type spec to an Option (i.e. flag) spec.
-  function addOption(name: string, option: WrappedOptionType, group?: string) {
+  function addOption(field: string, option: WrappedOptionType, group?: string) {
     const {type, desc = [], alias, hidden} = option;
 
     // The group name is prepended to the flag name.
-    const flag = group ? kebabcase(`${group}-${name}`) : kebabcase(name);
-    flagToField.set(flag, name);
+    const flag = group ? kebabcase(`${group}-${field}`) : kebabcase(field);
 
-    const defaultResult = v.testOptional<Value>(undefined, type);
-    const required = !defaultResult.ok;
-    const defaultValue = defaultResult.ok ? defaultResult.value : undefined;
-
+    const {required, defaultValue} = getRequiredOrDefault(type);
     let multiple = type.name === 'array';
     const literals = new Set<string>();
     const terminalTypes = new Set<string>();
@@ -258,6 +326,7 @@ export function parseOptions<T extends Options>(
         envArgv.push(`--${flag}`, processEnv[env]);
       }
     }
+    names.set(flag, {field, env});
 
     const spec = [
       (required
@@ -293,7 +362,7 @@ export function parseOptions<T extends Options>(
     optsWithDefaults.push({...opt, defaultValue});
   }
 
-  const flagToField = new Map<string, string>();
+  const names = new Map<string, {field: string; env: string}>();
   const optsWithDefaults: DescribedOptionDefinition[] = [];
   const optsWithoutDefaults: DescribedOptionDefinition[] = [];
   const envArgv: string[] = [];
@@ -316,14 +385,40 @@ export function parseOptions<T extends Options>(
       }
     }
 
-    const parsedArgs = merge(
-      parseArgs(optsWithDefaults, argv, flagToField, logger, exit),
-      parseArgs(optsWithoutDefaults, envArgv, flagToField, logger, exit),
-      parseArgs(optsWithoutDefaults, argv, flagToField, logger, exit),
-    );
+    const [defaults, env1, unknown] = parseArgs(optsWithDefaults, argv, names);
+    const [fromEnv, env2] = parseArgs(optsWithoutDefaults, envArgv, names);
+    const [withoutDefaults, env3] = parseArgs(optsWithoutDefaults, argv, names);
 
-    const schema = configSchema(options);
-    return v.parse(parsedArgs, schema);
+    switch (unknown?.[0]) {
+      case undefined:
+        break;
+      case '--help':
+      case '-h':
+        showUsage(optsWithDefaults, logger);
+        exit(0);
+        break;
+      default:
+        if (!allowUnknown) {
+          logger.error?.('Invalid arguments:', unknown);
+          showUsage(optsWithDefaults, logger);
+          exit(0);
+        }
+        break;
+    }
+
+    const parsedArgs = merge(defaults, fromEnv, withoutDefaults);
+    const env = {...env1, ...env2, ...env3};
+
+    let schema = configSchema(options);
+    if (allowPartial) {
+      // TODO: Type configSchema() to return a v.ObjectType<...>
+      schema = (schema as v.ObjectType).partial() as v.Type<Config<T>>;
+    }
+    return {
+      config: v.parse(parsedArgs, schema),
+      env,
+      ...(unknown ? {unknown} : {}),
+    };
   } catch (e) {
     logger.error?.(String(e));
     showUsage(optsWithDefaults, logger);
@@ -364,9 +459,7 @@ function valueParser(flagName: string, typeName: string) {
 function parseArgs(
   optionDefs: DescribedOptionDefinition[],
   argv: string[],
-  flagToField: Map<string, string>,
-  logger: OptionalLogger,
-  exit: (code?: number) => never,
+  names: Map<string, {field: string; env: string}>,
 ) {
   function normalizeFlagValue(value: unknown) {
     // A --flag without value is parsed by commandLineArgs() to `null`,
@@ -384,25 +477,15 @@ function parseArgs(
     partial: true,
   });
 
-  if (unknown?.length) {
-    switch (unknown[0]) {
-      case '--help':
-      case '-h':
-        break;
-      default:
-        logger.error?.('Invalid arguments:', unknown);
-    }
-    showUsage(optionDefs, logger);
-    exit(0);
-  }
-
   const result = {...config};
+  const envObj: Record<string, string> = {};
 
   // Handle ungrouped flags first
   if (ungrouped) {
     for (const [flagName, value] of Object.entries(ungrouped)) {
-      const name = must(flagToField.get(flagName));
-      result[name] = normalizeFlagValue(value);
+      const {field, env} = must(names.get(flagName));
+      result[field] = normalizeFlagValue(value);
+      envObj[env] = String(result[field]);
     }
   }
 
@@ -411,13 +494,14 @@ function parseArgs(
     if (typeof group === 'object' && group !== null) {
       result[groupName] = {};
       for (const [flagName, value] of Object.entries(group)) {
-        const name = must(flagToField.get(flagName));
-        result[groupName][name] = normalizeFlagValue(value);
+        const {field, env} = must(names.get(flagName));
+        result[groupName][field] = normalizeFlagValue(value);
+        envObj[env] = String(result[groupName][field]);
       }
     }
   }
 
-  return result;
+  return [result, envObj, unknown] as const;
 }
 
 function showUsage(

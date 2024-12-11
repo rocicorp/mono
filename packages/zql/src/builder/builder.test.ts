@@ -1,10 +1,14 @@
 import {expect, test} from 'vitest';
-import type {AST} from '../../../zero-protocol/src/ast.js';
+import type {AST, Disjunction} from '../../../zero-protocol/src/ast.js';
 import {Catch} from '../ivm/catch.js';
 import {MemoryStorage} from '../ivm/memory-storage.js';
 import type {Source} from '../ivm/source.js';
 import {createSource} from '../ivm/test/source-factory.js';
-import {bindStaticParameters, buildPipeline} from './builder.js';
+import {
+  bindStaticParameters,
+  buildPipeline,
+  groupSubqueryConditions,
+} from './builder.js';
 
 export function testSources() {
   const users = createSource(
@@ -149,6 +153,7 @@ test('self-join', () => {
         orderBy: [['id', 'asc']],
         related: [
           {
+            system: 'client',
             correlation: {parentField: ['recruiterID'], childField: ['id']},
             subquery: {
               table: 'users',
@@ -309,6 +314,7 @@ test('self-join edit', () => {
         orderBy: [['id', 'asc']],
         related: [
           {
+            system: 'client',
             correlation: {parentField: ['recruiterID'], childField: ['id']},
             subquery: {
               table: 'users',
@@ -465,6 +471,7 @@ test('multi-join', () => {
         },
         related: [
           {
+            system: 'client',
             correlation: {parentField: ['id'], childField: ['userID']},
             subquery: {
               table: 'userStates',
@@ -475,6 +482,7 @@ test('multi-join', () => {
               ],
               related: [
                 {
+                  system: 'client',
                   correlation: {
                     parentField: ['stateCode'],
                     childField: ['code'],
@@ -570,6 +578,7 @@ test('join with limit', () => {
         limit: 3,
         related: [
           {
+            system: 'client',
             correlation: {parentField: ['id'], childField: ['userID']},
             subquery: {
               table: 'userStates',
@@ -581,6 +590,7 @@ test('join with limit', () => {
               limit: 1,
               related: [
                 {
+                  system: 'client',
                   correlation: {
                     parentField: ['stateCode'],
                     childField: ['code'],
@@ -703,6 +713,7 @@ test('exists junction', () => {
         where: {
           type: 'correlatedSubquery',
           related: {
+            system: 'client',
             correlation: {parentField: ['id'], childField: ['userID']},
             subquery: {
               table: 'userStates',
@@ -714,6 +725,7 @@ test('exists junction', () => {
               where: {
                 type: 'correlatedSubquery',
                 related: {
+                  system: 'client',
                   correlation: {
                     parentField: ['stateCode'],
                     childField: ['code'],
@@ -898,6 +910,144 @@ test('exists junction', () => {
   `);
 });
 
+test('exists junction with limit, remove row after limit, and last row', () => {
+  const {sources, getSource} = testSources();
+  const sink = new Catch(
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        limit: 2,
+        where: {
+          type: 'correlatedSubquery',
+          related: {
+            correlation: {parentField: ['id'], childField: ['userID']},
+            subquery: {
+              table: 'userStates',
+              alias: 'zsubq_userStates',
+              orderBy: [
+                ['userID', 'asc'],
+                ['stateCode', 'asc'],
+              ],
+              where: {
+                type: 'correlatedSubquery',
+                related: {
+                  correlation: {
+                    parentField: ['stateCode'],
+                    childField: ['code'],
+                  },
+                  subquery: {
+                    table: 'states',
+                    alias: 'zsubq_states',
+                    orderBy: [['code', 'asc']],
+                  },
+                },
+                op: 'EXISTS',
+              },
+            },
+          },
+          op: 'EXISTS',
+        },
+      },
+      {
+        getSource,
+        createStorage: () => new MemoryStorage(),
+      },
+    ),
+  );
+
+  expect(sink.fetch()).toMatchInlineSnapshot(`
+    [
+      {
+        "relationships": {
+          "zsubq_userStates": [
+            {
+              "relationships": {
+                "zsubq_states": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "code": "HI",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "stateCode": "HI",
+                "userID": 1,
+              },
+            },
+          ],
+        },
+        "row": {
+          "id": 1,
+          "name": "aaron",
+          "recruiterID": null,
+        },
+      },
+      {
+        "relationships": {
+          "zsubq_userStates": [
+            {
+              "relationships": {
+                "zsubq_states": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "code": "AZ",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "stateCode": "AZ",
+                "userID": 3,
+              },
+            },
+            {
+              "relationships": {
+                "zsubq_states": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "code": "CA",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "stateCode": "CA",
+                "userID": 3,
+              },
+            },
+          ],
+        },
+        "row": {
+          "id": 3,
+          "name": "greg",
+          "recruiterID": 1,
+        },
+      },
+    ]
+  `);
+
+  // row after limit
+  sources.users.push({
+    type: 'remove',
+    row: {id: 4, name: 'matt', recruiterID: 1},
+  });
+
+  expect(sink.pushes).toMatchInlineSnapshot(`[]`);
+
+  // last row, also after limit
+  sources.users.push({
+    type: 'remove',
+    row: {id: 7, name: 'alex', recruiterID: 1},
+  });
+
+  expect(sink.pushes).toMatchInlineSnapshot(`[]`);
+});
+
 test('exists self join', () => {
   const {sources, getSource} = testSources();
   const sink = new Catch(
@@ -908,6 +1058,7 @@ test('exists self join', () => {
         where: {
           type: 'correlatedSubquery',
           related: {
+            system: 'client',
             correlation: {parentField: ['recruiterID'], childField: ['id']},
             subquery: {
               table: 'users',
@@ -1088,6 +1239,7 @@ test('not exists self join', () => {
         where: {
           type: 'correlatedSubquery',
           related: {
+            system: 'client',
             correlation: {parentField: ['recruiterID'], childField: ['id']},
             subquery: {
               table: 'users',
@@ -1171,6 +1323,7 @@ test('bind static parameters', () => {
     },
     related: [
       {
+        system: 'client',
         correlation: {parentField: ['id'], childField: ['userID']},
         subquery: {
           table: 'userStates',
@@ -1233,6 +1386,7 @@ test('bind static parameters', () => {
               "type": "simple",
             },
           },
+          "system": "client",
         },
       ],
       "table": "users",
@@ -1408,5 +1562,87 @@ test('always true literal comparison - everything goes through', () => {
       },
       type: 'add',
     },
+  ]);
+});
+
+test('groupSubqueryConditions', () => {
+  const empty: Disjunction = {
+    type: 'or',
+    conditions: [],
+  };
+
+  expect(groupSubqueryConditions(empty)).toEqual([[], []]);
+
+  const oneSimple: Disjunction = {
+    type: 'or',
+    conditions: [
+      {
+        type: 'simple',
+        left: {type: 'column', name: 'id'},
+        op: '=',
+        right: {type: 'literal', value: 1},
+      },
+    ],
+  };
+
+  expect(groupSubqueryConditions(oneSimple)).toEqual([
+    [],
+    [oneSimple.conditions[0]],
+  ]);
+
+  const oneSubquery: Disjunction = {
+    type: 'or',
+    conditions: [
+      {
+        type: 'correlatedSubquery',
+        op: 'EXISTS',
+        related: {
+          system: 'client',
+          correlation: {parentField: ['id'], childField: ['userID']},
+          subquery: {
+            table: 'userStates',
+            alias: 'userStates',
+            orderBy: [
+              ['userID', 'asc'],
+              ['stateCode', 'asc'],
+            ],
+          },
+        },
+      },
+    ],
+  };
+
+  expect(groupSubqueryConditions(oneSubquery)).toEqual([
+    [oneSubquery.conditions[0]],
+    [],
+  ]);
+
+  const oneEach: Disjunction = {
+    type: 'or',
+    conditions: [oneSimple.conditions[0], oneSubquery.conditions[0]],
+  };
+
+  expect(groupSubqueryConditions(oneEach)).toEqual([
+    [oneSubquery.conditions[0]],
+    [oneSimple.conditions[0]],
+  ]);
+
+  const subqueryInAnd: Disjunction = {
+    type: 'or',
+    conditions: [
+      {
+        type: 'and',
+        conditions: [oneSubquery.conditions[0]],
+      },
+      {
+        type: 'and',
+        conditions: [oneSimple.conditions[0]],
+      },
+    ],
+  };
+
+  expect(groupSubqueryConditions(subqueryInAnd)).toEqual([
+    [subqueryInAnd.conditions[0]],
+    [subqueryInAnd.conditions[1]],
   ]);
 });

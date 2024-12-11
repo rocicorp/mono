@@ -11,7 +11,6 @@ import type {Row, Value} from '../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
 import {assertOrderingIncludesPK} from '../../zql/src/builder/builder.js';
 import type {Change} from '../../zql/src/ivm/change.js';
-import type {Constraint} from '../../zql/src/ivm/constraint.js';
 import {
   makeComparator,
   type Comparator,
@@ -199,6 +198,7 @@ export class TableSource implements Source {
       sort: connection.sort,
       relationships: {},
       isHidden: false,
+      system: 'client',
       compareRows: connection.compareRows,
     };
   }
@@ -239,107 +239,58 @@ export class TableSource implements Source {
     return input;
   }
 
+  toSQLiteRow(row: Row): Row {
+    return Object.fromEntries(
+      Object.entries(row).map(([key, value]) => [
+        key,
+        toSQLiteType(value, this.#columns[key].type),
+      ]),
+    ) as Row;
+  }
+
   #cleanup(req: FetchRequest, connection: Connection): Stream<Node> {
     return this.#fetch(req, connection);
   }
 
-  *#fetch(
-    req: FetchRequest,
-    connection: Connection,
-    beforeRequest?: FetchRequest | undefined,
-  ): Stream<Node> {
-    const {start} = req;
+  *#fetch(req: FetchRequest, connection: Connection): Stream<Node> {
     const {sort} = connection;
 
-    /**
-     * Before isn't quite "before".
-     * It means to fetch all values in the current order but starting at the row
-     * _just before_ a given row.
-     *
-     * If we have values [1,2,3,4] and we say `fetch starting before 3` we should get back
-     * `[2,3,4]` not `[1,2]`.
-     *
-     * To handle this, we convert `before` to `at` and re-invoke the fetch.
-     */
-    if (start?.basis === 'before') {
-      assert(
-        beforeRequest === undefined,
-        'Before should only be converted once.',
-      );
-      const preSql = this.#requestToSQL(
-        req.constraint,
-        req.start !== undefined
-          ? {
-              from: req.start.row,
-              direction: req.start.basis === 'before' ? 'before' : 'after',
-              inclusive: req.start.basis === 'at',
-            }
-          : undefined,
-        connection.filters?.condition,
-        sort,
-      );
-      const sqlAndBindings = format(preSql);
+    const query = this.#requestToSQL(req, connection.filters?.condition, sort);
+    const sqlAndBindings = format(query);
 
-      let start: Start | undefined;
-      this.#stmts.cache.use(sqlAndBindings.text, cachedStatement => {
-        for (const beforeRow of cachedStatement.statement.iterate<Row>(
-          ...sqlAndBindings.values,
-        )) {
-          start = {row: beforeRow, basis: 'at'};
-          break;
+    const cachedStatement = this.#stmts.cache.get(sqlAndBindings.text);
+    try {
+      cachedStatement.statement.safeIntegers(true);
+      const rowIterator = cachedStatement.statement.iterate<Row>(
+        ...sqlAndBindings.values,
+      );
+
+      const callingConnectionIndex = this.#connections.indexOf(connection);
+      assert(callingConnectionIndex !== -1, 'Connection not found');
+
+      const comparator = makeComparator(sort, req.reverse);
+
+      let overlay: Overlay | undefined;
+      if (this.#overlay) {
+        if (callingConnectionIndex <= this.#overlay.outputIndex) {
+          overlay = this.#overlay;
         }
-      });
-
-      yield* this.#fetch({...req, start}, connection, req);
-    } else {
-      const query = this.#requestToSQL(
-        req.constraint,
-        req.start !== undefined
-          ? {
-              from: req.start.row,
-              direction: req.start.basis === 'before' ? 'before' : 'after',
-              inclusive: req.start.basis === 'at',
-            }
-          : undefined,
-        connection.filters?.condition,
-        sort,
-      );
-      const sqlAndBindings = format(query);
-
-      const cachedStatement = this.#stmts.cache.get(sqlAndBindings.text);
-      try {
-        cachedStatement.statement.safeIntegers(true);
-        const rowIterator = cachedStatement.statement.iterate<Row>(
-          ...sqlAndBindings.values,
-        );
-
-        const callingConnectionIndex = this.#connections.indexOf(connection);
-        assert(callingConnectionIndex !== -1, 'Connection not found');
-
-        const comparator = makeComparator(sort);
-
-        let overlay: Overlay | undefined;
-        if (this.#overlay) {
-          if (callingConnectionIndex <= this.#overlay.outputIndex) {
-            overlay = this.#overlay;
-          }
-        }
-
-        yield* generateWithStart(
-          generateWithOverlay(
-            req.start?.row,
-            mapFromSQLiteTypes(this.#columns, rowIterator),
-            req.constraint,
-            overlay,
-            comparator,
-            connection.filters?.predicate,
-          ),
-          beforeRequest ?? req,
-          comparator,
-        );
-      } finally {
-        this.#stmts.cache.return(cachedStatement);
       }
+
+      yield* generateWithStart(
+        generateWithOverlay(
+          req.start?.row,
+          mapFromSQLiteTypes(this.#columns, rowIterator),
+          req.constraint,
+          overlay,
+          comparator,
+          connection.filters?.predicate,
+        ),
+        req.start,
+        comparator,
+      );
+    } finally {
+      this.#stmts.cache.return(cachedStatement);
     }
   }
 
@@ -355,8 +306,6 @@ export class TableSource implements Source {
         ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
       )?.exists === 1;
 
-    // need to check for the existence of the row before modifying
-    // the db so we don't push it to outputs if it does/doest not exist.
     switch (change.type) {
       case 'add':
         assert(
@@ -372,22 +321,10 @@ export class TableSource implements Source {
           exists(change.oldRow),
           () => `Row not found ${stringify(change)}`,
         );
-        fromSQLiteTypes(this.#columns, change.oldRow);
         break;
       default:
         unreachable(change);
     }
-
-    // Outputs should see converted types (e.g. boolean).
-    // This conversion is here because the `pipeline-driver` reads
-    // row state from the SQLite. If you try to move this
-    // conversion into pipeline-driver (where it seems like it should go)
-    // you'll run into the issue that you need to do the `exists` checks above.
-    // The exists checks need the non-converted types since they query SQLite.
-    // So:
-    // 1. exists checks should be in the source.
-    // 2. this mapping should be in pipeline driver.
-    fromSQLiteTypes(this.#columns, change.row);
 
     const outputChange: Change =
       change.type === 'edit'
@@ -443,10 +380,15 @@ export class TableSource implements Source {
             this.#primaryKey,
           )
         ) {
-          must(this.#stmts.update).run(
-            ...nonPrimaryValues(this.#columns, this.#primaryKey, change.row),
-            ...toSQLiteTypes(this.#primaryKey, change.row, this.#columns),
-          );
+          const mergedRow = {
+            ...change.oldRow,
+            ...change.row,
+          };
+          const params = [
+            ...nonPrimaryValues(this.#columns, this.#primaryKey, mergedRow),
+            ...toSQLiteTypes(this.#primaryKey, mergedRow, this.#columns),
+          ];
+          must(this.#stmts.update).run(params);
         } else {
           this.#stmts.delete.run(
             ...toSQLiteTypes(this.#primaryKey, change.oldRow, this.#columns),
@@ -484,11 +426,11 @@ export class TableSource implements Source {
   }
 
   #requestToSQL(
-    constraint: Constraint | undefined,
-    cursor: Cursor | undefined,
+    request: FetchRequest,
     filters: NoSubqueryCondition | undefined,
     order: Ordering,
   ): SQLQuery {
+    const {constraint, start, reverse} = request;
     let query = sql`SELECT ${this.#allColumns} FROM ${sql.ident(this.#table)}`;
     const constraints: SQLQuery[] = [];
 
@@ -503,8 +445,10 @@ export class TableSource implements Source {
       }
     }
 
-    if (cursor) {
-      constraints.push(gatherStartConstraints(cursor, order, this.#columns));
+    if (start) {
+      constraints.push(
+        gatherStartConstraints(start, reverse, order, this.#columns),
+      );
     }
 
     if (filters) {
@@ -515,7 +459,7 @@ export class TableSource implements Source {
       query = sql`${query} WHERE ${sql.join(constraints, sql` AND `)}`;
     }
 
-    if (cursor?.direction === 'before') {
+    if (reverse) {
       query = sql`${query} ORDER BY ${sql.join(
         order.map(
           s =>
@@ -618,12 +562,6 @@ function getJsType(value: unknown): ValueType {
     : 'json';
 }
 
-type Cursor = {
-  from: Row;
-  direction: 'before' | 'after';
-  inclusive: boolean;
-};
-
 /**
  * The ordering could be complex such as:
  * `ORDER BY a ASC, b DESC, c ASC`
@@ -641,12 +579,13 @@ type Cursor = {
  * - inclusive adds a final `OR` clause for the exact match.
  */
 function gatherStartConstraints(
-  cursor: Cursor,
+  start: Start,
+  reverse: boolean | undefined,
   order: Ordering,
   columnTypes: Record<string, SchemaValue>,
 ): SQLQuery {
   const constraints: SQLQuery[] = [];
-  const {from, direction, inclusive} = cursor;
+  const {row: from, basis} = start;
 
   for (let i = 0; i < order.length; i++) {
     const group: SQLQuery[] = [];
@@ -654,7 +593,7 @@ function gatherStartConstraints(
     for (let j = 0; j <= i; j++) {
       if (j === i) {
         if (iDirection === 'asc') {
-          if (direction === 'after') {
+          if (!reverse) {
             group.push(
               sql`${sql.ident(iField)} > ${toSQLiteType(
                 from[iField],
@@ -662,7 +601,7 @@ function gatherStartConstraints(
               )}`,
             );
           } else {
-            direction satisfies 'before';
+            reverse satisfies true;
             group.push(
               sql`${sql.ident(iField)} < ${toSQLiteType(
                 from[iField],
@@ -672,7 +611,7 @@ function gatherStartConstraints(
           }
         } else {
           iDirection satisfies 'desc';
-          if (direction === 'after') {
+          if (!reverse) {
             group.push(
               sql`${sql.ident(iField)} < ${toSQLiteType(
                 from[iField],
@@ -680,7 +619,7 @@ function gatherStartConstraints(
               )}`,
             );
           } else {
-            direction satisfies 'before';
+            reverse satisfies true;
             group.push(
               sql`${sql.ident(iField)} > ${toSQLiteType(
                 from[iField],
@@ -702,7 +641,7 @@ function gatherStartConstraints(
     constraints.push(sql`(${sql.join(group, sql` AND `)})`);
   }
 
-  if (inclusive) {
+  if (basis === 'at') {
     constraints.push(
       sql`(${sql.join(
         order.map(
@@ -776,7 +715,7 @@ export function toSQLiteTypeName(type: ValueType) {
   }
 }
 
-function* mapFromSQLiteTypes(
+export function* mapFromSQLiteTypes(
   valueTypes: Record<string, SchemaValue>,
   rowIterator: IterableIterator<Row>,
 ): IterableIterator<Row> {
@@ -786,9 +725,18 @@ function* mapFromSQLiteTypes(
   }
 }
 
-function fromSQLiteTypes(valueTypes: Record<string, SchemaValue>, row: Row) {
-  for (const key in row) {
-    row[key] = fromSQLiteType(valueTypes[key].type, row[key]);
+export function fromSQLiteTypes(
+  valueTypes: Record<string, SchemaValue>,
+  row: Row,
+) {
+  for (const key of Object.keys(row)) {
+    const valueType = valueTypes[key];
+    if (valueType === undefined) {
+      throw new Error(
+        `Postgres is missing the column "${key}" but that column was part of a row.`,
+      );
+    }
+    row[key] = fromSQLiteType(valueType.type, row[key]);
   }
 }
 

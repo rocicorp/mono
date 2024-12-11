@@ -1,5 +1,10 @@
+import type {Row} from '@rocicorp/zero';
 import {assert} from 'shared/src/asserts.js';
-import type {Emoji} from './components/emoji-panel.js';
+import type {Schema} from '../schema.js';
+
+export type Emoji = Row<Schema['tables']['emoji']> & {
+  readonly creator: Row<Schema['tables']['user']> | undefined;
+};
 
 export function formatEmojiCreatorList(
   emojis: Emoji[],
@@ -33,4 +38,31 @@ export function formatEmojiTooltipText(
 ): string {
   const names = formatEmojiCreatorList(emojis, currentUserID);
   return `${names} reacted with ${emojis[0].annotation}`;
+}
+
+export function setSkinTone(emoji: string, skinTone: number): string {
+  const normalizedEmoji = normalizeEmoji(emoji);
+  if (skinTone === 0) {
+    return normalizedEmoji;
+  }
+
+  // Skin tone modifiers range from U+1F3FB to U+1F3FF
+  return normalizedEmoji + String.fromCodePoint(0x1f3fa + skinTone);
+}
+
+export function findEmojiForCreator(
+  emojis: Emoji[],
+  userID: string,
+): string | undefined {
+  for (const emoji of emojis) {
+    if (emoji.creatorID === userID) {
+      return emoji.id;
+    }
+  }
+  return undefined;
+}
+
+export function normalizeEmoji(emoji: string): string {
+  // Skin tone modifiers range from U+1F3FB to U+1F3FF
+  return emoji.replace(/[\u{1F3FB}-\u{1F3FF}]/gu, '');
 }

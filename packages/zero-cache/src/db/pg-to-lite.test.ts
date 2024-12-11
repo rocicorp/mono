@@ -1,6 +1,6 @@
 import {expect, test} from 'vitest';
 import {mapPostgresToLite, mapPostgresToLiteColumn} from './pg-to-lite.js';
-import type {ColumnSpec} from './specs.js';
+import {PostgresTypeClass, type ColumnSpec} from './specs.js';
 
 test('postgres to lite table spec', () => {
   expect(
@@ -57,6 +57,14 @@ test('postgres to lite table spec', () => {
           notNull: false,
           dflt: 'false',
         },
+        enomz: {
+          pos: 8,
+          dataType: 'my_type',
+          pgTypeClass: PostgresTypeClass.Enum,
+          characterMaximumLength: null,
+          notNull: false,
+          dflt: 'false',
+        },
       },
       primaryKey: ['b', 'a'],
     }),
@@ -104,6 +112,13 @@ test('postgres to lite table spec', () => {
         dflt: null,
         notNull: false,
         pos: 7,
+      },
+      enomz: {
+        characterMaximumLength: null,
+        dataType: 'TEXT_ENUM_my_type',
+        dflt: null,
+        notNull: false,
+        pos: 8,
       },
       int: {
         characterMaximumLength: null,

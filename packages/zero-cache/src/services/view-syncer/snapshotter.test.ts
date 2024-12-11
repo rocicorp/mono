@@ -2,7 +2,7 @@ import {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {listTables} from '../../db/lite-tables.js';
-import type {LiteTableSpec} from '../../db/specs.js';
+import type {LiteAndZqlSpec} from '../../db/specs.js';
 import {DbFile, expectTables} from '../../test/lite.js';
 import {initChangeLog} from '../replicator/schema/change-log.js';
 import {initReplicationState} from '../replicator/schema/replication-state.js';
@@ -16,12 +16,13 @@ import {
   SchemaChangeError,
   Snapshotter,
 } from './snapshotter.js';
+import {setSpecs} from './pipeline-driver.js';
 
 describe('view-syncer/snapshotter', () => {
   let lc: LogContext;
   let dbFile: DbFile;
   let replicator: FakeReplicator;
-  let tableSpecs: Map<string, LiteTableSpec>;
+  let tableSpecs: Map<string, LiteAndZqlSpec>;
   let s: Snapshotter;
 
   beforeEach(() => {
@@ -57,7 +58,8 @@ describe('view-syncer/snapshotter', () => {
     // The 'ignore' column should not show up in the diffs.
     const tables = listTables(db);
     tables.forEach(t => delete (t.columns as Record<string, unknown>).ignore);
-    tableSpecs = new Map(tables.map(spec => [spec.name, spec]));
+    tableSpecs = new Map();
+    setSpecs(tables, tableSpecs);
 
     replicator = fakeReplicator(lc, db);
     s = new Snapshotter(lc, dbFile.path).init();
@@ -147,15 +149,15 @@ describe('view-syncer/snapshotter', () => {
         {
           "nextValue": {
             "_0_version": "01",
-            "lock": 1n,
-            "maxSupportedVersion": 2n,
-            "minSupportedVersion": 1n,
+            "lock": 1,
+            "maxSupportedVersion": 2,
+            "minSupportedVersion": 1,
           },
           "prevValue": {
             "_0_version": "00",
-            "lock": 1n,
-            "maxSupportedVersion": 1n,
-            "minSupportedVersion": 1n,
+            "lock": 1,
+            "maxSupportedVersion": 1,
+            "minSupportedVersion": 1,
           },
           "table": "zero.schemaVersions",
         },
@@ -189,14 +191,14 @@ describe('view-syncer/snapshotter', () => {
           "nextValue": {
             "_0_version": "01",
             "desc": "food",
-            "id": 1n,
-            "owner": 10n,
+            "id": 1,
+            "owner": 10,
           },
           "prevValue": {
             "_0_version": "00",
             "desc": "foo",
-            "id": 1n,
-            "owner": 10n,
+            "id": 1,
+            "owner": 10,
           },
           "table": "issues",
         },
@@ -205,8 +207,8 @@ describe('view-syncer/snapshotter', () => {
           "prevValue": {
             "_0_version": "00",
             "desc": "bar",
-            "id": 2n,
-            "owner": 10n,
+            "id": 2,
+            "owner": 10,
           },
           "table": "issues",
         },
@@ -215,8 +217,8 @@ describe('view-syncer/snapshotter', () => {
           "prevValue": {
             "_0_version": "00",
             "desc": "baz",
-            "id": 3n,
-            "owner": 20n,
+            "id": 3,
+            "owner": 20,
           },
           "table": "issues",
         },
@@ -224,8 +226,8 @@ describe('view-syncer/snapshotter', () => {
           "nextValue": {
             "_0_version": "01",
             "desc": null,
-            "id": 4n,
-            "owner": 20n,
+            "id": 4,
+            "owner": 20,
           },
           "prevValue": null,
           "table": "issues",
@@ -234,8 +236,8 @@ describe('view-syncer/snapshotter', () => {
           "nextValue": {
             "_0_version": "01",
             "desc": "bard",
-            "id": 5n,
-            "owner": 10n,
+            "id": 5,
+            "owner": 10,
           },
           "prevValue": null,
           "table": "issues",
@@ -250,14 +252,14 @@ describe('view-syncer/snapshotter', () => {
           "nextValue": {
             "_0_version": "01",
             "desc": "food",
-            "id": 1n,
-            "owner": 10n,
+            "id": 1,
+            "owner": 10,
           },
           "prevValue": {
             "_0_version": "00",
             "desc": "foo",
-            "id": 1n,
-            "owner": 10n,
+            "id": 1,
+            "owner": 10,
           },
           "table": "issues",
         },
@@ -266,8 +268,8 @@ describe('view-syncer/snapshotter', () => {
           "prevValue": {
             "_0_version": "00",
             "desc": "bar",
-            "id": 2n,
-            "owner": 10n,
+            "id": 2,
+            "owner": 10,
           },
           "table": "issues",
         },
@@ -276,8 +278,8 @@ describe('view-syncer/snapshotter', () => {
           "prevValue": {
             "_0_version": "00",
             "desc": "baz",
-            "id": 3n,
-            "owner": 20n,
+            "id": 3,
+            "owner": 20,
           },
           "table": "issues",
         },
@@ -285,8 +287,8 @@ describe('view-syncer/snapshotter', () => {
           "nextValue": {
             "_0_version": "01",
             "desc": null,
-            "id": 4n,
-            "owner": 20n,
+            "id": 4,
+            "owner": 20,
           },
           "prevValue": null,
           "table": "issues",
@@ -295,8 +297,8 @@ describe('view-syncer/snapshotter', () => {
           "nextValue": {
             "_0_version": "01",
             "desc": "bard",
-            "id": 5n,
-            "owner": 10n,
+            "id": 5,
+            "owner": 10,
           },
           "prevValue": null,
           "table": "issues",
@@ -322,8 +324,8 @@ describe('view-syncer/snapshotter', () => {
           "nextValue": {
             "_0_version": "09",
             "desc": "bard",
-            "id": 2n,
-            "owner": 10n,
+            "id": 2,
+            "owner": 10,
           },
           "prevValue": null,
           "table": "issues",
@@ -333,8 +335,8 @@ describe('view-syncer/snapshotter', () => {
           "prevValue": {
             "_0_version": "01",
             "desc": null,
-            "id": 4n,
-            "owner": 20n,
+            "id": 4,
+            "owner": 20,
           },
           "table": "issues",
         },
@@ -343,8 +345,8 @@ describe('view-syncer/snapshotter', () => {
           "prevValue": {
             "_0_version": "01",
             "desc": "bard",
-            "id": 5n,
-            "owner": 10n,
+            "id": 5,
+            "owner": 10,
           },
           "table": "issues",
         },
@@ -373,14 +375,14 @@ describe('view-syncer/snapshotter', () => {
           "nextValue": {
             "_0_version": "01",
             "desc": "food",
-            "id": 1n,
-            "owner": 10n,
+            "id": 1,
+            "owner": 10,
           },
           "prevValue": {
             "_0_version": "00",
             "desc": "foo",
-            "id": 1n,
-            "owner": 10n,
+            "id": 1,
+            "owner": 10,
           },
           "table": "issues",
         },
@@ -389,8 +391,8 @@ describe('view-syncer/snapshotter', () => {
           "prevValue": {
             "_0_version": "00",
             "desc": "baz",
-            "id": 3n,
-            "owner": 20n,
+            "id": 3,
+            "owner": 20,
           },
           "table": "issues",
         },
@@ -398,14 +400,14 @@ describe('view-syncer/snapshotter', () => {
           "nextValue": {
             "_0_version": "09",
             "desc": "bard",
-            "id": 2n,
-            "owner": 10n,
+            "id": 2,
+            "owner": 10,
           },
           "prevValue": {
             "_0_version": "00",
             "desc": "bar",
-            "id": 2n,
-            "owner": 10n,
+            "id": 2,
+            "owner": 10,
           },
           "table": "issues",
         },
@@ -578,7 +580,7 @@ describe('view-syncer/snapshotter', () => {
           "nextValue": {
             "_0_version": "01",
             "handle": "robert",
-            "id": 20n,
+            "id": 20,
           },
           "prevValue": null,
           "table": "users",
@@ -587,7 +589,7 @@ describe('view-syncer/snapshotter', () => {
           "nextValue": {
             "_0_version": "01",
             "handle": "candice",
-            "id": 30n,
+            "id": 30,
           },
           "prevValue": null,
           "table": "users",
@@ -613,7 +615,7 @@ describe('view-syncer/snapshotter', () => {
           nextValue: {
             ['_0_version']: '01',
             desc: null,
-            id: 1n,
+            id: 1,
           },
           prevValue: null,
           table: 'comments',

@@ -1,6 +1,8 @@
 import {expect, test} from 'vitest';
+import {h64} from '../../shared/src/xxhash.js';
 import type {AST} from './ast.js';
-import {normalizeAST} from './ast.js';
+import {astSchema, normalizeAST} from './ast.js';
+import {PROTOCOL_VERSION} from './protocol-version.js';
 
 test('fields are placed into correct positions', () => {
   function normalizeAndStringify(ast: AST) {
@@ -167,6 +169,7 @@ test('related subqueries are sorted', () => {
     related: [
       {
         correlation: {parentField: ['a'], childField: ['a']},
+        system: 'client',
         subquery: {
           table: 'table',
           alias: 'alias2',
@@ -174,6 +177,7 @@ test('related subqueries are sorted', () => {
       },
       {
         correlation: {parentField: ['a'], childField: ['a']},
+        system: 'client',
         subquery: {
           table: 'table',
           alias: 'alias1',
@@ -204,6 +208,7 @@ test('related subqueries are sorted', () => {
           "table": "table",
           "where": undefined,
         },
+        "system": "client",
       },
       {
         "correlation": {
@@ -225,7 +230,19 @@ test('related subqueries are sorted', () => {
           "table": "table",
           "where": undefined,
         },
+        "system": "client",
       },
     ]
   `);
+});
+
+test('protocol version', () => {
+  const schemaJSON = JSON.stringify(astSchema);
+  const hash = h64(schemaJSON);
+
+  // If this test fails because the AST schema has changed such that
+  // old code will not understand the new schema, bump the
+  // PROTOCOL_VERSION and update the expected values.
+  expect(hash.toString(36)).toEqual('abcvo2klqduo');
+  expect(PROTOCOL_VERSION).toEqual(2);
 });

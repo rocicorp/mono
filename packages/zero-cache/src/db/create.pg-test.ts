@@ -8,7 +8,11 @@ import {createTableStatement} from './create.js';
 import {listTables} from './lite-tables.js';
 import {mapPostgresToLite} from './pg-to-lite.js';
 import {stripCommentsAndWhitespace} from './query-test-util.js';
-import type {LiteTableSpec, TableSpec} from './specs.js';
+import {
+  PostgresTypeClass,
+  type LiteTableSpec,
+  type TableSpec,
+} from './specs.js';
 
 describe('tables/create', () => {
   type Case = {
@@ -217,6 +221,14 @@ describe('tables/create', () => {
             notNull: false,
             dflt: "'2147483648'::bigint",
           },
+          enumnum: {
+            pos: 6,
+            characterMaximumLength: null,
+            dataType: 'my_type',
+            pgTypeClass: PostgresTypeClass.Enum,
+            notNull: false,
+            dflt: null,
+          },
         },
         primaryKey: ['user_id'],
       },
@@ -227,6 +239,7 @@ describe('tables/create', () => {
          "rank" int8 DEFAULT 1,
          "admin" bool DEFAULT false,
          "bigint" int8 DEFAULT '2147483648'::bigint,
+         "enumnum" my_type,
          PRIMARY KEY ("user_id")
       );`,
       dstTableSpec: {
@@ -267,6 +280,14 @@ describe('tables/create', () => {
             dataType: 'int8',
             notNull: false,
             dflt: "'2147483648'::bigint",
+          },
+          enumnum: {
+            pos: 6,
+            characterMaximumLength: null,
+            dataType: 'my_type',
+            pgTypeClass: PostgresTypeClass.Enum,
+            notNull: false,
+            dflt: null,
           },
         },
         primaryKey: ['user_id'],
@@ -309,12 +330,19 @@ describe('tables/create', () => {
             notNull: false,
             dflt: null,
           },
+          enumnum: {
+            pos: 6,
+            characterMaximumLength: null,
+            dataType: 'TEXT_ENUM_my_type',
+            notNull: false,
+            dflt: null,
+          },
           ['_0_version']: {
             characterMaximumLength: null,
             dataType: 'TEXT',
             dflt: null,
             notNull: false,
-            pos: 6,
+            pos: 7,
           },
         },
         primaryKey: ['user_id'],
@@ -326,7 +354,10 @@ describe('tables/create', () => {
     let db: postgres.Sql;
     beforeEach(async () => {
       db = await testDBs.create('create_tables_test');
-      await db`CREATE PUBLICATION zero_all FOR ALL TABLES`;
+      await db`
+      CREATE PUBLICATION zero_all FOR ALL TABLES;
+      CREATE TYPE my_type AS ENUM ('foo', 'bar', 'baz');
+      `.simple();
     });
 
     afterEach(async () => {

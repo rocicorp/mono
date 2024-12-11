@@ -27,7 +27,7 @@ import type {Input, Storage} from '../ivm/operator.js';
 import {Skip} from '../ivm/skip.js';
 import type {Source} from '../ivm/source.js';
 import {Take} from '../ivm/take.js';
-import {createPredicate} from './filter.js';
+import {createPredicate, type NoSubqueryCondition} from './filter.js';
 
 export type StaticQueryParameters = {
   authData: Record<string, JSONValue>;
@@ -85,17 +85,14 @@ export function bindStaticParameters(
   ast: AST,
   staticQueryParameters: StaticQueryParameters | undefined,
 ) {
-  const visit = (node: AST): AST => {
-    return {
-      ...node,
-      where: node.where ? bindCondition(node.where) : undefined,
-      related: node.related?.map(sq => ({
-        ...sq,
-        subquery: visit(sq.subquery),
-      })),
-    };
-    return node;
-  };
+  const visit = (node: AST): AST => ({
+    ...node,
+    where: node.where ? bindCondition(node.where) : undefined,
+    related: node.related?.map(sq => ({
+      ...sq,
+      subquery: visit(sq.subquery),
+    })),
+  });
 
   function bindCondition(condition: Condition): Condition {
     if (condition.type === 'simple') {
@@ -218,17 +215,73 @@ function applyAnd(
   return input;
 }
 
-function applyOr(
+export function applyOr(
   input: Input,
   condition: Disjunction,
   appliedFilters: boolean,
   delegate: BuilderDelegate,
 ): Input {
+  const [subqueryConditions, otherConditions] =
+    groupSubqueryConditions(condition);
+  // if there are no subquery conditions, no fan-in / fan-out is needed
+  if (subqueryConditions.length === 0) {
+    return otherConditions.length > 0
+      ? new Filter(
+          input,
+          appliedFilters ? 'push-only' : 'all',
+          createPredicate({
+            type: 'or',
+            conditions: otherConditions,
+          }),
+        )
+      : new FanIn(new FanOut(input), []);
+  }
+
   const fanOut = new FanOut(input);
-  const branches = condition.conditions.map(subCondition =>
+  const branches = subqueryConditions.map(subCondition =>
     applyWhere(fanOut, subCondition, appliedFilters, delegate),
   );
+  if (otherConditions.length > 0) {
+    branches.push(
+      new Filter(
+        fanOut,
+        appliedFilters ? 'push-only' : 'all',
+        createPredicate({
+          type: 'or',
+          conditions: otherConditions,
+        }),
+      ),
+    );
+  }
   return new FanIn(fanOut, branches);
+}
+
+export function groupSubqueryConditions(condition: Disjunction) {
+  const partitioned: [
+    subqueryConditions: Condition[],
+    otherConditions: NoSubqueryCondition[],
+  ] = [[], []];
+  for (const subCondition of condition.conditions) {
+    if (isNotAndDoesNotContainSubquery(subCondition)) {
+      partitioned[1].push(subCondition);
+    } else {
+      partitioned[0].push(subCondition);
+    }
+  }
+  return partitioned;
+}
+
+export function isNotAndDoesNotContainSubquery(
+  condition: Condition,
+): condition is NoSubqueryCondition {
+  if (condition.type === 'correlatedSubquery') {
+    return false;
+  }
+  if (condition.type === 'and') {
+    return condition.conditions.every(isNotAndDoesNotContainSubquery);
+  }
+  assert(condition.type !== 'or', 'where conditions are expected to be in DNF');
+  return true;
 }
 
 function applySimpleCondition(
@@ -262,6 +315,7 @@ function applyCorrelatedSubQuery(
     childKey: sq.correlation.childField,
     relationshipName: sq.subquery.alias,
     hidden: sq.hidden ?? false,
+    system: sq.system ?? 'client',
   });
   return end;
 }
@@ -276,6 +330,7 @@ function applyCorrelatedSubqueryCondition(
     input,
     delegate.createStorage(),
     must(condition.related.subquery.alias),
+    condition.related.correlation.parentField,
     condition.op,
   );
 }
@@ -289,7 +344,13 @@ function gatherCorrelatedSubqueryQueriesFromCondition(
       assert(condition.op === 'EXISTS' || condition.op === 'NOT EXISTS');
       csqs.push({
         ...condition.related,
-        subquery: {...condition.related.subquery, limit: EXISTS_LIMIT},
+        subquery: {
+          ...condition.related.subquery,
+          limit:
+            condition.related.system === 'permissions'
+              ? PERMISSIONS_EXISTS_LIMIT
+              : EXISTS_LIMIT,
+        },
       });
       return;
     }
@@ -307,6 +368,7 @@ function gatherCorrelatedSubqueryQueriesFromCondition(
 }
 
 const EXISTS_LIMIT = 3;
+const PERMISSIONS_EXISTS_LIMIT = 1;
 
 export function assertOrderingIncludesPK(
   ordering: Ordering,

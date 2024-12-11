@@ -63,7 +63,6 @@ export function EmojiPicker({onEmojiChange}: Props) {
   const onKeyPress = useCallback((e: Event) => e.stopPropagation(), []);
 
   const ref: RefCallback<Picker> = el => {
-    console.log('emoji-picker', el);
     if (lastPicker.current) {
       lastPicker.current.removeEventListener('emoji-click', onEmojiClick);
       lastPicker.current.removeEventListener(

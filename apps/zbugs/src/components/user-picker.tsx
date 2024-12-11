@@ -1,4 +1,4 @@
-import {type TableSchemaToRow} from '@rocicorp/zero';
+import {type Row} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {useEffect, useState} from 'react';
 import {type Schema} from '../../schema.js';
@@ -14,7 +14,7 @@ type Props = {
   placeholder?: string | undefined;
 };
 
-type User = TableSchemaToRow<Schema['tables']['user']>;
+type User = Row<Schema['tables']['user']>;
 
 export default function UserPicker({
   onSelect,
@@ -25,7 +25,7 @@ export default function UserPicker({
 }: Props) {
   const z = useZero();
 
-  const users = useQuery(z.query.user);
+  const [users] = useQuery(z.query.user);
   // TODO: Support case-insensitive sorting in ZQL.
   users.sort((a, b) => a.login.localeCompare(b.login));
 

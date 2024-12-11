@@ -13,9 +13,9 @@ RUN echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc && \
     rm -f .npmrc
 RUN apk add --update curl
 WORKDIR /opt/app/packages/zero-cache
-RUN chmod +x ./restore-litestream-db.sh
-EXPOSE 4848
+RUN chmod +x ./start-dual.sh
+EXPOSE 4848 4849
 ENTRYPOINT ["/bin/sh", "-c"]
 ENV ZERO_LOG_LEVEL=debug
 ENV ZERO_LOG_FORMAT=json
-CMD ["(./restore-litestream-db.sh || true) && litestream replicate -config /opt/app/prod/zbugs/litestream.yml"]
+CMD ["npx tsx ../zero/src/build-schema.ts --path ../../apps/zbugs/schema.ts && ./start-dual.sh"]

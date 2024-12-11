@@ -1101,3 +1101,46 @@ test('where exists', () => {
 
   expect(materialized.data).toEqual([]);
 });
+
+test('result type unknown then complete', async () => {
+  const queryDelegate = new QueryDelegateImpl();
+  const issueQuery = newQuery(queryDelegate, issueSchema);
+  const m = issueQuery.materialize();
+
+  let rows: unknown[] = [undefined];
+  let resultType = '';
+  m.addListener((data, type) => {
+    rows = deepClone(data) as unknown[];
+    resultType = type;
+  });
+
+  expect(rows).toEqual([]);
+  expect(resultType).toEqual('unknown');
+
+  expect(queryDelegate.gotCallbacks.length).to.equal(1);
+  queryDelegate.gotCallbacks[0]?.(true);
+
+  // updating of resultType is promised based, so check in a new
+  // microtask
+  await 1;
+
+  expect(rows).toEqual([]);
+  expect(resultType).toEqual('complete');
+});
+
+test('result type initially complete', () => {
+  const queryDelegate = new QueryDelegateImpl();
+  queryDelegate.synchronouslyCallNextGotCallback = true;
+  const issueQuery = newQuery(queryDelegate, issueSchema);
+  const m = issueQuery.materialize();
+
+  let rows: unknown[] = [undefined];
+  let resultType = '';
+  m.addListener((data, type) => {
+    rows = deepClone(data) as unknown[];
+    resultType = type;
+  });
+
+  expect(rows).toEqual([]);
+  expect(resultType).toEqual('complete');
+});

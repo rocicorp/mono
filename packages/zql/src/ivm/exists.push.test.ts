@@ -8,6 +8,7 @@ import {
   type Sources,
 } from './test/join-push-tests.js';
 import type {Format} from './view.js';
+import {Take} from './take.js';
 
 const sources: Sources = {
   issue: {
@@ -75,6 +76,105 @@ const format: Format = {
   },
 };
 
+suite('EXISTS 1 to many', () => {
+  const sources: Sources = {
+    comment: {
+      columns: {
+        id: {type: 'string'},
+        issueID: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+      sorts: [['id', 'asc']],
+    },
+    issue: {
+      columns: {
+        id: {type: 'string'},
+        title: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+      sorts: [['id', 'asc']],
+    },
+  };
+
+  const sourceContents: SourceContents = {
+    comment: [
+      {
+        id: 'c1',
+        issueID: 'i1',
+      },
+      {
+        id: 'c2',
+        issueID: 'i1',
+      },
+      {
+        id: 'c3',
+        issueID: 'i1',
+      },
+    ],
+    issue: [{id: 'i1', title: 'issue 1'}],
+  };
+
+  const joins: Joins = {
+    children: {
+      parentKey: ['issueID'],
+      parentSource: 'comment',
+      childKey: ['id'],
+      childSource: 'issue',
+      relationshipName: 'issue',
+    },
+  };
+
+  const format: Format = {
+    singular: false,
+    relationships: {
+      issue: {
+        singular: false,
+        relationships: {},
+      },
+    },
+  };
+
+  test.fails(
+    'exists receives `child.remove` events for relationships with 0 size',
+    () => {
+      /**
+       * The problem:
+       * 1. An issue is removed in a push
+       * 2. `take` fetches, bringing `c3` into scope of `exists`
+       * 3. `join` pushes a child remove for `c3`
+       * 4. `exists` receives the child remove for `c3` and throws because the size is 0 (line 147 in exists)
+       */
+      expect(() =>
+        runJoinTest({
+          sources,
+          sourceContents,
+          joins,
+          format,
+          pushes: [
+            [
+              'issue',
+              {
+                type: 'remove',
+                row: {id: 'i1', title: 'issue 1'},
+              },
+            ],
+          ],
+          addPostJoinsOperator: [
+            (i: Input, storage: Storage) => ({
+              name: 'exists',
+              op: new Exists(i, storage, 'issue', ['issueID'], 'EXISTS'),
+            }),
+            (i: Input, storage: Storage) => ({
+              name: 'take',
+              op: new Take(i, storage, 2),
+            }),
+          ],
+        }),
+      ).not.toThrow();
+    },
+  );
+});
+
 suite('EXISTS', () => {
   const existsType = 'EXISTS';
   test('parent add that has no children is not pushed', () => {
@@ -94,7 +194,7 @@ suite('EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -136,11 +236,11 @@ suite('EXISTS', () => {
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 1,
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
-        "["size",["i5"]]": 0,
+        "row//["i1"]": 1,
+        "row//["i2"]": 0,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
+        "row//["i5"]": 0,
       }
     `);
   });
@@ -169,7 +269,7 @@ suite('EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -260,11 +360,11 @@ suite('EXISTS', () => {
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 1,
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
-        "["size",["i5"]]": 1,
+        "row//["i1"]": 1,
+        "row//["i2"]": 0,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
+        "row//["i5"]": 1,
       }
     `);
   });
@@ -286,7 +386,7 @@ suite('EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -329,9 +429,9 @@ suite('EXISTS', () => {
     // i2 size is removed
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 1,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
+        "row//["i1"]": 1,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
       }
     `);
   });
@@ -353,7 +453,7 @@ suite('EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -423,9 +523,9 @@ suite('EXISTS', () => {
     // i1 size is removed
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
+        "row//["i2"]": 0,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
       }
     `);
   });
@@ -448,7 +548,7 @@ suite('EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -490,10 +590,10 @@ suite('EXISTS', () => {
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 1,
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
+        "row//["i1"]": 1,
+        "row//["i2"]": 0,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
       }
     `);
   });
@@ -516,7 +616,7 @@ suite('EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -590,10 +690,10 @@ suite('EXISTS', () => {
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 1,
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
+        "row//["i1"]": 1,
+        "row//["i2"]": 0,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
       }
     `);
   });
@@ -615,7 +715,7 @@ suite('EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -706,10 +806,10 @@ suite('EXISTS', () => {
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 1,
-        "["size",["i2"]]": 1,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
+        "row//["i1"]": 1,
+        "row//["i2"]": 1,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
       }
     `);
   });
@@ -731,7 +831,7 @@ suite('EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -824,10 +924,10 @@ suite('EXISTS', () => {
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 2,
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
+        "row//["i1"]": 2,
+        "row//["i2"]": 0,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
       }
     `);
   });
@@ -849,7 +949,7 @@ suite('EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -949,10 +1049,10 @@ suite('EXISTS', () => {
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 0,
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
+        "row//["i1"]": 0,
+        "row//["i2"]": 0,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
       }
     `);
   });
@@ -974,7 +1074,7 @@ suite('EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -1057,10 +1157,10 @@ suite('EXISTS', () => {
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 1,
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 1,
-        "["size",["i4"]]": 0,
+        "row//["i1"]": 1,
+        "row//["i2"]": 0,
+        "row//["i3"]": 1,
+        "row//["i4"]": 0,
       }
     `);
   });
@@ -1083,7 +1183,7 @@ suite('EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -1178,10 +1278,10 @@ suite('EXISTS', () => {
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 1,
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
+        "row//["i1"]": 1,
+        "row//["i2"]": 0,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
       }
     `);
   });
@@ -1204,7 +1304,7 @@ suite('EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -1347,10 +1447,10 @@ suite('EXISTS', () => {
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 0,
-        "["size",["i2"]]": 1,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
+        "row//["i1"]": 0,
+        "row//["i2"]": 1,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
       }
     `);
   });
@@ -1380,7 +1480,7 @@ suite('NOT EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -1439,11 +1539,11 @@ suite('NOT EXISTS', () => {
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 1,
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
-        "["size",["i5"]]": 0,
+        "row//["i1"]": 1,
+        "row//["i2"]": 0,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
+        "row//["i5"]": 0,
       }
     `);
   });
@@ -1472,7 +1572,7 @@ suite('NOT EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -1497,11 +1597,11 @@ suite('NOT EXISTS', () => {
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 1,
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
-        "["size",["i5"]]": 1,
+        "row//["i1"]": 1,
+        "row//["i2"]": 0,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
+        "row//["i5"]": 1,
       }
     `);
   });
@@ -1523,7 +1623,7 @@ suite('NOT EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -1573,9 +1673,9 @@ suite('NOT EXISTS', () => {
     // i2 size is removed
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 1,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
+        "row//["i1"]": 1,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
       }
     `);
   });
@@ -1597,7 +1697,7 @@ suite('NOT EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -1623,9 +1723,9 @@ suite('NOT EXISTS', () => {
     // i1 size is removed
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
+        "row//["i2"]": 0,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
       }
     `);
   });
@@ -1648,7 +1748,7 @@ suite('NOT EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -1705,10 +1805,10 @@ suite('NOT EXISTS', () => {
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 1,
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
+        "row//["i1"]": 1,
+        "row//["i2"]": 0,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
       }
     `);
   });
@@ -1731,7 +1831,7 @@ suite('NOT EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -1756,10 +1856,10 @@ suite('NOT EXISTS', () => {
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 1,
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
+        "row//["i1"]": 1,
+        "row//["i2"]": 0,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
       }
     `);
   });
@@ -1781,7 +1881,7 @@ suite('NOT EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -1879,10 +1979,10 @@ suite('NOT EXISTS', () => {
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 1,
-        "["size",["i2"]]": 1,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
+        "row//["i1"]": 1,
+        "row//["i2"]": 1,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
       }
     `);
   });
@@ -1904,7 +2004,7 @@ suite('NOT EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -1929,10 +2029,10 @@ suite('NOT EXISTS', () => {
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 2,
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
+        "row//["i1"]": 2,
+        "row//["i2"]": 0,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
       }
     `);
   });
@@ -1954,7 +2054,7 @@ suite('NOT EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -2013,10 +2113,10 @@ suite('NOT EXISTS', () => {
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 0,
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
+        "row//["i1"]": 0,
+        "row//["i2"]": 0,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
       }
     `);
   });
@@ -2038,7 +2138,7 @@ suite('NOT EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -2063,10 +2163,10 @@ suite('NOT EXISTS', () => {
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 1,
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 1,
-        "["size",["i4"]]": 0,
+        "row//["i1"]": 1,
+        "row//["i2"]": 0,
+        "row//["i3"]": 1,
+        "row//["i4"]": 0,
       }
     `);
   });
@@ -2089,7 +2189,7 @@ suite('NOT EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -2114,10 +2214,10 @@ suite('NOT EXISTS', () => {
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 1,
-        "["size",["i2"]]": 0,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
+        "row//["i1"]": 1,
+        "row//["i2"]": 0,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
       }
     `);
   });
@@ -2140,7 +2240,7 @@ suite('NOT EXISTS', () => {
       format,
       addPostJoinsOperator: (i: Input, storage: Storage) => ({
         name: 'exists',
-        op: new Exists(i, storage, 'comments', existsType),
+        op: new Exists(i, storage, 'comments', ['id'], existsType),
       }),
     });
 
@@ -2266,10 +2366,10 @@ suite('NOT EXISTS', () => {
 
     expect(actualStorage['exists']).toMatchInlineSnapshot(`
       {
-        "["size",["i1"]]": 0,
-        "["size",["i2"]]": 1,
-        "["size",["i3"]]": 2,
-        "["size",["i4"]]": 0,
+        "row//["i1"]": 0,
+        "row//["i2"]": 1,
+        "row//["i3"]": 2,
+        "row//["i4"]": 0,
       }
     `);
   });

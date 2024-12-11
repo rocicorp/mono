@@ -134,12 +134,8 @@ export class Take implements Operator {
 
   *#initialFetch(req: FetchRequest): Stream<Node> {
     assert(req.start === undefined);
-    assert(
-      !this.#partitionKey ||
-        (req.constraint &&
-          // TODO: Compound keys
-          constraintMatchesPartitionKey(req.constraint, this.#partitionKey)),
-    );
+    assert(!req.reverse);
+    assert(constraintMatchesPartitionKey(req.constraint, this.#partitionKey));
 
     if (this.#limit === 0) {
       return;
@@ -181,35 +177,15 @@ export class Take implements Operator {
 
   *cleanup(req: FetchRequest): Stream<Node> {
     assert(req.start === undefined);
-    assert(
-      !this.#partitionKey ||
-        (req.constraint &&
-          // TODO: Compound keys
-          constraintMatchesPartitionKey(req.constraint, this.#partitionKey)),
-    );
-
-    let takeState: TakeState | undefined;
-    if (this.#limit > 0) {
-      const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
-      takeState = this.#storage.get(takeStateKey);
-      assert(
-        takeState !== undefined,
-        'takeStateKey was: ' +
-          takeStateKey +
-          ', partitionKey was: ' +
-          this.#partitionKey +
-          ', constraint was: ' +
-          JSON.stringify(req.constraint),
-      );
-      this.#storage.del(takeStateKey);
-    }
+    assert(constraintMatchesPartitionKey(req.constraint, this.#partitionKey));
+    const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
+    this.#storage.del(takeStateKey);
+    let size = 0;
     for (const inputNode of this.#input.cleanup(req)) {
-      if (
-        takeState?.bound === undefined ||
-        this.getSchema().compareRows(takeState.bound, inputNode.row) < 0
-      ) {
+      if (size === this.#limit) {
         return;
       }
+      size++;
       yield inputNode;
     }
   }
@@ -296,13 +272,14 @@ export class Take implements Operator {
           ),
         );
       } else {
-        [beforeBoundNode, boundNode] = take(
+        [boundNode, beforeBoundNode] = take(
           this.#input.fetch({
             start: {
               row: takeState.bound,
-              basis: 'before',
+              basis: 'at',
             },
             constraint,
+            reverse: true,
           }),
           2,
         );
@@ -332,21 +309,42 @@ export class Take implements Operator {
         // change is after bound
         return;
       }
+      const [beforeBoundNode] = take(
+        this.#input.fetch({
+          start: {
+            row: takeState.bound,
+            basis: 'after',
+          },
+          constraint,
+          reverse: true,
+        }),
+        1,
+      );
+
       let newBound: {node: Node; push: boolean} | undefined;
-      for (const node of this.#input.fetch({
-        start: {
-          row: takeState.bound,
-          basis: 'before',
-        },
-        constraint,
-      })) {
-        const push = compareRows(node.row, takeState.bound) > 0;
+      if (beforeBoundNode) {
+        const push = compareRows(beforeBoundNode.row, takeState.bound) > 0;
         newBound = {
-          node,
+          node: beforeBoundNode,
           push,
         };
-        if (push) {
-          break;
+      }
+      if (!newBound?.push) {
+        for (const node of this.#input.fetch({
+          start: {
+            row: takeState.bound,
+            basis: 'at',
+          },
+          constraint,
+        })) {
+          const push = compareRows(node.row, takeState.bound) > 0;
+          newBound = {
+            node,
+            push,
+          };
+          if (push) {
+            break;
+          }
         }
       }
 
@@ -453,9 +451,10 @@ export class Take implements Operator {
             this.#input.fetch({
               start: {
                 row: takeState.bound,
-                basis: 'before',
+                basis: 'after',
               },
               constraint,
+              reverse: true,
             }),
           ),
         );
@@ -521,13 +520,14 @@ export class Take implements Operator {
       // old was outside, new is inside. Pushing out the old bounds
       assert(newCmp < 0);
 
-      const [newBoundNode, oldBoundNode] = take(
+      const [oldBoundNode, newBoundNode] = take(
         this.#input.fetch({
           start: {
             row: takeState.bound,
-            basis: 'before',
+            basis: 'at',
           },
           constraint,
+          reverse: true,
         }),
         2,
       );
@@ -648,9 +648,15 @@ function getTakeStateKey(
 }
 
 function constraintMatchesPartitionKey(
-  constraint: Constraint,
-  partitionKey: PartitionKey,
+  constraint: Constraint | undefined,
+  partitionKey: PartitionKey | undefined,
 ): boolean {
+  if (constraint === undefined || partitionKey === undefined) {
+    return constraint === partitionKey;
+  }
+  if (partitionKey.length !== Object.keys(constraint).length) {
+    return false;
+  }
   for (const key of partitionKey) {
     if (!hasOwn(constraint, key)) {
       return false;
