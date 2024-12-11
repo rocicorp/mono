@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {SilentLogger} from '@rocicorp/logger';
 import stripAnsi from 'strip-ansi';
+import type {PartialDeep} from 'type-fest';
 import {expect, test, vi} from 'vitest';
 import {
   envSchema,
@@ -20,6 +21,7 @@ const options = {
   replicaDBFile: v.string(),
   litestream: v.boolean().optional(),
   log: {
+    level: v.string(), // required grouped option tests deepPartial
     format: v.union(v.literal('text'), v.literal('json')).default('text'),
   },
   shard: {
@@ -60,17 +62,18 @@ type TestConfig = Config<typeof options>;
 test.each([
   [
     'defaults',
-    ['--replica-db-file', '/tmp/replica.db'],
+    ['--replica-db-file', '/tmp/replica.db', '--log-level', 'info'],
     {},
     false,
     {
       port: 4848,
       replicaDBFile: '/tmp/replica.db',
-      log: {format: 'text'},
+      log: {level: 'info', format: 'text'},
       shard: {id: '0', publications: []},
       tuple: ['a', 'b'],
     },
     {
+      Z_LOG_LEVEL: 'info',
       Z_LOG_FORMAT: 'text',
       Z_PORT: '4848',
       Z_REPLICA_DB_FILE: '/tmp/replica.db',
@@ -87,6 +90,7 @@ test.each([
       ['Z_PORT']: '6000',
       ['Z_REPLICA_DB_FILE']: '/tmp/env-replica.db',
       ['Z_LITESTREAM']: 'true',
+      ['Z_LOG_LEVEL']: 'info',
       ['Z_LOG_FORMAT']: 'json',
       ['Z_SHARD_ID']: 'xyz',
       ['Z_SHARD_PUBLICATIONS']: 'zero_foo',
@@ -98,7 +102,7 @@ test.each([
       port: 6000,
       replicaDBFile: '/tmp/env-replica.db',
       litestream: true,
-      log: {format: 'json'},
+      log: {level: 'info', format: 'json'},
       shard: {id: 'xyz', publications: ['zero_foo']},
       tuple: ['c', 'd'],
       hideMe: 'hello!',
@@ -106,6 +110,7 @@ test.each([
     {
       Z_HIDE_ME: 'hello!',
       Z_LITESTREAM: 'true',
+      Z_LOG_LEVEL: 'info',
       Z_LOG_FORMAT: 'json',
       Z_PORT: '6000',
       Z_REPLICA_DB_FILE: '/tmp/env-replica.db',
@@ -122,6 +127,7 @@ test.each([
       ['Z_PORT']: '6000',
       ['Z_REPLICA_DB_FILE']: '/tmp/env-replica.db',
       ['Z_LITESTREAM']: 'true',
+      ['Z_LOG_LEVEL']: 'info',
       ['Z_LOG_FORMAT']: 'json',
       ['Z_SHARD_ID']: 'xyz',
       ['Z_SHARD_PUBLICATIONS']: 'zero_foo,zero_bar',
@@ -132,12 +138,13 @@ test.each([
       port: 6000,
       replicaDBFile: '/tmp/env-replica.db',
       litestream: true,
-      log: {format: 'json'},
+      log: {level: 'info', format: 'json'},
       shard: {id: 'xyz', publications: ['zero_foo', 'zero_bar']},
       tuple: ['e', 'f'],
     },
     {
       Z_LITESTREAM: 'true',
+      Z_LOG_LEVEL: 'info',
       Z_LOG_FORMAT: 'json',
       Z_PORT: '6000',
       Z_REPLICA_DB_FILE: '/tmp/env-replica.db',
@@ -149,17 +156,18 @@ test.each([
   ],
   [
     'argv values, short alias',
-    ['-p', '6000', '--replica-db-file=/tmp/replica.db'],
+    ['-p', '6000', '--replica-db-file=/tmp/replica.db', '--log-level=info'],
     {},
     false,
     {
       port: 6000,
       replicaDBFile: '/tmp/replica.db',
-      log: {format: 'text'},
+      log: {level: 'info', format: 'text'},
       shard: {id: '0', publications: []},
       tuple: ['a', 'b'],
     },
     {
+      Z_LOG_LEVEL: 'info',
       Z_LOG_FORMAT: 'text',
       Z_PORT: '6000',
       Z_REPLICA_DB_FILE: '/tmp/replica.db',
@@ -171,17 +179,18 @@ test.each([
   ],
   [
     'argv values, hex numbers',
-    ['-p', '0x1234', '--replica-db-file=/tmp/replica.db'],
+    ['-p', '0x1234', '--replica-db-file=/tmp/replica.db', '--log-level=info'],
     {},
     false,
     {
       port: 4660,
       replicaDBFile: '/tmp/replica.db',
-      log: {format: 'text'},
+      log: {level: 'info', format: 'text'},
       shard: {id: '0', publications: []},
       tuple: ['a', 'b'],
     },
     {
+      Z_LOG_LEVEL: 'info',
       Z_LOG_FORMAT: 'text',
       Z_PORT: '4660',
       Z_REPLICA_DB_FILE: '/tmp/replica.db',
@@ -193,17 +202,18 @@ test.each([
   ],
   [
     'argv values, scientific notation',
-    ['-p', '1.234E3', '--replica-db-file=/tmp/replica.db'],
+    ['-p', '1.234E3', '--replica-db-file=/tmp/replica.db', '--log-level=info'],
     {},
     false,
     {
       port: 1234,
       replicaDBFile: '/tmp/replica.db',
-      log: {format: 'text'},
+      log: {level: 'info', format: 'text'},
       shard: {id: '0', publications: []},
       tuple: ['a', 'b'],
     },
     {
+      Z_LOG_LEVEL: 'info',
       Z_LOG_FORMAT: 'text',
       Z_PORT: '1234',
       Z_REPLICA_DB_FILE: '/tmp/replica.db',
@@ -219,6 +229,7 @@ test.each([
       '--port',
       '6000',
       '--replica-db-file=/tmp/replica.db',
+      '--log-level=info',
       '--litestream',
       'true',
       '--log-format=json',
@@ -237,12 +248,13 @@ test.each([
       port: 6000,
       replicaDBFile: '/tmp/replica.db',
       litestream: true,
-      log: {format: 'json'},
+      log: {level: 'info', format: 'json'},
       shard: {id: 'abc', publications: ['zero_foo', 'zero_bar']},
       tuple: ['g', 'h'],
     },
     {
       Z_LITESTREAM: 'true',
+      Z_LOG_LEVEL: 'info',
       Z_LOG_FORMAT: 'json',
       Z_PORT: '6000',
       Z_REPLICA_DB_FILE: '/tmp/replica.db',
@@ -259,6 +271,8 @@ test.each([
       '6000',
       '--replica-db-file',
       '/tmp/replica.db',
+      '--log-level',
+      'info',
       '--litestream',
       'true',
       '--log-format=json',
@@ -279,12 +293,13 @@ test.each([
       port: 6000,
       replicaDBFile: '/tmp/replica.db',
       litestream: true,
-      log: {format: 'json'},
+      log: {level: 'info', format: 'json'},
       shard: {id: 'abc', publications: ['zero_foo', 'zero_bar']},
       tuple: ['i', 'j'],
     },
     {
       Z_LITESTREAM: 'true',
+      Z_LOG_LEVEL: 'info',
       Z_LOG_FORMAT: 'json',
       Z_PORT: '6000',
       Z_REPLICA_DB_FILE: '/tmp/replica.db',
@@ -299,6 +314,7 @@ test.each([
     [
       '--port',
       '8888',
+      '--log-level=info',
       '--log-format=json',
       '--shard-id',
       'abc',
@@ -325,7 +341,7 @@ test.each([
       port: 8888,
       replicaDBFile: '/tmp/env-replica.db',
       litestream: true,
-      log: {format: 'json'},
+      log: {level: 'info', format: 'json'},
       shard: {id: 'abc', publications: ['zero_foo', 'zero_bar']},
       tuple: ['k', 'l'],
       hideMe: 'foo',
@@ -333,6 +349,7 @@ test.each([
     {
       Z_HIDE_ME: 'foo',
       Z_LITESTREAM: 'true',
+      Z_LOG_LEVEL: 'info',
       Z_LOG_FORMAT: 'json',
       Z_PORT: '8888',
       Z_REPLICA_DB_FILE: '/tmp/env-replica.db',
@@ -344,19 +361,20 @@ test.each([
   ],
   [
     '--bool flag',
-    ['--litestream', '--replica-db-file=/tmp/replica.db'],
+    ['--litestream', '--replica-db-file=/tmp/replica.db', '--log-level=info'],
     {},
     false,
     {
       port: 4848,
       replicaDBFile: '/tmp/replica.db',
       litestream: true,
-      log: {format: 'text'},
+      log: {level: 'info', format: 'text'},
       shard: {id: '0', publications: []},
       tuple: ['a', 'b'],
     },
     {
       Z_LITESTREAM: 'true',
+      Z_LOG_LEVEL: 'info',
       Z_LOG_FORMAT: 'text',
       Z_PORT: '4848',
       Z_REPLICA_DB_FILE: '/tmp/replica.db',
@@ -368,19 +386,24 @@ test.each([
   ],
   [
     '--bool=true flag',
-    ['--litestream=true', '--replica-db-file=/tmp/replica.db'],
+    [
+      '--litestream=true',
+      '--replica-db-file=/tmp/replica.db',
+      '--log-level=info',
+    ],
     {},
     false,
     {
       port: 4848,
       replicaDBFile: '/tmp/replica.db',
       litestream: true,
-      log: {format: 'text'},
+      log: {level: 'info', format: 'text'},
       shard: {id: '0', publications: []},
       tuple: ['a', 'b'],
     },
     {
       Z_LITESTREAM: 'true',
+      Z_LOG_LEVEL: 'info',
       Z_LOG_FORMAT: 'text',
       Z_PORT: '4848',
       Z_REPLICA_DB_FILE: '/tmp/replica.db',
@@ -392,19 +415,25 @@ test.each([
   ],
   [
     '--bool 1 flag',
-    ['--litestream', '1', '--replica-db-file=/tmp/replica.db'],
+    [
+      '--litestream',
+      '1',
+      '--replica-db-file=/tmp/replica.db',
+      '--log-level=info',
+    ],
     {},
     false,
     {
       port: 4848,
       replicaDBFile: '/tmp/replica.db',
       litestream: true,
-      log: {format: 'text'},
+      log: {level: 'info', format: 'text'},
       shard: {id: '0', publications: []},
       tuple: ['a', 'b'],
     },
     {
       Z_LITESTREAM: 'true',
+      Z_LOG_LEVEL: 'info',
       Z_LOG_FORMAT: 'text',
       Z_PORT: '4848',
       Z_REPLICA_DB_FILE: '/tmp/replica.db',
@@ -416,19 +445,20 @@ test.each([
   ],
   [
     '--bool=0 flag',
-    ['--litestream=0', '--replica-db-file=/tmp/replica.db'],
+    ['--litestream=0', '--replica-db-file=/tmp/replica.db', '--log-level=info'],
     {},
     false,
     {
       port: 4848,
       replicaDBFile: '/tmp/replica.db',
       litestream: false,
-      log: {format: 'text'},
+      log: {level: 'info', format: 'text'},
       shard: {id: '0', publications: []},
       tuple: ['a', 'b'],
     },
     {
       Z_LITESTREAM: 'false',
+      Z_LOG_LEVEL: 'info',
       Z_LOG_FORMAT: 'text',
       Z_PORT: '4848',
       Z_REPLICA_DB_FILE: '/tmp/replica.db',
@@ -440,19 +470,25 @@ test.each([
   ],
   [
     '--bool False flag',
-    ['--litestream', 'False', '--replica-db-file=/tmp/replica.db'],
+    [
+      '--litestream',
+      'False',
+      '--replica-db-file=/tmp/replica.db',
+      '--log-level=info',
+    ],
     {},
     false,
     {
       port: 4848,
       replicaDBFile: '/tmp/replica.db',
       litestream: false,
-      log: {format: 'text'},
+      log: {level: 'info', format: 'text'},
       shard: {id: '0', publications: []},
       tuple: ['a', 'b'],
     },
     {
       Z_LITESTREAM: 'false',
+      Z_LOG_LEVEL: 'info',
       Z_LOG_FORMAT: 'text',
       Z_PORT: '4848',
       Z_REPLICA_DB_FILE: '/tmp/replica.db',
@@ -464,17 +500,25 @@ test.each([
   ],
   [
     'unknown flags',
-    ['--foo', '--replica-db-file', '/tmp/replica.db', 'bar', '--baz=3'],
+    [
+      '--foo',
+      '--replica-db-file',
+      '/tmp/replica.db',
+      'bar',
+      '--log-level=info',
+      '--baz=3',
+    ],
     {},
     false,
     {
       port: 4848,
       replicaDBFile: '/tmp/replica.db',
-      log: {format: 'text'},
+      log: {level: 'info', format: 'text'},
       shard: {id: '0', publications: []},
       tuple: ['a', 'b'],
     },
     {
+      Z_LOG_LEVEL: 'info',
       Z_LOG_FORMAT: 'text',
       Z_PORT: '4848',
       Z_REPLICA_DB_FILE: '/tmp/replica.db',
@@ -509,7 +553,7 @@ test.each([
   string[],
   Record<string, string>,
   boolean,
-  Partial<TestConfig>,
+  PartialDeep<TestConfig>,
   Record<string, string>,
   string[] | undefined,
 ][])('%s', (_name, argv, env, allowPartial, result, envObj, unknown) => {
@@ -541,22 +585,10 @@ test.each([
 test('envSchema', () => {
   const schema = envSchema(options, 'ZERO_');
   expect(JSON.stringify(schema, null, 2)).toMatchInlineSnapshot(`
-      "{
-        "shape": {
-          "ZERO_PORT": {
-            "type": {
-              "name": "string",
-              "issue": {
-                "ok": false,
-                "code": "invalid_type",
-                "expected": [
-                  "string"
-                ]
-              }
-            },
-            "name": "optional"
-          },
-          "ZERO_REPLICA_DB_FILE": {
+    "{
+      "shape": {
+        "ZERO_PORT": {
+          "type": {
             "name": "string",
             "issue": {
               "ok": false,
@@ -566,101 +598,124 @@ test('envSchema', () => {
               ]
             }
           },
-          "ZERO_LITESTREAM": {
-            "type": {
-              "name": "string",
-              "issue": {
-                "ok": false,
-                "code": "invalid_type",
-                "expected": [
-                  "string"
-                ]
-              }
-            },
-            "name": "optional"
-          },
-          "ZERO_LOG_FORMAT": {
-            "type": {
-              "name": "string",
-              "issue": {
-                "ok": false,
-                "code": "invalid_type",
-                "expected": [
-                  "string"
-                ]
-              }
-            },
-            "name": "optional"
-          },
-          "ZERO_SHARD_ID": {
-            "type": {
-              "name": "string",
-              "issue": {
-                "ok": false,
-                "code": "invalid_type",
-                "expected": [
-                  "string"
-                ]
-              }
-            },
-            "name": "optional"
-          },
-          "ZERO_SHARD_PUBLICATIONS": {
-            "type": {
-              "name": "string",
-              "issue": {
-                "ok": false,
-                "code": "invalid_type",
-                "expected": [
-                  "string"
-                ]
-              }
-            },
-            "name": "optional"
-          },
-          "ZERO_TUPLE": {
-            "type": {
-              "name": "string",
-              "issue": {
-                "ok": false,
-                "code": "invalid_type",
-                "expected": [
-                  "string"
-                ]
-              }
-            },
-            "name": "optional"
-          },
-          "ZERO_HIDE_ME": {
-            "type": {
-              "name": "string",
-              "issue": {
-                "ok": false,
-                "code": "invalid_type",
-                "expected": [
-                  "string"
-                ]
-              }
-            },
-            "name": "optional"
+          "name": "optional"
+        },
+        "ZERO_REPLICA_DB_FILE": {
+          "name": "string",
+          "issue": {
+            "ok": false,
+            "code": "invalid_type",
+            "expected": [
+              "string"
+            ]
           }
         },
-        "name": "object",
-        "_invalidType": {
-          "ok": false,
-          "code": "invalid_type",
-          "expected": [
-            "object"
-          ]
+        "ZERO_LITESTREAM": {
+          "type": {
+            "name": "string",
+            "issue": {
+              "ok": false,
+              "code": "invalid_type",
+              "expected": [
+                "string"
+              ]
+            }
+          },
+          "name": "optional"
+        },
+        "ZERO_LOG_LEVEL": {
+          "name": "string",
+          "issue": {
+            "ok": false,
+            "code": "invalid_type",
+            "expected": [
+              "string"
+            ]
+          }
+        },
+        "ZERO_LOG_FORMAT": {
+          "type": {
+            "name": "string",
+            "issue": {
+              "ok": false,
+              "code": "invalid_type",
+              "expected": [
+                "string"
+              ]
+            }
+          },
+          "name": "optional"
+        },
+        "ZERO_SHARD_ID": {
+          "type": {
+            "name": "string",
+            "issue": {
+              "ok": false,
+              "code": "invalid_type",
+              "expected": [
+                "string"
+              ]
+            }
+          },
+          "name": "optional"
+        },
+        "ZERO_SHARD_PUBLICATIONS": {
+          "type": {
+            "name": "string",
+            "issue": {
+              "ok": false,
+              "code": "invalid_type",
+              "expected": [
+                "string"
+              ]
+            }
+          },
+          "name": "optional"
+        },
+        "ZERO_TUPLE": {
+          "type": {
+            "name": "string",
+            "issue": {
+              "ok": false,
+              "code": "invalid_type",
+              "expected": [
+                "string"
+              ]
+            }
+          },
+          "name": "optional"
+        },
+        "ZERO_HIDE_ME": {
+          "type": {
+            "name": "string",
+            "issue": {
+              "ok": false,
+              "code": "invalid_type",
+              "expected": [
+                "string"
+              ]
+            }
+          },
+          "name": "optional"
         }
-      }"
-    `);
+      },
+      "name": "object",
+      "_invalidType": {
+        "ok": false,
+        "code": "invalid_type",
+        "expected": [
+          "object"
+        ]
+      }
+    }"
+  `);
 
   expect(
     v.test(
       {
         ['ZERO_PORT']: '1234',
         ['ZERO_REPLICA_DB_FILE']: '/foo/bar.db',
+        ['ZERO_LOG_LEVEL']: 'info',
       },
       schema,
     ).ok,
@@ -762,6 +817,9 @@ test('--help', () => {
      --litestream boolean               optional                                                             
        Z_LITESTREAM env                                                                                      
                                                                                                              
+     --log-level string                 required                                                             
+       Z_LOG_LEVEL env                                                                                       
+                                                                                                             
      --log-format text,json             default: "text"                                                      
        Z_LOG_FORMAT env                                                                                      
                                                                                                              
@@ -796,6 +854,9 @@ test('-h', () => {
                                                                                                              
      --litestream boolean               optional                                                             
        ZERO_LITESTREAM env                                                                                   
+                                                                                                             
+     --log-level string                 required                                                             
+       ZERO_LOG_LEVEL env                                                                                    
                                                                                                              
      --log-format text,json             default: "text"                                                      
        ZERO_LOG_FORMAT env                                                                                   
@@ -841,6 +902,9 @@ test('unknown arguments', () => {
                                                                                                              
      --litestream boolean               optional                                                             
        LITESTREAM env                                                                                        
+                                                                                                             
+     --log-level string                 required                                                             
+       LOG_LEVEL env                                                                                         
                                                                                                              
      --log-format text,json             default: "text"                                                      
        LOG_FORMAT env                                                                                        
