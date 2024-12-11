@@ -45,7 +45,7 @@ export default async function runWorker(
   ...args: string[]
 ): Promise<void> {
   const config = getZeroConfig(env, args.slice(1));
-  const lc = createLogContext(config.log, {worker: 'syncer'});
+  const lc = createLogContext(config, {worker: 'syncer'});
 
   const {traceCollector} = config.log;
   if (!traceCollector) {

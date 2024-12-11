@@ -6,7 +6,7 @@ import {
   type LogSink,
 } from '@rocicorp/logger';
 import {pid} from 'node:process';
-import {type LogConfig} from '../config/zero-config.js';
+import {type LogConfig, type ZeroConfig} from '../config/zero-config.js';
 import {stringify} from '../types/bigint-json.js';
 
 function createLogSink(config: LogConfig) {
@@ -14,11 +14,12 @@ function createLogSink(config: LogConfig) {
 }
 
 export function createLogContext(
-  config: LogConfig,
+  config: Pick<ZeroConfig, 'log'>,
   context: {worker: string},
 ): LogContext {
+  const {log} = config;
   const ctx = {...context, pid};
-  return new LogContext(config.level, ctx, createLogSink(config));
+  return new LogContext(log.level, ctx, createLogSink(log));
 }
 
 const consoleJsonLogSink: LogSink = {
