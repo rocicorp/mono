@@ -259,6 +259,7 @@ export function parseOptions<T extends Options>(
     argv,
     envNamePrefix,
     false,
+    false,
     processEnv,
     logger,
     exit,
@@ -270,6 +271,7 @@ export function parseOptionsAdvanced<T extends Options>(
   argv: string[],
   envNamePrefix = '',
   allowUnknown = false,
+  allowPartial = false,
   processEnv = process.env,
   logger: OptionalLogger = console,
   exit = process.exit,
@@ -407,7 +409,11 @@ export function parseOptionsAdvanced<T extends Options>(
     const parsedArgs = merge(defaults, fromEnv, withoutDefaults);
     const env = {...env1, ...env2, ...env3};
 
-    const schema = configSchema(options);
+    let schema = configSchema(options);
+    if (allowPartial) {
+      // TODO: Type configSchema() to return a v.ObjectType<...>
+      schema = (schema as v.ObjectType).partial() as v.Type<Config<T>>;
+    }
     return {
       config: v.parse(parsedArgs, schema),
       env,
