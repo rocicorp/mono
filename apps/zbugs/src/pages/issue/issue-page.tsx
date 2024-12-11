@@ -23,6 +23,7 @@ import {must} from '../../../../../packages/shared/src/must.js';
 import type {CommentRow, IssueRow, Schema} from '../../../schema.js';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
+import {parsePermalink} from '../../comment-permalink.js';
 import {Button} from '../../components/button.js';
 import {CanEdit} from '../../components/can-edit.js';
 import {Combobox} from '../../components/combobox.js';
@@ -44,7 +45,8 @@ import {LRUCache} from '../../lru-cache.js';
 import {links, type ListContext, type ZbugsHistoryState} from '../../routes.js';
 import {preload} from '../../zero-setup.js';
 import CommentComposer from './comment-composer.js';
-import Comment, {parsePermalink} from './comment.js';
+import Comment from './comment.js';
+import {isCtrlEnter} from './is-ctrl-enter.js';
 
 const emojiToastShowDuration = 3_000;
 
@@ -171,12 +173,17 @@ export function IssuePage() {
     const commentIndex = comments.findIndex(c => c.id === commentID);
     if (commentIndex !== -1) {
       virtualizer.scrollToIndex(commentIndex, {
-        align: 'center',
+        // auto for minimal amount of scrolling.
+        align: 'auto',
         // The `smooth` scroll behavior is not fully supported with dynamic size.
         // behavior: 'smooth',
       });
     }
-  }, [hash, issue, virtualizer]);
+    // Issue changes any time there is a change in the issue. For example when
+    // the `modified` or `assignee` changes.
+    //
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hash, issue?.id, virtualizer]);
 
   const [deleteConfirmationShown, setDeleteConfirmationShown] = useState(false);
 
@@ -315,6 +322,7 @@ export function IssuePage() {
                 className="edit-title"
                 autoFocus
                 onChange={e => setEdits({...edits, title: e.target.value})}
+                onKeyDown={e => isCtrlEnter(e) && save()}
               />
             </div>
           )}
@@ -340,6 +348,7 @@ export function IssuePage() {
                 onChange={e =>
                   setEdits({...edits, description: e.target.value})
                 }
+                onKeyDown={e => isCtrlEnter(e) && save()}
               />
             </div>
           )}
