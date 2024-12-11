@@ -4,7 +4,7 @@
   "scripts": {
     "build": "rm -rf out && npm run build-server && npm run build-client",
     "build-client": "tsc -p tsconfig.client.json && tsc-alias -p tsconfig.client.json && node tool/build.js",
-    "build-server": "tsc -p tsconfig.server.json && tsc-alias -p tsconfig.server.json && chmod +x out/zero/src/cli.js out/zero/src/build-schema.js",
+    "build-server": "tsc -p tsconfig.server.json && tsc-alias -p tsconfig.server.json && chmod +x out/zero/src/cli.js out/zero/src/build-schema.js out/zero/src/zero-cache-dev.js",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
@@ -89,8 +89,9 @@
     }
   },
   "bin": {
+    "zero-build-schema": "./out/zero/src/build-schema.js",
     "zero-cache": "./out/zero/src/cli.js",
-    "zero-build-schema": "./out/zero/src/build-schema.js"
+    "zero-cache-dev": "./out/zero/src/zero-cache-dev.js"
   },
   "engines": {
     "node": ">=20"
