@@ -46,6 +46,7 @@ import {links, type ListContext, type ZbugsHistoryState} from '../../routes.js';
 import {preload} from '../../zero-setup.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
+import {isCtrlEnter} from './is-ctrl-enter.js';
 
 const emojiToastShowDuration = 3_000;
 
@@ -321,6 +322,7 @@ export function IssuePage() {
                 className="edit-title"
                 autoFocus
                 onChange={e => setEdits({...edits, title: e.target.value})}
+                onKeyDown={e => isCtrlEnter(e) && save()}
               />
             </div>
           )}
@@ -346,6 +348,7 @@ export function IssuePage() {
                 onChange={e =>
                   setEdits({...edits, description: e.target.value})
                 }
+                onKeyDown={e => isCtrlEnter(e) && save()}
               />
             </div>
           )}
