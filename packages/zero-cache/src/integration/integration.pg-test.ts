@@ -24,7 +24,7 @@ describe('integration', () => {
   let cvrDB: PostgresDB;
   let changeDB: PostgresDB;
   let replicaDbFile: DbFile;
-  let env: Record<string, string> = {};
+  let env: Record<string, string>;
   let port: number;
 
   const SCHEMA = {
@@ -58,6 +58,7 @@ describe('integration', () => {
 
     process.env['SINGLE_PROCESS'] = '1';
 
+    env = {};
     env['ZERO_PORT'] = String(port);
     env['ZERO_LOG_LEVEL'] = 'error';
     env['ZERO_UPSTREAM_DB'] = getConnectionURI(upDB);
@@ -86,10 +87,10 @@ describe('integration', () => {
     replicaDbFile.delete();
   });
 
-  test.each([['standalone', './server/main.ts', env]])(
+  test.each([['standalone', './server/main.ts', () => env]])(
     '%s',
-    async (_name, module, env) => {
-      await startZero(module, env);
+    async (_name, module, makeEnv) => {
+      await startZero(module, makeEnv());
 
       const downstream = new Queue<unknown>();
       const ws = new WebSocket(
@@ -97,9 +98,9 @@ describe('integration', () => {
           `?clientGroupID=abc&clientID=def&wsid=123&schemaVersion=1&baseCookie=&ts=123456789&lmid=1`,
         encodeURIComponent(btoa('{}')),
       );
-      ws.on('message', data => {
-        downstream.enqueue(JSON.parse(data.toString('utf-8')));
-      });
+      ws.on('message', data =>
+        downstream.enqueue(JSON.parse(data.toString('utf-8'))),
+      );
       ws.on('open', () =>
         ws.send(
           JSON.stringify([
