@@ -183,8 +183,8 @@ Resources:
         OperatingSystemFamily: LINUX
       ContainerDefinitions:
         - Name: view-syncer-container
-          Cpu: 4096
-          Memory: 8192
+          Cpu: 8192
+          Memory: 16384
           Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/zero-zbugs-sandbox:${Tag}
           PortMappings:
             - Name: "4848"
