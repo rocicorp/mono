@@ -97,6 +97,41 @@ const perUserMutationLimit = {
 
 export type RateLimit = Config<typeof perUserMutationLimit>;
 
+const authOptions = {
+  verifyKey: {
+    type: v.string().optional(),
+    desc: [
+      `The public key, JWK, or symmetric key used to verify JWTs. You can also use a remote JWK set. If you use a remote key set, set the jwkUrl`,
+      `instead of this option. If this option is set to a public key then the 'verifyAlgorithm' must also be set.`,
+    ],
+  },
+  verifyAlgorithm: {
+    type: v.string().optional(),
+    desc: [
+      `The algorithm to use when 'verifyKey' is set to a public key. This option`,
+      `should not be set if any of the following are true:`,
+      `1. 'verifyKey' is to a symmetric (secret) key `,
+      `2, 'verifyKey' is set to a JWK `,
+      `3. 'verifyKey' is not set.`,
+    ],
+  },
+  jwkUrl: {
+    type: v.string().optional(),
+    desc: [
+      `The URL of the JWK set used to verify JWTs. If set, this overrides {bold verifyKey}.`,
+    ],
+  },
+  decryptionKey: {
+    type: v.string().optional(),
+    desc: [
+      `Secret key used to decrypt encrypted JWTs if you use encrypted JWTs. This key`,
+      `can be in PEM or JWK format. It may also be a symmetric key.`,
+    ],
+  },
+};
+
+export type AuthConfig = Config<typeof authOptions>;
+
 // Note: --help will list flags in the order in which they are defined here,
 // so order the fields such that the important (e.g. required) ones are first.
 // (Exported for testing)
@@ -203,6 +238,8 @@ export const zeroOptions = {
 
   shard: shardOptions,
 
+  auth: authOptions,
+
   port: {
     type: v.number().default(4848),
     desc: [
@@ -233,11 +270,6 @@ export const zeroOptions = {
       ``,
       `If unspecified, defaults to {bold --port} + 2.`,
     ],
-  },
-
-  jwtSecret: {
-    type: v.string().optional(),
-    desc: [`JWT secret for verifying authentication tokens.`],
   },
 
   taskID: {

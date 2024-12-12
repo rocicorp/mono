@@ -89,7 +89,7 @@ fastify.get<{
   const jwt = await new SignJWT(jwtPayload)
     .setProtectedHeader({alg: 'HS256'})
     .setExpirationTime('30days')
-    .sign(new TextEncoder().encode(process.env.ZERO_JWT_SECRET));
+    .sign(new TextEncoder().encode(process.env.ZERO_AUTH_VERIFY_KEY));
 
   reply
     .cookie('jwt', jwt, {
