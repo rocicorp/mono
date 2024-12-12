@@ -20,6 +20,7 @@ const rehypeImageToVideo: Plugin = () => {
           autoplay: true,
           loop: true,
           muted: true,
+          playsinline: true,
         };
       }
     });
