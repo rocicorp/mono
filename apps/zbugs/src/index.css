@@ -1251,6 +1251,10 @@ textarea.autoResize {
 /* Emoji Reactions */
 
 .emoji-reaction-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
   margin-top: 1rem;
 }
 
@@ -1259,6 +1263,7 @@ textarea.autoResize {
   border-color: var(--color-light-outline);
   border-width: 1px;
   border-radius: 2rem;
+  white-space: nowrap;
 }
 
 .emoji-pill:hover {
@@ -1277,6 +1282,7 @@ textarea.autoResize {
   border-width: 1px;
   border-radius: 2rem;
   opacity: 0.6;
+  flex-shrink: 0;
 }
 
 [data-open] > .add-emoji-button,

@@ -100,10 +100,7 @@ export const EmojiPanel = memo(
 
       return (
         <FloatingDelayGroup delay={1000}>
-          <div
-            className="flex gap-2 items-center emoji-reaction-container"
-            ref={ref}
-          >
+          <div className="emoji-reaction-container" ref={ref}>
             {Object.entries(groups).map(([normalizedEmoji, emojis]) => (
               <EmojiPill
                 key={normalizedEmoji}
