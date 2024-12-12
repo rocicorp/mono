@@ -10,6 +10,7 @@ import {
   zeroOptions,
 } from '../../zero-cache/src/config/zero-config.js';
 import 'dotenv/config';
+import chalk from 'chalk';
 
 const buildSchemaScript = 'zero-build-schema';
 const zeroCacheScript = 'zero-cache';
@@ -26,21 +27,12 @@ function killProcess(childProcess: ChildProcess | undefined) {
   return promise;
 }
 
-const LOG_COLOR = {
-  red: 31,
-  green: 32,
-} as const;
-
-function log(
-  msg: string,
-  color: keyof typeof LOG_COLOR = 'green',
-  method: 'log' | 'error' = 'log',
-) {
-  console[method](`\x1b[${LOG_COLOR[color]}m> ${msg}\x1b[0m`);
+function log(msg: string) {
+  console.log(chalk.green(msg));
 }
 
 function logError(msg: string) {
-  log(msg, 'red', 'error');
+  console.error(chalk.red(msg));
 }
 
 async function main() {
@@ -121,7 +113,7 @@ async function main() {
     awaitWriteFinish: {stabilityThreshold: 500, pollInterval: 100},
   });
   const onFileChange = async () => {
-    log(`Detected ${path} change.`, 'green');
+    log(`Detected ${path} change.`);
     await buildSchemaAndStartZeroCache();
   };
   watcher.on('add', onFileChange);
