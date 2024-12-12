@@ -250,7 +250,12 @@ Resources:
       TargetGroupAttributes:
         - Key: deregistration_delay.timeout_seconds
           Value: "0"
-
+        - Key: stickiness.enabled
+          Value: true
+        - Key: stickiness.type
+          Value: lb_cookie
+        - Key: stickiness.lb_cookie.duration_seconds
+          Value: 300
   PublicLBListener:
     Type: "AWS::ElasticLoadBalancingV2::Listener"
     Properties:
