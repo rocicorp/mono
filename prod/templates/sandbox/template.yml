@@ -219,7 +219,7 @@ Resources:
               ValueFrom: !Sub "${ViewSyncerSecrets}:ZERO_CVR_DB::"
             - Name: ZERO_CHANGE_DB
               ValueFrom: !Sub "${ViewSyncerSecrets}:ZERO_CHANGE_DB::"
-            - Name: ZERO_JWT_SECRET
+            - Name: ZERO_AUTH_SECRET
               ValueFrom: !Sub "${ViewSyncerSecrets}:ZERO_JWT_SECRET::"
             - Name: AWS_ACCESS_KEY_ID
               ValueFrom: !Sub "${ViewSyncerSecrets}:AWS_ACCESS_KEY_ID::"
@@ -375,7 +375,7 @@ Resources:
               ValueFrom: !Sub "${ReplicationManagerSecrets}:ZERO_CVR_DB::"
             - Name: ZERO_CHANGE_DB
               ValueFrom: !Sub "${ReplicationManagerSecrets}:ZERO_CHANGE_DB::"
-            - Name: ZERO_JWT_SECRET
+            - Name: ZERO_AUTH_SECRET
               ValueFrom: !Sub "${ReplicationManagerSecrets}:ZERO_JWT_SECRET::"
             - Name: AWS_ACCESS_KEY_ID
               ValueFrom: !Sub "${ReplicationManagerSecrets}:AWS_ACCESS_KEY_ID::"

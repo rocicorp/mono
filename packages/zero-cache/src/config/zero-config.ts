@@ -98,34 +98,22 @@ const perUserMutationLimit = {
 export type RateLimit = Config<typeof perUserMutationLimit>;
 
 const authOptions = {
-  verifyKey: {
+  jwk: {
     type: v.string().optional(),
     desc: [
-      `The public key, JWK, or symmetric key used to verify JWTs. You can also use a remote JWK set. If you use a remote key set, set the jwkUrl`,
-      `instead of this option. If this option is set to a public key then the 'verifyAlgorithm' must also be set.`,
+      `A public key in JWK format used to verify JWTs. Only one of {bold jwk}, {bold jwksUrl} and {bold secret} may be set.`,
     ],
   },
-  verifyAlgorithm: {
+  jwksUrl: {
     type: v.string().optional(),
     desc: [
-      `The algorithm to use when 'verifyKey' is set to a public key. This option`,
-      `should not be set if any of the following are true:`,
-      `1. 'verifyKey' is to a symmetric (secret) key `,
-      `2, 'verifyKey' is set to a JWK `,
-      `3. 'verifyKey' is not set.`,
+      `A URL that returns a JWK set used to verify JWTs. Only one of {bold jwk}, {bold jwksUrl} and {bold secret} may be set.`,
     ],
   },
-  jwkUrl: {
+  secret: {
     type: v.string().optional(),
     desc: [
-      `The URL of the JWK set used to verify JWTs. If set, this overrides {bold verifyKey}.`,
-    ],
-  },
-  decryptionKey: {
-    type: v.string().optional(),
-    desc: [
-      `Secret key used to decrypt encrypted JWTs if you use encrypted JWTs. This key`,
-      `can be in PEM or JWK format. It may also be a symmetric key.`,
+      `A symmetric key used to verify JWTs. Only one of {bold jwk}, {bold jwksUrl} and {bold secret} may be set.`,
     ],
   },
 };
