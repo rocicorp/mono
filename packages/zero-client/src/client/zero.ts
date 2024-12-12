@@ -1610,7 +1610,7 @@ export async function createSocket(
   );
   const {searchParams} = url;
   searchParams.set('clientID', clientID);
-  searchParams.set('clientGroupIDz', clientGroupID);
+  searchParams.set('clientGroupID', clientGroupID);
   searchParams.set('schemaVersion', schemaVersion.toString());
   searchParams.set('userID', userID);
   searchParams.set('baseCookie', baseCookie === null ? '' : String(baseCookie));
