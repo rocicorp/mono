@@ -1,4 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: ZeroCache - ViewSyncer and ReplicationManager AWS Fargate with VPC, ALB, and ECR
 
@@ -33,14 +33,13 @@ Globals:
     Timeout: 3
     MemorySize: 128
 
-Resources:  
+Resources:
   VPC:
     Type: AWS::Serverless::Application
     Properties:
       Location: ./vpc.yml
       Parameters:
         CertificateArn: !Ref CertificateArn
-        
 
   ECRRepo:
     Type: AWS::ECR::Repository
@@ -49,10 +48,10 @@ Resources:
 
   Cluster:
     Type: AWS::ECS::Cluster
-    Properties: 
-      CapacityProviders: 
+    Properties:
+      CapacityProviders:
         - FARGATE
-  
+
   # Security Group for internal service communication
   InternalServicesSG:
     Type: AWS::EC2::SecurityGroup
@@ -100,8 +99,12 @@ Resources:
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
-          Subnets: [!GetAtt "VPC.Outputs.PublicSubnet1", !GetAtt VPC.Outputs.PublicSubnet2]
-          SecurityGroups: 
+          Subnets:
+            [
+              !GetAtt "VPC.Outputs.PublicSubnet1",
+              !GetAtt VPC.Outputs.PublicSubnet2,
+            ]
+          SecurityGroups:
             - !GetAtt VPC.Outputs.SG
             - !Ref InternalServicesSG
       DeploymentConfiguration:
@@ -113,7 +116,7 @@ Resources:
         - ContainerName: "view-syncer-container"
           ContainerPort: 4848
           TargetGroupArn: !GetAtt VPC.Outputs.PublicLBTargetGroup
- 
+
   # First, create the secure parameters
   ViewSyncerSecrets:
     Type: AWS::SecretsManager::Secret
@@ -134,7 +137,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
           - Effect: Allow
             Principal:
@@ -145,7 +148,7 @@ Resources:
       Policies:
         - PolicyName: ReadSSMParameters
           PolicyDocument:
-            Version: '2012-10-17'
+            Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
@@ -154,12 +157,12 @@ Resources:
                 Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/zbugs/view-syncer/*
         - PolicyName: SecretsManagerAccess
           PolicyDocument:
-            Version: '2012-10-17'
+            Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
                   - secretsmanager:GetSecretValue
-                Resource: 
+                Resource:
                   - !Ref ViewSyncerSecrets
                   - !Ref ReplicationManagerSecrets
 
@@ -171,7 +174,7 @@ Resources:
       Cpu: 16384
       Memory: 32768
       NetworkMode: awsvpc
-      RequiresCompatibilities: 
+      RequiresCompatibilities:
         - FARGATE
       TaskRoleArn: !Ref ECSTaskRole
       ExecutionRoleArn: !Ref ECSTaskExecutionRole
@@ -256,20 +259,20 @@ Resources:
     Properties:
       AssumeRolePolicyDocument:
         Statement:
-        - Effect: Allow
-          Principal:
-            Service: [ecs-tasks.amazonaws.com]
-          Action: ['sts:AssumeRole']
-          Condition:
-            ArnLike:
-              aws:SourceArn: !Sub arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:*
-            StringEquals:
-              aws:SourceAccount: !Ref AWS::AccountId
+          - Effect: Allow
+            Principal:
+              Service: [ecs-tasks.amazonaws.com]
+            Action: ["sts:AssumeRole"]
+            Condition:
+              ArnLike:
+                aws:SourceArn: !Sub arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:*
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
       Path: /
       Policies:
         - PolicyName: S3Access
           PolicyDocument:
-            Version: '2012-10-17'
+            Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
@@ -292,8 +295,12 @@ Resources:
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
-          Subnets: [!GetAtt "VPC.Outputs.PrivateSubnet1", !GetAtt VPC.Outputs.PrivateSubnet2]
-          SecurityGroups: 
+          Subnets:
+            [
+              !GetAtt "VPC.Outputs.PrivateSubnet1",
+              !GetAtt VPC.Outputs.PrivateSubnet2,
+            ]
+          SecurityGroups:
             - !GetAtt VPC.Outputs.SG
             - !Ref InternalServicesSG
       DeploymentConfiguration:
@@ -325,7 +332,7 @@ Resources:
       Cpu: 2048
       Memory: 8192
       NetworkMode: awsvpc
-      RequiresCompatibilities: 
+      RequiresCompatibilities:
         - FARGATE
       ExecutionRoleArn: !Ref ECSTaskExecutionRole
       TaskRoleArn: !Ref ECSTaskRole

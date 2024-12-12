@@ -1,4 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Description: VPC
 
 Mappings:
@@ -15,7 +15,7 @@ Mappings:
       CIDR: "10.0.96.0/19"
 
 Resources:
-# VPC
+  # VPC
   VPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -26,7 +26,7 @@ Resources:
         - Key: Name
           Value: VPC ZBugs Sandbox
 
-# VPC Internet Gateway and Attachment
+  # VPC Internet Gateway and Attachment
   VPCInternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
@@ -40,14 +40,14 @@ Resources:
       VpcId: !Ref VPC
       InternetGatewayId: !Ref VPCInternetGateway
 
-# Public Subnet
+  # Public Subnet
   PublicSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       AvailabilityZone:
         Fn::Select:
           - 0
-          - Fn::GetAZs: { Ref: "AWS::Region" }
+          - Fn::GetAZs: {Ref: "AWS::Region"}
       VpcId: !Ref VPC
       CidrBlock: !FindInMap ["SubnetConfig", "Public1", "CIDR"]
       MapPublicIpOnLaunch: true
@@ -56,13 +56,13 @@ Resources:
           Value: Public Subnet 1
 
   PublicSubnet1RouteTable:
-      Type: AWS::EC2::RouteTable
-      Properties:
-        VpcId: !Ref VPC
-        Tags:
-          - Key: Name
-            Value: Public Subnet 1 Route Table
-  
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: Public Subnet 1 Route Table
+
   PublicSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -100,7 +100,7 @@ Resources:
       AvailabilityZone:
         Fn::Select:
           - 1
-          - Fn::GetAZs: { Ref: "AWS::Region" }
+          - Fn::GetAZs: {Ref: "AWS::Region"}
       VpcId: !Ref VPC
       CidrBlock: !FindInMap ["SubnetConfig", "Public2", "CIDR"]
       MapPublicIpOnLaunch: true
@@ -146,14 +146,14 @@ Resources:
         - Key: Name
           Value: Public Subnet 2 Nat Gateway
 
-# Private Subnets
+  # Private Subnets
   PrivateSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       AvailabilityZone:
-         Fn::Select:
-         - 0
-         - Fn::GetAZs: {Ref: 'AWS::Region'}
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: {Ref: "AWS::Region"}
       VpcId: !Ref VPC
       CidrBlock: !FindInMap ["SubnetConfig", "Private1", "CIDR"]
       Tags:
@@ -185,9 +185,9 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       AvailabilityZone:
-         Fn::Select:
-         - 1
-         - Fn::GetAZs: {Ref: 'AWS::Region'}
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: {Ref: "AWS::Region"}
       VpcId: !Ref VPC
       CidrBlock: !FindInMap ["SubnetConfig", "Private2", "CIDR"]
       Tags:
@@ -207,14 +207,14 @@ Resources:
     Properties:
       RouteTableId: !Ref Private2RouteTable
       SubnetId: !Ref PrivateSubnet2
-  
+
   PrivateSubnet2DefaultRoute:
     Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref Private2RouteTable
       DestinationCidrBlock: 0.0.0.0/0
       NatGatewayId: !Ref PublicSubnet2NatGateway
-      
+
   #Load Balancer Configuration
   PublicLoadBalancer:
     DependsOn: VPCInternetGateway
