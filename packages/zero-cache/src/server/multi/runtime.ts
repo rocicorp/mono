@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {nanoid} from 'nanoid';
-import * as v from '../../../shared/src/valita.js';
+import * as v from '../../../../shared/src/valita.js';
 
 // https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-metadata-endpoint-v4-response.html
 const containerMetadataSchema = v.object({['TaskARN']: v.string()});

@@ -24,9 +24,10 @@ export const GRACEFUL_SHUTDOWN = ['SIGTERM', 'SIGINT'] as const;
 export const FORCEFUL_SHUTDOWN = ['SIGQUIT'] as const;
 
 /**
- * Handles termination signals and coordination of graceful shutdown.
+ * Handles readiness, termination signals, and coordination of graceful
+ * shutdown.
  */
-export class Terminator {
+export class ProcessManager {
   readonly #lc: LogContext;
   readonly #userFacing = new Set<Worker>();
   readonly #all = new Set<Worker>();
@@ -45,7 +46,7 @@ export class Terminator {
     this.#lc = lc.withContext('component', 'life-cycle');
 
     // Propagate `SIGTERM` and `SIGINT` to all user-facing workers,
-    // initiating a graceful shutdown. The terminator process will
+    // initiating a graceful shutdown. The parent process will
     // exit once all user-facing workers have exited ...
     for (const signal of GRACEFUL_SHUTDOWN) {
       proc.on(signal, () => this.#startDrain(signal));

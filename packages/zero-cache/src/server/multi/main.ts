@@ -10,11 +10,12 @@ import {orTimeout} from '../../types/timeout.js';
 import {
   exitAfter,
   HeartbeatMonitor,
+  ProcessManager,
   runUntilKilled,
-  Terminator,
 } from '../life-cycle.js';
 import {createLogContext} from '../logging.js';
 import {getMultiZeroConfig} from './config.js';
+import {getTaskID} from './runtime.js';
 import {TenantDispatcher} from './tenant-dispatcher.js';
 
 export default async function runWorker(
@@ -24,10 +25,17 @@ export default async function runWorker(
   const startMs = Date.now();
   const {config, env: baseEnv} = getMultiZeroConfig(env);
   const lc = createLogContext(config, {worker: 'main'});
+  const processes = new ProcessManager(lc);
 
   const {port, heartbeatMonitorPort} = config;
-  const multiMode = config.tenants.length;
+  let {taskID} = config;
+  if (!taskID) {
+    taskID = await getTaskID(lc);
+    baseEnv['ZERO_TASK_ID'] = taskID;
+  }
+  lc.info?.(`starting task ${taskID}`);
 
+  const multiMode = config.tenants.length;
   if (!multiMode) {
     // Run a single tenant on main `port`, and skip the TenantDispatcher.
     config.tenants.push({
@@ -49,14 +57,13 @@ export default async function runWorker(
     }),
   }));
 
-  const terminator = new Terminator(lc);
   for (const tenant of tenants) {
-    terminator.addWorker(tenant.worker, 'user-facing', tenant.id);
+    processes.addWorker(tenant.worker, 'user-facing', tenant.id);
   }
 
   const s = tenants.length > 1 ? 's' : '';
   lc.info?.(`waiting for zero-cache${s} to be ready ...`);
-  if ((await orTimeout(terminator.allWorkersReady(), 30_000)) === 'timed-out') {
+  if ((await orTimeout(processes.allWorkersReady(), 30_000)) === 'timed-out') {
     lc.info?.(`timed out waiting for readiness (${Date.now() - startMs} ms)`);
   } else {
     lc.info?.(`zero-cache${s} ready (${Date.now() - startMs} ms)`);
@@ -74,7 +81,7 @@ export default async function runWorker(
   try {
     await runUntilKilled(lc, process, ...mainServices);
   } catch (err) {
-    terminator.logErrorAndExit(err);
+    processes.logErrorAndExit(err);
   }
 }
 
