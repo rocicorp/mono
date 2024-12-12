@@ -13,7 +13,7 @@ if [ "$ZERO_LITESTREAM" = "1" ] || [ "$ZERO_LITESTREAM" = "true" ]; then
   litestream replicate -config /opt/app/prod/zbugs/litestream.yml
 else 
   echo "Not Launching Litestream and running main"
-  npx tsx ./src/server/main.ts
+  npx tsx ./src/server/multi/main.ts
 fi
 
 
