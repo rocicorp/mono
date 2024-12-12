@@ -795,25 +795,16 @@ function useEmojiChangeListener(
     }
 
     if (lastEmojis.current) {
-      dispatchCallback(lastEmojis.current, newEmojis);
-      lastEmojis.current = newEmojis;
-      return;
-    }
-
-    function dispatchCallback(
-      lastEmojis: Map<string, Emoji>,
-      newEmojis: Map<string, Emoji>,
-    ) {
       const added: Emoji[] = [];
       const removed: Emoji[] = [];
 
       for (const [id, emoji] of newEmojis) {
-        if (!lastEmojis.has(id)) {
+        if (!lastEmojis.current.has(id)) {
           added.push(emoji);
         }
       }
 
-      for (const [id, emoji] of lastEmojis) {
+      for (const [id, emoji] of lastEmojis.current) {
         if (!newEmojis.has(id)) {
           removed.push(emoji);
         }
@@ -822,6 +813,8 @@ function useEmojiChangeListener(
       if (added.length !== 0 || removed.length !== 0) {
         cb(added, removed);
       }
+
+      lastEmojis.current = newEmojis;
     }
   }, [cb, emojis, issueID, result.type]);
 }
