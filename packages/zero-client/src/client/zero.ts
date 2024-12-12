@@ -736,7 +736,8 @@ export class Zero<const S extends Schema> {
   #onClose = (e: CloseEvent) => {
     const l = addWebSocketIDFromSocketToLogContext(this.#socket!, this.#lc);
     const {code, reason, wasClean} = e;
-    l.info?.('Got socket close event', {code, reason, wasClean});
+    const log = code <= 1001 ? 'info' : 'error';
+    l[log]?.('Got socket close event', {code, reason, wasClean});
 
     const closeKind = wasClean ? 'CleanClose' : 'AbruptClose';
     this.#connectResolver.reject(new CloseError(closeKind));
