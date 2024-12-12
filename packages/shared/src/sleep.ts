@@ -12,6 +12,12 @@ const promiseNever = new Promise<void>(() => undefined);
  * Pass in an AbortSignal to clear the timeout.
  */
 export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  const newAbortError = () => new AbortError('Aborted');
+
+  if (signal?.aborted) {
+    return Promise.reject(newAbortError());
+  }
+
   if (ms === 0) {
     return promiseVoid;
   }
@@ -21,7 +27,7 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     if (signal) {
       handleAbort = () => {
         clearTimeout(id);
-        reject(new AbortError('Aborted'));
+        reject(newAbortError());
       };
       signal.addEventListener('abort', handleAbort, {once: true});
     }

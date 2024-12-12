@@ -918,6 +918,7 @@ export class Zero<const S extends Schema> {
     if (this.closed) {
       return;
     }
+
     // Reject connect after a timeout.
     const timeoutID = setTimeout(() => {
       l.debug?.('Rejecting connect resolver due to timeout');
@@ -929,6 +930,7 @@ export class Zero<const S extends Schema> {
     const abortHandler = () => {
       clearTimeout(timeoutID);
     };
+    // signal.aborted cannot be true here because we checked for `this.closed` above.
     this.#closeAbortController.signal.addEventListener('abort', abortHandler);
 
     const [ws, initConnectionQueries] = await createSocket(
