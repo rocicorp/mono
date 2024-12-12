@@ -103,9 +103,8 @@ export function makeComparator(
  * semantic for your application.
  */
 export function valuesEqual(a: Value, b: Value): boolean {
-  a = normalizeUndefined(a);
-  b = normalizeUndefined(b);
-  if (a === null || b === null) {
+  // eslint-disable-next-line eqeqeq
+  if (a == null || b == null) {
     return false;
   }
   return a === b;

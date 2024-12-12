@@ -12,8 +12,8 @@ export function constraintMatchesRow(
   constraint: Constraint,
   row: Row,
 ): boolean {
-  for (const [key, value] of Object.entries(constraint)) {
-    if (!valuesEqual(row[key], value)) {
+  for (const key in constraint) {
+    if (!valuesEqual(row[key], constraint[key])) {
       return false;
     }
   }
