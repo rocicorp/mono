@@ -50,7 +50,7 @@ const shardOptions = {
 
 export type ShardConfig = Config<typeof shardOptions>;
 
-export const logOptions = {
+const logOptions = {
   level: v
     .union(
       v.literal('debug'),
