@@ -8,6 +8,7 @@ import {visit} from 'unist-util-visit';
  */
 const rehypeImageToVideo: Plugin = () => {
   return tree => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     visit(tree, 'element', (node: any) => {
       if (
         node.tagName === 'img' &&
