@@ -412,7 +412,7 @@ export function parseOptionsAdvanced<T extends Options>(
     let schema = configSchema(options);
     if (allowPartial) {
       // TODO: Type configSchema() to return a v.ObjectType<...>
-      schema = (schema as v.ObjectType).partial() as v.Type<Config<T>>;
+      schema = v.deepPartial(schema as v.ObjectType) as v.Type<Config<T>>;
     }
     return {
       config: v.parse(parsedArgs, schema),

@@ -305,3 +305,16 @@ test('instanceOfAbstractType', () => {
   expect(v.instanceOfAbstractType(null)).toBe(false);
   expect(v.instanceOfAbstractType(undefined)).toBe(false);
 });
+
+test('deepPartial', () => {
+  const s = v.deepPartial(
+    v.object({
+      a: v.object({
+        b: v.string(),
+      }),
+    }),
+  );
+
+  expect(v.parse({}, s)).toEqual({});
+  expect(v.parse({a: {}}, s)).toEqual({a: {}});
+});
