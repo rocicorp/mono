@@ -42,7 +42,7 @@ export class Terminator {
     proc: EventEmitter = process,
     exit = (code: number) => process.exit(code),
   ) {
-    this.#lc = lc.withContext('component', 'terminator');
+    this.#lc = lc.withContext('component', 'life-cycle');
 
     // Propagate `SIGTERM` and `SIGINT` to all user-facing workers,
     // initiating a graceful shutdown. The terminator process will

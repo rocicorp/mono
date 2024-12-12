@@ -314,6 +314,12 @@ export const zeroOptions = {
       `tmp directory for IVM operator storage. Leave unset to use os.tmpdir()`,
     ],
   },
+
+  tenantID: {
+    type: v.string().optional(),
+    desc: ['Passed by multi/main.ts to tag the LogContext of zero-caches'],
+    hidden: true,
+  },
 };
 
 export type ZeroConfig = Config<typeof zeroOptions>;

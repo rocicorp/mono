@@ -1,5 +1,4 @@
 import {resolver} from '@rocicorp/resolver';
-import 'dotenv/config';
 import {availableParallelism} from 'node:os';
 import path from 'node:path';
 import {getZeroConfig} from '../config/zero-config.js';
@@ -22,7 +21,6 @@ import {
 } from '../workers/replicator.js';
 import {
   exitAfter,
-  HeartbeatMonitor,
   runUntilKilled,
   Terminator,
   type WorkerType,
@@ -147,16 +145,12 @@ export default async function runWorker(
     lc.info?.(`all workers ready (${Date.now() - startMs} ms)`);
   }
 
+  const mainServices: Service[] = [];
   const {port} = config;
-  const heartbeatMonitorPort = config.heartbeatMonitorPort ?? port + 2;
-
-  const mainServices: Service[] = [
-    new HeartbeatMonitor(lc, {port: heartbeatMonitorPort}),
-  ];
 
   if (numSyncers) {
     const workers: Workers = {syncers};
-    mainServices.push(new Dispatcher(lc, () => workers, {port}));
+    mainServices.push(new Dispatcher(lc, parent, () => workers, {port}));
   }
 
   parent?.send(['ready', {ready: true}]);

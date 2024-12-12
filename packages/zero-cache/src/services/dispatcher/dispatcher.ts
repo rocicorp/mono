@@ -21,6 +21,7 @@ export class Dispatcher extends HttpService {
 
   constructor(
     lc: LogContext,
+    parent: Worker | null,
     workersByHostname: (hostname: string) => Workers,
     opts: Options,
   ) {
@@ -30,6 +31,9 @@ export class Dispatcher extends HttpService {
     });
 
     this.#workersByHostname = workersByHostname;
+    if (parent) {
+      installWebSocketHandoff(lc, req => this.#handoff(req), parent);
+    }
   }
 
   #handoff(req: IncomingMessageSubset) {
