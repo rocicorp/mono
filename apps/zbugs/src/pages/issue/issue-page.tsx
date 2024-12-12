@@ -794,27 +794,28 @@ function useEmojiChangeListener(
       return;
     }
 
-    if (lastEmojis.current) {
-      const added: Emoji[] = [];
-      const removed: Emoji[] = [];
-
-      for (const [id, emoji] of newEmojis) {
-        if (!lastEmojis.current.has(id)) {
-          added.push(emoji);
-        }
-      }
-
-      for (const [id, emoji] of lastEmojis.current) {
-        if (!newEmojis.has(id)) {
-          removed.push(emoji);
-        }
-      }
-
-      if (added.length !== 0 || removed.length !== 0) {
-        cb(added, removed);
-      }
-
-      lastEmojis.current = newEmojis;
+    if (!lastEmojis.current) {
+      return;
     }
+    const added: Emoji[] = [];
+    const removed: Emoji[] = [];
+
+    for (const [id, emoji] of newEmojis) {
+      if (!lastEmojis.current.has(id)) {
+        added.push(emoji);
+      }
+    }
+
+    for (const [id, emoji] of lastEmojis.current) {
+      if (!newEmojis.has(id)) {
+        removed.push(emoji);
+      }
+    }
+
+    if (added.length !== 0 || removed.length !== 0) {
+      cb(added, removed);
+    }
+
+    lastEmojis.current = newEmojis;
   }, [cb, emojis, issueID, result.type]);
 }
