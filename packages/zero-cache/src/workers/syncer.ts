@@ -75,8 +75,8 @@ export class Syncer implements SingletonService {
     this.#parent = parent;
     this.#wss = new WebSocketServer({noServer: true});
 
-    if (config.jwtSecret) {
-      this.#jwtSecretBytes = new TextEncoder().encode(config.jwtSecret);
+    if (config.auth.verifyKey) {
+      this.#jwtSecretBytes = new TextEncoder().encode(config.auth.verifyKey);
     }
 
     installWebSocketReceiver(this.#wss, this.#createConnection, this.#parent);
