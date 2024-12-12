@@ -670,6 +670,15 @@ textarea.autoResize {
     no-repeat center left;
 }
 
+.inline-video {
+  margin: 2rem 0 1.5rem;
+  border-radius: 0.5rem;
+}
+
+.markdown-container img {
+  margin: 2rem 0 1.5rem;
+}
+
 .edit-buttons {
   display: flex;
   gap: 0.5rem;
