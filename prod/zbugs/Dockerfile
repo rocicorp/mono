@@ -18,4 +18,4 @@ EXPOSE 4848 4849
 ENTRYPOINT ["/bin/sh", "-c"]
 ENV ZERO_LOG_LEVEL=debug
 ENV ZERO_LOG_FORMAT=json
-CMD ["npx tsx ../zero/src/build-schema.ts --path ../../apps/zbugs/schema.ts && ./start-dual.sh"]
+CMD ["npx tsx ../zero/src/build-schema.ts --schema-path ../../apps/zbugs/schema.ts && ./start-dual.sh"]
