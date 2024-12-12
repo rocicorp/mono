@@ -28,11 +28,11 @@ function killProcess(childProcess: ChildProcess | undefined) {
 }
 
 function log(msg: string) {
-  console.log(chalk.green(msg));
+  console.log(chalk.green('> ' + msg));
 }
 
 function logError(msg: string) {
-  console.error(chalk.red(msg));
+  console.error(chalk.red('> ' + msg));
 }
 
 async function main() {
