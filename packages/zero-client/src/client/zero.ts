@@ -736,7 +736,8 @@ export class Zero<const S extends Schema> {
   #onClose = (e: CloseEvent) => {
     const l = addWebSocketIDFromSocketToLogContext(this.#socket!, this.#lc);
     const {code, reason, wasClean} = e;
-    l.info?.('Got socket close event', {code, reason, wasClean});
+    const log = code <= 1001 ? 'info' : 'error';
+    l[log]?.('Got socket close event', {code, reason, wasClean});
 
     const closeKind = wasClean ? 'CleanClose' : 'AbruptClose';
     this.#connectResolver.reject(new CloseError(closeKind));
@@ -1609,7 +1610,7 @@ export async function createSocket(
   );
   const {searchParams} = url;
   searchParams.set('clientID', clientID);
-  searchParams.set('clientGroupID', clientGroupID);
+  searchParams.set('clientGroupIDz', clientGroupID);
   searchParams.set('schemaVersion', schemaVersion.toString());
   searchParams.set('userID', userID);
   searchParams.set('baseCookie', baseCookie === null ? '' : String(baseCookie));

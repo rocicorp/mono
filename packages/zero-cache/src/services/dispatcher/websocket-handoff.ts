@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {IncomingMessage, Server} from 'node:http';
 import {Socket} from 'node:net';
-import type {WebSocket, WebSocketServer} from 'ws';
+import {WebSocketServer, type WebSocket} from 'ws';
 import {
   serializableSubset,
   type IncomingMessageSubset,
@@ -30,6 +30,7 @@ export function installWebSocketHandoff<P>(
   handoff: WebSocketHandoff<P>,
   source: Server | Worker,
 ) {
+  const wss = new WebSocketServer({noServer: true});
   const handle = (
     message: IncomingMessageSubset,
     socket: Socket,
@@ -51,8 +52,12 @@ export function installWebSocketHandoff<P>(
       receiver.send(data, socket as Socket);
     } catch (error) {
       lc.warn?.(`dispatch error: ${String(error)}`, error);
-      socket.write(`HTTP/1.1 400 Bad Request\r\n${String(error)}`);
-      return;
+      // Returning an error on the HTTP handshake looks like a hanging connection
+      // (at least from Chrome) and doesn't report any meaningful error in the browser.
+      // Instead, finish the upgrade to a websocket and then close it with an error.
+      wss.handleUpgrade(message as IncomingMessage, socket, head, ws =>
+        ws.close(1002 /* "protocol error" */, String(error)),
+      );
     }
   };
 

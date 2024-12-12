@@ -109,4 +109,27 @@ describe('dispatcher/websocket-handoff', () => {
       'Received "hello" and payload {"foo":"boo"}',
     );
   });
+
+  test('handoff error', async () => {
+    installWebSocketHandoff(
+      createSilentLogContext(),
+      () => {
+        throw new Error('fooz barz');
+      },
+      server,
+    );
+
+    const ws = new WebSocket(`ws://localhost:${port}/`);
+    const {promise, resolve} = resolver<unknown>();
+    ws.on('close', (code, reason) =>
+      resolve({code, reason: reason.toString('utf-8')}),
+    );
+
+    expect(await promise).toMatchInlineSnapshot(`
+      {
+        "code": 1002,
+        "reason": "Error: fooz barz",
+      }
+    `);
+  });
 });
