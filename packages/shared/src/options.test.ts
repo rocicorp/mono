@@ -729,6 +729,36 @@ test('envSchema', () => {
   `);
 });
 
+test('duplicate flag detection', () => {
+  expect(() =>
+    parseOptions(
+      {
+        fooBar: v.string().optional(),
+        foo: {bar: v.number().optional()},
+      },
+      [],
+    ),
+  ).toThrowError('Two or more option definitions have the same name');
+});
+
+test('duplicate short flag', () => {
+  expect(() =>
+    parseOptions(
+      {
+        foo: {
+          type: v.string().optional(),
+          alias: 'b',
+        },
+        bar: {
+          type: v.number().optional(),
+          alias: 'b',
+        },
+      },
+      [],
+    ),
+  ).toThrowError('Two or more option definitions have the same alias');
+});
+
 test.each([
   [
     'missing required flag',
