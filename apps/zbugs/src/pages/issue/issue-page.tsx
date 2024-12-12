@@ -20,7 +20,12 @@ import {assert} from 'shared/src/asserts.js';
 import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.js';
-import type {CommentRow, IssueRow, Schema} from '../../../schema.js';
+import {
+  timestamp,
+  type CommentRow,
+  type IssueRow,
+  type Schema,
+} from '../../../schema.js';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
 import {parsePermalink} from '../../comment-permalink.js';
@@ -90,7 +95,7 @@ export function IssuePage() {
         z.mutate.viewState.upsert({
           issueID: issue.id,
           userID: z.userID,
-          viewed: Date.now(),
+          viewed: timestamp(Date.now()),
         });
       }, 1000);
       return () => clearTimeout(handle);

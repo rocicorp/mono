@@ -2,12 +2,28 @@ import {
   createSchema,
   createTableSchema,
   definePermissions,
+  column,
   type ExpressionBuilder,
   type TableSchema,
   type Row,
   NOBODY_CAN,
 } from '@rocicorp/zero';
 import type {Condition} from 'zero-protocol/src/ast.js';
+
+export type Opaque<BaseType, BrandType = unknown> = BaseType & {
+  readonly [base]: BaseType;
+  readonly [brand]: BrandType;
+};
+
+declare const base: unique symbol;
+declare const brand: unique symbol;
+
+export type Timestamp = Opaque<number>;
+export function timestamp(n: number): Timestamp {
+  return n as Timestamp;
+}
+
+const {number, enumeration} = column;
 
 const userSchema = createTableSchema({
   tableName: 'user',
@@ -16,7 +32,7 @@ const userSchema = createTableSchema({
     login: 'string',
     name: 'string',
     avatar: 'string',
-    role: 'string',
+    role: enumeration<'crew' | 'user'>(),
   },
   primaryKey: 'id',
 });
@@ -28,8 +44,8 @@ const issueSchema = {
     shortID: {type: 'number', optional: true},
     title: 'string',
     open: 'boolean',
-    modified: 'number',
-    created: 'number',
+    modified: number<Timestamp>(),
+    created: number<Timestamp>(),
     creatorID: 'string',
     assigneeID: {type: 'string', optional: true},
     description: 'string',
@@ -82,7 +98,7 @@ const viewStateSchema = createTableSchema({
   columns: {
     issueID: 'string',
     userID: 'string',
-    viewed: 'number',
+    viewed: number<Timestamp>(),
   },
   primaryKey: ['userID', 'issueID'],
 });
@@ -149,7 +165,7 @@ const emojiSchema = {
     annotation: 'string',
     subjectID: 'string',
     creatorID: 'string',
-    created: 'number',
+    created: number<Timestamp>(),
   },
   primaryKey: 'id',
   relationships: {

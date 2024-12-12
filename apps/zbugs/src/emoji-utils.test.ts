@@ -2,11 +2,12 @@ import type {Writable} from 'shared/src/writable.js';
 import {expect, test} from 'vitest';
 import type {Emoji} from './emoji-utils.js';
 import {formatEmojiCreatorList, formatEmojiTooltipText} from './emoji-utils.js';
+import {timestamp} from '../schema.js';
 
 function makeEmoji(userID: string, login: string): Emoji {
   return {
     id: 'id',
-    created: Date.now(),
+    created: timestamp(Date.now()),
     creatorID: userID,
     annotation: 'waves hand',
     subjectID: 'subject-id',
@@ -16,7 +17,7 @@ function makeEmoji(userID: string, login: string): Emoji {
       login,
       avatar: 'avatar',
       name: 'James Holden',
-      role: 'admin',
+      role: 'crew',
     },
   };
 }

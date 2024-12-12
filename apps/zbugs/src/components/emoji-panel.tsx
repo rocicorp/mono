@@ -32,6 +32,7 @@ import {ButtonWithLoginCheck} from './button-with-login-check.js';
 import {type ButtonProps} from './button.js';
 import {EmojiPicker} from './emoji-picker.js';
 import {EmojiPill} from './emoji-pill.js';
+import {timestamp} from '../../schema.js';
 
 const loginMessage = 'You need to be logged in to modify emoji reactions.';
 
@@ -65,7 +66,7 @@ export const EmojiPanel = memo(
             annotation,
             subjectID,
             creatorID: z.userID,
-            created: Date.now(),
+            created: timestamp(Date.now()),
           });
         },
         [subjectID, z],

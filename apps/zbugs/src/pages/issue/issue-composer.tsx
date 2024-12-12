@@ -4,6 +4,7 @@ import {Button} from '../../components/button.js';
 import {Modal, ModalActions, ModalBody} from '../../components/modal.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {isCtrlEnter} from './is-ctrl-enter.js';
+import {timestamp} from '../../../schema.js';
 
 interface Props {
   /** If id is defined the issue created by the composer. */
@@ -52,9 +53,9 @@ export default function IssueComposer({isOpen, onDismiss}: Props) {
       id,
       title,
       description: description ?? '',
-      created: Date.now(),
+      created: timestamp(Date.now()),
       creatorID: z.userID,
-      modified: Date.now(),
+      modified: timestamp(Date.now()),
       open: true,
       visibility: 'public',
     });
