@@ -78,6 +78,5 @@ export default async function runWorker(
 }
 
 if (!singleProcessMode()) {
-  console.error('\n\n\nENV', process.env);
   void exitAfter(() => runWorker(parentWorker, process.env));
 }
