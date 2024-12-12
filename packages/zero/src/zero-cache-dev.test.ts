@@ -1,8 +1,16 @@
 import {expect, test} from 'vitest';
-import {buildSchemaOptions} from '../../zero-schema/src/build-schema-options.js';
-import {zeroOptions} from '../../zero-cache/src/config/zero-config.js';
+import {
+  buildSchemaOptions,
+  ZERO_BUILD_SCHEMA_ENV_VAR_PREFIX,
+} from '../../zero-schema/src/build-schema-options.js';
+import {
+  ZERO_ENV_VAR_PREFIX,
+  zeroOptions,
+} from '../../zero-cache/src/config/zero-config.js';
 import type {Group} from '../../shared/src/options.js';
 test('zeroOptions and buildSchemaOptions are compatible', () => {
+  expect(ZERO_BUILD_SCHEMA_ENV_VAR_PREFIX).toEqual(ZERO_ENV_VAR_PREFIX);
+
   // buildSchemaOptions has a single Group called schema
   expect(Object.keys(buildSchemaOptions)).toEqual(['schema']);
   expect(buildSchemaOptions.schema).toBeInstanceOf(Object);
