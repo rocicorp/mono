@@ -114,21 +114,30 @@ test('parse options', () => {
   `);
 });
 
-test('tenant path validation', () => {
+test.each([
+  [
+    'Only a single path component may be specified',
+    {
+      id: 'tenboo',
+      path: '/too/many-slashes',
+      env: {['ZERO_REPLICA_FILE']: 'foo.db'},
+    },
+  ],
+  [
+    'Unexpected property ZERO_REPLICA_FILEZZ',
+    {
+      id: 'tenboo',
+      path: '/zero',
+      env: {['ZERO_REPLICA_FILEZZ']: 'foo.db'},
+    },
+  ],
+])('%s', (errMsg, tenant) => {
   expect(() =>
     getMultiZeroConfig({}, [
       '--tenants-json',
-      JSON.stringify({
-        tenants: [
-          {
-            id: 'tenboo',
-            path: '/too/many-slashes',
-            env: {['ZERO_REPLICA_FILE']: 'foo.db'},
-          },
-        ],
-      }),
+      JSON.stringify({tenants: [tenant]}),
     ]),
-  ).toThrowError('Only a single path component may be specified');
+  ).toThrowError(errMsg);
 });
 
 class ExitAfterUsage extends Error {}
