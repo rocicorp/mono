@@ -110,7 +110,7 @@ Resources:
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 50
-      DesiredCount: 1
+      DesiredCount: 4
       TaskDefinition: !Ref "TaskDefinitionViewSyncer"
       LoadBalancers:
         - ContainerName: "view-syncer-container"
@@ -171,8 +171,8 @@ Resources:
     Type: AWS::ECS::TaskDefinition
     Properties:
       Family: sandbox-view-syncer-task-definition
-      Cpu: 16384
-      Memory: 32768
+      Cpu: 4096
+      Memory: 8192
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
@@ -183,8 +183,8 @@ Resources:
         OperatingSystemFamily: LINUX
       ContainerDefinitions:
         - Name: view-syncer-container
-          Cpu: 16384
-          Memory: 32768
+          Cpu: 4096
+          Memory: 8192
           Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/zero-zbugs-sandbox:${Tag}
           PortMappings:
             - Name: "4848"
