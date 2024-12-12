@@ -54,11 +54,12 @@ export default async function runWorker(
     terminator.addWorker(tenant.worker, 'user-facing', tenant.id);
   }
 
-  lc.info?.('waiting for tenants to be ready ...');
+  const s = tenants.length > 1 ? 's' : '';
+  lc.info?.(`waiting for zero-cache${s} to be ready ...`);
   if ((await orTimeout(terminator.allWorkersReady(), 30_000)) === 'timed-out') {
     lc.info?.(`timed out waiting for readiness (${Date.now() - startMs} ms)`);
   } else {
-    lc.info?.(`all tenants ready (${Date.now() - startMs} ms)`);
+    lc.info?.(`zero-cache${s} ready (${Date.now() - startMs} ms)`);
   }
 
   const mainServices: Service[] = [
