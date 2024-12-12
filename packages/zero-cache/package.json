@@ -12,7 +12,7 @@
     "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "local": "tsx tool/local.ts",
-    "start": "tsx ./src/server/main.ts",
+    "start": "tsx ./src/server/multi/main.ts",
     "bench": "tsx ./bench/bench.ts",
     "double": "tsx ./bench/double.ts",
     "wal_bench": "tsx ./bench/wal-bench.ts",
