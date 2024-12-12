@@ -21,6 +21,7 @@ const rehypeImageToVideo: Plugin = () => {
           loop: true,
           muted: true,
           playsinline: true,
+          className: [...(node.properties?.className || []), 'inline-video'],
         };
       }
     });
