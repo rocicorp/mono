@@ -21,12 +21,11 @@ import {
 } from '../workers/replicator.js';
 import {
   exitAfter,
+  ProcessManager,
   runUntilKilled,
-  Terminator,
   type WorkerType,
 } from './life-cycle.js';
 import {createLogContext} from './logging.js';
-import {getTaskID} from './runtime.js';
 
 export default async function runWorker(
   parent: Worker | null,
@@ -36,7 +35,7 @@ export default async function runWorker(
   const config = getZeroConfig(env);
   const lc = createLogContext(config, {worker: 'dispatcher'});
 
-  const terminator = new Terminator(lc);
+  const processes = new ProcessManager(lc);
 
   const numSyncers =
     config.numSyncWorkers !== undefined
@@ -65,13 +64,6 @@ export default async function runWorker(
           String(Math.floor(config.cvr.maxConns / numSyncers)),
         ];
 
-  let {taskID} = config;
-  if (!taskID) {
-    taskID = await getTaskID(lc);
-    internalFlags.push('--task-id', taskID);
-  }
-  lc.info?.(`starting task ${taskID}`);
-
   function loadWorker(
     modulePath: string,
     type: WorkerType,
@@ -80,7 +72,7 @@ export default async function runWorker(
   ): Worker {
     const worker = childWorker(modulePath, env, ...args, ...internalFlags);
     const name = path.basename(modulePath) + (id ? ` (${id})` : '');
-    return terminator.addWorker(worker, type, name);
+    return processes.addWorker(worker, type, name);
   }
 
   const {promise: changeStreamerReady, resolve} = resolver();
@@ -139,7 +131,7 @@ export default async function runWorker(
   }
 
   lc.info?.('waiting for workers to be ready ...');
-  if ((await orTimeout(terminator.allWorkersReady(), 30_000)) === 'timed-out') {
+  if ((await orTimeout(processes.allWorkersReady(), 30_000)) === 'timed-out') {
     lc.info?.(`timed out waiting for readiness (${Date.now() - startMs} ms)`);
   } else {
     lc.info?.(`all workers ready (${Date.now() - startMs} ms)`);
@@ -158,7 +150,7 @@ export default async function runWorker(
   try {
     await runUntilKilled(lc, process, ...mainServices);
   } catch (err) {
-    terminator.logErrorAndExit(err);
+    processes.logErrorAndExit(err);
   }
 }
 

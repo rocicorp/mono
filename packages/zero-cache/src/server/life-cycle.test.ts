@@ -5,12 +5,12 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js'
 import {promiseVoid} from '../../../shared/src/resolved-promises.js';
 import type {SingletonService} from '../services/service.js';
 import {inProcChannel} from '../types/processes.js';
-import {runUntilKilled, Terminator, type WorkerType} from './life-cycle.js';
+import {ProcessManager, runUntilKilled, type WorkerType} from './life-cycle.js';
 
 describe('shutdown', () => {
   const lc = createSilentLogContext();
   let proc: EventEmitter;
-  let terminator: Terminator;
+  let processes: ProcessManager;
   let events: string[];
   let changeStreamer: TestWorker;
   let replicator: TestWorker;
@@ -53,7 +53,7 @@ describe('shutdown', () => {
     const worker = new TestWorker(id, type);
     const [parentPort, childPort] = inProcChannel();
 
-    terminator.addWorker(parentPort, type, id);
+    processes.addWorker(parentPort, type, id);
 
     void runUntilKilled(lc, childPort, worker).then(
       () => parentPort.emit('close', 0),
@@ -64,7 +64,7 @@ describe('shutdown', () => {
 
   beforeEach(async () => {
     proc = new EventEmitter();
-    terminator = new Terminator(
+    processes = new ProcessManager(
       lc,
       proc,
       code => proc.emit('exit', code) as never,
@@ -225,7 +225,7 @@ describe('shutdown', () => {
 
   test('graceful shutdown with no user-facing workers', async () => {
     proc = new EventEmitter();
-    terminator = new Terminator(
+    processes = new ProcessManager(
       lc,
       proc,
       code => proc.emit('exit', code) as never,
