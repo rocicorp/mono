@@ -1,0 +1,27 @@
+{
+  "name": "prod",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write .",
+    "check-format": "prettier --check ."
+  },
+  "prettier": {
+    "overrides": [
+      {
+        "files": [
+          "*.yml",
+          "*.yaml"
+        ],
+        "options": {
+          "trailingComma": "es5",
+          "tabWidth": 2,
+          "bracketSpacing": false,
+          "semi": false,
+          "singleQuote": false
+        }
+      }
+    ]
+  }
+}
