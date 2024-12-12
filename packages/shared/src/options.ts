@@ -48,7 +48,7 @@ export type WrappedOptionType = {
 export type Option = OptionType | WrappedOptionType;
 
 // Related Options can be grouped.
-type Group = Record<string, Option>;
+export type Group = Record<string, Option>;
 
 /**
  * # Options

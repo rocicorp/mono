@@ -12,7 +12,7 @@
     "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "preview": "vite preview",
-    "zero": "npm run zero-build-schema && tsx ../../packages/zero-cache/src/server/multi/main.ts",
+    "zero": "zero-cache-dev",
     "zero-build-schema": "tsx ../../packages/zero-schema/src/build-schema.ts",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -23,7 +23,7 @@
     "@floating-ui/react": "^0.26.28",
     "@headlessui/react": "^2.1.8",
     "@octokit/core": "^6.1.2",
-    "@rocicorp/zero": "0.8.2024121100+8884ae",
+    "@rocicorp/zero": "0.8.2024121200+f615fa",
     "@schickling/fps-meter": "^0.1.2",
     "@tanstack/react-virtual": "^3.10.9",
     "classnames": "^2.5.1",
