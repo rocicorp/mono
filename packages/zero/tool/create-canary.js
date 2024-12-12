@@ -174,13 +174,25 @@ try {
   execute(`git push origin main`);
 
   const dockerCanaryVersion = nextCanaryVersion.replace(/\+/g, '-');
-  execute(
-    `docker build . \
+  for (let i = 0; i < 3; i++) {
+    try {
+      execute(
+        `docker build . \
     --build-arg=ZERO_VERSION=${nextCanaryVersion} \
     --build-arg=NPM_TOKEN=${npmAuthToken} \
     -t rocicorp/zero:${dockerCanaryVersion}`,
-    {cwd: basePath('packages', 'zero')},
-  );
+        {cwd: basePath('packages', 'zero')},
+      );
+    } catch (e) {
+      const wait = (i + 1) * 20;
+      console.error(
+        `Error building docker image, retrying in ${wait} seconds...`,
+      );
+      await new Promise(resolve => setTimeout(resolve, 10000));
+      continue;
+    }
+    break;
+  }
   execute(
     `docker tag rocicorp/zero:${dockerCanaryVersion} rocicorp/zero:canary`,
   );
