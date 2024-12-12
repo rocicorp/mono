@@ -287,3 +287,23 @@ export function instanceOfAbstractType<T = unknown>(
 ): obj is v.Type<T> | v.Optional<T> {
   return obj instanceof AbstractType;
 }
+
+type ObjectShape = Record<string, typeof AbstractType>;
+
+/**
+ * Similar to `ObjectType.partial()` except it recurses into nested objects.
+ * Rest types are not supported.
+ */
+export function deepPartial<Shape extends ObjectShape>(
+  s: v.ObjectType<Shape, undefined>,
+) {
+  const shape = {} as Record<string, unknown>;
+  for (const [key, type] of Object.entries(s.shape)) {
+    if (type.name === 'object') {
+      shape[key] = deepPartial(type as v.ObjectType).optional();
+    } else {
+      shape[key] = type.optional();
+    }
+  }
+  return v.object(shape as {[K in keyof Shape]: v.Optional<v.Infer<Shape[K]>>});
+}

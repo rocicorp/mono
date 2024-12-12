@@ -30,6 +30,7 @@ export function listTables(db: Database): LiteTableSpec[] {
       FROM sqlite_master as m 
       LEFT JOIN pragma_table_info(m.name) as p 
       WHERE m.type = 'table'
+      AND m.name NOT LIKE 'sqlite_%'
       `,
     )
     .all() as ColumnInfo[];

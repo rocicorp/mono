@@ -1,5 +1,4 @@
 import {expect, suite, test} from 'vitest';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 import type {
   Condition,
   SimpleOperator,
@@ -2481,17 +2480,9 @@ test('json is a valid type to read and write to/from a source', () => {
     ['a'],
   );
 
-  // This is certainly odd.
-  // See commentary in `TableSource.push` about why
-  // the `push` json is converted to a string for table-source.
-  const isTableSource =
-    (source as unknown as Record<string, unknown>)['setDB'] !== undefined;
-  function jForPush(j: ReadonlyJSONValue): ReadonlyJSONValue {
-    return isTableSource ? JSON.stringify(j) : j;
-  }
-  source.push({type: 'add', row: {a: 1, j: jForPush({foo: 'bar'})}});
-  source.push({type: 'add', row: {a: 2, j: jForPush({baz: 'qux'})}});
-  source.push({type: 'add', row: {a: 3, j: jForPush({foo: 'foo'})}});
+  source.push({type: 'add', row: {a: 1, j: {foo: 'bar'}}});
+  source.push({type: 'add', row: {a: 2, j: {baz: 'qux'}}});
+  source.push({type: 'add', row: {a: 3, j: {foo: 'foo'}}});
 
   const out = new Catch(source.connect([['a', 'asc']]));
   expect(out.fetch({})).toEqual(
@@ -2502,9 +2493,9 @@ test('json is a valid type to read and write to/from a source', () => {
     ]),
   );
 
-  source.push({type: 'add', row: {a: 4, j: jForPush({foo: 'foo'})}});
-  source.push({type: 'add', row: {a: 5, j: jForPush({baz: 'qux'})}});
-  source.push({type: 'add', row: {a: 6, j: jForPush({foo: 'bar'})}});
+  source.push({type: 'add', row: {a: 4, j: {foo: 'foo'}}});
+  source.push({type: 'add', row: {a: 5, j: {baz: 'qux'}}});
+  source.push({type: 'add', row: {a: 6, j: {foo: 'bar'}}});
   expect(out.pushes).toEqual([
     {
       type: 'add',
@@ -2524,10 +2515,10 @@ test('json is a valid type to read and write to/from a source', () => {
   out.reset();
   source.push({
     type: 'edit',
-    oldRow: {a: 4, j: jForPush({foo: 'foo'})},
-    row: {a: 4, j: jForPush({foo: 'bar'})},
+    oldRow: {a: 4, j: {foo: 'foo'}},
+    row: {a: 4, j: {foo: 'bar'}},
   });
-  source.push({type: 'remove', row: {a: 5, j: jForPush({baz: 'qux'})}});
+  source.push({type: 'remove', row: {a: 5, j: {baz: 'qux'}}});
   expect(out.pushes).toEqual([
     {
       type: 'edit',

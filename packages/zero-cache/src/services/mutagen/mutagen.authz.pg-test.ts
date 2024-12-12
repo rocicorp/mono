@@ -1,7 +1,11 @@
-import {afterEach, beforeEach, expect, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {MutationType} from '../../../../zero-protocol/src/push.js';
-import {definePermissions} from '../../../../zero-schema/src/permissions.js';
+import {
+  ANYONE_CAN,
+  definePermissions,
+  NOBODY_CAN,
+} from '../../../../zero-schema/src/permissions.js';
 import {createSchema} from '../../../../zero-schema/src/schema.js';
 import type {TableSchema} from '../../../../zero-schema/src/table-schema.js';
 import {ExpressionBuilder} from '../../../../zql/src/query/expression.js';
@@ -11,6 +15,7 @@ import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {zeroSchema} from './mutagen-test-shared.js';
 import {processMutation} from './mutagen.js';
+import type {Row} from '../../../../zql/src/query/query.js';
 
 const SHARD_ID = '0';
 const CG_ID = 'abc';
@@ -64,11 +69,12 @@ INSERT INTO "adminOnlyCell" VALUES ('locked', 'a', true);
 CREATE TABLE "adminOnlyRow" (
   id text PRIMARY KEY,
   a text,
-  "adminLocked" boolean
+  "adminLocked" boolean,
+  "json" json
 );
 
-INSERT INTO "adminOnlyRow" VALUES ('unlocked', 'a', false);
-INSERT INTO "adminOnlyRow" VALUES ('locked', 'a', true);
+INSERT INTO "adminOnlyRow" VALUES ('unlocked', 'a', false, '{}');
+INSERT INTO "adminOnlyRow" VALUES ('locked', 'a', true, '[]');
 
 CREATE TABLE "loggedInRow" (
   id text PRIMARY KEY,
@@ -80,6 +86,20 @@ INSERT INTO "loggedInRow" VALUES ('1', 'a');
 CREATE TABLE "userMatch" (
   id text PRIMARY KEY,
   a text
+);
+
+CREATE TABLE "dataTypeTest" (
+  "id" text PRIMARY KEY,
+  "j" json,
+  "b" boolean,
+  "r" real,
+  "i" bigint
+);
+
+INSERT INTO "dataTypeTest" (
+  "id", "j", "b", "r", "i"
+) VALUES (
+  '100', '{}', true, 1.1, 100
 );
 `;
 
@@ -161,6 +181,18 @@ const schema = createSchema({
       primaryKey: ['id'],
       relationships: {},
     },
+    dataTypeTest: {
+      tableName: 'dataTypeTest',
+      columns: {
+        id: {type: 'string'},
+        j: {type: 'json', optional: true},
+        b: {type: 'boolean', optional: true},
+        r: {type: 'number', optional: true},
+        i: {type: 'number', optional: true},
+      },
+      primaryKey: ['id'],
+      relationships: {},
+    },
   },
 });
 
@@ -198,21 +230,21 @@ const permissionsConfig = await definePermissions<AuthData, typeof schema>(
       roCell: {
         cell: {
           a: {
-            insert: [],
+            insert: NOBODY_CAN,
             update: {
-              preMutation: [],
+              preMutation: NOBODY_CAN,
             },
-            delete: [],
+            delete: NOBODY_CAN,
           },
         },
       },
       roRow: {
         row: {
-          insert: [],
+          insert: NOBODY_CAN,
           update: {
-            preMutation: [],
+            preMutation: NOBODY_CAN,
           },
-          delete: [],
+          delete: NOBODY_CAN,
         },
       },
       adminOnlyCell: {
@@ -244,6 +276,13 @@ const permissionsConfig = await definePermissions<AuthData, typeof schema>(
       userMatch: {
         row: {
           insert: [allowIfPostMutationIDMatchesLoggedInUser],
+        },
+      },
+      dataTypeTest: {
+        row: {
+          insert: ANYONE_CAN,
+          update: ANYONE_CAN,
+          delete: ANYONE_CAN,
         },
       },
     };
@@ -410,11 +449,11 @@ test('non-admins cannot update admin-only rows', async () => {
   await procMutation(
     'adminOnlyRow',
     'update',
-    {id: 'locked', a: 'UPDATED'},
+    {id: 'locked', a: 'UPDATED', json: 'some string'},
     'usr',
   );
   let rows = await upstream`SELECT * FROM "adminOnlyRow" WHERE id = 'locked'`;
-  expect(rows).toEqual([{id: 'locked', a: 'a', adminLocked: true}]);
+  expect(rows).toEqual([{id: 'locked', a: 'a', adminLocked: true, json: []}]);
 
   await procMutation('adminOnlyRow', 'delete', {id: 'locked'}, 'usr');
   rows = await upstream`SELECT * FROM "adminOnlyRow" WHERE id = 'locked'`;
@@ -429,7 +468,20 @@ test('non-admins can update unlocked rows', async () => {
     'usr',
   );
   let rows = await upstream`SELECT * FROM "adminOnlyRow" WHERE id = 'unlocked'`;
-  expect(rows).toEqual([{id: 'unlocked', a: 'UPDATED', adminLocked: false}]);
+  expect(rows).toEqual([
+    {id: 'unlocked', a: 'UPDATED', adminLocked: false, json: {}},
+  ]);
+
+  await procMutation(
+    'adminOnlyRow',
+    'update',
+    {id: 'unlocked', a: 'UPDATED2', json: {a: true}},
+    'usr',
+  );
+  rows = await upstream`SELECT * FROM "adminOnlyRow" WHERE id = 'unlocked'`;
+  expect(rows).toEqual([
+    {id: 'unlocked', a: 'UPDATED2', adminLocked: false, json: {a: true}},
+  ]);
 
   await procMutation('adminOnlyRow', 'delete', {id: 'unlocked'}, 'usr');
   rows = await upstream`SELECT * FROM "adminOnlyRow" WHERE id = 'unlocked'`;
@@ -444,7 +496,9 @@ test('admins can update locked rows', async () => {
     'admn',
   );
   let rows = await upstream`SELECT * FROM "adminOnlyRow" WHERE id = 'locked'`;
-  expect(rows).toEqual([{id: 'locked', a: 'UPDATED', adminLocked: true}]);
+  expect(rows).toEqual([
+    {id: 'locked', a: 'UPDATED', adminLocked: true, json: []},
+  ]);
 
   await procMutation('adminOnlyRow', 'delete', {id: 'locked'}, 'admn');
   rows = await upstream`SELECT * FROM "adminOnlyRow" WHERE id = 'locked'`;
@@ -497,4 +551,286 @@ test('userMatch postMutation check', async () => {
   await procMutation('userMatch', 'insert', {id: '1', a: 'a'}, '1');
   rows = await upstream`SELECT * FROM "userMatch" WHERE id = '1'`;
   expect(rows.length).toBe(1);
+});
+
+describe('data type test', () => {
+  function runMutation(
+    op: 'insert' | 'upsert' | 'update' | 'delete',
+    value: Partial<Row<typeof schema.tables.dataTypeTest>>,
+  ) {
+    return procMutation('dataTypeTest', op, value, 'usr');
+  }
+
+  function select(id?: string) {
+    if (id === undefined) {
+      return upstream`SELECT * FROM "dataTypeTest"`;
+    }
+    return upstream`SELECT * FROM "dataTypeTest" WHERE id = ${id}`;
+  }
+
+  test('partial inserts', async () => {
+    // only pk
+    await runMutation('insert', {id: '1'});
+    expect(await select('1')).toMatchInlineSnapshot(`
+      Result [
+        {
+          "b": null,
+          "i": null,
+          "id": "1",
+          "j": null,
+          "r": null,
+        },
+      ]
+    `);
+
+    // pk and json
+    await runMutation('insert', {id: '2', j: {a: 1}});
+    expect(await select('2')).toMatchInlineSnapshot(`
+      Result [
+        {
+          "b": null,
+          "i": null,
+          "id": "2",
+          "j": {
+            "a": 1,
+          },
+          "r": null,
+        },
+      ]
+    `);
+  });
+
+  test('complete inserts', async () => {
+    await runMutation('insert', {
+      id: '3',
+      j: {a: 1},
+      b: true,
+      r: 1.1,
+      i: 1,
+    });
+    expect(await select('3')).toMatchInlineSnapshot(`
+      Result [
+        {
+          "b": true,
+          "i": 1n,
+          "id": "3",
+          "j": {
+            "a": 1,
+          },
+          "r": 1.1,
+        },
+      ]
+    `);
+  });
+
+  test('json insert edge cases', async () => {
+    await runMutation('insert', {id: '1', j: null});
+    expect(await select('1')).toMatchInlineSnapshot(`
+      Result [
+        {
+          "b": null,
+          "i": null,
+          "id": "1",
+          "j": null,
+          "r": null,
+        },
+      ]
+    `);
+
+    await runMutation('insert', {id: '2', j: {}});
+    expect(await select('2')).toMatchInlineSnapshot(`
+      Result [
+        {
+          "b": null,
+          "i": null,
+          "id": "2",
+          "j": {},
+          "r": null,
+        },
+      ]
+    `);
+
+    await runMutation('insert', {id: '3', j: []});
+    expect(await select('3')).toMatchInlineSnapshot(`
+      Result [
+        {
+          "b": null,
+          "i": null,
+          "id": "3",
+          "j": [],
+          "r": null,
+        },
+      ]
+    `);
+
+    // These both fail inside of postgres... This is valid though, right?
+    // await runMutation('insert', {id: '4', j: true});
+    // expect(await select('4')).toMatchInlineSnapshot(`Result []`);
+
+    // await runMutation('insert', {id: '5', j: false});
+    // expect(await select('5')).toMatchInlineSnapshot(`Result []`);
+
+    await runMutation('insert', {id: '6', j: 'string'});
+    expect(await select('6')).toMatchInlineSnapshot(`
+      Result [
+        {
+          "b": null,
+          "i": null,
+          "id": "6",
+          "j": "string",
+          "r": null,
+        },
+      ]
+    `);
+
+    await runMutation('insert', {id: '7', j: 0});
+    expect(await select('7')).toMatchInlineSnapshot(`
+      Result [
+        {
+          "b": null,
+          "i": null,
+          "id": "7",
+          "j": 0,
+          "r": null,
+        },
+      ]
+    `);
+  });
+
+  test('json update edge cases', async () => {
+    await runMutation('update', {id: '100', j: {a: 1}});
+    expect(await select('100')).toMatchInlineSnapshot(`
+      Result [
+        {
+          "b": true,
+          "i": 100n,
+          "id": "100",
+          "j": {
+            "a": 1,
+          },
+          "r": 1.1,
+        },
+      ]
+    `);
+
+    await runMutation('update', {id: '100', j: null});
+    expect(await select('100')).toMatchInlineSnapshot(`
+      Result [
+        {
+          "b": true,
+          "i": 100n,
+          "id": "100",
+          "j": null,
+          "r": 1.1,
+        },
+      ]
+    `);
+
+    await runMutation('update', {id: '100', j: 'string'});
+    expect(await select('100')).toMatchInlineSnapshot(`
+      Result [
+        {
+          "b": true,
+          "i": 100n,
+          "id": "100",
+          "j": "string",
+          "r": 1.1,
+        },
+      ]
+    `);
+
+    await runMutation('update', {id: '100', j: 0});
+    expect(await select('100')).toMatchInlineSnapshot(`
+      Result [
+        {
+          "b": true,
+          "i": 100n,
+          "id": "100",
+          "j": 0,
+          "r": 1.1,
+        },
+      ]
+    `);
+
+    await runMutation('update', {id: '100', j: {}});
+    expect(await select('100')).toMatchInlineSnapshot(`
+      Result [
+        {
+          "b": true,
+          "i": 100n,
+          "id": "100",
+          "j": {},
+          "r": 1.1,
+        },
+      ]
+    `);
+
+    await runMutation('update', {id: '100', j: []});
+    expect(await select('100')).toMatchInlineSnapshot(`
+      Result [
+        {
+          "b": true,
+          "i": 100n,
+          "id": "100",
+          "j": [],
+          "r": 1.1,
+        },
+      ]
+    `);
+  });
+
+  test('boolean conversion', async () => {
+    await runMutation('update', {id: '100', b: true});
+    expect(await select('100')).toMatchInlineSnapshot(`
+      Result [
+        {
+          "b": true,
+          "i": 100n,
+          "id": "100",
+          "j": {},
+          "r": 1.1,
+        },
+      ]
+    `);
+    await runMutation('update', {id: '100', b: false});
+    expect(await select('100')).toMatchInlineSnapshot(`
+      Result [
+        {
+          "b": false,
+          "i": 100n,
+          "id": "100",
+          "j": {},
+          "r": 1.1,
+        },
+      ]
+    `);
+  });
+
+  test('bigint range', async () => {
+    await runMutation('update', {id: '100', i: Number.MAX_SAFE_INTEGER + 1});
+    expect(await select('100')).toMatchInlineSnapshot(`
+      Result [
+        {
+          "b": true,
+          "i": 9007199254740992n,
+          "id": "100",
+          "j": {},
+          "r": 1.1,
+        },
+      ]
+    `);
+
+    await runMutation('update', {id: '100', i: Number.MIN_SAFE_INTEGER - 1});
+    expect(await select('100')).toMatchInlineSnapshot(`
+      Result [
+        {
+          "b": true,
+          "i": -9007199254740992n,
+          "id": "100",
+          "j": {},
+          "r": 1.1,
+        },
+      ]
+    `);
+  });
 });
