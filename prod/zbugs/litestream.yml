@@ -1,4 +1,4 @@
-exec: npx tsx ./src/server/main.ts
+exec: npx tsx ./src/server/multi/main.ts
 dbs:
   - path: ${ZERO_REPLICA_FILE}
     replicas:
