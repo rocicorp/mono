@@ -55,10 +55,6 @@ const options = {
     type: v.string().optional(),
     hidden: true,
   },
-  hasOwnNamePrefix: {
-    type: v.string().optional(),
-    envNamePrefix: 'TEST_',
-  },
 };
 
 type TestConfig = Config<typeof options>;
@@ -552,34 +548,6 @@ test.each([
     },
     undefined,
   ],
-  [
-    'option that has own envNamePrefix',
-    ['--log-level=info'],
-    {
-      ['TEST_HAS_OWN_NAME_PREFIX']: 'foo',
-      ['Z_REPLICA_DB_FILE']: '/tmp/replica.db',
-    },
-    false,
-    {
-      port: 4848,
-      replicaDBFile: '/tmp/replica.db',
-      log: {format: 'text', level: 'info'},
-      shard: {id: '0', publications: []},
-      tuple: ['a', 'b'],
-      hasOwnNamePrefix: 'foo',
-    },
-    {
-      Z_LOG_FORMAT: 'text',
-      Z_LOG_LEVEL: 'info',
-      Z_PORT: '4848',
-      Z_REPLICA_DB_FILE: '/tmp/replica.db',
-      Z_SHARD_ID: '0',
-      Z_SHARD_PUBLICATIONS: '',
-      Z_TUPLE: 'a,b',
-      TEST_HAS_OWN_NAME_PREFIX: 'foo',
-    },
-    undefined,
-  ],
 ] satisfies [
   string,
   string[],
@@ -729,19 +697,6 @@ test('envSchema', () => {
             }
           },
           "name": "optional"
-        },
-        "TEST_HAS_OWN_NAME_PREFIX": {
-          "type": {
-            "name": "string",
-            "issue": {
-              "ok": false,
-              "code": "invalid_type",
-              "expected": [
-                "string"
-              ]
-            }
-          },
-          "name": "optional"
         }
       },
       "name": "object",
@@ -878,9 +833,6 @@ test('--help', () => {
      --tuple a,c,e,g,i,k,b,d,f,h,j,l    default: ["a","b"]                                                   
        Z_TUPLE env                                                                                           
                                                                                                              
-     --has-own-name-prefix string       optional                                                             
-       TEST_HAS_OWN_NAME_PREFIX env                                                                          
-                                                                                                             
     "
   `);
 });
@@ -918,9 +870,6 @@ test('-h', () => {
                                                                                                              
      --tuple a,c,e,g,i,k,b,d,f,h,j,l    default: ["a","b"]                                                   
        ZERO_TUPLE env                                                                                        
-                                                                                                             
-     --has-own-name-prefix string       optional                                                             
-       TEST_HAS_OWN_NAME_PREFIX env                                                                          
                                                                                                              
     "
   `);
@@ -969,9 +918,6 @@ test('unknown arguments', () => {
                                                                                                              
      --tuple a,c,e,g,i,k,b,d,f,h,j,l    default: ["a","b"]                                                   
        TUPLE env                                                                                             
-                                                                                                             
-     --has-own-name-prefix string       optional                                                             
-       TEST_HAS_OWN_NAME_PREFIX env                                                                          
                                                                                                              
     "
   `);

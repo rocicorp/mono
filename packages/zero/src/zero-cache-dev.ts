@@ -46,28 +46,31 @@ function logError(msg: string) {
 async function main() {
   const {config} = parseOptionsAdvanced(
     {
-      ...buildSchemaOptions,
       ...zeroOptions,
+      schema: {
+        ...zeroOptions.schema,
+        ...buildSchemaOptions.schema,
+      },
     },
     process.argv.slice(2),
     ZERO_ENV_VAR_PREFIX,
   );
 
-  const {unknown: zeroArgs} = parseOptionsAdvanced(
+  const {unknown: zeroCacheArgs} = parseOptionsAdvanced(
     buildSchemaOptions,
     process.argv.slice(2),
-    undefined,
+    ZERO_ENV_VAR_PREFIX,
     true,
   );
 
-  const {unknown: schemaArgs} = parseOptionsAdvanced(
+  const {unknown: buildSchemaArgs} = parseOptionsAdvanced(
     zeroOptions,
     process.argv.slice(2),
     ZERO_ENV_VAR_PREFIX,
     true,
   );
 
-  const {path} = config;
+  const {path} = config.schema;
 
   let schemaProcess: ChildProcess | undefined;
   let zeroCacheProcess: ChildProcess | undefined;
@@ -87,7 +90,7 @@ async function main() {
     zeroCacheProcess = undefined;
 
     log(`Running ${buildSchemaScript}.`);
-    schemaProcess = spawn(buildSchemaScript, schemaArgs ?? [], {
+    schemaProcess = spawn(buildSchemaScript, buildSchemaArgs ?? [], {
       stdio: 'inherit',
     });
 
@@ -95,7 +98,7 @@ async function main() {
       if (code === 0) {
         log(`${buildSchemaScript} completed successfully.`);
         log(`Running ${zeroCacheScript}.`);
-        zeroCacheProcess = spawn(zeroCacheScript, zeroArgs || [], {
+        zeroCacheProcess = spawn(zeroCacheScript, zeroCacheArgs || [], {
           stdio: 'inherit',
         });
         zeroCacheProcess.on('exit', () => {
