@@ -2,9 +2,14 @@
 
 import {spawn, type ChildProcess} from 'node:child_process';
 import {watch} from 'chokidar';
-import {parseOptions} from '../../shared/src/options.js';
+import {parseOptionsAdvanced} from '../../shared/src/options.js';
 import {resolver} from '@rocicorp/resolver';
-import {schemaOptions} from '../../zero-schema/src/build-schema.js';
+import {buildSchemaOptions} from '../../zero-schema/src/build-schema-options.js';
+import {
+  ZERO_ENV_VAR_PREFIX,
+  zeroOptions,
+} from '../../zero-cache/src/config/zero-config.js';
+import 'dotenv/config';
 
 const buildSchemaScript = 'zero-build-schema';
 const zeroCacheScript = 'zero-cache';
@@ -39,11 +44,30 @@ function logError(msg: string) {
 }
 
 async function main() {
-  const options = parseOptions(
-    schemaOptions,
+  const {config} = parseOptionsAdvanced(
+    {
+      ...buildSchemaOptions,
+      ...zeroOptions,
+    },
     process.argv.slice(2),
-    'ZERO_SCHEMA_',
+    ZERO_ENV_VAR_PREFIX,
   );
+
+  const {unknown: zeroArgs} = parseOptionsAdvanced(
+    buildSchemaOptions,
+    process.argv.slice(2),
+    undefined,
+    true,
+  );
+
+  const {unknown: schemaArgs} = parseOptionsAdvanced(
+    zeroOptions,
+    process.argv.slice(2),
+    ZERO_ENV_VAR_PREFIX,
+    true,
+  );
+
+  const {path} = config;
 
   let schemaProcess: ChildProcess | undefined;
   let zeroCacheProcess: ChildProcess | undefined;
@@ -55,28 +79,32 @@ async function main() {
   });
 
   async function buildSchemaAndStartZeroCache() {
-    // If schemaProcess is running remove the listener waiting
-    // for its completion before we kill it.
     schemaProcess?.removeAllListeners('exit');
+    zeroCacheProcess?.removeAllListeners('exit');
     await killProcess(schemaProcess);
     schemaProcess = undefined;
     await killProcess(zeroCacheProcess);
     zeroCacheProcess = undefined;
 
     log(`Running ${buildSchemaScript}.`);
-    schemaProcess = spawn(buildSchemaScript, process.argv.slice(2), {
+    schemaProcess = spawn(buildSchemaScript, schemaArgs ?? [], {
       stdio: 'inherit',
     });
 
     schemaProcess.on('exit', (code: number) => {
       if (code === 0) {
-        // Start zero cache
         log(`${buildSchemaScript} completed successfully.`);
         log(`Running ${zeroCacheScript}.`);
-        zeroCacheProcess = spawn(zeroCacheScript, {stdio: 'inherit'});
+        zeroCacheProcess = spawn(zeroCacheScript, zeroArgs || [], {
+          stdio: 'inherit',
+        });
+        zeroCacheProcess.on('exit', () => {
+          logError(`${zeroCacheScript} exited. Exiting.`);
+          process.exit(-1);
+        });
       } else {
         logError(
-          `Errors in ${options.path} must be fixed before zero-cache can be started.`,
+          `Errors in ${path} must be fixed before zero-cache can be started.`,
         );
       }
     });
@@ -85,9 +113,12 @@ async function main() {
   await buildSchemaAndStartZeroCache();
 
   // Watch for file changes
-  const watcher = watch(options.path);
+  const watcher = watch(path, {
+    ignoreInitial: true,
+    awaitWriteFinish: {stabilityThreshold: 500, pollInterval: 100},
+  });
   const onFileChange = async () => {
-    log(`Detected ${options.path} change.`, 'green');
+    log(`Detected ${path} change.`, 'green');
     await buildSchemaAndStartZeroCache();
   };
   watcher.on('add', onFileChange);
@@ -96,11 +127,15 @@ async function main() {
 }
 
 process.on('unhandledRejection', reason => {
-  logError(`Unexpected unhandled rejection.\n${reason}\nExiting.`);
+  logError('Unexpected unhandled rejection.');
+  console.error(reason);
+  logError('Exiting');
   process.exit(-1);
 });
 
 main().catch(e => {
-  logError(`Unexpected unhandled error.\n${e}\nExiting.`);
+  logError(`Unexpected unhandled error.`);
+  console.error(e);
+  logError('Exiting.');
   process.exit(-1);
 });

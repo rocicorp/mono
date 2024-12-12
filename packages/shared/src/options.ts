@@ -43,6 +43,12 @@ export type WrappedOptionType = {
 
   /** Exclude this flag from --help text. Used for internal flags. */
   hidden?: boolean;
+
+  /**
+   * If defined takes precedence over the envNamePrefix passed to parseOptions/
+   * parseOptionsAdvanced.
+   */
+  envNamePrefix?: string | undefined;
 };
 
 export type Option = OptionType | WrappedOptionType;
@@ -202,9 +208,14 @@ function configSchema<T extends Options>(options: T): v.Type<Config<T>> {
 export function envSchema<T extends Options>(options: T, envNamePrefix = '') {
   const fields: [string, v.Type<string> | v.Optional<string>][] = [];
 
-  function addField(name: string, type: OptionType, group?: string) {
+  function addField(
+    name: string,
+    type: OptionType,
+    group?: string,
+    localEnvNamePrefix = envNamePrefix,
+  ) {
     const flag = group ? `${group}_${name}` : name;
-    const env = snakeCase(`${envNamePrefix}${flag}`).toUpperCase();
+    const env = snakeCase(`${localEnvNamePrefix}${flag}`).toUpperCase();
 
     const {required} = getRequiredOrDefault(type);
     fields.push([env, required ? v.string() : v.string().optional()]);
@@ -220,7 +231,7 @@ export function envSchema<T extends Options>(options: T, envNamePrefix = '') {
       // WrappedOptionType
       const {type} = value;
       if (v.instanceOfAbstractType(type)) {
-        addField(name, type, group);
+        addField(name, type, group, (value as WrappedOptionType).envNamePrefix);
         return;
       }
       // OptionGroup
@@ -317,7 +328,9 @@ export function parseOptionsAdvanced<T extends Options>(
     assert(terminalTypes.size === 1);
     const terminalType = [...terminalTypes][0];
 
-    const env = snakeCase(`${envNamePrefix}${flag}`).toUpperCase();
+    const env = snakeCase(
+      `${option.envNamePrefix ?? envNamePrefix}${flag}`,
+    ).toUpperCase();
     if (processEnv[env]) {
       if (multiple) {
         // Technically not water-tight; assumes values for the string[] flag don't contain commas.

@@ -324,7 +324,7 @@ export const zeroOptions = {
 
 export type ZeroConfig = Config<typeof zeroOptions>;
 
-const ENV_VAR_PREFIX = 'ZERO_';
+export const ZERO_ENV_VAR_PREFIX = 'ZERO_';
 
 let loadedConfig: ZeroConfig | undefined;
 
@@ -333,7 +333,7 @@ export function getZeroConfig(
   argv = process.argv.slice(2),
 ): ZeroConfig {
   if (!loadedConfig || singleProcessMode()) {
-    loadedConfig = parseOptions(zeroOptions, argv, ENV_VAR_PREFIX, env);
+    loadedConfig = parseOptions(zeroOptions, argv, ZERO_ENV_VAR_PREFIX, env);
   }
 
   return loadedConfig;
