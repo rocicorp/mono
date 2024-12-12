@@ -7,6 +7,10 @@ export const useClickOutside = (
   const handleClick = useCallback(
     (event: MouseEvent | TouchEvent) => {
       const target = event.target as Node | null;
+      if (!target || !target.isConnected) {
+        // target got removed from document?
+        return;
+      }
       const isOutside = Array.isArray(ref)
         ? ref
             .map(r => r.current)

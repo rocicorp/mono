@@ -177,6 +177,12 @@ export function ListPage() {
     updateTextFilterQueryString(text);
   };
 
+  const clearAndHideSearch = () => {
+    setTextFilter('');
+    updateTextFilterQueryString('');
+    setForceSearchMode(false);
+  };
+
   const Row = ({index, style}: {index: number; style: CSSProperties}) => {
     const issue = issues[index];
     if (firstRowRendered === false) {
@@ -242,24 +248,20 @@ export function ListPage() {
   const searchMode = forceSearchMode || Boolean(textFilter);
   const searchBox = useRef<HTMLHeadingElement>(null);
   const startSearchButton = useRef<HTMLButtonElement>(null);
-  useKeypress('/', () => startSearch());
+  useKeypress('/', () => setForceSearchMode(true));
   useClickOutside([searchBox, startSearchButton], () =>
     setForceSearchMode(false),
   );
-  const startSearch = () => {
-    if (forceSearchMode) {
-      // If already in search mode, toggle it off
-      setForceSearchMode(false);
-      searchBox.current?.querySelector('input')?.blur(); // Remove focus from input
-    } else {
-      // If not in search mode, activate it
-      setForceSearchMode(true);
-      setTimeout(() => searchBox.current?.querySelector('input')?.focus(), 0);
-    }
-  };
   const handleSearchKeyUp = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
-      searchBox.current?.querySelector('input')?.blur();
+      clearAndHideSearch();
+    }
+  };
+  const toggleSearchMode = () => {
+    if (searchMode) {
+      clearAndHideSearch();
+    } else {
+      setForceSearchMode(true);
     }
   };
 
@@ -283,16 +285,16 @@ export function ListPage() {
                 onBlur={() => setForceSearchMode(false)}
                 onKeyUp={handleSearchKeyUp}
                 placeholder="Search…"
+                autoFocus={true}
               />
               {textFilter && (
-                <div
+                <Button
                   className="clear-search"
-                  onClick={() => onTextFilterChange('')} // Clear the search field
-                  role="button"
+                  onAction={() => setTextFilter('')} // Clear the search field
                   aria-label="Clear search"
                 >
                   &times;
-                </div>
+                </Button>
               )}
             </div>
           ) : (
@@ -304,7 +306,7 @@ export function ListPage() {
           ref={startSearchButton}
           className="search-toggle"
           eventName="Toggle Search"
-          onAction={startSearch}
+          onAction={toggleSearchMode}
         ></Button>
       </div>
       <div className="list-view-filter-container">
