@@ -758,54 +758,63 @@ function useEmojiChangeListener(
 ) {
   const z = useZero();
   const enable = issue !== undefined;
-  const issueID = issue?.id ?? '';
+  const issueID = issue?.id;
   const commentIDs = issue?.comments.map(c => c.id) ?? [];
   const [emojis, result] = useQuery(
     z.query.emoji
       .where(({cmp, or}) =>
-        or(cmp('subjectID', 'IN', commentIDs), cmp('subjectID', issueID)),
+        or(cmp('subjectID', 'IN', commentIDs), cmp('subjectID', issueID ?? '')),
       )
       .related('creator', q => q.one()),
     enable,
   );
 
-  // We only set lastEmojis when we got the first complete result.
-  const lastEmojis = useRef<Map<string, Emoji> | null>(null);
+  const lastIssueID = useRef<string | undefined>();
+  const lastEmojis = useRef<Map<string, Emoji> | undefined>();
+
+  // When the issue.id changes we reset lastEmojis to undefined.
+  // First time we get the complete emojis for issue.id we update the lastEmojis.current.
+  // After that as long as issue.id does not change we update lastEmojis.current with the new emojis.
 
   useEffect(() => {
+    if (lastIssueID.current !== issueID) {
+      lastIssueID.current = issueID;
+      if (result.type === 'unknown') {
+        lastEmojis.current = undefined;
+        return;
+      }
+    }
+
     const newEmojis = new Map(emojis.map(emoji => [emoji.id, emoji]));
 
-    if (result.type === 'unknown') {
-      return;
-    }
-
-    // First time we get the complete emojis, we just store them.
-    if (lastEmojis.current === null) {
+    // First time we see the complete emojis for this issue.
+    if (result.type === 'complete' && !lastEmojis.current) {
       lastEmojis.current = newEmojis;
+      // First time should not trigger the callback.
       return;
     }
 
-    const added: Emoji[] = [];
-    const removed: Emoji[] = [];
+    if (lastEmojis.current) {
+      const added: Emoji[] = [];
+      const removed: Emoji[] = [];
 
-    for (const [id, emoji] of newEmojis) {
-      if (!lastEmojis.current.has(id)) {
-        added.push(emoji);
+      for (const [id, emoji] of newEmojis) {
+        if (!lastEmojis.current.has(id)) {
+          added.push(emoji);
+        }
       }
-    }
 
-    for (const [id, emoji] of lastEmojis.current) {
-      if (!newEmojis.has(id)) {
-        removed.push(emoji);
+      for (const [id, emoji] of lastEmojis.current) {
+        if (!newEmojis.has(id)) {
+          removed.push(emoji);
+        }
       }
+
+      if (added.length !== 0 || removed.length !== 0) {
+        cb(added, removed);
+      }
+
+      lastEmojis.current = newEmojis;
     }
-
-    lastEmojis.current = newEmojis;
-
-    if (added.length === 0 && removed.length === 0) {
-      return;
-    }
-
-    cb(added, removed);
-  }, [cb, emojis, result.type]);
+  }, [cb, emojis, issueID, result.type]);
 }
