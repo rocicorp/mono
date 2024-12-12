@@ -200,7 +200,7 @@ export function IssuePage() {
 
       for (const emoji of added) {
         if (emoji.creatorID !== z.userID) {
-          showToastForEmoji(
+          maybeShowToastForEmoji(
             emoji,
             issue,
             virtualizer,
@@ -548,7 +548,7 @@ const MyToastContainer = memo(({position}: {position: 'top' | 'bottom'}) => {
 // This cache is stored outside the state so that it can be used between renders.
 const commentSizeCache = new LRUCache<string, number>(1000);
 
-function showToastForEmoji(
+function maybeShowToastForEmoji(
   emoji: Emoji,
   issue: IssueRow & {comments: CommentRow[]},
   virtualizer: Virtualizer<Window, HTMLElement>,
@@ -559,38 +559,23 @@ function showToastForEmoji(
   const {creator} = emoji;
   assert(creator);
 
+  // We ony show toasts for emojis in the issue itself. Not for emojis in comments.
+  if (emoji.subjectID !== issue.id || !emojiElement) {
+    return;
+  }
+
   // Determine if we should show a toast:
   // - at the top (the emoji is above the viewport)
   // - at the bottom (the emoji is below the viewport)
   // - no toast. Just the tooltip (which is always shown)
   let containerID: 'top' | 'bottom' | undefined;
-
-  const index = issue.comments.findIndex(c => c.id === emoji.subjectID);
-  if (index === -1) {
-    // Is the emoji on the issue itself?
-    if (emoji.subjectID === issue.id && emojiElement !== null) {
-      // The emoji is on the issue itself.
-      // We will scroll to the issue itself.
-      // We don't need to show a toast for this.
-
-      const rect = emojiElement.getBoundingClientRect();
-      const {scrollRect} = virtualizer;
-      if (scrollRect) {
-        if (rect.bottom < 0) {
-          containerID = 'top';
-        } else if (rect.top > scrollRect.height) {
-          containerID = 'bottom';
-        }
-      }
-    }
-  } else {
-    const toastPosition = virtualizer.getOffsetForIndex(index);
-    if (toastPosition !== undefined) {
-      if (toastPosition[1] === 'start') {
-        containerID = 'top';
-      } else if (toastPosition[1] === 'end') {
-        containerID = 'bottom';
-      }
+  const rect = emojiElement.getBoundingClientRect();
+  const {scrollRect} = virtualizer;
+  if (scrollRect) {
+    if (rect.bottom < 0) {
+      containerID = 'top';
+    } else if (rect.top > scrollRect.height) {
+      containerID = 'bottom';
     }
   }
 
@@ -601,11 +586,7 @@ function showToastForEmoji(
   toast(
     <ToastContent toastID={toastID}>
       <img className="toast-emoji-icon" src={creator.avatar} />
-      {creator.login +
-        ' reacted on ' +
-        (emoji.subjectID === issue.id ? 'this issue' : 'a comment') +
-        ': ' +
-        emoji.value}
+      {creator.login + ' reacted on this issue: ' + emoji.value}
     </ToastContent>,
     {
       toastId: toastID,
@@ -619,17 +600,10 @@ function showToastForEmoji(
           ...emojis.filter(e => e.id !== emoji.id),
         ]);
 
-        const index = issue.comments.findIndex(c => c.id === emoji.subjectID);
-        if (index !== -1) {
-          virtualizer.scrollToIndex(index, {
-            align: 'end',
-          });
-        } else if (emoji.subjectID === issue.id) {
-          emojiElement?.scrollIntoView({
-            block: 'end',
-            behavior: 'smooth',
-          });
-        }
+        emojiElement?.scrollIntoView({
+          block: 'end',
+          behavior: 'smooth',
+        });
       },
     },
   );
