@@ -20,6 +20,8 @@ const rehypeImageToVideo: Plugin = () => {
           autoplay: true,
           loop: true,
           muted: true,
+          playsinline: true,
+          className: [...(node.properties?.className || []), 'inline-video'],
         };
       }
     });
