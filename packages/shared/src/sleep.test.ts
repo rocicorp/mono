@@ -82,3 +82,18 @@ test('sleepWithAbort', async () => {
   await clock.tickAsync(50);
   expect(okResolved).toEqual(false);
 });
+
+test.each([100, 0])(
+  'sleep with abort signal already aborted ms=%s',
+  async ms => {
+    const controller = new AbortController();
+    controller.abort();
+    let e;
+    try {
+      await sleep(ms, controller.signal);
+    } catch (err) {
+      e = err;
+    }
+    expect(e).toBeInstanceOf(AbortError);
+  },
+);
