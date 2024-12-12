@@ -11,14 +11,20 @@ export function formatEmojiCreatorList(
   currentUserID: string,
 ): string {
   assert(emojis.length > 0);
-  const names = emojis.map(emoji => {
-    const {creator} = emoji;
-    assert(creator);
-    if (emoji.creatorID === currentUserID) {
-      return 'you';
-    }
-    return creator.login;
-  });
+  const names = emojis
+    .filter(emoji => emoji.creator !== undefined)
+    .map(emoji => {
+      const {creator} = emoji;
+      assert(creator);
+      if (emoji.creatorID === currentUserID) {
+        return 'you';
+      }
+      return creator.login;
+    });
+
+  if (names.length === 0) {
+    return '';
+  }
   if (names.length === 1) {
     return names[0];
   }
