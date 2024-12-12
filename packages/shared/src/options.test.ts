@@ -554,7 +554,7 @@ test.each([
   ],
   [
     'option that has own envNamePrefix',
-    [],
+    ['--log-level=info'],
     {
       ['TEST_HAS_OWN_NAME_PREFIX']: 'foo',
       ['Z_REPLICA_DB_FILE']: '/tmp/replica.db',
@@ -563,13 +563,14 @@ test.each([
     {
       port: 4848,
       replicaDBFile: '/tmp/replica.db',
-      log: {format: 'text'},
+      log: {format: 'text', level: 'info'},
       shard: {id: '0', publications: []},
       tuple: ['a', 'b'],
       hasOwnNamePrefix: 'foo',
     },
     {
       Z_LOG_FORMAT: 'text',
+      Z_LOG_LEVEL: 'info',
       Z_PORT: '4848',
       Z_REPLICA_DB_FILE: '/tmp/replica.db',
       Z_SHARD_ID: '0',
