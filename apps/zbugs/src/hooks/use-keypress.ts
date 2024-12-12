@@ -7,11 +7,12 @@ export function useKeypress(
   allowOnInputElements = false,
 ) {
   useEffect(() => {
-    function handleKeypress(event: KeyboardEvent) {
+    function handleKeypress(e: KeyboardEvent) {
       if (
-        event.key === key &&
-        (allowOnInputElements || shouldAllow(event.target as HTMLElement))
+        e.key === key &&
+        (allowOnInputElements || shouldAllow(e.target as HTMLElement))
       ) {
+        e.preventDefault();
         callback();
       }
     }
