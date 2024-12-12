@@ -1,6 +1,7 @@
 import {
   compactDecrypt,
   decodeProtectedHeader,
+  importSPKI,
   jwtVerify,
   type JWK,
   type JWTClaimVerificationOptions,
@@ -9,12 +10,13 @@ import {
 } from 'jose';
 import {assert} from '../../../shared/src/asserts.js';
 import type {AuthConfig} from '../config/zero-config.js';
+import {must} from '../../../shared/src/must.js';
 
 export function authIsConfigured(config: AuthConfig) {
   return config.verifyKey !== undefined || config.jwkUrl !== undefined;
 }
 
-export function decryptDecodeVerifyJWT(
+export async function verifyToken(
   config: AuthConfig,
   token: string,
   verifyOptions: JWTClaimVerificationOptions,
@@ -27,13 +29,35 @@ export function decryptDecodeVerifyJWT(
   }
 
   if (config.verifyKey !== undefined) {
-    const verifyKey = new TextEncoder().encode(config.verifyKey);
-    return decryptDecodeVerifyJWTImpl(
-      token,
-      verifyKey,
-      decryptionKey,
-      verifyOptions,
-    );
+    let verifyKey: Uint8Array | JWK | KeyLike | undefined;
+
+    // Try for JWK first
+    try {
+      const maybeVerifyKey = JSON.parse(config.verifyKey);
+      if (maybeVerifyKey.kty) {
+        verifyKey = maybeVerifyKey as JWK;
+      }
+    } catch (_e) {
+      // ignoring. Try as pem or symmetric key next.
+    }
+
+    // Not a JWK? Maybe it is a PEM or symmetric key
+    if (verifyKey === undefined) {
+      if (config.verifyKey.startsWith('-----BEGIN PUBLIC KEY')) {
+        verifyKey = await importSPKI(
+          config.verifyKey,
+          must(
+            config.verifyAlgorithm,
+            'verifyAlgorithm must be set when using a public key as the `verifyKey`',
+          ),
+        );
+      } else {
+        // Last shot, try as a symmetric key
+        verifyKey = new TextEncoder().encode(config.verifyKey);
+      }
+    }
+
+    return verifyTokenImpl(token, verifyKey, decryptionKey, verifyOptions);
   }
 
   // jwk fetching
@@ -48,14 +72,10 @@ function verifyConfig(config: AuthConfig) {
     'Either `jwkUrl` or `verifyKey` must be set in `zero.config`',
   );
 
-  if (
-    config.decryptionKey !== undefined ||
-    config.decryptionAlgorithm !== undefined
-  ) {
+  if (config.verifyAlgorithm !== undefined) {
     assert(
-      config.decryptionAlgorithm !== undefined &&
-        config.decryptionKey !== undefined,
-      'Cannot set `decryptionKey` without also setting `decryptionAlgorithm` in `zero.config`',
+      config.verifyKey !== undefined,
+      'Cannot set `verifyAlgorithm` without also setting `verifyKey` in `zero.config`.',
     );
   }
 }
@@ -68,9 +88,9 @@ function verifyConfig(config: AuthConfig) {
  * - Verifies and decrypts with either a public key or a secret key
  * - Supports https://datatracker.ietf.org/doc/html/rfc7517 JSON Web Keys too
  */
-async function decryptDecodeVerifyJWTImpl(
+async function verifyTokenImpl(
   token: string,
-  verifyKey: Uint8Array | JWK,
+  verifyKey: Uint8Array | KeyLike | JWK,
   decryptionKey: KeyLike | Uint8Array | undefined,
   verifyOptions: JWTClaimVerificationOptions,
 ): Promise<JWTPayload> {
