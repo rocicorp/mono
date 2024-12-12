@@ -1,36 +1,8 @@
 import {describe, expect, test} from 'vitest';
 import type {AuthConfig} from '../config/zero-config.js';
 import {verifyToken} from './jwt.js';
-import {
-  CompactEncrypt,
-  exportJWK,
-  generateKeyPair,
-  importJWK,
-  importPKCS8,
-  SignJWT,
-  type JWTPayload,
-} from 'jose';
-import {generateKeyPair as crypoGenerateKeyPair} from 'node:crypto';
-import {promisify} from 'node:util';
+import {exportJWK, generateKeyPair, SignJWT, type JWTPayload} from 'jose';
 import {must} from '../../../shared/src/must.js';
-
-const generateKeyPairAsync = promisify(crypoGenerateKeyPair);
-
-async function generateKeys() {
-  const {privateKey, publicKey} = await generateKeyPairAsync('rsa', {
-    modulusLength: 2048,
-    publicKeyEncoding: {
-      type: 'spki',
-      format: 'pem',
-    },
-    privateKeyEncoding: {
-      type: 'pkcs8',
-      format: 'pem',
-    },
-  });
-
-  return {privateKey, publicKey};
-}
 
 async function generateJwkKeys() {
   const {publicKey, privateKey} = await generateKeyPair('PS256');
@@ -58,70 +30,7 @@ describe('symmetric key', () => {
     return {expected: tokenData, token};
   }
 
-  commonTests({verifyKey: key}, makeToken);
-
-  async function makeEncryptedToken(tokenData: JWTPayload) {
-    const {expected, token} = await makeToken(tokenData);
-    const encryptedToken = await new CompactEncrypt(
-      new TextEncoder().encode(token),
-    )
-      .setProtectedHeader({
-        alg: 'dir',
-        enc: 'A256GCM',
-      })
-      .encrypt(new TextEncoder().encode(key));
-    return {expected, token: encryptedToken};
-  }
-
-  commonTests(
-    {
-      verifyKey: key,
-      decryptionKey: key,
-    },
-    makeEncryptedToken,
-  );
-});
-
-describe('public key', async () => {
-  const keys = await generateKeys();
-
-  async function makeToken(tokenData: JWTPayload) {
-    const privateKey = await importPKCS8(keys.privateKey, 'RS256');
-    const token = await new SignJWT(tokenData)
-      .setProtectedHeader({alg: 'RS256'})
-      .sign(privateKey);
-    return {expected: tokenData, token};
-  }
-
-  commonTests({verifyKey: keys.publicKey, verifyAlgorithm: 'RS256'}, makeToken);
-
-  async function makeEncryptedToken(tokenData: JWTPayload) {
-    const {expected, token} = await makeToken(tokenData);
-    const privateKey = await importPKCS8(keys.privateKey, 'RS256');
-
-    const encryptedToken = await new CompactEncrypt(
-      new TextEncoder().encode(token),
-    )
-      .setProtectedHeader({
-        alg: 'RSA-OAEP-256',
-        enc: 'A256GCM',
-      })
-      .encrypt(privateKey);
-
-    return {
-      expected,
-      token: encryptedToken,
-    };
-  }
-
-  commonTests(
-    {
-      verifyKey: keys.publicKey,
-      verifyAlgorithm: 'RS256',
-      decryptionKey: keys.privateKey,
-    },
-    makeEncryptedToken,
-  );
+  commonTests({secret: key}, makeToken);
 });
 
 describe('jwk', async () => {
@@ -135,29 +44,7 @@ describe('jwk', async () => {
     return {expected: tokenData, token};
   }
 
-  commonTests({verifyKey: JSON.stringify(publicJwk)}, makeToken);
-
-  async function makeEncryptedToken(tokenData: JWTPayload) {
-    const {expected, token} = await makeToken(tokenData);
-    const key = await importJWK(privateJwk);
-    const encryptedToken = await new CompactEncrypt(
-      new TextEncoder().encode(token),
-    )
-      .setProtectedHeader({
-        alg: 'RSA-OAEP-256',
-        enc: 'A256GCM',
-      })
-      .encrypt(key);
-    return {expected, token: encryptedToken};
-  }
-
-  commonTests(
-    {
-      verifyKey: JSON.stringify(publicJwk),
-      decryptionKey: JSON.stringify(privateJwk),
-    },
-    makeEncryptedToken,
-  );
+  commonTests({jwk: JSON.stringify(publicJwk)}, makeToken);
 });
 
 // describe('jwkUrl', () => {});
@@ -209,7 +96,7 @@ function commonTests(
 
   test('invalid token', async () => {
     await expect(() => verifyToken(config, 'sdfsdf', {})).rejects.toThrowError(
-      `Invalid Token or Protected Header formatting`,
+      `Invalid Compact JWS`,
     );
   });
 
