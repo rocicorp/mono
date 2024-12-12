@@ -3,5 +3,10 @@
   "compilerOptions": {
     "noEmit": false
   },
-  "include": ["src/server/*.ts", "src/cli.ts", "src/build-schema.ts"]
+  "include": [
+    "src/server/*.ts",
+    "src/cli.ts",
+    "src/build-schema.ts",
+    "src/zero-cache-dev.ts"
+  ]
 }
