@@ -1,0 +1,24 @@
+{
+  "tenants": [
+    {
+      "id": "foo",
+      "path": "/foo",
+      "env": {
+        "ZERO_REPLICA_FILE": "/tmp/zbugs-tenant-0.db",
+        "ZERO_SHARD_ID": "1",
+        "ZERO_CVR_DB": "postgresql://user:password@127.0.0.1:6435/tenant0",
+        "ZERO_CHANGE_DB": "postgresql://user:password@127.0.0.1:6435/tenant0"
+      }
+    },
+    {
+      "id": "bar",
+      "path": "/bar",
+      "env": {
+        "ZERO_REPLICA_FILE": "/tmp/zbugs-tenant-1.db",
+        "ZERO_SHARD_ID": "2",
+        "ZERO_CVR_DB": "postgresql://user:password@127.0.0.1:6435/tenant1",
+        "ZERO_CHANGE_DB": "postgresql://user:password@127.0.0.1:6435/tenant1"
+      }
+    }
+  ]
+}

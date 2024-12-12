@@ -1,5 +1,4 @@
 import {resolver} from '@rocicorp/resolver';
-import 'dotenv/config';
 import {availableParallelism} from 'node:os';
 import path from 'node:path';
 import {getZeroConfig} from '../config/zero-config.js';
@@ -22,7 +21,6 @@ import {
 } from '../workers/replicator.js';
 import {
   exitAfter,
-  HeartbeatMonitor,
   runUntilKilled,
   Terminator,
   type WorkerType,
@@ -149,13 +147,6 @@ export default async function runWorker(
 
   const mainServices: Service[] = [];
   const {port} = config;
-
-  // Only one heartbeat monitor is necessary. If there is a parent process
-  // (i.e. multi-tenant), that process will listen for heartbeats.
-  if (!parent) {
-    const heartbeatMonitorPort = config.heartbeatMonitorPort ?? port + 2;
-    mainServices.push(new HeartbeatMonitor(lc, {port: heartbeatMonitorPort}));
-  }
 
   if (numSyncers) {
     const workers: Workers = {syncers};

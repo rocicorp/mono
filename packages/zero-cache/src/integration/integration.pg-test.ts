@@ -89,14 +89,14 @@ describe('integration', () => {
   });
 
   test.each([
-    ['standalone', './server/main.ts', () => env],
+    ['standalone', './server/multi/main.ts', () => env],
     [
       'multi-tenant, direct-dispatch',
       './server/multi/main.ts',
       () => ({
         ['ZERO_PORT']: String(port - 3),
         ['ZERO_LOG_LEVEL']: 'error',
-        ['ZERO_TENANT_CONFIGS_JSON']: JSON.stringify({
+        ['ZERO_TENANTS_JSON']: JSON.stringify({
           tenants: [{id: 'tenant', path: '/zero', env}],
         }),
       }),
@@ -107,7 +107,7 @@ describe('integration', () => {
       () => ({
         ['ZERO_PORT']: String(port),
         ['ZERO_LOG_LEVEL']: 'error',
-        ['ZERO_TENANT_CONFIGS_JSON']: JSON.stringify({
+        ['ZERO_TENANTS_JSON']: JSON.stringify({
           tenants: [
             {
               id: 'tenant',

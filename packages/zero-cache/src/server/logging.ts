@@ -19,7 +19,7 @@ export function createLogContext(
 ): LogContext {
   const {log, tenantID: tid} = config;
   const ctx = {
-    ...(tid ? {tid} : {}),
+    ...((tid ?? '').length ? {tid} : {}),
     ...context,
     pid,
   };

@@ -21,7 +21,8 @@ export class TenantDispatcher extends HttpService {
       installWebSocketHandoff(lc, req => this.#handoff(req), fastify.server);
     });
 
-    this.#tenants = tenants;
+    // Only tenants with a host or path can be dispatched to.
+    this.#tenants = tenants.filter(t => t.host || t.path);
   }
 
   #handoff(req: IncomingMessageSubset) {

@@ -1,3 +1,4 @@
+import 'dotenv/config'; // Imports ENV variables from .env
 import type {Service} from '../../services/service.js';
 import {
   childWorker,
@@ -21,21 +22,30 @@ export default async function runWorker(
   env: NodeJS.ProcessEnv,
 ): Promise<void> {
   const startMs = Date.now();
-  const config = getMultiZeroConfig(env);
-  const lc = createLogContext(config, {worker: 'multi'});
+  const {config, env: baseEnv} = getMultiZeroConfig(env);
+  const lc = createLogContext(config, {worker: 'main'});
 
   const {port, heartbeatMonitorPort} = config;
+  const multiMode = config.tenants.length;
 
-  let tenantPort = port;
+  if (!multiMode) {
+    // Run a single tenant on main `port`, and skip the TenantDispatcher.
+    config.tenants.push({
+      id: '',
+      env: {['ZERO_PORT']: String(port)},
+    });
+  }
+
+  // Start the first tenant at (port + 1 + 2) unless explicitly
+  // overridden by its own ZERO_PORT ...
+  let tenantPort = port + 1;
   const tenants = config.tenants.map(tenant => ({
     ...tenant,
     worker: childWorker('./server/main.ts', {
-      // defaults
+      ...baseEnv, // defaults
       ['ZERO_TENANT_ID']: tenant.id,
-      ['ZERO_PORT']: String((tenantPort += 3)),
-      ['ZERO_LOG_LEVEL']: config.log.level,
-      ['ZERO_LOG_FORMAT']: config.log.format,
-      ...tenant.env,
+      ['ZERO_PORT']: String((tenantPort += 2)), // and bump the port by 2 thereafter.
+      ...tenant.env, // overrides
     }),
   }));
 
@@ -52,9 +62,11 @@ export default async function runWorker(
   }
 
   const mainServices: Service[] = [
-    new TenantDispatcher(lc, tenants, {port}),
     new HeartbeatMonitor(lc, {port: heartbeatMonitorPort ?? port + 2}),
   ];
+  if (multiMode) {
+    mainServices.push(new TenantDispatcher(lc, tenants, {port}));
+  }
 
   parent?.send(['ready', {ready: true}]);
 
@@ -66,5 +78,6 @@ export default async function runWorker(
 }
 
 if (!singleProcessMode()) {
+  console.error('\n\n\nENV', process.env);
   void exitAfter(() => runWorker(parentWorker, process.env));
 }
