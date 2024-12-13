@@ -783,10 +783,6 @@ textarea.autoResize {
     word-break: break-all;
     overflow: hidden;
   }
-
-  .issue-detail-label {
-    margin-top: 4rem;
-  }
 }
 
 .pill {
@@ -917,12 +913,13 @@ textarea.autoResize {
 .markdown-container {
   p {
     line-height: 1.5;
-    margin-bottom: 0.5rem;
+    margin-bottom: 1rem;
   }
 
   ul,
   ol {
     padding-left: 2rem;
+    margin-bottom: 1rem;
   }
 
   ul {
