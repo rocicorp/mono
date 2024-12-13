@@ -670,9 +670,29 @@ textarea.autoResize {
     no-repeat center left;
 }
 
+.video-container {
+  width: 100%;
+  margin: 2rem auto;
+  position: relative;
+}
+
+.video-wrapper {
+  width: 100%;
+  padding-top: calc(var(--video-height, 360) / var(--video-width, 640) * 100%);
+  background: #000;
+  position: relative;
+  overflow: hidden;
+}
+
 .inline-video {
-  margin: 2rem 0 1.5rem;
+  position: absolute;
   border-radius: 0.5rem;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: transparent;
 }
 
 .edit-buttons {
