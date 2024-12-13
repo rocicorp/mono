@@ -38,8 +38,8 @@ type Props = {
   issueID: string;
   commentID?: string | undefined;
   emojis: readonly Emoji[];
-  recentEmojis: readonly Emoji[];
-  removeRecentEmoji: (id: string) => void;
+  recentEmojis?: readonly Emoji[] | undefined;
+  removeRecentEmoji?: (id: string) => void | undefined;
 };
 
 export const EmojiPanel = memo(

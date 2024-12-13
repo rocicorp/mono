@@ -27,8 +27,8 @@ type Props = {
   normalizedEmoji: string;
   emojis: Emoji[];
   addOrRemoveEmoji: AddOrRemoveEmoji;
-  recentEmojis: readonly Emoji[];
-  removeRecentEmoji: (id: string) => void;
+  recentEmojis?: readonly Emoji[] | undefined;
+  removeRecentEmoji?: (id: string) => void | undefined;
   subjectID: string;
 };
 
@@ -53,8 +53,11 @@ export function EmojiPill({
   const documentHasFocus = useDocumentHasFocus();
 
   useEffect(() => {
+    if (!recentEmojis) {
+      return;
+    }
     const newTriggeredEmojis: Emoji[] = [];
-    for (const emoji of recentEmojis.values()) {
+    for (const emoji of recentEmojis) {
       if (emojis.some(e => e.id === emoji.id)) {
         setWasTriggered(true);
         newTriggeredEmojis.push(emoji);
@@ -70,7 +73,7 @@ export function EmojiPill({
   }, [isIntersecting, forceShow, wasTriggered]);
 
   useEffect(() => {
-    if (forceShow && documentHasFocus) {
+    if (forceShow && documentHasFocus && removeRecentEmoji) {
       const id = setTimeout(() => {
         setForceShow(false);
         setWasTriggered(false);
