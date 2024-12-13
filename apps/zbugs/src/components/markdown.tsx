@@ -3,8 +3,12 @@ import MarkdownBase from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type {Plugin} from 'unified'; // Type-only import
 import {visit} from 'unist-util-visit';
-import type {Element} from 'hast';
-import type {Parent} from 'unist';
+import type {Element, Parent} from 'hast';
+
+// Type guard to check if a node is an Element
+function isElement(node: Parent | null): node is Element {
+  return node !== null && node.type === 'element' && 'tagName' in node;
+}
 
 /**
  * Custom rehype plugin to transform <img> with video extensions to <video>.
@@ -53,7 +57,6 @@ const rehypeImageToVideo: Plugin = () => {
             console.warn('Missing width or height in node:', properties);
           }
 
-          // Transform <img> into <div> with a nested <video>
           const videoContainer: Element = {
             type: 'element',
             tagName: 'div',
@@ -95,16 +98,19 @@ const rehypeImageToVideo: Plugin = () => {
             ],
           };
 
-          // Replace the parent <p> with the video container, if the parent is a <p>
+          // Use the type guard to ensure `parent` is an Element
           if (
             parent &&
-            parent.type === 'element' &&
+            isElement(parent) &&
             parent.tagName === 'p' &&
             typeof index === 'number'
           ) {
             parent.children.splice(index, 1, videoContainer);
+          } else if (parent && isElement(parent)) {
+            // If parent exists but is not <p>, replace the <img> directly
+            parent.children.splice(index!, 1, videoContainer);
           } else {
-            // If no <p>, replace the <img> directly
+            // If no valid parent, replace the node itself
             node.tagName = 'div';
             node.properties = videoContainer.properties;
             node.children = videoContainer.children;
