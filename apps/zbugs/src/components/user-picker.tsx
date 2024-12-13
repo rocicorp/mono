@@ -25,11 +25,9 @@ export default function UserPicker({
 }: Props) {
   const z = useZero();
 
-  const [unsortedUsers] = useQuery(z.query.user);
+  const [users] = useQuery(z.query.user);
   // TODO: Support case-insensitive sorting in ZQL.
-  const users = unsortedUsers.toSorted((a, b) =>
-    a.login.localeCompare(b.login),
-  );
+  users.sort((a, b) => a.login.localeCompare(b.login));
 
   // Preload the avatar icons so they show up instantly when opening the
   // dropdown.

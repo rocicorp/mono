@@ -31,11 +31,11 @@ export type Context = {
 
 export type Smash<T extends QueryType> = T['singular'] extends true
   ? SmashOne<T> | undefined
-  : ReadonlyArray<SmashOne<T>>;
+  : Array<SmashOne<T>>;
 
 type SmashOne<T extends QueryType> = Expand<
   T['row'] & {
-    readonly [K in keyof T['related']]: T['related'][K] extends QueryType
+    [K in keyof T['related']]: T['related'][K] extends QueryType
       ? Smash<T['related'][K]>
       : never;
   }
@@ -108,9 +108,9 @@ type InferSubreturn<TSubquery extends Query<TableSchema, QueryType>> =
  * fields have been smashed down.
  */
 export type QueryType = {
-  readonly row: IVMRow;
-  readonly related: Readonly<Record<string, QueryType>>;
-  readonly singular: boolean;
+  row: IVMRow;
+  related: Record<string, QueryType>;
+  singular: boolean;
 };
 
 export type Operator =
