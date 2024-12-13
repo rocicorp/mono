@@ -508,8 +508,6 @@ export function IssuePage() {
                     issueID={issue.id}
                     comment={issue.comments[item.index]}
                     height={item.size}
-                    recentEmojis={recentEmojis}
-                    removeRecentEmoji={removeRecentEmoji}
                   />
                 </div>
               ))}
