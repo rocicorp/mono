@@ -1,11 +1,11 @@
 import {
+  createRemoteJWKSet,
   jwtVerify,
   type JWK,
   type JWTClaimVerificationOptions,
   type JWTPayload,
   type KeyLike,
 } from 'jose';
-import {assert} from '../../../shared/src/asserts.js';
 import type {AuthConfig} from '../config/zero-config.js';
 
 export function authIsConfigured(config: AuthConfig) {
@@ -16,13 +16,20 @@ export function authIsConfigured(config: AuthConfig) {
   );
 }
 
-export function verifyToken(
+let remoteKeyset: ReturnType<typeof createRemoteJWKSet> | undefined;
+function getRemoteKeyset(jwksUrl: string) {
+  if (remoteKeyset === undefined) {
+    remoteKeyset = createRemoteJWKSet(new URL(jwksUrl));
+  }
+
+  return remoteKeyset;
+}
+
+export async function verifyToken(
   config: AuthConfig,
   token: string,
   verifyOptions: JWTClaimVerificationOptions,
 ): Promise<JWTPayload> {
-  verifyConfig(config);
-
   if (config.jwk !== undefined) {
     return verifyTokenImpl(token, loadJwk(config.jwk), verifyOptions);
   }
@@ -31,8 +38,14 @@ export function verifyToken(
     return verifyTokenImpl(token, loadSecret(config.secret), verifyOptions);
   }
 
-  // jwk fetching
-  throw new Error('jwksUrl is not implemented yet');
+  if (config.jwksUrl !== undefined) {
+    const remoteKeyset = getRemoteKeyset(config.jwksUrl);
+    return (await jwtVerify(token, remoteKeyset, verifyOptions)).payload;
+  }
+
+  throw new Error(
+    'verifyToken was called but no auth options (one of: jwk, secret, jwksUrl) were configured.',
+  );
 }
 
 function loadJwk(jwkString: string) {
@@ -41,10 +54,6 @@ function loadJwk(jwkString: string) {
 
 function loadSecret(secret: string) {
   return new TextEncoder().encode(secret);
-}
-
-function verifyConfig(config: AuthConfig) {
-  assert(authIsConfigured(config), 'No auth options are configured.');
 }
 
 async function verifyTokenImpl(
