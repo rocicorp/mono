@@ -200,8 +200,6 @@ export function IssuePage() {
     ];
   }, [issue?.comments, allCommentsResult.type, allComments]);
 
-  console.log(comments, hasOlderComments);
-
   const {listRef, virtualizer} = useVirtualComments(comments ?? []);
 
   const hash = useHash();
