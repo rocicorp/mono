@@ -1,10 +1,10 @@
 import type {Value} from '../../../zero-protocol/src/data.js';
-import type {Input} from './operator.js';
-import type {Query, QueryType} from '../query/query.js';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
+import type {Query, QueryType} from '../query/query.js';
+import type {Input} from './operator.js';
 
 export type View = EntryList | Entry | undefined;
-export type EntryList = Entry[];
+export type EntryList = readonly Entry[];
 export type Entry = {[key: string]: Value | View};
 
 export type Format = {

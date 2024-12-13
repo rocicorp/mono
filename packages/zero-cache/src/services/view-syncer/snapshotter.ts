@@ -3,6 +3,7 @@ import {assert} from '../../../../shared/src/asserts.js';
 import {must} from '../../../../shared/src/must.js';
 import * as v from '../../../../shared/src/valita.js';
 import {Database} from '../../../../zqlite/src/db.js';
+import {fromSQLiteTypes} from '../../../../zqlite/src/table-source.js';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.js';
 import {StatementRunner} from '../../db/statements.js';
 import {jsonObjectSchema, type JSONValue} from '../../types/bigint-json.js';
@@ -23,7 +24,6 @@ import {
   getReplicationVersions,
   ZERO_VERSION_COLUMN_NAME as ROW_VERSION,
 } from '../replicator/schema/replication-state.js';
-import {fromSQLiteTypes} from '../../../../zqlite/src/table-source.js';
 
 /**
  * A `Snapshotter` manages the progression of database snapshots for a
@@ -392,9 +392,9 @@ class Diff implements SnapshotDiff {
             }
 
             assert(rowKey !== null);
-            const prevValue =
+            let prevValue =
               truncates.getRowIfNotTruncated(tableSpec, rowKey) ?? null;
-            const nextValue =
+            let nextValue =
               op === SET_OP ? this.curr.getRow(tableSpec, rowKey) : null;
 
             // Sanity check detects if the diff is being accessed after the Snapshots have advanced.
@@ -409,10 +409,10 @@ class Diff implements SnapshotDiff {
             // Modify the values in place when converting to ZQL rows
             // This is safe since we're the first node in the iterator chain.
             if (prevValue) {
-              fromSQLiteTypes(zqlSpec, prevValue);
+              prevValue = fromSQLiteTypes(zqlSpec, prevValue);
             }
             if (nextValue) {
-              fromSQLiteTypes(zqlSpec, nextValue);
+              nextValue = fromSQLiteTypes(zqlSpec, nextValue);
             }
             return {value: {table, prevValue, nextValue} satisfies Change};
           }

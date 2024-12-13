@@ -6,24 +6,35 @@ import path from 'node:path';
 import {pid} from 'node:process';
 import {assert} from '../../../shared/src/asserts.js';
 import type {JSONValue} from '../../../shared/src/json.js';
+import {must} from '../../../shared/src/must.js';
 import {randInt} from '../../../shared/src/rand.js';
 import * as v from '../../../shared/src/valita.js';
+import type {Condition} from '../../../zero-protocol/src/ast.js';
 import type {
-  InsertOp,
-  DeleteOp,
-  UpsertOp,
-  UpdateOp,
   CRUDOp,
+  DeleteOp,
+  InsertOp,
+  UpdateOp,
+  UpsertOp,
 } from '../../../zero-protocol/src/mod.js';
 import {
   primaryKeyValueSchema,
   type PrimaryKeyValue,
 } from '../../../zero-protocol/src/primary-key.js';
+import type {
+  PermissionsConfig,
+  Policy,
+} from '../../../zero-schema/src/compiled-permissions.js';
+import type {Schema} from '../../../zero-schema/src/schema.js';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 import type {BuilderDelegate} from '../../../zql/src/builder/builder.js';
 import {
   bindStaticParameters,
   buildPipeline,
 } from '../../../zql/src/builder/builder.js';
+import {AuthQuery, authQuery} from '../../../zql/src/query/auth-query.js';
+import {dnf} from '../../../zql/src/query/dnf.js';
+import type {Query} from '../../../zql/src/query/query.js';
 import {Database} from '../../../zqlite/src/db.js';
 import {compile, sql} from '../../../zqlite/src/internal/sql.js';
 import {
@@ -32,22 +43,11 @@ import {
 } from '../../../zqlite/src/table-source.js';
 import type {ZeroConfig} from '../config/zero-config.js';
 import {listTables} from '../db/lite-tables.js';
-import {mapLiteDataTypeToZqlSchemaValue} from '../types/lite.js';
+import type {LiteAndZqlSpec} from '../db/specs.js';
+import {StatementRunner} from '../db/statements.js';
 import {DatabaseStorage} from '../services/view-syncer/database-storage.js';
 import {setSpecs} from '../services/view-syncer/pipeline-driver.js';
-import type {
-  PermissionsConfig,
-  Policy,
-} from '../../../zero-schema/src/compiled-permissions.js';
-import {StatementRunner} from '../db/statements.js';
-import type {Schema} from '../../../zero-schema/src/schema.js';
-import {AuthQuery, authQuery} from '../../../zql/src/query/auth-query.js';
-import {must} from '../../../shared/src/must.js';
-import type {Query} from '../../../zql/src/query/query.js';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
-import type {Condition} from '../../../zero-protocol/src/ast.js';
-import {dnf} from '../../../zql/src/query/dnf.js';
-import type {LiteAndZqlSpec} from '../db/specs.js';
+import {mapLiteDataTypeToZqlSchemaValue} from '../types/lite.js';
 
 type Phase = 'preMutation' | 'postMutation';
 
@@ -397,8 +397,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     if (ret === undefined) {
       return ret;
     }
-    fromSQLiteTypes(spec.zqlSpec, ret);
-    return ret;
+    return fromSQLiteTypes(spec.zqlSpec, ret);
   }
 
   #requirePreMutationRow(op: UpdateOp | DeleteOp) {
