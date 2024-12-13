@@ -304,9 +304,7 @@ export function IssuePage() {
                   <span className="breadcrumb-item">&rarr;</span>
                 </>
               ) : null}
-              <span className="breadcrumb-item">
-                Issue {issue.shortID} {issue.id}
-              </span>
+              <span className="breadcrumb-item">Issue {issue.shortID}</span>
             </div>
             <CanEdit ownerID={issue.creatorID}>
               <div className="edit-buttons">
@@ -517,7 +515,7 @@ export function IssuePage() {
           </div>
 
           <h2 className="issue-detail-label">Comments</h2>
-          {hasOlderComments ? (
+          {!displayAllComments && hasOlderComments ? (
             <div onClick={() => setDisplayAllComments(true)}>Older</div>
           ) : (
             <div>&nbsp;</div>
