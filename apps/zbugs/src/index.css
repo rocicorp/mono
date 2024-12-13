@@ -675,10 +675,6 @@ textarea.autoResize {
   border-radius: 0.5rem;
 }
 
-.markdown-container img {
-  margin: 2rem 0 1.5rem;
-}
-
 .edit-buttons {
   display: flex;
   gap: 0.5rem;
@@ -757,17 +753,20 @@ textarea.autoResize {
   cursor: default;
 }
 
-.issue-detail p {
-  word-wrap: break-word;
-  overflow: hidden;
-}
-.issue-detail a {
-  word-break: break-all;
-  overflow: hidden;
-}
+.issue-detail {
+  p {
+    word-wrap: break-word;
+    overflow: hidden;
+  }
 
-.description-container {
-  margin-bottom: 4rem;
+  a {
+    word-break: break-all;
+    overflow: hidden;
+  }
+
+  .issue-detail-label {
+    margin-top: 4rem;
+  }
 }
 
 .pill {
@@ -895,165 +894,172 @@ textarea.autoResize {
 /* Markdown */
 /************/
 
-.markdown-container p {
-  line-height: 1.5;
-  margin-bottom: 0.5rem;
-}
+.markdown-container {
+  p {
+    line-height: 1.5;
+    margin-bottom: 0.5rem;
+  }
 
-.markdown-container ul,
-.markdown-container ol {
-  padding-left: 2rem;
-}
+  ul,
+  ol {
+    padding-left: 2rem;
+  }
 
-.markdown-container ul {
-  list-style-type: disc;
-  list-style-position: outside;
-  padding-left: 2.3rem;
-}
+  ul {
+    list-style-type: disc;
+    list-style-position: outside;
+    padding-left: 2.3rem;
+  }
 
-.markdown-container ul.contains-task-list {
-  list-style-type: none;
-  padding-left: 1rem;
-}
+  ul.contains-task-list {
+    list-style-type: none;
+    padding-left: 1rem;
+  }
 
-.markdown-container ul.contains-task-list input[type='checkbox'] {
-  margin-right: 0.5rem;
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
+  ul.contains-task-list input[type='checkbox'] {
+    margin-right: 0.5rem;
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
 
-.markdown-container ul.contains-task-list li.task-list-item {
-  display: flex;
-  align-items: center;
-  gap: 0.1rem;
-  padding-left: 0;
-}
+  ul.contains-task-list li.task-list-item {
+    display: flex;
+    align-items: center;
+    gap: 0.1rem;
+    padding-left: 0;
+  }
 
-.markdown-container ul.contains-task-list li.task-list-item::before {
-  content: '';
-  display: inline-block;
-  width: 1.25rem;
-  height: 1.25rem;
-  margin-right: 1rem;
-  border: 1px solid var(--color-button-outline);
-  border-radius: 4px;
-  background-color: transparent;
-  border-radius: 0.25rem;
-  flex: 0 0 auto;
-  align-self: start;
-  top: 7px;
-  position: relative;
-}
+  ul.contains-task-list li.task-list-item::before {
+    content: '';
+    display: inline-block;
+    width: 1.25rem;
+    height: 1.25rem;
+    margin-right: 1rem;
+    border: 1px solid var(--color-button-outline);
+    border-radius: 4px;
+    background-color: transparent;
+    border-radius: 0.25rem;
+    flex: 0 0 auto;
+    align-self: start;
+    top: 7px;
+    position: relative;
+  }
 
-/* Add the checkmark when checked */
-.markdown-container
+  /* Add the checkmark when checked */
   ul.contains-task-list
-  li.task-list-item:has(> input:disabled:checked)::before {
-  content: '';
-  border-color: var(--color-primary-cta);
-  color: var(--color-primary-cta);
-  width: 1.25rem;
-  height: 1.25rem;
-  background: url(/src/assets/icons/check.svg) no-repeat center center;
-}
+    li.task-list-item:has(> input:disabled:checked)::before {
+    content: '';
+    border-color: var(--color-primary-cta);
+    color: var(--color-primary-cta);
+    width: 1.25rem;
+    height: 1.25rem;
+    background: url(/src/assets/icons/check.svg) no-repeat center center;
+  }
 
-.markdown-container ol {
-  counter-reset: list-counter;
-  list-style: none;
-  padding-left: 0;
-}
+  ol {
+    counter-reset: list-counter;
+    list-style: none;
+    padding-left: 0;
+  }
 
-.markdown-container ol li {
-  counter-increment: list-counter;
-  position: relative;
-  padding: 0.25rem 0 0.25rem 3.35em;
-  line-height: 2;
-}
+  ol li {
+    counter-increment: list-counter;
+    position: relative;
+    padding: 0.25rem 0 0.25rem 3.35em;
+    line-height: 2;
+  }
 
-.markdown-container ol li::before {
-  content: counter(list-counter) '.';
-  position: absolute;
-  left: 0;
-  width: 2.2em;
-  text-align: right;
-}
+  ol li::before {
+    content: counter(list-counter) '.';
+    position: absolute;
+    left: 0;
+    width: 2.2em;
+    text-align: right;
+  }
 
-.markdown-container ul li {
-  padding: 0.25rem 0 0.25rem 1.05rem;
-  line-height: 2;
-}
+  ul li {
+    padding: 0.25rem 0 0.25rem 1.05rem;
+    line-height: 2;
+  }
 
-/* Markdown: Code blocks */
-.issue-detail pre {
-  background-color: var(--color-nav-selected);
-  border-radius: 0.5rem;
-  margin: 2rem 0;
-  padding: 1rem;
-  overflow-x: auto;
-}
+  /* Markdown: Code blocks */
+  pre {
+    background-color: var(--color-nav-selected);
+    border-radius: 0.5rem;
+    margin: 2rem 0;
+    padding: 1rem;
+    overflow-x: auto;
+  }
 
-.issue-detail code {
-  font-size: 0.9rem;
-  font-family:
-    ui-monospace,
-    SFMono-Regular,
-    SF Mono,
-    Menlo,
-    Consolas,
-    Liberation Mono,
-    monospace;
-  background-color: var(--color-nav-selected);
-  padding: 0.1rem 0.3rem;
-  border-radius: 0.25rem;
-}
+  code {
+    font-size: 0.9rem;
+    font-family:
+      ui-monospace,
+      SFMono-Regular,
+      SF Mono,
+      Menlo,
+      Consolas,
+      Liberation Mono,
+      monospace;
+    background-color: var(--color-nav-selected);
+    padding: 0.1rem 0.3rem;
+    border-radius: 0.25rem;
+  }
 
-/* Markdown: Blockquotes */
-.markdown-container blockquote {
-  margin: 1rem 0;
-  padding: 0.5em 1em;
-  border-left: 0.4rem solid var(--color-nav-selected);
-  font-style: italic;
-  color: rgba(255, 255, 255, 0.6);
+  /* Markdown: Blockquotes */
+  blockquote {
+    margin: 1rem 0;
+    padding: 0.5em 1em;
+    border-left: 0.4rem solid var(--color-nav-selected);
+    font-style: italic;
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  /* Markdown: Headers */
+  h1 {
+    font-size: 3rem;
+  }
+
+  h2 {
+    font-size: 2rem;
+    margin: 3rem 0 1rem;
+  }
+
+  h3 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 2rem 0 1rem;
+  }
+
+  /* Markdown: Links */
+  a {
+    color: var(--color-primary-cta);
+  }
+
+  /* Markdown: Horizontal rule */
+  hr {
+    margin: 1rem 0;
+    border-color: var(--color-nav-selected);
+  }
+
+  img {
+    margin: 2rem 0 1.5rem;
+  }
 }
 
 .comments-container {
   position: relative;
 }
 
-.comments-container .markdown-container blockquote {
-  border-left-color: var(--color-button-outline);
-}
+.comments-container .markdown-container {
+  blockquote {
+    border-left-color: var(--color-button-outline);
+  }
 
-/* Markdown: Horizontal rule */
-.markdown-container hr {
-  margin: 1rem 0;
-  border-color: var(--color-nav-selected);
-}
-
-.comments-container .markdown-container hr {
-  border-color: var(--color-text-dimmed-label);
-}
-
-/* Markdown: Headers */
-.markdown-container h1 {
-  font-size: 3rem;
-}
-
-.markdown-container h2 {
-  font-size: 2rem;
-  margin: 3rem 0 1rem;
-}
-
-.markdown-container h3 {
-  font-size: 1.25rem;
-  font-weight: 700;
-  margin: 2rem 0 1rem;
-}
-
-/* Markdown: Links */
-.markdown-container a {
-  color: var(--color-primary-cta);
+  hr {
+    border-color: var(--color-text-dimmed-label);
+  }
 }
 
 /**************/

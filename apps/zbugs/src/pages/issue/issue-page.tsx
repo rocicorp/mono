@@ -341,8 +341,10 @@ export function IssuePage() {
          HTML mixed in. We need to find some way to render them, or convert to
          standard markdown? break-spaces makes it render a little better */}
           {!editing ? (
-            <div className="description-container markdown-container">
-              <Markdown>{rendering.description}</Markdown>
+            <>
+              <div className="description-container markdown-container">
+                <Markdown>{rendering.description}</Markdown>
+              </div>
               <EmojiPanel
                 issueID={issue.id}
                 ref={issueEmojiRef}
@@ -350,7 +352,7 @@ export function IssuePage() {
                 recentEmojis={recentEmojis}
                 removeRecentEmoji={removeRecentEmoji}
               />
-            </div>
+            </>
           ) : (
             <div className="edit-description-container">
               <p className="issue-detail-label">Edit description</p>
