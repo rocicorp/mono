@@ -535,11 +535,14 @@ export function IssuePage() {
           </div>
 
           <h2 className="issue-detail-label">Comments</h2>
-          {!displayAllComments && hasOlderComments ? (
-            <div onClick={() => setDisplayAllComments(true)}>Older</div>
-          ) : (
-            <div>&nbsp;</div>
-          )}
+          <Button
+            style={{
+              visibility: hasOlderComments ? 'visible' : 'hidden',
+            }}
+            onAction={() => setDisplayAllComments(true)}
+          >
+            Show Older
+          </Button>
 
           <div className="comments-container" ref={listRef}>
             <div
