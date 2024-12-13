@@ -8,12 +8,12 @@ import {visit} from 'unist-util-visit';
  */
 const rehypeImageToVideo: Plugin = () => {
   return tree => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     visit(tree, 'element', (node: any) => {
       if (
         node.tagName === 'img' &&
         /\.(mp4|webm|ogg)$/.test(node.properties?.src)
       ) {
+        const poster = node.properties['data-poster']; // Extract the `data-poster` attribute
         node.tagName = 'video';
         node.properties = {
           ...node.properties,
@@ -22,8 +22,11 @@ const rehypeImageToVideo: Plugin = () => {
           loop: true,
           muted: true,
           playsinline: true,
+          preload: 'metadata',
+          poster: poster || undefined, // Add the poster if present
           className: [...(node.properties?.className || []), 'inline-video'],
         };
+        delete node.properties['data-poster']; // Clean up the `data-poster` attribute
       }
     });
   };
