@@ -1,6 +1,9 @@
+import {trace} from '@opentelemetry/api';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import type {MaybeRow, PendingQuery, Row} from 'postgres';
+import {startAsyncSpan} from '../../../../otel/src/span.js';
+import {version} from '../../../../otel/src/version.js';
 import {assert} from '../../../../shared/src/asserts.js';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.js';
 import {
@@ -43,9 +46,6 @@ import {
   versionString,
   versionToNullableCookie,
 } from './schema/types.js';
-import {trace} from '@opentelemetry/api';
-import {version} from '../../../../otel/src/version.js';
-import {startAsyncSpan} from '../../../../otel/src/span.js';
 
 type NotNull<T> = T extends null ? never : T;
 
@@ -252,6 +252,10 @@ class RowRecordCache {
       flushing.reject(e);
       this.#failService(e);
     }
+  }
+
+  hasPendingUpdates() {
+    return this.#flushing !== null;
   }
 
   /**
@@ -948,6 +952,10 @@ export class CVRStore {
       this.#writes.clear();
       this.#pendingRowRecordPuts.clear();
     }
+  }
+
+  hasPendingUpdates(): boolean {
+    return this.#rowCache.hasPendingUpdates();
   }
 
   /** Resolves when all pending updates are flushed. */

@@ -148,6 +148,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       () => this.#stateChanges.cancel(),
     );
     this.#permissions = permissions;
+
+    // Wait for the first connection to init.
+    this.keepalive();
   }
 
   #runInLockWithCVR(
@@ -157,6 +160,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const lc = this.#lc.withContext('lock', randomID());
       if (!this.#stateChanges.active) {
         return; // view-syncer has been shutdown
+      }
+      // If all clients have disconnected, cancel all pending work.
+      if (this.#checkForShutdownConditionsInLock()) {
+        this.#lc.info?.('shutting down');
+        this.#stateChanges.cancel(); // Note: #stateChanges.active becomes false.
+        return;
       }
       if (!this.#cvr) {
         this.#cvr = await this.#cvrStore.load(lc, this.#lastConnectTime);
@@ -265,23 +274,35 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   #shutdownTimer: NodeJS.Timeout | null = null;
 
-  async #tryShutdown() {
-    // Keep the view-syncer alive if there are pending rows being flushed.
-    // It's better to do this before shutting down since it may take a
-    // while, during which new connections may come in.
-    await this.#cvrStore.flushed(this.#lc).catch(e => this.#lc.error?.(e));
+  #scheduleShutdown(delayMs = 0) {
+    this.#shutdownTimer ??= setTimeout(async () => {
+      this.#shutdownTimer = null;
 
-    this.#shutdownTimer = null;
-    if (Date.now() <= this.#keepAliveUntil) {
-      this.#lc.debug?.('not shutting down: keepalive');
-      this.#shutdownTimer = setTimeout(
-        () => this.#tryShutdown(),
-        this.#keepaliveMs,
-      );
-    } else if (this.#clients.size === 0) {
-      this.#lc.info?.('shutting down');
-      this.#stateChanges.cancel(); // Note: #stateChanges.active becomes false.
+      // Keep the view-syncer alive if there are pending rows being flushed.
+      // It's better to do this before shutting down since it may take a
+      // while, during which new connections may come in.
+      await this.#cvrStore.flushed(this.#lc).catch(e => this.#lc.error?.(e));
+
+      // All lock tasks check for shutdown so that queued work is immediately
+      // canceled when clients disconnect. Queue an empty task to ensure that
+      // this check happens.
+      await this.#runInLockWithCVR(() => {});
+    }, delayMs);
+  }
+
+  #checkForShutdownConditionsInLock(): boolean {
+    if (this.#clients.size > 0) {
+      return false; // common case.
     }
+    if (Date.now() <= this.#keepAliveUntil) {
+      this.#scheduleShutdown(this.#keepaliveMs); // check again later
+      return false;
+    }
+    if (this.#cvrStore.hasPendingUpdates()) {
+      this.#scheduleShutdown(0); // check again after #cvrStore.flushed()
+      return false;
+    }
+    return true;
   }
 
   #deleteClient(clientID: string, client: ClientHandler) {
@@ -293,8 +314,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     if (c === client) {
       this.#clients.delete(clientID);
 
-      if (this.#clients.size === 0 && this.#shutdownTimer === null) {
-        this.#shutdownTimer = setTimeout(() => this.#tryShutdown(), 0);
+      if (this.#clients.size === 0) {
+        this.#scheduleShutdown();
       }
     }
   }
