@@ -39,7 +39,7 @@ type Props = {
   commentID?: string | undefined;
   emojis: readonly Emoji[];
   recentEmojis?: readonly Emoji[] | undefined;
-  removeRecentEmoji?: (id: string) => void | undefined;
+  removeRecentEmoji?: ((id: string) => void) | undefined;
 };
 
 export const EmojiPanel = memo(

@@ -28,7 +28,7 @@ type Props = {
   emojis: Emoji[];
   addOrRemoveEmoji: AddOrRemoveEmoji;
   recentEmojis?: readonly Emoji[] | undefined;
-  removeRecentEmoji?: (id: string) => void | undefined;
+  removeRecentEmoji?: ((id: string) => void) | undefined;
   subjectID: string;
 };
 
