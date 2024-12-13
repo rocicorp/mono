@@ -1,14 +1,12 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import assert from 'assert';
-import {jwtVerify, type JWTPayload} from 'jose';
+import {type JWTPayload} from 'jose';
 import {pid} from 'process';
 import {MessagePort} from 'worker_threads';
 import {WebSocketServer, type WebSocket} from 'ws';
-import {must} from '../../../shared/src/must.js';
 import {promiseVoid} from '../../../shared/src/resolved-promises.js';
 import {ErrorKind} from '../../../zero-protocol/src/error.js';
-import {type ZeroConfig} from '../config/zero-config.js';
+import {type AuthConfig, type ZeroConfig} from '../config/zero-config.js';
 import type {ConnectParams} from '../services/dispatcher/connect-params.js';
 import {installWebSocketReceiver} from '../services/dispatcher/websocket-handoff.js';
 import type {Mutagen} from '../services/mutagen/mutagen.js';
@@ -25,6 +23,7 @@ import type {Worker} from '../types/processes.js';
 import {Subscription} from '../types/subscription.js';
 import {Connection, sendError} from './connection.js';
 import {createNotifierFrom, subscribeTo} from './replicator.js';
+import {verifyToken} from '../auth/jwt.js';
 
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;
@@ -47,7 +46,7 @@ export class Syncer implements SingletonService {
   readonly #parent: Worker;
   readonly #wss: WebSocketServer;
   readonly #stopped = resolver();
-  #jwtSecretBytes: Uint8Array | undefined;
+  readonly #authConfig: AuthConfig;
 
   constructor(
     lc: LogContext,
@@ -60,6 +59,7 @@ export class Syncer implements SingletonService {
     mutagenFactory: (id: string) => Mutagen & Service,
     parent: Worker,
   ) {
+    this.#authConfig = config.auth;
     // Relays notifications from the parent thread subscription
     // to ViewSyncers within this thread.
     const notifier = createNotifierFrom(lc, parent);
@@ -75,10 +75,6 @@ export class Syncer implements SingletonService {
     this.#parent = parent;
     this.#wss = new WebSocketServer({noServer: true});
 
-    if (config.auth.secret) {
-      this.#jwtSecretBytes = new TextEncoder().encode(config.auth.secret);
-    }
-
     installWebSocketReceiver(this.#wss, this.#createConnection, this.#parent);
   }
 
@@ -92,11 +88,9 @@ export class Syncer implements SingletonService {
     let decodedToken: JWTPayload | undefined;
     if (auth) {
       try {
-        decodedToken = await decodeAndCheckToken(
-          auth,
-          this.#jwtSecretBytes,
-          userID,
-        );
+        decodedToken = await verifyToken(this.#authConfig, auth, {
+          subject: userID,
+        });
       } catch (e) {
         sendError(this.#lc, ws, {
           kind: ErrorKind.AuthInvalidated,
@@ -170,22 +164,4 @@ export class Syncer implements SingletonService {
     this.#stopped.resolve();
     return promiseVoid;
   }
-}
-
-export async function decodeAndCheckToken(
-  auth: string,
-  secret: Uint8Array | undefined,
-  userID: string,
-) {
-  assert(
-    secret,
-    'JWT secret was not set in `zero.config`. Set this to the secret that you use to sign JWTs.',
-  );
-  const decodedToken = (await jwtVerify(auth, secret)).payload;
-  must(decodedToken, 'Failed to verify JWT');
-  assert(
-    decodedToken.sub === userID,
-    'JWT subject does not match the userID that Zero was constructed with.',
-  );
-  return decodedToken;
 }
