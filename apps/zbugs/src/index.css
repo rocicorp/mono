@@ -691,8 +691,8 @@ textarea.autoResize {
   left: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover; /* Prevent distortion of the video */
-  background: transparent; /* Ensure no unwanted background color */
+  object-fit: cover;
+  background: transparent;
 }
 
 .edit-buttons {

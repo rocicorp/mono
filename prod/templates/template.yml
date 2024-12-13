@@ -51,6 +51,9 @@ Resources:
     Properties:
       CapacityProviders:
         - FARGATE
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
 
   # Security Group for internal service communication
   InternalServicesSG:
