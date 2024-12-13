@@ -77,7 +77,8 @@ export function IssuePage() {
         .related('emoji', emoji =>
           emoji.related('creator', creator => creator.one()),
         )
-        .orderBy('created', 'asc'),
+        .limit(101)
+        .orderBy('created', 'desc'),
     )
     .one();
   const [issue, issueResult] = useQuery(q);
@@ -170,7 +171,33 @@ export function IssuePage() {
     [issue?.labels],
   );
 
-  const {listRef, virtualizer} = useVirtualComments(issue?.comments ?? []);
+  const [displayAllComments, setDisplayAllComments] = useState(false);
+
+  const [allComments, allCommentsResult] = useQuery(
+    z.query.comment
+      .where('issueID', issue?.id ?? '')
+      .related('creator', creator => creator.one())
+      .related('emoji', emoji =>
+        emoji.related('creator', creator => creator.one()),
+      )
+      .orderBy('created', 'asc'),
+    displayAllComments && issue !== undefined,
+  );
+
+  const [comments, hasOlderComments] = useMemo(() => {
+    if (issue?.comments === undefined) {
+      return [undefined, false];
+    }
+    if (allCommentsResult.type === 'complete') {
+      return [allComments, false];
+    }
+    return [
+      issue.comments.slice(0, 100).reverse(),
+      issue.comments.length > 100,
+    ];
+  }, [issue?.comments, allCommentsResult.type, allComments]);
+
+  const {listRef, virtualizer} = useVirtualComments(comments ?? []);
 
   const hash = useHash();
 
@@ -242,7 +269,7 @@ export function IssuePage() {
   // TODO: We need the notion of the 'partial' result type to correctly render
   // a 404 here. We can't put the 404 here now because it would flash until we
   // get data.
-  if (!issue) {
+  if (!issue || !comments) {
     return null;
   }
 
@@ -277,7 +304,9 @@ export function IssuePage() {
                   <span className="breadcrumb-item">&rarr;</span>
                 </>
               ) : null}
-              <span className="breadcrumb-item">Issue {issue.shortID}</span>
+              <span className="breadcrumb-item">
+                Issue {issue.shortID} {issue.id}
+              </span>
             </div>
             <CanEdit ownerID={issue.creatorID}>
               <div className="edit-buttons">
@@ -488,6 +517,11 @@ export function IssuePage() {
           </div>
 
           <h2 className="issue-detail-label">Comments</h2>
+          {hasOlderComments ? (
+            <div onClick={() => setDisplayAllComments(true)}>Older</div>
+          ) : (
+            <div>&nbsp;</div>
+          )}
 
           <div className="comments-container" ref={listRef}>
             <div
@@ -506,9 +540,9 @@ export function IssuePage() {
                   }}
                 >
                   <Comment
-                    id={issue.comments[item.index].id}
+                    id={comments[item.index].id}
                     issueID={issue.id}
-                    comment={issue.comments[item.index]}
+                    comment={comments[item.index]}
                     height={item.size}
                   />
                 </div>
