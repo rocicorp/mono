@@ -72,6 +72,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   readonly #tables = new Map<string, TableSource>();
   readonly #statementRunner: StatementRunner;
   readonly #lc: LogContext;
+  readonly #clientGroupID: string;
 
   constructor(
     lc: LogContext,
@@ -81,6 +82,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     replica: Database,
     cgID: string,
   ) {
+    this.#clientGroupID = cgID;
     this.#lc = lc.withContext('class', 'WriteAuthorizerImpl');
     this.#schema = schema;
     this.#permissionsConfig = permissions ?? {};
@@ -230,6 +232,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     const {columns, primaryKey} = tableSpec.tableSpec;
     assert(primaryKey.length);
     source = new TableSource(
+      this.#clientGroupID,
       this.#replica,
       tableName,
       Object.fromEntries(

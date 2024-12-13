@@ -91,15 +91,18 @@ export class TableSource implements Source {
   readonly #table: string;
   readonly #columns: Record<string, SchemaValue>;
   readonly #primaryKey: PrimaryKey;
+  readonly #clientGroupID: string;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
 
   constructor(
+    clientGroupID: string,
     db: Database,
     tableName: string,
     columns: Record<string, SchemaValue>,
     primaryKey: readonly [string, ...string[]],
   ) {
+    this.#clientGroupID = clientGroupID;
     this.#table = tableName;
     this.#columns = columns;
     this.#primaryKey = primaryKey;
@@ -311,7 +314,7 @@ export class TableSource implements Source {
   ): IterableIterator<Row> {
     for (const row of rowIterator) {
       if (runtimeDebugFlags.trackRowsVended) {
-        runtimeDebugStats.rowVended(this.#table, query);
+        runtimeDebugStats.rowVended(this.#clientGroupID, this.#table, query);
       }
       yield fromSQLiteTypes(valueTypes, row);
     }

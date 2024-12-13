@@ -21,6 +21,10 @@ import type {SchemaVersions} from '../../types/schema-versions.js';
 import {getSubscriptionState} from '../replicator/schema/replication-state.js';
 import type {ClientGroupStorage} from './database-storage.js';
 import {type SnapshotDiff, Snapshotter} from './snapshotter.js';
+import {
+  runtimeDebugFlags,
+  runtimeDebugStats,
+} from '../../../../zqlite/src/runtime-debug.js';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -86,6 +90,7 @@ export class PipelineDriver {
   readonly #lc: LogContext;
   readonly #snapshotter: Snapshotter;
   readonly #storage: ClientGroupStorage;
+  readonly #clientGroupID: string;
   #tableSpecs: Map<string, LiteAndZqlSpec> | null = null;
   #streamer: Streamer | null = null;
   #replicaVersion: string | null = null;
@@ -94,10 +99,12 @@ export class PipelineDriver {
     lc: LogContext,
     snapshotter: Snapshotter,
     storage: ClientGroupStorage,
+    clientGroupID: string,
   ) {
-    this.#lc = lc;
+    this.#lc = lc.withContext('clientGroupID', clientGroupID);
     this.#snapshotter = snapshotter;
     this.#storage = storage;
+    this.#clientGroupID = clientGroupID;
   }
 
   /**
@@ -226,11 +233,39 @@ export class PipelineDriver {
 
     const start = Date.now();
 
+    if (runtimeDebugFlags.trackRowsVended) {
+      runtimeDebugStats.resetRowsVended(this.#clientGroupID);
+    }
+
     const res = input.fetch({});
     const streamer = new Streamer().accumulate(hash, schema, toAdds(res));
     yield* streamer.stream();
 
     const hydrationTimeMs = Date.now() - start;
+    if (runtimeDebugFlags.trackRowsVended) {
+      if (hydrationTimeMs > 200) {
+        let totalRowsConsidered = 0;
+        const lc = this.#lc
+          .withContext('hash', hash)
+          .withContext('hydrationTimeMs', hydrationTimeMs);
+        for (const tableName of this.#tables.keys()) {
+          const entires = [
+            ...(runtimeDebugStats
+              .getRowsVended(this.#clientGroupID)
+              ?.get(tableName)
+              ?.entries() ?? []),
+          ];
+          totalRowsConsidered += entires.reduce(
+            (acc, entry) => acc + entry[1],
+            0,
+          );
+          lc.debug?.(tableName + ' VENDED: ', entires);
+        }
+        lc.debug?.(`Total rows considered: ${totalRowsConsidered}`);
+      }
+      runtimeDebugStats.resetRowsVended(this.#clientGroupID);
+    }
+
     this.#pipelines.set(hash, {input, hydrationTimeMs});
   }
 
@@ -322,10 +357,13 @@ export class PipelineDriver {
     assert(primaryKey.length);
 
     const {db} = this.#snapshotter.current();
-    source = new TableSource(db.db, tableName, tableSpec.zqlSpec, [
-      primaryKey[0],
-      ...primaryKey.slice(1),
-    ]);
+    source = new TableSource(
+      this.#clientGroupID,
+      db.db,
+      tableName,
+      tableSpec.zqlSpec,
+      [primaryKey[0], ...primaryKey.slice(1)],
+    );
     this.#tables.set(tableName, source);
     this.#lc.debug?.(`created TableSource for ${tableName}`);
     return source;

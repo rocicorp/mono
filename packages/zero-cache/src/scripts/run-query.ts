@@ -33,6 +33,7 @@ const host: QueryDelegate = {
       return source;
     }
     source = new TableSource(
+      '',
       db,
       name,
       normalizedSchema.tables[name].columns,
@@ -68,7 +69,8 @@ const end = performance.now();
 let totalRowsConsidered = 0;
 for (const source of sources.values()) {
   const entires = [
-    ...(runtimeDebugStats.rowsVended.get(source.table)?.entries() ?? []),
+    ...(runtimeDebugStats.getRowsVended('')?.get(source.table)?.entries() ??
+      []),
   ];
   totalRowsConsidered += entires.reduce((acc, entry) => acc + entry[1], 0);
   console.log(source.table + ' VENDED: ', entires);

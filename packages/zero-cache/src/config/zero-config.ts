@@ -4,6 +4,7 @@
 
 import {parseOptions, type Config} from '../../../shared/src/options.js';
 import * as v from '../../../shared/src/valita.js';
+import {runtimeDebugFlags} from '../../../zqlite/src/runtime-debug.js';
 import {singleProcessMode} from '../types/processes.js';
 
 /**
@@ -178,6 +179,14 @@ export const zeroOptions = {
       type: v.number().optional(),
       hidden: true, // Passed from main thread to sync workers
     },
+  },
+
+  queryHydrationStats: {
+    type: v.boolean().optional(),
+    desc: [
+      `Track and log the number of rows considered by each query in the system.`,
+      `This is useful for debugging and performance tuning.`,
+    ],
   },
 
   change: {
@@ -368,6 +377,10 @@ export function getZeroConfig(
 ): ZeroConfig {
   if (!loadedConfig || singleProcessMode()) {
     loadedConfig = parseOptions(zeroOptions, argv, ZERO_ENV_VAR_PREFIX, env);
+
+    if (loadedConfig.queryHydrationStats) {
+      runtimeDebugFlags.trackRowsVended = true;
+    }
   }
 
   return loadedConfig;
