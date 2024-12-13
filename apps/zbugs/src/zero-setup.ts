@@ -3,6 +3,7 @@ import {Atom} from './atom.js';
 import {type Schema, schema} from '../schema.js';
 import {clearJwt, getJwt, getRawJwt} from './jwt.js';
 import {mark} from './perf-log.js';
+import {INITIAL_COMMENT_LIMIT} from './pages/issue/issue-page.js';
 
 export type LoginState = {
   encoded: string;
@@ -69,7 +70,15 @@ export function preload(z: Zero<Schema>) {
     mark('preload complete');
     cleanup();
     baseIssueQuery
-      .related('comments', q => q.related('emoji').limit(10))
+      .related('comments', comments =>
+        comments
+          .related('creator', creator => creator.one())
+          .related('emoji', emoji =>
+            emoji.related('creator', creator => creator.one()),
+          )
+          .limit(INITIAL_COMMENT_LIMIT)
+          .orderBy('created', 'desc'),
+      )
       .preload();
   });
 

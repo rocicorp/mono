@@ -49,6 +49,9 @@ import Comment from './comment.js';
 import {isCtrlEnter} from './is-ctrl-enter.js';
 
 const emojiToastShowDuration = 3_000;
+// One more than we display so we can detect if there are more
+// to laod.
+export const INITIAL_COMMENT_LIMIT = 101;
 
 export function IssuePage() {
   const z = useZero();
@@ -77,7 +80,7 @@ export function IssuePage() {
         .related('emoji', emoji =>
           emoji.related('creator', creator => creator.one()),
         )
-        .limit(101)
+        .limit(INITIAL_COMMENT_LIMIT)
         .orderBy('created', 'desc'),
     )
     .one();
@@ -196,6 +199,8 @@ export function IssuePage() {
       issue.comments.length > 100,
     ];
   }, [issue?.comments, allCommentsResult.type, allComments]);
+
+  console.log(comments, hasOlderComments);
 
   const {listRef, virtualizer} = useVirtualComments(comments ?? []);
 
