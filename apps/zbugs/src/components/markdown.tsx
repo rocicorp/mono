@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {memo} from 'react';
 import MarkdownBase from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type {Plugin} from 'unified'; // Type-only import
@@ -121,7 +121,7 @@ const rehypeImageToVideo: Plugin = () => {
   };
 };
 
-export default function Markdown({children}: {children: string}) {
+const Markdown = memo(({children}: {children: string}) => {
   return (
     <MarkdownBase
       remarkPlugins={[remarkGfm]}
@@ -150,4 +150,6 @@ export default function Markdown({children}: {children: string}) {
       {children}
     </MarkdownBase>
   );
-}
+});
+
+export default Markdown;
