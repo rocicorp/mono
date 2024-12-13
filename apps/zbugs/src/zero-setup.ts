@@ -63,7 +63,9 @@ export function preload(z: Zero<Schema>) {
     .related('assignee')
     .related('labels')
     .related('viewState', q => q.where('userID', z.userID).one())
-    .related('emoji');
+    .related('emoji', emoji =>
+      emoji.related('creator', creator => creator.one()),
+    );
 
   const {cleanup, complete} = baseIssueQuery.preload();
   complete.then(() => {
