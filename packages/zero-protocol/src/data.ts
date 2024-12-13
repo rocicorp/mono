@@ -3,7 +3,7 @@ import * as v from '../../shared/src/valita.js';
 
 export const valueSchema = v.union(jsonSchema, v.undefined());
 
-export const rowSchema = v.record(valueSchema);
+export const rowSchema = v.readonlyRecord(valueSchema);
 
 /**
  * The data types that Zero can represent are limited by two things:

@@ -4726,8 +4726,11 @@ describe('edit assignee', () => {
   });
 
   test('from one to none', () => {
-    const localSourceContents = structuredClone(sourceContents);
-    localSourceContents.issue[0].assigneeID = 'u1';
+    const {issue, ...rest} = sourceContents;
+    const localSourceContents = {
+      issue: [{...issue[0], assigneeID: 'u1'}, ...issue.slice(1)],
+      ...rest,
+    } as const;
 
     const {log, data, actualStorage, pushes} = runJoinTest({
       sources,
@@ -4971,8 +4974,9 @@ describe('edit assignee', () => {
   });
 
   test('from many to none', () => {
-    const issue = structuredClone(sourceContents.issue);
-    issue[0].assigneeID = 'u1';
+    let {issue} = sourceContents;
+    issue = [{...issue[0], assigneeID: 'u1'}, ...issue.slice(1)];
+
     const localSources: Sources = {
       issue: sources.issue,
       user: {

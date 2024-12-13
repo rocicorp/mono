@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../shared/src/asserts.js';
+import type {Writable} from '../../../shared/src/writable.js';
 import {hashOfAST} from '../../../zero-protocol/src/ast-hash.js';
 import type {
   AST,
@@ -463,7 +464,7 @@ export abstract class AbstractQuery<
       const finalOrderBy = addPrimaryKeys(this.#schema, this.#ast.orderBy);
       if (this.#ast.start) {
         const {row} = this.#ast.start;
-        const narrowedRow: IVMRow = {};
+        const narrowedRow: Writable<IVMRow> = {};
         for (const [field] of finalOrderBy) {
           narrowedRow[field] = row[field];
         }

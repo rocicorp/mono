@@ -8,7 +8,7 @@ import {
 import {must} from '../../../shared/src/must.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import type {Change} from './change.js';
-import type {Node, Comparator} from './data.js';
+import type {Comparator, Node} from './data.js';
 import type {SourceSchema} from './schema.js';
 import type {Entry, EntryList, Format} from './view.js';
 
@@ -76,10 +76,10 @@ export function applyChange(
         );
         parentEntry[relationship] = newEntry;
       } else {
-        const view = parentEntry[relationship];
-        assertArray(view);
+        const view = getChildEntryList(parentEntry, relationship);
         const {pos, found} = binarySearch(view, newEntry, schema.compareRows);
         assert(!found, 'node already exists');
+        // @ts-expect-error view is readonly
         view.splice(pos, 0, newEntry);
       }
       for (const [relationship, children] of Object.entries(
@@ -111,14 +111,14 @@ export function applyChange(
         assertObject(parentEntry[relationship]);
         parentEntry[relationship] = undefined;
       } else {
-        assertArray(parentEntry[relationship]);
-        const view = parentEntry[relationship];
+        const view = getChildEntryList(parentEntry, relationship);
         const {pos, found} = binarySearch(
           view,
           change.node.row,
           schema.compareRows,
         );
         assert(found, 'node does not exist');
+        // @ts-expect-error view is readonly
         view.splice(pos, 1);
       }
       // Needed to ensure cleanup of operator state is fully done.
@@ -131,11 +131,10 @@ export function applyChange(
         assertObject(parentEntry[relationship]);
         existing = parentEntry[relationship];
       } else {
-        assertArray(parentEntry[relationship]);
-        const list = parentEntry[relationship];
-        const {pos, found} = binarySearch(list, change.row, schema.compareRows);
+        const view = getChildEntryList(parentEntry, relationship);
+        const {pos, found} = binarySearch(view, change.row, schema.compareRows);
         assert(found, 'node does not exist');
-        existing = list[pos];
+        existing = view[pos];
       }
 
       const childSchema = must(
@@ -161,8 +160,8 @@ export function applyChange(
           ...change.node.row,
         };
       } else {
-        assertArray(parentEntry[relationship]);
-        const view = parentEntry[relationship];
+        const view = parentEntry[relationship] as EntryList | undefined;
+        assertArray(view);
         // If the order changed due to the edit, we need to remove and reinsert.
         if (schema.compareRows(change.oldNode.row, change.node.row) === 0) {
           const {pos, found} = binarySearch(
@@ -251,4 +250,13 @@ function drainStreams(node: Node) {
       drainStreams(node);
     }
   }
+}
+
+function getChildEntryList(
+  parentEntry: Entry,
+  relationship: string,
+): EntryList {
+  const view = parentEntry[relationship] as unknown;
+  assertArray(view);
+  return view as EntryList;
 }
