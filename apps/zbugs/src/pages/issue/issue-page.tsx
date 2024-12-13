@@ -207,26 +207,43 @@ export function IssuePage() {
   const hash = useHash();
 
   // Permalink scrolling behavior
+  const [lastPermalinkScroll, setLastPermalinkScroll] = useState('');
   useEffect(() => {
-    if (issue === undefined) {
+    if (issue === undefined || comments === undefined) {
       return;
     }
-    const {comments} = issue;
     const commentID = parsePermalink(hash);
+    if (!commentID) {
+      return;
+    }
+    if (lastPermalinkScroll === commentID) {
+      return;
+    }
     const commentIndex = comments.findIndex(c => c.id === commentID);
     if (commentIndex !== -1) {
+      setLastPermalinkScroll(commentID);
       virtualizer.scrollToIndex(commentIndex, {
         // auto for minimal amount of scrolling.
         align: 'auto',
         // The `smooth` scroll behavior is not fully supported with dynamic size.
         // behavior: 'smooth',
       });
+    } else {
+      if (!displayAllComments) {
+        setDisplayAllComments(true);
+      }
     }
     // Issue changes any time there is a change in the issue. For example when
     // the `modified` or `assignee` changes.
     //
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hash, issue?.id, virtualizer]);
+  }, [
+    hash,
+    issue?.id,
+    virtualizer,
+    displayAllComments,
+    allCommentsResult.type,
+  ]);
 
   const [deleteConfirmationShown, setDeleteConfirmationShown] = useState(false);
 
