@@ -161,7 +161,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       if (!this.#cvr) {
         this.#cvr = await this.#cvrStore.load(lc, this.#lastConnectTime);
       }
-      lc.debug?.(`cvr@${versionString(this.#cvr.version)}`);
       try {
         await fn(lc, this.#cvr);
       } catch (e) {
@@ -393,7 +392,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             if (client?.wsID !== wsID) {
               // Only respond to messages of the currently connected client.
               // Connections may have been drained or dropped due to an error.
-              lc.debug?.(`client no longer connected. dropping ${cmd} message`);
               return;
             }
 
