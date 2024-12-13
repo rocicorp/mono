@@ -1079,6 +1079,10 @@ textarea.autoResize {
   }
 }
 
+.comments-container .emoji-reaction-container {
+  margin-bottom: 0;
+}
+
 /**************/
 /* Responsive */
 /**************/
@@ -1287,7 +1291,7 @@ textarea.autoResize {
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
-  margin-top: 1rem;
+  margin: 1rem 0 4rem;
 }
 
 .emoji-pill {
