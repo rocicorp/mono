@@ -1,6 +1,7 @@
 import type {SQLQuery} from '@databases/sql';
 import {assert, unreachable} from '../../shared/src/asserts.js';
 import {must} from '../../shared/src/must.js';
+import type {Writable} from '../../shared/src/writable.js';
 import type {
   Condition,
   Ordering,
@@ -9,7 +10,16 @@ import type {
 } from '../../zero-protocol/src/ast.js';
 import type {Row, Value} from '../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
+import type {
+  SchemaValue,
+  ValueType,
+} from '../../zero-schema/src/table-schema.js';
 import {assertOrderingIncludesPK} from '../../zql/src/builder/builder.js';
+import {
+  createPredicate,
+  transformFilters,
+  type NoSubqueryCondition,
+} from '../../zql/src/builder/filter.js';
 import type {Change} from '../../zql/src/ivm/change.js';
 import {
   makeComparator,
@@ -37,15 +47,6 @@ import type {Stream} from '../../zql/src/ivm/stream.js';
 import {Database, Statement} from './db.js';
 import {compile, format, sql} from './internal/sql.js';
 import {StatementCache} from './internal/statement-cache.js';
-import type {
-  SchemaValue,
-  ValueType,
-} from '../../zero-schema/src/table-schema.js';
-import {
-  createPredicate,
-  transformFilters,
-  type NoSubqueryCondition,
-} from '../../zql/src/builder/filter.js';
 
 type Connection = {
   input: Input;
@@ -420,7 +421,7 @@ export class TableSource implements Source {
       this.#primaryKey.map(key => pk[key]),
     );
     if (row) {
-      fromSQLiteTypes(this.#columns, row);
+      return fromSQLiteTypes(this.#columns, row);
     }
     return row;
   }
@@ -720,15 +721,15 @@ export function* mapFromSQLiteTypes(
   rowIterator: IterableIterator<Row>,
 ): IterableIterator<Row> {
   for (const row of rowIterator) {
-    fromSQLiteTypes(valueTypes, row);
-    yield row;
+    yield fromSQLiteTypes(valueTypes, row);
   }
 }
 
 export function fromSQLiteTypes(
   valueTypes: Record<string, SchemaValue>,
   row: Row,
-) {
+): Row {
+  const newRow: Writable<Row> = {};
   for (const key of Object.keys(row)) {
     const valueType = valueTypes[key];
     if (valueType === undefined) {
@@ -736,8 +737,9 @@ export function fromSQLiteTypes(
         `Postgres is missing the column "${key}" but that column was part of a row.`,
       );
     }
-    row[key] = fromSQLiteType(valueType.type, row[key]);
+    newRow[key] = fromSQLiteType(valueType.type, row[key]);
   }
+  return newRow;
 }
 
 function fromSQLiteType(valueType: ValueType, v: Value): Value {

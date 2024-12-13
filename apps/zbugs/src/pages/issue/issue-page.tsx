@@ -561,7 +561,7 @@ const commentSizeCache = new LRUCache<string, number>(1000);
 
 function maybeShowToastForEmoji(
   emoji: Emoji,
-  issue: IssueRow & {comments: CommentRow[]},
+  issue: IssueRow & {readonly comments: readonly CommentRow[]},
   virtualizer: Virtualizer<Window, HTMLElement>,
   emojiElement: HTMLDivElement | null,
   setRecentEmojis: Dispatch<SetStateAction<Emoji[]>>,
@@ -650,7 +650,7 @@ function ToastContent({
   );
 }
 
-function useVirtualComments<T extends {id: string}>(comments: T[]) {
+function useVirtualComments<T extends {id: string}>(comments: readonly T[]) {
   const defaultHeight = 500;
   const listRef = useRef<HTMLDivElement | null>(null);
   const estimateAverage = useRef(defaultHeight);
