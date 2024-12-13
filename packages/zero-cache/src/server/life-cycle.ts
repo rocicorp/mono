@@ -39,7 +39,6 @@ export class ProcessManager {
 
   constructor(
     lc: LogContext,
-    // testing hooks
     proc: EventEmitter = process,
     exit = (code: number) => process.exit(code),
   ) {

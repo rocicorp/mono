@@ -35,7 +35,7 @@ export default async function runWorker(
   const config = getZeroConfig(env);
   const lc = createLogContext(config, {worker: 'dispatcher'});
 
-  const processes = new ProcessManager(lc);
+  const processes = new ProcessManager(lc, parent ?? process);
 
   const numSyncers =
     config.numSyncWorkers !== undefined
