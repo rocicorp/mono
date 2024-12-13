@@ -783,10 +783,6 @@ textarea.autoResize {
     word-break: break-all;
     overflow: hidden;
   }
-
-  .issue-detail-label {
-    margin-top: 4rem;
-  }
 }
 
 .pill {
