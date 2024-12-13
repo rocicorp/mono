@@ -113,7 +113,7 @@ Resources:
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 50
-      DesiredCount: 1
+      DesiredCount: 8
       TaskDefinition: !Ref "TaskDefinitionViewSyncer"
       LoadBalancers:
         - ContainerName: "view-syncer-container"
@@ -174,8 +174,8 @@ Resources:
     Type: AWS::ECS::TaskDefinition
     Properties:
       Family: view-syncer-task-definition
-      Cpu: 16384
-      Memory: 32768
+      Cpu: 4096
+      Memory: 8192
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
@@ -186,8 +186,8 @@ Resources:
         OperatingSystemFamily: LINUX
       ContainerDefinitions:
         - Name: view-syncer-container
-          Cpu: 16384
-          Memory: 32768
+          Cpu: 4096
+          Memory: 8192
           Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/zero-zbugs
           PortMappings:
             - Name: "4848"
@@ -208,11 +208,11 @@ Resources:
             - Name: ZERO_LOG_LEVEL
               Value: debug
             - Name: ZERO_UPSTREAM_MAX_CONNS
-              Value: 60
+              # limit: 190 max_connections / 8 tasks
+              Value: 20
             - Name: ZERO_CVR_MAX_CONNS
-              Value: 275
-            - Name: ZERO_CHANGE_MAX_CONNS
-              Value: 3
+              # limit: 1708 max_connections / 8 tasks
+              Value: 200
             - Name: ZERO_SCHEMA_FILE
               Value: /opt/app/packages/zero-cache/zero-schema.json
             - Name: ZERO_PER_USER_MUTATION_LIMIT_MAX
@@ -367,10 +367,6 @@ Resources:
               Value: /data/db/sync-replica.db
             - Name: ZERO_LOG_LEVEL
               Value: debug
-            - Name: ZERO_UPSTREAM_MAX_CONNS
-              Value: 60
-            - Name: ZERO_CVR_MAX_CONNS
-              Value: 275
             - Name: ZERO_CHANGE_MAX_CONNS
               Value: 3
             - Name: ZERO_SCHEMA_FILE

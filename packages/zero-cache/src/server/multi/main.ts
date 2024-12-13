@@ -25,7 +25,7 @@ export default async function runWorker(
   const startMs = Date.now();
   const {config, env: baseEnv} = getMultiZeroConfig(env);
   const lc = createLogContext(config, {worker: 'main'});
-  const processes = new ProcessManager(lc);
+  const processes = new ProcessManager(lc, parent ?? process);
 
   const {port, heartbeatMonitorPort} = config;
   let {taskID} = config;
