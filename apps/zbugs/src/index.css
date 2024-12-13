@@ -670,15 +670,29 @@ textarea.autoResize {
     no-repeat center left;
 }
 
-.inline-video {
-  margin: 2rem 0 1.5rem;
-  border-radius: 0.5rem;
-  display: block;
+.video-container {
+  width: 100%; /* Ensure it takes the full width of its parent */
+  margin: 2rem auto; /* Center and add spacing */
+  position: relative; /* For proper aspect-ratio handling */
+}
+
+.video-wrapper {
   width: 100%;
-  height: auto;
-  aspect-ratio: auto;
-  background: #000;
-  object-fit: cover;
+  padding-top: calc(var(--video-height, 360) / var(--video-width, 640) * 100%);
+  background: #000; /* Placeholder background color */
+  position: relative; /* Maintain the aspect ratio */
+  overflow: hidden; /* Ensure no overflowing elements */
+}
+
+.inline-video {
+  position: absolute;
+  border-radius: 0.5rem;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* Prevent distortion of the video */
+  background: transparent; /* Ensure no unwanted background color */
 }
 
 .edit-buttons {
