@@ -1,6 +1,6 @@
 import {type Row} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
-import {useEffect, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 import {type Schema} from '../../schema.js';
 import avatarIcon from '../assets/icons/avatar-default.svg';
 import {useZero} from '../hooks/use-zero.js';
@@ -27,8 +27,9 @@ export default function UserPicker({
 
   const [unsortedUsers] = useQuery(z.query.user);
   // TODO: Support case-insensitive sorting in ZQL.
-  const users = unsortedUsers.toSorted((a, b) =>
-    a.login.localeCompare(b.login),
+  const users = useMemo(
+    () => unsortedUsers.toSorted((a, b) => a.login.localeCompare(b.login)),
+    [unsortedUsers],
   );
 
   // Preload the avatar icons so they show up instantly when opening the
