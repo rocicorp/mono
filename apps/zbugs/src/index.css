@@ -673,6 +673,12 @@ textarea.autoResize {
 .inline-video {
   margin: 2rem 0 1.5rem;
   border-radius: 0.5rem;
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: auto;
+  background: #000;
+  object-fit: cover;
 }
 
 .edit-buttons {
