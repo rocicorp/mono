@@ -32,6 +32,7 @@ export function bench(opts: Options) {
       const {columns, primaryKey} = tableSpec;
 
       source = new TableSource(
+        'benchmark',
         db,
         name,
         Object.fromEntries(

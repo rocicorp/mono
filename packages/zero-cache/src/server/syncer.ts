@@ -122,6 +122,7 @@ export default async function runWorker(
         logger,
         new Snapshotter(logger, replicaFile),
         operatorStorage.createClientGroupStorage(id),
+        id,
       ),
       sub,
       drainCoordinator,

@@ -1,24 +1,45 @@
-import {assert} from '../../shared/src/asserts.js';
-
 export const runtimeDebugFlags = {
   trackRowsVended: false,
 };
 
-const rowsVendedBySourceAndQuery = new Map<string, Map<string, number>>();
+type ClientGroupID = string;
+type SourceName = string;
+type SQL = string;
+
+type RowsByCg = Map<ClientGroupID, RowsBySource>;
+type RowsBySource = Map<SourceName, RowsByQuery>;
+type RowsByQuery = Map<SQL, number>;
+
+const rowsVendedByCg: RowsByCg = new Map<
+  ClientGroupID,
+  Map<SourceName, Map<SQL, number>>
+>();
 
 export const runtimeDebugStats = {
-  rowVended(source: string, query: string) {
-    assert(runtimeDebugFlags.trackRowsVended);
-    let sourceMap = rowsVendedBySourceAndQuery.get(source);
+  rowVended(clientGroupID: ClientGroupID, source: SourceName, query: SQL) {
+    let sourceMap = rowsVendedByCg.get(clientGroupID);
     if (!sourceMap) {
-      sourceMap = new Map<string, number>();
-      rowsVendedBySourceAndQuery.set(source, sourceMap);
+      sourceMap = new Map<SourceName, RowsByQuery>();
+      rowsVendedByCg.set(clientGroupID, sourceMap);
+    }
+    let queryMap = sourceMap.get(source);
+    if (!queryMap) {
+      queryMap = new Map<SQL, number>();
+      sourceMap.set(source, queryMap);
     }
 
-    sourceMap.set(query, (sourceMap.get(query) ?? 0) + 1);
+    queryMap.set(query, (queryMap.get(query) ?? 0) + 1);
   },
 
-  get rowsVended() {
-    return rowsVendedBySourceAndQuery;
+  resetRowsVended(clientGroupID: ClientGroupID) {
+    rowsVendedByCg.delete(clientGroupID);
+  },
+
+  getRowsVended(clientGroupID: ClientGroupID): RowsBySource | undefined {
+    return rowsVendedByCg.get(clientGroupID);
+  },
+
+  all() {
+    return rowsVendedByCg;
   },
 };

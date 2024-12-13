@@ -24,5 +24,5 @@ export const createSource: SourceFactory = (
     )}));`,
   );
   db.exec(query);
-  return new TableSource(db, tableName, columns, primaryKey);
+  return new TableSource('zqlite-test', db, tableName, columns, primaryKey);
 };

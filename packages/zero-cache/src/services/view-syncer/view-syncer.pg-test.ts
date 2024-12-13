@@ -379,6 +379,7 @@ async function setup(permissions: PermissionsConfig = {}) {
       lc.withContext('component', 'pipeline-driver'),
       new Snapshotter(lc, replicaDbFile.path),
       operatorStorage,
+      'view-syncer.pg-test.ts',
     ),
     stateChanges,
     drainCoordinator,
