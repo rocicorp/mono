@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import type {Plugin} from 'unified'; // Type-only import
 import {visit} from 'unist-util-visit';
 import type {Element} from 'hast';
+import type {Parent} from 'unist';
 
 /**
  * Custom rehype plugin to transform <img> with video extensions to <video>.
@@ -53,7 +54,7 @@ const rehypeImageToVideo: Plugin = () => {
           }
 
           // Transform <img> into <div> with a nested <video>
-          const videoContainer = {
+          const videoContainer: Element = {
             type: 'element',
             tagName: 'div',
             properties: {
@@ -85,7 +86,7 @@ const rehypeImageToVideo: Plugin = () => {
                       'className': 'inline-video',
                       'data-width': width || '640',
                       'data-height': height || '360',
-                      'src': properties.src, // Add video source
+                      'src': properties.src,
                     },
                     children: [],
                   },
