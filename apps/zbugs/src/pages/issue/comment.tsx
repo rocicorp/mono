@@ -84,14 +84,16 @@ const Comment = memo(({id, issueID, comment, height}: Props) => {
           onDone={() => setEditing(false)}
         />
       ) : (
-        <div className="markdown-container">
-          <Markdown>{comment.body}</Markdown>
+        <>
+          <div className="markdown-container">
+            <Markdown>{comment.body}</Markdown>
+          </div>
           <EmojiPanel
             issueID={issueID}
             commentID={comment.id}
             emojis={comment.emoji}
           />
-        </div>
+        </>
       )}
       {editing ? null : (
         <CanEdit ownerID={comment.creatorID}>
