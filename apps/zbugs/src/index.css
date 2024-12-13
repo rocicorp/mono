@@ -671,17 +671,17 @@ textarea.autoResize {
 }
 
 .video-container {
-  width: 100%; /* Ensure it takes the full width of its parent */
-  margin: 2rem auto; /* Center and add spacing */
-  position: relative; /* For proper aspect-ratio handling */
+  width: 100%;
+  margin: 2rem auto;
+  position: relative;
 }
 
 .video-wrapper {
   width: 100%;
   padding-top: calc(var(--video-height, 360) / var(--video-width, 640) * 100%);
-  background: #000; /* Placeholder background color */
-  position: relative; /* Maintain the aspect ratio */
-  overflow: hidden; /* Ensure no overflowing elements */
+  background: #000;
+  position: relative;
+  overflow: hidden;
 }
 
 .inline-video {
