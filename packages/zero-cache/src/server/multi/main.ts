@@ -79,7 +79,7 @@ export default async function runWorker(
   parent?.send(['ready', {ready: true}]);
 
   try {
-    await runUntilKilled(lc, process, ...mainServices);
+    await runUntilKilled(lc, parent ?? process, ...mainServices);
   } catch (err) {
     processes.logErrorAndExit(err);
   }
