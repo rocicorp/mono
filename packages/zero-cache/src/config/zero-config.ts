@@ -97,6 +97,29 @@ const perUserMutationLimit = {
 
 export type RateLimit = Config<typeof perUserMutationLimit>;
 
+const authOptions = {
+  jwk: {
+    type: v.string().optional(),
+    desc: [
+      `A public key in JWK format used to verify JWTs. Only one of {bold jwk}, {bold jwksUrl} and {bold secret} may be set.`,
+    ],
+  },
+  jwksUrl: {
+    type: v.string().optional(),
+    desc: [
+      `A URL that returns a JWK set used to verify JWTs. Only one of {bold jwk}, {bold jwksUrl} and {bold secret} may be set.`,
+    ],
+  },
+  secret: {
+    type: v.string().optional(),
+    desc: [
+      `A symmetric key used to verify JWTs. Only one of {bold jwk}, {bold jwksUrl} and {bold secret} may be set.`,
+    ],
+  },
+};
+
+export type AuthConfig = Config<typeof authOptions>;
+
 // Note: --help will list flags in the order in which they are defined here,
 // so order the fields such that the important (e.g. required) ones are first.
 // (Exported for testing)
@@ -203,6 +226,8 @@ export const zeroOptions = {
 
   shard: shardOptions,
 
+  auth: authOptions,
+
   port: {
     type: v.number().default(4848),
     desc: [
@@ -233,11 +258,6 @@ export const zeroOptions = {
       ``,
       `If unspecified, defaults to {bold --port} + 2.`,
     ],
-  },
-
-  jwtSecret: {
-    type: v.string().optional(),
-    desc: [`JWT secret for verifying authentication tokens.`],
   },
 
   taskID: {
