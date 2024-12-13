@@ -170,7 +170,13 @@ describe('fetching from a table source', () => {
       expectedRows: allRows.filter(r => r.a === 1 && r.b === 2),
     },
   ] as const)('$name', ({sourceArgs, fetchArgs, expectedRows}) => {
-    const source = new TableSource(db, sourceArgs[0], sourceArgs[1], ['id']);
+    const source = new TableSource(
+      'table-source.test.ts',
+      db,
+      sourceArgs[0],
+      sourceArgs[1],
+      ['id'],
+    );
     const c = source.connect(sourceArgs[2]);
     const out = new Catch(c);
     c.setOutput(out);
@@ -253,7 +259,13 @@ describe('fetched value types', () => {
         /* sql */ `INSERT INTO foo (id, a, b, c, d) VALUES (?, ?, ?, ?, ?);`,
       );
       stmt.run(c.input);
-      const source = new TableSource(db, 'foo', columns, ['id']);
+      const source = new TableSource(
+        'table-source.test.ts',
+        db,
+        'foo',
+        columns,
+        ['id'],
+      );
       const input = source.connect([['id', 'asc']]);
 
       if (c.output) {
@@ -275,6 +287,7 @@ test('pushing values does the correct writes and outputs', () => {
     /* sql */ `CREATE TABLE foo (a, b, c, d, ignored, columns, PRIMARY KEY (a, b));`,
   );
   const source = new TableSource(
+    'table-source.test.ts',
     db1,
     'foo',
     {
@@ -538,6 +551,7 @@ test('getByKey', () => {
   );
 
   const source = new TableSource(
+    'table-source.test.ts',
     db,
     'foo',
     {

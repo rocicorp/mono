@@ -47,6 +47,11 @@ test('zero-cache --help', () => {
                                                    Note that this number must allow for at least one connection per                                  
                                                    sync worker, or zero-cache will fail to start. See --numSyncWorkers                               
                                                                                                                                                      
+     --query-hydration-stats boolean               optional                                                                                          
+       ZERO_QUERY_HYDRATION_STATS env                                                                                                                
+                                                   Track and log the number of rows considered by each query in the system.                          
+                                                   This is useful for debugging and performance tuning.                                              
+                                                                                                                                                     
      --change-db string                            required                                                                                          
        ZERO_CHANGE_DB env                                                                                                                            
                                                    Yet another Postgres database, used to store a replication log.                                   

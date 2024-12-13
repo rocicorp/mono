@@ -35,6 +35,7 @@ describe('view-syncer/pipeline-driver', () => {
       lc,
       new Snapshotter(lc, dbFile.path),
       new DatabaseStorage(storage).createClientGroupStorage('foo-client-group'),
+      'pipeline-driver.test.ts',
     );
 
     db = dbFile.connect(lc);

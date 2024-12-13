@@ -32,7 +32,13 @@ beforeEach(() => {
         PRIMARY KEY (${schema.primaryKey.map(k => `"${k}"`).join(', ')})
       )`);
 
-      source = new TableSource(db, name, schema.columns, schema.primaryKey);
+      source = new TableSource(
+        'query.test.ts',
+        db,
+        name,
+        schema.columns,
+        schema.primaryKey,
+      );
 
       sources.set(name, source);
       return source;

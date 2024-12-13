@@ -458,6 +458,7 @@ beforeEach(() => {
       )`);
 
       source = new TableSource(
+        'read-auth-test',
         replica,
         name,
         tableSchema.columns,
