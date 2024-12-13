@@ -99,7 +99,7 @@ export default function Markdown({children}: {children: string}) {
       rehypePlugins={[rehypeImageToVideo]}
       components={{
         // Override <p> rendering
-        p: ({node, children}) => <div>{children}</div>,
+        p: ({children}) => <div>{children}</div>,
         // Ensure no additional processing for <img> elements
         img: ({node, ...props}) => <img {...props} />,
       }}
