@@ -19,7 +19,6 @@ import {
   useState,
   type ForwardedRef,
 } from 'react';
-import {useQuery} from 'zero-react/src/use-query.js';
 import addEmojiIcon from '../assets/icons/add-emoji.svg';
 import {
   findEmojiForCreator,
@@ -38,6 +37,7 @@ const loginMessage = 'You need to be logged in to modify emoji reactions.';
 type Props = {
   issueID: string;
   commentID?: string | undefined;
+  emojis: readonly Emoji[];
   recentEmojis: readonly Emoji[];
   removeRecentEmoji: (id: string) => void;
 };
@@ -45,16 +45,11 @@ type Props = {
 export const EmojiPanel = memo(
   forwardRef(
     (
-      {issueID, commentID, recentEmojis, removeRecentEmoji}: Props,
+      {issueID, commentID, emojis, recentEmojis, removeRecentEmoji}: Props,
       ref: ForwardedRef<HTMLDivElement>,
     ) => {
       const subjectID = commentID ?? issueID;
       const z = useZero();
-      const q = z.query.emoji
-        .where('subjectID', subjectID)
-        .related('creator', creator => creator.one());
-
-      const [emojis] = useQuery(q);
 
       const addEmoji = useCallback(
         (unicode: string, annotation: string) => {
@@ -200,7 +195,7 @@ const EmojiMenuButton = memo(
   },
 );
 
-function groupAndSortEmojis(emojis: Emoji[]): Record<string, Emoji[]> {
+function groupAndSortEmojis(emojis: readonly Emoji[]): Record<string, Emoji[]> {
   // Sort the emojis by creation time. Not sure how to sort this with ZQL.
   const sortedEmojis = [...emojis].sort((a, b) => a.created - b.created);
   const rv: Record<string, Emoji[]> = {};

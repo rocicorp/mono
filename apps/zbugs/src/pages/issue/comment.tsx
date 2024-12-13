@@ -1,4 +1,3 @@
-import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {memo, useState} from 'react';
 import {makePermalink} from '../../comment-permalink.js';
@@ -15,10 +14,17 @@ import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
 import CommentComposer from './comment-composer.js';
 import style from './comment.module.css';
+import type {Row} from '@rocicorp/zero';
+import type {Schema} from '../../../schema.js';
 
 type Props = {
   id: string;
   issueID: string;
+  comment: Row<Schema['tables']['comment']> & {
+    readonly creator: Row<Schema['tables']['user']> | undefined;
+  } & {
+    readonly emoji: Emoji[];
+  };
   /**
    * Height of the comment. Used to keep the layout stable when comments are
    * being "loaded".
@@ -30,13 +36,8 @@ type Props = {
 };
 
 const Comment = memo(
-  ({id, issueID, height, recentEmojis, removeRecentEmoji}: Props) => {
+  ({id, issueID, comment, height, recentEmojis, removeRecentEmoji}: Props) => {
     const z = useZero();
-    const q = z.query.comment
-      .where('id', id)
-      .related('creator', creator => creator.one())
-      .one();
-    const [comment] = useQuery(q);
     const [editing, setEditing] = useState(false);
     const login = useLogin();
     const [deleteConfirmationShown, setDeleteConfirmationShown] =
@@ -93,6 +94,7 @@ const Comment = memo(
             <EmojiPanel
               issueID={issueID}
               commentID={comment.id}
+              emojis={comment.emoji}
               recentEmojis={recentEmojis}
               removeRecentEmoji={removeRecentEmoji}
             />

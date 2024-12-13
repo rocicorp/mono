@@ -60,14 +60,25 @@ export function IssuePage() {
 
   const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
   const listContext = zbugsHistoryState?.zbugsListContext;
-  // todo: one should be in the schema
   const q = z.query.issue
     .where(idField, id)
+    .related('emoji', emoji =>
+      emoji.related('creator', creator => creator.one()),
+    )
     .related('creator', creator => creator.one())
     .related('assignee', assignee => assignee.one())
     .related('labels')
-    .related('viewState', q => q.where('userID', z.userID).one())
-    .related('comments', q => q.orderBy('created', 'asc'))
+    .related('viewState', viewState =>
+      viewState.where('userID', z.userID).one(),
+    )
+    .related('comments', comments =>
+      comments
+        .related('creator', creator => creator.one())
+        .related('emoji', emoji =>
+          emoji.related('creator', creator => creator.one()),
+        )
+        .orderBy('created', 'asc'),
+    )
     .one();
   const [issue, issueResult] = useQuery(q);
   const login = useLogin();
@@ -335,6 +346,7 @@ export function IssuePage() {
               <EmojiPanel
                 issueID={issue.id}
                 ref={issueEmojiRef}
+                emojis={issue.emoji}
                 recentEmojis={recentEmojis}
                 removeRecentEmoji={removeRecentEmoji}
               />
@@ -494,6 +506,7 @@ export function IssuePage() {
                   <Comment
                     id={issue.comments[item.index].id}
                     issueID={issue.id}
+                    comment={issue.comments[item.index]}
                     height={item.size}
                     recentEmojis={recentEmojis}
                     removeRecentEmoji={removeRecentEmoji}
@@ -733,13 +746,10 @@ function useEmojiChangeListener(
   const z = useZero();
   const enable = issue !== undefined;
   const issueID = issue?.id;
-  const commentIDs = issue?.comments.map(c => c.id) ?? [];
   const [emojis, result] = useQuery(
     z.query.emoji
-      .where(({cmp, or}) =>
-        or(cmp('subjectID', 'IN', commentIDs), cmp('subjectID', issueID ?? '')),
-      )
-      .related('creator', q => q.one()),
+      .where('subjectID', issueID ?? '')
+      .related('creator', creator => creator.one()),
     enable,
   );
 
