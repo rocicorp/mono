@@ -51,7 +51,6 @@ Resources:
     Properties:
       CapacityProviders:
         - FARGATE
-        Properties:
       ClusterSettings:
         - Name: containerInsights
           Value: enabled
