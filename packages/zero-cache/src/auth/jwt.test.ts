@@ -47,8 +47,6 @@ describe('jwk', async () => {
   commonTests({jwk: JSON.stringify(publicJwk)}, makeToken);
 });
 
-// describe('jwkUrl', () => {});
-
 function commonTests(
   config: AuthConfig,
   makeToken: (
