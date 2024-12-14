@@ -5,7 +5,7 @@ import labelIcon from '../assets/icons/label.svg';
 import {useZero} from '../hooks/use-zero.js';
 import {Button} from './button.js';
 import {Combobox} from './combobox.js';
-import UserPicker from './user-picker.js';
+import {UserPicker} from './user-picker.js';
 
 export type Selection =
   | {creator: string}

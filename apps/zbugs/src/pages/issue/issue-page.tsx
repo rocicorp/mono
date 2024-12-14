@@ -16,11 +16,11 @@ import {
 } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {toast, ToastContainer} from 'react-toastify';
-import {assert} from 'shared/src/asserts.js';
+import {assert, unreachable} from 'shared/src/asserts.js';
 import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.js';
-import type {CommentRow, IssueRow, Schema} from '../../../schema.js';
+import type {CommentRow, EmojiRow, IssueRow, Schema} from '../../../schema.js';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
 import {parsePermalink} from '../../comment-permalink.js';
@@ -34,13 +34,13 @@ import LabelPicker from '../../components/label-picker.js';
 import {Link} from '../../components/link.js';
 import Markdown from '../../components/markdown.js';
 import RelativeTime from '../../components/relative-time.js';
-import UserPicker from '../../components/user-picker.js';
-import {type Emoji} from '../../emoji-utils.js';
+import {UserPicker} from '../../components/user-picker.js';
 import {useCanEdit} from '../../hooks/use-can-edit.js';
 import {useDocumentHasFocus} from '../../hooks/use-document-has-focus.js';
 import {useHash} from '../../hooks/use-hash.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useLogin} from '../../hooks/use-login.js';
+import {useWatchQuery} from '../../hooks/use-watch-query.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {LRUCache} from '../../lru-cache.js';
 import {links, type ListContext, type ZbugsHistoryState} from '../../routes.js';
@@ -253,14 +253,15 @@ export function IssuePage() {
 
   const issueEmojiRef = useRef<HTMLDivElement>(null);
 
-  const [recentEmojis, setRecentEmojis] = useState<Emoji[]>([]);
+  const [recentEmojis, setRecentEmojis] = useState<string[]>([]);
 
   const handleEmojiChange = useCallback(
-    (added: readonly Emoji[], removed: readonly Emoji[]) => {
+    (added: EmojiRow | undefined, removed: EmojiRow | undefined) => {
       assert(issue);
-      const newRecentEmojis = new Map(recentEmojis.map(e => [e.id, e]));
+      const newRecentEmojis = new Set(recentEmojis);
 
-      for (const emoji of added) {
+      if (added) {
+        const emoji = added;
         if (emoji.creatorID !== z.userID) {
           maybeShowToastForEmoji(
             emoji,
@@ -269,26 +270,34 @@ export function IssuePage() {
             issueEmojiRef.current,
             setRecentEmojis,
           );
-          newRecentEmojis.set(emoji.id, emoji);
+          newRecentEmojis.add(emoji.id);
         }
       }
-      for (const emoji of removed) {
+      if (removed) {
+        const emoji = removed;
         // toast.dismiss is fine to call with non existing toast IDs
         toast.dismiss(emoji.id);
         newRecentEmojis.delete(emoji.id);
       }
 
-      setRecentEmojis([...newRecentEmojis.values()]);
+      setRecentEmojis([...newRecentEmojis]);
     },
     [issue, recentEmojis, virtualizer, z.userID],
   );
 
   const removeRecentEmoji = useCallback((id: string) => {
     toast.dismiss(id);
-    setRecentEmojis(recentEmojis => recentEmojis.filter(e => e.id !== id));
+    setRecentEmojis(recentEmojis => recentEmojis.filter(e => e !== id));
   }, []);
 
   useEmojiChangeListener(issue, handleEmojiChange);
+
+  useWatchQuery(
+    z.query.comment.where('issueID', issue?.id ?? ''),
+    useCallback(changes => {
+      console.log('comments changed', changes);
+    }, []),
+  );
 
   // TODO: We need the notion of the 'partial' result type to correctly render
   // a 404 here. We can't put the 404 here now because it would flash until we
@@ -400,7 +409,7 @@ export function IssuePage() {
                 issueID={issue.id}
                 ref={issueEmojiRef}
                 emojis={issue.emoji}
-                recentEmojis={recentEmojis}
+                recentEmojiIDs={recentEmojis}
                 removeRecentEmoji={removeRecentEmoji}
               />
             </>
@@ -621,16 +630,13 @@ const MyToastContainer = memo(({position}: {position: 'top' | 'bottom'}) => {
 const commentSizeCache = new LRUCache<string, number>(1000);
 
 function maybeShowToastForEmoji(
-  emoji: Emoji,
+  emoji: EmojiRow,
   issue: IssueRow & {readonly comments: readonly CommentRow[]},
   virtualizer: Virtualizer<Window, HTMLElement>,
   emojiElement: HTMLDivElement | null,
-  setRecentEmojis: Dispatch<SetStateAction<Emoji[]>>,
+  setRecentEmojis: Dispatch<SetStateAction<string[]>>,
 ) {
   const toastID = emoji.id;
-  const {creator} = emoji;
-  assert(creator);
-
   // We ony show toasts for emojis in the issue itself. Not for emojis in comments.
   if (emoji.subjectID !== issue.id || !emojiElement) {
     return;
@@ -657,8 +663,7 @@ function maybeShowToastForEmoji(
 
   toast(
     <ToastContent toastID={toastID}>
-      <img className="toast-emoji-icon" src={creator.avatar} />
-      {creator.login + ' reacted on this issue: ' + emoji.value}
+      <EmojiToastContent emoji={emoji} />
     </ToastContent>,
     {
       toastId: toastID,
@@ -668,8 +673,8 @@ function maybeShowToastForEmoji(
         // This is so that the emoji that was clicked first is the one that is
         // shown in the tooltip.
         setRecentEmojis(emojis => [
-          emoji,
-          ...emojis.filter(e => e.id !== emoji.id),
+          emoji.id,
+          ...emojis.filter(e => e !== emoji.id),
         ]);
 
         emojiElement?.scrollIntoView({
@@ -708,6 +713,21 @@ function ToastContent({
     >
       {children}
     </div>
+  );
+}
+
+function EmojiToastContent({emoji}: {emoji: EmojiRow}) {
+  const z = useZero();
+  const [creator] = useQuery(z.query.user.where('id', emoji.creatorID).one());
+  if (!creator) {
+    return null;
+  }
+
+  return (
+    <>
+      <img className="toast-emoji-icon" src={creator.avatar} />
+      {creator.login + ' reacted on this issue: ' + emoji.value}
+    </>
   );
 }
 
@@ -800,64 +820,29 @@ type Issue = IssueRow & {
 
 function useEmojiChangeListener(
   issue: Issue | undefined,
-  cb: (added: readonly Emoji[], removed: readonly Emoji[]) => void,
+  cb: (added: EmojiRow | undefined, removed: EmojiRow | undefined) => void,
 ) {
   const z = useZero();
-  const enable = issue !== undefined;
-  const issueID = issue?.id;
-  const [emojis, result] = useQuery(
-    z.query.emoji
-      .where('subjectID', issueID ?? '')
-      .related('creator', creator => creator.one()),
-    enable,
+  const q = z.query.emoji.where('subjectID', issue?.id ?? '');
+  useWatchQuery(
+    q,
+    change => {
+      switch (change.type) {
+        case 'add':
+          cb(change.row, undefined);
+          break;
+        case 'remove':
+          cb(undefined, change.row);
+          break;
+        case 'edit':
+          cb(change.row, change.oldRow);
+          break;
+        case 'child':
+          break;
+        default:
+          unreachable(change);
+      }
+    },
+    issue !== undefined,
   );
-
-  const lastIssueID = useRef<string | undefined>();
-  const lastEmojis = useRef<Map<string, Emoji> | undefined>();
-
-  // When the issue.id changes we reset lastEmojis to undefined.
-  // First time we get the complete emojis for issue.id we update the lastEmojis.current.
-  // After that as long as issue.id does not change we update lastEmojis.current with the new emojis.
-
-  useEffect(() => {
-    if (lastIssueID.current !== issueID) {
-      lastIssueID.current = issueID;
-      if (result.type === 'unknown') {
-        lastEmojis.current = undefined;
-        return;
-      }
-    }
-
-    const newEmojis = new Map(emojis.map(emoji => [emoji.id, emoji]));
-
-    // First time we see the complete emojis for this issue.
-    if (result.type === 'complete' && !lastEmojis.current) {
-      lastEmojis.current = newEmojis;
-      // First time should not trigger the callback.
-      return;
-    }
-
-    if (lastEmojis.current) {
-      const added: Emoji[] = [];
-      const removed: Emoji[] = [];
-
-      for (const [id, emoji] of newEmojis) {
-        if (!lastEmojis.current.has(id)) {
-          added.push(emoji);
-        }
-      }
-
-      for (const [id, emoji] of lastEmojis.current) {
-        if (!newEmojis.has(id)) {
-          removed.push(emoji);
-        }
-      }
-
-      if (added.length !== 0 || removed.length !== 0) {
-        cb(added, removed);
-      }
-
-      lastEmojis.current = newEmojis;
-    }
-  }, [cb, emojis, issueID, result.type]);
 }

@@ -38,14 +38,14 @@ type Props = {
   issueID: string;
   commentID?: string | undefined;
   emojis: readonly Emoji[];
-  recentEmojis?: readonly Emoji[] | undefined;
+  recentEmojiIDs?: readonly string[] | undefined;
   removeRecentEmoji?: ((id: string) => void) | undefined;
 };
 
 export const EmojiPanel = memo(
   forwardRef(
     (
-      {issueID, commentID, emojis, recentEmojis, removeRecentEmoji}: Props,
+      {issueID, commentID, emojis, recentEmojiIDs, removeRecentEmoji}: Props,
       ref: ForwardedRef<HTMLDivElement>,
     ) => {
       const subjectID = commentID ?? issueID;
@@ -102,7 +102,7 @@ export const EmojiPanel = memo(
                 normalizedEmoji={normalizedEmoji}
                 emojis={emojis}
                 addOrRemoveEmoji={addOrRemoveEmoji}
-                recentEmojis={recentEmojis}
+                recentEmojiIDs={recentEmojiIDs}
                 removeRecentEmoji={removeRecentEmoji}
                 subjectID={subjectID}
               />

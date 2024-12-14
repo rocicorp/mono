@@ -1,3 +1,4 @@
+import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {useEffect, useState} from 'react';
 import {useIntersectionObserver} from 'usehooks-ts';
@@ -27,7 +28,7 @@ type Props = {
   normalizedEmoji: string;
   emojis: Emoji[];
   addOrRemoveEmoji: AddOrRemoveEmoji;
-  recentEmojis?: readonly Emoji[] | undefined;
+  recentEmojiIDs?: readonly string[] | undefined;
   removeRecentEmoji?: ((id: string) => void) | undefined;
   subjectID: string;
 };
@@ -36,7 +37,7 @@ export function EmojiPill({
   normalizedEmoji,
   emojis,
   addOrRemoveEmoji,
-  recentEmojis,
+  recentEmojiIDs,
   removeRecentEmoji,
   subjectID,
 }: Props) {
@@ -45,7 +46,7 @@ export function EmojiPill({
   const mine = findEmojiForCreator(emojis, z.userID) !== undefined;
   const [forceShow, setForceShow] = useState(false);
   const [wasTriggered, setWasTriggered] = useState(false);
-  const [triggeredEmojis, setTriggeredEmojis] = useState<Emoji[]>([]);
+  const [triggeredEmojiIDs, setTriggeredEmojiIDs] = useState<string[]>([]);
   const {isIntersecting, ref} = useIntersectionObserver({
     threshold: 0.5,
     freezeOnceVisible: true,
@@ -53,18 +54,18 @@ export function EmojiPill({
   const documentHasFocus = useDocumentHasFocus();
 
   useEffect(() => {
-    if (!recentEmojis) {
+    if (!recentEmojiIDs) {
       return;
     }
-    const newTriggeredEmojis: Emoji[] = [];
-    for (const emoji of recentEmojis) {
-      if (emojis.some(e => e.id === emoji.id)) {
+    const newTriggeredEmojiIDs: string[] = [];
+    for (const id of recentEmojiIDs) {
+      if (emojis.some(e => e.id === id)) {
         setWasTriggered(true);
-        newTriggeredEmojis.push(emoji);
+        newTriggeredEmojiIDs.push(id);
       }
     }
-    setTriggeredEmojis(newTriggeredEmojis);
-  }, [emojis, recentEmojis, subjectID]);
+    setTriggeredEmojiIDs(newTriggeredEmojiIDs);
+  }, [emojis, recentEmojiIDs, subjectID]);
 
   useEffect(() => {
     if (wasTriggered && isIntersecting && !forceShow) {
@@ -74,22 +75,22 @@ export function EmojiPill({
 
   useEffect(() => {
     if (forceShow && documentHasFocus && removeRecentEmoji) {
-      const id = setTimeout(() => {
+      const timer = setTimeout(() => {
         setForceShow(false);
         setWasTriggered(false);
-        const [first, ...rest] = triggeredEmojis;
-        if (first) {
-          removeRecentEmoji(first.id);
+        const [firstID, ...restIDs] = triggeredEmojiIDs;
+        if (firstID) {
+          removeRecentEmoji(firstID);
         }
-        setTriggeredEmojis(rest);
+        setTriggeredEmojiIDs(restIDs);
       }, triggeredTooltipDuration);
 
-      return () => clearTimeout(id);
+      return () => clearTimeout(timer);
     }
     return () => void 0;
-  }, [triggeredEmojis, documentHasFocus, forceShow, removeRecentEmoji]);
+  }, [triggeredEmojiIDs, documentHasFocus, forceShow, removeRecentEmoji]);
 
-  const triggered = triggeredEmojis.length > 0;
+  const triggered = triggeredEmojiIDs.length > 0;
 
   return (
     <Tooltip open={forceShow || undefined}>
@@ -118,8 +119,8 @@ export function EmojiPill({
       </TooltipTrigger>
 
       <TooltipContent className={classNames({triggered})}>
-        {triggeredEmojis.length > 0 ? (
-          <TriggeredTooltipContent emojis={triggeredEmojis} />
+        {triggeredEmojiIDs.length > 0 ? (
+          <TriggeredTooltipContent emojiIDs={triggeredEmojiIDs} />
         ) : (
           formatEmojiCreatorList(emojis, z.userID)
         )}
@@ -128,12 +129,23 @@ export function EmojiPill({
   );
 }
 
-function TriggeredTooltipContent({emojis}: {emojis: Emoji[]}) {
-  const emoji = emojis[0];
+function TriggeredTooltipContent({emojiIDs}: {emojiIDs: string[]}) {
+  const emojiID = emojiIDs[0];
+  const z = useZero();
+  const [emoji] = useQuery(
+    z.query.emoji
+      .where('id', emojiID)
+      .related('creator', creator => creator.one())
+      .one(),
+  );
+  if (!emoji || !emoji.creator) {
+    return null;
+  }
+
   return (
     <>
-      <img className="tooltip-emoji-icon" src={emoji.creator?.avatar} />
-      {emoji.creator?.login}
+      <img className="tooltip-emoji-icon" src={emoji.creator.avatar} />
+      {emoji.creator.login}
     </>
   );
 }
