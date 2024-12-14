@@ -14,7 +14,7 @@ const userSchema = createTableSchema({
   columns: {
     id: 'string',
     login: 'string',
-    name: 'string',
+    name: {type: 'string', optional: true},
     avatar: 'string',
     role: 'string',
   },

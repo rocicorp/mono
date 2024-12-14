@@ -441,7 +441,7 @@ export function IssuePage() {
                 <img
                   src={issue.creator?.avatar}
                   className="issue-creator-avatar"
-                  alt={issue.creator?.name}
+                  alt={issue.creator?.name ?? undefined}
                 />
                 {issue.creator.login}
               </div>
