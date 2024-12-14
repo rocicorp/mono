@@ -54,7 +54,7 @@ ZERO_LOG_FORMAT = "text"
 # Secret used to sign and verify the JWT
 # Set this to something real if you intend to deploy
 # the app.
-ZERO_JWT_SECRET = "my-localhost-testing-secret"
+ZERO_AUTH_SECRET = "my-localhost-testing-secret"
 
 #### ZBugs API Server Variables ####
 

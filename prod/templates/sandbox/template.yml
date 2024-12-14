@@ -208,11 +208,11 @@ Resources:
             - Name: ZERO_LOG_LEVEL
               Value: debug
             - Name: ZERO_UPSTREAM_MAX_CONNS
-              Value: 60
+              # limit: 190 max_connections / 4 tasks
+              Value: 40
             - Name: ZERO_CVR_MAX_CONNS
+              # limit: 1708 max_connections / 4 tasks
               Value: 275
-            - Name: ZERO_CHANGE_MAX_CONNS
-              Value: 3
             - Name: ZERO_SCHEMA_FILE
               Value: /opt/app/packages/zero-cache/zero-schema.json
           Secrets:
@@ -363,10 +363,6 @@ Resources:
               Value: /data/db/sync-replica.db
             - Name: ZERO_LOG_LEVEL
               Value: debug
-            - Name: ZERO_UPSTREAM_MAX_CONNS
-              Value: 60
-            - Name: ZERO_CVR_MAX_CONNS
-              Value: 275
             - Name: ZERO_CHANGE_MAX_CONNS
               Value: 3
             - Name: ZERO_SCHEMA_FILE

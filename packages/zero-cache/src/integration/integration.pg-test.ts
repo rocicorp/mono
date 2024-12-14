@@ -9,6 +9,7 @@ import {
   vi,
 } from 'vitest';
 import WebSocket from 'ws';
+import {assert} from '../../../shared/src/asserts.js';
 import {Queue} from '../../../shared/src/queue.js';
 import {randInt} from '../../../shared/src/rand.js';
 import type {AST} from '../../../zero-protocol/src/ast.js';
@@ -17,7 +18,7 @@ import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.js';
 import {getConnectionURI, testDBs} from '../test/db.js';
 import {DbFile} from '../test/lite.js';
 import type {PostgresDB} from '../types/pg.js';
-import {childWorker} from '../types/processes.js';
+import {childWorker, type Worker} from '../types/processes.js';
 
 describe('integration', () => {
   let upDB: PostgresDB;
@@ -26,6 +27,8 @@ describe('integration', () => {
   let replicaDbFile: DbFile;
   let env: Record<string, string>;
   let port: number;
+  let zero: Worker | undefined;
+  let zeroExited: Promise<number> | undefined;
 
   const SCHEMA = {
     permissions: {},
@@ -48,6 +51,8 @@ describe('integration', () => {
     cvrDB = await testDBs.create('integration_test_cvr');
     changeDB = await testDBs.create('integration_test_change');
     replicaDbFile = new DbFile('integration_test_replica');
+    zero = undefined;
+    zeroExited = undefined;
 
     await upDB`
       CREATE TABLE foo(id TEXT PRIMARY KEY, val TEXT);
@@ -76,16 +81,26 @@ describe('integration', () => {
   };
 
   async function startZero(module: string, env: NodeJS.ProcessEnv) {
-    const {promise, resolve} = resolver<unknown>();
+    assert(zero === undefined);
+    assert(zeroExited === undefined);
+    const {promise: ready, resolve: onReady} = resolver<unknown>();
+    const {promise: done, resolve: onClose} = resolver<number>();
 
-    const zero = childWorker(module, env);
-    zero.onMessageType('ready', resolve);
-    await promise;
+    zeroExited = done;
+    zero = childWorker(module, env);
+    zero.onMessageType('ready', onReady);
+    zero.on('close', onClose);
+    await ready;
   }
 
   afterEach(async () => {
-    await testDBs.drop(upDB);
-    replicaDbFile.delete();
+    try {
+      zero?.kill('SIGTERM'); // initiate and await graceful shutdown
+      expect(await zeroExited).toBe(0);
+    } finally {
+      await testDBs.drop(upDB);
+      replicaDbFile.delete();
+    }
   });
 
   test.each([
