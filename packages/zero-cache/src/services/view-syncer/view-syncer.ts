@@ -742,6 +742,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       await this.#catchupClients(
         lc,
         cvr,
+        this.#cvr.version,
         addQueries.map(q => q.id),
         pokers,
       );
@@ -756,6 +757,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   /**
    * @param cvr The CVR to which clients should be caught up to. This does
    *     not necessarily need to be the current CVR.
+   * @param current The expected current CVR version. Before performing
+   *     catchup, the snapshot read will verify that the CVR has not been
+   *     concurrently modified. Note that this only needs to be done for
+   *     catchup because it is the only time data from the CVR DB is
+   *     "exported" without being gated by a CVR flush (which provides
+   *     concurrency protection in all other cases).
+   *
+   *     If unspecified, the version of the `cvr` is used.
    * @param excludeQueryHashes Exclude patches from rows associated with
    *     the specified queries.
    * @param usePokers If specified, sends pokes on existing PokeHandlers,
@@ -767,10 +776,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #catchupClients(
     lc: LogContext,
     cvr: CVRSnapshot,
+    current?: CVRVersion,
     excludeQueryHashes: string[] = [],
     usePokers?: PokeHandler[],
   ) {
     return startAsyncSpan(tracer, 'vs.#catchupClients', async span => {
+      current ??= cvr.version;
       const clients = this.#getClients();
       const pokers =
         usePokers ??
@@ -789,6 +800,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         lc,
         catchupFrom,
         cvr,
+        current,
         excludeQueryHashes,
       );
 
@@ -797,6 +809,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         lc,
         catchupFrom,
         cvr,
+        current,
       );
 
       // await the rowPatches first so that the AsyncGenerator kicks off.
