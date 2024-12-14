@@ -67,7 +67,7 @@ const Comment = memo(({id, issueID, comment, height}: Props) => {
             display: 'inline-block',
             marginRight: '0.3rem',
           }}
-          alt={comment.creator?.name}
+          alt={comment.creator?.name ?? undefined}
         />{' '}
         {comment.creator?.login}
       </p>

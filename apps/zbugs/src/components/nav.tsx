@@ -127,7 +127,7 @@ export const Nav = memo(() => {
                       <img
                         src={user?.avatar}
                         className="issue-creator-avatar"
-                        alt={user?.name}
+                        alt={user?.name ?? undefined}
                         title={user?.login}
                       />
                     </Button>
@@ -150,7 +150,7 @@ export const Nav = memo(() => {
                   <img
                     src={user?.avatar}
                     className="issue-creator-avatar"
-                    alt={user?.name}
+                    alt={user?.name ?? undefined}
                     title={user?.login}
                   />
                 )}
