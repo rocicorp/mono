@@ -2,12 +2,11 @@ import {
   createSchema,
   createTableSchema,
   definePermissions,
-  type ExpressionBuilder,
-  type TableSchema,
+  // type ExpressionBuilder,
+  // type TableSchema,
   type Row,
-  NOBODY_CAN,
 } from '@rocicorp/zero';
-import type {Condition} from 'zero-protocol/src/ast.js';
+// import type {Condition} from 'zero-protocol/src/ast.js';
 
 const userSchema = createTableSchema({
   tableName: 'user',
@@ -209,16 +208,16 @@ export const schema = createSchema({
   },
 });
 
-type PermissionRule<TSchema extends TableSchema> = (
-  authData: AuthData,
-  eb: ExpressionBuilder<TSchema>,
-) => Condition;
+// type PermissionRule<TSchema extends TableSchema> = (
+//   authData: AuthData,
+//   eb: ExpressionBuilder<TSchema>,
+// ) => Condition;
 
-function and<TSchema extends TableSchema>(
-  ...rules: PermissionRule<TSchema>[]
-): PermissionRule<TSchema> {
-  return (authData, eb) => eb.and(...rules.map(rule => rule(authData, eb)));
-}
+// function and<TSchema extends TableSchema>(
+//   ...rules: PermissionRule<TSchema>[]
+// ): PermissionRule<TSchema> {
+//   return (authData, eb) => eb.and(...rules.map(rule => rule(authData, eb)));
+// }
 
 export const permissions: ReturnType<typeof definePermissions> =
   definePermissions<AuthData, Schema>(schema, () => ({}));
