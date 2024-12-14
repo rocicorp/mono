@@ -1,5 +1,5 @@
-import { defineConfig, devices } from '@playwright/test';
-import { time } from 'console';
+import {defineConfig, devices} from '@playwright/test';
+import {time} from 'console';
 
 /**
  * Read environment variables from file.
@@ -15,7 +15,7 @@ import { time } from 'console';
 export default defineConfig({
   testDir: './playwright',
   testMatch: '*.spec.ts',
-  
+
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
@@ -28,7 +28,7 @@ export default defineConfig({
   reporter: 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   timeout: 70000,
-  expect: { timeout: 70000 },
+  expect: {timeout: 70000},
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
     // baseURL: 'http://127.0.0.1:3000',
@@ -41,17 +41,17 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {...devices['Desktop Chrome']},
     },
 
     {
       name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
+      use: {...devices['Desktop Firefox']},
     },
 
     {
       name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
+      use: {...devices['Desktop Safari']},
     },
 
     /* Test against mobile viewports. */
