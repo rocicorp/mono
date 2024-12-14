@@ -35,12 +35,12 @@ describe('view-syncer/cvr-store', () => {
     await db.begin(tx => setupCVRTables(lc, tx));
     await db.unsafe(`
     INSERT INTO cvr.instances ("clientGroupID", version, "lastActive", "replicaVersion")
-      VALUES('${CVR_ID}', '01', '2024-09-04', '01');
+      VALUES('${CVR_ID}', '03', '2024-09-04', '01');
     INSERT INTO cvr.queries ("clientGroupID", "queryHash", "clientAST", 
                              "patchVersion", "transformationHash", "transformationVersion")
       VALUES('${CVR_ID}', 'foo', '{"table":"issues"}', '01', 'foo-transformed', '01');
     INSERT INTO cvr."rowsVersion" ("clientGroupID", version)
-      VALUES('${CVR_ID}', '01');
+      VALUES('${CVR_ID}', '03');
     INSERT INTO cvr.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
       VALUES('${CVR_ID}', '', 'issues', '{"id":"1"}', '01', '01', NULL);
     INSERT INTO cvr.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
@@ -85,7 +85,7 @@ describe('view-syncer/cvr-store', () => {
 
   test('wait for row catchup', async () => {
     // Simulate the CVR being ahead of the rows.
-    await db`UPDATE cvr.instances SET version = '02'`;
+    await db`UPDATE cvr.instances SET version = '04'`;
 
     // start a CVR load.
     const loading = store.load(lc, CONNECT_TIME);
@@ -94,25 +94,25 @@ describe('view-syncer/cvr-store', () => {
 
     // Simulate catching up.
     await db`
-    UPDATE cvr.instances SET version = '03:01';
-    UPDATE cvr."rowsVersion" SET version = '03:01';
+    UPDATE cvr.instances SET version = '05:01';
+    UPDATE cvr."rowsVersion" SET version = '05:01';
     `.simple();
 
     const cvr = await loading;
     expect(cvr.version).toEqual({
-      stateVersion: '03',
+      stateVersion: '05',
       minorVersion: 1,
     });
   });
 
   test('fail after max attempts if rows behind', async () => {
     // Simulate the CVR being ahead of the rows.
-    await db`UPDATE cvr.instances SET version = '02'`;
+    await db`UPDATE cvr.instances SET version = '04'`;
 
     await expect(
       store.load(lc, CONNECT_TIME),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[Error: {"kind":"ClientNotFound","message":"max attempts exceeded waiting for CVR@02 to catch up from 01"}]`,
+      `[Error: {"kind":"ClientNotFound","message":"max attempts exceeded waiting for CVR@04 to catch up from 03"}]`,
     );
 
     // Verify that the store signaled an ownership change to 'my-task' at CONNECT_TIME.
@@ -124,7 +124,7 @@ describe('view-syncer/cvr-store', () => {
           "lastActive": 1725408000000,
           "owner": "my-task",
           "replicaVersion": "01",
-          "version": "02",
+          "version": "04",
         },
       ]
     `);
@@ -147,7 +147,7 @@ describe('view-syncer/cvr-store', () => {
           "lastActive": 1725408000000,
           "owner": "other-task",
           "replicaVersion": "01",
-          "version": "01",
+          "version": "03",
         },
       ]
     `);
@@ -330,7 +330,7 @@ describe('view-syncer/cvr-store', () => {
     // 12 rows set up in beforeEach().
     expect(await db`SELECT COUNT(*) FROM cvr.rows`).toEqual([{count: 12n}]);
 
-    let updater = new CVRQueryDrivenUpdater(store, cvr, '02', '01');
+    let updater = new CVRQueryDrivenUpdater(store, cvr, '04', '01');
     updater.trackQueries(
       lc,
       [{id: 'foo', transformationHash: 'foo-transformed'}],
@@ -342,7 +342,7 @@ describe('view-syncer/cvr-store', () => {
       const id = String(20 + i);
       rows.set(
         {schema: 'public', table: 'issues', rowKey: {id}},
-        {version: '02', contents: {id}, refCounts: {foo: 1}},
+        {version: '04', contents: {id}, refCounts: {foo: 1}},
       );
     }
     await updater.received(lc, rows);
@@ -356,17 +356,17 @@ describe('view-syncer/cvr-store', () => {
           "lastActive": 1732320000000,
           "owner": "my-task",
           "replicaVersion": "01",
-          "version": "02",
+          "version": "04",
         },
       ]
     `);
 
-    // rowsVersion === '01' (flush deferred).
+    // rowsVersion === '03' (flush deferred).
     expect(await db`SELECT * FROM cvr."rowsVersion"`).toMatchInlineSnapshot(`
       Result [
         {
           "clientGroupID": "my-cvr",
-          "version": "01",
+          "version": "03",
         },
       ]
     `);
@@ -380,7 +380,7 @@ describe('view-syncer/cvr-store', () => {
     // Before flushing, simulate another CVR update, this time within
     // the DEFERRED_LIMIT. It should still be deferred because there
     // are now pending rows waiting to be flushed.
-    updater = new CVRQueryDrivenUpdater(store, cvr, '03', '01');
+    updater = new CVRQueryDrivenUpdater(store, cvr, '05', '01');
     updater.trackQueries(
       lc,
       [{id: 'foo', transformationHash: 'foo-transformed'}],
@@ -406,17 +406,17 @@ describe('view-syncer/cvr-store', () => {
           "lastActive": 1732320000000,
           "owner": "my-task",
           "replicaVersion": "01",
-          "version": "03",
+          "version": "05",
         },
       ]
     `);
 
-    // rowsVersion === '01' (flush deferred).
+    // rowsVersion === '03' (flush deferred).
     expect(await db`SELECT * FROM cvr."rowsVersion"`).toMatchInlineSnapshot(`
       Result [
         {
           "clientGroupID": "my-cvr",
-          "version": "01",
+          "version": "03",
         },
       ]
     `);
@@ -427,12 +427,12 @@ describe('view-syncer/cvr-store', () => {
     // Now run the flush logic.
     await setTimeoutFn.mock.calls[0][0]();
 
-    // rowsVersion === '03' (flushed).
+    // rowsVersion === '05' (flushed).
     expect(await db`SELECT * FROM cvr."rowsVersion"`).toMatchInlineSnapshot(`
       Result [
         {
           "clientGroupID": "my-cvr",
-          "version": "03",
+          "version": "05",
         },
       ]
     `);
