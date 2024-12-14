@@ -139,11 +139,9 @@ function Combobox<T>({
 
   return (
     <div
-      className={classNames(
-        styles.container,
-        className,
-        disabled ? styles.disabled : undefined,
-      )}
+      className={classNames(styles.container, className, {
+        [styles.disabled]: disabled,
+      })}
     >
       <div className={styles.inputWrapper}>
         {iconItem && (
@@ -157,9 +155,7 @@ function Combobox<T>({
             ref={inputRef as RefObject<HTMLInputElement>}
             disabled={disabled}
             type="text"
-            className={classNames(styles.input, {
-              [styles.withIcon]: selectedItem && !isOpen,
-            })}
+            className={classNames(styles.input)}
             value={isOpen ? searchQuery : selectedItem?.text || ''}
             onChange={e => {
               setSearchQuery(e.target.value);

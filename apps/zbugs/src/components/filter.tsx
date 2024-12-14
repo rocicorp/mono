@@ -63,12 +63,16 @@ export const Filter = memo(function Filter({onSelect}: Props) {
               <p className="filter-modal-label">Creator</p>
               <UserPicker
                 onSelect={u => u && handleSelect({creator: u.login})}
+                placeholder="Select"
+                allowNone={false}
               />
             </div>
             <div className="filter-modal-item">
               <p className="filter-modal-label">Assignee</p>
               <UserPicker
                 onSelect={u => u && handleSelect({assignee: u.login})}
+                placeholder="Select"
+                allowNone={false}
               />
             </div>
             <div className="filter-modal-item">
