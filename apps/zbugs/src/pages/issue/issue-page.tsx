@@ -49,6 +49,9 @@ import Comment from './comment.js';
 import {isCtrlEnter} from './is-ctrl-enter.js';
 
 const emojiToastShowDuration = 3_000;
+// One more than we display so we can detect if there are more
+// to laod.
+export const INITIAL_COMMENT_LIMIT = 101;
 
 export function IssuePage() {
   const z = useZero();
@@ -77,7 +80,8 @@ export function IssuePage() {
         .related('emoji', emoji =>
           emoji.related('creator', creator => creator.one()),
         )
-        .orderBy('created', 'asc'),
+        .limit(INITIAL_COMMENT_LIMIT)
+        .orderBy('created', 'desc'),
     )
     .one();
   const [issue, issueResult] = useQuery(q);
@@ -170,31 +174,74 @@ export function IssuePage() {
     [issue?.labels],
   );
 
-  const {listRef, virtualizer} = useVirtualComments(issue?.comments ?? []);
+  const [displayAllComments, setDisplayAllComments] = useState(false);
+
+  const [allComments, allCommentsResult] = useQuery(
+    z.query.comment
+      .where('issueID', issue?.id ?? '')
+      .related('creator', creator => creator.one())
+      .related('emoji', emoji =>
+        emoji.related('creator', creator => creator.one()),
+      )
+      .orderBy('created', 'asc'),
+    displayAllComments && issue !== undefined,
+  );
+
+  const [comments, hasOlderComments] = useMemo(() => {
+    if (issue?.comments === undefined) {
+      return [undefined, false];
+    }
+    if (allCommentsResult.type === 'complete') {
+      return [allComments, false];
+    }
+    return [
+      issue.comments.slice(0, 100).reverse(),
+      issue.comments.length > 100,
+    ];
+  }, [issue?.comments, allCommentsResult.type, allComments]);
+
+  const {listRef, virtualizer} = useVirtualComments(comments ?? []);
 
   const hash = useHash();
 
   // Permalink scrolling behavior
+  const [lastPermalinkScroll, setLastPermalinkScroll] = useState('');
   useEffect(() => {
-    if (issue === undefined) {
+    if (issue === undefined || comments === undefined) {
       return;
     }
-    const {comments} = issue;
     const commentID = parsePermalink(hash);
+    if (!commentID) {
+      return;
+    }
+    if (lastPermalinkScroll === commentID) {
+      return;
+    }
     const commentIndex = comments.findIndex(c => c.id === commentID);
     if (commentIndex !== -1) {
+      setLastPermalinkScroll(commentID);
       virtualizer.scrollToIndex(commentIndex, {
         // auto for minimal amount of scrolling.
         align: 'auto',
         // The `smooth` scroll behavior is not fully supported with dynamic size.
         // behavior: 'smooth',
       });
+    } else {
+      if (!displayAllComments) {
+        setDisplayAllComments(true);
+      }
     }
     // Issue changes any time there is a change in the issue. For example when
     // the `modified` or `assignee` changes.
     //
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hash, issue?.id, virtualizer]);
+  }, [
+    hash,
+    issue?.id,
+    virtualizer,
+    displayAllComments,
+    allCommentsResult.type,
+  ]);
 
   const [deleteConfirmationShown, setDeleteConfirmationShown] = useState(false);
 
@@ -242,7 +289,7 @@ export function IssuePage() {
   // TODO: We need the notion of the 'partial' result type to correctly render
   // a 404 here. We can't put the 404 here now because it would flash until we
   // get data.
-  if (!issue) {
+  if (!issue || !comments) {
     return null;
   }
 
@@ -488,6 +535,14 @@ export function IssuePage() {
           </div>
 
           <h2 className="issue-detail-label">Comments</h2>
+          <Button
+            style={{
+              visibility: hasOlderComments ? 'visible' : 'hidden',
+            }}
+            onAction={() => setDisplayAllComments(true)}
+          >
+            Show Older
+          </Button>
 
           <div className="comments-container" ref={listRef}>
             <div
@@ -506,9 +561,9 @@ export function IssuePage() {
                   }}
                 >
                   <Comment
-                    id={issue.comments[item.index].id}
+                    id={comments[item.index].id}
                     issueID={issue.id}
-                    comment={issue.comments[item.index]}
+                    comment={comments[item.index]}
                     height={item.size}
                   />
                 </div>
