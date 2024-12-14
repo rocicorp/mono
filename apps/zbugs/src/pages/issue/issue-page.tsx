@@ -29,6 +29,7 @@ import {CanEdit} from '../../components/can-edit.js';
 import {Combobox} from '../../components/combobox.js';
 import {Confirm} from '../../components/confirm.js';
 import {EmojiPanel} from '../../components/emoji-panel.js';
+import {useEmojiDataSourcePreload} from '../../components/emoji-picker.js';
 import LabelPicker from '../../components/label-picker.js';
 import {Link} from '../../components/link.js';
 import Markdown from '../../components/markdown.js';
@@ -49,6 +50,7 @@ import Comment from './comment.js';
 import {isCtrlEnter} from './is-ctrl-enter.js';
 
 const emojiToastShowDuration = 3_000;
+
 // One more than we display so we can detect if there are more
 // to laod.
 export const INITIAL_COMMENT_LIMIT = 101;
@@ -246,6 +248,8 @@ export function IssuePage() {
   const [deleteConfirmationShown, setDeleteConfirmationShown] = useState(false);
 
   const canEdit = useCanEdit(issue?.creatorID);
+
+  useEmojiDataSourcePreload();
 
   const issueEmojiRef = useRef<HTMLDivElement>(null);
 
