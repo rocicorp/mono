@@ -877,11 +877,11 @@ export class CVRStore {
             owner: null,
             grantedAt: null,
           };
-    if (version !== expected) {
-      throw new ConcurrentModificationException(expected, version);
-    }
     if (owner !== this.#taskID && (grantedAt ?? 0) > lastConnectTime) {
       throw new OwnershipError(owner, grantedAt);
+    }
+    if (version !== expected) {
+      throw new ConcurrentModificationException(expected, version);
     }
   }
 
