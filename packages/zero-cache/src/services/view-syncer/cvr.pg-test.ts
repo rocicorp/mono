@@ -144,6 +144,7 @@ describe('view-syncer/cvr', () => {
     cvrStore: CVRStore,
     afterVersion: CVRVersion,
     upToCVR: CVRSnapshot,
+    current: CVRVersion,
     excludeQueries: string[] = [],
   ) {
     const rows: RowsRow[] = [];
@@ -151,6 +152,7 @@ describe('view-syncer/cvr', () => {
       lc,
       afterVersion,
       upToCVR,
+      current,
       excludeQueries,
     )) {
       rows.push(...batch);
@@ -1364,8 +1366,14 @@ describe('view-syncer/cvr', () => {
         }
       `);
 
-    expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
-      .toMatchInlineSnapshot(`
+    expect(
+      await cvrStore.catchupConfigPatches(
+        lc,
+        {stateVersion: '189'},
+        cvr,
+        updated.version,
+      ),
+    ).toMatchInlineSnapshot(`
       [
         {
           "patch": {
@@ -1406,8 +1414,11 @@ describe('view-syncer/cvr', () => {
       ]
     `);
 
-    expect(await catchupRows(cvrStore, {stateVersion: '189'}, cvr, ['oneHash']))
-      .toMatchInlineSnapshot(`
+    expect(
+      await catchupRows(cvrStore, {stateVersion: '189'}, cvr, updated.version, [
+        'oneHash',
+      ]),
+    ).toMatchInlineSnapshot(`
       [
         {
           "clientGroupID": "abc123",
@@ -1777,8 +1788,14 @@ describe('view-syncer/cvr', () => {
         }
       `);
 
-    expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
-      .toMatchInlineSnapshot(`
+    expect(
+      await cvrStore.catchupConfigPatches(
+        lc,
+        {stateVersion: '189'},
+        cvr,
+        updated.version,
+      ),
+    ).toMatchInlineSnapshot(`
       [
         {
           "patch": {
@@ -1833,8 +1850,11 @@ describe('view-syncer/cvr', () => {
       ]
     `);
 
-    expect(await catchupRows(cvrStore, {stateVersion: '189'}, cvr, ['oneHash']))
-      .toMatchInlineSnapshot(`
+    expect(
+      await catchupRows(cvrStore, {stateVersion: '189'}, cvr, updated.version, [
+        'oneHash',
+      ]),
+    ).toMatchInlineSnapshot(`
       [
         {
           "clientGroupID": "abc123",
@@ -2321,8 +2341,14 @@ describe('view-syncer/cvr', () => {
       }
     `);
 
-    expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
-      .toMatchInlineSnapshot(`
+    expect(
+      await cvrStore.catchupConfigPatches(
+        lc,
+        {stateVersion: '189'},
+        cvr,
+        updated.version,
+      ),
+    ).toMatchInlineSnapshot(`
       [
         {
           "patch": {
@@ -2407,7 +2433,7 @@ describe('view-syncer/cvr', () => {
     `);
 
     expect(
-      await catchupRows(cvrStore, {stateVersion: '189'}, cvr, [
+      await catchupRows(cvrStore, {stateVersion: '189'}, cvr, updated.version, [
         'oneHash',
         'twoHash',
       ]),
@@ -2740,8 +2766,14 @@ describe('view-syncer/cvr', () => {
       }
     `);
 
-    expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
-      .toMatchInlineSnapshot(`
+    expect(
+      await cvrStore.catchupConfigPatches(
+        lc,
+        {stateVersion: '189'},
+        cvr,
+        updated.version,
+      ),
+    ).toMatchInlineSnapshot(`
       [
         {
           "patch": {
@@ -2756,8 +2788,15 @@ describe('view-syncer/cvr', () => {
       ]
     `);
 
-    expect(await catchupRows(cvrStore, {stateVersion: '189'}, cvr, []))
-      .toMatchInlineSnapshot(`
+    expect(
+      await catchupRows(
+        cvrStore,
+        {stateVersion: '189'},
+        cvr,
+        updated.version,
+        [],
+      ),
+    ).toMatchInlineSnapshot(`
       [
         {
           "clientGroupID": "abc123",
@@ -3227,8 +3266,14 @@ describe('view-syncer/cvr', () => {
       }
     `);
 
-    expect(await cvrStore.catchupConfigPatches(lc, {stateVersion: '189'}, cvr))
-      .toMatchInlineSnapshot(`
+    expect(
+      await cvrStore.catchupConfigPatches(
+        lc,
+        {stateVersion: '189'},
+        cvr,
+        updated.version,
+      ),
+    ).toMatchInlineSnapshot(`
       [
         {
           "patch": {
@@ -3313,7 +3358,7 @@ describe('view-syncer/cvr', () => {
     `);
 
     expect(
-      await catchupRows(cvrStore, {stateVersion: '189'}, cvr, [
+      await catchupRows(cvrStore, {stateVersion: '189'}, cvr, updated.version, [
         'oneHash',
         'twoHash',
       ]),

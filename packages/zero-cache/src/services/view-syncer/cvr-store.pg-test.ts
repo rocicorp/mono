@@ -156,15 +156,15 @@ describe('view-syncer/cvr-store', () => {
   async function catchupRows(
     after: CVRVersion,
     upTo: CVRVersion,
+    current: CVRVersion,
     excludeQueryHashes: string[] = [],
   ): Promise<RowsRow[]> {
     const rows = [];
     for await (const batch of store.catchupRowPatches(
       lc,
       after,
-      {
-        version: upTo,
-      } as CVRSnapshot,
+      {version: upTo} as CVRSnapshot,
+      current,
       excludeQueryHashes,
     )) {
       rows.push(...batch);
@@ -174,8 +174,13 @@ describe('view-syncer/cvr-store', () => {
 
   test('catchupRows', async () => {
     // After 01, up to 02:
-    expect(await catchupRows({stateVersion: '01'}, {stateVersion: '02'}))
-      .toMatchInlineSnapshot(`
+    expect(
+      await catchupRows(
+        {stateVersion: '01'},
+        {stateVersion: '02'},
+        {stateVersion: '03'},
+      ),
+    ).toMatchInlineSnapshot(`
       [
         {
           "clientGroupID": "my-cvr",
@@ -233,7 +238,12 @@ describe('view-syncer/cvr-store', () => {
 
     // After 00, up to 02, excluding query hash 'bar'
     expect(
-      await catchupRows({stateVersion: '00'}, {stateVersion: '02'}, ['bar']),
+      await catchupRows(
+        {stateVersion: '00'},
+        {stateVersion: '02'},
+        {stateVersion: '03'},
+        ['bar'],
+      ),
     ).toMatchInlineSnapshot(`
       [
         {
@@ -289,10 +299,12 @@ describe('view-syncer/cvr-store', () => {
 
     // After 01, up to 03, excluding multiple query hashes 'foo' and 'bar'
     expect(
-      await catchupRows({stateVersion: '01'}, {stateVersion: '03'}, [
-        'foo',
-        'bar',
-      ]),
+      await catchupRows(
+        {stateVersion: '01'},
+        {stateVersion: '03'},
+        {stateVersion: '03'},
+        ['foo', 'bar'],
+      ),
     ).toMatchInlineSnapshot(`
       [
         {
@@ -319,6 +331,20 @@ describe('view-syncer/cvr-store', () => {
         },
       ]
     `);
+  });
+
+  test('row catchup detects concurrent modification', async () => {
+    // Expect the stateVersion to be '02', simulating a situation in which
+    // the CVR has already been updated to '03'.
+    await expect(
+      catchupRows(
+        {stateVersion: '01'},
+        {stateVersion: '02'},
+        {stateVersion: '02'},
+      ),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[ConcurrentModificationException: CVR has been concurrently modified. Expected 02, got 03]`,
+    );
   });
 
   const DEFERRED_ROW_LIMIT = 5;
