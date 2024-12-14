@@ -343,7 +343,6 @@ export const permissions: ReturnType<typeof definePermissions> =
             loggedInUserIsAdmin,
             and(canSeeComment, loggedInUserIsCreator),
           ],
-          select: [canSeeComment],
         },
       },
       label: {
@@ -372,7 +371,6 @@ export const permissions: ReturnType<typeof definePermissions> =
             preMutation: NOBODY_CAN,
           },
           delete: [and(canSeeIssueLabel, allowIfAdminOrIssueCreator)],
-          select: [canSeeIssueLabel],
         },
       },
       emoji: {
@@ -386,7 +384,6 @@ export const permissions: ReturnType<typeof definePermissions> =
             postMutation: [and(canSeeEmoji, loggedInUserIsCreator)],
           },
           delete: [and(canSeeEmoji, loggedInUserIsCreator)],
-          select: [canSeeEmoji],
         },
       },
       userPref: {

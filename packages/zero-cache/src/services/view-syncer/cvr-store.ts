@@ -15,6 +15,7 @@ import {promiseVoid} from '../../../../shared/src/resolved-promises.js';
 import {sleep} from '../../../../shared/src/sleep.js';
 import {astSchema} from '../../../../zero-protocol/src/ast.js';
 import {ErrorKind} from '../../../../zero-protocol/src/error.js';
+import {Mode, TransactionPool} from '../../db/transaction-pool.js';
 import type {JSONValue} from '../../types/bigint-json.js';
 import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
@@ -281,6 +282,7 @@ class RowRecordCache {
     lc: LogContext,
     afterVersion: NullableCVRVersion,
     upToCVR: CVRSnapshot,
+    current: CVRVersion,
     excludeQueryHashes: string[] = [],
   ): AsyncGenerator<RowsRow[], void, undefined> {
     if (cmpVersions(afterVersion, upToCVR.version) >= 0) {
@@ -288,7 +290,6 @@ class RowRecordCache {
     }
 
     const startMs = Date.now();
-    const sql = this.#db;
     const start = afterVersion ? versionString(afterVersion) : '';
     const end = versionString(upToCVR.version);
     lc.debug?.(`scanning row patches for clients from ${start}`);
@@ -300,20 +301,33 @@ class RowRecordCache {
     await this.flushed(lc);
     const flushMs = Date.now() - startMs;
 
-    const query =
-      excludeQueryHashes.length === 0
-        ? sql<RowsRow[]>`SELECT * FROM cvr.rows
+    const reader = new TransactionPool(lc, Mode.READONLY).run(this.#db);
+    try {
+      // Verify that we are reading the right version of the CVR.
+      await reader.processReadTask(tx =>
+        checkVersion(tx, this.#cvrID, current),
+      );
+
+      const {query} = await reader.processReadTask(tx => {
+        const query =
+          excludeQueryHashes.length === 0
+            ? tx<RowsRow[]>`SELECT * FROM cvr.rows
         WHERE "clientGroupID" = ${this.#cvrID}
           AND "patchVersion" > ${start}
           AND "patchVersion" <= ${end}`
-        : // Exclude rows that were already sent as part of query hydration.
-          sql<RowsRow[]>`SELECT * FROM cvr.rows
+            : // Exclude rows that were already sent as part of query hydration.
+              tx<RowsRow[]>`SELECT * FROM cvr.rows
         WHERE "clientGroupID" = ${this.#cvrID}
           AND "patchVersion" > ${start}
           AND "patchVersion" <= ${end}
           AND ("refCounts" IS NULL OR NOT "refCounts" ?| ${excludeQueryHashes})`;
+        return {query};
+      });
 
-    yield* query.cursor(10000);
+      yield* query.cursor(10000);
+    } finally {
+      reader.setDone();
+    }
 
     const totalMs = Date.now() - startMs;
     lc.debug?.(
@@ -755,12 +769,14 @@ export class CVRStore {
     lc: LogContext,
     afterVersion: NullableCVRVersion,
     upToCVR: CVRSnapshot,
+    current: CVRVersion,
     excludeQueryHashes: string[] = [],
   ): AsyncGenerator<RowsRow[], void, undefined> {
     return this.#rowCache.catchupRowPatches(
       lc,
       afterVersion,
       upToCVR,
+      current,
       excludeQueryHashes,
     );
   }
@@ -769,64 +785,77 @@ export class CVRStore {
     lc: LogContext,
     afterVersion: NullableCVRVersion,
     upToCVR: CVRSnapshot,
+    current: CVRVersion,
   ): Promise<PatchToVersion[]> {
     if (cmpVersions(afterVersion, upToCVR.version) >= 0) {
       return [];
     }
 
     const startMs = Date.now();
-    const sql = this.#db;
     const start = afterVersion ? versionString(afterVersion) : '';
     const end = versionString(upToCVR.version);
     lc.debug?.(`scanning config patches for clients from ${start}`);
 
-    const [allDesires, clientRows, queryRows] = await Promise.all([
-      sql<DesiresRow[]>`SELECT * FROM cvr.desires
+    const reader = new TransactionPool(lc, Mode.READONLY).run(this.#db);
+    try {
+      // Verify that we are reading the right version of the CVR.
+      await reader.processReadTask(tx => checkVersion(tx, this.#id, current));
+
+      const [allDesires, clientRows, queryRows] = await reader.processReadTask(
+        tx =>
+          Promise.all([
+            tx<DesiresRow[]>`SELECT * FROM cvr.desires
        WHERE "clientGroupID" = ${this.#id}
         AND "patchVersion" > ${start}
         AND "patchVersion" <= ${end}`,
-      sql<ClientsRow[]>`SELECT * FROM cvr.clients
+            tx<ClientsRow[]>`SELECT * FROM cvr.clients
        WHERE "clientGroupID" = ${this.#id}
         AND "patchVersion" > ${start}
         AND "patchVersion" <= ${end}`,
-      sql<
-        Pick<QueriesRow, 'deleted' | 'queryHash' | 'patchVersion'>[]
-      >`SELECT deleted, "queryHash", "patchVersion" FROM cvr.queries
+            tx<
+              Pick<QueriesRow, 'deleted' | 'queryHash' | 'patchVersion'>[]
+            >`SELECT deleted, "queryHash", "patchVersion" FROM cvr.queries
       WHERE "clientGroupID" = ${this.#id}
         AND "patchVersion" > ${start}
         AND "patchVersion" <= ${end}`,
-    ]);
+          ]),
+      );
 
-    const ast = (id: string) => must(upToCVR.queries[id]).ast;
+      const ast = (id: string) => must(upToCVR.queries[id]).ast;
 
-    const patches: PatchToVersion[] = [];
-    for (const row of queryRows) {
-      const {queryHash: id} = row;
-      const patch: Patch = row.deleted
-        ? {type: 'query', op: 'del', id}
-        : {type: 'query', op: 'put', id, ast: ast(id)};
-      const v = row.patchVersion;
-      assert(v);
-      patches.push({patch, toVersion: versionFromString(v)});
-    }
-    for (const row of clientRows) {
-      const patch: Patch = {
-        type: 'client',
-        op: row.deleted ? 'del' : 'put',
-        id: row.clientID,
-      };
-      patches.push({patch, toVersion: versionFromString(row.patchVersion)});
-    }
-    for (const row of allDesires) {
-      const {clientID, queryHash: id} = row;
-      const patch: Patch = row.deleted
-        ? {type: 'query', op: 'del', id, clientID}
-        : {type: 'query', op: 'put', id, clientID, ast: ast(id)};
-      patches.push({patch, toVersion: versionFromString(row.patchVersion)});
-    }
+      const patches: PatchToVersion[] = [];
+      for (const row of queryRows) {
+        const {queryHash: id} = row;
+        const patch: Patch = row.deleted
+          ? {type: 'query', op: 'del', id}
+          : {type: 'query', op: 'put', id, ast: ast(id)};
+        const v = row.patchVersion;
+        assert(v);
+        patches.push({patch, toVersion: versionFromString(v)});
+      }
+      for (const row of clientRows) {
+        const patch: Patch = {
+          type: 'client',
+          op: row.deleted ? 'del' : 'put',
+          id: row.clientID,
+        };
+        patches.push({patch, toVersion: versionFromString(row.patchVersion)});
+      }
+      for (const row of allDesires) {
+        const {clientID, queryHash: id} = row;
+        const patch: Patch = row.deleted
+          ? {type: 'query', op: 'del', id, clientID}
+          : {type: 'query', op: 'put', id, clientID, ast: ast(id)};
+        patches.push({patch, toVersion: versionFromString(row.patchVersion)});
+      }
 
-    lc.debug?.(`${patches.length} config patches (${Date.now() - startMs} ms)`);
-    return patches;
+      lc.debug?.(
+        `${patches.length} config patches (${Date.now() - startMs} ms)`,
+      );
+      return patches;
+    } finally {
+      reader.setDone();
+    }
   }
 
   async #checkVersionAndOwnership(
@@ -968,6 +997,26 @@ export class CVRStore {
 // Each row record has 7 parameters (1 per column).
 // 65534 / 7 = 9362
 const ROW_RECORD_UPSERT_BATCH_SIZE = 9_360;
+
+/**
+ * This is similar to {@link CVRStore.#checkVersionAndOwnership} except
+ * that it only checks the version and is suitable for snapshot reads
+ * (i.e. by doing a plain `SELECT` rather than a `SELECT ... FOR UPDATE`).
+ */
+async function checkVersion(
+  tx: PostgresTransaction,
+  clientGroupID: string,
+  expectedCurrentVersion: CVRVersion,
+): Promise<void> {
+  const expected = versionString(expectedCurrentVersion);
+  const result = await tx<Pick<InstancesRow, 'version'>[]>`
+    SELECT version FROM cvr.instances WHERE "clientGroupID" = ${clientGroupID}`;
+  const {version} =
+    result.length > 0 ? result[0] : {version: EMPTY_CVR_VERSION.stateVersion};
+  if (version !== expected) {
+    throw new ConcurrentModificationException(expected, version);
+  }
+}
 
 export class ConcurrentModificationException extends Error {
   readonly name = 'ConcurrentModificationException';
