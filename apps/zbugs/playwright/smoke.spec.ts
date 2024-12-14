@@ -32,7 +32,7 @@ test('loadtest', async ({page, browser, context}) => {
     },
   ]);
   const testID = Math.random().toString(36).substring(2, 8);
-  if(DELAY_START > 0) {
+  if (DELAY_START > 0) {
     const delay = Math.random() * DELAY_START;
     console.log(`Delaying for ${delay}ms to create jitter`);
     await page.waitForTimeout(delay);
@@ -56,14 +56,20 @@ test('loadtest', async ({page, browser, context}) => {
   if (!wentDirect) {
     await page.waitForSelector('.issue-list .row');
     cgID = await page.evaluate('window.z.clientGroupID');
-    console.log(AWS_BATCH_JOB_ARRAY_INDEX, cgID,  `Start rendered in: ${Date.now() - start}ms`);
+    console.log(
+      AWS_BATCH_JOB_ARRAY_INDEX,
+      cgID,
+      `Start rendered in: ${Date.now() - start}ms`,
+    );
   } else {
     await page.waitForSelector('[class^="_commentItem"]');
     cgID = await page.evaluate('window.z.clientGroupID');
-    console.log(AWS_BATCH_JOB_ARRAY_INDEX, cgID, `Direct Issue Start rendered in: ${Date.now() - start}ms`);
+    console.log(
+      AWS_BATCH_JOB_ARRAY_INDEX,
+      cgID,
+      `Direct Issue Start rendered in: ${Date.now() - start}ms`,
+    );
   }
-
-
 
   for (let i = 0; i < NUM_ITERATIONS; i++) {
     const iterationStart = Date.now();
@@ -88,7 +94,11 @@ test('loadtest', async ({page, browser, context}) => {
       `#options-listbox > li:nth-child(${Math.floor(Math.random() * 5) + 2})`,
     );
 
-    console.log(AWS_BATCH_JOB_ARRAY_INDEX, cgID, `Filtering by ${await elm.allTextContents()}`);
+    console.log(
+      AWS_BATCH_JOB_ARRAY_INDEX,
+      cgID,
+      `Filtering by ${await elm.allTextContents()}`,
+    );
     await elm.click();
     await page.getByRole('button', {name: '+ Filter'}).click();
     // select assignee
@@ -97,7 +107,11 @@ test('loadtest', async ({page, browser, context}) => {
       `#options-listbox > li:nth-child(${Math.floor(Math.random() * 5) + 2})`,
     );
 
-    console.log(AWS_BATCH_JOB_ARRAY_INDEX, cgID, `Filtering by ${await elm.allTextContents()}`);
+    console.log(
+      AWS_BATCH_JOB_ARRAY_INDEX,
+      cgID,
+      `Filtering by ${await elm.allTextContents()}`,
+    );
     await elm.click();
     console.log(AWS_BATCH_JOB_ARRAY_INDEX, cgID, 'Removing user filter');
     await page
@@ -114,7 +128,11 @@ test('loadtest', async ({page, browser, context}) => {
       });
     });
 
-    console.log(AWS_BATCH_JOB_ARRAY_INDEX, cgID, `Finished iteration in ${Date.now() - iterationStart}ms`);
+    console.log(
+      AWS_BATCH_JOB_ARRAY_INDEX,
+      cgID,
+      `Finished iteration in ${Date.now() - iterationStart}ms`,
+    );
     await page.goBack();
     await page.waitForTimeout(DELAY_PER_ITERATION);
   }
