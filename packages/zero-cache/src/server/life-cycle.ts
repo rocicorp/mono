@@ -1,11 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {constants, setPriority} from 'os';
 import {pid} from 'process';
 import type {EventEmitter} from 'stream';
 import {HttpService, type Options} from '../services/http-service.js';
 import type {SingletonService} from '../services/service.js';
-import {singleProcessMode, type Worker} from '../types/processes.js';
+import type {Worker} from '../types/processes.js';
 
 /**
  * * `user-facing` workers serve external requests and are the first to
@@ -86,17 +85,6 @@ export class ProcessManager {
   }
 
   addWorker(worker: Worker, type: WorkerType, name: string): Worker {
-    if (type === 'supporting' && worker.pid && !singleProcessMode()) {
-      try {
-        setPriority(worker.pid, constants.priority.PRIORITY_HIGH);
-        this.#lc.info?.(`set ${name} (pid=${worker.pid}) to HIGH priority`);
-      } catch (e) {
-        this.#lc.warn?.(
-          `unable to set priority of ${name} (pid=${worker.pid}):`,
-          String(e),
-        );
-      }
-    }
     if (type === 'user-facing') {
       this.#userFacing.add(worker);
     }
