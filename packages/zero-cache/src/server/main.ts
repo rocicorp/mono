@@ -37,11 +37,13 @@ export default async function runWorker(
 
   const processes = new ProcessManager(lc, parent ?? process);
 
+  // Run as many sync workers as there are available cores.
+  // To avoid starvation of supporting workers (replicator, change-streamer),
+  // the ProcessManager sets them to a higher priority.
   const numSyncers =
     config.numSyncWorkers !== undefined
       ? config.numSyncWorkers
-      : // Reserve 1 core for the replicator. The change-streamer is not CPU heavy.
-        Math.max(1, availableParallelism() - 1);
+      : Math.max(1, availableParallelism());
 
   if (config.upstream.maxConns < numSyncers) {
     throw new Error(
