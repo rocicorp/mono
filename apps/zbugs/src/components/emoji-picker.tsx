@@ -1,5 +1,5 @@
 import 'emoji-picker-element';
-import emojiDataSource from 'emoji-picker-element-data/en/emojibase/data.json?url';
+import dataSource from 'emoji-picker-element-data/en/emojibase/data.json?url';
 import Database from 'emoji-picker-element/database.js';
 import type Picker from 'emoji-picker-element/picker.js';
 import type {
@@ -7,7 +7,7 @@ import type {
   NativeEmoji,
   SkinToneChangeEvent,
 } from 'emoji-picker-element/shared.js';
-import {createElement, useCallback, useRef, type RefCallback} from 'react';
+import {createElement, memo, useEffect, useRef, type RefCallback} from 'react';
 import {setUserPref, useUserPref} from '../hooks/use-user-pref.js';
 import {useZero} from '../hooks/use-zero.js';
 
@@ -17,7 +17,7 @@ interface Props {
   onEmojiChange: (emoji: {unicode: string; annotation: string}) => void;
 }
 
-export function EmojiPicker({onEmojiChange}: Props) {
+export const EmojiPicker = memo(({onEmojiChange}: Props) => {
   const z = useZero();
 
   // We need to keep a reference to the last picker so we can remove event
@@ -28,39 +28,33 @@ export function EmojiPicker({onEmojiChange}: Props) {
   if (skinTonePref !== undefined) {
     const v = parseInt(skinTonePref, 10);
     if (!isNaN(v)) {
-      const db = new Database();
+      const db = new Database({dataSource});
       db.setPreferredSkinTone(v).catch(err => {
         console.error('Failed to set preferred skin tone:', err);
       });
     }
   }
 
-  const onEmojiClick = useCallback(
-    ({detail}: EmojiClickEvent) => {
-      const {unicode} = detail;
-      // Custom emojis don't have a unicode property.
-      // At this point we don't care about custom emojis.
-      if (!unicode) {
-        return;
-      }
-      onEmojiChange({
-        unicode: unicode,
-        annotation: (detail.emoji as NativeEmoji).annotation,
-      });
-    },
-    [onEmojiChange],
-  );
-  const onSkinToneChange = useCallback(
-    (e: SkinToneChangeEvent) => {
-      const skinTone = e.detail.skinTone;
-      setUserPref(z, SKIN_TONE_PREF, skinTone + '');
-    },
-    [z],
-  );
+  const onEmojiClick = ({detail}: EmojiClickEvent) => {
+    const {unicode} = detail;
+    // Custom emojis don't have a unicode property.
+    // At this point we don't care about custom emojis.
+    if (!unicode) {
+      return;
+    }
+    onEmojiChange({
+      unicode: unicode,
+      annotation: (detail.emoji as NativeEmoji).annotation,
+    });
+  };
+  const onSkinToneChange = (e: SkinToneChangeEvent) => {
+    const skinTone = e.detail.skinTone;
+    setUserPref(z, SKIN_TONE_PREF, skinTone + '');
+  };
 
   // Stop propagation of keypress events to prevent the k/j useKeypress hook to
   // get triggered
-  const onKeyPress = useCallback((e: Event) => e.stopPropagation(), []);
+  const onKeyPress = (e: Event) => e.stopPropagation();
 
   const ref: RefCallback<Picker> = el => {
     if (lastPicker.current) {
@@ -107,6 +101,20 @@ export function EmojiPicker({onEmojiChange}: Props) {
   return createElement('emoji-picker', {
     'class': 'dark',
     ref,
-    'data-source': emojiDataSource,
+    'data-source': dataSource,
   });
+});
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useEmojiDataSourcePreload() {
+  useEffect(() => {
+    // Do this on a timer to not compete with other work.
+    const timer = setTimeout(
+      () => {
+        new Database({dataSource});
+      },
+      1000 + Math.random() * 1000,
+    );
+    return () => clearTimeout(timer);
+  }, []);
 }
