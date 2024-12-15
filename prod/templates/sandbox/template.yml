@@ -211,8 +211,8 @@ Resources:
               # limit: 190 max_connections / 8 tasks * 2 (during update)
               Value: 10
             - Name: ZERO_CVR_MAX_CONNS
-              # limit: 1708 max_connections / 8 tasks * 2 (during update)
-              Value: 100
+              # limit: 5000 max_connections / 8 tasks * 2 (during update)
+              Value: 300
             - Name: ZERO_SCHEMA_FILE
               Value: /opt/app/packages/zero-cache/zero-schema.json
           Secrets:
