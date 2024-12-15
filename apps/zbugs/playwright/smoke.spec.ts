@@ -1,4 +1,5 @@
 import {test} from '@playwright/test';
+import 'dotenv/config';
 
 const userCookies = [
   'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJPZVZucjF5NWJFTV9ZZzA2c1VGdEQiLCJpYXQiOjE3MzQxMzY3NDYsInJvbGUiOiJjcmV3IiwibmFtZSI6ImFib29kbWFuIiwiZXhwIjoxNzM2NzI4NzQ2fQ.muDyQMOsjYi--80bl3kxyxzIHmZbA1lCdsK6z3B58LI',
@@ -14,150 +15,163 @@ const PERCENT_DIRECT = parseFloat(process.env.PERCENT_DIRECT ?? '0.75');
 const AWS_BATCH_JOB_ARRAY_INDEX = process.env.AWS_BATCH_JOB_ARRAY_INDEX ?? '-1';
 const ENTER_PASSWORD = process.env.ENTER_PASSWORD === '1';
 
-test('loadtest', async ({page, browser, context}) => {
-  // print environment variables
-  console.log(process.env);
-  test.setTimeout(700000);
-  await page.context().addCookies([
-    {
-      name: 'jwt',
-      value: userCookies[Math.floor(Math.random() * userCookies.length)],
-      domain: new URL(SITE_URL).host,
-      path: '/',
-      expires: -1,
-      httpOnly: false,
-    },
-  ]);
-  const testID = Math.random().toString(36).substring(2, 8);
-  if (DELAY_START > 0) {
-    const delay = Math.random() * DELAY_START;
-    console.log(`Delaying for ${delay}ms to create jitter`);
-    await page.waitForTimeout(delay);
-  }
-  const random = Math.random();
-  console.log(`Random: ${random}`);
-  const wentDirect = random < PERCENT_DIRECT;
-  if (wentDirect) {
-    console.log('Opening direct issue:', DIRECT_URL);
-    await page.goto(DIRECT_URL);
-  } else {
-    console.log('Opening main page:', SITE_URL);
-    await page.goto(SITE_URL);
-  }
-  if (ENTER_PASSWORD) {
-    await page.getByLabel('VISITOR PASSWORD').click();
-    await page.getByLabel('VISITOR PASSWORD').fill('zql');
-    await page.getByLabel('VISITOR PASSWORD').press('Enter');
-  }
-  let cgID = '';
-  const start = Date.now();
-  // if it went to direct url, do this branch of code
-  if (!wentDirect) {
-    await page.waitForSelector('.issue-list .row');
-    cgID = await page.evaluate('window.z.clientGroupID');
-    console.log(
-      AWS_BATCH_JOB_ARRAY_INDEX,
-      cgID,
-      `Start rendered in: ${Date.now() - start}ms`,
-    );
-  } else {
-    await page.waitForSelector('[class^="_commentItem"]');
-    cgID = await page.evaluate('window.z.clientGroupID');
-    console.log(
-      AWS_BATCH_JOB_ARRAY_INDEX,
-      cgID,
-      `Direct Issue Start rendered in: ${Date.now() - start}ms`,
-    );
-  }
+const NUM_CONCURRENT = 50;
 
-  for (let i = 0; i < NUM_ITERATIONS; i++) {
-    const iterationStart = Date.now();
+test.describe.parallel('loadtest', () => {
+  for (let i = 0; i < NUM_CONCURRENT; ++i) {
+    test(`loadtest ${i}`, async ({page, browser, context}) => {
+      // print environment variables
+      console.log(process.env);
+      test.setTimeout(700000);
+      await page.context().addCookies([
+        {
+          name: 'jwt',
+          value: userCookies[Math.floor(Math.random() * userCookies.length)],
+          domain: new URL(SITE_URL).host,
+          path: '/',
+          expires: -1,
+          httpOnly: false,
+        },
+      ]);
+      const testID = Math.random().toString(36).substring(2, 8);
+      if (DELAY_START > 0) {
+        const delay = Math.random() * DELAY_START;
+        console.log(`Delaying for ${delay}ms to create jitter`);
+        await page.waitForTimeout(delay);
+      }
+      const random = Math.random();
+      console.log(`Random: ${random}`);
+      const wentDirect = random < PERCENT_DIRECT;
+      if (wentDirect) {
+        console.log('Opening direct issue:', DIRECT_URL);
+        await page.goto(DIRECT_URL);
+      } else {
+        console.log('Opening main page:', SITE_URL);
+        await page.goto(SITE_URL);
+      }
+      if (ENTER_PASSWORD) {
+        await page.getByLabel('VISITOR PASSWORD').click();
+        await page.getByLabel('VISITOR PASSWORD').fill('zql');
+        await page.getByLabel('VISITOR PASSWORD').press('Enter');
+      }
+      let cgID = '';
+      const start = Date.now();
+      // if it went to direct url, do this branch of code
+      if (!wentDirect) {
+        await page.waitForSelector('.issue-list .row');
+        cgID = await page.evaluate('window.z.clientGroupID');
+        console.log(
+          AWS_BATCH_JOB_ARRAY_INDEX,
+          cgID,
+          `Start rendered in: ${Date.now() - start}ms`,
+        );
+      } else {
+        await page.waitForSelector('[class^="_commentItem"]');
+        cgID = await page.evaluate('window.z.clientGroupID');
+        console.log(
+          AWS_BATCH_JOB_ARRAY_INDEX,
+          cgID,
+          `Direct Issue Start rendered in: ${Date.now() - start}ms`,
+        );
+      }
 
-    // navigate into test issue
-    await openIssueByID(page, ISSUE_ID);
+      for (let i = 0; i < NUM_ITERATIONS; i++) {
+        const iterationStart = Date.now();
 
-    // every other time comment on the issue
-    if (i % 2 === 0) {
-      await commentOnNewIssue(page, 'This is a test comment');
-    }
+        // navigate into test issue
+        await openIssueByID(page, ISSUE_ID);
 
-    // do some filters
-    console.log(AWS_BATCH_JOB_ARRAY_INDEX, cgID, 'Filtering by open');
-    await page.locator('.nav-item', {hasText: 'Open'}).click();
-    console.log(AWS_BATCH_JOB_ARRAY_INDEX, cgID, 'Filtering by closed');
-    await page.locator('.nav-item', {hasText: 'Closed'}).click();
-    console.log(AWS_BATCH_JOB_ARRAY_INDEX, cgID, 'Filtering by all');
-    await page.locator('.nav-item', {hasText: 'All'}).click();
+        // every other time comment on the issue
+        if (i % 2 === 0) {
+          await commentOnNewIssue(page, 'This is a test comment');
+        }
 
-    // filter by creator and pick a random creator
-    await page.locator('.add-filter').click();
-    await page.getByText('Filtered by:+ Filter').click();
-    await page.getByRole('button', {name: '+ Filter'}).click();
-    await page.locator('div.add-filter-modal > div:nth-child(1)').click();
+        // do some filters
+        console.log(AWS_BATCH_JOB_ARRAY_INDEX, cgID, 'Filtering by open');
+        await page.locator('.nav-item', {hasText: 'Open'}).click();
+        console.log(AWS_BATCH_JOB_ARRAY_INDEX, cgID, 'Filtering by closed');
+        await page.locator('.nav-item', {hasText: 'Closed'}).click();
+        console.log(AWS_BATCH_JOB_ARRAY_INDEX, cgID, 'Filtering by all');
+        await page.locator('.nav-item', {hasText: 'All'}).click();
 
-    let elm = await page.locator(
-      `#options-listbox > li:nth-child(${Math.floor(Math.random() * 5) + 2})`,
-    );
+        // filter by creator and pick a random creator
+        await page.locator('.add-filter').click();
+        await page.getByText('Filtered by:+ Filter').click();
+        await page.getByRole('button', {name: '+ Filter'}).click();
+        await page.locator('div.add-filter-modal > div:nth-child(1)').click();
 
-    console.log(
-      AWS_BATCH_JOB_ARRAY_INDEX,
-      cgID,
-      `Filtering by ${await elm.allTextContents()}`,
-    );
-    await elm.click();
+        let elm = await page.locator(
+          `#options-listbox > li:nth-child(${
+            Math.floor(Math.random() * 5) + 2
+          })`,
+        );
 
-    // filter by assignee and pick a random assignee
-    await page.getByRole('button', {name: '+ Filter'}).click();
-    await page.locator('div.add-filter-modal > div:nth-child(2)').click();
-    elm = await page.locator(
-      `#options-listbox > li:nth-child(${Math.floor(Math.random() * 5) + 2})`,
-    );
+        console.log(
+          AWS_BATCH_JOB_ARRAY_INDEX,
+          cgID,
+          `Filtering by ${await elm.allTextContents()}`,
+        );
+        await elm.click();
 
-    console.log(
-      AWS_BATCH_JOB_ARRAY_INDEX,
-      cgID,
-      `Filtering by ${await elm.allTextContents()}`,
-    );
-    await elm.click();
+        // filter by assignee and pick a random assignee
+        await page.getByRole('button', {name: '+ Filter'}).click();
+        await page.locator('div.add-filter-modal > div:nth-child(2)').click();
+        elm = await page.locator(
+          `#options-listbox > li:nth-child(${
+            Math.floor(Math.random() * 5) + 2
+          })`,
+        );
 
-    // remove filters
-    console.log(AWS_BATCH_JOB_ARRAY_INDEX, cgID, 'Removing user filter');
-    await page
-      .locator('.list-view-filter-container .pill.user')
-      .first()
-      .click();
-    console.log(AWS_BATCH_JOB_ARRAY_INDEX, cgID, 'Removing label filter');
-    await page.locator('.list-view-filter-container .pill.user').last().click();
+        console.log(
+          AWS_BATCH_JOB_ARRAY_INDEX,
+          cgID,
+          `Filtering by ${await elm.allTextContents()}`,
+        );
+        await elm.click();
 
-    // show all issues
-    await page.locator('.nav-item', {hasText: 'All'}).click();
+        // remove filters
+        console.log(AWS_BATCH_JOB_ARRAY_INDEX, cgID, 'Removing user filter');
+        await page
+          .locator('.list-view-filter-container .pill.user')
+          .first()
+          .click();
+        console.log(AWS_BATCH_JOB_ARRAY_INDEX, cgID, 'Removing label filter');
+        await page
+          .locator('.list-view-filter-container .pill.user')
+          .last()
+          .click();
 
-    // scroll to bottom of page
-    await page.evaluate(() => {
-      window.scrollTo({
-        top: document.body.scrollHeight + 1000000,
-        behavior: 'smooth',
-      });
+        // show all issues
+        await page.locator('.nav-item', {hasText: 'All'}).click();
+
+        // scroll to bottom of page
+        await page.evaluate(() => {
+          window.scrollTo({
+            top: document.body.scrollHeight + 1000000,
+            behavior: 'smooth',
+          });
+        });
+
+        console.log(
+          AWS_BATCH_JOB_ARRAY_INDEX,
+          cgID,
+          `Finished iteration in ${Date.now() - iterationStart}ms`,
+        );
+        await page.goBack();
+        await page.waitForTimeout(DELAY_PER_ITERATION);
+      }
+      await context.close();
+      await page.close();
+      await browser.close();
+      let elapsed = Date.now() - start;
+      elapsed = elapsed - DELAY_PER_ITERATION * NUM_ITERATIONS;
+      console.log(
+        `${cgID} loadtest completed in ${(elapsed / 1000).toFixed(2)} secs`,
+      );
+      console.log(testID, `Ending Test`);
+      console.log(AWS_BATCH_JOB_ARRAY_INDEX, cgID, `Done`);
     });
-
-    console.log(
-      AWS_BATCH_JOB_ARRAY_INDEX,
-      cgID,
-      `Finished iteration in ${Date.now() - iterationStart}ms`,
-    );
-    await page.goBack();
-    await page.waitForTimeout(DELAY_PER_ITERATION);
   }
-  await context.close();
-  await page.close();
-  await browser.close();
-  let elapsed = Date.now() - start;
-  elapsed = elapsed - DELAY_PER_ITERATION * NUM_ITERATIONS;
-  console.log(
-    `${cgID} loadtest completed in ${(elapsed / 1000).toFixed(2)} secs`,
-  );
-  console.log(testID, `Ending Test`);
-  console.log(AWS_BATCH_JOB_ARRAY_INDEX, cgID, `Done`);
 });
 
 async function waitForIssueList(page) {
