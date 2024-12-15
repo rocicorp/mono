@@ -211,8 +211,8 @@ Resources:
               # limit: 190 max_connections / 8 tasks
               Value: 20
             - Name: ZERO_CVR_MAX_CONNS
-              # limit: 1708 max_connections / 8 tasks
-              Value: 200
+              # limit: 1708 max_connections / 8 tasks * 2 (total tasks)
+              Value: 100
             - Name: ZERO_SCHEMA_FILE
               Value: /opt/app/packages/zero-cache/zero-schema.json
             - Name: ZERO_PER_USER_MUTATION_LIMIT_MAX
@@ -388,7 +388,7 @@ Resources:
             LogDriver: awslogs
             Options:
               mode: non-blocking
-              max-buffer-size: 25m
+              max-buffer-size: 15m
               awslogs-group: !Ref LogGroupReplicationManager
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: replication-manager
