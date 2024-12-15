@@ -388,7 +388,7 @@ Resources:
             LogDriver: awslogs
             Options:
               mode: non-blocking
-              max-buffer-size: 15m
+              max-buffer-size: 25m
               awslogs-group: !Ref LogGroupReplicationManager
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: replication-manager
