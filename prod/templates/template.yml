@@ -53,7 +53,7 @@ Resources:
         - FARGATE
       ClusterSettings:
         - Name: containerInsights
-          Value: enabled
+          Value: enhanced
 
   # Security Group for internal service communication
   InternalServicesSG:
@@ -208,11 +208,11 @@ Resources:
             - Name: ZERO_LOG_LEVEL
               Value: debug
             - Name: ZERO_UPSTREAM_MAX_CONNS
-              # limit: 190 max_connections / 8 tasks
-              Value: 20
+              # limit: 190 max_connections / 8 tasks * 2 (during update)
+              Value: 10
             - Name: ZERO_CVR_MAX_CONNS
-              # limit: 1708 max_connections / 8 tasks
-              Value: 200
+              # limit: 1708 max_connections / 8 tasks * 2 (during update)
+              Value: 100
             - Name: ZERO_SCHEMA_FILE
               Value: /opt/app/packages/zero-cache/zero-schema.json
             - Name: ZERO_PER_USER_MUTATION_LIMIT_MAX
