@@ -290,9 +290,17 @@ export function IssuePage() {
 
   useEmojiChangeListener(issue, handleEmojiChange);
 
-  // TODO: We need the notion of the 'partial' result type to correctly render
-  // a 404 here. We can't put the 404 here now because it would flash until we
-  // get data.
+  if (!issue && issueResult.type === 'complete') {
+    return (
+      <div>
+        <div>
+          <b>Error 404</b>
+        </div>
+        <div>zarro boogs found</div>
+      </div>
+    );
+  }
+
   if (!issue || !comments) {
     return null;
   }
