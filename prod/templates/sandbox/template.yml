@@ -53,7 +53,7 @@ Resources:
         - FARGATE
       ClusterSettings:
         - Name: containerInsights
-          Value: enabled
+          Value: enhanced
 
   # Security Group for internal service communication
   InternalServicesSG:
