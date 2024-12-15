@@ -20,7 +20,8 @@ import {assert} from 'shared/src/asserts.js';
 import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.js';
-import type {CommentRow, IssueRow, Schema} from '../../../schema.js';
+import {symmetricDifference} from '../../../../../packages/shared/src/set-utils.js';
+import type {CommentRow, IssueRow, Schema, UserRow} from '../../../schema.js';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
 import {parsePermalink} from '../../comment-permalink.js';
@@ -249,8 +250,6 @@ export function IssuePage() {
 
   const canEdit = useCanEdit(issue?.creatorID);
 
-  useEmojiDataSourcePreload();
-
   const issueEmojiRef = useRef<HTMLDivElement>(null);
 
   const [recentEmojis, setRecentEmojis] = useState<Emoji[]>([]);
@@ -289,6 +288,8 @@ export function IssuePage() {
   }, []);
 
   useEmojiChangeListener(issue, handleEmojiChange);
+  useEmojiDataSourcePreload();
+  useShowToastForNewComment(comments, virtualizer);
 
   if (!issue && issueResult.type === 'complete') {
     return (
@@ -665,7 +666,7 @@ function maybeShowToastForEmoji(
 
   toast(
     <ToastContent toastID={toastID}>
-      <img className="toast-emoji-icon" src={creator.avatar} />
+      <img className="toast-avatar-icon" src={creator.avatar} />
       {creator.login + ' reacted on this issue: ' + emoji.value}
     </ToastContent>,
     {
@@ -820,22 +821,9 @@ function useEmojiChangeListener(
     enable,
   );
 
-  const lastIssueID = useRef<string | undefined>();
   const lastEmojis = useRef<Map<string, Emoji> | undefined>();
 
-  // When the issue.id changes we reset lastEmojis to undefined.
-  // First time we get the complete emojis for issue.id we update the lastEmojis.current.
-  // After that as long as issue.id does not change we update lastEmojis.current with the new emojis.
-
   useEffect(() => {
-    if (lastIssueID.current !== issueID) {
-      lastIssueID.current = issueID;
-      if (result.type === 'unknown') {
-        lastEmojis.current = undefined;
-        return;
-      }
-    }
-
     const newEmojis = new Map(emojis.map(emoji => [emoji.id, emoji]));
 
     // First time we see the complete emojis for this issue.
@@ -868,4 +856,76 @@ function useEmojiChangeListener(
       lastEmojis.current = newEmojis;
     }
   }, [cb, emojis, issueID, result.type]);
+}
+
+function useShowToastForNewComment(
+  comments:
+    | ReadonlyArray<CommentRow & {readonly creator: UserRow | undefined}>
+    | undefined,
+  virtualizer: Virtualizer<Window, HTMLElement>,
+) {
+  // Keep track of the last comment IDs so we can compare them to the current
+  // comment IDs and show a toast for new comments.
+  const lastCommentIDs = useRef<Set<string> | undefined>();
+  const {userID} = useZero();
+
+  useEffect(() => {
+    if (comments === undefined || comments.length === 0) {
+      return;
+    }
+
+    if (lastCommentIDs.current === undefined) {
+      lastCommentIDs.current = new Set(comments.map(c => c.id));
+      return;
+    }
+
+    const currentCommentIDs = new Set(comments.map(c => c.id));
+
+    // TODO: Rename symmetricDifference since it no longer matches the spec
+    const [removedCommentIDs, newCommentIDs] = symmetricDifference(
+      lastCommentIDs.current,
+      currentCommentIDs,
+    );
+
+    for (const commentID of newCommentIDs) {
+      const index = comments.findLastIndex(c => c.id === commentID);
+      if (index === -1) {
+        continue;
+      }
+
+      // Don't show a toast if the user is the one who posted the comment.
+      const comment = comments[index];
+      if (comment.creatorID === userID) {
+        continue;
+      }
+      const commentTop = virtualizer.getOffsetForIndex(index)?.[0] ?? 0;
+      const scrollTop = virtualizer.scrollOffset ?? 0;
+      const scrollHeight = virtualizer.scrollRect?.height ?? 0;
+      const isCommentBelowViewport = commentTop > scrollTop + scrollHeight;
+      if (!isCommentBelowViewport) {
+        continue;
+      }
+
+      toast(
+        <ToastContent toastID={commentID}>
+          <img className="toast-avatar-icon" src={comment.creator?.avatar} />
+          {comment.creator?.login + ' posted a new comment'}
+        </ToastContent>,
+
+        {
+          toastId: commentID,
+          containerId: 'bottom',
+          onClick: () => {
+            virtualizer.scrollToIndex(index);
+          },
+        },
+      );
+    }
+
+    for (const commentID of removedCommentIDs) {
+      toast.dismiss(commentID);
+    }
+
+    lastCommentIDs.current = currentCommentIDs;
+  }, [comments, virtualizer, userID]);
 }

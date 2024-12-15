@@ -2,10 +2,10 @@ import {
   createSchema,
   createTableSchema,
   definePermissions,
-  type ExpressionBuilder,
-  type TableSchema,
-  type Row,
   NOBODY_CAN,
+  type ExpressionBuilder,
+  type Row,
+  type TableSchema,
 } from '@rocicorp/zero';
 import type {Condition} from 'zero-protocol/src/ast.js';
 
@@ -183,6 +183,7 @@ const userPrefSchema = createTableSchema({
 
 export type IssueRow = Row<typeof issueSchema>;
 export type CommentRow = Row<typeof commentSchema>;
+export type UserRow = Row<typeof userSchema>;
 export type Schema = typeof schema;
 
 /** The contents of the zbugs JWT */
