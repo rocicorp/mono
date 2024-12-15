@@ -59,19 +59,19 @@ export function preload(z: Zero<Schema>) {
   didPreload = true;
 
   const baseIssueQuery = z.query.issue
-    .related('creator')
-    .related('assignee')
     .related('labels')
-    .related('viewState', q => q.where('userID', z.userID).one())
-    .related('emoji', emoji =>
-      emoji.related('creator', creator => creator.one()),
-    );
+    .related('viewState', q => q.where('userID', z.userID).one());
 
   const {cleanup, complete} = baseIssueQuery.preload();
   complete.then(() => {
     mark('preload complete');
     cleanup();
     baseIssueQuery
+      .related('creator')
+      .related('assignee')
+      .related('emoji', emoji =>
+        emoji.related('creator', creator => creator.one()),
+      )
       .related('comments', comments =>
         comments
           .related('creator', creator => creator.one())
