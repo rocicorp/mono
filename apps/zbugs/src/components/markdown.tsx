@@ -1,9 +1,9 @@
+import type {Element, Parent} from 'hast';
 import React, {memo} from 'react';
 import MarkdownBase from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type {Plugin} from 'unified'; // Type-only import
 import {visit} from 'unist-util-visit';
-import type {Element, Parent} from 'hast';
 
 // Type guard to check if a node is an Element
 function isElement(node: Parent | null): node is Element {
@@ -108,7 +108,7 @@ const rehypeImageToVideo: Plugin = () => {
             parent.children.splice(index, 1, videoContainer);
           } else if (parent && isElement(parent)) {
             // If parent exists but is not <p>, replace the <img> directly
-            parent.children.splice(index!, 1, videoContainer);
+            parent.children.splice(index ?? 0, 1, videoContainer);
           } else {
             // If no valid parent, replace the node itself
             node.tagName = 'div';
@@ -144,7 +144,8 @@ const Markdown = memo(({children}: {children: string}) => {
           return <p>{children}</p>;
         },
         // Ensure no additional processing for <img> elements
-        img: ({node, ...props}) => <img {...props} />,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        img: ({node: _node, ...props}) => <img {...props} />,
       }}
     >
       {children}
