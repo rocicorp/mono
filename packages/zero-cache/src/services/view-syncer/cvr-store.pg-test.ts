@@ -73,7 +73,6 @@ describe('view-syncer/cvr-store', () => {
     store = new CVRStore(
       lc,
       db,
-      db,
       TASK_ID,
       CVR_ID,
       ON_FAILURE,

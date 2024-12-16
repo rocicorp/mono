@@ -375,7 +375,6 @@ async function setup(permissions: PermissionsConfig = {}) {
     serviceID,
     SHARD_ID,
     cvrDB,
-    cvrDB,
     new PipelineDriver(
       lc.withContext('component', 'pipeline-driver'),
       new Snapshotter(lc, replicaDbFile.path),
@@ -512,14 +511,7 @@ describe('view-syncer/service', () => {
     ]);
     await nextPoke(client);
 
-    const cvrStore = new CVRStore(
-      lc,
-      cvrDB,
-      cvrDB,
-      TASK_ID,
-      serviceID,
-      ON_FAILURE,
-    );
+    const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
     const cvr = await cvrStore.load(lc, Date.now());
     expect(cvr).toMatchObject({
       clients: {
@@ -567,14 +559,7 @@ describe('view-syncer/service', () => {
       },
     ]);
 
-    const cvrStore = new CVRStore(
-      lc,
-      cvrDB,
-      cvrDB,
-      TASK_ID,
-      serviceID,
-      ON_FAILURE,
-    );
+    const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
     const cvr = await cvrStore.load(lc, Date.now());
     expect(cvr).toMatchObject({
       clients: {
@@ -2497,14 +2482,7 @@ describe('view-syncer/service', () => {
   test('waits for replica to catch up', async () => {
     // Before connecting, artificially set the CVR version to '07',
     // which is ahead of the current replica version '00'.
-    const cvrStore = new CVRStore(
-      lc,
-      cvrDB,
-      cvrDB,
-      TASK_ID,
-      serviceID,
-      ON_FAILURE,
-    );
+    const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
     await new CVRQueryDrivenUpdater(
       cvrStore,
       await cvrStore.load(lc, Date.now()),
@@ -2665,14 +2643,7 @@ describe('view-syncer/service', () => {
   });
 
   test('sends reset for CVR from different replica version up', async () => {
-    const cvrStore = new CVRStore(
-      lc,
-      cvrDB,
-      cvrDB,
-      TASK_ID,
-      serviceID,
-      ON_FAILURE,
-    );
+    const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
     await new CVRQueryDrivenUpdater(
       cvrStore,
       await cvrStore.load(lc, Date.now()),
@@ -2721,14 +2692,7 @@ describe('view-syncer/service', () => {
   });
 
   test('sends invalid base cookie if client is ahead of CVR', async () => {
-    const cvrStore = new CVRStore(
-      lc,
-      cvrDB,
-      cvrDB,
-      TASK_ID,
-      serviceID,
-      ON_FAILURE,
-    );
+    const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
     await new CVRQueryDrivenUpdater(
       cvrStore,
       await cvrStore.load(lc, Date.now()),
