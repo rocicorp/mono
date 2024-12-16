@@ -161,7 +161,7 @@ describe('view-syncer/cvr', () => {
   }
 
   test('load first time cvr', async () => {
-    const pgStore = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const pgStore = new CVRStore(lc, db, db, 'my-task', 'abc123', ON_FAILURE);
 
     const cvr = await pgStore.load(lc, LAST_CONNECT);
     expect(cvr).toEqual({
@@ -186,7 +186,7 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const pgStore2 = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const pgStore2 = new CVRStore(lc, db, db, 'my-task', 'abc123', ON_FAILURE);
     const reloaded = await pgStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(flushed);
 
@@ -251,7 +251,7 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const cvrStore = new CVRStore(lc, db, db, 'my-task', 'abc123', ON_FAILURE);
 
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
     expect(cvr).toEqual({
@@ -332,7 +332,7 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const cvrStore = new CVRStore(lc, db, db, 'my-task', 'abc123', ON_FAILURE);
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
     const updater = new CVRUpdater(cvrStore, cvr, cvr.replicaVersion);
 
@@ -382,7 +382,7 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const cvrStore2 = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const cvrStore2 = new CVRStore(lc, db, db, 'my-task', 'abc123', ON_FAILURE);
     const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
@@ -416,7 +416,7 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const cvrStore = new CVRStore(lc, db, db, 'my-task', 'abc123', ON_FAILURE);
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
     const updater = new CVRUpdater(cvrStore, cvr, cvr.replicaVersion);
 
@@ -452,7 +452,7 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const cvrStore = new CVRStore(lc, db, db, 'my-task', 'abc123', ON_FAILURE);
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
     const updater = new CVRUpdater(cvrStore, cvr, cvr.replicaVersion);
 
@@ -528,7 +528,7 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const cvrStore = new CVRStore(lc, db, db, 'my-task', 'abc123', ON_FAILURE);
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
     expect(cvr).toEqual({
       id: 'abc123',
@@ -956,7 +956,7 @@ describe('view-syncer/cvr', () => {
     });
 
     // Verify round tripping.
-    const cvrStore2 = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const cvrStore2 = new CVRStore(lc, db, db, 'my-task', 'abc123', ON_FAILURE);
     const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
@@ -1038,7 +1038,7 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const cvrStore = new CVRStore(lc, db, db, 'my-task', 'abc123', ON_FAILURE);
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
     const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
 
@@ -1071,7 +1071,14 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const doCVRStore2 = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const doCVRStore2 = new CVRStore(
+      lc,
+      db,
+      db,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
     const reloaded = await doCVRStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
@@ -1223,7 +1230,7 @@ describe('view-syncer/cvr', () => {
 
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const cvrStore = new CVRStore(lc, db, db, 'my-task', 'abc123', ON_FAILURE);
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1aa', '123');
 
@@ -1452,7 +1459,7 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const cvrStore2 = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const cvrStore2 = new CVRStore(lc, db, db, 'my-task', 'abc123', ON_FAILURE);
     const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
@@ -1693,7 +1700,7 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    let cvrStore = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    let cvrStore = new CVRStore(lc, db, db, 'my-task', 'abc123', ON_FAILURE);
     let cvr = await cvrStore.load(lc, LAST_CONNECT);
     let updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '123');
 
@@ -1887,7 +1894,7 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    cvrStore = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    cvrStore = new CVRStore(lc, db, db, 'my-task', 'abc123', ON_FAILURE);
     cvr = await cvrStore.load(lc, LAST_CONNECT);
     expect(cvr).toEqual(updated);
 
@@ -2219,7 +2226,7 @@ describe('view-syncer/cvr', () => {
 
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const cvrStore = new CVRStore(lc, db, db, 'my-task', 'abc123', ON_FAILURE);
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '123');
 
@@ -2478,7 +2485,14 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const doCVRStore2 = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const doCVRStore2 = new CVRStore(
+      lc,
+      db,
+      db,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
     const reloaded = await doCVRStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
@@ -2714,7 +2728,7 @@ describe('view-syncer/cvr', () => {
 
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const cvrStore = new CVRStore(lc, db, db, 'my-task', 'abc123', ON_FAILURE);
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '123');
 
@@ -2846,7 +2860,14 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const doCVRStore2 = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const doCVRStore2 = new CVRStore(
+      lc,
+      db,
+      db,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
     const reloaded = await doCVRStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
@@ -3085,7 +3106,7 @@ describe('view-syncer/cvr', () => {
 
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const cvrStore = new CVRStore(lc, db, db, 'my-task', 'abc123', ON_FAILURE);
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
     expect(cvr).toMatchInlineSnapshot(`
       {
@@ -3384,7 +3405,14 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    const doCVRStore2 = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const doCVRStore2 = new CVRStore(
+      lc,
+      db,
+      db,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
     const reloaded = await doCVRStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
@@ -3459,7 +3487,7 @@ describe('view-syncer/cvr', () => {
 
     await setInitialState(db, initialState);
 
-    const cvrStore = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const cvrStore = new CVRStore(lc, db, db, 'my-task', 'abc123', ON_FAILURE);
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
     const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '120');
 
@@ -3521,7 +3549,7 @@ describe('view-syncer/cvr', () => {
     `);
 
     // Verify round tripping.
-    const cvrStore2 = new CVRStore(lc, db, 'my-task', 'abc123', ON_FAILURE);
+    const cvrStore2 = new CVRStore(lc, db, db, 'my-task', 'abc123', ON_FAILURE);
     const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 

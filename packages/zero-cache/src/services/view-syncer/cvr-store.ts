@@ -118,7 +118,8 @@ class RowRecordCache {
   // been flushed to cvr.rows.
   #cache: Promise<CustomKeyMap<RowID, RowRecord>> | undefined;
   readonly #lc: LogContext;
-  readonly #db: PostgresDB;
+  readonly #highPriDB: PostgresDB;
+  readonly #lowPriDB: PostgresDB;
   readonly #cvrID: string;
   readonly #failService: (e: unknown) => void;
   readonly #deferredRowFlushThreshold: number;
@@ -132,14 +133,16 @@ class RowRecordCache {
 
   constructor(
     lc: LogContext,
-    db: PostgresDB,
+    highPriDB: PostgresDB,
+    lowPriDB: PostgresDB,
     cvrID: string,
     failService: (e: unknown) => void,
     deferredRowFlushThreshold = 100,
     setTimeoutFn = setTimeout,
   ) {
     this.#lc = lc;
-    this.#db = db;
+    this.#highPriDB = highPriDB;
+    this.#lowPriDB = lowPriDB;
     this.#cvrID = cvrID;
     this.#failService = failService;
     this.#deferredRowFlushThreshold = deferredRowFlushThreshold;
@@ -156,7 +159,7 @@ class RowRecordCache {
     this.#cache = r.promise;
 
     const cache: CustomKeyMap<RowID, RowRecord> = new CustomKeyMap(rowIDString);
-    for await (const rows of this.#db<
+    for await (const rows of this.#highPriDB<
       RowsRow[]
     >`SELECT * FROM cvr.rows WHERE "clientGroupID" = ${
       this.#cvrID
@@ -221,7 +224,10 @@ class RowRecordCache {
       while (this.#pendingRowsVersion !== this.#flushedRowsVersion) {
         const start = Date.now();
 
-        const {rows, rowsVersion} = await this.#db.begin(tx => {
+        // Note: Asynchronous flushes use the lowPriDB to rate-limit the
+        // amount of heavy lifting imposed on the DB and keep the (small)
+        // high priority requests fast.
+        const {rows, rowsVersion} = await this.#lowPriDB.begin(tx => {
           // Note: This code block is synchronous, guaranteeing that the
           // #pendingRowsVersion is consistent with the #pending rows.
           const rows = this.#pending.size;
@@ -301,7 +307,7 @@ class RowRecordCache {
     await this.flushed(lc);
     const flushMs = Date.now() - startMs;
 
-    const reader = new TransactionPool(lc, Mode.READONLY).run(this.#db);
+    const reader = new TransactionPool(lc, Mode.READONLY).run(this.#highPriDB);
     try {
       // Verify that we are reading the right version of the CVR.
       await reader.processReadTask(tx =>
@@ -441,7 +447,8 @@ export class CVRStore {
 
   constructor(
     lc: LogContext,
-    db: PostgresDB,
+    highPriDB: PostgresDB,
+    lowPriDB: PostgresDB,
     taskID: string,
     cvrID: string,
     failService: (e: unknown) => void,
@@ -450,12 +457,13 @@ export class CVRStore {
     deferredRowFlushThreshold = 100, // somewhat arbitrary
     setTimeoutFn = setTimeout,
   ) {
-    this.#db = db;
+    this.#db = highPriDB;
     this.#taskID = taskID;
     this.#id = cvrID;
     this.#rowCache = new RowRecordCache(
       lc,
-      db,
+      highPriDB,
+      lowPriDB,
       cvrID,
       failService,
       deferredRowFlushThreshold,
