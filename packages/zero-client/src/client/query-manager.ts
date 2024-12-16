@@ -1,5 +1,6 @@
 import type {ClientID} from '../../../replicache/src/mod.js';
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.js';
+import {assert} from '../../../shared/src/asserts.js';
 import {must} from '../../../shared/src/must.js';
 import {hashOfAST} from '../../../zero-protocol/src/ast-hash.js';
 import {normalizeAST, type AST} from '../../../zero-protocol/src/ast.js';
@@ -13,6 +14,8 @@ import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.js';
 
 type QueryHash = string;
 
+const RECENT_QUERIES_SIZE = 30;
+
 /**
  * Tracks what queries the client is currently subscribed to on the server.
  * Sends `changeDesiredQueries` message to server when this changes.
@@ -25,6 +28,7 @@ export class QueryManager {
     QueryHash,
     {normalized: AST; count: number; gotCallbacks: GotCallback[]}
   > = new Map();
+  readonly #recentQueries: Set<string> = new Set();
   readonly #gotQueries: Set<string> = new Set();
 
   constructor(
@@ -124,6 +128,7 @@ export class QueryManager {
     const normalized = normalizeAST(ast);
     const astHash = hashOfAST(normalized);
     let entry = this.#queries.get(astHash);
+    this.#recentQueries.delete(astHash);
     if (!entry) {
       entry = {
         normalized,
@@ -131,7 +136,6 @@ export class QueryManager {
         gotCallbacks: gotCallback === undefined ? [] : [gotCallback],
       };
       this.#queries.set(astHash, entry);
-
       this.#send([
         'changeDesiredQueries',
         {
@@ -163,14 +167,18 @@ export class QueryManager {
     const entry = must(this.#queries.get(astHash));
     --entry.count;
     if (entry.count === 0) {
-      this.#queries.delete(astHash);
-      this.#send([
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [{op: 'del', hash: astHash}],
-        },
-      ]);
+      this.#recentQueries.add(astHash);
+      if (this.#recentQueries.size > RECENT_QUERIES_SIZE) {
+        const lruAstHash = this.#recentQueries.values().next().value;
+        assert(lruAstHash);
+        this.#queries.delete(astHash);
+        this.#send([
+          'changeDesiredQueries',
+          {
+            desiredQueriesPatch: [{op: 'del', hash: lruAstHash}],
+          },
+        ]);
+      }
     }
-    return true;
   }
 }
