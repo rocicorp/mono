@@ -300,7 +300,9 @@ export function ListPage() {
           ) : (
             <span>{title}</span>
           )}
-          <span className="issue-count">{issues.length}</span>
+          {issuesResult.type === 'complete' || issues.length > 0 ? (
+            <span className="issue-count">{issues.length}</span>
+          ) : null}
         </h1>
         <Button
           ref={startSearchButton}
