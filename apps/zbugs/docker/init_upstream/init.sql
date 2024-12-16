@@ -12,7 +12,7 @@ DROP TABLE IF EXISTS "user",
 CREATE TABLE "user" (
     "id" VARCHAR PRIMARY KEY,
     "login" VARCHAR NOT NULL,
-    "name" VARCHAR NOT NULL,
+    "name" VARCHAR,
     "avatar" VARCHAR,
     "role" VARCHAR DEFAULT 'user' NOT NULL,
     "githubID" INTEGER NOT NULL

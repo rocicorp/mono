@@ -2,7 +2,13 @@
 import {describe, expectTypeOf, test} from 'vitest';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 import {
-  column,
+  boolean,
+  enumeration,
+  json,
+  number,
+  string,
+} from '../../../zero-schema/src/column.js';
+import {
   type Supertype,
   type TableSchema,
 } from '../../../zero-schema/src/table-schema.js';
@@ -84,7 +90,6 @@ function timestamp(n: number): Timestamp {
   return n as Timestamp;
 }
 
-const {string, number, json, enumeration, boolean} = column;
 const schemaWithAdvancedTypes = {
   tableName: 'schemaWithAdvancedTypes',
   columns: {

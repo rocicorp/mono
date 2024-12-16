@@ -110,8 +110,15 @@ suite('EXISTS 1 to many', () => {
         id: 'c3',
         issueID: 'i1',
       },
+      {
+        id: 'c4',
+        issueID: 'i2',
+      },
     ],
-    issue: [{id: 'i1', title: 'issue 1'}],
+    issue: [
+      {id: 'i1', title: 'issue 1'},
+      {id: 'i2', title: 'issue 2'},
+    ],
   };
 
   const joins: Joins = {
@@ -134,45 +141,366 @@ suite('EXISTS 1 to many', () => {
     },
   };
 
-  test.fails(
-    'exists receives `child.remove` events for relationships with 0 size',
-    () => {
-      /**
-       * The problem:
-       * 1. An issue is removed in a push
-       * 2. `take` fetches, bringing `c3` into scope of `exists`
-       * 3. `join` pushes a child remove for `c3`
-       * 4. `exists` receives the child remove for `c3` and throws because the size is 0 (line 147 in exists)
-       */
-      expect(() =>
-        runJoinTest({
-          sources,
-          sourceContents,
-          joins,
-          format,
-          pushes: [
-            [
-              'issue',
-              {
-                type: 'remove',
-                row: {id: 'i1', title: 'issue 1'},
-              },
-            ],
-          ],
-          addPostJoinsOperator: [
-            (i: Input, storage: Storage) => ({
-              name: 'exists',
-              op: new Exists(i, storage, 'issue', ['issueID'], 'EXISTS'),
-            }),
-            (i: Input, storage: Storage) => ({
-              name: 'take',
-              op: new Take(i, storage, 2),
-            }),
-          ],
+  test('Remove of child that joins with multiple parents, interplay with take', () => {
+    /**
+     * The problem, exists receives `child.remove` events for relationships with 0 size:
+     * 1. An issue is removed in a push
+     * 2. `take` fetches, bringing `c3` into scope of `exists`
+     * 3. `join` pushes a child remove for `c3`
+     * 4. `exists` receives the child remove for `c3` and used to throw because the size is 0,
+     * but this assert is currently disabled as a work around and the remove is just dropped
+     */
+    const {log, data, actualStorage, pushes} = runJoinTest({
+      sources,
+      sourceContents,
+      joins,
+      format,
+      pushes: [
+        [
+          'issue',
+          {
+            type: 'remove',
+            row: {id: 'i1', title: 'issue 1'},
+          },
+        ],
+      ],
+      addPostJoinsOperator: [
+        (i: Input, storage: Storage) => ({
+          name: 'exists',
+          op: new Exists(i, storage, 'issue', ['issueID'], 'EXISTS'),
         }),
-      ).not.toThrow();
-    },
-  );
+        (i: Input, storage: Storage) => ({
+          name: 'take',
+          op: new Take(i, storage, 2),
+        }),
+      ],
+    });
+
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "c4",
+          "issue": [
+            {
+              "id": "i2",
+              "title": "issue 2",
+            },
+          ],
+          "issueID": "i2",
+        },
+      ]
+    `);
+
+    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`
+      [
+        [
+          "exists",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "i1",
+                "title": "issue 1",
+              },
+              "type": "remove",
+            },
+            "row": {
+              "id": "c1",
+              "issueID": "i1",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          "exists",
+          "push",
+          {
+            "row": {
+              "id": "c1",
+              "issueID": "i1",
+            },
+            "type": "remove",
+          },
+        ],
+        [
+          "exists",
+          "fetch",
+          {
+            "constraint": undefined,
+            "reverse": true,
+            "start": {
+              "basis": "after",
+              "row": {
+                "id": "c2",
+                "issueID": "i1",
+              },
+            },
+          },
+        ],
+        [
+          "exists",
+          "fetch",
+          {
+            "constraint": undefined,
+            "start": {
+              "basis": "at",
+              "row": {
+                "id": "c2",
+                "issueID": "i1",
+              },
+            },
+          },
+        ],
+        [
+          "exists",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "i1",
+                "title": "issue 1",
+              },
+              "type": "remove",
+            },
+            "row": {
+              "id": "c2",
+              "issueID": "i1",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          "exists",
+          "push",
+          {
+            "row": {
+              "id": "c2",
+              "issueID": "i1",
+            },
+            "type": "remove",
+          },
+        ],
+        [
+          "exists",
+          "fetch",
+          {
+            "constraint": undefined,
+            "reverse": true,
+            "start": {
+              "basis": "after",
+              "row": {
+                "id": "c4",
+                "issueID": "i2",
+              },
+            },
+          },
+        ],
+        [
+          "exists",
+          "fetch",
+          {
+            "constraint": undefined,
+            "start": {
+              "basis": "at",
+              "row": {
+                "id": "c4",
+                "issueID": "i2",
+              },
+            },
+          },
+        ],
+      ]
+    `);
+    expect(log.filter(msg => msg[0] === 'take')).toMatchInlineSnapshot(`
+      [
+        [
+          "take",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "i1",
+                "title": "issue 1",
+              },
+              "type": "remove",
+            },
+            "row": {
+              "id": "c1",
+              "issueID": "i1",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          "take",
+          "push",
+          {
+            "row": {
+              "id": "c1",
+              "issueID": "i1",
+            },
+            "type": "remove",
+          },
+        ],
+        [
+          "take",
+          "push",
+          {
+            "row": {
+              "id": "c4",
+              "issueID": "i2",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          "take",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "i1",
+                "title": "issue 1",
+              },
+              "type": "remove",
+            },
+            "row": {
+              "id": "c2",
+              "issueID": "i1",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          "take",
+          "push",
+          {
+            "row": {
+              "id": "c2",
+              "issueID": "i1",
+            },
+            "type": "remove",
+          },
+        ],
+      ]
+    `);
+
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "id": "i1",
+                  "title": "issue 1",
+                },
+              },
+              "type": "remove",
+            },
+            "relationshipName": "issue",
+          },
+          "row": {
+            "id": "c1",
+            "issueID": "i1",
+          },
+          "type": "child",
+        },
+        {
+          "node": {
+            "relationships": {
+              "issue": [],
+            },
+            "row": {
+              "id": "c1",
+              "issueID": "i1",
+            },
+          },
+          "type": "remove",
+        },
+        {
+          "node": {
+            "relationships": {
+              "issue": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": "i2",
+                    "title": "issue 2",
+                  },
+                },
+              ],
+            },
+            "row": {
+              "id": "c4",
+              "issueID": "i2",
+            },
+          },
+          "type": "add",
+        },
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "id": "i1",
+                  "title": "issue 1",
+                },
+              },
+              "type": "remove",
+            },
+            "relationshipName": "issue",
+          },
+          "row": {
+            "id": "c2",
+            "issueID": "i1",
+          },
+          "type": "child",
+        },
+        {
+          "node": {
+            "relationships": {
+              "issue": [],
+            },
+            "row": {
+              "id": "c2",
+              "issueID": "i1",
+            },
+          },
+          "type": "remove",
+        },
+      ]
+    `);
+
+    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+      {
+        "row/["i1"]": 0,
+        "row/["i1"]/["c1"]": 0,
+        "row/["i1"]/["c2"]": 0,
+        "row/["i1"]/["c3"]": 0,
+        "row/["i2"]": 1,
+        "row/["i2"]/["c4"]": 1,
+      }
+    `);
+
+    expect(actualStorage['take']).toMatchInlineSnapshot(`
+      {
+        "["take"]": {
+          "bound": {
+            "id": "c4",
+            "issueID": "i2",
+          },
+          "size": 1,
+        },
+        "maxBound": {
+          "id": "c4",
+          "issueID": "i2",
+        },
+      }
+    `);
+  });
 });
 
 suite('EXISTS', () => {

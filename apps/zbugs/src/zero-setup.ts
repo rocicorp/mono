@@ -1,8 +1,10 @@
 import {Zero} from '@rocicorp/zero';
+import {type ZeroAdvancedOptions} from '@rocicorp/zero/advanced';
 import {Atom} from './atom.js';
 import {type Schema, schema} from '../schema.js';
 import {clearJwt, getJwt, getRawJwt} from './jwt.js';
 import {mark} from './perf-log.js';
+import {INITIAL_COMMENT_LIMIT} from './pages/issue/issue-page.js';
 
 export type LoginState = {
   encoded: string;
@@ -29,7 +31,7 @@ authAtom.value =
 authAtom.onChange(auth => {
   zeroAtom.value?.close();
   mark('creating new zero');
-  const z = new Zero({
+  const zOptions: ZeroAdvancedOptions<typeof schema> = {
     logLevel: 'info',
     server: import.meta.env.VITE_PUBLIC_SERVER,
     userID: auth?.decoded?.sub ?? 'anon',
@@ -42,7 +44,9 @@ authAtom.onChange(auth => {
       return auth?.encoded;
     },
     schema,
-  });
+    maxRecentQueries: 40,
+  };
+  const z = new Zero(zOptions);
   zeroAtom.value = z;
 
   exposeDevHooks(z);
@@ -58,18 +62,28 @@ export function preload(z: Zero<Schema>) {
   didPreload = true;
 
   const baseIssueQuery = z.query.issue
-    .related('creator')
-    .related('assignee')
     .related('labels')
-    .related('viewState', q => q.where('userID', z.userID).one())
-    .related('emoji');
+    .related('viewState', q => q.where('userID', z.userID).one());
 
   const {cleanup, complete} = baseIssueQuery.preload();
   complete.then(() => {
     mark('preload complete');
     cleanup();
     baseIssueQuery
-      .related('comments', q => q.related('emoji').limit(10))
+      .related('creator')
+      .related('assignee')
+      .related('emoji', emoji =>
+        emoji.related('creator', creator => creator.one()),
+      )
+      .related('comments', comments =>
+        comments
+          .related('creator', creator => creator.one())
+          .related('emoji', emoji =>
+            emoji.related('creator', creator => creator.one()),
+          )
+          .limit(INITIAL_COMMENT_LIMIT)
+          .orderBy('created', 'desc'),
+      )
       .preload();
   });
 

@@ -28,46 +28,6 @@ type EnumSchemaValue<T> = {
   customType: T;
 };
 
-export const column = {
-  string<T extends string = string>(optional: boolean = false) {
-    return {
-      type: 'string',
-      optional,
-      customType: null as unknown as T,
-    } as const;
-  },
-  number<T extends number = number>(optional: boolean = false) {
-    return {
-      type: 'number',
-      optional,
-      customType: null as unknown as T,
-    } as const;
-  },
-  boolean<T extends boolean = boolean>(optional: boolean = false) {
-    return {
-      type: 'boolean',
-      optional,
-      customType: null as unknown as T,
-    } as const;
-  },
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  json<T = any>(optional: boolean = false) {
-    return {
-      type: 'json',
-      optional,
-      customType: null as unknown as T,
-    } as const;
-  },
-  enumeration<T extends string>(optional: boolean = false) {
-    return {
-      type: 'string',
-      kind: 'enum',
-      customType: null as unknown as T,
-      optional,
-    } as const;
-  },
-};
-
 export type TableSchema = {
   readonly tableName: string;
   readonly columns: Record<string, SchemaValue | ValueType>;

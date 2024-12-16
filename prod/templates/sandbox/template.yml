@@ -53,7 +53,7 @@ Resources:
         - FARGATE
       ClusterSettings:
         - Name: containerInsights
-          Value: enabled
+          Value: enhanced
 
   # Security Group for internal service communication
   InternalServicesSG:
@@ -111,9 +111,10 @@ Resources:
             - !GetAtt VPC.Outputs.SG
             - !Ref InternalServicesSG
       DeploymentConfiguration:
-        MaximumPercent: 200
+        # Run up to 7 tasks, capping updates to 2 tasks at a time
+        MaximumPercent: 140
         MinimumHealthyPercent: 50
-      DesiredCount: 4
+      DesiredCount: 5
       TaskDefinition: !Ref "TaskDefinitionViewSyncer"
       LoadBalancers:
         - ContainerName: "view-syncer-container"
@@ -208,11 +209,11 @@ Resources:
             - Name: ZERO_LOG_LEVEL
               Value: debug
             - Name: ZERO_UPSTREAM_MAX_CONNS
-              # limit: 190 max_connections / 4 tasks
-              Value: 40
+              # limit: 190 max_connections / (5 tasks * 1.4 maximum-percent)
+              Value: 25
             - Name: ZERO_CVR_MAX_CONNS
-              # limit: 1708 max_connections / 4 tasks
-              Value: 275
+              # limit: 5000 max_connections / (5 tasks * 1.4 maximum-percent)
+              Value: 700
             - Name: ZERO_SCHEMA_FILE
               Value: /opt/app/packages/zero-cache/zero-schema.json
           Secrets:

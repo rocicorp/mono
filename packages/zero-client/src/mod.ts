@@ -1,10 +1,10 @@
 export {
-  IDBNotFoundError,
-  TransactionClosedError,
   dropAllDatabases,
   dropDatabase,
   getDefaultPuller,
+  IDBNotFoundError,
   makeIDBName,
+  TransactionClosedError,
 } from '../../replicache/src/mod.js';
 export type {
   AsyncIterableIteratorToArray,
@@ -33,17 +33,17 @@ export type {
   IterableUnion,
   JSONObject,
   JSONValue,
+  KeyTypeForScanOptions,
   KVRead,
   KVStore,
   KVWrite,
-  KeyTypeForScanOptions,
   MaybePromise,
   MutatorDefs,
   MutatorReturn,
   PatchOperation,
-  ReadTransaction,
   ReadonlyJSONObject,
   ReadonlyJSONValue,
+  ReadTransaction,
   ScanIndexOptions,
   ScanNoIndexOptions,
   ScanOptionIndexedStartKey,
@@ -57,16 +57,16 @@ export type {
   VersionNotSupportedResponse,
   WriteTransaction,
 } from '../../replicache/src/mod.js';
+export * as column from '../../zero-schema/src/column.js';
 export {
-  definePermissions,
   ANYONE_CAN,
+  definePermissions,
   NOBODY_CAN,
 } from '../../zero-schema/src/permissions.js';
 export {createSchema} from '../../zero-schema/src/schema.js';
 export {
   createTableSchema,
   type TableSchema,
-  column,
 } from '../../zero-schema/src/table-schema.js';
 export {escapeLike} from '../../zql/src/query/escape-like.js';
 export type {
@@ -79,9 +79,9 @@ export type {
   QueryReturnType,
   QueryRowType,
   QueryType,
-  Smash,
   Row,
   Rows,
+  Smash,
 } from '../../zql/src/query/query.js';
 export type {TypedView} from '../../zql/src/query/typed-view.js';
 export type {ZeroOptions} from './client/options.js';

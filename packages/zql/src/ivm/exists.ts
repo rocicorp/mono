@@ -161,7 +161,11 @@ export class Exists implements Operator {
           case 'remove': {
             let size = this.#getSize(change.row);
             if (size !== undefined) {
-              assert(size > 0);
+              // Work around for issue https://bugs.rocicorp.dev/issue/3204
+              // assert(size > 0);
+              if (size === 0) {
+                return;
+              }
               size--;
               this.#setCachedSize(change.row, size);
               this.#setSize(change.row, size);

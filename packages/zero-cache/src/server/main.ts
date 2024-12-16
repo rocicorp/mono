@@ -2,7 +2,7 @@ import {resolver} from '@rocicorp/resolver';
 import {availableParallelism} from 'node:os';
 import path from 'node:path';
 import {getZeroConfig} from '../config/zero-config.js';
-import {Dispatcher, type Workers} from '../services/dispatcher/dispatcher.js';
+import {SyncDispatcher} from '../services/dispatcher/sync-dispatcher.js';
 import type {Service} from '../services/service.js';
 import {initViewSyncerSchema} from '../services/view-syncer/schema/init.js';
 import {pgClient} from '../types/pg.js';
@@ -141,8 +141,7 @@ export default async function runWorker(
   const {port} = config;
 
   if (numSyncers) {
-    const workers: Workers = {syncers};
-    mainServices.push(new Dispatcher(lc, parent, () => workers, {port}));
+    mainServices.push(new SyncDispatcher(lc, parent, syncers, {port}));
   }
 
   parent?.send(['ready', {ready: true}]);

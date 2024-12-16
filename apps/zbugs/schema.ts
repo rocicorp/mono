@@ -2,10 +2,10 @@ import {
   createSchema,
   createTableSchema,
   definePermissions,
-  type ExpressionBuilder,
-  type TableSchema,
-  type Row,
   NOBODY_CAN,
+  type ExpressionBuilder,
+  type Row,
+  type TableSchema,
 } from '@rocicorp/zero';
 import type {Condition} from 'zero-protocol/src/ast.js';
 
@@ -14,7 +14,7 @@ const userSchema = createTableSchema({
   columns: {
     id: 'string',
     login: 'string',
-    name: 'string',
+    name: {type: 'string', optional: true},
     avatar: 'string',
     role: 'string',
   },
@@ -183,6 +183,7 @@ const userPrefSchema = createTableSchema({
 
 export type IssueRow = Row<typeof issueSchema>;
 export type CommentRow = Row<typeof commentSchema>;
+export type UserRow = Row<typeof userSchema>;
 export type Schema = typeof schema;
 
 /** The contents of the zbugs JWT */
@@ -343,7 +344,6 @@ export const permissions: ReturnType<typeof definePermissions> =
             loggedInUserIsAdmin,
             and(canSeeComment, loggedInUserIsCreator),
           ],
-          select: [canSeeComment],
         },
       },
       label: {
@@ -372,7 +372,6 @@ export const permissions: ReturnType<typeof definePermissions> =
             preMutation: NOBODY_CAN,
           },
           delete: [and(canSeeIssueLabel, allowIfAdminOrIssueCreator)],
-          select: [canSeeIssueLabel],
         },
       },
       emoji: {
@@ -386,7 +385,6 @@ export const permissions: ReturnType<typeof definePermissions> =
             postMutation: [and(canSeeEmoji, loggedInUserIsCreator)],
           },
           delete: [and(canSeeEmoji, loggedInUserIsCreator)],
-          select: [canSeeEmoji],
         },
       },
       userPref: {

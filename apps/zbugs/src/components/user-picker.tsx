@@ -12,6 +12,7 @@ type Props = {
   disabled?: boolean | undefined;
   unselectedLabel?: string | undefined;
   placeholder?: string | undefined;
+  allowNone?: boolean | undefined;
 };
 
 type User = Row<Schema['tables']['user']>;
@@ -22,6 +23,7 @@ export default function UserPicker({
   disabled,
   unselectedLabel,
   placeholder,
+  allowNone = true,
 }: Props) {
   const z = useZero();
 
@@ -56,29 +58,36 @@ export default function UserPicker({
 
   const selectedUser = selected && users.find(u => u.login === selected.login);
 
-  const unselectedItem = {
-    text: unselectedLabel ?? 'Select',
-    icon: avatarIcon,
-    value: undefined,
-  };
   const defaultItem = {
     text: placeholder ?? 'Select a user...',
     icon: avatarIcon,
     value: undefined,
   };
 
+  const items = useMemo(() => {
+    const mappedUsers = users.map(u => ({
+      text: u.login,
+      value: u,
+      icon: avatars[u.id],
+    }));
+    if (allowNone) {
+      return [
+        {
+          text: unselectedLabel ?? 'None',
+          icon: avatarIcon,
+          value: undefined,
+        },
+        ...mappedUsers,
+      ];
+    }
+    return mappedUsers;
+  }, [users, allowNone, avatars, unselectedLabel]);
+
   return (
     <Combobox
       disabled={disabled}
       onChange={c => handleSelect(c)}
-      items={[
-        unselectedItem,
-        ...users.map(u => ({
-          text: u.login,
-          value: u,
-          icon: avatars[u.id],
-        })),
-      ]}
+      items={items}
       defaultItem={defaultItem}
       selectedValue={selectedUser ?? undefined}
       className="user-picker"

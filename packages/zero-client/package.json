@@ -12,6 +12,7 @@
     "test-firefox": "vitest run --browser.name=firefox",
     "test-webkit": "vitest run --browser.name=webkit",
     "test:watch": "vitest",
+    "test:update": "vitest run -u",
     "bench": "vitest bench",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch"

@@ -28,6 +28,10 @@
   text-rendering: auto;
 }
 
+.input:not(:focus)::placeholder {
+  color: inherit;
+}
+
 .noResults,
 .option {
   display: flex;
