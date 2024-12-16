@@ -75,29 +75,13 @@ export default async function runWorker(
   assert(config.cvr.maxConnsPerWorker);
   assert(config.upstream.maxConnsPerWorker);
 
-  // Reserve 98% of the connections for high priority requests,
-  // and 2% of connections for asynchronous row updates.
-  const highPriConns = Math.max(
-    Math.floor(config.cvr.maxConnsPerWorker * 0.98),
-    1,
-  );
-  const lowPriConns = config.cvr.maxConnsPerWorker - highPriConns;
-  lc.debug?.(`CVR db connections: ${highPriConns} high, ${lowPriConns} low`);
-
   const replicaFile = replicaFileName(config.replicaFile, fileMode);
   lc.debug?.(`running view-syncer on ${replicaFile}`);
 
-  const cvrDBHigh = pgClient(lc, config.cvr.db, {
-    max: highPriConns,
-    connection: {['application_name']: `zero-sync-worker-${pid}-cvr-high`},
+  const cvrDB = pgClient(lc, config.cvr.db, {
+    max: config.cvr.maxConnsPerWorker,
+    connection: {['application_name']: `zero-sync-worker-${pid}-cvr`},
   });
-
-  const cvrDBLow = lowPriConns
-    ? pgClient(lc, config.cvr.db, {
-        max: lowPriConns,
-        connection: {['application_name']: `zero-sync-worker-${pid}-cvr-low`},
-      })
-    : cvrDBHigh;
 
   const upstreamDB = pgClient(lc, config.upstream.db, {
     max: config.upstream.maxConnsPerWorker,
@@ -105,8 +89,8 @@ export default async function runWorker(
   });
 
   const dbWarmup = Promise.allSettled([
-    ...Array.from({length: highPriConns}, () =>
-      cvrDBHigh`SELECT 1`.simple().execute(),
+    ...Array.from({length: config.cvr.maxConnsPerWorker}, () =>
+      cvrDB`SELECT 1`.simple().execute(),
     ),
     ...Array.from({length: config.upstream.maxConnsPerWorker}, () =>
       upstreamDB`SELECT 1`.simple().execute(),
@@ -133,8 +117,7 @@ export default async function runWorker(
       must(config.taskID, 'main must set --task-id'),
       id,
       config.shard.id,
-      cvrDBHigh,
-      cvrDBLow,
+      cvrDB,
       new PipelineDriver(
         logger,
         new Snapshotter(logger, replicaFile),

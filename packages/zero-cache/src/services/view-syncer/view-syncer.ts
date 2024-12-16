@@ -124,8 +124,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     taskID: string,
     clientGroupID: string,
     shardID: string,
-    highPriDB: PostgresDB,
-    lowPriDB: PostgresDB,
+    db: PostgresDB,
     pipelineDriver: PipelineDriver,
     versionChanges: Subscription<ReplicaState>,
     drainCoordinator: DrainCoordinator,
@@ -141,8 +140,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#keepaliveMs = keepaliveMs;
     this.#cvrStore = new CVRStore(
       lc,
-      highPriDB,
-      lowPriDB,
+      db,
       taskID,
       clientGroupID,
       // On failure, cancel the #stateChanges subscription. The run()
