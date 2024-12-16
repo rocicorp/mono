@@ -163,6 +163,14 @@ export interface ZeroAdvancedOptions<S extends Schema> extends ZeroOptions<S> {
    * Implementations must always call `applyViewUpdates` synchronously.
    */
   batchViewUpdates?: ((applyViewUpdates: () => void) => void) | undefined;
+
+  /**
+   * The maximum number of recent queries no longer subscribed to by a preload
+   * or view to continue syncing.
+   *
+   * Defaults is 0.
+   */
+  maxRecentQueries?: number | undefined;
 }
 
 export type UpdateNeededReason =

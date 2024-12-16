@@ -14,8 +14,6 @@ import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.js';
 
 type QueryHash = string;
 
-const RECENT_QUERIES_SIZE = 30;
-
 /**
  * Tracks what queries the client is currently subscribed to on the server.
  * Sends `changeDesiredQueries` message to server when this changes.
@@ -28,6 +26,7 @@ export class QueryManager {
     QueryHash,
     {normalized: AST; count: number; gotCallbacks: GotCallback[]}
   > = new Map();
+  readonly #recentQueriesMaxSize: number;
   readonly #recentQueries: Set<string> = new Set();
   readonly #gotQueries: Set<string> = new Set();
 
@@ -35,8 +34,10 @@ export class QueryManager {
     clientID: ClientID,
     send: (change: ChangeDesiredQueriesMessage) => void,
     experimentalWatch: InstanceType<typeof ReplicacheImpl>['experimentalWatch'],
+    recentQueriesMaxSize: number,
   ) {
     this.#clientID = clientID;
+    this.#recentQueriesMaxSize = recentQueriesMaxSize;
     this.#send = send;
     experimentalWatch(
       diff => {
@@ -159,19 +160,24 @@ export class QueryManager {
         return;
       }
       removed = true;
-      this.#remove(astHash);
+      this.#remove(astHash, gotCallback);
     };
   }
 
-  #remove(astHash: string) {
+  #remove(astHash: string, gotCallback: GotCallback | undefined) {
     const entry = must(this.#queries.get(astHash));
+    if (gotCallback) {
+      const index = entry.gotCallbacks.indexOf(gotCallback);
+      entry.gotCallbacks.splice(index, 1);
+    }
     --entry.count;
     if (entry.count === 0) {
       this.#recentQueries.add(astHash);
-      if (this.#recentQueries.size > RECENT_QUERIES_SIZE) {
+      if (this.#recentQueries.size > this.#recentQueriesMaxSize) {
         const lruAstHash = this.#recentQueries.values().next().value;
         assert(lruAstHash);
-        this.#queries.delete(astHash);
+        this.#queries.delete(lruAstHash);
+        this.#recentQueries.delete(lruAstHash);
         this.#send([
           'changeDesiredQueries',
           {
