@@ -11,18 +11,14 @@ import {installWebSocketHandoff} from './websocket-handoff.js';
 // servicing requests on the same domain as the application.
 const CONNECT_URL_PATTERN = new UrlPattern('(/:base)/sync/v:version/connect');
 
-export type Workers = {
-  syncers: Worker[];
-};
-
-export class Dispatcher extends HttpService {
+export class SyncDispatcher extends HttpService {
   readonly id = 'dispatcher';
-  readonly #workersByHostname: (hostname: string) => Workers;
+  readonly #syncers: Worker[];
 
   constructor(
     lc: LogContext,
     parent: Worker | null,
-    workersByHostname: (hostname: string) => Workers,
+    syncers: Worker[],
     opts: Options,
   ) {
     super('dispatcher', lc, opts, fastify => {
@@ -30,7 +26,7 @@ export class Dispatcher extends HttpService {
       installWebSocketHandoff(lc, req => this.#handoff(req), fastify.server);
     });
 
-    this.#workersByHostname = workersByHostname;
+    this.#syncers = syncers;
     if (parent) {
       installWebSocketHandoff(lc, req => this.#handoff(req), parent);
     }
@@ -51,16 +47,11 @@ export class Dispatcher extends HttpService {
     if (error !== null) {
       throw new Error(error);
     }
-    const {host} = headers;
-    if (!host) {
-      throw new Error('Missing Host field');
-    }
     const {clientGroupID} = params;
-    const {syncers} = this.#workersByHostname(host);
-    const syncer = h32(clientGroupID) % syncers.length;
+    const syncer = h32(clientGroupID) % this.#syncers.length;
 
     this._lc.debug?.(`connecting ${clientGroupID} to syncer ${syncer}`);
-    return {payload: params, receiver: syncers[syncer]};
+    return {payload: params, receiver: this.#syncers[syncer]};
   }
 }
 
