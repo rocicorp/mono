@@ -24,7 +24,7 @@ import {symmetricDifferences} from '../../../../../packages/shared/src/set-utils
 import type {CommentRow, IssueRow, Schema, UserRow} from '../../../schema.js';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
-import {parsePermalink} from '../../comment-permalink.js';
+import {makePermalink, parsePermalink} from '../../comment-permalink.js';
 import {Button} from '../../components/button.js';
 import {CanEdit} from '../../components/can-edit.js';
 import {Combobox} from '../../components/combobox.js';
@@ -897,10 +897,12 @@ function useShowToastForNewComment(
       if (comment.creatorID === userID) {
         continue;
       }
-      const commentTop = virtualizer.getOffsetForIndex(index)?.[0] ?? 0;
+
       const scrollTop = virtualizer.scrollOffset ?? 0;
-      const scrollHeight = virtualizer.scrollRect?.height ?? 0;
-      const isCommentBelowViewport = commentTop > scrollTop + scrollHeight;
+      const clientHeight = virtualizer.scrollRect?.height ?? 0;
+      const isCommentBelowViewport =
+        virtualizer.measurementsCache[index].start > scrollTop + clientHeight;
+
       if (!isCommentBelowViewport) {
         continue;
       }
@@ -915,7 +917,7 @@ function useShowToastForNewComment(
           toastId: commentID,
           containerId: 'bottom',
           onClick: () => {
-            virtualizer.scrollToIndex(index);
+            navigate('#' + makePermalink(comment));
           },
         },
       );
