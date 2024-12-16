@@ -77,3 +77,7 @@ packages/zero/deps
 *.0x/
 .aws-sam
 parameters.json
+
+playwright-report/
+test-results/
+debug-scratch.md

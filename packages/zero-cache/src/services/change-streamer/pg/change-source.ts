@@ -21,7 +21,7 @@ import {deepEqual} from '../../../../../shared/src/json.js';
 import {must} from '../../../../../shared/src/must.js';
 import {
   intersection,
-  symmetricDifference,
+  symmetricDifferences,
 } from '../../../../../shared/src/set-utils.js';
 import {sleep} from '../../../../../shared/src/sleep.js';
 import * as v from '../../../../../shared/src/valita.js';
@@ -528,7 +528,7 @@ class ChangeMaker {
       validate(this.#lc, this.#shardID, table);
     }
 
-    const [dropped, created] = symmetricDifference(
+    const [dropped, created] = symmetricDifferences(
       new Set(prevIndexes.keys()),
       new Set(nextIndexes.keys()),
     );
@@ -578,7 +578,7 @@ class ChangeMaker {
     // the exception being `ALTER TABLE`, for which a table rename should not be
     // confused as a drop + add.
     if (tag !== 'ALTER TABLE') {
-      const [dropped, created] = symmetricDifference(
+      const [dropped, created] = symmetricDifferences(
         new Set(prevTables.keys()),
         new Set(nextTables.keys()),
       );
@@ -607,7 +607,7 @@ class ChangeMaker {
     newTable: TableSpec,
   ): DataChange[] {
     const table = {schema: newTable.schema, name: newTable.name};
-    const [dropped, added] = symmetricDifference(
+    const [dropped, added] = symmetricDifferences(
       new Set(Object.keys(oldTable.columns)),
       new Set(Object.keys(newTable.columns)),
     );
@@ -633,7 +633,7 @@ class ChangeMaker {
     newTable: TableSpec,
   ): DataChange[] {
     const table = {schema: newTable.schema, name: newTable.name};
-    const [d, a] = symmetricDifference(
+    const [d, a] = symmetricDifferences(
       new Set(Object.keys(oldTable.columns)),
       new Set(Object.keys(newTable.columns)),
     );

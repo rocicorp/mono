@@ -49,7 +49,7 @@ export function difference<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): Set<T> {
   return result;
 }
 
-export function symmetricDifference<T>(
+export function symmetricDifferences<T>(
   a: Set<T>,
   b: Set<T>,
 ): [onlyA: Set<T>, onlyB: Set<T>] {

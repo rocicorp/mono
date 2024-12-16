@@ -1,4 +1,5 @@
 import {Zero} from '@rocicorp/zero';
+import {type ZeroAdvancedOptions} from '@rocicorp/zero/advanced';
 import {Atom} from './atom.js';
 import {type Schema, schema} from '../schema.js';
 import {clearJwt, getJwt, getRawJwt} from './jwt.js';
@@ -30,7 +31,7 @@ authAtom.value =
 authAtom.onChange(auth => {
   zeroAtom.value?.close();
   mark('creating new zero');
-  const z = new Zero({
+  const zOptions: ZeroAdvancedOptions<typeof schema> = {
     logLevel: 'info',
     server: import.meta.env.VITE_PUBLIC_SERVER,
     userID: auth?.decoded?.sub ?? 'anon',
@@ -43,7 +44,9 @@ authAtom.onChange(auth => {
       return auth?.encoded;
     },
     schema,
-  });
+    maxRecentQueries: 20,
+  };
+  const z = new Zero(zOptions);
   zeroAtom.value = z;
 
   exposeDevHooks(z);
@@ -59,19 +62,19 @@ export function preload(z: Zero<Schema>) {
   didPreload = true;
 
   const baseIssueQuery = z.query.issue
-    .related('creator')
-    .related('assignee')
     .related('labels')
-    .related('viewState', q => q.where('userID', z.userID).one())
-    .related('emoji', emoji =>
-      emoji.related('creator', creator => creator.one()),
-    );
+    .related('viewState', q => q.where('userID', z.userID).one());
 
   const {cleanup, complete} = baseIssueQuery.preload();
   complete.then(() => {
     mark('preload complete');
     cleanup();
     baseIssueQuery
+      .related('creator')
+      .related('assignee')
+      .related('emoji', emoji =>
+        emoji.related('creator', creator => creator.one()),
+      )
       .related('comments', comments =>
         comments
           .related('creator', creator => creator.one())
