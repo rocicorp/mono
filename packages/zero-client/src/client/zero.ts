@@ -375,6 +375,7 @@ export class Zero<const S extends Schema> {
       kvStore = 'idb',
       schema,
       batchViewUpdates = applyViewUpdates => applyViewUpdates(),
+      maxRecentQueries = 0,
     } = options as ZeroAdvancedOptions<S>;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
@@ -481,6 +482,7 @@ export class Zero<const S extends Schema> {
       rep.clientID,
       msg => this.#sendChangeDesiredQueries(msg),
       rep.experimentalWatch.bind(rep),
+      maxRecentQueries,
     );
 
     this.#zeroContext = new ZeroContext(

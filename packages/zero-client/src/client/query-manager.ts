@@ -1,5 +1,6 @@
 import type {ClientID} from '../../../replicache/src/mod.js';
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.js';
+import {assert} from '../../../shared/src/asserts.js';
 import {must} from '../../../shared/src/must.js';
 import {hashOfAST} from '../../../zero-protocol/src/ast-hash.js';
 import {normalizeAST, type AST} from '../../../zero-protocol/src/ast.js';
@@ -25,14 +26,18 @@ export class QueryManager {
     QueryHash,
     {normalized: AST; count: number; gotCallbacks: GotCallback[]}
   > = new Map();
+  readonly #recentQueriesMaxSize: number;
+  readonly #recentQueries: Set<string> = new Set();
   readonly #gotQueries: Set<string> = new Set();
 
   constructor(
     clientID: ClientID,
     send: (change: ChangeDesiredQueriesMessage) => void,
     experimentalWatch: InstanceType<typeof ReplicacheImpl>['experimentalWatch'],
+    recentQueriesMaxSize: number,
   ) {
     this.#clientID = clientID;
+    this.#recentQueriesMaxSize = recentQueriesMaxSize;
     this.#send = send;
     experimentalWatch(
       diff => {
@@ -124,6 +129,7 @@ export class QueryManager {
     const normalized = normalizeAST(ast);
     const astHash = hashOfAST(normalized);
     let entry = this.#queries.get(astHash);
+    this.#recentQueries.delete(astHash);
     if (!entry) {
       entry = {
         normalized,
@@ -131,7 +137,6 @@ export class QueryManager {
         gotCallbacks: gotCallback === undefined ? [] : [gotCallback],
       };
       this.#queries.set(astHash, entry);
-
       this.#send([
         'changeDesiredQueries',
         {
@@ -155,22 +160,31 @@ export class QueryManager {
         return;
       }
       removed = true;
-      this.#remove(astHash);
+      this.#remove(astHash, gotCallback);
     };
   }
 
-  #remove(astHash: string) {
+  #remove(astHash: string, gotCallback: GotCallback | undefined) {
     const entry = must(this.#queries.get(astHash));
+    if (gotCallback) {
+      const index = entry.gotCallbacks.indexOf(gotCallback);
+      entry.gotCallbacks.splice(index, 1);
+    }
     --entry.count;
     if (entry.count === 0) {
-      this.#queries.delete(astHash);
-      this.#send([
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [{op: 'del', hash: astHash}],
-        },
-      ]);
+      this.#recentQueries.add(astHash);
+      if (this.#recentQueries.size > this.#recentQueriesMaxSize) {
+        const lruAstHash = this.#recentQueries.values().next().value;
+        assert(lruAstHash);
+        this.#queries.delete(lruAstHash);
+        this.#recentQueries.delete(lruAstHash);
+        this.#send([
+          'changeDesiredQueries',
+          {
+            desiredQueriesPatch: [{op: 'del', hash: lruAstHash}],
+          },
+        ]);
+      }
     }
-    return true;
   }
 }
