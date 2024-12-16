@@ -3,7 +3,7 @@ import {
   difference,
   equals,
   intersection,
-  symmetricDifference,
+  symmetricDifferences,
   union,
 } from './set-utils.js';
 
@@ -81,17 +81,17 @@ test('difference', () => {
   t('abc', 'abcd', '');
 });
 
-test('symmetricDifference', () => {
+test('symmetricDifferences', () => {
   const t = <T>(
     a: Iterable<T>,
     b: Iterable<T>,
     expected: [Iterable<T>, Iterable<T>],
   ) => {
-    expect(symmetricDifference(new Set(a), new Set(b))).toEqual([
+    expect(symmetricDifferences(new Set(a), new Set(b))).toEqual([
       new Set(expected[0]),
       new Set(expected[1]),
     ]);
-    expect(symmetricDifference(new Set(b), new Set(a))).toEqual([
+    expect(symmetricDifferences(new Set(b), new Set(a))).toEqual([
       new Set(expected[1]),
       new Set(expected[0]),
     ]);
