@@ -551,7 +551,7 @@ export function IssuePage() {
           <Button
             className="show-older-comments"
             style={{
-              visibility: hasOlderComments ? 'visible' : 'visible',
+              visibility: hasOlderComments ? 'visible' : 'hidden',
             }}
             onAction={() => setDisplayAllComments(true)}
           >
