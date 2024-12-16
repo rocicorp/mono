@@ -13,6 +13,7 @@ type Props = {
   unselectedLabel?: string | undefined;
   placeholder?: string | undefined;
   allowNone?: boolean | undefined;
+  crewOnly?: boolean | undefined;
 };
 
 type User = Row<Schema['tables']['user']>;
@@ -24,14 +25,16 @@ export default function UserPicker({
   unselectedLabel,
   placeholder,
   allowNone = true,
+  crewOnly = false,
 }: Props) {
   const z = useZero();
 
-  // if disabled we only need the selected user
-  const q =
-    selected?.login && disabled
-      ? z.query.user.where('login', selected.login)
-      : z.query.user.where('role', 'crew');
+  let q = z.query.user;
+  if (disabled && selected?.login) {
+    q = q.where('login', selected.login);
+  } else if (crewOnly) {
+    q = q.where('role', 'crew');
+  }
 
   const [unsortedUsers] = useQuery(q);
   // TODO: Support case-insensitive sorting in ZQL.
