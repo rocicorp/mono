@@ -75,10 +75,10 @@ export default async function runWorker(
   assert(config.cvr.maxConnsPerWorker);
   assert(config.upstream.maxConnsPerWorker);
 
-  // Reserve 90% of the connections for high priority requests,
-  // and 10% of connections for asynchronous row updates.
+  // Reserve 98% of the connections for high priority requests,
+  // and 2% of connections for asynchronous row updates.
   const highPriConns = Math.max(
-    Math.floor(config.cvr.maxConnsPerWorker * 0.9),
+    Math.floor(config.cvr.maxConnsPerWorker * 0.98),
     1,
   );
   const lowPriConns = config.cvr.maxConnsPerWorker - highPriConns;
