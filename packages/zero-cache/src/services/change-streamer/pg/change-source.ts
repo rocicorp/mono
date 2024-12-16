@@ -528,10 +528,7 @@ class ChangeMaker {
       validate(this.#lc, this.#shardID, table);
     }
 
-    const [dropped, created] = symmetricDifferences(
-      new Set(prevIndexes.keys()),
-      new Set(nextIndexes.keys()),
-    );
+    const [dropped, created] = symmetricDifferences(prevIndexes, nextIndexes);
 
     // Drop indexes first so that allow dropping dependent objects.
     for (const id of dropped) {
@@ -540,10 +537,7 @@ class ChangeMaker {
     }
 
     if (tag === 'ALTER PUBLICATION') {
-      const tables = intersection(
-        new Set(prevTables.keys()),
-        new Set(nextTables.keys()),
-      );
+      const tables = intersection(prevTables, nextTables);
       for (const id of tables) {
         changes.push(
           ...this.#getAddedOrDroppedColumnChanges(
@@ -578,10 +572,7 @@ class ChangeMaker {
     // the exception being `ALTER TABLE`, for which a table rename should not be
     // confused as a drop + add.
     if (tag !== 'ALTER TABLE') {
-      const [dropped, created] = symmetricDifferences(
-        new Set(prevTables.keys()),
-        new Set(nextTables.keys()),
-      );
+      const [dropped, created] = symmetricDifferences(prevTables, nextTables);
       for (const id of dropped) {
         const {schema, name} = must(prevTables.get(id));
         changes.push({tag: 'drop-table', id: {schema, name}});
