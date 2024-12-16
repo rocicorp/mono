@@ -487,10 +487,9 @@ class ChangeMaker {
       event,
     ).map(change => ['data', change] satisfies Data);
 
-    this.#lc.info?.(
-      `${changes.length} schema change(s) for ${event.context.query}`,
-      changes,
-    );
+    this.#lc
+      .withContext('query', event.context.query)
+      .info?.(`${changes.length} schema change(s)`, changes);
 
     return changes;
   }
