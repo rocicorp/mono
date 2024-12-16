@@ -1,10 +1,10 @@
 import {Zero} from '@rocicorp/zero';
+import {type ZeroAdvancedOptions} from '@rocicorp/zero/advanced';
 import {Atom} from './atom.js';
 import {type Schema, schema} from '../schema.js';
 import {clearJwt, getJwt, getRawJwt} from './jwt.js';
 import {mark} from './perf-log.js';
 import {INITIAL_COMMENT_LIMIT} from './pages/issue/issue-page.js';
-import type {ZeroAdvancedOptions} from 'zero-client/src/client/options.js';
 
 export type LoginState = {
   encoded: string;
