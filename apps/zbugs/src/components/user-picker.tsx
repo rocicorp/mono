@@ -27,7 +27,13 @@ export default function UserPicker({
 }: Props) {
   const z = useZero();
 
-  const [unsortedUsers] = useQuery(z.query.user);
+  // if disabled we only need the selected user
+  const q =
+    selected?.login && disabled
+      ? z.query.user.where('login', selected.login)
+      : z.query.user.where('role', 'crew');
+
+  const [unsortedUsers] = useQuery(q);
   // TODO: Support case-insensitive sorting in ZQL.
   const users = useMemo(
     () => unsortedUsers.toSorted((a, b) => a.login.localeCompare(b.login)),
