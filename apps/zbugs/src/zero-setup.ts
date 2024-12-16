@@ -4,6 +4,7 @@ import {type Schema, schema} from '../schema.js';
 import {clearJwt, getJwt, getRawJwt} from './jwt.js';
 import {mark} from './perf-log.js';
 import {INITIAL_COMMENT_LIMIT} from './pages/issue/issue-page.js';
+import type {ZeroAdvancedOptions} from 'zero-client/src/client/options.js';
 
 export type LoginState = {
   encoded: string;
@@ -30,7 +31,7 @@ authAtom.value =
 authAtom.onChange(auth => {
   zeroAtom.value?.close();
   mark('creating new zero');
-  const z = new Zero({
+  const zOptions: ZeroAdvancedOptions<typeof schema> = {
     logLevel: 'info',
     server: import.meta.env.VITE_PUBLIC_SERVER,
     userID: auth?.decoded?.sub ?? 'anon',
@@ -43,7 +44,9 @@ authAtom.onChange(auth => {
       return auth?.encoded;
     },
     schema,
-  });
+    maxRecentQueries: 20,
+  };
+  const z = new Zero(zOptions);
   zeroAtom.value = z;
 
   exposeDevHooks(z);
