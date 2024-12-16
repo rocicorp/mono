@@ -549,6 +549,7 @@ export function IssuePage() {
 
           <h2 className="issue-detail-label">Comments</h2>
           <Button
+            className="show-older-comments"
             style={{
               visibility: hasOlderComments ? 'visible' : 'hidden',
             }}
