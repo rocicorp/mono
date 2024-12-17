@@ -44,7 +44,7 @@ authAtom.onChange(auth => {
       return auth?.encoded;
     },
     schema,
-    maxRecentQueries: 40,
+    maxRecentQueries: 1000,
   };
   const z = new Zero(zOptions);
   zeroAtom.value = z;
