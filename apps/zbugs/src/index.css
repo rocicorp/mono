@@ -833,9 +833,9 @@ textarea.autoResize {
   border: 1px solid var(--color-text-dimmed-label);
   border-radius: 0.5rem;
   padding: 0.25rem 0.5rem;
-  display: inline-block;
-  margin-bottom: 1rem;
-  width: 100%;
+  display: block;
+  margin: 0 auto 1rem;
+  width: fit-content;
 }
 
 .show-older-comments:hover {
