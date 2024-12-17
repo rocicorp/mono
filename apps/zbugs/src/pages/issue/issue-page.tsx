@@ -787,12 +787,15 @@ function getScrollRestore(
   virtualizer: Virtualizer<Window, HTMLElement>,
   comments: readonly {id: string}[],
 ): () => void {
-  const {scrollHeight, clientHeight, scrollTop} = document.documentElement;
+  const getScrollHeight = () =>
+    virtualizer.options.scrollMargin + virtualizer.getTotalSize();
+  const getClientHeight = () => virtualizer.scrollRect?.height ?? 0;
+  const getScrollTop = () => virtualizer.scrollOffset ?? 0;
 
   // If the issue description is visible we keep scroll as is.
   if (issueDescriptionElement && issueDescriptionElement.isConnected) {
     const rect = issueDescriptionElement.getBoundingClientRect();
-    const inView = rect.bottom > 0 && rect.top < clientHeight;
+    const inView = rect.bottom > 0 && rect.top < getClientHeight();
     if (inView) {
       return noop;
     }
@@ -800,16 +803,18 @@ function getScrollRestore(
 
   // If almost at the bottom of the page, maintain the scrollBottom.
   const bottomMargin = 175;
-  const scrollBottom = scrollHeight - scrollTop - clientHeight;
+  const scrollBottom = getScrollHeight() - getScrollTop() - getClientHeight();
 
   if (scrollBottom <= bottomMargin) {
     return () => {
-      const {scrollHeight, clientHeight} = document.documentElement;
-      virtualizer.scrollToOffset(scrollHeight - clientHeight - scrollBottom);
+      virtualizer.scrollToOffset(
+        getScrollHeight() - getClientHeight() - scrollBottom,
+      );
     };
   }
 
   // Npw we use the first comment that is visible in the viewport as the anchor.
+  const scrollTop = getScrollTop();
   const topVirtualItem = virtualizer.getVirtualItemForOffset(scrollTop);
   if (topVirtualItem) {
     const top = topVirtualItem.start - scrollTop;
