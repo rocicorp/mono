@@ -1,5 +1,5 @@
 import classNames from 'classnames';
-import {useEffect, useState} from 'react';
+import {memo, useEffect, useState} from 'react';
 import {useIntersectionObserver} from 'usehooks-ts';
 import type {Emoji} from '../emoji-utils.js';
 import {
@@ -32,101 +32,103 @@ type Props = {
   subjectID: string;
 };
 
-export function EmojiPill({
-  normalizedEmoji,
-  emojis,
-  addOrRemoveEmoji,
-  recentEmojis,
-  removeRecentEmoji,
-  subjectID,
-}: Props) {
-  const z = useZero();
-  const skinTone = useNumericPref(SKIN_TONE_PREF, 0);
-  const mine = findEmojiForCreator(emojis, z.userID) !== undefined;
-  const [forceShow, setForceShow] = useState(false);
-  const [wasTriggered, setWasTriggered] = useState(false);
-  const [triggeredEmojis, setTriggeredEmojis] = useState<Emoji[]>([]);
-  const {isIntersecting, ref} = useIntersectionObserver({
-    threshold: 0.5,
-    freezeOnceVisible: true,
-  });
-  const documentHasFocus = useDocumentHasFocus();
+export const EmojiPill = memo(
+  ({
+    normalizedEmoji,
+    emojis,
+    addOrRemoveEmoji,
+    recentEmojis,
+    removeRecentEmoji,
+    subjectID,
+  }: Props) => {
+    const z = useZero();
+    const skinTone = useNumericPref(SKIN_TONE_PREF, 0);
+    const mine = findEmojiForCreator(emojis, z.userID) !== undefined;
+    const [forceShow, setForceShow] = useState(false);
+    const [wasTriggered, setWasTriggered] = useState(false);
+    const [triggeredEmojis, setTriggeredEmojis] = useState<Emoji[]>([]);
+    const {isIntersecting, ref} = useIntersectionObserver({
+      threshold: 0.5,
+      freezeOnceVisible: true,
+    });
+    const documentHasFocus = useDocumentHasFocus();
 
-  useEffect(() => {
-    if (!recentEmojis) {
-      return;
-    }
-    const newTriggeredEmojis: Emoji[] = [];
-    for (const emoji of recentEmojis) {
-      if (emojis.some(e => e.id === emoji.id)) {
-        setWasTriggered(true);
-        newTriggeredEmojis.push(emoji);
+    useEffect(() => {
+      if (!recentEmojis) {
+        return;
       }
-    }
-    setTriggeredEmojis(newTriggeredEmojis);
-  }, [emojis, recentEmojis, subjectID]);
-
-  useEffect(() => {
-    if (wasTriggered && isIntersecting && !forceShow) {
-      setForceShow(true);
-    }
-  }, [isIntersecting, forceShow, wasTriggered]);
-
-  useEffect(() => {
-    if (forceShow && documentHasFocus && removeRecentEmoji) {
-      const id = setTimeout(() => {
-        setForceShow(false);
-        setWasTriggered(false);
-        const [first, ...rest] = triggeredEmojis;
-        if (first) {
-          removeRecentEmoji(first.id);
+      const newTriggeredEmojis: Emoji[] = [];
+      for (const emoji of recentEmojis) {
+        if (emojis.some(e => e.id === emoji.id)) {
+          newTriggeredEmojis.push(emoji);
         }
-        setTriggeredEmojis(rest);
-      }, triggeredTooltipDuration);
+      }
+      setWasTriggered(newTriggeredEmojis.length > 0);
+      setTriggeredEmojis(newTriggeredEmojis);
+    }, [emojis, recentEmojis, subjectID]);
 
-      return () => clearTimeout(id);
-    }
-    return () => void 0;
-  }, [triggeredEmojis, documentHasFocus, forceShow, removeRecentEmoji]);
+    useEffect(() => {
+      if (wasTriggered && isIntersecting && !forceShow) {
+        setForceShow(true);
+      }
+    }, [isIntersecting, forceShow, wasTriggered]);
 
-  const triggered = triggeredEmojis.length > 0;
-
-  return (
-    <Tooltip open={forceShow || undefined}>
-      <TooltipTrigger>
-        <ButtonWithLoginCheck
-          ref={ref}
-          className={classNames('emoji-pill', {
-            mine,
-            triggered,
-          })}
-          eventName="Add to existing emoji reaction"
-          key={normalizedEmoji}
-          loginMessage={loginMessage}
-          onAction={() =>
-            addOrRemoveEmoji({
-              unicode: setSkinTone(normalizedEmoji, skinTone),
-              annotation: emojis[0].annotation ?? '',
-            })
+    useEffect(() => {
+      if (forceShow && documentHasFocus && removeRecentEmoji) {
+        const id = setTimeout(() => {
+          setForceShow(false);
+          setWasTriggered(false);
+          const [first, ...rest] = triggeredEmojis;
+          if (first) {
+            removeRecentEmoji(first.id);
           }
-        >
-          {unique(emojis).map(value => (
-            <span key={value}>{value}</span>
-          ))}
-          {' ' + emojis.length}
-        </ButtonWithLoginCheck>
-      </TooltipTrigger>
+          setTriggeredEmojis(rest);
+        }, triggeredTooltipDuration);
 
-      <TooltipContent className={classNames({triggered})}>
-        {triggeredEmojis.length > 0 ? (
-          <TriggeredTooltipContent emojis={triggeredEmojis} />
-        ) : (
-          formatEmojiCreatorList(emojis, z.userID)
-        )}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
+        return () => clearTimeout(id);
+      }
+      return () => void 0;
+    }, [triggeredEmojis, documentHasFocus, forceShow, removeRecentEmoji]);
+
+    const triggered = triggeredEmojis.length > 0;
+
+    return (
+      <Tooltip open={forceShow || undefined}>
+        <TooltipTrigger>
+          <ButtonWithLoginCheck
+            ref={ref}
+            className={classNames('emoji-pill', {
+              mine,
+              triggered,
+            })}
+            eventName="Add to existing emoji reaction"
+            key={normalizedEmoji}
+            loginMessage={loginMessage}
+            onAction={() =>
+              addOrRemoveEmoji({
+                unicode: setSkinTone(normalizedEmoji, skinTone),
+                annotation: emojis[0].annotation ?? '',
+              })
+            }
+          >
+            {unique(emojis).map(value => (
+              <span key={value}>{value}</span>
+            ))}
+            {' ' + emojis.length}
+          </ButtonWithLoginCheck>
+        </TooltipTrigger>
+
+        <TooltipContent className={classNames({triggered})}>
+          {triggeredEmojis.length > 0 ? (
+            <TriggeredTooltipContent emojis={triggeredEmojis} />
+          ) : (
+            formatEmojiCreatorList(emojis, z.userID)
+          )}
+        </TooltipContent>
+      </Tooltip>
+    );
+  },
+);
 
 function TriggeredTooltipContent({emojis}: {emojis: Emoji[]}) {
   const emoji = emojis[0];
