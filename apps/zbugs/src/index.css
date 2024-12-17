@@ -1382,6 +1382,7 @@ emoji-picker {
 
 .Toastify__toast-container {
   --toastify-toast-width: 100vw;
+  pointer-events: none;
 }
 
 .Toastify__toast {
@@ -1404,6 +1405,7 @@ emoji-picker {
 
 .Toastify__toast-body > div {
   width: max-content;
+  pointer-events: auto;
 }
 
 .Toastify__toast .emoji-icon {
