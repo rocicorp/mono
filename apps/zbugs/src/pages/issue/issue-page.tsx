@@ -49,6 +49,7 @@ import {preload} from '../../zero-setup.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
 import {isCtrlEnter} from './is-ctrl-enter.js';
+import {recordPageLoad} from '../../page-load-stats.js';
 
 const emojiToastShowDuration = 3_000;
 
@@ -93,6 +94,7 @@ export function IssuePage() {
 
   useEffect(() => {
     if (issueResult.type === 'complete') {
+      recordPageLoad('issue-page');
       preload(z);
     }
   }, [issueResult.type, z]);
