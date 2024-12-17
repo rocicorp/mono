@@ -614,4 +614,76 @@ describe('view-syncer/cvr-store', () => {
     // 12 + (30 * 10)
     expect(await db`SELECT COUNT(*) FROM cvr.rows`).toEqual([{count: 312n}]);
   });
+
+  test('large batch row updates', async () => {
+    const now = Date.UTC(2024, 10, 23);
+    let cvr = await store.load(lc, CONNECT_TIME);
+
+    // 12 rows set up in beforeEach().
+    expect(await db`SELECT COUNT(*) FROM cvr.rows`).toEqual([{count: 12n}]);
+
+    const updater = new CVRQueryDrivenUpdater(store, cvr, '04', '01');
+    updater.trackQueries(
+      lc,
+      [{id: 'foo', transformationHash: 'foo-transformed'}],
+      [],
+    );
+
+    const rows = new CustomKeyMap<RowID, RowUpdate>(rowIDString);
+    // Should flush in batches of 512, 256, 128, 127, with the last one being unprepared.
+    for (let i = 0; i < 1023; i++) {
+      const id = String(20 + i);
+      rows.set(
+        {schema: 'public', table: 'issues', rowKey: {id}},
+        {version: '04', contents: {id}, refCounts: {foo: 1}},
+      );
+    }
+    await updater.received(lc, rows);
+    cvr = (await updater.flush(lc, CONNECT_TIME, now)).cvr;
+
+    expect(await db`SELECT * FROM cvr.instances`).toMatchInlineSnapshot(`
+    Result [
+      {
+        "clientGroupID": "my-cvr",
+        "grantedAt": 1732233600000,
+        "lastActive": 1732320000000,
+        "owner": "my-task",
+        "replicaVersion": "01",
+        "version": "04",
+      },
+    ]
+  `);
+
+    // rowsVersion === '03' (flush deferred).
+    expect(await db`SELECT * FROM cvr."rowsVersion"`).toMatchInlineSnapshot(`
+    Result [
+      {
+        "clientGroupID": "my-cvr",
+        "version": "03",
+      },
+    ]
+  `);
+
+    // Still only 12 rows.
+    expect(await db`SELECT COUNT(*) FROM cvr.rows`).toEqual([{count: 12n}]);
+
+    // Flush was scheduled.
+    expect(setTimeoutFn).toHaveBeenCalledOnce();
+
+    // Now run the flush logic.
+    await setTimeoutFn.mock.calls[0][0]();
+
+    // rowsVersion === '04' (flushed).
+    expect(await db`SELECT * FROM cvr."rowsVersion"`).toMatchInlineSnapshot(`
+    Result [
+      {
+        "clientGroupID": "my-cvr",
+        "version": "04",
+      },
+    ]
+  `);
+
+    // 12 + 1023 = 1035
+    expect(await db`SELECT COUNT(*) FROM cvr.rows`).toEqual([{count: 1035n}]);
+  });
 });

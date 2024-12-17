@@ -15,6 +15,7 @@ import {promiseVoid} from '../../../../shared/src/resolved-promises.js';
 import {sleep} from '../../../../shared/src/sleep.js';
 import {astSchema} from '../../../../zero-protocol/src/ast.js';
 import {ErrorKind} from '../../../../zero-protocol/src/error.js';
+import {multiInsertParams, multiInsertStatement} from '../../db/queries.js';
 import {Mode, TransactionPool} from '../../db/transaction-pool.js';
 import type {JSONValue} from '../../types/bigint-json.js';
 import {ErrorForClient} from '../../types/error-for-client.js';
@@ -363,20 +364,83 @@ class RowRecordCache {
            DO UPDATE SET ${tx(rowsVersion)}`.execute(),
     ];
     let i = 0;
+    let batchSize = ROW_RECORD_UPSERT_BATCH_MAX_SIZE;
+    let prepare = true;
+
     while (i < rowRecordRows.length) {
+      const remaining = rowRecordRows.length - i;
+
+      while (batchSize > remaining) {
+        batchSize /= 2;
+        if (batchSize < ROW_RECORD_UPSERT_BATCH_MIN_PREPARED_SIZE) {
+          batchSize = remaining;
+          prepare = false;
+          break;
+        }
+      }
+      const stmt = prepare
+        ? must(PREPARED_ROW_INSERT_STATEMENTS.get(batchSize)) // optimization: pre-formatted
+        : insertRowsStatement(batchSize);
       pending.push(
-        tx`INSERT INTO cvr.rows ${tx(
-          rowRecordRows.slice(i, i + ROW_RECORD_UPSERT_BATCH_SIZE),
-        )} 
-          ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
-          DO UPDATE SET "rowVersion" = excluded."rowVersion",
-            "patchVersion" = excluded."patchVersion",
-            "refCounts" = excluded."refCounts"`.execute(),
+        tx
+          .unsafe<Row[]>(
+            stmt,
+            multiInsertParams(
+              ROW_RECORD_COLUMNS,
+              rowRecordRows.slice(i, i + batchSize),
+            ),
+            {prepare},
+          )
+          .execute(),
       );
-      i += ROW_RECORD_UPSERT_BATCH_SIZE;
+      this.#lc.debug?.(
+        `flushing batch of ${batchSize} rows (prepared=${prepare})`,
+      );
+      i += batchSize;
     }
     return pending;
   }
+}
+
+// Max number of parameters for postgres is 65534.
+// Each row record has 7 parameters (1 per column),
+// making 65534 / 7 = 9362 the absolute max batch size.
+const ROW_RECORD_UPSERT_BATCH_MAX_SIZE = 8192;
+// For batchSizes smaller than 128, flush the rows in an unprepared statement
+// so as to not consume too much memory on PG.
+const ROW_RECORD_UPSERT_BATCH_MIN_PREPARED_SIZE = 128;
+
+const ROW_RECORD_COLUMNS: (keyof RowsRow)[] = [
+  'clientGroupID',
+  'schema',
+  'table',
+  'rowKey',
+  'rowVersion',
+  'patchVersion',
+  'refCounts',
+];
+
+function insertRowsStatement(count: number) {
+  return multiInsertStatement(
+    'cvr',
+    'rows',
+    ROW_RECORD_COLUMNS,
+    count,
+    `ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
+        DO UPDATE SET "rowVersion" = excluded."rowVersion",
+          "patchVersion" = excluded."patchVersion",
+          "refCounts" = excluded."refCounts"`,
+  );
+}
+
+const PREPARED_ROW_INSERT_STATEMENTS = new Map<number, string>();
+// Pre-format statements for 8192, 4096, 2048, 1024, 512, 256, 128 row(s).
+for (
+  let count = ROW_RECORD_UPSERT_BATCH_MAX_SIZE; // 8192
+  count >= ROW_RECORD_UPSERT_BATCH_MIN_PREPARED_SIZE; // 128
+  count /= 2
+) {
+  PREPARED_ROW_INSERT_STATEMENTS.set(count, insertRowsStatement(count));
 }
 
 type QueryRow = {
@@ -992,11 +1056,6 @@ export class CVRStore {
     return this.#rowCache.flushed(lc);
   }
 }
-
-// Max number of parameters for our sqlite build is 65534.
-// Each row record has 7 parameters (1 per column).
-// 65534 / 7 = 9362
-const ROW_RECORD_UPSERT_BATCH_SIZE = 9_360;
 
 /**
  * This is similar to {@link CVRStore.#checkVersionAndOwnership} except
