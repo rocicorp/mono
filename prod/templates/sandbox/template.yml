@@ -118,6 +118,7 @@ Resources:
       TaskDefinition: !Ref "TaskDefinitionViewSyncer"
       ServiceConnectConfiguration:
         Enabled: true
+        Namespace: !Ref ServiceDiscoveryNamespace
       LoadBalancers:
         - ContainerName: "view-syncer-container"
           ContainerPort: 4848
@@ -288,8 +289,6 @@ Resources:
 
   ServiceReplicationManager:
     Type: AWS::ECS::Service
-    DependsOn:
-      - ServiceDiscoveryNamespace
     Properties:
       ServiceName: "replication-manager"
       Cluster: !Ref Cluster
@@ -313,6 +312,7 @@ Resources:
       TaskDefinition: !Ref "TaskDefinitionReplicationManager"
       ServiceConnectConfiguration:
         Enabled: true
+        Namespace: !Ref ServiceDiscoveryNamespace
         Services:
           - PortName: "change-streamer"
       ServiceRegistries:
