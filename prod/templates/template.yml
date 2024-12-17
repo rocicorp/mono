@@ -216,10 +216,6 @@ Resources:
               Value: 400
             - Name: ZERO_SCHEMA_FILE
               Value: /opt/app/packages/zero-cache/zero-schema.json
-            - Name: ZERO_PER_USER_MUTATION_LIMIT_MAX
-              Value: 20
-            - Name: ZERO_PER_USER_MUTATION_LIMIT_WINDOW_MS
-              Value: 60000
           Secrets:
             - Name: ZERO_UPSTREAM_DB
               ValueFrom: !Sub "${ViewSyncerSecrets}:ZERO_UPSTREAM_DB::"
