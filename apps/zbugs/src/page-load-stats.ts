@@ -12,7 +12,7 @@ function assignLatencyToBucket(latencyMs: number): string {
     }
   }
 
-  return '20001ms+';
+  return '20001+';
 }
 
 let pageLoadRecorded = false;
