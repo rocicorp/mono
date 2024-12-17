@@ -722,17 +722,34 @@ function ToastContent({
   );
 }
 
-function useVirtualComments<T extends {id: string}>(comments: readonly T[]) {
-  // No idea - experimentally tested.
-  const defaultHeight = /Chrome/.test(navigator.userAgent) ? 1000 : 500;
+const sampleSize = 100;
+function average(numbers: number[]) {
+  return numbers.reduce((a, b) => a + b, 0) / numbers.length;
+}
+function sample(bucket: number[], sample: number, size: number) {
+  if (bucket.length < size) {
+    bucket.push(sample);
+    return;
+  }
 
+  bucket.shift();
+  bucket.push(sample);
+}
+
+function useVirtualComments<T extends {id: string}>(comments: readonly T[]) {
   const listRef = useRef<HTMLDivElement | null>(null);
-  const estimateAverage = useRef(defaultHeight);
+
+  const measurements = useRef<number[]>([200]);
+
   const virtualizer = useWindowVirtualizer({
     count: comments.length,
     estimateSize: index => {
       const {id} = comments[index];
-      return commentSizeCache.get(id) || estimateAverage.current;
+      const cached = commentSizeCache.get(id);
+      if (cached) {
+        return cached;
+      }
+      return average(measurements.current);
     },
     overscan: 2,
     scrollMargin: listRef.current?.offsetTop ?? 0,
@@ -741,15 +758,9 @@ function useVirtualComments<T extends {id: string}>(comments: readonly T[]) {
       const {index} = el.dataset;
       if (index && height) {
         const {id} = comments[parseInt(index)];
-        const oldSize = commentSizeCache.get(id) ?? defaultHeight;
         commentSizeCache.set(id, height);
-
-        // Update estimateAverage
-        const count = comments.length;
-        const oldTotal = estimateAverage.current * count;
-        const newTotal = oldTotal - oldSize + height;
-        estimateAverage.current = newTotal / count;
       }
+      sample(measurements.current, height, sampleSize);
       return height;
     },
     getItemKey: index => comments[index].id,
