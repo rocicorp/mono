@@ -1,5 +1,4 @@
 import {Zero} from '@rocicorp/zero';
-import {type ZeroAdvancedOptions} from '@rocicorp/zero/advanced';
 import {Atom} from './atom.js';
 import {type Schema, schema} from '../schema.js';
 import {clearJwt, getJwt, getRawJwt} from './jwt.js';
