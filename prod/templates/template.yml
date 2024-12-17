@@ -349,7 +349,7 @@ Resources:
           Memory: 8192
           Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/zero-zbugs
           PortMappings:
-            - Name: "4849"
+            - Name: "change-streamer"
               ContainerPort: 4849
               HostPort: 4849
               Protocol: tcp
