@@ -89,7 +89,7 @@ Resources:
         NamespaceId: !Ref ServiceDiscoveryNamespace
         DnsRecords:
           - Type: A
-            TTL: 300
+            TTL: 5
 
   ServiceViewSyncer:
     Type: AWS::ECS::Service
