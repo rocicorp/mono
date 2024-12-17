@@ -89,7 +89,7 @@ Resources:
         NamespaceId: !Ref ServiceDiscoveryNamespace
         DnsRecords:
           - Type: A
-            TTL: 300
+            TTL: 5
 
   ServiceViewSyncer:
     Type: AWS::ECS::Service
@@ -111,10 +111,10 @@ Resources:
             - !GetAtt VPC.Outputs.SG
             - !Ref InternalServicesSG
       DeploymentConfiguration:
-        # Run up to 7 tasks, capping updates to 2 tasks at a time
-        MaximumPercent: 170
+        # Run up to 12 tasks, capping updates to 2 tasks at a time
+        MaximumPercent: 120
         MinimumHealthyPercent: 50
-      DesiredCount: 5
+      DesiredCount: 10
       TaskDefinition: !Ref "TaskDefinitionViewSyncer"
       LoadBalancers:
         - ContainerName: "view-syncer-container"
@@ -209,11 +209,11 @@ Resources:
             - Name: ZERO_LOG_LEVEL
               Value: debug
             - Name: ZERO_UPSTREAM_MAX_CONNS
-              # limit: 190 max_connections / (5 tasks * 1.4 maximum-percent)
-              Value: 25
+              # limit: 190 max_connections / (10 tasks * 1.2 maximum-percent)
+              Value: 15
             - Name: ZERO_CVR_MAX_CONNS
-              # limit: 5000 max_connections / (5 tasks * 1.4 maximum-percent)
-              Value: 700
+              # limit: 5000 max_connections / (10 tasks * 1.2 maximum-percent)
+              Value: 400
             - Name: ZERO_SCHEMA_FILE
               Value: /opt/app/packages/zero-cache/zero-schema.json
             - Name: ZERO_PER_USER_MUTATION_LIMIT_MAX

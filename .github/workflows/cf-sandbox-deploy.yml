@@ -2,7 +2,7 @@ name: Build and Deploy Sandbox Zero-Cache AWS CF
 
 on:
   push:
-    branches: [disable-sandbox]
+    branches: [sandbox]
     # paths:
     #   - 'packages/zero-cache/**'
 env:

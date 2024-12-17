@@ -41,7 +41,9 @@ function connect(
   }
 
   replica.pragma('synchronous = NORMAL');
+  replica.exec('VACUUM');
   replica.pragma('optimize = 0x10002');
+  lc.info?.(`vacuumed and optimized ${replicaDbFile}`);
   return replica;
 }
 

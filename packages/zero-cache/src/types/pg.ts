@@ -4,6 +4,7 @@ import {LogContext} from '@rocicorp/logger';
 import pg from 'pg';
 import postgres, {type Notice, type PostgresType} from 'postgres';
 import array from 'postgres-array';
+import {randInt} from '../../../shared/src/rand.js';
 import {BigIntJSON, type JSONValue} from './bigint-json.js';
 
 const {
@@ -179,9 +180,14 @@ export function pgClient(
   const url = new URL(connectionURI);
   const ssl =
     url.searchParams.get('ssl') ?? url.searchParams.get('sslmode') ?? 'prefer';
+
+  // Set connections to expire between 5 and 10 minutes to free up state on PG.
+  const maxLifetimeSeconds = randInt(5 * 60, 10 * 60);
   return postgres(connectionURI, {
     ...postgresTypeConfig(),
     onnotice,
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    max_lifetime: maxLifetimeSeconds,
     ssl: ssl === 'disable' || ssl === 'false' ? false : (ssl as 'prefer'),
     ...options,
   });

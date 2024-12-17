@@ -3055,7 +3055,7 @@ Profile attached. More information when less tired :).
 
 [Profile-live.json.zip](https://github.com/rocicorp/reflect-server/files/9663620/Profile-live.json.zip)
 "
-N983dAQkVWxJwlWi8nb_N,75,We can get rid of the whole complicated updateClients (which was needed due to async hashing and indexeddb).  Callers can use setClients (and they need to put their own chunks).,False,1677091437000.0,1664205709000.0,nqYkxAGMnzk7Y5STjZryV,,"        We can get rid of the whole complicated updateClients (which was needed due to async hashing and indexeddb).  Callers can use setClients (and they need to put their own chunks).  
+N983dAQkVWxJwlWi8nb_N,75,We can get rid of the whole complicated updateClients (which was needed due to async hashing and indexeddb)..,False,1677091437000.0,1664205709000.0,nqYkxAGMnzk7Y5STjZryV,,"Callers can use setClients (and they need to put their own chunks).
 
 Fine to do as a follow up as this is already quite a big pr.
 
@@ -3365,10 +3365,10 @@ zrpBifgcCO7g1DjYQ1v9A,90,"Rails ""done done""",False,1677091445000.0,16570873140
 - [ ] Update ReplidrawDO to use
 - [ ] Update Repliear to use
 - [ ] Rename to something else... replicache-crud?"
-jC2ZSB7TCGAhDeK_CTNuj,147,Maybe call this test `crossClientGetMutationID` or something to make more clear why it only runs under DD31. A comment would also help.,False,1677091452000.0,1656407388000.0,nqYkxAGMnzk7Y5STjZryV,,"Maybe call this test `crossClientGetMutationID` or something to make more clear why it only runs under DD31. A comment would also help.
+jC2ZSB7TCGAhDeK_CTNuj,147,Maybe call this test `crossClientGetMutationID` or something to make more clear why it only runs under DD31.,False,1677091452000.0,1656407388000.0,nqYkxAGMnzk7Y5STjZryV,,"A comment would also help.
 
 _Originally posted by @aboodman in https://github.com/rocicorp/replicache-internal/pull/177#discussion_r906419411_"
-bbBCilPYtx_FfumPLQRqG,148,"Why not adjust these tests to have a dag.Read. Even if most of the commit types / tests don't need it, some do. Would be easier to read the test if you didn't have to understand why it's OK to pass null here.",False,1677091453000.0,1656407353000.0,nqYkxAGMnzk7Y5STjZryV,,"Why not adjust these tests to have a dag.Read. Even if most of the commit types / tests don't need it, some do. Would be easier to read the test if you didn't have to understand why it's OK to pass null here.
+bbBCilPYtx_FfumPLQRqG,148,"Why not adjust these tests to have a dag.Read. Even if most of the commit types / tests don't need it, some do.",False,1677091453000.0,1656407353000.0,nqYkxAGMnzk7Y5STjZryV,,"Would be easier to read the test if you didn't have to understand why it's OK to pass null here.
 
 _Originally posted by @aboodman in https://github.com/rocicorp/replicache-internal/pull/177#discussion_r906418791_"
 0aANjS4hkfgYM6jyk0bnz,111,DD 3.1,False,1709536712000.0,1655804122000.0,nqYkxAGMnzk7Y5STjZryV,,"Tracking bug for https://www.notion.so/replicache/DD-3-1-e42489fc2e6b4340a01c7fa0de353a30

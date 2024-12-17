@@ -20,7 +20,7 @@ import {assert} from 'shared/src/asserts.js';
 import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.js';
-import {symmetricDifferences} from '../../../../../packages/shared/src/set-utils.js';
+import {difference} from '../../../../../packages/shared/src/set-utils.js';
 import type {CommentRow, IssueRow, Schema, UserRow} from '../../../schema.js';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
@@ -84,7 +84,8 @@ export function IssuePage() {
           emoji.related('creator', creator => creator.one()),
         )
         .limit(INITIAL_COMMENT_LIMIT)
-        .orderBy('created', 'desc'),
+        .orderBy('created', 'desc')
+        .orderBy('id', 'desc'),
     )
     .one();
   const [issue, issueResult] = useQuery(q);
@@ -186,7 +187,8 @@ export function IssuePage() {
       .related('emoji', emoji =>
         emoji.related('creator', creator => creator.one()),
       )
-      .orderBy('created', 'asc'),
+      .orderBy('created', 'asc')
+      .orderBy('id', 'asc'),
     displayAllComments && issue !== undefined,
   );
 
@@ -460,6 +462,7 @@ export function IssuePage() {
                 selected={{login: issue.assignee?.login}}
                 placeholder="Assign to..."
                 unselectedLabel="Nobody"
+                crewOnly={true}
                 onSelect={user => {
                   z.mutate.issue.update({
                     id: issue.id,
@@ -722,7 +725,9 @@ function ToastContent({
 }
 
 function useVirtualComments<T extends {id: string}>(comments: readonly T[]) {
-  const defaultHeight = 500;
+  // No idea - experimentally tested.
+  const defaultHeight = /Chrome/.test(navigator.userAgent) ? 1000 : 500;
+
   const listRef = useRef<HTMLDivElement | null>(null);
   const estimateAverage = useRef(defaultHeight);
   const virtualizer = useWindowVirtualizer({
@@ -874,7 +879,6 @@ function useShowToastForNewComment(
     if (comments === undefined || comments.length === 0) {
       return;
     }
-
     if (lastCommentIDs.current === undefined) {
       lastCommentIDs.current = new Set(comments.map(c => c.id));
       return;
@@ -882,10 +886,20 @@ function useShowToastForNewComment(
 
     const currentCommentIDs = new Set(comments.map(c => c.id));
 
-    const [removedCommentIDs, newCommentIDs] = symmetricDifferences(
+    const removedCommentIDs = difference(
       lastCommentIDs.current,
       currentCommentIDs,
     );
+
+    const lCommentIds = lastCommentIDs.current;
+    const newCommentIDs = [];
+    for (let i = comments.length - 1; i >= 0; i--) {
+      const commentID = comments[i].id;
+      if (lCommentIds.has(commentID)) {
+        break;
+      }
+      newCommentIDs.push(commentID);
+    }
 
     for (const commentID of newCommentIDs) {
       const index = comments.findLastIndex(c => c.id === commentID);
