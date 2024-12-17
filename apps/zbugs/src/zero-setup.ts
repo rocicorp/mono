@@ -31,7 +31,7 @@ authAtom.value =
 authAtom.onChange(auth => {
   zeroAtom.value?.close();
   mark('creating new zero');
-  const zOptions: ZeroAdvancedOptions<typeof schema> = {
+  const z = new Zero({
     logLevel: 'info',
     server: import.meta.env.VITE_PUBLIC_SERVER,
     userID: auth?.decoded?.sub ?? 'anon',
@@ -44,9 +44,7 @@ authAtom.onChange(auth => {
       return auth?.encoded;
     },
     schema,
-    maxRecentQueries: 1000,
-  };
-  const z = new Zero(zOptions);
+  });
   zeroAtom.value = z;
 
   exposeDevHooks(z);
