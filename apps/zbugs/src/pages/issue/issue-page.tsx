@@ -207,7 +207,31 @@ export function IssuePage() {
     ];
   }, [issue?.comments, allCommentsResult.type, allComments]);
 
+  const issueDescriptionRef = useRef<HTMLDivElement | null>(null);
+  const restoreScrollRef = useRef<() => void>();
   const {listRef, virtualizer} = useVirtualComments(comments ?? []);
+
+  // Restore scroll on changes to comments.
+  useEffect(() => {
+    restoreScrollRef.current?.();
+  }, [comments]);
+
+  useEffect(() => {
+    if (comments === undefined || comments.length === 0) {
+      restoreScrollRef.current = undefined;
+      return;
+    }
+
+    restoreScrollRef.current = getScrollRestore(
+      issueDescriptionRef.current,
+      virtualizer,
+      comments,
+    );
+
+    // Disabled because we do not want comments in here. We only want this to be
+    // called on scroll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [virtualizer.scrollOffset]);
 
   const hash = useHash();
 
@@ -321,68 +345,68 @@ export function IssuePage() {
   const rendering = editing ? {...editing, ...edits} : issue;
 
   return (
-    <>
-      <div className="issue-detail-container">
-        <MyToastContainer position="bottom" />
-        <MyToastContainer position="top" />
-        {/* Center column of info */}
-        <div className="issue-detail">
-          <div className="issue-topbar">
-            <div className="issue-breadcrumb">
-              {listContext ? (
-                <>
-                  <Link className="breadcrumb-item" href={listContext.href}>
-                    {listContext.title}
-                  </Link>
-                  <span className="breadcrumb-item">&rarr;</span>
-                </>
-              ) : null}
-              <span className="breadcrumb-item">Issue {issue.shortID}</span>
-            </div>
-            <CanEdit ownerID={issue.creatorID}>
-              <div className="edit-buttons">
-                {!editing ? (
-                  <>
-                    <Button
-                      className="edit-button"
-                      eventName="Edit issue"
-                      onAction={() => setEditing(issue)}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      className="delete-button"
-                      eventName="Delete issue"
-                      onAction={() => setDeleteConfirmationShown(true)}
-                    >
-                      Delete
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      className="save-button"
-                      eventName="Save issue edits"
-                      onAction={save}
-                      disabled={
-                        !edits || edits.title === '' || edits.description === ''
-                      }
-                    >
-                      Save
-                    </Button>
-                    <Button
-                      className="cancel-button"
-                      eventName="Cancel issue edits"
-                      onAction={cancel}
-                    >
-                      Cancel
-                    </Button>
-                  </>
-                )}
-              </div>
-            </CanEdit>
+    <div className="issue-detail-container">
+      <MyToastContainer position="bottom" />
+      <MyToastContainer position="top" />
+      {/* Center column of info */}
+      <div className="issue-detail">
+        <div className="issue-topbar">
+          <div className="issue-breadcrumb">
+            {listContext ? (
+              <>
+                <Link className="breadcrumb-item" href={listContext.href}>
+                  {listContext.title}
+                </Link>
+                <span className="breadcrumb-item">&rarr;</span>
+              </>
+            ) : null}
+            <span className="breadcrumb-item">Issue {issue.shortID}</span>
           </div>
+          <CanEdit ownerID={issue.creatorID}>
+            <div className="edit-buttons">
+              {!editing ? (
+                <>
+                  <Button
+                    className="edit-button"
+                    eventName="Edit issue"
+                    onAction={() => setEditing(issue)}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    className="delete-button"
+                    eventName="Delete issue"
+                    onAction={() => setDeleteConfirmationShown(true)}
+                  >
+                    Delete
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    className="save-button"
+                    eventName="Save issue edits"
+                    onAction={save}
+                    disabled={
+                      !edits || edits.title === '' || edits.description === ''
+                    }
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    className="cancel-button"
+                    eventName="Cancel issue edits"
+                    onAction={cancel}
+                  >
+                    Cancel
+                  </Button>
+                </>
+              )}
+            </div>
+          </CanEdit>
+        </div>
 
+        <div ref={issueDescriptionRef}>
           {!editing ? (
             <h1 className="issue-detail-title">{rendering.title}</h1>
           ) : (
@@ -426,188 +450,188 @@ export function IssuePage() {
               />
             </div>
           )}
+        </div>
 
-          {/* Right sidebar */}
-          <div className="issue-sidebar">
+        {/* Right sidebar */}
+        <div className="issue-sidebar">
+          <div className="sidebar-item">
+            <p className="issue-detail-label">Status</p>
+            <Combobox
+              editable={false}
+              disabled={!canEdit}
+              items={[
+                {
+                  text: 'Open',
+                  value: true,
+                  icon: statusOpen,
+                },
+                {
+                  text: 'Closed',
+                  value: false,
+                  icon: statusClosed,
+                },
+              ]}
+              selectedValue={issue.open}
+              onChange={value =>
+                z.mutate.issue.update({id: issue.id, open: value})
+              }
+            />
+          </div>
+
+          <div className="sidebar-item">
+            <p className="issue-detail-label">Assignee</p>
+            <UserPicker
+              disabled={!canEdit}
+              selected={{login: issue.assignee?.login}}
+              placeholder="Assign to..."
+              unselectedLabel="Nobody"
+              crewOnly={true}
+              onSelect={user => {
+                z.mutate.issue.update({
+                  id: issue.id,
+                  assigneeID: user?.id ?? null,
+                });
+              }}
+            />
+          </div>
+
+          {login.loginState?.decoded.role === 'crew' ? (
             <div className="sidebar-item">
-              <p className="issue-detail-label">Status</p>
+              <p className="issue-detail-label">Visibility</p>
               <Combobox
                 editable={false}
                 disabled={!canEdit}
                 items={[
                   {
-                    text: 'Open',
-                    value: true,
+                    text: 'Public',
+                    value: 'public',
                     icon: statusOpen,
                   },
                   {
-                    text: 'Closed',
-                    value: false,
+                    text: 'Internal',
+                    value: 'internal',
                     icon: statusClosed,
                   },
                 ]}
-                selectedValue={issue.open}
+                selectedValue={issue.visibility}
                 onChange={value =>
-                  z.mutate.issue.update({id: issue.id, open: value})
+                  z.mutate.issue.update({id: issue.id, visibility: value})
                 }
               />
             </div>
+          ) : null}
 
-            <div className="sidebar-item">
-              <p className="issue-detail-label">Assignee</p>
-              <UserPicker
-                disabled={!canEdit}
-                selected={{login: issue.assignee?.login}}
-                placeholder="Assign to..."
-                unselectedLabel="Nobody"
-                crewOnly={true}
-                onSelect={user => {
-                  z.mutate.issue.update({
-                    id: issue.id,
-                    assigneeID: user?.id ?? null,
+          <div className="sidebar-item">
+            <p className="issue-detail-label">Creator</p>
+            <div className="issue-creator">
+              <img
+                src={issue.creator?.avatar}
+                className="issue-creator-avatar"
+                alt={issue.creator?.name ?? undefined}
+              />
+              {issue.creator.login}
+            </div>
+          </div>
+
+          <div className="sidebar-item">
+            <p className="issue-detail-label">Labels</p>
+            <div className="issue-detail-label-container">
+              {issue.labels.map(label => (
+                <span className="pill label" key={label.id}>
+                  {label.name}
+                </span>
+              ))}
+            </div>
+            <CanEdit ownerID={issue.creatorID}>
+              <LabelPicker
+                selected={labelSet}
+                onAssociateLabel={labelID =>
+                  z.mutate.issueLabel.insert({
+                    issueID: issue.id,
+                    labelID,
+                  })
+                }
+                onDisassociateLabel={labelID =>
+                  z.mutate.issueLabel.delete({issueID: issue.id, labelID})
+                }
+                onCreateNewLabel={labelName => {
+                  const labelID = nanoid();
+                  z.mutateBatch(tx => {
+                    tx.label.insert({id: labelID, name: labelName});
+                    tx.issueLabel.insert({issueID: issue.id, labelID});
                   });
                 }}
               />
-            </div>
-
-            {login.loginState?.decoded.role === 'crew' ? (
-              <div className="sidebar-item">
-                <p className="issue-detail-label">Visibility</p>
-                <Combobox
-                  editable={false}
-                  disabled={!canEdit}
-                  items={[
-                    {
-                      text: 'Public',
-                      value: 'public',
-                      icon: statusOpen,
-                    },
-                    {
-                      text: 'Internal',
-                      value: 'internal',
-                      icon: statusClosed,
-                    },
-                  ]}
-                  selectedValue={issue.visibility}
-                  onChange={value =>
-                    z.mutate.issue.update({id: issue.id, visibility: value})
-                  }
-                />
-              </div>
-            ) : null}
-
-            <div className="sidebar-item">
-              <p className="issue-detail-label">Creator</p>
-              <div className="issue-creator">
-                <img
-                  src={issue.creator?.avatar}
-                  className="issue-creator-avatar"
-                  alt={issue.creator?.name ?? undefined}
-                />
-                {issue.creator.login}
-              </div>
-            </div>
-
-            <div className="sidebar-item">
-              <p className="issue-detail-label">Labels</p>
-              <div className="issue-detail-label-container">
-                {issue.labels.map(label => (
-                  <span className="pill label" key={label.id}>
-                    {label.name}
-                  </span>
-                ))}
-              </div>
-              <CanEdit ownerID={issue.creatorID}>
-                <LabelPicker
-                  selected={labelSet}
-                  onAssociateLabel={labelID =>
-                    z.mutate.issueLabel.insert({
-                      issueID: issue.id,
-                      labelID,
-                    })
-                  }
-                  onDisassociateLabel={labelID =>
-                    z.mutate.issueLabel.delete({issueID: issue.id, labelID})
-                  }
-                  onCreateNewLabel={labelName => {
-                    const labelID = nanoid();
-                    z.mutateBatch(tx => {
-                      tx.label.insert({id: labelID, name: labelName});
-                      tx.issueLabel.insert({issueID: issue.id, labelID});
-                    });
-                  }}
-                />
-              </CanEdit>
-            </div>
-
-            <div className="sidebar-item">
-              <p className="issue-detail-label">Last updated</p>
-              <div className="timestamp-container">
-                <RelativeTime timestamp={issue.modified} />
-              </div>
-            </div>
+            </CanEdit>
           </div>
 
-          <h2 className="issue-detail-label">Comments</h2>
-          <Button
-            className="show-older-comments"
-            style={{
-              visibility: hasOlderComments ? 'visible' : 'hidden',
-            }}
-            onAction={() => setDisplayAllComments(true)}
-          >
-            Show Older
-          </Button>
-
-          <div className="comments-container" ref={listRef}>
-            <div
-              className="virtual-list"
-              style={{height: virtualizer.getTotalSize()}}
-            >
-              {virtualizer.getVirtualItems().map(item => (
-                <div
-                  key={item.key as string}
-                  ref={virtualizer.measureElement}
-                  data-index={item.index}
-                  style={{
-                    transform: `translateY(${
-                      item.start - virtualizer.options.scrollMargin
-                    }px)`,
-                  }}
-                >
-                  <Comment
-                    id={comments[item.index].id}
-                    issueID={issue.id}
-                    comment={comments[item.index]}
-                    height={item.size}
-                  />
-                </div>
-              ))}
+          <div className="sidebar-item">
+            <p className="issue-detail-label">Last updated</p>
+            <div className="timestamp-container">
+              <RelativeTime timestamp={issue.modified} />
             </div>
           </div>
-
-          {z.userID === 'anon' ? (
-            <a href="/api/login/github" className="login-to-comment">
-              Login to comment
-            </a>
-          ) : (
-            <CommentComposer issueID={issue.id} />
-          )}
         </div>
-        <Confirm
-          isOpen={deleteConfirmationShown}
-          title="Delete Issue"
-          text="Really delete?"
-          okButtonLabel="Delete"
-          onClose={b => {
-            if (b) {
-              remove();
-            }
-            setDeleteConfirmationShown(false);
+
+        <h2 className="issue-detail-label">Comments</h2>
+        <Button
+          className="show-older-comments"
+          style={{
+            visibility: hasOlderComments ? 'visible' : 'hidden',
           }}
-        />
+          onAction={() => setDisplayAllComments(true)}
+        >
+          Show Older
+        </Button>
+
+        <div className="comments-container" ref={listRef}>
+          <div
+            className="virtual-list"
+            style={{height: virtualizer.getTotalSize()}}
+          >
+            {virtualizer.getVirtualItems().map(item => (
+              <div
+                key={item.key as string}
+                ref={virtualizer.measureElement}
+                data-index={item.index}
+                style={{
+                  transform: `translateY(${
+                    item.start - virtualizer.options.scrollMargin
+                  }px)`,
+                }}
+              >
+                <Comment
+                  id={comments[item.index].id}
+                  issueID={issue.id}
+                  comment={comments[item.index]}
+                  height={item.size}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {z.userID === 'anon' ? (
+          <a href="/api/login/github" className="login-to-comment">
+            Login to comment
+          </a>
+        ) : (
+          <CommentComposer issueID={issue.id} />
+        )}
       </div>
-    </>
+      <Confirm
+        isOpen={deleteConfirmationShown}
+        title="Delete Issue"
+        text="Really delete?"
+        okButtonLabel="Delete"
+        onClose={b => {
+          if (b) {
+            remove();
+          }
+          setDeleteConfirmationShown(false);
+        }}
+      />
+    </div>
   );
 }
 
@@ -767,6 +791,73 @@ function useVirtualComments<T extends {id: string}>(comments: readonly T[]) {
     gap: 16,
   });
   return {listRef, virtualizer};
+}
+
+function getScrollRestore(
+  issueDescriptionElement: HTMLDivElement | null,
+  virtualizer: Virtualizer<Window, HTMLElement>,
+  comments: readonly {id: string}[],
+): () => void {
+  const {scrollHeight, clientHeight, scrollTop} = document.documentElement;
+
+  // If the issue description is visible we keep scroll as is.
+  if (issueDescriptionElement && issueDescriptionElement.isConnected) {
+    const rect = issueDescriptionElement.getBoundingClientRect();
+    const inView = rect.bottom > 0 && rect.top < clientHeight;
+    if (inView) {
+      return noop;
+    }
+  }
+
+  // If almost at the bottom of the page, maintain the scrollBottom.
+  const bottomMargin = 175;
+  const scrollBottom = scrollHeight - scrollTop - clientHeight;
+
+  if (scrollBottom <= bottomMargin) {
+    return () => {
+      const {scrollHeight, clientHeight} = document.documentElement;
+      virtualizer.scrollToOffset(scrollHeight - clientHeight - scrollBottom);
+    };
+  }
+
+  // Npw we use the first comment that is visible in the viewport as the anchor.
+  const topVirtualItem = virtualizer.getVirtualItemForOffset(scrollTop);
+  if (topVirtualItem) {
+    const top = topVirtualItem.start - scrollTop;
+    const {key, index} = topVirtualItem;
+    return () => {
+      type Key = number | string | bigint;
+      const find = (key: Key | undefined) =>
+        virtualizer.getVirtualItems().find(vi => vi.key === key);
+      let newVirtualItem = find(key);
+      if (!newVirtualItem) {
+        // The comment was removed. Let's try to use the next one instead.
+        const key = comments[index]?.id;
+        newVirtualItem = find(key);
+        // Ff we still can't find it don't adjust the scroll position.
+        if (!newVirtualItem) {
+          return;
+        }
+      }
+
+      const offsetForIndex = virtualizer.getOffsetForIndex(
+        newVirtualItem.index,
+        'start',
+      );
+      if (offsetForIndex === undefined) {
+        return;
+      }
+      virtualizer.scrollToOffset(offsetForIndex[0] - top, {
+        align: 'start',
+      });
+    };
+  }
+
+  return noop;
+}
+
+function noop() {
+  // no op
 }
 
 function buildListQuery(
