@@ -20,7 +20,7 @@ export interface ButtonProps {
 
 export const Button = memo(
   forwardRef((props: ButtonProps, ref: ForwardedRef<HTMLButtonElement>) => {
-    const {onAction, eventName, ...rest} = props;
+    const {onAction, eventName, children, ...rest} = props;
 
     const handleMouseDown = (e: React.MouseEvent) => {
       onAction?.();
@@ -62,7 +62,7 @@ export const Button = memo(
 
     return (
       <button {...actionProps} {...rest} ref={ref}>
-        {props.children}
+        {children}
       </button>
     );
   }),
