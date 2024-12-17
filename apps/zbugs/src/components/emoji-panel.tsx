@@ -16,6 +16,7 @@ import {
   forwardRef,
   memo,
   useCallback,
+  useMemo,
   useState,
   type ForwardedRef,
 } from 'react';
@@ -74,7 +75,7 @@ export const EmojiPanel = memo(
       );
 
       // The emojis is an array. We want to group them by value and count them.
-      const groups = groupAndSortEmojis(emojis);
+      const groups = useMemo(() => groupAndSortEmojis(emojis), [emojis]);
 
       const addOrRemoveEmoji = useCallback(
         (details: {unicode: string; annotation: string}) => {

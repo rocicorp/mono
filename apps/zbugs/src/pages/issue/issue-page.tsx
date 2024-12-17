@@ -53,7 +53,7 @@ import {isCtrlEnter} from './is-ctrl-enter.js';
 const emojiToastShowDuration = 3_000;
 
 // One more than we display so we can detect if there are more
-// to laod.
+// to load.
 export const INITIAL_COMMENT_LIMIT = 101;
 
 export function IssuePage() {
@@ -212,7 +212,7 @@ export function IssuePage() {
   // Permalink scrolling behavior
   const [lastPermalinkScroll, setLastPermalinkScroll] = useState('');
   useEffect(() => {
-    if (issue === undefined || comments === undefined) {
+    if (comments === undefined) {
       return;
     }
     const commentID = parsePermalink(hash);
@@ -236,16 +236,13 @@ export function IssuePage() {
         setDisplayAllComments(true);
       }
     }
-    // Issue changes any time there is a change in the issue. For example when
-    // the `modified` or `assignee` changes.
-    //
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     hash,
-    issue?.id,
     virtualizer,
     displayAllComments,
     allCommentsResult.type,
+    comments,
+    lastPermalinkScroll,
   ]);
 
   const [deleteConfirmationShown, setDeleteConfirmationShown] = useState(false);
@@ -258,11 +255,10 @@ export function IssuePage() {
 
   const handleEmojiChange = useCallback(
     (added: readonly Emoji[], removed: readonly Emoji[]) => {
-      assert(issue);
       const newRecentEmojis = new Map(recentEmojis.map(e => [e.id, e]));
 
       for (const emoji of added) {
-        if (emoji.creatorID !== z.userID) {
+        if (issue && emoji.creatorID !== z.userID) {
           maybeShowToastForEmoji(
             emoji,
             issue,
@@ -400,8 +396,8 @@ export function IssuePage() {
             </div>
           )}
           {/* These comments are actually github markdown which unfortunately has
-         HTML mixed in. We need to find some way to render them, or convert to
-         standard markdown? break-spaces makes it render a little better */}
+           HTML mixed in. We need to find some way to render them, or convert to
+           standard markdown? break-spaces makes it render a little better */}
           {!editing ? (
             <>
               <div className="description-container markdown-container">
@@ -631,7 +627,7 @@ const MyToastContainer = memo(({position}: {position: 'top' | 'bottom'}) => {
 });
 
 // This cache is stored outside the state so that it can be used between renders.
-const commentSizeCache = new LRUCache<string, number>(1000);
+const commentSizeCache = new LRUCache<string, number>(2000);
 
 function maybeShowToastForEmoji(
   emoji: Emoji,
@@ -886,16 +882,13 @@ function useShowToastForNewComment(
 
     const currentCommentIDs = new Set(comments.map(c => c.id));
 
-    const removedCommentIDs = difference(
-      lastCommentIDs.current,
-      currentCommentIDs,
-    );
+    const lCommentIDs = lastCommentIDs.current;
+    const removedCommentIDs = difference(lCommentIDs, currentCommentIDs);
 
-    const lCommentIds = lastCommentIDs.current;
     const newCommentIDs = [];
     for (let i = comments.length - 1; i >= 0; i--) {
       const commentID = comments[i].id;
-      if (lCommentIds.has(commentID)) {
+      if (lCommentIDs.has(commentID)) {
         break;
       }
       newCommentIDs.push(commentID);
