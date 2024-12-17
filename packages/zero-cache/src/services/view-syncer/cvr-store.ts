@@ -379,8 +379,8 @@ class RowRecordCache {
         }
       }
       const stmt = prepare
-        ? must(PREPARED_ROW_INSERT_STATEMENTS.get(batchSize)) // optimization: pre-formatted
-        : insertRowsStatement(batchSize);
+        ? must(PREPARED_UPSERT_ROW_STATEMENTS.get(batchSize)) // optimization: pre-formatted
+        : upsertRowsStatement(batchSize);
       pending.push(
         tx
           .unsafe<Row[]>(
@@ -406,6 +406,7 @@ class RowRecordCache {
 // Each row record has 7 parameters (1 per column),
 // making 65534 / 7 = 9362 the absolute max batch size.
 const ROW_RECORD_UPSERT_BATCH_MAX_SIZE = 8192;
+
 // For batchSizes smaller than 128, flush the rows in an unprepared statement
 // so as to not consume too much memory on PG.
 const ROW_RECORD_UPSERT_BATCH_MIN_PREPARED_SIZE = 128;
@@ -420,7 +421,7 @@ const ROW_RECORD_COLUMNS: (keyof RowsRow)[] = [
   'refCounts',
 ];
 
-function insertRowsStatement(count: number) {
+function upsertRowsStatement(count: number) {
   return multiInsertStatement(
     'cvr',
     'rows',
@@ -433,14 +434,14 @@ function insertRowsStatement(count: number) {
   );
 }
 
-const PREPARED_ROW_INSERT_STATEMENTS = new Map<number, string>();
-// Pre-format statements for 8192, 4096, 2048, 1024, 512, 256, 128 row(s).
+const PREPARED_UPSERT_ROW_STATEMENTS = new Map<number, string>();
+// Pre-format statements for batches of 8192, 4096, 2048, 1024, 512, 256, 128
 for (
-  let count = ROW_RECORD_UPSERT_BATCH_MAX_SIZE; // 8192
-  count >= ROW_RECORD_UPSERT_BATCH_MIN_PREPARED_SIZE; // 128
-  count /= 2
+  let size = ROW_RECORD_UPSERT_BATCH_MAX_SIZE; // 8192
+  size >= ROW_RECORD_UPSERT_BATCH_MIN_PREPARED_SIZE; // 128
+  size /= 2
 ) {
-  PREPARED_ROW_INSERT_STATEMENTS.set(count, insertRowsStatement(count));
+  PREPARED_UPSERT_ROW_STATEMENTS.set(size, upsertRowsStatement(size));
 }
 
 type QueryRow = {
