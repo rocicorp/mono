@@ -725,7 +725,9 @@ function ToastContent({
 }
 
 function useVirtualComments<T extends {id: string}>(comments: readonly T[]) {
-  const defaultHeight = 500;
+  // No idea - experimentally tested.
+  const defaultHeight = /Chrome/.test(navigator.userAgent) ? 1000 : 500;
+
   const listRef = useRef<HTMLDivElement | null>(null);
   const estimateAverage = useRef(defaultHeight);
   const virtualizer = useWindowVirtualizer({
