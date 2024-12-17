@@ -116,9 +116,6 @@ Resources:
         MinimumHealthyPercent: 50
       DesiredCount: 10
       TaskDefinition: !Ref "TaskDefinitionViewSyncer"
-      ServiceConnectConfiguration:
-        Enabled: true
-        Namespace: !Ref ServiceDiscoveryNamespace
       LoadBalancers:
         - ContainerName: "view-syncer-container"
           ContainerPort: 4848
@@ -202,7 +199,6 @@ Resources:
           Essential: true
           Environment:
             - Name: ZERO_CHANGE_STREAMER_URI
-              # TODO: Change to ws://change-streamer:4849 and remove ServiceDiscovery
               Value: ws://replication-manager.internal.local:4849
             - Name: ZERO_LOG_FORMAT
               Value: json
@@ -289,6 +285,8 @@ Resources:
 
   ServiceReplicationManager:
     Type: AWS::ECS::Service
+    DependsOn:
+      - ServiceDiscoveryNamespace
     Properties:
       ServiceName: "replication-manager"
       Cluster: !Ref Cluster
@@ -310,11 +308,6 @@ Resources:
         MinimumHealthyPercent: 50
       DesiredCount: 1
       TaskDefinition: !Ref "TaskDefinitionReplicationManager"
-      ServiceConnectConfiguration:
-        Enabled: true
-        Namespace: !Ref ServiceDiscoveryNamespace
-        Services:
-          - PortName: "change-streamer"
       ServiceRegistries:
         - RegistryArn: !GetAtt ReplicationManagerRegistry.Arn
 
