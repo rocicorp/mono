@@ -27,6 +27,7 @@ import {useZero} from '../../hooks/use-zero.js';
 import {mark} from '../../perf-log.js';
 import type {ListContext} from '../../routes.js';
 import {preload} from '../../zero-setup.js';
+import {recordPageLoad} from '../../page-load-stats.js';
 
 let firstRowRendered = false;
 const itemSize = 56;
@@ -96,6 +97,7 @@ export function ListPage() {
 
   useEffect(() => {
     if (issuesResult.type === 'complete') {
+      recordPageLoad('list-page');
       preload(z);
     }
   }, [issuesResult.type, z]);
