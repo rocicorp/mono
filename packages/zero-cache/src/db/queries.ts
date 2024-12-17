@@ -2,6 +2,7 @@ import {compareUTF8} from 'compare-utf8';
 import {ident as id} from 'pg-format';
 import type postgres from 'postgres';
 import {assert} from '../../../shared/src/asserts.js';
+import type {JSONValue} from '../types/bigint-json.js';
 import {type PostgresDB, typeNameByOID} from '../types/pg.js';
 import type {RowKey, RowKeyType, RowValue} from '../types/row-key.js';
 
@@ -48,22 +49,23 @@ export function lookupRowsWithKeys(
   `;
 }
 
-export function multiInsertStatement<R extends RowValue>(
+export function multiInsertStatement<Row extends RowValue>(
   schema: string,
   table: string,
-  columns: readonly (string & keyof R)[],
-  count: number,
+  columnNames: readonly (string & keyof Row)[],
+  numRows: number,
   postamble: string = '',
-) {
-  assert(count > 0, 'count must be > 0');
+): string {
+  assert(numRows > 0, 'numRows must be > 0');
+
   const parts = [
     `INSERT INTO ${id(schema)}.${id(table)} `,
-    `(${columns.map(col => id(col)).join(',')}) VALUES `,
+    `(${columnNames.map(col => id(col)).join(',')}) VALUES `,
   ];
   let p = 1;
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < numRows; i++) {
     parts.push(i === 0 ? '(' : ',(');
-    for (let col = 0; col < columns.length; col++) {
+    for (let col = 0; col < columnNames.length; col++) {
       parts.push(col === 0 ? `$${p}` : `,$${p}`);
       p++;
     }
@@ -75,9 +77,9 @@ export function multiInsertStatement<R extends RowValue>(
   return parts.join('');
 }
 
-export function multiInsertParams<R extends RowValue>(
-  columns: readonly (keyof R)[],
-  rows: readonly R[],
-) {
-  return rows.map(row => columns.map(col => row[col])).flat();
+export function multiInsertParams<Row extends RowValue>(
+  columnNames: readonly (keyof Row)[],
+  rows: readonly Row[],
+): JSONValue[] {
+  return rows.map(row => columnNames.map(col => row[col])).flat();
 }
