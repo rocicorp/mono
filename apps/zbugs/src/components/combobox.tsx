@@ -50,13 +50,16 @@ function Combobox<T>({
   const selectedItem = items.find(option => option.value === value);
 
   const setMenuOpen = (b: boolean) => {
-    if (b) {
-      openTimeRef.current = Date.now();
-      umami.track('Combobox opened'); // Track open action
-    } else {
-      umami.track('Combobox closed'); // Track close action
+    if (b !== isOpen) {
+      // Only track if state changes
+      if (b) {
+        openTimeRef.current = Date.now();
+        umami.track('Combobox opened'); // Track open action
+      } else {
+        umami.track('Combobox closed'); // Track close action
+      }
+      setIsOpen(b);
     }
-    setIsOpen(b);
   };
 
   const toggleDropdown = () => {
