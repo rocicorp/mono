@@ -97,8 +97,8 @@ export function ListPage() {
 
   useEffect(() => {
     if (issuesResult.type === 'complete') {
-      preload(z);
       recordPageLoad('list-page');
+      preload(z);
     }
   }, [issuesResult.type, z]);
 

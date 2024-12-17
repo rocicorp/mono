@@ -94,8 +94,8 @@ export function IssuePage() {
 
   useEffect(() => {
     if (issueResult.type === 'complete') {
-      preload(z);
       recordPageLoad('issue-page');
+      preload(z);
     }
   }, [issueResult.type, z]);
 
