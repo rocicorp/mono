@@ -12,7 +12,7 @@ interface Props {
   };
 }
 
-function RelativeTime({timestamp, absolute = false, format}: Props) {
+export function RelativeTime({timestamp, absolute = false, format}: Props) {
   const now = useNow();
   const fullTimestamp = fullTimestampFormat.format(timestamp);
   return (
@@ -21,8 +21,6 @@ function RelativeTime({timestamp, absolute = false, format}: Props) {
     </span>
   );
 }
-
-export default RelativeTime;
 
 const fullTimestampFormat = Intl.DateTimeFormat('en-US', {
   year: 'numeric',

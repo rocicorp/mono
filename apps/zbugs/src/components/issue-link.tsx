@@ -1,7 +1,7 @@
 import {links, type ListContext} from '../routes.js';
 import {Link, type Props as LinkProps} from './link.js';
 
-export default function IssueLink({
+export function IssueLink({
   issue,
   title,
   children,

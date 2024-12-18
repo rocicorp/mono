@@ -12,7 +12,7 @@ const focusInput = (input: HTMLInputElement | null) => {
   }
 };
 
-export default function LabelPicker({
+export function LabelPicker({
   selected,
   onDisassociateLabel,
   onAssociateLabel,
