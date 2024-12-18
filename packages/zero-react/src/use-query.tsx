@@ -28,12 +28,12 @@ export function useQuery<
 >(q: Query<TSchema, TReturn>, enable: boolean = true): QueryResult<TReturn> {
   const z = useZero();
   const view = viewStore.getView(
-    z?.clientID,
+    z.clientID,
     q as AdvancedQuery<TSchema, TReturn>,
-    enable,
+    enable && z.enabled,
   );
   // https://react.dev/reference/react/useSyncExternalStore
-  return useSyncExternalStore(view.subscribeReactInternals, view.getSnapshot);
+  return useSyncExternalStore(view.subscribeReactInternals, view.getSnapshot, view.getSnapshot);
 }
 
 const emptyArray: unknown[] = [];
@@ -112,7 +112,7 @@ class ViewStore {
     getSnapshot: () => QueryResult<TReturn>;
     subscribeReactInternals: (internals: () => void) => () => void;
   } {
-    if (!enabled || !clientID) {
+    if (!enabled) {
       return {
         getSnapshot: () => getDefaultSnapshot(query.format.singular),
         subscribeReactInternals: disabledSubscriber,

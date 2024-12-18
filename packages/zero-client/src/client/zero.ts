@@ -363,6 +363,14 @@ export class Zero<const S extends Schema> {
   #reload = () => getBrowserGlobal('location')?.reload();
 
   /**
+   * Whether the Zero instance was configured with a valid server URL
+   * and is enabled.
+   */
+  get enabled(): boolean {
+    return Boolean(this.#server);
+  }
+
+  /**
    * Constructs a new Zero client.
    */
   constructor(options: ZeroOptions<S>) {

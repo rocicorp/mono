@@ -56,6 +56,10 @@ function validateServerParam(paramName: string, server: string): HTTPString {
 export function getServer(
   server: string | undefined | null,
 ): HTTPString | null {
+  if (typeof window === 'undefined') {
+    console.debug('Zero started in a non-browser environment, no data will be synced.');
+    return null;
+  }
   if (server === undefined || server === null) {
     console.warn(
       'Zero starting up with no server URL. This is supported for unit testing ' +
