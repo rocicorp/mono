@@ -28,7 +28,7 @@ export function useQuery<
 >(q: Query<TSchema, TReturn>, enable: boolean = true): QueryResult<TReturn> {
   const z = useZero();
   const view = viewStore.getView(
-    z.clientID,
+    z?.clientID,
     q as AdvancedQuery<TSchema, TReturn>,
     enable,
   );
@@ -105,14 +105,14 @@ class ViewStore {
   #views = new Map<string, ViewWrapper<any, any>>();
 
   getView<TSchema extends TableSchema, TReturn extends QueryType>(
-    clientID: string,
+    clientID: string | undefined,
     query: AdvancedQuery<TSchema, TReturn>,
     enabled: boolean,
   ): {
     getSnapshot: () => QueryResult<TReturn>;
     subscribeReactInternals: (internals: () => void) => () => void;
   } {
-    if (!enabled) {
+    if (!enabled || !clientID) {
       return {
         getSnapshot: () => getDefaultSnapshot(query.format.singular),
         subscribeReactInternals: disabledSubscriber,

@@ -5,24 +5,24 @@ import type {Schema} from '../../zero-schema/src/mod.js';
 // eslint-disable-next-line @typescript-eslint/naming-convention
 const ZeroContext = createContext<unknown | undefined>(undefined);
 
-export function useZero<S extends Schema>(): Zero<S> {
+export function useZero<S extends Schema, Z extends Zero<S> = Zero<S>>(): Z {
   const zero = useContext(ZeroContext);
   if (zero === undefined) {
     throw new Error('useZero must be used within a ZeroProvider');
   }
-  return zero as Zero<S>;
+  return zero as Z;
 }
 
-export function createUseZero<S extends Schema>() {
-  return () => useZero<S>();
+export function createUseZero<S extends Schema, Z extends Zero<S> = Zero<S>>() {
+  return () => useZero<S, Z>();
 }
 
-export function ZeroProvider<S extends Schema>({
+export function ZeroProvider<S extends Schema, Z extends Zero<S> = Zero<S>>({
   children,
   zero,
 }: {
   children: React.ReactNode;
-  zero: Zero<S>;
+  zero: Z;
 }) {
   return <ZeroContext.Provider value={zero}>{children}</ZeroContext.Provider>;
 }
