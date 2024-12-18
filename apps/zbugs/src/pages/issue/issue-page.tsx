@@ -39,6 +39,7 @@ import UserPicker from '../../components/user-picker.js';
 import {type Emoji} from '../../emoji-utils.js';
 import {useCanEdit} from '../../hooks/use-can-edit.js';
 import {useDocumentHasFocus} from '../../hooks/use-document-has-focus.js';
+import useIsScrolling from '../../hooks/use-is-scrolling.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
@@ -49,7 +50,6 @@ import {preload} from '../../zero-setup.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
 import {isCtrlEnter} from './is-ctrl-enter.js';
-import useIsScrolling from '../../hooks/use-is-scrolling.js';
 
 const emojiToastShowDuration = 3_000;
 
@@ -100,21 +100,38 @@ export function IssuePage() {
     }
   }, [issue, isScrolling, displayed]);
 
-  // exposes a function to dev console to create comments.
-  // useful for testing displayed above, and other things.
-  useEffect(() => {
-    (window as unknown as Record<string, unknown>).autocomment = () => {
-      setInterval(() => {
-        z.mutate.comment.insert({
-          id: nanoid(),
-          issueID: displayed?.id ?? '',
-          body: nanoid(),
-          created: Date.now(),
-          creatorID: z.userID,
-        });
-      }, 10_000);
-    };
-  });
+  if (import.meta.env.DEV) {
+    // exposes a function to dev console to create comments.
+    // useful for testing displayed above, and other things.
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useEffect(() => {
+      (window as unknown as Record<string, unknown>).autocomment = (
+        count = 1,
+        repeat = true,
+      ) => {
+        const mut = () => {
+          z.mutateBatch(m => {
+            for (let i = 0; i < count; i++) {
+              const id = nanoid();
+              m.comment.insert({
+                id,
+                issueID: displayed?.id ?? '',
+                body: `autocomment ${id}`,
+                created: Date.now(),
+                creatorID: z.userID,
+              });
+            }
+          });
+        };
+
+        if (repeat) {
+          setInterval(mut, 5_000);
+        } else {
+          mut();
+        }
+      };
+    });
+  }
 
   useEffect(() => {
     if (issueResult.type === 'complete') {
@@ -785,7 +802,7 @@ function useVirtualComments<T extends {id: string}>(comments: readonly T[]) {
       }
       return average(measurements.current);
     },
-    overscan: 2,
+    overscan: 3,
     scrollMargin: listRef.current?.offsetTop ?? 0,
     measureElement: (el: HTMLElement) => {
       const height = el.offsetHeight;
@@ -841,24 +858,24 @@ function getScrollRestore(
     const top = topVirtualItem.start - scrollTop;
     const {key, index} = topVirtualItem;
     return () => {
-      type Key = number | string | bigint;
-      const find = (key: Key | undefined) =>
-        virtualizer.getVirtualItems().find(vi => vi.key === key);
-      let newVirtualItem = find(key);
-      if (!newVirtualItem) {
-        // The comment was removed. Let's try to use the next one instead.
-        const key = comments[index]?.id;
-        newVirtualItem = find(key);
-        // Ff we still can't find it don't adjust the scroll position.
-        if (!newVirtualItem) {
-          return;
+      let newIndex = -1;
+      // First search the virtual items for the comment.
+      const newVirtualItem = virtualizer
+        .getVirtualItems()
+        .find(vi => vi.key === key);
+      if (newVirtualItem) {
+        newIndex = newVirtualItem.index;
+      } else {
+        // The comment is not in the virtual items. Let's try to find it in the
+        // comments list
+        newIndex = comments.findIndex(c => c.id === key);
+        if (newIndex === -1) {
+          // The comment was removed. Use the old index instead.
+          newIndex = index;
         }
       }
 
-      const offsetForIndex = virtualizer.getOffsetForIndex(
-        newVirtualItem.index,
-        'start',
-      );
+      const offsetForIndex = virtualizer.getOffsetForIndex(newIndex, 'start');
       if (offsetForIndex === undefined) {
         return;
       }
