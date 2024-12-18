@@ -7,6 +7,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -50,6 +51,7 @@ import {preload} from '../../zero-setup.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
 import {isCtrlEnter} from './is-ctrl-enter.js';
+import useIsScrolling from '../../hooks/use-is-scrolling.js';
 
 const emojiToastShowDuration = 3_000;
 
@@ -92,6 +94,30 @@ export function IssuePage() {
   const [issue, issueResult] = useQuery(q);
   const login = useLogin();
 
+  const isScrolling = useIsScrolling();
+  const [displayed, setDisplayed] = useState(issue);
+  useLayoutEffect(() => {
+    if (!isScrolling) {
+      setDisplayed(issue);
+    }
+  }, [issue, isScrolling, displayed]);
+
+  // exposes a function to dev console to create comments.
+  // useful for testing displayed above, and other things.
+  useEffect(() => {
+    (window as unknown as Record<string, unknown>).autocomment = () => {
+      setInterval(() => {
+        z.mutate.comment.insert({
+          id: nanoid(),
+          issueID: displayed?.id ?? '',
+          body: nanoid(),
+          created: Date.now(),
+          creatorID: z.userID,
+        });
+      }, 3000);
+    };
+  });
+
   useEffect(() => {
     if (issueResult.type === 'complete') {
       recordPageLoad('issue-page');
@@ -103,13 +129,13 @@ export function IssuePage() {
     // only push viewed forward if the issue has been modified since the last viewing
     if (
       z.userID !== 'anon' &&
-      issue &&
-      issue.modified > (issue?.viewState?.viewed ?? 0)
+      displayed &&
+      displayed.modified > (displayed?.viewState?.viewed ?? 0)
     ) {
       // only set to viewed if the user has looked at it for > 1 second
       const handle = setTimeout(() => {
         z.mutate.viewState.upsert({
-          issueID: issue.id,
+          issueID: displayed.id,
           userID: z.userID,
           viewed: Date.now(),
         });
@@ -117,18 +143,18 @@ export function IssuePage() {
       return () => clearTimeout(handle);
     }
     return;
-  }, [issue, z]);
+  }, [displayed, z]);
 
-  const [editing, setEditing] = useState<typeof issue | null>(null);
-  const [edits, setEdits] = useState<Partial<typeof issue>>({});
+  const [editing, setEditing] = useState<typeof displayed | null>(null);
+  const [edits, setEdits] = useState<Partial<typeof displayed>>({});
   useEffect(() => {
-    if (issue?.shortID !== undefined && idField !== 'shortID') {
-      navigate(links.issue(issue), {
+    if (displayed?.shortID !== undefined && idField !== 'shortID') {
+      navigate(links.issue(displayed), {
         replace: true,
         state: zbugsHistoryState,
       });
     }
-  }, [issue, idField, zbugsHistoryState]);
+  }, [displayed, idField, zbugsHistoryState]);
 
   const save = () => {
     if (!editing) {
@@ -148,15 +174,15 @@ export function IssuePage() {
   // used for finding the next/prev items so that a user can open an item
   // modify it and then navigate to the next/prev item in the list as it was
   // when they were viewing it.
-  const [issueSnapshot, setIssueSnapshot] = useState(issue);
+  const [issueSnapshot, setIssueSnapshot] = useState(displayed);
   if (
-    issue !== undefined &&
-    (issueSnapshot === undefined || issueSnapshot.id !== issue.id)
+    displayed !== undefined &&
+    (issueSnapshot === undefined || issueSnapshot.id !== displayed.id)
   ) {
-    setIssueSnapshot(issue);
+    setIssueSnapshot(displayed);
   }
   const [next] = useQuery(
-    buildListQuery(z, listContext, issue, 'next'),
+    buildListQuery(z, listContext, displayed, 'next'),
     listContext !== undefined && issueSnapshot !== undefined,
   );
   useKeypress('j', () => {
@@ -166,7 +192,7 @@ export function IssuePage() {
   });
 
   const [prev] = useQuery(
-    buildListQuery(z, listContext, issue, 'prev'),
+    buildListQuery(z, listContext, displayed, 'prev'),
     listContext !== undefined && issueSnapshot !== undefined,
   );
   useKeypress('k', () => {
@@ -176,36 +202,36 @@ export function IssuePage() {
   });
 
   const labelSet = useMemo(
-    () => new Set(issue?.labels?.map(l => l.id)),
-    [issue?.labels],
+    () => new Set(displayed?.labels?.map(l => l.id)),
+    [displayed?.labels],
   );
 
   const [displayAllComments, setDisplayAllComments] = useState(false);
 
   const [allComments, allCommentsResult] = useQuery(
     z.query.comment
-      .where('issueID', issue?.id ?? '')
+      .where('issueID', displayed?.id ?? '')
       .related('creator', creator => creator.one())
       .related('emoji', emoji =>
         emoji.related('creator', creator => creator.one()),
       )
       .orderBy('created', 'asc')
       .orderBy('id', 'asc'),
-    displayAllComments && issue !== undefined,
+    displayAllComments && displayed !== undefined,
   );
 
   const [comments, hasOlderComments] = useMemo(() => {
-    if (issue?.comments === undefined) {
+    if (displayed?.comments === undefined) {
       return [undefined, false];
     }
     if (allCommentsResult.type === 'complete') {
       return [allComments, false];
     }
     return [
-      issue.comments.slice(0, 100).reverse(),
-      issue.comments.length > 100,
+      displayed.comments.slice(0, 100).reverse(),
+      displayed.comments.length > 100,
     ];
-  }, [issue?.comments, allCommentsResult.type, allComments]);
+  }, [displayed?.comments, allCommentsResult.type, allComments]);
 
   const issueDescriptionRef = useRef<HTMLDivElement | null>(null);
   const restoreScrollRef = useRef<() => void>();
@@ -269,7 +295,7 @@ export function IssuePage() {
 
   const [deleteConfirmationShown, setDeleteConfirmationShown] = useState(false);
 
-  const canEdit = useCanEdit(issue?.creatorID);
+  const canEdit = useCanEdit(displayed?.creatorID);
 
   const issueEmojiRef = useRef<HTMLDivElement>(null);
 
@@ -280,10 +306,10 @@ export function IssuePage() {
       const newRecentEmojis = new Map(recentEmojis.map(e => [e.id, e]));
 
       for (const emoji of added) {
-        if (issue && emoji.creatorID !== z.userID) {
+        if (displayed && emoji.creatorID !== z.userID) {
           maybeShowToastForEmoji(
             emoji,
-            issue,
+            displayed,
             virtualizer,
             issueEmojiRef.current,
             setRecentEmojis,
@@ -299,7 +325,7 @@ export function IssuePage() {
 
       setRecentEmojis([...newRecentEmojis.values()]);
     },
-    [issue, recentEmojis, virtualizer, z.userID],
+    [displayed, recentEmojis, virtualizer, z.userID],
   );
 
   const removeRecentEmoji = useCallback((id: string) => {
@@ -307,11 +333,11 @@ export function IssuePage() {
     setRecentEmojis(recentEmojis => recentEmojis.filter(e => e.id !== id));
   }, []);
 
-  useEmojiChangeListener(issue, handleEmojiChange);
+  useEmojiChangeListener(displayed, handleEmojiChange);
   useEmojiDataSourcePreload();
   useShowToastForNewComment(comments, virtualizer);
 
-  if (!issue && issueResult.type === 'complete') {
+  if (!displayed && issueResult.type === 'complete') {
     return (
       <div>
         <div>
@@ -322,23 +348,23 @@ export function IssuePage() {
     );
   }
 
-  if (!issue || !comments) {
+  if (!displayed || !comments) {
     return null;
   }
 
   const remove = () => {
     // TODO: Implement undo - https://github.com/rocicorp/undo
-    z.mutate.issue.delete({id: issue.id});
+    z.mutate.issue.delete({id: displayed.id});
     navigate(listContext?.href ?? links.home());
   };
 
   // TODO: This check goes away once Zero's consistency model is implemented.
   // The query above should not be able to return an incomplete result.
-  if (!issue.creator) {
+  if (!displayed.creator) {
     return null;
   }
 
-  const rendering = editing ? {...editing, ...edits} : issue;
+  const rendering = editing ? {...editing, ...edits} : displayed;
 
   return (
     <div className="issue-detail-container">
@@ -356,16 +382,16 @@ export function IssuePage() {
                 <span className="breadcrumb-item">&rarr;</span>
               </>
             ) : null}
-            <span className="breadcrumb-item">Issue {issue.shortID}</span>
+            <span className="breadcrumb-item">Issue {displayed.shortID}</span>
           </div>
-          <CanEdit ownerID={issue.creatorID}>
+          <CanEdit ownerID={displayed.creatorID}>
             <div className="edit-buttons">
               {!editing ? (
                 <>
                   <Button
                     className="edit-button"
                     eventName="Edit issue"
-                    onAction={() => setEditing(issue)}
+                    onAction={() => setEditing(displayed)}
                   >
                     Edit
                   </Button>
@@ -426,9 +452,9 @@ export function IssuePage() {
                 <Markdown>{rendering.description}</Markdown>
               </div>
               <EmojiPanel
-                issueID={issue.id}
+                issueID={displayed.id}
                 ref={issueEmojiRef}
-                emojis={issue.emoji}
+                emojis={displayed.emoji}
                 recentEmojis={recentEmojis}
                 removeRecentEmoji={removeRecentEmoji}
               />
@@ -467,9 +493,9 @@ export function IssuePage() {
                   icon: statusClosed,
                 },
               ]}
-              selectedValue={issue.open}
+              selectedValue={displayed.open}
               onChange={value =>
-                z.mutate.issue.update({id: issue.id, open: value})
+                z.mutate.issue.update({id: displayed.id, open: value})
               }
             />
           </div>
@@ -478,13 +504,13 @@ export function IssuePage() {
             <p className="issue-detail-label">Assignee</p>
             <UserPicker
               disabled={!canEdit}
-              selected={{login: issue.assignee?.login}}
+              selected={{login: displayed.assignee?.login}}
               placeholder="Assign to..."
               unselectedLabel="Nobody"
               crewOnly={true}
               onSelect={user => {
                 z.mutate.issue.update({
-                  id: issue.id,
+                  id: displayed.id,
                   assigneeID: user?.id ?? null,
                 });
               }}
@@ -509,9 +535,12 @@ export function IssuePage() {
                     icon: statusClosed,
                   },
                 ]}
-                selectedValue={issue.visibility}
+                selectedValue={displayed.visibility}
                 onChange={value =>
-                  z.mutate.issue.update({id: issue.id, visibility: value})
+                  z.mutate.issue.update({
+                    id: displayed.id,
+                    visibility: value,
+                  })
                 }
               />
             </div>
@@ -521,40 +550,43 @@ export function IssuePage() {
             <p className="issue-detail-label">Creator</p>
             <div className="issue-creator">
               <img
-                src={issue.creator?.avatar}
+                src={displayed.creator?.avatar}
                 className="issue-creator-avatar"
-                alt={issue.creator?.name ?? undefined}
+                alt={displayed.creator?.name ?? undefined}
               />
-              {issue.creator.login}
+              {displayed.creator.login}
             </div>
           </div>
 
           <div className="sidebar-item">
             <p className="issue-detail-label">Labels</p>
             <div className="issue-detail-label-container">
-              {issue.labels.map(label => (
+              {displayed.labels.map(label => (
                 <span className="pill label" key={label.id}>
                   {label.name}
                 </span>
               ))}
             </div>
-            <CanEdit ownerID={issue.creatorID}>
+            <CanEdit ownerID={displayed.creatorID}>
               <LabelPicker
                 selected={labelSet}
                 onAssociateLabel={labelID =>
                   z.mutate.issueLabel.insert({
-                    issueID: issue.id,
+                    issueID: displayed.id,
                     labelID,
                   })
                 }
                 onDisassociateLabel={labelID =>
-                  z.mutate.issueLabel.delete({issueID: issue.id, labelID})
+                  z.mutate.issueLabel.delete({
+                    issueID: displayed.id,
+                    labelID,
+                  })
                 }
                 onCreateNewLabel={labelName => {
                   const labelID = nanoid();
                   z.mutateBatch(tx => {
                     tx.label.insert({id: labelID, name: labelName});
-                    tx.issueLabel.insert({issueID: issue.id, labelID});
+                    tx.issueLabel.insert({issueID: displayed.id, labelID});
                   });
                 }}
               />
@@ -564,7 +596,7 @@ export function IssuePage() {
           <div className="sidebar-item">
             <p className="issue-detail-label">Last updated</p>
             <div className="timestamp-container">
-              <RelativeTime timestamp={issue.modified} />
+              <RelativeTime timestamp={displayed.modified} />
             </div>
           </div>
         </div>
@@ -598,7 +630,7 @@ export function IssuePage() {
               >
                 <Comment
                   id={comments[item.index].id}
-                  issueID={issue.id}
+                  issueID={displayed.id}
                   comment={comments[item.index]}
                   height={item.size}
                 />
@@ -612,7 +644,7 @@ export function IssuePage() {
             Login to comment
           </a>
         ) : (
-          <CommentComposer issueID={issue.id} />
+          <CommentComposer issueID={displayed.id} />
         )}
       </div>
       <Confirm
