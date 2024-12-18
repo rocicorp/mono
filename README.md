@@ -1,22 +1,30 @@
 # Rocicorp Monorepo
 
-## SQLite build
+This is the mono repo for [Rocicorp](https://rocicorp.dev/)'s two main products (as of 2024).
 
-Zero uses a non-trunk build of SQLite. To update the build:
+## Zero
 
-1. Determine desired Check-in of SQLite.
+Web site and docs: https://zero.rocicorp.dev/.
 
-   - For example, https://sqlite.org/src/info/2a07caad4ab1bf5f is referred to as Check-in `2a07caad`.
-   - Verify that the `ZIP archive` link on the info page is of the form
-     https://sqlite.org/src/zip/{CHECKIN}/SQLite-{CHECKIN}.zip
-   - For the time being, we are using the latest build referenced by bedrockdb, e.g.:
-     https://github.com/Expensify/Bedrock/blob/a70564a677d4643c0761cea4eb528237474b006d/libstuff/sqlite3.h#L151
+### Code
 
-2. Edit the `CHECKIN=` variable in [deps/download.sh](deps/download.sh).
+- [packages/zero-client](./packages/zero-client): The main client library. It use replicache under the hood.
+- [packages/zero-cache](./packages/zero-cache): The server side code.
+- [packages/zql](./packages/zql): The IVM (incremental view maintenance) engine as well as the query language/API.
+- [@rocicorp/zero-docs](https://github.com/rocicorp/zero-docs): The docs for zero is currently in a separate repo.
+- [apps/zbugs](./apps/zbugs): The bug tracker app.
 
-3. From the repo root, run:
+## Replicache
 
-```sh
-npm run download-deps
-npm install
-```
+Web site and docs https://replicache.dev/.
+
+### Code
+
+- [packages/replicache](./packages/replicache): The replicache client library.
+- [packages/replicache/doc](./packages/replicache/): The docs for replicache is in this mono repo.
+
+## Older Projects
+
+### Reflect
+
+Reflect is no longer under development. The code lives in a the [@rocicorp/reflect-archive](https://github.com/rocicorp/reflect-archive) repo.
