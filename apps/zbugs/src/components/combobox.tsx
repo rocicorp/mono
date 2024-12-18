@@ -3,11 +3,13 @@ import {
   type KeyboardEvent,
   memo,
   type RefObject,
+  useCallback,
   useEffect,
   useRef,
   useState,
 } from 'react';
 import DropdownArrow from '../assets/icons/dropdown-arrow.svg?react';
+import {useClickOutside} from '../hooks/use-click-outside.js';
 import {umami} from '../umami.js';
 import styles from './combobox.module.css';
 import {fuzzySearch} from './fuzzySearch.js';
@@ -49,18 +51,21 @@ function Combobox<T>({
 
   const selectedItem = items.find(option => option.value === value);
 
-  const setMenuOpen = (b: boolean) => {
-    if (b !== isOpen) {
-      // Only track if state changes
-      if (b) {
-        openTimeRef.current = Date.now();
-        umami.track('Combobox opened'); // Track open action
-      } else {
-        umami.track('Combobox closed'); // Track close action
+  const setMenuOpen = useCallback(
+    (b: boolean) => {
+      if (b !== isOpen) {
+        // Only track if state changes
+        if (b) {
+          openTimeRef.current = Date.now();
+          umami.track('Combobox opened'); // Track open action
+        } else {
+          umami.track('Combobox closed'); // Track close action
+        }
+        setIsOpen(b);
       }
-      setIsOpen(b);
-    }
-  };
+    },
+    [isOpen],
+  );
 
   const toggleDropdown = () => {
     setMenuOpen(!isOpen);
@@ -73,19 +78,12 @@ function Combobox<T>({
     }
   }, [isOpen]);
 
-  useEffect(() => {
-    const handleMouseDown = (event: MouseEvent) => {
-      if (
-        !inputRef.current?.contains(event.target as Element) &&
-        !listboxRef.current?.contains(event.target as Element)
-      ) {
-        setMenuOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleMouseDown);
-    return () => document.removeEventListener('mousedown', handleMouseDown);
-  }, []);
+  useClickOutside(
+    [inputRef, listboxRef],
+    useCallback(() => {
+      setMenuOpen(false);
+    }, [setMenuOpen]),
+  );
 
   const selectIndex = (index: number) => {
     setSelectedIndex(index);
