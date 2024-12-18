@@ -24,7 +24,7 @@ import type {
   TokenData,
   ViewSyncer,
 } from '../services/view-syncer/view-syncer.js';
-import {findErrorForClient} from '../types/error-for-client.js';
+import {findErrorForClient, getLogLevel} from '../types/error-for-client.js';
 import type {Source} from '../types/streams.js';
 
 const tracer = trace.getTracer('syncer-ws-server', version);
@@ -287,7 +287,7 @@ export function sendError(
   thrown?: unknown,
 ) {
   lc = lc.withContext('errorKind', errorBody.kind);
-  const logLevel = thrown ? 'error' : 'info';
+  const logLevel = thrown ? getLogLevel(thrown) : 'info';
   lc[logLevel]?.('Sending error on WebSocket', errorBody, thrown ?? '');
   send(ws, ['error', errorBody]);
 }
