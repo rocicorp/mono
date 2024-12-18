@@ -1,10 +1,10 @@
 # Rocicorp Monorepo
 
-This is the mono repo for [Rocicorp](https://rocicorp.dev/)'s two main products (dec 2024).
+This is the mono repo for [Rocicorp](https://rocicorp.dev/)'s two main products (as of 2024).
 
 ## Zero
 
-Web site and end user docs: https://zero.rocicorp.dev/.
+Web site and docs: https://zero.rocicorp.dev/.
 
 The code for this is in a few different packages in this repo:
 
@@ -15,7 +15,7 @@ The code for this is in a few different packages in this repo:
 
 ## Replicache
 
-Web site and end user docs https://replicache.dev/.
+Web site and docs https://replicache.dev/.
 
 ### Code
 
