@@ -1,7 +1,7 @@
 import type {Zero} from '@rocicorp/zero';
 import {escapeLike, type Row} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
-import {useWindowVirtualizer, type Virtualizer} from '@tanstack/react-virtual';
+import {useWindowVirtualizer, Virtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
 import {
   memo,
@@ -44,12 +44,12 @@ import {useKeypress} from '../../hooks/use-keypress.js';
 import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {LRUCache} from '../../lru-cache.js';
+import {recordPageLoad} from '../../page-load-stats.js';
 import {links, type ListContext, type ZbugsHistoryState} from '../../routes.js';
 import {preload} from '../../zero-setup.js';
 import CommentComposer from './comment-composer.js';
 import Comment from './comment.js';
 import {isCtrlEnter} from './is-ctrl-enter.js';
-import {recordPageLoad} from '../../page-load-stats.js';
 
 const emojiToastShowDuration = 3_000;
 
@@ -227,11 +227,7 @@ export function IssuePage() {
       virtualizer,
       comments,
     );
-
-    // Disabled because we do not want comments in here. We only want this to be
-    // called on scroll.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [virtualizer.scrollOffset]);
+  }, [virtualizer.scrollOffset, comments, virtualizer]);
 
   const hash = useHash();
 
