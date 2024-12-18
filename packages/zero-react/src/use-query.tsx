@@ -105,7 +105,7 @@ class ViewStore {
   #views = new Map<string, ViewWrapper<any, any>>();
 
   getView<TSchema extends TableSchema, TReturn extends QueryType>(
-    clientID: string | undefined,
+    clientID: string,
     query: AdvancedQuery<TSchema, TReturn>,
     enabled: boolean,
   ): {
