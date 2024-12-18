@@ -6,12 +6,13 @@ This is the mono repo for [Rocicorp](https://rocicorp.dev/)'s two main products 
 
 Web site and docs: https://zero.rocicorp.dev/.
 
-The code for this is in a few different packages in this repo:
+### Code
 
 - [packages/zero-client](./packages/zero-client): The main client library. It use replicache under the hood.
 - [packages/zero-cache](./packages/zero-cache): The server side code.
 - [packages/zql](./packages/zql): The IVM (incremental view maintenance) engine as well as the query language/API.
 - [@rocicorp/zero-docs](https://github.com/rocicorp/zero-docs): The docs for zero is currently in a separate repo.
+- [apps/zbugs](./apps/zbugs): The bug tracker app.
 
 ## Replicache
 
