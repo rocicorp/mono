@@ -1,5 +1,4 @@
 import 'emoji-picker-element';
-import dataSource from 'emoji-picker-element-data/en/emojibase/data.json?url';
 import Database from 'emoji-picker-element/database.js';
 import type Picker from 'emoji-picker-element/picker.js';
 import type {
@@ -7,9 +6,10 @@ import type {
   NativeEmoji,
   SkinToneChangeEvent,
 } from 'emoji-picker-element/shared.js';
-import {createElement, memo, useEffect, useRef, type RefCallback} from 'react';
+import {createElement, memo, useRef, type RefCallback} from 'react';
 import {setUserPref, useUserPref} from '../hooks/use-user-pref.js';
 import {useZero} from '../hooks/use-zero.js';
+import {emojiDataSource} from './emoji-data-source.js';
 
 export const SKIN_TONE_PREF = 'emojiSkinTone';
 
@@ -28,7 +28,7 @@ export const EmojiPicker = memo(({onEmojiChange}: Props) => {
   if (skinTonePref !== undefined) {
     const v = parseInt(skinTonePref, 10);
     if (!isNaN(v)) {
-      const db = new Database({dataSource});
+      const db = new Database({dataSource: emojiDataSource});
       db.setPreferredSkinTone(v).catch(err => {
         console.error('Failed to set preferred skin tone:', err);
       });
@@ -101,20 +101,6 @@ export const EmojiPicker = memo(({onEmojiChange}: Props) => {
   return createElement('emoji-picker', {
     'class': 'dark',
     ref,
-    'data-source': dataSource,
+    'data-source': emojiDataSource,
   });
 });
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function useEmojiDataSourcePreload() {
-  useEffect(() => {
-    // Do this on a timer to not compete with other work.
-    const timer = setTimeout(
-      () => {
-        new Database({dataSource});
-      },
-      1000 + Math.random() * 1000,
-    );
-    return () => clearTimeout(timer);
-  }, []);
-}

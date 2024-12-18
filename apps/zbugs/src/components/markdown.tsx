@@ -121,7 +121,7 @@ const rehypeImageToVideo: Plugin = () => {
   };
 };
 
-const Markdown = memo(({children}: {children: string}) => {
+export const Markdown = memo(({children}: {children: string}) => {
   return (
     <MarkdownBase
       remarkPlugins={[remarkGfm]}
@@ -152,5 +152,3 @@ const Markdown = memo(({children}: {children: string}) => {
     </MarkdownBase>
   );
 });
-
-export default Markdown;

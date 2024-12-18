@@ -17,7 +17,7 @@ const focusInput = (input: HTMLInputElement | null) => {
   }
 };
 
-export default function IssueComposer({isOpen, onDismiss}: Props) {
+export function IssueComposer({isOpen, onDismiss}: Props) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState<string>('');
   const z = useZero();

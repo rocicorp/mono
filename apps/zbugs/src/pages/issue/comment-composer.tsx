@@ -5,7 +5,7 @@ import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {isCtrlEnter} from './is-ctrl-enter.js';
 
-export default function CommentComposer({
+export function CommentComposer({
   id,
   body,
   issueID,

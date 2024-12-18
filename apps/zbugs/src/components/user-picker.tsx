@@ -18,7 +18,7 @@ type Props = {
 
 type User = Row<Schema['tables']['user']>;
 
-export default function UserPicker({
+export function UserPicker({
   onSelect,
   selected,
   disabled,

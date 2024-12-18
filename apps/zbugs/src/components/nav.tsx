@@ -8,7 +8,7 @@ import logoURL from '../assets/images/logo.svg';
 import markURL from '../assets/images/mark.svg';
 import {useLogin} from '../hooks/use-login.js';
 import {useZero} from '../hooks/use-zero.js';
-import IssueComposer from '../pages/issue/issue-composer.js';
+import {IssueComposer} from '../pages/issue/issue-composer.js';
 import {
   links,
   routes,

@@ -8,7 +8,7 @@ import {ListPage} from './pages/list/list-page.js';
 import {routes} from './routes.js';
 import {zeroRef} from './zero-setup.js';
 
-export default function Root() {
+export function Root() {
   const z = useSyncExternalStore(
     zeroRef.onChange,
     useCallback(() => zeroRef.value, []),

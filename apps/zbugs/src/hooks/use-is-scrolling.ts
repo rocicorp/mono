@@ -1,6 +1,6 @@
-import {useState, useEffect} from 'react';
+import {useEffect, useState} from 'react';
 
-const useIsScrolling = () => {
+export function useIsScrolling() {
   const [isScrolling, setIsScrolling] = useState(false);
 
   useEffect(() => {
@@ -29,6 +29,4 @@ const useIsScrolling = () => {
   }, []);
 
   return isScrolling;
-};
-
-export default useIsScrolling;
+}
