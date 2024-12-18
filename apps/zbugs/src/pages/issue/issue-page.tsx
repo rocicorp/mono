@@ -25,7 +25,6 @@ import {difference} from '../../../../../packages/shared/src/set-utils.js';
 import type {CommentRow, IssueRow, Schema, UserRow} from '../../../schema.js';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
-import {makePermalink, parsePermalink} from '../../comment-permalink.js';
 import {Button} from '../../components/button.js';
 import {CanEdit} from '../../components/can-edit.js';
 import {Combobox} from '../../components/combobox.js';
@@ -40,7 +39,6 @@ import UserPicker from '../../components/user-picker.js';
 import {type Emoji} from '../../emoji-utils.js';
 import {useCanEdit} from '../../hooks/use-can-edit.js';
 import {useDocumentHasFocus} from '../../hooks/use-document-has-focus.js';
-import {useHash} from '../../hooks/use-hash.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
@@ -114,7 +112,7 @@ export function IssuePage() {
           created: Date.now(),
           creatorID: z.userID,
         });
-      }, 3000);
+      }, 10_000);
     };
   });
 
@@ -255,43 +253,26 @@ export function IssuePage() {
     );
   }, [virtualizer.scrollOffset, comments, virtualizer]);
 
-  const hash = useHash();
-
   // Permalink scrolling behavior
-  const [lastPermalinkScroll, setLastPermalinkScroll] = useState('');
-  useEffect(() => {
+  const [highlightedCommentID, setHighlightedCommentID] = useState<
+    string | null
+  >(null);
+
+  const highlightComment = (commentID: string) => {
     if (comments === undefined) {
-      return;
-    }
-    const commentID = parsePermalink(hash);
-    if (!commentID) {
-      return;
-    }
-    if (lastPermalinkScroll === commentID) {
       return;
     }
     const commentIndex = comments.findIndex(c => c.id === commentID);
     if (commentIndex !== -1) {
-      setLastPermalinkScroll(commentID);
+      setHighlightedCommentID(commentID);
       virtualizer.scrollToIndex(commentIndex, {
         // auto for minimal amount of scrolling.
         align: 'auto',
         // The `smooth` scroll behavior is not fully supported with dynamic size.
         // behavior: 'smooth',
       });
-    } else {
-      if (!displayAllComments) {
-        setDisplayAllComments(true);
-      }
     }
-  }, [
-    hash,
-    virtualizer,
-    displayAllComments,
-    allCommentsResult.type,
-    comments,
-    lastPermalinkScroll,
-  ]);
+  };
 
   const [deleteConfirmationShown, setDeleteConfirmationShown] = useState(false);
 
@@ -335,7 +316,7 @@ export function IssuePage() {
 
   useEmojiChangeListener(displayed, handleEmojiChange);
   useEmojiDataSourcePreload();
-  useShowToastForNewComment(comments, virtualizer);
+  useShowToastForNewComment(comments, virtualizer, highlightComment);
 
   if (!displayed && issueResult.type === 'complete') {
     return (
@@ -633,6 +614,7 @@ export function IssuePage() {
                   issueID={displayed.id}
                   comment={comments[item.index]}
                   height={item.size}
+                  highlight={highlightedCommentID === comments[item.index].id}
                 />
               </div>
             ))}
@@ -1002,6 +984,7 @@ function useShowToastForNewComment(
     | ReadonlyArray<CommentRow & {readonly creator: UserRow | undefined}>
     | undefined,
   virtualizer: Virtualizer<Window, HTMLElement>,
+  highlightComment: (id: string) => void,
 ) {
   // Keep track of the last comment IDs so we can compare them to the current
   // comment IDs and show a toast for new comments.
@@ -1062,7 +1045,7 @@ function useShowToastForNewComment(
           toastId: commentID,
           containerId: 'bottom',
           onClick: () => {
-            navigate('#' + makePermalink(comment));
+            highlightComment(comment.id);
           },
         },
       );
@@ -1073,5 +1056,5 @@ function useShowToastForNewComment(
     }
 
     lastCommentIDs.current = currentCommentIDs;
-  }, [comments, virtualizer, userID]);
+  }, [comments, virtualizer, userID, highlightComment]);
 }

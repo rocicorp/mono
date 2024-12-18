@@ -30,9 +30,10 @@ type Props = {
    * being "loaded".
    */
   height?: number | undefined;
+  highlight?: boolean | undefined;
 };
 
-const Comment = memo(({id, issueID, comment, height}: Props) => {
+const Comment = memo(({id, issueID, comment, height, highlight}: Props) => {
   const z = useZero();
   const [editing, setEditing] = useState(false);
   const login = useLogin();
@@ -40,7 +41,7 @@ const Comment = memo(({id, issueID, comment, height}: Props) => {
 
   const hash = useHash();
   const permalink = comment && makePermalink(comment);
-  const isPermalinked = hash === permalink;
+  const isPermalinked = highlight || hash === permalink;
 
   const edit = () => setEditing(true);
   const remove = () => z.mutate.comment.delete({id});
