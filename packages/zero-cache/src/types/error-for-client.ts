@@ -14,7 +14,7 @@ export class ErrorWithLevel extends Error {
   }
 }
 
-export function getLogLevel(error: unknown) {
+export function getLogLevel(error: unknown): LogLevel {
   return error instanceof ErrorWithLevel ? error.logLevel : 'error';
 }
 
@@ -22,7 +22,7 @@ export class ErrorForClient extends ErrorWithLevel {
   readonly errorBody;
   constructor(
     errorBody: ErrorBody,
-    logLevel: LogLevel = 'warn', // 'warn' by default most of these are not server errors
+    logLevel: LogLevel = 'warn', // 'warn' by default since these are generally not server issues
     options?: ErrorOptions,
   ) {
     super(JSON.stringify(errorBody), logLevel, options);
