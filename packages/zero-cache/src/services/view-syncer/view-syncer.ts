@@ -25,7 +25,7 @@ import {
 import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.js';
 import {transformAndHashQuery} from '../../auth/read-authorizer.js';
 import {stringify} from '../../types/bigint-json.js';
-import {ErrorForClient} from '../../types/error-for-client.js';
+import {ErrorForClient, getLogLevel} from '../../types/error-for-client.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {rowIDString, type RowKey} from '../../types/row-key.js';
 import type {Source} from '../../types/streams.js';
@@ -238,12 +238,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
       this.#cleanup();
     } catch (e) {
-      this.#lc.error?.(`stopping view-syncer: ${String(e)}`, e);
+      this.#lc[getLogLevel(e)]?.(`stopping view-syncer: ${String(e)}`, e);
       this.#cleanup(e);
     } finally {
       // Always wait for the cvrStore to flush, regardless of how the service
       // was stopped.
-      await this.#cvrStore.flushed(this.#lc).catch(e => this.#lc.error?.(e));
+      await this.#cvrStore
+        .flushed(this.#lc)
+        .catch(e => this.#lc[getLogLevel(e)]?.(e));
       this.#lc.info?.('view-syncer stopped');
       this.#stopped.resolve();
     }
@@ -336,7 +338,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const downstream = Subscription.create<Downstream>({
         cleanup: (_, err) => {
           err
-            ? lc.error?.(`client closed with error`, err)
+            ? lc[getLogLevel(err)]?.(`client closed with error`, err)
             : lc.info?.('client closed');
           this.#deleteClient(clientID, newClient);
         },
@@ -424,11 +426,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             return fn(lc, clientID, body, cvr);
           });
         } catch (e) {
-          this.#lc
+          const lc = this.#lc
             .withContext('clientID', clientID)
             .withContext('wsID', wsID)
-            .withContext('cmd', cmd)
-            .error?.(`closing connection with error`, e);
+            .withContext('cmd', cmd);
+          lc[getLogLevel(e)]?.(`closing connection with error`, e);
           if (client) {
             // Ideally, propagate the exception to the client's downstream subscription ...
             client.fail(e);

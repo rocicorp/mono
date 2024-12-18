@@ -18,7 +18,7 @@ import {ErrorKind} from '../../../../zero-protocol/src/error.js';
 import {multiInsertParams, multiInsertStatement} from '../../db/queries.js';
 import {Mode, TransactionPool} from '../../db/transaction-pool.js';
 import type {JSONValue} from '../../types/bigint-json.js';
-import {ErrorForClient} from '../../types/error-for-client.js';
+import {ErrorForClient, ErrorWithLevel} from '../../types/error-for-client.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import {rowIDString} from '../../types/row-key.js';
 import type {Patch, PatchToVersion} from './client-handler.js';
@@ -1078,17 +1078,18 @@ async function checkVersion(
   }
 }
 
-export class ConcurrentModificationException extends Error {
+export class ConcurrentModificationException extends ErrorWithLevel {
   readonly name = 'ConcurrentModificationException';
 
   constructor(expectedVersion: string, actualVersion: string) {
     super(
       `CVR has been concurrently modified. Expected ${expectedVersion}, got ${actualVersion}`,
+      'warn',
     );
   }
 }
 
-export class OwnershipError extends Error {
+export class OwnershipError extends ErrorWithLevel {
   readonly name = 'OwnershipError';
 
   constructor(owner: string | null, grantedAt: number | null) {
@@ -1096,6 +1097,7 @@ export class OwnershipError extends Error {
       `CVR ownership was transferred to ${owner} at ${new Date(
         grantedAt ?? 0,
       ).toISOString()}`,
+      'info',
     );
   }
 }
