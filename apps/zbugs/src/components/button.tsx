@@ -5,6 +5,7 @@ import {
   type ForwardedRef,
   type ReactNode,
 } from 'react';
+import {isPrimaryMouseButton} from '../is-primary-mouse-button.js';
 import {umami} from '../umami.js';
 
 export interface ButtonProps {
@@ -23,19 +24,21 @@ export const Button = memo(
     const {onAction, eventName, children, ...rest} = props;
 
     const handleMouseDown = (e: React.MouseEvent) => {
-      onAction?.();
-      if (eventName) {
-        umami.track(eventName);
+      if (isPrimaryMouseButton(e)) {
+        onAction?.();
+        if (eventName) {
+          umami.track(eventName);
+        }
+
+        // TODO: This is really not the right thing to do. We should only use
+        // preventDefault in the callers if they move focus.... However, this is
+        // because we are using onmousedown which is non-standard and it is easy
+        // to forget to deal with the focus case
+
+        // Prevent default to avoid the button taking focus on click, which
+        // will steal focus from anything focused in response to onAction.
+        e.preventDefault();
       }
-
-      // TODO: This is really not the right thing to do. We should only use
-      // preventDefault in the callers if they move focus.... However, this is
-      // because we are using onmousedown which is non-standard and it is easy
-      // to forget to deal with the focus case
-
-      // Prevent default to avoid the button taking focus on click, which
-      // will steal focus from anything focused in response to onAction.
-      e.preventDefault();
     };
 
     const actionProps = onAction
