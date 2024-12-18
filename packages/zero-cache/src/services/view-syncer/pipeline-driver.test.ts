@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {beforeEach, describe, expect, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import type {AST} from '../../../../zero-protocol/src/ast.js';
 import type {Database as DB} from '../../../../zqlite/src/db.js';
@@ -86,6 +86,10 @@ describe('view-syncer/pipeline-driver', () => {
       INSERT INTO "labels" (id, name, _0_version) VALUES ('1', 'bug', '00');
       `);
     replicator = fakeReplicator(lc, db);
+  });
+
+  afterEach(() => {
+    dbFile.delete();
   });
 
   const ISSUES_AND_COMMENTS: AST = {
