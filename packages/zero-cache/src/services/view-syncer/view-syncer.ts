@@ -162,7 +162,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         return; // view-syncer has been shutdown
       }
       // If all clients have disconnected, cancel all pending work.
-      if (this.#checkForShutdownConditionsInLock()) {
+      if (await this.#checkForShutdownConditionsInLock()) {
         this.#lc.info?.('shutting down');
         this.#stateChanges.cancel(); // Note: #stateChanges.active becomes false.
         return;
@@ -278,11 +278,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#shutdownTimer ??= setTimeout(async () => {
       this.#shutdownTimer = null;
 
-      // Keep the view-syncer alive if there are pending rows being flushed.
-      // It's better to do this before shutting down since it may take a
-      // while, during which new connections may come in.
-      await this.#cvrStore.flushed(this.#lc).catch(e => this.#lc.error?.(e));
-
       // All lock tasks check for shutdown so that queued work is immediately
       // canceled when clients disconnect. Queue an empty task to ensure that
       // this check happens.
@@ -290,19 +285,23 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }, delayMs);
   }
 
-  #checkForShutdownConditionsInLock(): boolean {
+  async #checkForShutdownConditionsInLock(): Promise<boolean> {
     if (this.#clients.size > 0) {
       return false; // common case.
     }
+
+    // Keep the view-syncer alive if there are pending rows being flushed.
+    // It's better to do this before shutting down since it may take a
+    // while, during which new connections may come in.
+    await this.#cvrStore.flushed(this.#lc);
+
     if (Date.now() <= this.#keepAliveUntil) {
       this.#scheduleShutdown(this.#keepaliveMs); // check again later
       return false;
     }
-    if (this.#cvrStore.hasPendingUpdates()) {
-      this.#scheduleShutdown(0); // check again after #cvrStore.flushed()
-      return false;
-    }
-    return true;
+
+    // If no clients have connected while waiting for the row flush, shutdown.
+    return this.#clients.size === 0;
   }
 
   #deleteClient(clientID: string, client: ClientHandler) {
