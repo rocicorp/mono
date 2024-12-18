@@ -54,7 +54,8 @@ Resources:
       ClusterSettings:
         - Name: containerInsights
           Value: enhanced
-
+      ServiceConnectDefaults:
+        Namespace: "zero-cache-prod"
   # Security Group for internal service communication
   InternalServicesSG:
     Type: AWS::EC2::SecurityGroup
@@ -120,7 +121,9 @@ Resources:
         - ContainerName: "view-syncer-container"
           ContainerPort: 4848
           TargetGroupArn: !GetAtt VPC.Outputs.PublicLBTargetGroup
-
+      ServiceConnectConfiguration:
+        Enabled: true
+        Namespace: "zero-cache-prod"
   # First, create the secure parameters
   ViewSyncerSecrets:
     Type: AWS::SecretsManager::Secret
@@ -199,7 +202,7 @@ Resources:
           Essential: true
           Environment:
             - Name: ZERO_CHANGE_STREAMER_URI
-              Value: ws://replication-manager.internal.local:4849
+              Value: ws://change-streamer.zero-cache-prod:4849
             - Name: ZERO_LOG_FORMAT
               Value: json
             - Name: ZERO_REPLICA_FILE
@@ -289,8 +292,6 @@ Resources:
 
   ServiceReplicationManager:
     Type: AWS::ECS::Service
-    DependsOn:
-      - ServiceDiscoveryNamespace
     Properties:
       ServiceName: "replication-manager"
       Cluster: !Ref Cluster
@@ -312,8 +313,15 @@ Resources:
         MinimumHealthyPercent: 50
       DesiredCount: 1
       TaskDefinition: !Ref "TaskDefinitionReplicationManager"
-      ServiceRegistries:
-        - RegistryArn: !GetAtt ReplicationManagerRegistry.Arn
+      ServiceConnectConfiguration:
+        Enabled: true
+        Namespace: "zero-cache-prod"
+        Services:
+          - PortName: "change-streamer"
+            DiscoveryName: change-streamer
+            ClientAliases:
+              - Port: 4849
+                DnsName: "change-streamer.zero-cache-prod"
 
   ReplicationManagerSecrets:
     Type: AWS::SecretsManager::Secret
