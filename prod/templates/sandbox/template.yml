@@ -54,6 +54,8 @@ Resources:
       ClusterSettings:
         - Name: containerInsights
           Value: enhanced
+      ServiceConnectDefaults:
+        Namespace: "zero-cache-sandbox"
 
   # Security Group for internal service communication
   InternalServicesSG:
@@ -73,23 +75,6 @@ Resources:
       Tags:
         - Key: Name
           Value: internal-services-sg
-  # Create a private DNS namespace
-  ServiceDiscoveryNamespace:
-    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
-    Properties:
-      Name: internal.local
-      Vpc: !GetAtt VPC.Outputs.VPCID
-
-  # Service Discovery for Replication Manager
-  ReplicationManagerRegistry:
-    Type: AWS::ServiceDiscovery::Service
-    Properties:
-      Name: replication-manager
-      DnsConfig:
-        NamespaceId: !Ref ServiceDiscoveryNamespace
-        DnsRecords:
-          - Type: A
-            TTL: 5
 
   ServiceViewSyncer:
     Type: AWS::ECS::Service
@@ -116,14 +101,13 @@ Resources:
         MinimumHealthyPercent: 50
       DesiredCount: 10
       TaskDefinition: !Ref "TaskDefinitionViewSyncer"
-      ServiceConnectConfiguration:
-        Enabled: true
-        Namespace: !Ref ServiceDiscoveryNamespace
       LoadBalancers:
         - ContainerName: "view-syncer-container"
           ContainerPort: 4848
           TargetGroupArn: !GetAtt VPC.Outputs.PublicLBTargetGroup
-
+      ServiceConnectConfiguration:
+        Enabled: true
+        Namespace: "zero-cache-sandbox"
   # First, create the secure parameters
   ViewSyncerSecrets:
     Type: AWS::SecretsManager::Secret
@@ -202,8 +186,7 @@ Resources:
           Essential: true
           Environment:
             - Name: ZERO_CHANGE_STREAMER_URI
-              # TODO: Change to ws://change-streamer:4849 and remove ServiceDiscovery
-              Value: ws://replication-manager.internal.local:4849
+              Value: ws://change-streamer.zero-cache:4849
             - Name: ZERO_LOG_FORMAT
               Value: json
             - Name: ZERO_REPLICA_FILE
@@ -312,11 +295,13 @@ Resources:
       TaskDefinition: !Ref "TaskDefinitionReplicationManager"
       ServiceConnectConfiguration:
         Enabled: true
-        Namespace: !Ref ServiceDiscoveryNamespace
+        Namespace: "zero-cache-sandbox"
         Services:
           - PortName: "change-streamer"
-      ServiceRegistries:
-        - RegistryArn: !GetAtt ReplicationManagerRegistry.Arn
+            DiscoveryName: change-streamer
+            ClientAliases:
+              - Port: 4849
+                DnsName: "change-streamer.zero-cache-sandbox"
 
   ReplicationManagerSecrets:
     Type: AWS::SecretsManager::Secret
