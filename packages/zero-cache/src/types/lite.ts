@@ -152,6 +152,7 @@ export function dataTypeToZqlValueType(
     case 'character':
     case 'character varying':
     case 'text':
+    case 'uuid':
     case 'varchar':
       return 'string';
 
