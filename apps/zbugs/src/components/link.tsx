@@ -1,5 +1,6 @@
 import {memo, type ReactNode} from 'react';
 import {navigate} from 'wouter/use-browser-location';
+import {isPrimaryMouseButton} from '../is-primary-mouse-button.js';
 import type {ZbugsHistoryState} from '../routes.js';
 import {umami} from '../umami.js';
 
@@ -11,20 +12,15 @@ export type Props = {
   state?: ZbugsHistoryState | undefined;
   eventName?: string | undefined;
 };
+
 /**
  * The Link from wouter uses onClick and there's no way to change it.
  * We like mousedown here at Rocicorp.
  */
 export const Link = memo(
   ({children, href, className, title, state, eventName}: Props) => {
-    const isPrimary = (e: React.MouseEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.button !== 0) {
-        return false;
-      }
-      return true;
-    };
     const onMouseDown = (e: React.MouseEvent) => {
-      if (isPrimary(e)) {
+      if (isPrimaryMouseButton(e)) {
         navigate(href, {state});
         if (eventName) {
           umami.track(eventName);
@@ -32,7 +28,7 @@ export const Link = memo(
       }
     };
     const onClick = (e: React.MouseEvent) => {
-      if (isPrimary(e) && !e.defaultPrevented) {
+      if (isPrimaryMouseButton(e) && !e.defaultPrevented) {
         e.preventDefault();
       }
     };
