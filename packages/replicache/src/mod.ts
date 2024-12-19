@@ -24,6 +24,7 @@ export type {
 } from './error-responses.js';
 export {filterAsyncIterable} from './filter-async-iterable.js';
 export {getDefaultPuller} from './get-default-puller.js';
+export {getDefaultPusher} from './get-default-pusher.js';
 export type {HTTPRequestInfo} from './http-request-info.js';
 export type {IndexDefinition, IndexDefinitions} from './index-defs.js';
 export type {IterableUnion} from './iterable-union.js';
