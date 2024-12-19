@@ -26,14 +26,14 @@ export function CommentComposer({
         id: nanoid(),
         issueID,
         creatorID: z.userID,
-        body: currentBody,
+        body: currentBody.slice(0, 1024),
         created: Date.now(),
       });
       onDone?.();
       return;
     }
 
-    z.mutate.comment.update({id, body: currentBody});
+    z.mutate.comment.update({id, body: currentBody.slice(0, 1024)});
     onDone?.();
   };
 

@@ -34,6 +34,7 @@ import {throwErrorForClientIfSchemaVersionNotSupported} from '../../types/schema
 import {unescapedSchema as schema} from '../change-streamer/pg/schema/shard.js';
 import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.js';
 import type {Service} from '../service.js';
+import type {ReadonlyJSONValue} from '../../../../shared/src/json.js';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
@@ -314,11 +315,36 @@ async function processMutationWithTx(
   await Promise.all(tasks.map(task => task()));
 }
 
+function limitValue(
+  op: Readonly<Record<string, ReadonlyJSONValue | undefined>>,
+) {
+  // Avoid making copy in common case where not needed.
+  const limit = 8096;
+  const needsLimit = Object.values(op).some(
+    val => typeof val === 'string' && val.length > limit,
+  );
+  if (!needsLimit) {
+    return op;
+  }
+
+  const copy: Record<string, ReadonlyJSONValue | undefined> = {};
+  for (const key in op) {
+    const val = op[key];
+    if (typeof val === 'string' && val.length > limit) {
+      copy[key] = val.slice(0, limit);
+    } else {
+      copy[key] = val;
+    }
+  }
+  return copy;
+}
+
 export function getInsertSQL(
   tx: postgres.TransactionSql,
   create: InsertOp,
 ): postgres.PendingQuery<postgres.Row[]> {
-  return tx`INSERT INTO ${tx(create.tableName)} ${tx(create.value)}`;
+  const limited = limitValue(create.value);
+  return tx`INSERT INTO ${tx(create.tableName)} ${tx(limited)}`;
 }
 
 export function getUpsertSQL(
@@ -326,10 +352,11 @@ export function getUpsertSQL(
   set: UpsertOp,
 ): postgres.PendingQuery<postgres.Row[]> {
   const {tableName, primaryKey, value} = set;
+  const limited = limitValue(value);
   return tx`
-    INSERT INTO ${tx(tableName)} ${tx(value)}
+    INSERT INTO ${tx(tableName)} ${tx(limited)}
     ON CONFLICT (${tx(primaryKey)})
-    DO UPDATE SET ${tx(value)}
+    DO UPDATE SET ${tx(limited)}
   `;
 }
 
@@ -343,7 +370,8 @@ function getUpdateSQL(
   for (const key of primaryKey) {
     id[key] = v.parse(value[key], primaryKeyValueSchema);
   }
-  return tx`UPDATE ${tx(table)} SET ${tx(value)} WHERE ${Object.entries(
+  const limited = limitValue(value);
+  return tx`UPDATE ${tx(table)} SET ${tx(limited)} WHERE ${Object.entries(
     id,
   ).flatMap(([key, value], i) =>
     i ? [tx`AND`, tx`${tx(key)} = ${value}`] : tx`${tx(key)} = ${value}`,
