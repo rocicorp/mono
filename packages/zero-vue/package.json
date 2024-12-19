@@ -1,0 +1,20 @@
+{
+  "name": "zero-vue",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "module": "true",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check-types": "tsc",
+    "check-types:watch": "tsc --watch"
+  },
+  "peerDependencies": {
+    "vue": ">=3"
+  },
+  "devDependencies": {
+    "vue": ">=3",
+    "zero-client": "0.0.0"
+  }
+}
