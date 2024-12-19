@@ -1,5 +1,4 @@
 import {defineConfig, devices} from '@playwright/test';
-import {time} from 'console';
 
 /**
  * Read environment variables from file.
@@ -13,7 +12,6 @@ import {time} from 'console';
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
-  testDir: './playwright',
   testMatch: '*.spec.ts',
 
   /* Run tests in files in parallel */

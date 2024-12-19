@@ -19,7 +19,6 @@ RUN npm install
 COPY *.spec.ts .
 COPY start.sh .
 RUN chmod +x ./start.sh
-
-
+ENV ENTER_PASSWORD=1
 # Run the Playwright tests
 CMD ["./start.sh"]
