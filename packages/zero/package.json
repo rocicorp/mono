@@ -84,6 +84,10 @@
       "types": "./out/zero-solid/src/mod.d.ts",
       "default": "./out/solid.js"
     },
+    "./vue": {
+      "types": "./out/zero-vue/src/mod.d.ts",
+      "default": "./out/vue.js"
+    },
     "./server": {
       "types": "./out/zero-cache/src/server/main.d.ts",
       "default": "./out/zero-cache/src/server/main.js"
