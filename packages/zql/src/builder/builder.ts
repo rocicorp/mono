@@ -335,7 +335,7 @@ function applyCorrelatedSubqueryCondition(
   );
 }
 
-function gatherCorrelatedSubqueryQueriesFromCondition(
+export function gatherCorrelatedSubqueryQueriesFromCondition(
   condition: Condition | undefined,
 ) {
   const csqs: CorrelatedSubquery[] = [];
