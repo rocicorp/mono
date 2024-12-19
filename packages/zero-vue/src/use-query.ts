@@ -7,14 +7,25 @@ import type {
 } from '../../zero-advanced/src/mod.js';
 import {readonly, ref, watch, type DeepReadonly, type Ref} from 'vue';
 import {vueViewFactory} from './vue-view.js';
+import type {ResultType} from '../../zql/src/query/typed-view.js';
+
+export type QueryResultDetails = {
+  type: ResultType;
+};
+
+export type QueryResult<TReturn extends QueryType> = [
+  Ref<Smash<TReturn>>,
+  Ref<QueryResultDetails>,
+];
 
 export function useQuery<
   TSchema extends TableSchema,
   TReturn extends QueryType,
 >(
   queryGetter: () => Query<TSchema, TReturn>,
-): DeepReadonly<Ref<Smash<TReturn>>> {
+): DeepReadonly<QueryResult<TReturn>> {
   const queryResult: Ref<Smash<TReturn> | undefined> = ref();
+  const details = ref<QueryResultDetails>({type: 'unknown'});
 
   watch(
     queryGetter,
@@ -28,9 +39,10 @@ export function useQuery<
       });
 
       queryResult.value = view.data;
+      details.value = view.details;
     },
     {immediate: true},
   );
 
-  return readonly(queryResult as Ref<Smash<TReturn>>);
+  return [readonly(queryResult as Ref<Smash<TReturn>>), details];
 }
