@@ -30,10 +30,14 @@ export function useQuery<
   const view = viewStore.getView(
     z.clientID,
     q as AdvancedQuery<TSchema, TReturn>,
-    enable,
+    enable && z.server !== null,
   );
   // https://react.dev/reference/react/useSyncExternalStore
-  return useSyncExternalStore(view.subscribeReactInternals, view.getSnapshot);
+  return useSyncExternalStore(
+    view.subscribeReactInternals,
+    view.getSnapshot,
+    view.getSnapshot,
+  );
 }
 
 const emptyArray: unknown[] = [];
