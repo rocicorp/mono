@@ -277,13 +277,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #shutdownTimer: NodeJS.Timeout | null = null;
 
   #scheduleShutdown(delayMs = 0) {
-    this.#shutdownTimer ??= setTimeout(async () => {
+    this.#shutdownTimer ??= setTimeout(() => {
       this.#shutdownTimer = null;
 
       // All lock tasks check for shutdown so that queued work is immediately
       // canceled when clients disconnect. Queue an empty task to ensure that
       // this check happens.
-      await this.#runInLockWithCVR(() => {});
+      void this.#runInLockWithCVR(() => {}).catch(e =>
+        // If an error occurs (e.g. ownership change), propagate the error
+        // to the main run() loop via the #stateChanges Subscription.
+        this.#stateChanges.fail(e),
+      );
     }, delayMs);
   }
 
