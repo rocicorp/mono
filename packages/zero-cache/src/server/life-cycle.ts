@@ -23,10 +23,6 @@ export type WorkerType = 'user-facing' | 'supporting';
 export const GRACEFUL_SHUTDOWN = ['SIGTERM', 'SIGINT'] as const;
 export const FORCEFUL_SHUTDOWN = ['SIGQUIT'] as const;
 
-function isGracefulShutdown(sig: NodeJS.Signals | null) {
-  return sig && (GRACEFUL_SHUTDOWN as readonly NodeJS.Signals[]).includes(sig);
-}
-
 /**
  * Handles readiness, termination signals, and coordination of graceful
  * shutdown.
@@ -147,19 +143,16 @@ export class ProcessManager {
       return this.#exit(log === 'error' ? -1 : code);
     }
 
-    const log =
-      this.#drainStart === 0
-        ? 'error'
-        : isGracefulShutdown(sig) || code === 0
-        ? 'info'
-        : 'warn';
+    const log = this.#drainStart === 0 ? 'error' : 'warn';
     if (sig) {
       this.#lc[log]?.(`${type} worker ${pid} killed with (${sig})`, err ?? '');
-    } else {
+    } else if (code !== 0) {
       this.#lc[log]?.(
         `${type} worker ${pid} exited with code (${code})`,
         err ?? '',
       );
+    } else {
+      this.#lc.info?.(`${type} worker ${pid} exited with code (${code})`);
     }
 
     // Exit only if not draining. If a user-facing worker exits unexpectedly
