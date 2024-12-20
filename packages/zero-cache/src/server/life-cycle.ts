@@ -3,6 +3,7 @@ import {resolver} from '@rocicorp/resolver';
 import {pid} from 'process';
 import type {EventEmitter} from 'stream';
 import {HttpService, type Options} from '../services/http-service.js';
+import {RunningState} from '../services/running-state.js';
 import type {SingletonService} from '../services/service.js';
 import type {Worker} from '../types/processes.js';
 
@@ -23,10 +24,6 @@ export type WorkerType = 'user-facing' | 'supporting';
 export const GRACEFUL_SHUTDOWN = ['SIGTERM', 'SIGINT'] as const;
 export const FORCEFUL_SHUTDOWN = ['SIGQUIT'] as const;
 
-function isGracefulShutdown(sig: NodeJS.Signals | null) {
-  return sig && (GRACEFUL_SHUTDOWN as readonly NodeJS.Signals[]).includes(sig);
-}
-
 /**
  * Handles readiness, termination signals, and coordination of graceful
  * shutdown.
@@ -39,6 +36,7 @@ export class ProcessManager {
   readonly #start = Date.now();
   readonly #ready: Promise<void>[] = [];
 
+  #runningState = new RunningState('process-manager');
   #drainStart = 0;
 
   constructor(
@@ -46,7 +44,7 @@ export class ProcessManager {
     proc: EventEmitter = process,
     exit = (code: number) => process.exit(code),
   ) {
-    this.#lc = lc.withContext('component', 'life-cycle');
+    this.#lc = lc.withContext('component', 'process-manager');
 
     // Propagate `SIGTERM` and `SIGINT` to all user-facing workers,
     // initiating a graceful shutdown. The parent process will
@@ -73,8 +71,13 @@ export class ProcessManager {
     this.#exitImpl = exit;
   }
 
+  done() {
+    return this.#runningState.stopped();
+  }
+
   #exit(code: number) {
     this.#lc.info?.('exiting with code', code);
+    this.#runningState.stop(this.#lc);
     void this.#lc.flush().finally(() => this.#exitImpl(code));
   }
 
@@ -147,19 +150,16 @@ export class ProcessManager {
       return this.#exit(log === 'error' ? -1 : code);
     }
 
-    const log =
-      this.#drainStart === 0
-        ? 'error'
-        : isGracefulShutdown(sig) || code === 0
-        ? 'info'
-        : 'warn';
+    const log = this.#drainStart === 0 ? 'error' : 'warn';
     if (sig) {
       this.#lc[log]?.(`${type} worker ${pid} killed with (${sig})`, err ?? '');
-    } else {
+    } else if (code !== 0) {
       this.#lc[log]?.(
         `${type} worker ${pid} exited with code (${code})`,
         err ?? '',
       );
+    } else {
+      this.#lc.info?.(`${type} worker ${pid} exited with code (${code})`);
     }
 
     // Exit only if not draining. If a user-facing worker exits unexpectedly
