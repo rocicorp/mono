@@ -1,5 +1,12 @@
-import xxhash from 'xxhash-wasm';
+import xxhash from 'xxhash-wasm'
 
-const {create64, h32, h64} = await xxhash();
+let xxhash64: ((str: string) => void) | null = null
 
-export {create64, h32, h64};
+void xxhash().then((x) => {
+  xxhash64 = x.h64
+})
+
+export function h64(str: string) {
+  if (!xxhash64) throw new Error(`Not loaded hash`)
+  return xxhash64(str)
+}
