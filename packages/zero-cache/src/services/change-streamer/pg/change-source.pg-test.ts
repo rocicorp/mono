@@ -116,7 +116,7 @@ describe('change-source/pg', () => {
     );
   }
 
-  const MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE = 5;
+  const MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE = 10;
 
   async function startStream(watermark: string) {
     let err;

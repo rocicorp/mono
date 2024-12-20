@@ -204,7 +204,6 @@ export async function createVersionHistoryTable(
     );`.simple();
 }
 
-// Exposed for tests
 export async function getVersionHistory(
   sql: postgres.Sql,
   schemaName: string,

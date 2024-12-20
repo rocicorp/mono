@@ -7,7 +7,7 @@ import {
 } from '../../../../db/migration.js';
 import {expectTablesToMatch, initDB, testDBs} from '../../../../test/db.js';
 import type {PostgresDB} from '../../../../types/pg.js';
-import {updateShardSchema} from './init.js';
+import {initShardSchema, updateShardSchema} from './init.js';
 import {GLOBAL_SETUP} from './shard.js';
 
 const SHARD_ID = 'shard_schema_test_id';
@@ -209,11 +209,16 @@ describe('change-streamer/pg/schema/init', () => {
         await createVersionHistoryTable(upstream, schema);
         await upstream`INSERT INTO ${upstream(schema)}."versionHistory"
           ${upstream(c.existingVersionHistory)}`;
+        await updateShardSchema(lc, upstream, {
+          id: SHARD_ID,
+          publications: c.requestedPublications ?? [],
+        });
+      } else {
+        await initShardSchema(lc, upstream, {
+          id: SHARD_ID,
+          publications: c.requestedPublications ?? [],
+        });
       }
-      await updateShardSchema(lc, upstream, {
-        id: SHARD_ID,
-        publications: c.requestedPublications ?? [],
-      });
 
       await expectTablesToMatch(upstream, c.upstreamPostState);
     });

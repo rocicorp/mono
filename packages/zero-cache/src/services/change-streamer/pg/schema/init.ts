@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {
+  getVersionHistory,
   runSchemaMigrations,
   type IncrementalMigrationMap,
   type Migration,
@@ -23,13 +24,28 @@ export async function initShardSchema(
   shardConfig: ShardConfig,
 ): Promise<void> {
   await db.unsafe(dropShard(shardConfig.id));
-  return updateShardSchema(lc, db, shardConfig);
+  return runShardMigrations(lc, db, shardConfig);
 }
 
 /**
  * Updates the schema for an existing shard.
  */
 export async function updateShardSchema(
+  lc: LogContext,
+  db: PostgresDB,
+  shardConfig: ShardConfig,
+): Promise<void> {
+  const {id} = shardConfig;
+  const {schemaVersion} = await getVersionHistory(db, unescapedSchema(id));
+  if (schemaVersion === 0) {
+    throw new Error(
+      `upstream shard ${id} is not initialized. Delete the replica and resync.`,
+    );
+  }
+  return runShardMigrations(lc, db, shardConfig);
+}
+
+async function runShardMigrations(
   lc: LogContext,
   db: PostgresDB,
   shardConfig: ShardConfig,
