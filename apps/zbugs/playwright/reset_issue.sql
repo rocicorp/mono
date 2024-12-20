@@ -75,7 +75,7 @@ BEGIN
 
     -- Delete existing comments and emojis
     DELETE FROM comment WHERE "issueID" = issue_id;
-        DELETE FROM emoji 
+    DELETE FROM emoji 
     WHERE "subjectID" = issue_id
     OR "subjectID" IN (
         SELECT id FROM comment 
@@ -87,7 +87,7 @@ BEGIN
     FROM "user";
 
     -- Set base time to one year ago
-    base_time := EXTRACT(EPOCH FROM NOW() - interval '1 year');
+    base_time := EXTRACT(EPOCH FROM NOW() - interval '1 year') * 1000;
 
     -- Create 1000 comments for the issue
     FOR i IN 1..1000 LOOP
