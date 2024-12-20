@@ -302,6 +302,9 @@ Resources:
             ClientAliases:
               - Port: 4849
                 DnsName: "change-streamer.zero-cache-sandbox"
+            Timeout:
+              IdleTimeoutSeconds: 0
+              PerRequestTimeoutSeconds: 0
 
   ReplicationManagerSecrets:
     Type: AWS::SecretsManager::Secret
