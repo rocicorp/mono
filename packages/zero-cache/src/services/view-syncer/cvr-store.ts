@@ -657,7 +657,11 @@ export class CVRStore {
 
     for (const row of desiresRows) {
       const client = cvr.clients[row.clientID];
-      assert(client, 'Client not found');
+      if (!client) {
+        // should be impossible unless CVR is corrupted
+        lc.error?.(`Client ${row.clientID} not found`, cvr);
+        throw new Error(`Client ${row.clientID} not found`);
+      }
       client.desiredQueryIDs.push(row.queryHash);
 
       const query = cvr.queries[row.queryHash];
