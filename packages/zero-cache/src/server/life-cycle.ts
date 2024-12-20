@@ -156,7 +156,7 @@ export class ProcessManager {
     if (sig) {
       this.#lc[log]?.(`${type} worker ${pid} killed with (${sig})`, err ?? '');
     } else {
-      this.#lc.info?.(
+      this.#lc[log]?.(
         `${type} worker ${pid} exited with code (${code})`,
         err ?? '',
       );
