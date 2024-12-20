@@ -162,19 +162,24 @@ export class ProcessManager {
       this.#lc.info?.(`${type} worker ${pid} exited with code (${code})`);
     }
 
-    // Exit only if not draining. If a user-facing worker exits unexpectedly
-    // during a drain, log a warning but let other user-facing workers drain.
-    if (log === 'error') {
-      this.#exit(code || -1);
-    }
-
-    // user-facing worker finished draining.
+    // user-facing workers exited or finished draining.
     if (this.#userFacing.size === 0) {
       this.#lc.info?.(
-        `all user-facing workers drained (${Date.now() - this.#drainStart} ms)`,
+        this.#drainStart
+          ? `all user-facing workers drained (${
+              Date.now() - this.#drainStart
+            } ms)`
+          : `all user-facing workers exited`,
       );
       return this.#exit(0);
     }
+
+    // Exit only if not draining. If a user-facing worker exits unexpectedly
+    // during a drain, log a warning but let other user-facing workers drain.
+    if (log === 'error') {
+      return this.#exit(code || -1);
+    }
+
     return undefined;
   }
 
