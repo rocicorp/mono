@@ -3,6 +3,7 @@ import {resolver} from '@rocicorp/resolver';
 import {pid} from 'process';
 import type {EventEmitter} from 'stream';
 import {HttpService, type Options} from '../services/http-service.js';
+import {RunningState} from '../services/running-state.js';
 import type {SingletonService} from '../services/service.js';
 import type {Worker} from '../types/processes.js';
 
@@ -35,6 +36,7 @@ export class ProcessManager {
   readonly #start = Date.now();
   readonly #ready: Promise<void>[] = [];
 
+  #runningState = new RunningState('process-manager');
   #drainStart = 0;
 
   constructor(
@@ -42,7 +44,7 @@ export class ProcessManager {
     proc: EventEmitter = process,
     exit = (code: number) => process.exit(code),
   ) {
-    this.#lc = lc.withContext('component', 'life-cycle');
+    this.#lc = lc.withContext('component', 'process-manager');
 
     // Propagate `SIGTERM` and `SIGINT` to all user-facing workers,
     // initiating a graceful shutdown. The parent process will
@@ -69,8 +71,13 @@ export class ProcessManager {
     this.#exitImpl = exit;
   }
 
+  done() {
+    return this.#runningState.stopped();
+  }
+
   #exit(code: number) {
     this.#lc.info?.('exiting with code', code);
+    this.#runningState.stop(this.#lc);
     void this.#lc.flush().finally(() => this.#exitImpl(code));
   }
 
