@@ -110,11 +110,8 @@ export class RunningState {
    */
   stop(lc: LogContext, err?: unknown): void {
     if (this.shouldRun()) {
-      if (!err || err instanceof AbortError) {
-        lc.info?.(`stopping ${this.#serviceName}`);
-      } else {
-        lc.error?.(`stopping ${this.#serviceName} with error`, err);
-      }
+      const log = !err || err instanceof AbortError ? 'info' : 'error';
+      lc[log]?.(`stopping ${this.#serviceName}`, err ?? '');
       this.#controller.abort();
     }
   }
