@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {AbortError} from '../../../../../../shared/src/abort-error.js';
 import {
   getVersionHistory,
   runSchemaMigrations,
@@ -38,7 +39,7 @@ export async function updateShardSchema(
   const {id} = shardConfig;
   const {schemaVersion} = await getVersionHistory(db, unescapedSchema(id));
   if (schemaVersion === 0) {
-    throw new Error(
+    throw new AbortError(
       `upstream shard ${id} is not initialized. Delete the replica and resync.`,
     );
   }
