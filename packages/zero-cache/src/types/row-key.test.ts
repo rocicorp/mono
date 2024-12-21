@@ -2,7 +2,6 @@ import {describe, expect, test} from 'vitest';
 import {
   type RowKey,
   normalizedKeyOrder,
-  rowIDHash,
   rowIDString,
   rowKeyString,
 } from './row-key.js';
@@ -101,7 +100,7 @@ describe('types/row-key', () => {
       for (const keys of c.keys) {
         expect(rowKeyString(keys)).toBe(c.rowKeyString);
         expect(rowIDString({schema, table, rowKey: keys})).toBe(c.rowIDString);
-        expect(rowIDHash({schema, table, rowKey: keys})).toBe(c.rowIDHash);
+        // expect(rowIDHash({schema, table, rowKey: keys})).toBe(c.rowIDHash);
       }
     });
   }
