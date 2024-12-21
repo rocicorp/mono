@@ -1,5 +1,5 @@
 import {ZeroProvider} from '@rocicorp/zero/react';
-import {useCallback, useSyncExternalStore} from 'react';
+import {useCallback, useState, useSyncExternalStore} from 'react';
 import {Route, Switch} from 'wouter';
 import {Nav} from './components/nav.js';
 import {ErrorPage} from './pages/error/error-page.js';
@@ -14,21 +14,33 @@ export function Root() {
     useCallback(() => zeroRef.value, []),
   );
 
+  const [contentReady, setContentReady] = useState(false);
+
   if (!z) {
     return null;
   }
 
   return (
     <ZeroProvider zero={z}>
-      <div className="app-container flex p-8">
+      <div
+        className="app-container flex p-8"
+        style={{visibility: contentReady ? 'visible' : 'hidden'}}
+      >
         <div className="primary-nav w-48 shrink-0 grow-0">
           <Nav />
         </div>
         <div className="primary-content">
           <Switch>
-            <Route path={routes.home} component={ListPage} />
+            <Route path={routes.home}>
+              <ListPage onReady={() => setContentReady(true)} />
+            </Route>
             <Route path={routes.issue}>
-              {params => <IssuePage key={params.id} />}
+              {params => (
+                <IssuePage
+                  key={params.id}
+                  onReady={() => setContentReady(true)}
+                />
+              )}
             </Route>
             <Route component={ErrorPage} />
           </Switch>
