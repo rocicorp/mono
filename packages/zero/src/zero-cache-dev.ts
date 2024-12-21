@@ -89,7 +89,9 @@ async function main() {
     schemaProcess.on('exit', (code: number) => {
       if (code === 0) {
         log(`${buildSchemaScript} completed successfully.`);
-        log(`Running ${zeroCacheScript}.`);
+        log(
+          `Running ${zeroCacheScript} at\n\n\thttp://localhost:${config.port}\n`,
+        );
         zeroCacheProcess = spawn(zeroCacheScript, zeroCacheArgs || [], {
           stdio: 'inherit',
         });
