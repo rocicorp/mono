@@ -11,6 +11,7 @@ import {
 import type {PostgresDB} from '../../types/pg.js';
 import type {Sink, Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
+import {orTimeout} from '../../types/timeout.js';
 import {DEFAULT_MAX_RETRY_DELAY_MS, RunningState} from '../running-state.js';
 import {
   downstreamChange,
@@ -107,6 +108,12 @@ export interface ChangeSource {
    */
   startStream(afterWatermark: string): Promise<ChangeStream>;
 }
+
+/**
+ * The maximum time to wait for a serving request before taking
+ * over the change stream from the previous change-streamer.
+ */
+const MAX_SERVING_DELAY = 30_000;
 
 /**
  * Upstream-agnostic dispatch of messages in a {@link ChangeStream} to a
@@ -267,7 +274,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   // To minimize this gap, delay starting the ChangeStream until the first
   // request from a `serving` replicator, indicating that higher level
   // load-balancing / routing logic has begun routing requests to this task.
-  readonly #firstServingRequestReceived = resolver();
+  readonly #serving = resolver();
 
   #stream: ChangeStream | undefined;
 
@@ -299,7 +306,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#storer.run().catch(e => this.stop(e));
 
     this.#lc.info?.('awaiting first serving subscriber');
-    await this.#firstServingRequestReceived.promise;
+    if (
+      (await orTimeout(this.#serving.promise, MAX_SERVING_DELAY)) ===
+      'timed-out'
+    ) {
+      this.#lc.info?.('timed out waiting for first request');
+    }
     this.#lc.info?.('starting change stream');
 
     while (this.#state.shouldRun()) {
@@ -364,7 +376,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
     const {id, mode, replicaVersion, watermark, initial} = ctx;
     if (mode === 'serving') {
-      this.#firstServingRequestReceived.resolve();
+      this.#serving.resolve();
     }
     const downstream = Subscription.create<Downstream>({
       cleanup: () => this.#forwarder.remove(subscriber),
