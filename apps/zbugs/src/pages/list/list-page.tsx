@@ -32,7 +32,7 @@ import {preload} from '../../zero-setup.js';
 let firstRowRendered = false;
 const itemSize = 56;
 
-export function ListPage() {
+export function ListPage({onReady}: {onReady: () => void}) {
   const z = useZero();
   const login = useLogin();
   const search = useSearch();
@@ -94,6 +94,9 @@ export function ListPage() {
   }
 
   const [issues, issuesResult] = useQuery(q);
+  if (issues.length > 0 || issuesResult.type === 'complete') {
+    onReady();
+  }
 
   useEffect(() => {
     if (issuesResult.type === 'complete') {
