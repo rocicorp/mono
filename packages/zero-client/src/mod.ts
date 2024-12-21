@@ -63,7 +63,7 @@ export {
   definePermissions,
   NOBODY_CAN,
 } from '../../zero-schema/src/permissions.js';
-export {createSchema} from '../../zero-schema/src/schema.js';
+export {createSchema, type Schema} from '../../zero-schema/src/schema.js';
 export {
   createTableSchema,
   type TableSchema,

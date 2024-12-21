@@ -83,6 +83,8 @@ export default async function runWorker(
   } catch (err) {
     processes.logErrorAndExit(err);
   }
+
+  await processes.done();
 }
 
 if (!singleProcessMode()) {

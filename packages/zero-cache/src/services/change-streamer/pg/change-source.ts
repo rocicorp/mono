@@ -297,7 +297,7 @@ class PostgresChangeSource implements ChangeSource {
     SELECT pg_terminate_backend(active_pid), active_pid as pid
       FROM pg_replication_slots WHERE slot_name = ${slot}`;
     if (result.length === 0) {
-      throw new Error(
+      throw new AbortError(
         `replication slot ${slot} is missing. Delete the replica and resync.`,
       );
     }
