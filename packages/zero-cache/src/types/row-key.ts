@@ -1,4 +1,4 @@
-import {h64WithReverse} from '../../../shared/src/h64-with-reverse.js';
+import {h128} from '../../../shared/src/hash.js';
 import {stringify, type JSONValue} from './bigint-json.js';
 
 export type ColumnType = {readonly typeOid: number};
@@ -86,7 +86,7 @@ export function rowIDHash(id: RowID): string {
   }
 
   const str = rowIDString(id);
-  hash = h64WithReverse(str);
+  hash = h128(str).toString(36);
   rowIDHashes.set(id, hash);
   return hash;
 }

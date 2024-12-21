@@ -1,4 +1,4 @@
-import {h64} from '../../shared/src/xxhash.js';
+import {h64} from '../../shared/src/hash.js';
 import {normalizeAST, type AST} from './ast.js';
 
 const hashCache = new WeakMap<AST, string>();
