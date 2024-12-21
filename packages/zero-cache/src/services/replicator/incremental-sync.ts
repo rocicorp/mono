@@ -45,7 +45,7 @@ import type {
 } from '../change-streamer/schema/change.js';
 import {RunningState} from '../running-state.js';
 import {Notifier} from './notifier.js';
-import type {ReplicaState} from './replicator.js';
+import type {ReplicaState, ReplicatorMode} from './replicator.js';
 import {
   logDeleteOp,
   logResetOp,
@@ -71,6 +71,7 @@ export class IncrementalSyncer {
   readonly #id: string;
   readonly #changeStreamer: ChangeStreamer;
   readonly #replica: StatementRunner;
+  readonly #mode: ReplicatorMode;
   readonly #txMode: TransactionMode;
   readonly #notifier: Notifier;
 
@@ -81,12 +82,13 @@ export class IncrementalSyncer {
     id: string,
     changeStreamer: ChangeStreamer,
     replica: Database,
-    txMode: TransactionMode,
+    mode: ReplicatorMode,
   ) {
     this.#id = id;
     this.#changeStreamer = changeStreamer;
     this.#replica = new StatementRunner(replica);
-    this.#txMode = txMode;
+    this.#mode = mode;
+    this.#txMode = mode === 'serving' ? 'CONCURRENT' : 'IMMEDIATE';
     this.#notifier = new Notifier();
   }
 
@@ -112,6 +114,7 @@ export class IncrementalSyncer {
       try {
         downstream = await this.#changeStreamer.subscribe({
           id: this.#id,
+          mode: this.#mode,
           watermark,
           replicaVersion,
           initial: watermark === initialWatermark,

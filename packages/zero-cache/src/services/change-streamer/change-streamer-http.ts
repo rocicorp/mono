@@ -76,6 +76,7 @@ function getSubscriberContext(req: FastifyRequest): SubscriberContext {
 
   return {
     id: params.get('id', true),
+    mode: params.get('mode', false) === 'backup' ? 'backup' : 'serving',
     replicaVersion: params.get('replicaVersion', true),
     watermark: params.get('watermark', true),
     initial: params.getBoolean('initial'),

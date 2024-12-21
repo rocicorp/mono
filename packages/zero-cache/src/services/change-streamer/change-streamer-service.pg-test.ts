@@ -113,6 +113,7 @@ describe('change-streamer/service', () => {
   test('immediate forwarding, transaction storage', async () => {
     const sub = await streamer.subscribe({
       id: 'myid',
+      mode: 'serving',
       watermark: '01',
       replicaVersion: REPLICA_VERSION,
       initial: true,
@@ -170,6 +171,7 @@ describe('change-streamer/service', () => {
     // Subscribe to the original watermark.
     const sub = await streamer.subscribe({
       id: 'myid',
+      mode: 'serving',
       watermark: '01',
       replicaVersion: REPLICA_VERSION,
       initial: true,
@@ -241,6 +243,7 @@ describe('change-streamer/service', () => {
     // Subscribe to the original watermark.
     const sub = await streamer.subscribe({
       id: 'myid',
+      mode: 'serving',
       watermark: '01',
       replicaVersion: REPLICA_VERSION,
       initial: true,
@@ -291,6 +294,7 @@ describe('change-streamer/service', () => {
   test('data types (forwarded and catchup)', async () => {
     const sub = await streamer.subscribe({
       id: 'myid',
+      mode: 'serving',
       watermark: '01',
       replicaVersion: REPLICA_VERSION,
       initial: true,
@@ -353,6 +357,7 @@ describe('change-streamer/service', () => {
     // Also verify when loading from the Store as opposed to direct forwarding.
     const catchupSub = await streamer.subscribe({
       id: 'myid2',
+      mode: 'serving',
       watermark: '01',
       replicaVersion: REPLICA_VERSION,
       initial: true,
@@ -389,6 +394,7 @@ describe('change-streamer/service', () => {
     // Start two subscribers: one at 06 and one at 04
     await streamer.subscribe({
       id: 'myid1',
+      mode: 'serving',
       watermark: '06',
       replicaVersion: REPLICA_VERSION,
       initial: true,
@@ -396,6 +402,7 @@ describe('change-streamer/service', () => {
 
     const sub2 = await streamer.subscribe({
       id: 'myid2',
+      mode: 'serving',
       watermark: '04',
       replicaVersion: REPLICA_VERSION,
       initial: true,
@@ -444,6 +451,7 @@ describe('change-streamer/service', () => {
     // New connections earlier than 06 should now be rejected.
     const sub3 = await streamer.subscribe({
       id: 'myid2',
+      mode: 'serving',
       watermark: '04',
       replicaVersion: REPLICA_VERSION,
       initial: true,
@@ -462,6 +470,7 @@ describe('change-streamer/service', () => {
   test('wrong replica version', async () => {
     const sub = await streamer.subscribe({
       id: 'myid1',
+      mode: 'serving',
       watermark: '06',
       replicaVersion: REPLICA_VERSION + 'foobar',
       initial: true,
@@ -497,6 +506,15 @@ describe('change-streamer/service', () => {
     );
     void streamer.run();
 
+    // Kick off the initial stream with a serving request.
+    void streamer.subscribe({
+      id: 'myid',
+      mode: 'serving',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
     expect(await hasRetried).toBe(true);
   });
 
@@ -517,6 +535,15 @@ describe('change-streamer/service', () => {
     );
     void streamer.run();
 
+    // Kick off the initial stream with a serving request.
+    void streamer.subscribe({
+      id: 'myid',
+      mode: 'serving',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
     expect(await requests.dequeue()).toBe(REPLICA_VERSION);
 
     await changeDB`
@@ -532,6 +559,15 @@ describe('change-streamer/service', () => {
       true,
     );
     void streamer.run();
+
+    // Kick off the initial stream with a serving request.
+    void streamer.subscribe({
+      id: 'myid',
+      mode: 'serving',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
 
     expect(await requests.dequeue()).toBe('04');
   });
@@ -562,12 +598,30 @@ describe('change-streamer/service', () => {
     );
     void streamer.run();
 
+    // Kick off the initial stream with a serving request.
+    void streamer.subscribe({
+      id: 'myid',
+      mode: 'serving',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
     changes.fail(new Error('doh'));
 
     expect(await hasRetried).toBe(true);
   });
 
   test('reset required', async () => {
+    // Kick off the initial stream with a serving request.
+    void streamer.subscribe({
+      id: 'myid',
+      mode: 'serving',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
     changes.push(['control', {tag: 'reset-required'}]);
     await streamerDone;
     await expect(
@@ -576,6 +630,15 @@ describe('change-streamer/service', () => {
   });
 
   test('shutdown on AbortError', async () => {
+    // Kick off the initial stream with a serving request.
+    void streamer.subscribe({
+      id: 'myid',
+      mode: 'serving',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
     changes.fail(new AbortError());
     await streamerDone;
   });
@@ -583,6 +646,7 @@ describe('change-streamer/service', () => {
   test('shutdown on unexpected storage error', async () => {
     await streamer.subscribe({
       id: 'myid',
+      mode: 'serving',
       watermark: '01',
       replicaVersion: REPLICA_VERSION,
       initial: true,

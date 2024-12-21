@@ -49,7 +49,7 @@ describe('replicator/incremental-sync', () => {
       REPLICA_ID,
       {subscribe: subscribeFn.mockResolvedValue(downstream)},
       replica,
-      'CONCURRENT',
+      'serving',
     );
   });
 
@@ -1531,6 +1531,7 @@ describe('replicator/incremental-sync', () => {
       await versionReady.next(); // Get the initial nextStateVersion.
       expect(subscribeFn.mock.calls[0][0]).toEqual({
         id: 'incremental_sync_test_id',
+        mode: 'serving',
         replicaVersion: '02',
         watermark: '02',
         initial: true,
@@ -1573,7 +1574,7 @@ describe('replicator/incremental-sync', () => {
           }),
       },
       replica,
-      'CONCURRENT',
+      'serving',
     );
 
     void syncer.run(lc);
@@ -1599,7 +1600,7 @@ describe('replicator/incremental-sync', () => {
           }),
       },
       replica,
-      'CONCURRENT',
+      'serving',
     );
 
     void syncer.run(lc);

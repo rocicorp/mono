@@ -105,10 +105,11 @@ describe('change-streamer/http', () => {
   test('basic messages streamed over websocket', async () => {
     const ctx = {
       id: 'foo',
+      mode: 'serving',
       replicaVersion: 'abc',
       watermark: '123',
       initial: true,
-    };
+    } as const;
     const sub = await client.subscribe(ctx);
 
     downstream.push(['begin', {tag: 'begin'}]);
@@ -130,6 +131,7 @@ describe('change-streamer/http', () => {
   test('bigint and non-JSON fields', async () => {
     const sub = await client.subscribe({
       id: 'foo',
+      mode: 'serving',
       replicaVersion: 'abc',
       watermark: '123',
       initial: true,

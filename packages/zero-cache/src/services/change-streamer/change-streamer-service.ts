@@ -1,4 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {unreachable} from '../../../../shared/src/asserts.js';
 import * as v from '../../../../shared/src/valita.js';
 import {
@@ -257,6 +258,17 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #autoReset: boolean;
   readonly #state: RunningState;
   readonly #initialWatermarks = new Set<string>();
+
+  // Starting the (Postgres) ChangeStream results in killing the previous
+  // Postgres subscriber, potentially creating a gap in which the old
+  // change-streamer has shut down and the new change-streamer has not yet
+  // been recognized as "healthy" (and thus does not get any requests).
+  //
+  // To minimize this gap, delay starting the ChangeStream until the first
+  // request from a `serving` replicator, indicating that higher level
+  // load-balancing / routing logic has begun routing requests to this task.
+  readonly #firstServingRequestReceived = resolver();
+
   #stream: ChangeStream | undefined;
 
   constructor(
@@ -285,6 +297,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
   async run() {
     this.#storer.run().catch(e => this.stop(e));
+
+    this.#lc.info?.('awaiting first serving subscriber');
+    await this.#firstServingRequestReceived.promise;
+    this.#lc.info?.('starting change stream');
 
     while (this.#state.shouldRun()) {
       let err: unknown;
@@ -346,7 +362,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   }
 
   subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
-    const {id, replicaVersion, watermark, initial} = ctx;
+    const {id, mode, replicaVersion, watermark, initial} = ctx;
+    if (mode === 'serving') {
+      this.#firstServingRequestReceived.resolve();
+    }
     const downstream = Subscription.create<Downstream>({
       cleanup: () => this.#forwarder.remove(subscriber),
     });

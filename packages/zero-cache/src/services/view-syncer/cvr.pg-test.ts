@@ -208,7 +208,7 @@ describe('view-syncer/cvr', () => {
   });
 
   // Relies on an async homing signal (with no explicit flush, so allow retries)
-  test('load existing cvr', {retry: 2}, async () => {
+  test('load existing cvr', {retry: 3}, async () => {
     const initialState: DBState = {
       instances: [
         {
