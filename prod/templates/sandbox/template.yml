@@ -231,10 +231,10 @@ Resources:
             Command:
               - CMD-SHELL
               - curl -f http://localhost:4848/ || exit 1
-            Interval: 10
-            Timeout: 60
-            Retries: 10
-            StartPeriod: 10
+            Interval: 5
+            Retries: 3
+            # allow for slow `litestream restore` operations
+            StartPeriod: 300
 
   LogGroupViewSyncer:
     Type: AWS::Logs::LogGroup
@@ -388,10 +388,23 @@ Resources:
             Command:
               - CMD-SHELL
               - curl -f http://localhost:4849/ || exit 1
-            Interval: 300
-            Timeout: 60
-            Retries: 5
+            Interval: 5
+            Retries: 3
+            # allow for slow `litestream restore` operations
             StartPeriod: 300
+        # Dummy container with a dependency on replication-manager-container
+        # to delay the ECS transition to a RUNNING state until the replication-manager-container
+        # is healthy (as an ECS Task is only transitions to RUNNING once all containers have started).
+        # This, in turn, delays ServiceConnect requests from view-syncers until the
+        # replication-manager-container is HEALTHY. This workaround is described in:
+        # https://github.com/aws/containers-roadmap/issues/2334#issuecomment-2299912626
+        - Name: service-connect-hold
+          Image: public.ecr.aws/docker/library/alpine:edge
+          Cpu: 0
+          Essential: false
+          DependsOn:
+            - ContainerName: replication-manager-container
+              Condition: HEALTHY
 
   LogGroupReplicationManager:
     Type: AWS::Logs::LogGroup
