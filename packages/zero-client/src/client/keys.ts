@@ -1,4 +1,4 @@
-import {h64WithReverse} from '../../../shared/src/h64-with-reverse.js';
+import {h128} from '../../../shared/src/hash.js';
 import * as v from '../../../shared/src/valita.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import {primaryKeyValueSchema} from '../../../zero-protocol/src/primary-key.js';
@@ -42,6 +42,6 @@ export function toPrimaryKeyString(
   const values = primaryKey.map(k => v.parse(value[k], primaryKeyValueSchema));
   const str = JSON.stringify(values);
 
-  const idSegment = h64WithReverse(str);
+  const idSegment = h128(str);
   return ENTITIES_KEY_PREFIX + tableName + '/' + idSegment;
 }

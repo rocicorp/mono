@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {h64} from '../../shared/src/xxhash.js';
+import {h64} from '../../shared/src/hash.js';
 import type {AST} from './ast.js';
 import {astSchema, normalizeAST} from './ast.js';
 import {PROTOCOL_VERSION} from './protocol-version.js';
@@ -238,11 +238,11 @@ test('related subqueries are sorted', () => {
 
 test('protocol version', () => {
   const schemaJSON = JSON.stringify(astSchema);
-  const hash = h64(schemaJSON);
+  const hash = h64(schemaJSON).toString(36);
 
   // If this test fails because the AST schema has changed such that
   // old code will not understand the new schema, bump the
   // PROTOCOL_VERSION and update the expected values.
-  expect(hash.toString(36)).toEqual('abcvo2klqduo');
-  expect(PROTOCOL_VERSION).toEqual(2);
+  expect(hash).toEqual('1g60qx4dfwety');
+  expect(PROTOCOL_VERSION).toEqual(3);
 });

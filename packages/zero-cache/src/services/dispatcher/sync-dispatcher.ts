@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import UrlPattern from 'url-pattern';
-import {h32} from '../../../../shared/src/xxhash.js';
+import {h32} from '../../../../shared/src/hash.js';
 import type {IncomingMessageSubset} from '../../types/http.js';
 import type {Worker} from '../../types/processes.js';
 import {HttpService, type Options} from '../http-service.js';

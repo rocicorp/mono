@@ -29,13 +29,17 @@ test('toPrimaryKeyString', () => {
       issueID: 'issue1',
       labelID: 'label1',
     }),
-  ).toMatchInlineSnapshot(`"e/issue_label/dqncq7kzfa6fpmhj26azwoy9t"`);
+  ).toMatchInlineSnapshot(
+    `"e/issue_label/15328927053344014787296837153592575662"`,
+  );
   expect(
     toPrimaryKeyString('issue_label', ['issueID', 'labelID'], {
       labelID: 'label1',
       issueID: 'issue1',
     }),
-  ).toMatchInlineSnapshot(`"e/issue_label/dqncq7kzfa6fpmhj26azwoy9t"`);
+  ).toMatchInlineSnapshot(
+    `"e/issue_label/15328927053344014787296837153592575662"`,
+  );
 
   // Order of the primary key fields matter.
   expect(
@@ -43,7 +47,9 @@ test('toPrimaryKeyString', () => {
       issueID: 'issue1',
       labelID: 'label1',
     }),
-  ).toMatchInlineSnapshot(`"e/issue_label/6k4z2behq35evuhhopppftje7"`);
+  ).toMatchInlineSnapshot(
+    `"e/issue_label/178908081844397207787976631973495261027"`,
+  );
 
   // Extra columns are ignored
   expect(
@@ -54,7 +60,9 @@ test('toPrimaryKeyString', () => {
       ignore: 'bananas',
       me: true,
     }),
-  ).toMatchInlineSnapshot(`"e/issue_label/dqncq7kzfa6fpmhj26azwoy9t"`);
+  ).toMatchInlineSnapshot(
+    `"e/issue_label/15328927053344014787296837153592575662"`,
+  );
 
   // Numeric value in the primary key.
   expect(

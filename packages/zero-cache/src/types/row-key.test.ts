@@ -22,14 +22,14 @@ describe('types/row-key', () => {
       keys: [{foo: 'bar'}, {foo: 'bar'}],
       rowKeyString: '["foo","bar"]',
       rowIDString: '["public","issue","foo","bar"]',
-      rowIDHash: '3z7dbf9d35nybsu0u6j0qdduu',
+      rowIDHash: 'ciol231ukcwkot147odcn45m0',
     },
     {
       table: 'clients',
       keys: [{foo: 'bar'}, {foo: 'bar'}],
       rowKeyString: '["foo","bar"]',
       rowIDString: '["public","clients","foo","bar"]',
-      rowIDHash: '369s9ujkm8cshq8maksagrk4z',
+      rowIDHash: '64611vx2jblwgdkqghzcfnbhm',
     },
     {
       schema: 'zero',
@@ -37,7 +37,7 @@ describe('types/row-key', () => {
       keys: [{foo: 'bar'}, {foo: 'bar'}],
       rowKeyString: '["foo","bar"]',
       rowIDString: '["zero","clients","foo","bar"]',
-      rowIDHash: 'bdi7ujkjhk018p49qckqpjs59',
+      rowIDHash: 'd5ylu9yny0atlxwv84ckob3iq',
     },
     {
       schema: 'clients',
@@ -45,26 +45,26 @@ describe('types/row-key', () => {
       keys: [{foo: 'bar'}, {foo: 'bar'}],
       rowKeyString: '["foo","bar"]',
       rowIDString: '["clients","zero","foo","bar"]',
-      rowIDHash: '83rna1e2y74s7ik5skigv9223',
+      rowIDHash: '46fn166ycpx29z47xjh8mcqxp',
     },
     {
       table: 'issues',
       keys: [{foo: ['bar']}, {foo: ['bar']}],
       rowKeyString: '["foo",["bar"]]',
       rowIDString: '["public","issues","foo",["bar"]]',
-      rowIDHash: 'c8pu7tydek3r9wopx9c4o64nl',
+      rowIDHash: '9q3o77bjorgu22uheyyr3yyh2',
     },
     {
       keys: [{foo: 1}, {foo: 1}],
       rowKeyString: '["foo",1]',
       rowIDString: '["public","issue","foo",1]',
-      rowIDHash: 'gjssbmsl6avdktnaq8an52jg',
+      rowIDHash: 'cy4p72xet3a20cgyrdj1c81ak',
     },
     {
       keys: [{foo: '1'}, {foo: '1'}],
       rowKeyString: '["foo","1"]',
       rowIDString: '["public","issue","foo","1"]',
-      rowIDHash: 'cr6zlx3dei78jpjv8qecv5b63',
+      rowIDHash: '5ejr02sz9n3l7zpt82rr8mh7c',
     },
     {
       // Two-column keys
@@ -74,7 +74,7 @@ describe('types/row-key', () => {
       ],
       rowKeyString: '["bar",["foo"],"foo","bar"]',
       rowIDString: '["public","issue","bar",["foo"],"foo","bar"]',
-      rowIDHash: '73vrcw1djlz99hvz4lqjyt2bw',
+      rowIDHash: '5h887x9fpyacg9dsk8ld9w6qf',
     },
     {
       // Three-column keys
@@ -85,13 +85,13 @@ describe('types/row-key', () => {
       ],
       rowKeyString: '["bar",["foo"],"baz",2,"foo","bar"]',
       rowIDString: '["public","issue","bar",["foo"],"baz",2,"foo","bar"]',
-      rowIDHash: '802jgj2gmrqy0khigiknxueof',
+      rowIDHash: '3qflvcrevxjynhsqs07r27cik',
     },
     {
       keys: [{id: 'HhCx1Vi3js'}],
       rowKeyString: '["id","HhCx1Vi3js"]',
       rowIDString: '["public","issue","id","HhCx1Vi3js"]',
-      rowIDHash: 'd9wwy0a6s1olyhxq8vkvw7kln',
+      rowIDHash: '6si0q0rmq27la39k5mhtl9420',
     },
   ];
 
