@@ -1,5 +1,6 @@
 import * as v from '../../../../shared/src/valita.js';
 import type {Source} from '../../types/streams.js';
+import type {ReplicatorMode} from '../replicator/replicator.js';
 import type {Service} from '../service.js';
 import {
   beginSchema,
@@ -57,6 +58,13 @@ export type SubscriberContext = {
    * Subscriber id. This is only used for debugging.
    */
   id: string;
+
+  /**
+   * The ReplicatorMode of the subscriber. 'backup' indicates that the
+   * subscriber is local to the `change-streamer` in the `replication-manager`,
+   * while 'serving' indicates that user-facing requests depend on the subscriber.
+   */
+  mode: ReplicatorMode;
 
   /**
    * The ChangeStreamer will return an Error if the subscriber is

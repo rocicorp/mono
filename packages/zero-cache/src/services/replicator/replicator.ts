@@ -73,7 +73,7 @@ export class ReplicatorService implements Replicator, Service {
       `${taskID}/${id}`,
       changeStreamer,
       replica,
-      mode === 'serving' ? 'CONCURRENT' : 'IMMEDIATE',
+      mode,
     );
   }
 
