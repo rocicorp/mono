@@ -303,8 +303,6 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   }
 
   async run() {
-    this.#storer.run().catch(e => this.stop(e));
-
     this.#lc.info?.('awaiting first serving subscriber');
     if (
       (await orTimeout(this.#serving.promise, MAX_SERVING_DELAY)) ===
@@ -313,6 +311,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       this.#lc.info?.('timed out waiting for first request');
     }
     this.#lc.info?.('starting change stream');
+
+    let storerRunning = false;
 
     while (this.#state.shouldRun()) {
       let err: unknown;
@@ -325,6 +325,14 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         this.#state.resetBackoff();
 
         let preCommitWatermark = stream.initialWatermark;
+
+        // Once this change-streamer "owns" the replication stream,
+        // it is safe to start the storer, given the guarantee that this
+        // process is the single writer to the change DB.
+        if (!storerRunning) {
+          this.#storer.run().catch(e => this.stop(e));
+          storerRunning = true;
+        }
 
         for await (const change of stream.changes) {
           let watermark: string;
