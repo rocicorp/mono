@@ -231,10 +231,10 @@ Resources:
             Command:
               - CMD-SHELL
               - curl -f http://localhost:4848/ || exit 1
-            Interval: 10
-            Timeout: 60
-            Retries: 10
-            StartPeriod: 10
+            Interval: 5
+            Retries: 3
+            # allow for slow `litestream restore` operations
+            StartPeriod: 300
 
   LogGroupViewSyncer:
     Type: AWS::Logs::LogGroup
@@ -388,9 +388,9 @@ Resources:
             Command:
               - CMD-SHELL
               - curl -f http://localhost:4849/ || exit 1
-            Interval: 300
-            Timeout: 60
-            Retries: 5
+            Interval: 5
+            Retries: 3
+            # allow for slow `litestream restore` operations
             StartPeriod: 300
 
   LogGroupReplicationManager:
