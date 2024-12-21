@@ -57,7 +57,7 @@ const emojiToastShowDuration = 3_000;
 // to load.
 export const INITIAL_COMMENT_LIMIT = 101;
 
-export function IssuePage() {
+export function IssuePage({onReady}: {onReady: () => void}) {
   const z = useZero();
   const params = useParams();
 
@@ -90,6 +90,10 @@ export function IssuePage() {
     )
     .one();
   const [issue, issueResult] = useQuery(q);
+  if (issue) {
+    onReady();
+  }
+
   const login = useLogin();
 
   const isScrolling = useIsScrolling();
