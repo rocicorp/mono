@@ -19,12 +19,12 @@
     "chalk-template": "^1.1.0",
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
+    "js-xxhash": "^4.0.0",
     "lodash.kebabcase": "^4.1.1",
     "lodash.merge": "^4.6.2",
     "lodash.snakecase": "^4.1.1",
     "semver": "^7.5.4",
-    "strip-ansi": "^7.1.0",
-    "xxhash-wasm": "^1.1.0"
+    "strip-ansi": "^7.1.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20231010.0",
