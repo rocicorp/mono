@@ -1,4 +1,3 @@
-import {h64WithReverse} from '../../../shared/src/h64-with-reverse.js';
 import {stringify, type JSONValue} from './bigint-json.js';
 
 export type ColumnType = {readonly typeOid: number};
@@ -63,30 +62,4 @@ export function rowIDString(id: RowID): string {
   val = stringify([id.schema, id.table, ...tuples(id.rowKey)]);
   rowIDStrings.set(id, val);
   return val;
-}
-
-const rowIDHashes = new WeakMap<RowID, string>();
-
-/**
- * A RowIDHash is a 128-bit column-order-agnostic hash of the schema, table name, and
- * column name / value tuples of a row key. It serves as a compact identifier for
- * a row in the database that:
- *
- * * is guaranteed to fit within the constraints of the CVR store (Durable Object
- *   storage keys cannot exceed 2KiB)
- * * can be used to compactly encode (and lookup) the rows of query results for CVR
- *   bookkeeping.
- *
- * The hash is encoded in `base36`, with the maximum 128-bit value being 25 characters long.
- */
-export function rowIDHash(id: RowID): string {
-  let hash = rowIDHashes.get(id);
-  if (hash) {
-    return hash;
-  }
-
-  const str = rowIDString(id);
-  hash = h64WithReverse(str);
-  rowIDHashes.set(id, hash);
-  return hash;
 }
