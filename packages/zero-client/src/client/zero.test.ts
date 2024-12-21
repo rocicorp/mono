@@ -548,7 +548,7 @@ suite('initConnection', () => {
               table: 'e',
               orderBy: [['id', 'asc']],
             } satisfies AST,
-            hash: '1jnb9n35hhddz',
+            hash: '29j3x0l4bxthp',
             op: 'put',
           },
         ],
@@ -591,7 +591,7 @@ suite('initConnection', () => {
                 table: 'e',
                 orderBy: [['id', 'asc']],
               } satisfies AST,
-              hash: '1jnb9n35hhddz',
+              hash: '29j3x0l4bxthp',
               op: 'put',
             },
           ],
@@ -637,7 +637,7 @@ suite('initConnection', () => {
                 table: 'e',
                 orderBy: [['id', 'asc']],
               } satisfies AST,
-              hash: '1jnb9n35hhddz',
+              hash: '29j3x0l4bxthp',
               op: 'put',
             },
           ],
@@ -726,7 +726,7 @@ suite('initConnection', () => {
         {
           desiredQueriesPatch: [
             {
-              hash: '1jnb9n35hhddz',
+              hash: '29j3x0l4bxthp',
               op: 'del',
             },
           ],
