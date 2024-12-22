@@ -566,6 +566,13 @@ export class Zero<const S extends Schema> {
   }
 
   /**
+   * The server URL that this Zero instance is configured with.
+   */
+  get server(): HTTPString | null {
+    return this.#server;
+  }
+
+  /**
    * The name of the IndexedDB database in which the data of this
    * instance of Zero is stored.
    */

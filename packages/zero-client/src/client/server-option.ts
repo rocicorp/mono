@@ -1,3 +1,4 @@
+import {getBrowserGlobal} from '../../../shared/src/browser-env.js';
 import type {HTTPString} from './http-string.js';
 
 function validateServerParam(paramName: string, server: string): HTTPString {
@@ -56,6 +57,13 @@ function validateServerParam(paramName: string, server: string): HTTPString {
 export function getServer(
   server: string | undefined | null,
 ): HTTPString | null {
+  const WS = getBrowserGlobal('WebSocket');
+  if (!WS) {
+    console.warn(
+      'Zero started in an unsupported environment, no data will be synced.',
+    );
+    return null;
+  }
   if (server === undefined || server === null) {
     console.warn(
       'Zero starting up with no server URL. This is supported for unit testing ' +
