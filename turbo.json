@@ -12,7 +12,8 @@
         "../zero-client/src/**/*.ts",
         "../zero-react/src/**/*.ts",
         "../zero-schema/src/**/*.ts",
-        "../zero-solid/src/**/*.ts"
+        "../zero-solid/src/**/*.ts",
+        "../zero-vue/src/**/*.ts"
       ]
     },
     "lint": {
