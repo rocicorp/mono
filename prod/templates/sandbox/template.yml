@@ -96,10 +96,11 @@ Resources:
             - !GetAtt VPC.Outputs.SG
             - !Ref InternalServicesSG
       DeploymentConfiguration:
-        # Run up to 7 tasks, capping updates to 2 tasks at a time
-        MaximumPercent: 120
+        # Run up to 4 tasks, capping updates to 2 tasks at a time
+        # (Connection counts are currently safe for up to 12 tasks at a time)
+        MaximumPercent: 200
         MinimumHealthyPercent: 50
-      DesiredCount: 10
+      DesiredCount: 2
       TaskDefinition: !Ref "TaskDefinitionViewSyncer"
       LoadBalancers:
         - ContainerName: "view-syncer-container"
