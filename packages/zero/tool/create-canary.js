@@ -131,6 +131,8 @@ try {
   const hash = execute('git rev-parse HEAD', {stdio: 'pipe'}).substring(0, 6);
   const currentPackageData = getPackageData(ZERO_PACKAGE_JSON_PATH);
   const nextCanaryVersion = bumpCanaryVersion(currentPackageData.version, hash);
+  console.log(`Current version is ${currentPackageData.version}`);
+  console.log(`Next version is ${nextCanaryVersion}`);
   currentPackageData.version = nextCanaryVersion;
 
   const tagName = `zero/v${nextCanaryVersion}`;
@@ -153,14 +155,13 @@ try {
   execute('npm run build');
   execute('npm run format');
   execute('npx syncpack fix-mismatches');
+
   execute('git status');
-  execute('git add package.json');
-  execute('git add **/package.json');
-  execute('git add package-lock.json');
-  execute(`git commit -m "Bump version to ${nextCanaryVersion}"`);
+  execute(`git commit -am "Bump version to ${nextCanaryVersion}"`);
 
-  execute('npm publish --tag=canary', {cwd: basePath('packages', 'zero')});
-
+  // Push to git before npm so that if npm fails the versioning logic works correctly.
+  // Also if npm push succeeds but docker fails we correctly record the tag that the
+  // npm version was made
   execute(`git tag ${tagName}`);
   execute(`git push origin ${tagName}`);
 
@@ -173,14 +174,20 @@ try {
   execute(`git merge ${tagName}`);
   execute(`git push origin main`);
 
+  execute(`git checkout ${tagName}`);
+  execute('npm publish --tag=canary', {cwd: basePath('packages', 'zero')});
+
   const dockerCanaryVersion = nextCanaryVersion.replace(/\+/g, '-');
   for (let i = 0; i < 3; i++) {
     try {
       execute(
-        `docker build . \
+        `docker buildx build \
+    --platform linux/amd64,linux/arm64 \
     --build-arg=ZERO_VERSION=${nextCanaryVersion} \
     --build-arg=NPM_TOKEN=${npmAuthToken} \
-    -t rocicorp/zero:${dockerCanaryVersion}`,
+    -t rocicorp/zero:${dockerCanaryVersion} \
+    -t rocicorp/zero:canary \
+    --push .`,
         {cwd: basePath('packages', 'zero')},
       );
     } catch (e) {
@@ -193,11 +200,6 @@ try {
     }
     break;
   }
-  execute(
-    `docker tag rocicorp/zero:${dockerCanaryVersion} rocicorp/zero:canary`,
-  );
-  execute(`docker push rocicorp/zero:${dockerCanaryVersion}`);
-  execute(`docker push rocicorp/zero:canary`);
 
   console.log(``);
   console.log(``);
