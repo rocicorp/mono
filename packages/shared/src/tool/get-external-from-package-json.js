@@ -3,7 +3,7 @@
 /* eslint-env es2022 */
 
 import {readFile} from 'node:fs/promises';
-import {pkgUp} from 'pkg-up';
+import {packageUp} from 'package-up';
 import {resolve as resolvePath} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {isInternalPackage} from './internal-packages.js';
@@ -15,7 +15,7 @@ import {isInternalPackage} from './internal-packages.js';
  */
 export async function getExternalFromPackageJSON(basePath, includePeerDeps) {
   const cwd = basePath.startsWith('file:') ? fileURLToPath(basePath) : basePath;
-  const path = await pkgUp({cwd});
+  const path = await packageUp({cwd});
 
   if (!path) {
     throw new Error('Could not find package.json');
