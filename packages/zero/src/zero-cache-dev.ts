@@ -84,6 +84,7 @@ async function main() {
     log(`Running ${buildSchemaScript}.`);
     schemaProcess = spawn(buildSchemaScript, buildSchemaArgs ?? [], {
       stdio: 'inherit',
+      shell: true,
     });
 
     schemaProcess.on('exit', (code: number) => {
@@ -94,6 +95,7 @@ async function main() {
         );
         zeroCacheProcess = spawn(zeroCacheScript, zeroCacheArgs || [], {
           stdio: 'inherit',
+          shell: true,
         });
         zeroCacheProcess.on('exit', () => {
           logError(`${zeroCacheScript} exited. Exiting.`);
