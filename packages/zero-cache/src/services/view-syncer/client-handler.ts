@@ -6,7 +6,11 @@ import {
 } from '../../../../shared/src/json.js';
 import * as v from '../../../../shared/src/valita.js';
 import type {AST} from '../../../../zero-protocol/src/ast.js';
-import {rowSchema} from '../../../../zero-protocol/src/data.js';
+import {
+  type Row,
+  rowSchema,
+  type Value,
+} from '../../../../zero-protocol/src/data.js';
 import type {
   Downstream,
   PokePartBody,
@@ -16,6 +20,7 @@ import type {
 import {primaryKeyValueRecordSchema} from '../../../../zero-protocol/src/primary-key.js';
 import type {JSONObject} from '../../types/bigint-json.js';
 import {getLogLevel} from '../../types/error-for-client.js';
+import type {RowKey} from '../../types/row-key.js';
 import {
   getErrorForClientIfSchemaVersionNotSupported,
   type SchemaVersions,
@@ -84,6 +89,7 @@ export class ClientHandler {
   readonly #clientGroupID: string;
   readonly clientID: string;
   readonly wsID: string;
+  readonly #protocolVersion: number;
   readonly #zeroClientsTable: string;
   readonly #lc: LogContext;
   readonly #pokes: Subscription<Downstream>;
@@ -95,6 +101,7 @@ export class ClientHandler {
     clientGroupID: string,
     clientID: string,
     wsID: string,
+    protocolVersion: number,
     shardID: string,
     baseCookie: string | null,
     schemaVersion: number,
@@ -103,6 +110,7 @@ export class ClientHandler {
     this.#clientGroupID = clientGroupID;
     this.clientID = clientID;
     this.wsID = wsID;
+    this.#protocolVersion = protocolVersion;
     this.#zeroClientsTable = `${schema(shardID)}.clients`;
     this.#lc = lc;
     this.#pokes = pokes;
@@ -200,7 +208,9 @@ export class ClientHandler {
           if (patch.id.table === this.#zeroClientsTable) {
             this.#updateLMIDs((body.lastMutationIDChanges ??= {}), patch);
           } else {
-            (body.rowsPatch ??= []).push(makeRowPatch(patch));
+            (body.rowsPatch ??= []).push(
+              makeRowPatch(patch, this.#protocolVersion),
+            );
           }
           break;
         default:
@@ -263,19 +273,28 @@ const lmidRowSchema = v.object({
   lastMutationID: v.number(), // Actually returned as a bigint, but converted by ensureSafeJSON().
 });
 
-function makeRowPatch(patch: RowPatch): RowPatchOp {
+function makeRowPatch(patch: RowPatch, protocolVersion: number): RowPatchOp {
   const {
     op,
     id: {table: tableName, rowKey: id},
   } = patch;
 
   switch (op) {
-    case 'put':
+    case 'put': {
+      const value = v.parse(ensureSafeJSON(patch.contents), rowSchema);
+      const contents =
+        protocolVersion >= 4
+          ? {
+              id: v.parse(id, primaryKeyValueRecordSchema),
+              rest: rest(id, value),
+            }
+          : {value};
       return {
         op: 'put',
         tableName,
-        value: v.parse(ensureSafeJSON(patch.contents), rowSchema),
+        ...contents,
       };
+    }
 
     case 'del':
       return {
@@ -287,6 +306,16 @@ function makeRowPatch(patch: RowPatch): RowPatchOp {
     default:
       unreachable(op);
   }
+}
+
+export function rest(id: RowKey, value: Row) {
+  const rest: Record<string, Value> = {};
+  for (const key in value) {
+    if (!(key in id)) {
+      rest[key] = value[key];
+    }
+  }
+  return rest;
 }
 
 /**
