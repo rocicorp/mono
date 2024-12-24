@@ -7,6 +7,7 @@ import {
 import EventEmitter from 'node:events';
 import path from 'node:path';
 import {pid} from 'node:process';
+import {fileURLToPath} from 'node:url';
 
 /**
  * Central registry of message type names, which are used to identify
@@ -159,7 +160,7 @@ export function childWorker(
   const ext = path.extname(import.meta.url);
   // modulePath is .ts. If we have been compiled, it should be changed to .js
   modulePath = modulePath.replace(/\.ts$/, ext);
-  const absModulePath = new URL(`../${modulePath}`, import.meta.url).pathname;
+  const absModulePath = new URL(`../${modulePath}`, import.meta.url).href;
 
   args.push(...process.argv.slice(2));
 
@@ -175,13 +176,26 @@ export function childWorker(
       .catch(err => child.emit('error', err));
     return child;
   }
-  return wrap(
-    fork(absModulePath, args, {
-      detached: true, // do not automatically propagate SIGINT
-      serialization: 'advanced', // use structured clone for IPC
-      env,
-    }),
-  );
+
+  const child = fork(fileURLToPath(absModulePath), args, {
+    detached: true, // do not automatically propagate SIGINT
+    serialization: 'advanced', // use structured clone for IPC
+    env,
+    // // uncomment this line to debug child process output
+    //
+    // silent: true,
+  });
+
+  // // uncomment these lines to debug child process output
+  //
+  //   const onWorkerOutput = (data: Buffer) => {
+  //     const msg = data.toString('utf8');
+  //     console.log(msg);
+  //   };
+  //   child.stdout?.on('data', onWorkerOutput);
+  //   child.stderr?.on('data', onWorkerOutput);
+
+  return wrap(child);
 }
 
 /**
