@@ -198,7 +198,7 @@ describe('integration', () => {
         pokeID: '00:02',
         gotQueriesPatch: [{op: 'put', hash: 'query-hash1', ast: FOO_QUERY}],
         rowsPatch: [
-          {op: 'put', tableName: 'foo', value: {id: 'bar', val: 'baz'}},
+          {op: 'put', tableName: 'foo', id: {id: 'bar'}, rest: {val: 'baz'}},
         ],
       },
     ]);
@@ -219,7 +219,7 @@ describe('integration', () => {
       {
         pokeID: expect.any(String),
         rowsPatch: [
-          {op: 'put', tableName: 'foo', value: {id: 'voo', val: 'doo'}},
+          {op: 'put', tableName: 'foo', id: {id: 'voo'}, rest: {val: 'doo'}},
         ],
       },
     ]);

@@ -11,6 +11,7 @@ import {
   type PokeStartBody,
   type QueriesPatch,
 } from '../../../../zero-protocol/src/mod.js';
+import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.js';
 import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.js';
 import {definePermissions} from '../../../../zero-schema/src/permissions.js';
 import type {ExpressionBuilder} from '../../../../zql/src/query/expression.js';
@@ -465,6 +466,7 @@ describe('view-syncer/service', () => {
   const SYNC_CONTEXT = {
     clientID: 'foo',
     wsID: 'ws1',
+    protocolVersion: PROTOCOL_VERSION,
     baseCookie: null,
     schemaVersion: 2,
     tokenData: undefined,
@@ -711,52 +713,60 @@ describe('view-syncer/service', () => {
             "pokeID": "00:02",
             "rowsPatch": [
               {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
+                "id": {
                   "id": "1",
+                },
+                "op": "put",
+                "rest": {
+                  "big": 9007199254740991,
                   "json": null,
                   "owner": "100",
                   "parent": null,
                   "title": "parent issue foo",
                 },
+                "tableName": "issues",
               },
               {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": -9007199254740991,
+                "id": {
                   "id": "2",
+                },
+                "op": "put",
+                "rest": {
+                  "big": -9007199254740991,
                   "json": null,
                   "owner": "101",
                   "parent": null,
                   "title": "parent issue bar",
                 },
+                "tableName": "issues",
               },
               {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
+                "id": {
                   "id": "3",
+                },
+                "op": "put",
+                "rest": {
+                  "big": 123,
                   "json": null,
                   "owner": "102",
                   "parent": "1",
                   "title": "foo",
                 },
+                "tableName": "issues",
               },
               {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
+                "id": {
                   "id": "4",
+                },
+                "op": "put",
+                "rest": {
+                  "big": 100,
                   "json": null,
                   "owner": "101",
                   "parent": "2",
                   "title": "bar",
                 },
+                "tableName": "issues",
               },
             ],
           },
@@ -927,150 +937,160 @@ describe('view-syncer/service', () => {
 
     stateChanges.push({state: 'version-ready'});
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
-    [
-      [
-        "pokeStart",
-        {
-          "baseCookie": "00:01",
-          "cookie": "00:02",
-          "pokeID": "00:02",
-          "schemaVersions": {
-            "maxSupportedVersion": 3,
-            "minSupportedVersion": 2,
-          },
-        },
-      ],
-      [
-        "pokePart",
-        {
-          "gotQueriesPatch": [
-            {
-              "ast": {
-                "orderBy": [
-                  [
-                    "id",
-                    "asc",
-                  ],
-                ],
-                "table": "issues",
-                "where": {
-                  "left": {
-                    "name": "id",
-                    "type": "column",
+              [
+                [
+                  "pokeStart",
+                  {
+                    "baseCookie": "00:01",
+                    "cookie": "00:02",
+                    "pokeID": "00:02",
+                    "schemaVersions": {
+                      "maxSupportedVersion": 3,
+                      "minSupportedVersion": 2,
+                    },
                   },
-                  "op": "IN",
-                  "right": {
-                    "type": "literal",
-                    "value": [
-                      "1",
-                      "2",
-                      "3",
-                      "4",
+                ],
+                [
+                  "pokePart",
+                  {
+                    "gotQueriesPatch": [
+                      {
+                        "ast": {
+                          "orderBy": [
+                            [
+                              "id",
+                              "asc",
+                            ],
+                          ],
+                          "table": "issues",
+                          "where": {
+                            "left": {
+                              "name": "id",
+                              "type": "column",
+                            },
+                            "op": "IN",
+                            "right": {
+                              "type": "literal",
+                              "value": [
+                                "1",
+                                "2",
+                                "3",
+                                "4",
+                              ],
+                            },
+                            "type": "simple",
+                          },
+                        },
+                        "hash": "query-hash1",
+                        "op": "put",
+                      },
+                      {
+                        "ast": {
+                          "orderBy": [
+                            [
+                              "id",
+                              "asc",
+                            ],
+                          ],
+                          "table": "issues",
+                        },
+                        "hash": "query-hash2",
+                        "op": "put",
+                      },
+                    ],
+                    "lastMutationIDChanges": {
+                      "foo": 42,
+                    },
+                    "pokeID": "00:02",
+                    "rowsPatch": [
+                      {
+                        "id": {
+                          "id": "1",
+                        },
+                        "op": "put",
+                        "rest": {
+                          "big": 9007199254740991,
+                          "json": null,
+                          "owner": "100",
+                          "parent": null,
+                          "title": "parent issue foo",
+                        },
+                        "tableName": "issues",
+                      },
+                      {
+                        "id": {
+                          "id": "2",
+                        },
+                        "op": "put",
+                        "rest": {
+                          "big": -9007199254740991,
+                          "json": null,
+                          "owner": "101",
+                          "parent": null,
+                          "title": "parent issue bar",
+                        },
+                        "tableName": "issues",
+                      },
+                      {
+                        "id": {
+                          "id": "3",
+                        },
+                        "op": "put",
+                        "rest": {
+                          "big": 123,
+                          "json": null,
+                          "owner": "102",
+                          "parent": "1",
+                          "title": "foo",
+                        },
+                        "tableName": "issues",
+                      },
+                      {
+                        "id": {
+                          "id": "4",
+                        },
+                        "op": "put",
+                        "rest": {
+                          "big": 100,
+                          "json": null,
+                          "owner": "101",
+                          "parent": "2",
+                          "title": "bar",
+                        },
+                        "tableName": "issues",
+                      },
+                      {
+                        "id": {
+                          "id": "5",
+                        },
+                        "op": "put",
+                        "rest": {
+                          "big": 100,
+                          "json": [
+                            123,
+                            {
+                              "bar": 789,
+                              "foo": 456,
+                            },
+                            "baz",
+                          ],
+                          "owner": "101",
+                          "parent": "2",
+                          "title": "not matched",
+                        },
+                        "tableName": "issues",
+                      },
                     ],
                   },
-                  "type": "simple",
-                },
-              },
-              "hash": "query-hash1",
-              "op": "put",
-            },
-            {
-              "ast": {
-                "orderBy": [
-                  [
-                    "id",
-                    "asc",
-                  ],
                 ],
-                "table": "issues",
-              },
-              "hash": "query-hash2",
-              "op": "put",
-            },
-          ],
-          "lastMutationIDChanges": {
-            "foo": 42,
-          },
-          "pokeID": "00:02",
-          "rowsPatch": [
-            {
-              "op": "put",
-              "tableName": "issues",
-              "value": {
-                "big": 9007199254740991,
-                "id": "1",
-                "json": null,
-                "owner": "100",
-                "parent": null,
-                "title": "parent issue foo",
-              },
-            },
-            {
-              "op": "put",
-              "tableName": "issues",
-              "value": {
-                "big": -9007199254740991,
-                "id": "2",
-                "json": null,
-                "owner": "101",
-                "parent": null,
-                "title": "parent issue bar",
-              },
-            },
-            {
-              "op": "put",
-              "tableName": "issues",
-              "value": {
-                "big": 123,
-                "id": "3",
-                "json": null,
-                "owner": "102",
-                "parent": "1",
-                "title": "foo",
-              },
-            },
-            {
-              "op": "put",
-              "tableName": "issues",
-              "value": {
-                "big": 100,
-                "id": "4",
-                "json": null,
-                "owner": "101",
-                "parent": "2",
-                "title": "bar",
-              },
-            },
-            {
-              "op": "put",
-              "tableName": "issues",
-              "value": {
-                "big": 100,
-                "id": "5",
-                "json": [
-                  123,
+                [
+                  "pokeEnd",
                   {
-                    "bar": 789,
-                    "foo": 456,
+                    "pokeID": "00:02",
                   },
-                  "baz",
                 ],
-                "owner": "101",
-                "parent": "2",
-                "title": "not matched",
-              },
-            },
-          ],
-        },
-      ],
-      [
-        "pokeEnd",
-        {
-          "pokeID": "00:02",
-        },
-      ],
-    ]
-  `);
+              ]
+            `);
 
     expect(await cvrDB`SELECT * from cvr.rows`).toMatchInlineSnapshot(`
       Result [
@@ -1400,16 +1420,18 @@ describe('view-syncer/service', () => {
             "pokeID": "01",
             "rowsPatch": [
               {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
+                "id": {
                   "id": "1",
+                },
+                "op": "put",
+                "rest": {
+                  "big": 9007199254740991,
                   "json": null,
                   "owner": "100.0",
                   "parent": null,
                   "title": "new title",
                 },
+                "tableName": "issues",
               },
               {
                 "id": {
@@ -1717,54 +1739,56 @@ describe('view-syncer/service', () => {
     });
 
     expect(await nextPoke(client2)).toMatchInlineSnapshot(`
-      [
         [
-          "pokeStart",
-          {
-            "baseCookie": "00:03",
-            "cookie": "01",
-            "pokeID": "01",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 3,
+          [
+            "pokeStart",
+            {
+              "baseCookie": "00:03",
+              "cookie": "01",
+              "pokeID": "01",
+              "schemaVersions": {
+                "maxSupportedVersion": 3,
+                "minSupportedVersion": 3,
+              },
             },
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "pokeID": "01",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "owner": "100.0",
-                  "parent": null,
-                  "title": "new title",
+          ],
+          [
+            "pokePart",
+            {
+              "pokeID": "01",
+              "rowsPatch": [
+                {
+                  "id": {
+                    "id": "1",
+                  },
+                  "op": "put",
+                  "rest": {
+                    "big": 9007199254740991,
+                    "json": null,
+                    "owner": "100.0",
+                    "parent": null,
+                    "title": "new title",
+                  },
+                  "tableName": "issues",
                 },
-              },
-              {
-                "id": {
-                  "id": "2",
+                {
+                  "id": {
+                    "id": "2",
+                  },
+                  "op": "del",
+                  "tableName": "issues",
                 },
-                "op": "del",
-                "tableName": "issues",
-              },
-            ],
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "pokeID": "01",
-          },
-        ],
-      ]
-    `);
+              ],
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "pokeID": "01",
+            },
+          ],
+        ]
+      `);
   });
 
   test('process advancement with schema change', async () => {
@@ -1881,87 +1905,95 @@ describe('view-syncer/service', () => {
 
     // The "newColumn" should be arrive in the nextPoke.
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": "00:02",
-            "cookie": "01",
-            "pokeID": "01",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "pokeID": "01",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "newColumn": null,
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
+            [
+              [
+                "pokeStart",
+                {
+                  "baseCookie": "00:02",
+                  "cookie": "01",
+                  "pokeID": "01",
+                  "schemaVersions": {
+                    "maxSupportedVersion": 3,
+                    "minSupportedVersion": 2,
+                  },
                 },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": -9007199254740991,
-                  "id": "2",
-                  "json": null,
-                  "newColumn": null,
-                  "owner": "101",
-                  "parent": null,
-                  "title": "parent issue bar",
+              ],
+              [
+                "pokePart",
+                {
+                  "pokeID": "01",
+                  "rowsPatch": [
+                    {
+                      "id": {
+                        "id": "1",
+                      },
+                      "op": "put",
+                      "rest": {
+                        "big": 9007199254740991,
+                        "json": null,
+                        "newColumn": null,
+                        "owner": "100",
+                        "parent": null,
+                        "title": "parent issue foo",
+                      },
+                      "tableName": "issues",
+                    },
+                    {
+                      "id": {
+                        "id": "2",
+                      },
+                      "op": "put",
+                      "rest": {
+                        "big": -9007199254740991,
+                        "json": null,
+                        "newColumn": null,
+                        "owner": "101",
+                        "parent": null,
+                        "title": "parent issue bar",
+                      },
+                      "tableName": "issues",
+                    },
+                    {
+                      "id": {
+                        "id": "3",
+                      },
+                      "op": "put",
+                      "rest": {
+                        "big": 123,
+                        "json": null,
+                        "newColumn": null,
+                        "owner": "102",
+                        "parent": "1",
+                        "title": "foo",
+                      },
+                      "tableName": "issues",
+                    },
+                    {
+                      "id": {
+                        "id": "4",
+                      },
+                      "op": "put",
+                      "rest": {
+                        "big": 100,
+                        "json": null,
+                        "newColumn": null,
+                        "owner": "101",
+                        "parent": "2",
+                        "title": "bar",
+                      },
+                      "tableName": "issues",
+                    },
+                  ],
                 },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
-                  "id": "3",
-                  "json": null,
-                  "newColumn": null,
-                  "owner": "102",
-                  "parent": "1",
-                  "title": "foo",
+              ],
+              [
+                "pokeEnd",
+                {
+                  "pokeID": "01",
                 },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "json": null,
-                  "newColumn": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "bar",
-                },
-              },
-            ],
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "pokeID": "01",
-          },
-        ],
-      ]
-    `);
+              ],
+            ]
+          `);
   });
 
   test('catch up client', async () => {
@@ -2061,9 +2093,9 @@ describe('view-syncer/service', () => {
         {
           tableName: 'issues',
           op: 'put',
-          value: {
+          id: {id: '1'},
+          rest: {
             big: 9007199254740991,
-            id: '1',
             owner: '100.0',
             parent: null,
             title: 'new title',
@@ -2086,6 +2118,7 @@ describe('view-syncer/service', () => {
         clientID: 'bar',
         wsID: '9382',
         baseCookie: preAdvancement.cookie,
+        protocolVersion: PROTOCOL_VERSION,
         schemaVersion: 2,
         tokenData: undefined,
       },
@@ -2100,94 +2133,96 @@ describe('view-syncer/service', () => {
       pokeID: '01:01',
     });
     expect(response2).toMatchInlineSnapshot(`
+      [
         [
-          [
-            "pokeStart",
-            {
-              "baseCookie": "00:02",
-              "cookie": "01:01",
-              "pokeID": "01:01",
-              "schemaVersions": {
-                "maxSupportedVersion": 3,
-                "minSupportedVersion": 2,
-              },
+          "pokeStart",
+          {
+            "baseCookie": "00:02",
+            "cookie": "01:01",
+            "pokeID": "01:01",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
             },
-          ],
-          [
-            "pokePart",
-            {
-              "clientsPatch": [
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "clientsPatch": [
+              {
+                "clientID": "bar",
+                "op": "put",
+              },
+            ],
+            "desiredQueriesPatches": {
+              "bar": [
                 {
-                  "clientID": "bar",
-                  "op": "put",
-                },
-              ],
-              "desiredQueriesPatches": {
-                "bar": [
-                  {
-                    "ast": {
-                      "orderBy": [
-                        [
-                          "id",
-                          "asc",
-                        ],
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
                       ],
-                      "table": "issues",
-                      "where": {
-                        "left": {
-                          "name": "id",
-                          "type": "column",
-                        },
-                        "op": "IN",
-                        "right": {
-                          "type": "literal",
-                          "value": [
-                            "1",
-                            "2",
-                            "3",
-                            "4",
-                          ],
-                        },
-                        "type": "simple",
+                    ],
+                    "table": "issues",
+                    "where": {
+                      "left": {
+                        "name": "id",
+                        "type": "column",
                       },
+                      "op": "IN",
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                      "type": "simple",
                     },
-                    "hash": "query-hash1",
-                    "op": "put",
                   },
-                ],
-              },
-              "pokeID": "01:01",
-              "rowsPatch": [
-                {
+                  "hash": "query-hash1",
                   "op": "put",
-                  "tableName": "issues",
-                  "value": {
-                    "big": 9007199254740991,
-                    "id": "1",
-                    "json": null,
-                    "owner": "100.0",
-                    "parent": null,
-                    "title": "new title",
-                  },
-                },
-                {
-                  "id": {
-                    "id": "2",
-                  },
-                  "op": "del",
-                  "tableName": "issues",
                 },
               ],
             },
-          ],
-          [
-            "pokeEnd",
-            {
-              "pokeID": "01:01",
-            },
-          ],
-        ]
-      `);
+            "pokeID": "01:01",
+            "rowsPatch": [
+              {
+                "id": {
+                  "id": "1",
+                },
+                "op": "put",
+                "rest": {
+                  "big": 9007199254740991,
+                  "json": null,
+                  "owner": "100.0",
+                  "parent": null,
+                  "title": "new title",
+                },
+                "tableName": "issues",
+              },
+              {
+                "id": {
+                  "id": "2",
+                },
+                "op": "del",
+                "tableName": "issues",
+              },
+            ],
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "01:01",
+          },
+        ],
+      ]
+    `);
 
     // client1 should be poked to get the new client2 config,
     // but no new entities.
@@ -2424,40 +2459,46 @@ describe('view-syncer/service', () => {
             "pokeID": "01:01",
             "rowsPatch": [
               {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
+                "id": {
                   "id": "3",
+                },
+                "op": "put",
+                "rest": {
+                  "big": 123,
                   "json": null,
                   "owner": "102",
                   "parent": "1",
                   "title": "foo",
                 },
+                "tableName": "issues",
               },
               {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
+                "id": {
                   "id": "4",
+                },
+                "op": "put",
+                "rest": {
+                  "big": 100,
                   "json": null,
                   "owner": "101",
                   "parent": "2",
                   "title": "bar",
                 },
+                "tableName": "issues",
               },
               {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
+                "id": {
                   "id": "1",
+                },
+                "op": "put",
+                "rest": {
+                  "big": 9007199254740991,
                   "json": null,
                   "owner": "100.0",
                   "parent": null,
                   "title": "new title",
                 },
+                "tableName": "issues",
               },
               {
                 "id": {
@@ -2618,16 +2659,18 @@ describe('view-syncer/service', () => {
             "pokeID": "07:02",
             "rowsPatch": [
               {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
+                "id": {
                   "id": "4",
+                },
+                "op": "put",
+                "rest": {
+                  "big": 100,
                   "json": null,
                   "owner": "101",
                   "parent": "2",
                   "title": "caught up",
                 },
+                "tableName": "issues",
               },
             ],
           },
@@ -2852,6 +2895,7 @@ describe('permissions', () => {
     clientID: 'foo',
     wsID: 'ws1',
     baseCookie: null,
+    protocolVersion: PROTOCOL_VERSION,
     schemaVersion: 2,
     tokenData: {
       raw: '',
@@ -2964,194 +3008,202 @@ describe('permissions', () => {
     );
 
     expect(await nextPoke(client2)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": null,
-            "cookie": "00:04",
-            "pokeID": "00:04",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-              {
-                "clientID": "bar",
-                "op": "put",
-              },
-            ],
-            "desiredQueriesPatches": {
-              "bar": [
-                {
-                  "ast": {
-                    "orderBy": [
                       [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
+                        [
+                          "pokeStart",
+                          {
+                            "baseCookie": null,
+                            "cookie": "00:04",
+                            "pokeID": "00:04",
+                            "schemaVersions": {
+                              "maxSupportedVersion": 3,
+                              "minSupportedVersion": 2,
+                            },
+                          },
                         ],
-                      },
-                      "type": "simple",
-                    },
-                  },
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
-              "foo": [
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
+                        [
+                          "pokePart",
+                          {
+                            "clientsPatch": [
+                              {
+                                "clientID": "foo",
+                                "op": "put",
+                              },
+                              {
+                                "clientID": "bar",
+                                "op": "put",
+                              },
+                            ],
+                            "desiredQueriesPatches": {
+                              "bar": [
+                                {
+                                  "ast": {
+                                    "orderBy": [
+                                      [
+                                        "id",
+                                        "asc",
+                                      ],
+                                    ],
+                                    "table": "issues",
+                                    "where": {
+                                      "left": {
+                                        "name": "id",
+                                        "type": "column",
+                                      },
+                                      "op": "IN",
+                                      "right": {
+                                        "type": "literal",
+                                        "value": [
+                                          "1",
+                                          "2",
+                                          "3",
+                                          "4",
+                                        ],
+                                      },
+                                      "type": "simple",
+                                    },
+                                  },
+                                  "hash": "query-hash1",
+                                  "op": "put",
+                                },
+                              ],
+                              "foo": [
+                                {
+                                  "ast": {
+                                    "orderBy": [
+                                      [
+                                        "id",
+                                        "asc",
+                                      ],
+                                    ],
+                                    "table": "issues",
+                                    "where": {
+                                      "left": {
+                                        "name": "id",
+                                        "type": "column",
+                                      },
+                                      "op": "IN",
+                                      "right": {
+                                        "type": "literal",
+                                        "value": [
+                                          "1",
+                                          "2",
+                                          "3",
+                                          "4",
+                                        ],
+                                      },
+                                      "type": "simple",
+                                    },
+                                  },
+                                  "hash": "query-hash1",
+                                  "op": "put",
+                                },
+                              ],
+                            },
+                            "gotQueriesPatch": [
+                              {
+                                "ast": {
+                                  "orderBy": [
+                                    [
+                                      "id",
+                                      "asc",
+                                    ],
+                                  ],
+                                  "table": "issues",
+                                  "where": {
+                                    "left": {
+                                      "name": "id",
+                                      "type": "column",
+                                    },
+                                    "op": "IN",
+                                    "right": {
+                                      "type": "literal",
+                                      "value": [
+                                        "1",
+                                        "2",
+                                        "3",
+                                        "4",
+                                      ],
+                                    },
+                                    "type": "simple",
+                                  },
+                                },
+                                "hash": "query-hash1",
+                                "op": "put",
+                              },
+                            ],
+                            "lastMutationIDChanges": {
+                              "foo": 42,
+                            },
+                            "pokeID": "00:04",
+                            "rowsPatch": [
+                              {
+                                "id": {
+                                  "id": "1",
+                                },
+                                "op": "put",
+                                "rest": {
+                                  "big": 9007199254740991,
+                                  "json": null,
+                                  "owner": "100",
+                                  "parent": null,
+                                  "title": "parent issue foo",
+                                },
+                                "tableName": "issues",
+                              },
+                              {
+                                "id": {
+                                  "id": "2",
+                                },
+                                "op": "put",
+                                "rest": {
+                                  "big": -9007199254740991,
+                                  "json": null,
+                                  "owner": "101",
+                                  "parent": null,
+                                  "title": "parent issue bar",
+                                },
+                                "tableName": "issues",
+                              },
+                              {
+                                "id": {
+                                  "id": "3",
+                                },
+                                "op": "put",
+                                "rest": {
+                                  "big": 123,
+                                  "json": null,
+                                  "owner": "102",
+                                  "parent": "1",
+                                  "title": "foo",
+                                },
+                                "tableName": "issues",
+                              },
+                              {
+                                "id": {
+                                  "id": "4",
+                                },
+                                "op": "put",
+                                "rest": {
+                                  "big": 100,
+                                  "json": null,
+                                  "owner": "101",
+                                  "parent": "2",
+                                  "title": "bar",
+                                },
+                                "tableName": "issues",
+                              },
+                            ],
+                          },
                         ],
-                      },
-                      "type": "simple",
-                    },
-                  },
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
-            },
-            "gotQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
-                "hash": "query-hash1",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "00:04",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": -9007199254740991,
-                  "id": "2",
-                  "json": null,
-                  "owner": "101",
-                  "parent": null,
-                  "title": "parent issue bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
-                  "id": "3",
-                  "json": null,
-                  "owner": "102",
-                  "parent": "1",
-                  "title": "foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "bar",
-                },
-              },
-            ],
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "pokeID": "00:04",
-          },
-        ],
-      ]
-    `);
+                        [
+                          "pokeEnd",
+                          {
+                            "pokeID": "00:04",
+                          },
+                        ],
+                      ]
+                    `);
   });
 
   test('permissions via subquery', async () => {
@@ -3226,71 +3278,75 @@ describe('permissions', () => {
     // but should not receive those issues since the query for them was added by
     // the auth system.
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": "00:01",
-            "cookie": "00:02",
-            "pokeID": "00:02",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "gotQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
+                  [
                     [
-                      "id",
-                      "asc",
+                      "pokeStart",
+                      {
+                        "baseCookie": "00:01",
+                        "cookie": "00:02",
+                        "pokeID": "00:02",
+                        "schemaVersions": {
+                          "maxSupportedVersion": 3,
+                          "minSupportedVersion": 2,
+                        },
+                      },
                     ],
-                  ],
-                  "table": "comments",
-                },
-                "hash": "query-hash2",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "00:02",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "comments",
-                "value": {
-                  "id": "1",
-                  "issueID": "1",
-                  "text": "comment 1",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "comments",
-                "value": {
-                  "id": "2",
-                  "issueID": "1",
-                  "text": "comment 2",
-                },
-              },
-            ],
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "pokeID": "00:02",
-          },
-        ],
-      ]
-    `);
+                    [
+                      "pokePart",
+                      {
+                        "gotQueriesPatch": [
+                          {
+                            "ast": {
+                              "orderBy": [
+                                [
+                                  "id",
+                                  "asc",
+                                ],
+                              ],
+                              "table": "comments",
+                            },
+                            "hash": "query-hash2",
+                            "op": "put",
+                          },
+                        ],
+                        "lastMutationIDChanges": {
+                          "foo": 42,
+                        },
+                        "pokeID": "00:02",
+                        "rowsPatch": [
+                          {
+                            "id": {
+                              "id": "1",
+                            },
+                            "op": "put",
+                            "rest": {
+                              "issueID": "1",
+                              "text": "comment 1",
+                            },
+                            "tableName": "comments",
+                          },
+                          {
+                            "id": {
+                              "id": "2",
+                            },
+                            "op": "put",
+                            "rest": {
+                              "issueID": "1",
+                              "text": "comment 2",
+                            },
+                            "tableName": "comments",
+                          },
+                        ],
+                      },
+                    ],
+                    [
+                      "pokeEnd",
+                      {
+                        "pokeID": "00:02",
+                      },
+                    ],
+                  ]
+                `);
   });
 });
 

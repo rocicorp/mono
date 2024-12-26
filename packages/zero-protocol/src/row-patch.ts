@@ -6,7 +6,14 @@ import {primaryKeyValueRecordSchema} from './primary-key.js';
 const putOpSchema = v.object({
   op: v.literal('put'),
   tableName: v.string(),
-  value: rowSchema,
+
+  // `id` and `rest` comprise the full row value
+  // TODO: make these non-optional with next PROTOCOL_VERSION bump.
+  id: primaryKeyValueRecordSchema.optional(),
+  rest: rowSchema.optional(),
+
+  // TODO: remove with next PROTOCOL_VERSION bump.
+  value: rowSchema.optional(),
 });
 
 const updateOpSchema = v.object({

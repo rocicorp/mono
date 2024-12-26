@@ -68,6 +68,7 @@ export type TokenData = {
 export type SyncContext = {
   readonly clientID: string;
   readonly wsID: string;
+  readonly protocolVersion: number;
   readonly baseCookie: string | null;
   readonly schemaVersion: number;
   readonly tokenData: TokenData | undefined;
@@ -331,7 +332,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ): Source<Downstream> {
     return startSpan(tracer, 'vs.initConnection', () => {
       this.#lastConnectTime = Date.now();
-      const {clientID, wsID, baseCookie, schemaVersion, tokenData} = ctx;
+      const {
+        clientID,
+        wsID,
+        protocolVersion,
+        baseCookie,
+        schemaVersion,
+        tokenData,
+      } = ctx;
       this.#authData = pickToken(this.#authData, tokenData?.decoded);
 
       const lc = this.#lc
@@ -353,6 +361,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.id,
         clientID,
         wsID,
+        protocolVersion,
         this.#shardID,
         baseCookie,
         schemaVersion,

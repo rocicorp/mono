@@ -14,13 +14,13 @@ import type {
   QueriesPatchOp,
   RowPatchOp,
 } from '../../../zero-protocol/src/mod.js';
+import type {NormalizedSchema} from '../../../zero-schema/src/normalized-schema.js';
 import {
   toClientsKey,
   toDesiredQueriesKey,
   toGotQueriesKey,
   toPrimaryKeyString,
 } from './keys.js';
-import type {NormalizedSchema} from '../../../zero-schema/src/normalized-schema.js';
 
 type PokeAccumulator = {
   readonly pokeStart: PokeStartBody;
@@ -320,16 +320,18 @@ function rowsPatchOpToReplicachePatchOp(
           op.id,
         ),
       };
-    case 'put':
+    case 'put': {
+      const value = op.value ? op.value : {...op.id, ...op.rest};
       return {
         op: 'put',
         key: toPrimaryKeyString(
           op.tableName,
           schema.tables[op.tableName].primaryKey,
-          op.value,
+          value,
         ),
-        value: op.value,
+        value,
       };
+    }
     case 'update':
       return {
         op: 'update',

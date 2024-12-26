@@ -74,6 +74,7 @@ test('completed poke plays on first raf', async () => {
       {
         op: 'put',
         tableName: 'issues',
+        // TODO: switch to {id, rest} protocol
         value: {id: 'issue1', title: 'foo1'},
       },
     ],
@@ -87,12 +88,14 @@ test('completed poke plays on first raf', async () => {
       {
         op: 'put',
         tableName: 'issues',
-        value: {id: 'issue1', title: 'foo2'},
+        id: {id: 'issue1'},
+        rest: {title: 'foo2'},
       },
       {
         op: 'put',
         tableName: 'issues',
-        value: {id: 'issue2', title: 'bar1'},
+        id: {id: 'issue2'},
+        rest: {title: 'bar1'},
       },
     ],
   });

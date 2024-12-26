@@ -16,4 +16,4 @@
  * from earlier protocol versions are closed with a `VersionNotSupported`
  * error.
  */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;

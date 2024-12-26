@@ -7,10 +7,16 @@ import {
   type PokePartMessage,
   type PokeStartMessage,
 } from '../../../../zero-protocol/src/mod.js';
+import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.js';
 import type {JSONObject} from '../../types/bigint-json.js';
 import {ErrorForClient} from '../../types/error-for-client.js';
 import {Subscription} from '../../types/subscription.js';
-import {ClientHandler, ensureSafeJSON, type Patch} from './client-handler.js';
+import {
+  ClientHandler,
+  ensureSafeJSON,
+  rest,
+  type Patch,
+} from './client-handler.js';
 
 const SHARD_ID = 'xyz';
 
@@ -37,6 +43,7 @@ describe('view-syncer/client-handler', () => {
         'g1',
         'id1',
         'ws1',
+        PROTOCOL_VERSION,
         SHARD_ID,
         '121',
         schemaVersion,
@@ -48,6 +55,7 @@ describe('view-syncer/client-handler', () => {
         'g1',
         'id2',
         'ws2',
+        PROTOCOL_VERSION,
         SHARD_ID,
         '120:01',
         schemaVersion,
@@ -59,6 +67,7 @@ describe('view-syncer/client-handler', () => {
         'g1',
         'id3',
         'ws3',
+        3, // And is also at an older protocol version
         SHARD_ID,
         '11z',
         schemaVersion,
@@ -231,12 +240,14 @@ describe('view-syncer/client-handler', () => {
             {
               op: 'put',
               tableName: 'issues',
-              value: {id: 'bar', name: 'hello', num: 123},
+              id: {id: 'bar'},
+              rest: {name: 'hello', num: 123},
             },
             {
               op: 'put',
               tableName: 'issues',
-              value: {id: 'boo', name: 'world', num: 123456},
+              id: {id: 'boo'},
+              rest: {name: 'world', num: 123456},
             },
           ],
         },
@@ -323,6 +334,7 @@ describe('view-syncer/client-handler', () => {
       'g1',
       'id1',
       'ws1',
+      PROTOCOL_VERSION,
       SHARD_ID,
       '120',
       schemaVersion,
@@ -389,6 +401,7 @@ describe('view-syncer/client-handler', () => {
         'g1',
         'id1',
         'ws1',
+        PROTOCOL_VERSION,
         SHARD_ID,
         '121',
         schemaVersion,
@@ -441,5 +454,19 @@ describe('view-syncer/client-handler', () => {
       }
       expect(result).toEqual(expected);
     }
+  });
+
+  test('rest', () => {
+    expect(rest({id: 1}, {id: 1, foo: 'bar', baz: 2})).toEqual({
+      foo: 'bar',
+      baz: 2,
+    });
+    expect(
+      rest({id: 1, foo: 'boo'}, {foo: 'boo', boo: 2, id: 1, baz: 3}),
+    ).toEqual({
+      boo: 2,
+      baz: 3,
+    });
+    expect(rest({id: 2}, {id: 2})).toEqual({});
   });
 });
