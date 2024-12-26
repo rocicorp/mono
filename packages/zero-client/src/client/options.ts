@@ -8,14 +8,14 @@ import type {Schema} from '../../../zero-schema/src/mod.js';
  */
 export interface ZeroOptions<S extends Schema> {
   /**
-   * URL to the server. This can be a simple hostname, e.g.
+   * URL to the zero-cache. This can be a simple hostname, e.g.
    * - "https://myapp-myteam.zero.ms"
    * or a prefix with a single path component, e.g.
    * - "https://myapp-myteam.zero.ms/zero"
    * - "https://myapp-myteam.zero.ms/db"
    *
    * The latter is useful for configuring routing rules (e.g. "zero/**") when
-   * the server is hosted on the same domain as the application.
+   * the zero-cache is hosted on the same domain as the application.
    */
   server?: string | null | undefined;
 
@@ -23,8 +23,8 @@ export interface ZeroOptions<S extends Schema> {
    * A string token to identify and authenticate the user, a function that
    * returns such a token, or undefined if there is no logged in user.
    *
-   * If the server determines the token is invalid (expired, can't be decoded,
-   * bad signature, etc):
+   * If the zero-cache determines the token is invalid (expired, can't be
+   * decoded, bad signature, etc):
    * 1. if a function was provided Zero will call the function to get a new
    *    token with the error argument set to `'invalid-token'`.
    * 2. if a string token was provided Zero will continue to retry with the
@@ -86,12 +86,12 @@ export interface ZeroOptions<S extends Schema> {
 
   /**
    * `onClientStateNotFound` is called when this client is no longer able
-   * to sync with the server due to missing synchronization state.  This can be
-   * because:
+   * to sync with the zero-cache due to missing synchronization state.  This
+   * can be because:
    * - the local persistent synchronization state has been garbage collected.
    *   This can happen if the client has no pending mutations and has not been
    *   used for a while (e.g. the client's tab has been hidden for a long time).
-   * - the server fails to find the server side synchronization state for
+   * - the zero-cache fails to find the server side synchronization state for
    *   this client.
    *
    * The default behavior is to reload the page (using `location.reload()`).
@@ -129,7 +129,7 @@ export interface ZeroOptions<S extends Schema> {
    *
    * Zero adds some extra information to headers on initialization if possible.
    * This speeds up data synchronization. This number should be kept less than
-   * or equal to the maximum header size allowed by the server and any load
+   * or equal to the maximum header size allowed by the zero-cache and any load
    * balancers.
    *
    * Default value: 8kb.
@@ -176,11 +176,11 @@ export interface ZeroAdvancedOptions<S extends Schema> extends ZeroOptions<S> {
 export type UpdateNeededReason =
   // There is a new client group due to a another tab loading new code which
   // cannot sync locally with this tab until it updates to the new code.
-  // This tab can still sync with the server.
+  // This tab can still sync with the zero-cache.
   | {type: 'NewClientGroup'}
-  // This client was unable to connect to the server because it is using a
-  // protocol version that the server does not support.
+  // This client was unable to connect to the zero-cache because it is using a
+  // protocol version that the zero-cache does not support.
   | {type: 'VersionNotSupported'}
-  // This client was unable to connect to the server because it is using a
-  // schema version (see {@link Schema}) that the server does not support.
+  // This client was unable to connect to the zero-cache because it is using a
+  // schema version (see {@link Schema}) that the zero-cache does not support.
   | {type: 'SchemaVersionNotSupported'};
