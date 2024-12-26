@@ -4,6 +4,7 @@ import * as esbuild from 'esbuild';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {builtinModules} from 'node:module';
+import {resolve as resolvePath} from 'node:path';
 import {makeDefine, sharedOptions} from '../../shared/src/build.js';
 import {getExternalFromPackageJSON} from '../../shared/src/tool/get-external-from-package-json.js';
 
@@ -12,7 +13,8 @@ import {getExternalFromPackageJSON} from '../../shared/src/tool/get-external-fro
  * @returns {string}
  */
 function basePath(path) {
-  return new URL('../' + path, import.meta.url).pathname;
+  const base = resolvePath(path);
+  return base;
 }
 
 /**
@@ -29,8 +31,9 @@ async function getExternal(includePeerDeps) {
    * @param {string} internalPackageName
    */
   async function addExternalDepsFor(internalPackageName) {
+    const internalPackageDir = basePath('../' + internalPackageName);
     for (const dep of await getExternalFromPackageJSON(
-      basePath('../' + internalPackageName),
+      internalPackageDir,
       includePeerDeps,
     )) {
       externalSet.add(dep);
