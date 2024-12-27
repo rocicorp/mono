@@ -50,6 +50,10 @@ import {preload} from '../../zero-setup.js';
 import {CommentComposer} from './comment-composer.js';
 import {Comment} from './comment.js';
 import {isCtrlEnter} from './is-ctrl-enter.js';
+import {
+  MAX_ISSUE_DESCRIPTION_LENGTH,
+  MAX_ISSUE_TITLE_LENGTH,
+} from '../../limits.js';
 
 const emojiToastShowDuration = 3_000;
 
@@ -442,6 +446,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                 autoFocus
                 onChange={e => setEdits({...edits, title: e.target.value})}
                 onKeyDown={e => isCtrlEnter(e) && save()}
+                maxLength={MAX_ISSUE_TITLE_LENGTH}
               />
             </div>
           )}
@@ -471,6 +476,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                   setEdits({...edits, description: e.target.value})
                 }
                 onKeyDown={e => isCtrlEnter(e) && save()}
+                maxLength={MAX_ISSUE_DESCRIPTION_LENGTH}
               />
             </div>
           )}
