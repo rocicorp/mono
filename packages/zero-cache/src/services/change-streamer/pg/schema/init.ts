@@ -1,5 +1,4 @@
 import type {LogContext} from '@rocicorp/logger';
-import {AbortError} from '../../../../../../shared/src/abort-error.js';
 import {
   getVersionHistory,
   runSchemaMigrations,
@@ -7,6 +6,7 @@ import {
   type Migration,
 } from '../../../../db/migration.js';
 import type {PostgresDB, PostgresTransaction} from '../../../../types/pg.js';
+import {AutoResetSignal} from '../../schema/tables.js';
 import type {ShardConfig} from '../shard-config.js';
 import {getPublicationInfo, type PublishedSchema} from './published.js';
 import {
@@ -39,9 +39,7 @@ export async function updateShardSchema(
   const {id} = shardConfig;
   const {schemaVersion} = await getVersionHistory(db, unescapedSchema(id));
   if (schemaVersion === 0) {
-    throw new AbortError(
-      `upstream shard ${id} is not initialized. Delete the replica and resync.`,
-    );
+    throw new AutoResetSignal(`upstream shard ${id} is not initialized`);
   }
   return runShardMigrations(lc, db, shardConfig);
 }
