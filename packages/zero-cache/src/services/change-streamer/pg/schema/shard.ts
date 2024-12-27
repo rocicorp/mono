@@ -31,7 +31,7 @@ export function unescapedSchema(shardID: string) {
 export const APP_PUBLICATION_PREFIX = 'zero_';
 export const INTERNAL_PUBLICATION_PREFIX = '_zero_';
 
-const DEFAULT_APP_PUBLICATION = APP_PUBLICATION_PREFIX + 'public';
+const DEFAULT_PUBLICATION_PREFIX = INTERNAL_PUBLICATION_PREFIX + 'public_';
 const METADATA_PUBLICATION_PREFIX = INTERNAL_PUBLICATION_PREFIX + 'metadata_';
 
 // The GLOBAL_SETUP must be idempotent as it can be run multiple times for different shards.
@@ -100,10 +100,12 @@ function shardSetup(shardID: string, publications: string[]): string {
 export function dropShard(shardID: string): string {
   const schema = schemaFor(shardID);
   const metadataPublication = METADATA_PUBLICATION_PREFIX + shardID;
+  const defaultPublication = DEFAULT_PUBLICATION_PREFIX + shardID;
 
   // DROP SCHEMA ... CASCADE does not drop dependent PUBLICATIONS,
-  // so the PUBLICATION must be dropped explicitly.
+  // so PUBLICATIONs must be dropped explicitly.
   return `
+    DROP PUBLICATION IF EXISTS ${id(defaultPublication)};
     DROP PUBLICATION IF EXISTS ${id(metadataPublication)};
     DROP SCHEMA IF EXISTS ${schema} CASCADE;
   `;
@@ -188,15 +190,14 @@ export async function setupTablesAndReplication(
     }
     allPublications.push(...publications);
   } else {
-    const defaultPub = await tx`
-    SELECT 1 FROM pg_publication WHERE pubname = ${DEFAULT_APP_PUBLICATION}`;
-    if (defaultPub.length === 0) {
+    const defaultPublication = DEFAULT_PUBLICATION_PREFIX + id;
+    const result = await tx`
+    SELECT 1 FROM pg_publication WHERE pubname = ${defaultPublication}`;
+    if (result.length === 0) {
       await tx`
-      CREATE PUBLICATION ${tx(
-        DEFAULT_APP_PUBLICATION,
-      )} FOR TABLES IN SCHEMA public`;
+      CREATE PUBLICATION ${tx(defaultPublication)} FOR TABLES IN SCHEMA public`;
     }
-    allPublications.push(DEFAULT_APP_PUBLICATION);
+    allPublications.push(defaultPublication);
   }
 
   // Setup the global tables and shard tables / publications.

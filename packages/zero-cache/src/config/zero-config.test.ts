@@ -110,10 +110,10 @@ test('zero-cache --help', () => {
                                                    replicated to the shard. All publication names must begin with the prefix                         
                                                    zero_, and all tables must be in the public schema.                                               
                                                                                                                                                      
-                                                   If unspecified, zero-cache will create and use a zero_public publication that                     
+                                                   If unspecified, zero-cache will create and use an internal publication that                       
                                                    publishes all tables in the public schema, i.e.:                                                  
                                                                                                                                                      
-                                                   CREATE PUBLICATION zero_public FOR TABLES IN SCHEMA public;                                       
+                                                   CREATE PUBLICATION _zero_public_0 FOR TABLES IN SCHEMA public;                                    
                                                                                                                                                      
                                                    Note that once a shard has begun syncing data, this list of publications                          
                                                    cannot be changed, and zero-cache will refuse to start if a specified                             

@@ -36,7 +36,7 @@ describe('change-source/pg', () => {
     expect(await publications()).toEqual([
       [`_zero_metadata_0`, 'zero', 'schemaVersions', null],
       [`_zero_metadata_0`, `zero_0`, 'clients', null],
-      ['zero_public', null, null, null],
+      ['_zero_public_0', null, null, null],
     ]);
 
     await expectTables(db, {
@@ -46,7 +46,7 @@ describe('change-source/pg', () => {
       ['zero_0.shardConfig']: [
         {
           lock: true,
-          publications: ['_zero_metadata_0', 'zero_public'],
+          publications: ['_zero_metadata_0', '_zero_public_0'],
           ddlDetection: true,
           initialSchema: null,
         },
@@ -75,7 +75,7 @@ describe('change-source/pg', () => {
     expect(await publications()).toEqual([
       [`_zero_metadata_'has quotes'`, 'zero', 'schemaVersions', null],
       [`_zero_metadata_'has quotes'`, `zero_'has quotes'`, 'clients', null],
-      ['zero_public', null, null, null],
+      [`_zero_public_'has quotes'`, null, null, null],
     ]);
 
     await expectTables(db, {
@@ -85,7 +85,10 @@ describe('change-source/pg', () => {
       [`zero_'has quotes'.shardConfig`]: [
         {
           lock: true,
-          publications: [`_zero_metadata_'has quotes'`, 'zero_public'],
+          publications: [
+            `_zero_metadata_'has quotes'`,
+            `_zero_public_'has quotes'`,
+          ],
           ddlDetection: true,
           initialSchema: null,
         },
@@ -107,7 +110,8 @@ describe('change-source/pg', () => {
       [`_zero_metadata_0`, `zero_0`, 'clients', null],
       [`_zero_metadata_1`, 'zero', 'schemaVersions', null],
       [`_zero_metadata_1`, `zero_1`, 'clients', null],
-      ['zero_public', null, null, null],
+      ['_zero_public_0', null, null, null],
+      ['_zero_public_1', null, null, null],
     ]);
 
     await expectTables(db, {
@@ -117,7 +121,7 @@ describe('change-source/pg', () => {
       ['zero_0.shardConfig']: [
         {
           lock: true,
-          publications: ['_zero_metadata_0', 'zero_public'],
+          publications: ['_zero_metadata_0', '_zero_public_0'],
           ddlDetection: true,
           initialSchema: null,
         },
@@ -126,7 +130,7 @@ describe('change-source/pg', () => {
       ['zero_1.shardConfig']: [
         {
           lock: true,
-          publications: ['_zero_metadata_1', 'zero_public'],
+          publications: ['_zero_metadata_1', '_zero_public_1'],
           ddlDetection: true,
           initialSchema: null,
         },
@@ -325,12 +329,12 @@ describe('change-source/pg', () => {
       await initDB(
         db,
         c.setupUpstreamQuery +
-          `CREATE PUBLICATION zero_public FOR TABLES IN SCHEMA public;`,
+          `CREATE PUBLICATION zero_data FOR TABLES IN SCHEMA public;`,
         c.upstream,
       );
 
       const published = await getPublicationInfo(db, [
-        'zero_public',
+        'zero_data',
         ...(c.requestedPublications ?? []),
       ]);
       expect(() => validatePublications(lc, SHARD_ID, published)).toThrowError(

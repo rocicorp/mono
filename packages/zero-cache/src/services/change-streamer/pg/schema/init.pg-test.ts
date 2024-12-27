@@ -51,7 +51,7 @@ describe('change-streamer/pg/schema/init', () => {
             lock: true,
             publications: [
               '_zero_metadata_shard_schema_test_id',
-              'zero_public',
+              '_zero_public_shard_schema_test_id',
             ],
             ddlDetection: true,
             initialSchema: null,
@@ -102,7 +102,7 @@ describe('change-streamer/pg/schema/init', () => {
             lock: true,
             publications: [
               '_zero_metadata_shard_schema_test_id',
-              'zero_public',
+              '_zero_public_shard_schema_test_id',
             ],
             ddlDetection: true,
             initialSchema: null,
@@ -142,7 +142,7 @@ describe('change-streamer/pg/schema/init', () => {
         CONSTRAINT single_row_shard_config_0 CHECK (lock)
       );
       INSERT INTO zero_${SHARD_ID}."shardConfig" ("lock", "publications")
-        VALUES (true, ARRAY['_zero_metadata_${SHARD_ID}','zero_public']);
+        VALUES (true, ARRAY['_zero_metadata_${SHARD_ID}','_zero_public_${SHARD_ID}']);
       `,
       existingVersionHistory: {
         ...CURRENT_SCHEMA_VERSIONS,
@@ -155,7 +155,7 @@ describe('change-streamer/pg/schema/init', () => {
             lock: true,
             publications: [
               '_zero_metadata_shard_schema_test_id',
-              'zero_public',
+              '_zero_public_shard_schema_test_id',
             ],
             ddlDetection: true,
             initialSchema: {
