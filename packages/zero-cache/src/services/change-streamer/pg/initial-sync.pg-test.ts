@@ -193,7 +193,10 @@ describe('replicator/initial-sync', () => {
           },
         ],
       },
-      resultingPublications: [`_zero_metadata_${SHARD_ID}`, 'zero_public'],
+      resultingPublications: [
+        `_zero_metadata_${SHARD_ID}`,
+        `_zero_public_${SHARD_ID}`,
+      ],
     },
     {
       name: 'replication slot already exists',
@@ -221,7 +224,10 @@ describe('replicator/initial-sync', () => {
           },
         ],
       },
-      resultingPublications: [`_zero_metadata_${SHARD_ID}`, 'zero_public'],
+      resultingPublications: [
+        `_zero_metadata_${SHARD_ID}`,
+        `_zero_public_${SHARD_ID}`,
+      ],
     },
     {
       name: 'existing table, default publication',
@@ -348,7 +354,7 @@ describe('replicator/initial-sync', () => {
           name: 'issues',
           primaryKey: ['orgID', 'issueID'],
           schema: 'public',
-          publications: {['zero_public']: {rowFilter: null}},
+          publications: {[`_zero_public_${SHARD_ID}`]: {rowFilter: null}},
         },
       },
       replicatedSchema: {
@@ -552,7 +558,10 @@ describe('replicator/initial-sync', () => {
           },
         ],
       },
-      resultingPublications: [`_zero_metadata_${SHARD_ID}`, 'zero_public'],
+      resultingPublications: [
+        `_zero_metadata_${SHARD_ID}`,
+        `_zero_public_${SHARD_ID}`,
+      ],
     },
     {
       name: 'existing partial publication',
@@ -803,7 +812,7 @@ describe('replicator/initial-sync', () => {
           name: 'issues',
           primaryKey: ['orgID', 'issueID'],
           schema: 'public',
-          publications: {['zero_public']: {rowFilter: null}},
+          publications: {[`_zero_public_${SHARD_ID}`]: {rowFilter: null}},
         },
       },
       replicatedSchema: {
@@ -875,7 +884,10 @@ describe('replicator/initial-sync', () => {
           unique: false,
         },
       ],
-      resultingPublications: [`_zero_metadata_${SHARD_ID}`, 'zero_public'],
+      resultingPublications: [
+        `_zero_metadata_${SHARD_ID}`,
+        `_zero_public_${SHARD_ID}`,
+      ],
     },
   ];
 
