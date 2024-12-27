@@ -59,7 +59,7 @@
     "@types/lodash.kebabcase": "^4.1.9",
     "@types/lodash.merge": "^4.6.9",
     "@types/lodash.snakecase": "^4.1.9",
-    "@types/node": "^18.16.0",
+    "@types/node": "^20.8.4",
     "@types/pg": "^8.11.2",
     "@types/pg-format": "^1.0.5",
     "@types/strip-ansi": "^3.0.0",
