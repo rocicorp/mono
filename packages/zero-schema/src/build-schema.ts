@@ -23,6 +23,8 @@ async function main() {
     path.basename(absoluteConfigPath),
   );
 
+  // tsImport doesn't expect to receive slashes in the Windows format when running
+  // on Windows. They need to be converted to *nix format.
   relativePath = relativePath.replace(/\\/g, "/");
 
   try {
