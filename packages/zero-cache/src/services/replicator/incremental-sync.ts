@@ -3,18 +3,20 @@ import {SqliteError} from '@rocicorp/zero-sqlite3';
 import {LogicalReplicationService} from 'pg-logical-replication';
 import {AbortError} from '../../../../shared/src/abort-error.js';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
+import {must} from '../../../../shared/src/must.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {
   columnDef,
   createIndexStatement,
   createTableStatement,
 } from '../../db/create.js';
-import {listIndexes} from '../../db/lite-tables.js';
+import {listIndexes, listTables} from '../../db/lite-tables.js';
 import {
   mapPostgresToLite,
   mapPostgresToLiteColumn,
   mapPostgresToLiteIndex,
 } from '../../db/pg-to-lite.js';
+import type {LiteTableSpec} from '../../db/specs.js';
 import {StatementRunner} from '../../db/statements.js';
 import {stringify} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
@@ -377,6 +379,7 @@ class TransactionProcessor {
   readonly #startMs: number;
   readonly #db: StatementRunner;
   readonly #version: LexiVersion;
+  readonly #tableSpecs = new Map<string, LiteTableSpec>();
 
   constructor(lc: LogContext, db: StatementRunner, txMode: TransactionMode) {
     this.#startMs = Date.now();
@@ -401,6 +404,19 @@ class TransactionProcessor {
     this.#db = db;
     this.#version = nextStateVersion;
     this.#lc = lc.withContext('version', nextStateVersion);
+
+    this.#refreshTableSpecs();
+  }
+
+  #refreshTableSpecs() {
+    this.#tableSpecs.clear();
+    for (const spec of listTables(this.#db.db)) {
+      this.#tableSpecs.set(spec.name, spec);
+    }
+  }
+
+  #tableSpec(name: string) {
+    return must(this.#tableSpecs.get(name), `Unknown table ${name}`);
   }
 
   /**
@@ -421,7 +437,7 @@ class TransactionProcessor {
    */
   processInsert(insert: MessageInsert) {
     const table = liteTableName(insert.relation);
-    const newRow = liteRow(insert.new);
+    const newRow = liteRow(insert.new, this.#tableSpec(table));
     const row = {
       ...newRow,
       [ZERO_VERSION_COLUMN_NAME]: this.#version,
@@ -448,13 +464,15 @@ class TransactionProcessor {
 
   processUpdate(update: MessageUpdate) {
     const table = liteTableName(update.relation);
-    const newRow = liteRow(update.new);
+    const newRow = liteRow(update.new, this.#tableSpec(table));
     const row = {
       ...newRow,
       [ZERO_VERSION_COLUMN_NAME]: this.#version,
     };
     // update.key is set with the old values if the key has changed.
-    const oldKey = update.key ? liteRow(update.key) : null;
+    const oldKey = update.key
+      ? liteRow(update.key, this.#tableSpec(table))
+      : null;
     const newKey = Object.fromEntries(
       update.relation.keyColumns.map(col => [col, newRow[col]]),
     );
@@ -481,8 +499,8 @@ class TransactionProcessor {
     // REPLICA IDENTITY DEFAULT means the `key` must be set.
     // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html
     assert(del.relation.replicaIdentity === 'default');
-    const rowKey = liteRow(del.key);
     const table = liteTableName(del.relation);
+    const rowKey = liteRow(del.key, this.#tableSpec(table));
 
     const conds = Object.keys(rowKey).map(col => `${id(col)}=?`);
     this.#db.run(
@@ -507,7 +525,7 @@ class TransactionProcessor {
     const table = mapPostgresToLite(create.spec);
     this.#db.db.exec(createTableStatement(table));
 
-    logResetOp(this.#db, this.#version, table.name);
+    this.#logResetOp(table.name);
     this.#lc.info?.(create.tag, table.name);
   }
 
@@ -517,7 +535,7 @@ class TransactionProcessor {
     this.#db.db.exec(`ALTER TABLE ${id(oldName)} RENAME TO ${id(newName)}`);
 
     this.#bumpVersions(newName);
-    logResetOp(this.#db, this.#version, oldName);
+    this.#logResetOp(oldName);
     this.#lc.info?.(rename.tag, oldName, newName);
   }
 
@@ -591,7 +609,7 @@ class TransactionProcessor {
     const name = liteTableName(drop.id);
     this.#db.db.exec(`DROP TABLE IF EXISTS ${id(name)}`);
 
-    logResetOp(this.#db, this.#version, name);
+    this.#logResetOp(name);
     this.#lc.info?.(drop.tag, name);
   }
 
@@ -612,7 +630,12 @@ class TransactionProcessor {
       `UPDATE ${id(table)} SET ${id(ZERO_VERSION_COLUMN_NAME)} = ?`,
       this.#version,
     );
+    this.#logResetOp(table);
+  }
+
+  #logResetOp(table: string) {
     logResetOp(this.#db, this.#version, table);
+    this.#refreshTableSpecs();
   }
 
   processCommit(commit: MessageCommit, watermark: string) {
