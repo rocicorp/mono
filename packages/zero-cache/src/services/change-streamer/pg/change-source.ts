@@ -49,7 +49,7 @@ import type {
 } from '../change-streamer-service.js';
 import type {Commit, Data, DownstreamChange} from '../change-streamer.js';
 import type {DataChange, Identifier, MessageDelete} from '../schema/change.js';
-import type {ReplicationConfig} from '../schema/tables.js';
+import {AutoResetSignal, type ReplicationConfig} from '../schema/tables.js';
 import {replicationSlot} from './initial-sync.js';
 import {fromLexiVersion, toLexiVersion} from './lsn.js';
 import {replicationEventSchema, type DdlUpdateEvent} from './schema/ddl.js';
@@ -103,6 +103,15 @@ export async function initializeChangeSource(
     }
   }
 
+  // Check that upstream is properly setup, and throw an AutoReset to re-run
+  // initial sync if not.
+  const db = pgClient(lc, upstreamURI);
+  try {
+    await checkAndUpdateUpstream(lc, db, shard);
+  } finally {
+    await db.end();
+  }
+
   const changeSource = new PostgresChangeSource(
     lc,
     upstreamURI,
@@ -111,6 +120,24 @@ export async function initializeChangeSource(
   );
 
   return {replicationConfig, changeSource};
+}
+
+async function checkAndUpdateUpstream(
+  lc: LogContext,
+  db: PostgresDB,
+  shard: ShardConfig,
+) {
+  const slot = replicationSlot(shard.id);
+  const result = await db<{pid: string | null}[]>`
+  SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${slot}`;
+  if (result.length === 0) {
+    throw new AutoResetSignal(`replication slot ${slot} is missing`);
+  }
+  // Perform any shard schema updates
+  await updateShardSchema(lc, db, {
+    id: shard.id,
+    publications: shard.publications,
+  });
 }
 
 const MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE = 5;
@@ -145,11 +172,6 @@ class PostgresChangeSource implements ChangeSource {
     try {
       await this.#stopExistingReplicationSlotSubscriber(db, slot);
 
-      // Perform any shard schema updates
-      await updateShardSchema(this.#lc, db, {
-        id: this.#shardID,
-        publications: this.#replicationConfig.publications,
-      });
       const config = await getInternalShardConfig(db, this.#shardID);
       this.#lc.info?.(`starting replication stream @${slot}`);
 
@@ -297,6 +319,9 @@ class PostgresChangeSource implements ChangeSource {
     SELECT pg_terminate_backend(active_pid), active_pid as pid
       FROM pg_replication_slots WHERE slot_name = ${slot}`;
     if (result.length === 0) {
+      // Note: This should not happen as it is checked at initialization time,
+      //       but it is technically possible for the replication slot to be
+      //       dropped (e.g. manually).
       throw new AbortError(
         `replication slot ${slot} is missing. Delete the replica and resync.`,
       );

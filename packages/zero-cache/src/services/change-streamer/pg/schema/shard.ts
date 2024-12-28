@@ -191,12 +191,10 @@ export async function setupTablesAndReplication(
     allPublications.push(...publications);
   } else {
     const defaultPublication = DEFAULT_PUBLICATION_PREFIX + id;
-    const result = await tx`
-    SELECT 1 FROM pg_publication WHERE pubname = ${defaultPublication}`;
-    if (result.length === 0) {
-      await tx`
+    // Note: For re-syncing, this publication is dropped in dropShard(), so an existence
+    //       check is unnecessary.
+    await tx`
       CREATE PUBLICATION ${tx(defaultPublication)} FOR TABLES IN SCHEMA public`;
-    }
     allPublications.push(defaultPublication);
   }
 
