@@ -7,11 +7,21 @@ import type {
   TableSchema,
 } from '../../zero-advanced/src/mod.js';
 import {solidViewFactory} from './solid-view.js';
+import type {ResultType} from '../../zql/src/query/typed-view.js';
+
+export type QueryResultDetails = Readonly<{
+  type: ResultType;
+}>;
+
+export type QueryResult<TReturn extends QueryType> = readonly [
+  Smash<TReturn>,
+  QueryResultDetails,
+];
 
 export function useQuery<
   TSchema extends TableSchema,
   TReturn extends QueryType,
->(querySignal: () => Query<TSchema, TReturn>): Accessor<Smash<TReturn>> {
+>(querySignal: () => Query<TSchema, TReturn>): Accessor<QueryResult<TReturn>> {
   return createMemo(() => {
     const query = querySignal();
     const view = (query as AdvancedQuery<TSchema, TReturn>).materialize(
@@ -22,6 +32,6 @@ export function useQuery<
       view.destroy();
     });
 
-    return view.data;
+    return [view.data, {type: view.resultType}] as const;
   });
 }
