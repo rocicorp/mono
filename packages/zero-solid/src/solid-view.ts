@@ -32,7 +32,7 @@ export class SolidView<V extends View> implements Output {
     input: Input,
     format: Format = {singular: false, relationships: {}},
     onDestroy: () => void = () => {},
-    queryComplete: true | Promise<true>,
+    queryComplete: true | Promise<true> = true,
   ) {
     this.#input = input;
     this.#format = format;
@@ -41,7 +41,7 @@ export class SolidView<V extends View> implements Output {
       '': format.singular ? undefined : [],
     });
     [this.#resultTypeStore, this.#setResultType] = createStore({
-      resultType: queryComplete ? 'complete' : 'unknown',
+      resultType: queryComplete === true ? 'complete' : 'unknown',
     });
     input.setOutput(this);
 
