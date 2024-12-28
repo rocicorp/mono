@@ -50,6 +50,8 @@ export type GetFieldTypeNoUndefined<
       SchemaValueToTSType<TSchema['columns'][TColumn]>,
       null | undefined
     >[]
+  : TOperator extends 'IS' | 'IS NOT'
+  ? Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, undefined> | null
   : Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, undefined>;
 
 export type Row<T extends TableSchema | Query<TableSchema>> =
@@ -57,7 +59,9 @@ export type Row<T extends TableSchema | Query<TableSchema>> =
     ? {
         [K in keyof T['columns']]: SchemaValueToTSType<T['columns'][K]>;
       }
-    : QueryRowType<T & Query<TableSchema>>;
+    : T extends Query<TableSchema>
+    ? QueryRowType<T>
+    : never;
 
 export type Rows<T extends TableSchema | Query<TableSchema>> =
   T extends TableSchema ? Row<T>[] : QueryReturnType<T & Query<TableSchema>>;

@@ -1,7 +1,6 @@
 import type {Row} from '@rocicorp/zero';
 import classNames from 'classnames';
 import {memo, useState} from 'react';
-import type {Schema} from '../../../schema.js';
 import {makePermalink} from '../../comment-permalink.js';
 import {Button} from '../../components/button.js';
 import {CanEdit} from '../../components/can-edit.js';
@@ -10,21 +9,17 @@ import {EmojiPanel} from '../../components/emoji-panel.js';
 import {Link} from '../../components/link.js';
 import {Markdown} from '../../components/markdown.js';
 import {RelativeTime} from '../../components/relative-time.js';
-import {type Emoji} from '../../emoji-utils.js';
 import {useHash} from '../../hooks/use-hash.js';
 import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {CommentComposer} from './comment-composer.js';
 import style from './comment.module.css';
+import type {commentQuery} from './issue-page.js';
 
 type Props = {
   id: string;
   issueID: string;
-  comment: Row<Schema['tables']['comment']> & {
-    readonly creator: Row<Schema['tables']['user']> | undefined;
-  } & {
-    readonly emoji: readonly Emoji[];
-  };
+  comment: Row<ReturnType<typeof commentQuery>>;
   /**
    * Height of the comment. Used to keep the layout stable when comments are
    * being "loaded".

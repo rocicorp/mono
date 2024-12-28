@@ -521,6 +521,9 @@ describe('types', () => {
     query.where('s', '=', null);
     // @ts-expect-error - cannot compare with undefined
     query.where('s', '=', undefined);
+
+    // IS can compare to null
+    query.where('s', 'IS', null);
   });
 
   test('start', () => {

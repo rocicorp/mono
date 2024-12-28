@@ -61,6 +61,17 @@ const emojiToastShowDuration = 3_000;
 // to load.
 export const INITIAL_COMMENT_LIMIT = 101;
 
+export function commentQuery(z: Zero<Schema>, displayed: IssueRow | undefined) {
+  return z.query.comment
+    .where('issueID', 'IS', displayed?.id ?? null)
+    .related('creator', creator => creator.one())
+    .related('emoji', emoji =>
+      emoji.related('creator', creator => creator.one()),
+    )
+    .orderBy('created', 'asc')
+    .orderBy('id', 'asc');
+}
+
 export function IssuePage({onReady}: {onReady: () => void}) {
   const z = useZero();
   const params = useParams();
@@ -232,14 +243,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const [displayAllComments, setDisplayAllComments] = useState(false);
 
   const [allComments, allCommentsResult] = useQuery(
-    z.query.comment
-      .where('issueID', displayed?.id ?? '')
-      .related('creator', creator => creator.one())
-      .related('emoji', emoji =>
-        emoji.related('creator', creator => creator.one()),
-      )
-      .orderBy('created', 'asc')
-      .orderBy('id', 'asc'),
+    commentQuery(z, displayed),
     displayAllComments && displayed !== undefined,
   );
 
