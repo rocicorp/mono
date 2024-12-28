@@ -192,6 +192,11 @@ export class MessageProcessor {
   readonly #txMode: TransactionMode;
   readonly #failService: (lc: LogContext, err: unknown) => void;
 
+  // The TransactionProcessor lazily loads table specs into this Map,
+  // and reloads them after a schema change. It is cached here to avoid
+  // reading them from the DB on every transaction.
+  readonly #tableSpecs = new Map<string, LiteTableSpec>();
+
   #currentTx: TransactionProcessor | null = null;
 
   #failure: Error | undefined;
@@ -248,7 +253,12 @@ export class MessageProcessor {
     let start = Date.now();
     for (let i = 0; ; i++) {
       try {
-        return new TransactionProcessor(lc, this.#db, this.#txMode);
+        return new TransactionProcessor(
+          lc,
+          this.#db,
+          this.#txMode,
+          this.#tableSpecs,
+        );
       } catch (e) {
         // The db occasionally errors with a 'database is locked' error when
         // being concurrently processed by `litestream replicate`, even with
@@ -379,9 +389,14 @@ class TransactionProcessor {
   readonly #startMs: number;
   readonly #db: StatementRunner;
   readonly #version: LexiVersion;
-  readonly #tableSpecs = new Map<string, LiteTableSpec>();
+  readonly #tableSpecs: Map<string, LiteTableSpec>;
 
-  constructor(lc: LogContext, db: StatementRunner, txMode: TransactionMode) {
+  constructor(
+    lc: LogContext,
+    db: StatementRunner,
+    txMode: TransactionMode,
+    tableSpecs: Map<string, LiteTableSpec>,
+  ) {
     this.#startMs = Date.now();
 
     if (txMode === 'CONCURRENT') {
@@ -404,11 +419,14 @@ class TransactionProcessor {
     this.#db = db;
     this.#version = nextStateVersion;
     this.#lc = lc.withContext('version', nextStateVersion);
+    this.#tableSpecs = tableSpecs;
 
-    this.#refreshTableSpecs();
+    if (this.#tableSpecs.size === 0) {
+      this.#reloadTableSpecs();
+    }
   }
 
-  #refreshTableSpecs() {
+  #reloadTableSpecs() {
     this.#tableSpecs.clear();
     for (const spec of listTables(this.#db.db)) {
       this.#tableSpecs.set(spec.name, spec);
@@ -635,7 +653,7 @@ class TransactionProcessor {
 
   #logResetOp(table: string) {
     logResetOp(this.#db, this.#version, table);
-    this.#refreshTableSpecs();
+    this.#reloadTableSpecs();
   }
 
   processCommit(commit: MessageCommit, watermark: string) {
