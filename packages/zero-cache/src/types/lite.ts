@@ -3,6 +3,7 @@ import type {
   SchemaValue,
   ValueType,
 } from '../../../zero-schema/src/table-schema.js';
+import type {LiteTableSpec} from '../db/specs.js';
 import {stringify, type JSONValue} from './bigint-json.js';
 import type {PostgresValueType} from './pg.js';
 import type {RowValue} from './row-key.js';
@@ -13,15 +14,21 @@ export type LiteValueType = number | bigint | string | null | Uint8Array;
 export type LiteRow = Readonly<Record<string, LiteValueType>>;
 export type LiteRowKey = LiteRow; // just for API readability
 
+function columnType(col: string, table: LiteTableSpec) {
+  const spec = table.columns[col];
+  assert(spec, `Unknown column ${col} in table ${table.name}`);
+  return spec.dataType;
+}
+
 /**
  * Creates a LiteRow from the supplied RowValue. A copy of the `row`
  * is made only if a value conversion is performed.
  */
-export function liteRow(row: RowValue): LiteRow {
+export function liteRow(row: RowValue, table: LiteTableSpec): LiteRow {
   let copyNeeded = false;
   for (const key in row) {
     const val = row[key];
-    const liteVal = liteValue(val);
+    const liteVal = liteValue(val, columnType(key, table));
     if (val !== liteVal) {
       copyNeeded = true;
       break;
@@ -32,12 +39,20 @@ export function liteRow(row: RowValue): LiteRow {
   }
   // Slow path for when a conversion is needed.
   return Object.fromEntries(
-    Object.entries(row).map(([key, val]) => [key, liteValue(val)]),
+    Object.entries(row).map(([key, val]) => [
+      key,
+      liteValue(val, columnType(key, table)),
+    ]),
   );
 }
 
-export function liteValues(row: RowValue): LiteValueType[] {
-  return Object.values(row).map(liteValue);
+export function liteValues(
+  row: RowValue,
+  table: LiteTableSpec,
+): LiteValueType[] {
+  return Object.entries(row).map(([col, val]) =>
+    liteValue(val, columnType(col, table)),
+  );
 }
 
 /**
@@ -50,9 +65,16 @@ export function liteValues(row: RowValue): LiteValueType[] {
  * Note that this currently does not handle the `bytea[]` type, but that's
  * already a pretty questionable type.
  */
-export function liteValue(val: PostgresValueType): LiteValueType {
-  if (val instanceof Uint8Array) {
+export function liteValue(
+  val: PostgresValueType,
+  pgType: string,
+): LiteValueType {
+  if (val instanceof Uint8Array || val === null) {
     return val;
+  }
+  const valueType = dataTypeToZqlValueType(pgType);
+  if (valueType === 'json') {
+    return stringify(val); // JSON values are stored as stringified strings.
   }
   const obj = toLiteValue(val);
   return obj && typeof obj === 'object' ? stringify(obj) : obj;

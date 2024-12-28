@@ -256,7 +256,7 @@ async function copy(
   for await (const rows of cursor) {
     for (const row of rows) {
       insertStmt.run([
-        ...liteValues(row),
+        ...liteValues(row, table),
         '00', // initial _0_version
       ]);
     }
