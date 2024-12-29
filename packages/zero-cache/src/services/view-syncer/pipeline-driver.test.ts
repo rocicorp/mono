@@ -14,7 +14,7 @@ import {
 } from '../replicator/test-utils.js';
 import {CREATE_STORAGE_TABLE, DatabaseStorage} from './database-storage.js';
 import {PipelineDriver} from './pipeline-driver.js';
-import {ResetPipelineSignal, Snapshotter} from './snapshotter.js';
+import {ResetPipelinesSignal, Snapshotter} from './snapshotter.js';
 
 describe('view-syncer/pipeline-driver', () => {
   let dbFile: DbFile;
@@ -499,7 +499,7 @@ describe('view-syncer/pipeline-driver', () => {
     replicator.processTransaction('134', messages.truncate('comments'));
 
     expect(() => [...pipelines.advance().changes]).toThrowError(
-      ResetPipelineSignal,
+      ResetPipelinesSignal,
     );
   });
 

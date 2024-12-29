@@ -58,7 +58,7 @@ import {
   type NullableCVRVersion,
   type RowID,
 } from './schema/types.js';
-import {ResetPipelineSignal} from './snapshotter.js';
+import {ResetPipelinesSignal} from './snapshotter.js';
 
 export type TokenData = {
   readonly raw: string;
@@ -957,7 +957,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #advancePipelines(
     lc: LogContext,
     cvr: CVRSnapshot,
-  ): Promise<'success' | ResetPipelineSignal> {
+  ): Promise<'success' | ResetPipelinesSignal> {
     return startAsyncSpan(tracer, 'vs.#advancePipelines', async () => {
       assert(this.#pipelines.initialized());
       const start = Date.now();
@@ -1000,7 +1000,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           transformationHashToHash,
         );
       } catch (e) {
-        if (e instanceof ResetPipelineSignal) {
+        if (e instanceof ResetPipelinesSignal) {
           pokers.forEach(poker => poker.cancel());
           return e;
         }

@@ -14,7 +14,7 @@ import {
 import {setSpecs} from './pipeline-driver.js';
 import {
   InvalidDiffError,
-  ResetPipelineSignal,
+  ResetPipelinesSignal,
   Snapshotter,
 } from './snapshotter.js';
 
@@ -430,7 +430,7 @@ describe('view-syncer/snapshotter', () => {
     expect(diff.curr.version).toBe('01');
     expect(diff.changes).toBe(1);
 
-    expect(() => [...diff]).toThrowError(ResetPipelineSignal);
+    expect(() => [...diff]).toThrowError(ResetPipelinesSignal);
   });
 
   test('changelog iterator cleaned up on aborted iteration', () => {
@@ -481,6 +481,6 @@ describe('view-syncer/snapshotter', () => {
     expect(diff.curr.version).toBe('01');
     expect(diff.changes).toBe(1);
 
-    expect(() => [...diff]).toThrow(ResetPipelineSignal);
+    expect(() => [...diff]).toThrow(ResetPipelinesSignal);
   });
 });

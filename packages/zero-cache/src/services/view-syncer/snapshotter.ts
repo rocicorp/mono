@@ -222,8 +222,8 @@ export interface SnapshotDiff extends Iterable<Change> {
  * change or truncate is encountered, which result in aborting the
  * advancement and resetting / rehydrating the pipelines.
  */
-export class ResetPipelineSignal extends Error {
-  readonly name = 'ResetPipelineSignal';
+export class ResetPipelinesSignal extends Error {
+  readonly name = 'ResetPipelinesSignal';
 
   constructor(msg: string) {
     super(msg);
@@ -375,13 +375,13 @@ class Diff implements SnapshotDiff {
             const {table, rowKey, op, stateVersion} = v.parse(value, schema);
             if (op === RESET_OP) {
               // The current map of `TableSpec`s may not have the correct or complete information.
-              throw new ResetPipelineSignal(
+              throw new ResetPipelinesSignal(
                 `schema for table ${table} has changed`,
               );
             }
             if (op === TRUNCATE_OP) {
               // Truncates are also processed by rehydrating pipelines at current.
-              throw new ResetPipelineSignal(
+              throw new ResetPipelinesSignal(
                 `table ${table} has been truncated`,
               );
             }
