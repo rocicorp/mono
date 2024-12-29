@@ -1268,7 +1268,7 @@ describe('view-syncer/service', () => {
     });
   });
 
-  test('process advancement', async () => {
+  test('process successful advancement', async () => {
     const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
       {op: 'put', hash: 'query-hash2', ast: ISSUES_QUERY2},
@@ -1507,6 +1507,169 @@ describe('view-syncer/service', () => {
           "refCounts": null,
           "rowKey": {
             "id": "2",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "issues",
+        },
+      ]
+    `);
+
+    replicator.processTransaction('124', messages.truncate('issues'));
+
+    stateChanges.push({state: 'version-ready'});
+
+    // One canceled poke.
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "01",
+            "cookie": "123",
+            "pokeID": "123",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cancel": true,
+            "pokeID": "123",
+          },
+        ],
+      ]
+    `);
+
+    // Then a poke that deletes issues rows in the CVR.
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "01",
+            "cookie": "123",
+            "pokeID": "123",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "pokeID": "123",
+            "rowsPatch": [
+              {
+                "id": {
+                  "id": "1",
+                },
+                "op": "del",
+                "tableName": "issues",
+              },
+              {
+                "id": {
+                  "id": "3",
+                },
+                "op": "del",
+                "tableName": "issues",
+              },
+              {
+                "id": {
+                  "id": "4",
+                },
+                "op": "del",
+                "tableName": "issues",
+              },
+              {
+                "id": {
+                  "id": "5",
+                },
+                "op": "del",
+                "tableName": "issues",
+              },
+            ],
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "123",
+          },
+        ],
+      ]
+    `);
+
+    expect(await cvrDB`SELECT * from cvr.rows`).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "00:02",
+          "refCounts": {
+            "lmids": 1,
+          },
+          "rowKey": {
+            "clientGroupID": "9876",
+            "clientID": "foo",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "zero_ABC.clients",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "01",
+          "refCounts": null,
+          "rowKey": {
+            "id": "2",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "123",
+          "refCounts": null,
+          "rowKey": {
+            "id": "1",
+          },
+          "rowVersion": "01",
+          "schema": "",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "123",
+          "refCounts": null,
+          "rowKey": {
+            "id": "3",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "123",
+          "refCounts": null,
+          "rowKey": {
+            "id": "4",
+          },
+          "rowVersion": "00",
+          "schema": "",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "123",
+          "refCounts": null,
+          "rowKey": {
+            "id": "5",
           },
           "rowVersion": "00",
           "schema": "",

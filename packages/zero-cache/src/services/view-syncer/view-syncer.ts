@@ -58,7 +58,7 @@ import {
   type NullableCVRVersion,
   type RowID,
 } from './schema/types.js';
-import {SchemaChangeError} from './snapshotter.js';
+import {ResetPipelineSignal} from './snapshotter.js';
 
 export type TokenData = {
   readonly raw: string;
@@ -210,7 +210,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             if (result === 'success') {
               return;
             }
-            lc.info?.(`resetting for schema change: ${result.message}`);
+            lc.info?.(`resetting pipelines: ${result.message}`);
             this.#pipelines.reset();
           }
 
@@ -957,7 +957,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #advancePipelines(
     lc: LogContext,
     cvr: CVRSnapshot,
-  ): Promise<'success' | SchemaChangeError> {
+  ): Promise<'success' | ResetPipelineSignal> {
     return startAsyncSpan(tracer, 'vs.#advancePipelines', async () => {
       assert(this.#pipelines.initialized());
       const start = Date.now();
@@ -1000,7 +1000,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           transformationHashToHash,
         );
       } catch (e) {
-        if (e instanceof SchemaChangeError) {
+        if (e instanceof ResetPipelineSignal) {
           pokers.forEach(poker => poker.cancel());
           return e;
         }

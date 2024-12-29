@@ -6,7 +6,7 @@ import {Database} from '../../../../zqlite/src/db.js';
 import {fromSQLiteTypes} from '../../../../zqlite/src/table-source.js';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.js';
 import {StatementRunner} from '../../db/statements.js';
-import {jsonObjectSchema, type JSONValue} from '../../types/bigint-json.js';
+import {type JSONValue} from '../../types/bigint-json.js';
 import {
   normalizedKeyOrder,
   type RowKey,
@@ -219,13 +219,14 @@ export interface SnapshotDiff extends Iterable<Change> {
 
 /**
  * Thrown during an iteration of a {@link SnapshotDiff} when a schema
- * change is encountered.
+ * change or truncate is encountered, which result in aborting the
+ * advancement and resetting / rehydrating the pipelines.
  */
-export class SchemaChangeError extends Error {
-  readonly name = 'SchemaChangeError';
+export class ResetPipelineSignal extends Error {
+  readonly name = 'ResetPipelineSignal';
 
-  constructor(table: string) {
-    super(`schema for table ${table} has changed`);
+  constructor(msg: string) {
+    super(msg);
   }
 }
 
@@ -351,16 +352,13 @@ class Diff implements SnapshotDiff {
 
   [Symbol.iterator](): Iterator<Change> {
     const {changes, cleanup: done} = this.curr.changesSince(this.prev.version);
-    const truncates = new TruncateTracker(this.prev);
 
     const cleanup = () => {
       try {
         // Allow open iterators to clean up their state.
-        truncates.iterReturn(undefined);
         changes.return?.(undefined);
       } finally {
         done();
-        truncates.done();
       }
     };
 
@@ -368,12 +366,6 @@ class Diff implements SnapshotDiff {
       next: () => {
         try {
           for (;;) {
-            // Exhaust the TRUNCATE iteration before continuing the Change sequence.
-            const truncatedRow = truncates.next();
-            if (truncatedRow) {
-              return truncatedRow;
-            }
-
             const {value, done} = changes.next();
             if (done) {
               cleanup();
@@ -383,17 +375,20 @@ class Diff implements SnapshotDiff {
             const {table, rowKey, op, stateVersion} = v.parse(value, schema);
             if (op === RESET_OP) {
               // The current map of `TableSpec`s may not have the correct or complete information.
-              throw new SchemaChangeError(table);
+              throw new ResetPipelineSignal(
+                `schema for table ${table} has changed`,
+              );
+            }
+            if (op === TRUNCATE_OP) {
+              // Truncates are also processed by rehydrating pipelines at current.
+              throw new ResetPipelineSignal(
+                `table ${table} has been truncated`,
+              );
             }
             const {tableSpec, zqlSpec} = must(this.tables.get(table));
-            if (op === TRUNCATE_OP) {
-              truncates.startTruncate(tableSpec);
-              continue; // loop around to pull rows from the TruncateTracker.
-            }
 
             assert(rowKey !== null);
-            let prevValue =
-              truncates.getRowIfNotTruncated(tableSpec, rowKey) ?? null;
+            let prevValue = this.prev.getRow(tableSpec, rowKey) ?? null;
             let nextValue =
               op === SET_OP ? this.curr.getRow(tableSpec, rowKey) : null;
 
@@ -456,80 +451,6 @@ class Diff implements SnapshotDiff {
         'Diff is no longer valid. curr db has advanced.',
       );
     }
-  }
-}
-
-/**
- * `TRUNCATE` changes are handled by:
- * 1. Iterating over all of the rows in the `prev` Snapshot and returning
- *    corresponding `DELETE` row operations for them (i.e. `nextValue: null`).
- * 2. Tracking the fact that a table has been truncated (i.e. all row-deletes
- *    have been returned) so that subsequent lookups of prevValues (e.g. for
- *    inserts after the truncate) correctly return `null`.
- */
-class TruncateTracker {
-  readonly #prev: Snapshot;
-  readonly #truncated = new Set<string>();
-
-  #truncating: {
-    table: string;
-    rows: Iterator<unknown>;
-    cleanup: () => void;
-  } | null = null;
-
-  constructor(prev: Snapshot) {
-    this.#prev = prev;
-  }
-
-  startTruncate(table: LiteTableSpec) {
-    assert(this.#truncating === null);
-    const {rows, cleanup} = this.#prev.getRows(table);
-    this.#truncating = {table: table.name, rows, cleanup};
-  }
-
-  next(): IteratorResult<Change> | null {
-    if (this.#truncating === null) {
-      return null;
-    }
-    const {table} = this.#truncating;
-    const {value, done} = this.#truncating.rows.next();
-    if (done) {
-      this.#truncating.cleanup();
-      this.#truncating = null;
-      this.#truncated.add(table);
-      return null;
-    }
-    const prevValue = v.parse(value, jsonObjectSchema);
-
-    // Sanity check detects if the diff is being accessed after the Snapshots have advanced.
-    if ((prevValue[ROW_VERSION] ?? '~') > this.#prev.version) {
-      throw new InvalidDiffError(
-        `Diff is no longer valid. prev db has advanced past ${
-          this.#prev.version
-        }.`,
-      );
-    }
-
-    return {value: {table, prevValue, nextValue: null} satisfies Change};
-  }
-
-  getRowIfNotTruncated(table: LiteTableSpec, rowKey: RowKey) {
-    // If the row has been returned in a TRUNCATE iteration, its prevValue is henceforth null.
-    return this.#truncated.has(table.name)
-      ? null
-      : this.#prev.getRow(table, rowKey);
-  }
-
-  iterReturn(value: unknown) {
-    this.#truncating?.rows.return?.(value);
-  }
-
-  iterThrow(err: unknown) {
-    this.#truncating?.rows.throw?.(err);
-  }
-
-  done() {
-    this.#truncating?.cleanup();
   }
 }
 

@@ -269,5 +269,45 @@ describe('integration', () => {
       'pokeEnd',
       {pokeID: expect.any(String)},
     ]);
+
+    // Test TRUNCATE
+    await upDB`TRUNCATE TABLE foo RESTART IDENTITY`;
+
+    // One canceled poke
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokeStart',
+      {pokeID: expect.any(String)},
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokeEnd',
+      {pokeID: expect.any(String), cancel: true},
+    ]);
+
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokeStart',
+      {pokeID: expect.any(String)},
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokePart',
+      {
+        pokeID: expect.any(String),
+        rowsPatch: [
+          {
+            op: 'del',
+            tableName: 'foo',
+            id: {id: 'bar'},
+          },
+          {
+            op: 'del',
+            tableName: 'foo',
+            id: {id: 'voo'},
+          },
+        ],
+      },
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokeEnd',
+      {pokeID: expect.any(String)},
+    ]);
   });
 });
