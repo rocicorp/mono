@@ -34,7 +34,12 @@ import type {
 } from '../../../db/specs.js';
 import {StatementRunner} from '../../../db/statements.js';
 import {stringify} from '../../../types/bigint-json.js';
-import {max, oneAfter, versionFromLexi} from '../../../types/lexi-version.js';
+import {
+  max,
+  oneAfter,
+  versionFromLexi,
+  versionToLexi,
+} from '../../../types/lexi-version.js';
 import {
   pgClient,
   registerPostgresTypeParsers,
@@ -47,7 +52,7 @@ import type {
   ChangeStream,
   ChangeStreamMessage,
 } from '../change-streamer-service.js';
-import type {Commit, Data, DownstreamChange} from '../change-streamer.js';
+import type {Data, DownstreamChange} from '../change-streamer.js';
 import type {DataChange, Identifier, MessageDelete} from '../schema/change.js';
 import {AutoResetSignal, type ReplicationConfig} from '../schema/tables.js';
 import {replicationSlot} from './initial-sync.js';
@@ -222,17 +227,7 @@ class PostgresChangeSource implements ChangeSource {
     clientStart: string,
     shardConfig: InternalShardConfig,
     useSSL: boolean,
-  ) {
-    let lastLSN = '0/0';
-
-    const ack = (commit?: Commit) => {
-      if (commit) {
-        const {watermark} = commit[2];
-        lastLSN = fromLexiVersion(watermark);
-      }
-      void service.acknowledge(lastLSN);
-    };
-
+  ): Promise<ChangeStream> {
     const changes = Subscription.create<ChangeStreamMessage>({
       cleanup: () => service.stop(),
     });
@@ -258,6 +253,7 @@ class PostgresChangeSource implements ChangeSource {
       }
     };
 
+    let acker: Acker | undefined = undefined;
     const changeMaker = new ChangeMaker(
       this.#lc,
       this.#shardID,
@@ -279,17 +275,19 @@ class PostgresChangeSource implements ChangeSource {
           handleError,
         ),
       )
-      .on('heartbeat', (_lsn, _time, respond) => {
-        respond && ack();
-      })
-      .on('data', (lsn, msg) =>
+      .on(
+        'heartbeat',
+        (lsn, _time, respond) => acker?.onHeartbeat(lsn, respond),
+      )
+      .on('data', (lsn, msg) => {
+        acker?.onData(lsn);
         // lock to ensure in-order processing
-        lock.withLock(async () => {
+        return lock.withLock(async () => {
           for (const change of await changeMaker.makeChanges(lsn, msg)) {
             changes.push(change);
           }
-        }),
-      )
+        });
+      })
       .on('error', handleError);
 
     service
@@ -308,7 +306,13 @@ class PostgresChangeSource implements ChangeSource {
     this.#lc.info?.(
       `replication stream@${slot} started at ${initialWatermark}`,
     );
-    return {initialWatermark, changes, acks: {push: ack}};
+    acker = new Acker(service, initialWatermark);
+
+    return {
+      initialWatermark,
+      changes,
+      acks: {push: commit => acker.onAck(commit[2].watermark)},
+    };
   }
 
   async #stopExistingReplicationSlotSubscriber(
@@ -378,6 +382,42 @@ class PostgresChangeSource implements ChangeSource {
       oneAfter(restartWatermark),
       clientStart,
     );
+  }
+}
+
+// Exported for testing.
+export class Acker {
+  #service: LogicalReplicationService;
+  #lastAck: string;
+  #lastData: string = versionToLexi(0);
+
+  constructor(service: LogicalReplicationService, initialWatermark: string) {
+    this.#service = service;
+    this.#lastAck = initialWatermark;
+  }
+
+  onData(lsn: string) {
+    this.#lastData = max(this.#lastData, toLexiVersion(lsn));
+  }
+
+  onHeartbeat(lsn: string, respond: boolean) {
+    // Heartbeats bump the last ack unless we are behind received data.
+    if (this.#lastAck >= this.#lastData) {
+      this.#lastAck = max(this.#lastAck, toLexiVersion(lsn));
+    }
+    if (respond) {
+      this.#sendAck();
+    }
+  }
+
+  onAck(lexiVersion: string) {
+    this.#lastAck = max(this.#lastAck, lexiVersion);
+    this.#sendAck();
+  }
+
+  #sendAck() {
+    const lsn = fromLexiVersion(this.#lastAck);
+    void this.#service.acknowledge(lsn);
   }
 }
 
