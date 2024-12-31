@@ -56,7 +56,7 @@ import type {Data, DownstreamChange} from '../change-streamer.js';
 import type {DataChange, Identifier, MessageDelete} from '../schema/change.js';
 import {AutoResetSignal, type ReplicationConfig} from '../schema/tables.js';
 import {replicationSlot} from './initial-sync.js';
-import {fromLexiVersion, toLexiVersion} from './lsn.js';
+import {fromLexiVersion, toLexiVersion, type LSN} from './lsn.js';
 import {replicationEventSchema, type DdlUpdateEvent} from './schema/ddl.js';
 import {updateShardSchema} from './schema/init.js';
 import {getPublicationInfo, type PublishedSchema} from './schema/published.js';
@@ -133,10 +133,16 @@ async function checkAndUpdateUpstream(
   shard: ShardConfig,
 ) {
   const slot = replicationSlot(shard.id);
-  const result = await db<{pid: string | null}[]>`
-  SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${slot}`;
+  const result = await db<{restartLSN: LSN | null}[]>`
+  SELECT restart_lsn as "restartLSN" FROM pg_replication_slots WHERE slot_name = ${slot}`;
   if (result.length === 0) {
     throw new AutoResetSignal(`replication slot ${slot} is missing`);
+  }
+  const [{restartLSN}] = result;
+  if (restartLSN === null) {
+    throw new AutoResetSignal(
+      `replication slot ${slot} has been invalidated for exceeding the max_slot_wal_keep_size`,
+    );
   }
   // Perform any shard schema updates
   await updateShardSchema(lc, db, {
