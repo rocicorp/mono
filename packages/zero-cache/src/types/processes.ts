@@ -175,13 +175,16 @@ export function childWorker(
       .catch(err => child.emit('error', err));
     return child;
   }
-  return wrap(
-    fork(moduleUrl, args, {
-      detached: true, // do not automatically propagate SIGINT
-      serialization: 'advanced', // use structured clone for IPC
-      env,
-    }),
-  );
+  const child = fork(moduleUrl, args, {
+    detached: true, // do not automatically propagate SIGINT
+    serialization: 'advanced', // use structured clone for IPC
+    env,
+    // silent: true,
+    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+  });
+  child.stdout?.pipe(process.stdout);
+  child.stderr?.pipe(process.stderr);
+  return wrap(child);
 }
 
 /**
