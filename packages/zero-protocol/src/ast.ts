@@ -275,13 +275,6 @@ export type SimpleCondition = {
   readonly right: Exclude<ValuePosition, ColumnReference>;
 };
 
-export type LiteralCondition = {
-  type: 'literal';
-  op: SimpleOperator;
-  leftValue: ValuePosition;
-  rightValue: ValuePosition;
-};
-
 export type Conjunction = {
   type: 'and';
   conditions: readonly Condition[];
