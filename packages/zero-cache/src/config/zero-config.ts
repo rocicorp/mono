@@ -344,6 +344,27 @@ export const zeroOptions = {
     ],
   },
 
+  initialSync: {
+    tableCopyWorkers: {
+      type: v.number().default(5),
+      desc: [
+        `The number of parallel workers used to copy tables during initial sync.`,
+        `Each worker copies a single table at a time, fetching rows in batches of`,
+        `of {bold initial-sync-row-batch-size}.`,
+      ],
+    },
+
+    rowBatchSize: {
+      type: v.number().default(10000),
+      desc: [
+        `The number of rows each table copy worker fetches at a time during`,
+        `initial sync. This can be increased to speed up initial sync, or decreased`,
+        `to reduce the amount of heap memory used during initial sync (e.g. for tables`,
+        `with large rows).`,
+      ],
+    },
+  },
+
   tenantID: {
     type: v.string().optional(),
     desc: ['Passed by multi/main.ts to tag the LogContext of zero-caches'],
