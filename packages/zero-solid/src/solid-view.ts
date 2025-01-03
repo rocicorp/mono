@@ -11,7 +11,9 @@ import {
   type Smash,
   type TableSchema,
   type View,
+  type ViewFactory,
 } from '../../zero-advanced/src/mod.js';
+import type {ResultType} from '../../zql/src/query/typed-view.js';
 
 export class SolidView<V extends View> implements Output {
   readonly #input: Input;
@@ -20,19 +22,26 @@ export class SolidView<V extends View> implements Output {
 
   // Synthetic "root" entry that has a single "" relationship, so that we can
   // treat all changes, including the root change, generically.
-  readonly #root: Entry;
+  readonly #rootStore: Entry;
   readonly #setRoot: SetStoreFunction<Entry>;
+
+  readonly #resultTypeStore: {resultType: ResultType};
+  readonly #setResultType: SetStoreFunction<{resultType: ResultType}>;
 
   constructor(
     input: Input,
     format: Format = {singular: false, relationships: {}},
     onDestroy: () => void = () => {},
+    queryComplete: true | Promise<true> = true,
   ) {
     this.#input = input;
     this.#format = format;
     this.#onDestroy = onDestroy;
-    [this.#root, this.#setRoot] = createStore({
+    [this.#rootStore, this.#setRoot] = createStore({
       '': format.singular ? undefined : [],
+    });
+    [this.#resultTypeStore, this.#setResultType] = createStore({
+      resultType: queryComplete === true ? 'complete' : 'unknown',
     });
     input.setOutput(this);
 
@@ -49,10 +58,19 @@ export class SolidView<V extends View> implements Output {
         }
       }),
     );
+    if (queryComplete !== true) {
+      void queryComplete.then(() => {
+        this.#setResultType({resultType: 'complete'});
+      });
+    }
   }
 
   get data() {
-    return this.#root[''] as V;
+    return this.#rootStore[''] as V;
+  }
+
+  get resultType() {
+    return this.#resultTypeStore.resultType;
   }
 
   destroy() {
@@ -82,8 +100,17 @@ export function solidViewFactory<
   input: Input,
   format: Format,
   onDestroy: () => void,
+  _onTransactionCommit: (cb: () => void) => void,
+  queryComplete: true | Promise<true>,
 ): SolidView<Smash<TReturn>> {
-  const v = new SolidView<Smash<TReturn>>(input, format, onDestroy);
+  const v = new SolidView<Smash<TReturn>>(
+    input,
+    format,
+    onDestroy,
+    queryComplete,
+  );
 
   return v;
 }
+
+solidViewFactory satisfies ViewFactory<TableSchema, QueryType, unknown>;

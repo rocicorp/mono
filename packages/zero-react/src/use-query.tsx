@@ -13,11 +13,11 @@ import {useZero} from './use-zero.js';
 import type {TableSchema} from '../../zero-schema/src/table-schema.js';
 import type {ResultType} from '../../zql/src/query/typed-view.js';
 
-export type QueryResultDetails = {
+export type QueryResultDetails = Readonly<{
   type: ResultType;
-};
+}>;
 
-export type QueryResult<TReturn extends QueryType> = [
+export type QueryResult<TReturn extends QueryType> = readonly [
   Smash<TReturn>,
   QueryResultDetails,
 ];
