@@ -879,7 +879,7 @@ function translateError(e: unknown): Error {
     return new Error(String(e));
   }
   if (e instanceof DatabaseError && e.code === PG_ADMIN_SHUTDOWN) {
-    return new AbortError(e.message, {cause: e});
+    return new ShutdownSignal(e);
   }
   return e;
 }
@@ -903,5 +903,15 @@ export class UnsupportedSchemaChangeError extends Error {
     super(
       'Replication halted. Schema changes cannot be reliably replicated without event trigger support. Resync the replica to recover.',
     );
+  }
+}
+
+class ShutdownSignal extends AbortError {
+  readonly name = 'ShutdownSignal';
+
+  constructor(cause: unknown) {
+    super('shutdown signal received (e.g. another zero-cache starting up)', {
+      cause,
+    });
   }
 }
