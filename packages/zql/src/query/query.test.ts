@@ -16,6 +16,7 @@ import type {ExpressionFactory} from './expression.js';
 import {staticParam} from './query-impl.js';
 import type {AdvancedQuery} from './query-internal.js';
 import {type Query, type QueryType, type Row} from './query.js';
+import {toStaticParam} from '../../../zero-protocol/src/ast.js';
 
 const mockQuery = {
   select() {
@@ -485,9 +486,13 @@ describe('types', () => {
   test('where-parameters', () => {
     const query = mockQuery as unknown as Query<TestSchema>;
 
-    query.where('s', '=', staticParam('authData', 'aud'));
+    query.where('s', '=', {
+      [toStaticParam]: () => staticParam('authData', 'aud'),
+    });
 
-    const p = staticParam('authData', 'aud');
+    const p = {
+      [toStaticParam]: () => staticParam('authData', 'aud'),
+    };
     query.where('b', '=', p);
   });
 

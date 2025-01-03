@@ -16,6 +16,10 @@ import type {
 
 import {type Parameter, toStaticParam} from '../../../zero-protocol/src/ast.js';
 
+export type ParameterReference = {
+  [toStaticParam](): Parameter;
+};
+
 /**
  * A factory function that creates a condition. This is used to create
  * complex conditions that can be passed to the `where` method of a query.
@@ -63,31 +67,37 @@ export class ExpressionBuilder<TSchema extends TableSchema> {
   cmp<TSelector extends NoJsonSelector<TSchema>, TOperator extends Operator>(
     field: TSelector,
     op: TOperator,
-    value: GetFieldTypeNoUndefined<TSchema, TSelector, TOperator> | Parameter,
+    value:
+      | GetFieldTypeNoUndefined<TSchema, TSelector, TOperator>
+      | ParameterReference,
   ): Condition;
   cmp<TSelector extends NoJsonSelector<TSchema>>(
     field: TSelector,
-    value: GetFieldTypeNoUndefined<TSchema, TSelector, '='> | Parameter,
+    value:
+      | GetFieldTypeNoUndefined<TSchema, TSelector, '='>
+      | ParameterReference,
   ): Condition;
   cmp(
     field: string,
-    opOrValue: Operator | Parameter | LiteralValue,
-    value?: Parameter | LiteralValue,
+    opOrValue: Operator | ParameterReference | LiteralValue,
+    value?: ParameterReference | LiteralValue,
   ): Condition {
     return cmp(field, opOrValue, value);
   }
 
   cmpLit(
-    left: Parameter | LiteralValue,
+    left: ParameterReference | LiteralValue,
     op: Operator,
-    right: Parameter | LiteralValue,
+    right: ParameterReference | LiteralValue,
   ): Condition {
-    left = maybeToParameter(left);
-    right = maybeToParameter(right);
     return {
       type: 'simple',
-      left: isParameter(left) ? left : {type: 'literal', value: left},
-      right: isParameter(right) ? right : {type: 'literal', value: right},
+      left: isParameterReference(left)
+        ? left[toStaticParam]()
+        : {type: 'literal', value: left},
+      right: isParameterReference(right)
+        ? right[toStaticParam]()
+        : {type: 'literal', value: right},
       op,
     };
   }
@@ -177,8 +187,8 @@ export function not(expression: Condition): Condition {
 
 export function cmp(
   field: string,
-  opOrValue: Operator | Parameter | LiteralValue,
-  value?: Parameter | LiteralValue,
+  opOrValue: Operator | ParameterReference | LiteralValue,
+  value?: ParameterReference | LiteralValue,
 ): Condition {
   let op: Operator;
   if (value === undefined) {
@@ -188,42 +198,22 @@ export function cmp(
     op = opOrValue as Operator;
   }
 
-  value = maybeToParameter(value);
-
   return {
     type: 'simple',
     left: {type: 'column', name: field},
-    right: isParameter(value) ? value : {type: 'literal', value},
+    right: isParameterReference(value)
+      ? value[toStaticParam]()
+      : {type: 'literal', value},
     op,
   };
 }
 
-function isParameter(
-  value: Parameter | LiteralValue | null,
-): value is Parameter {
+function isParameterReference(
+  value: ParameterReference | LiteralValue | null,
+): value is ParameterReference {
   return (
-    typeof value === 'object' && (value as {type: string})?.type === 'static'
+    value !== null && typeof value === 'object' && (value as any)[toStaticParam]
   );
-}
-
-function maybeToParameter(
-  value: Parameter | LiteralValue,
-): Parameter | LiteralValue {
-  if (
-    value !== null &&
-    typeof value === 'object' &&
-    (value as any)[toStaticParam]
-  ) {
-    console.log(
-      'TYPE:',
-      typeof (value as any)[toStaticParam],
-      (value as any)[toStaticParam],
-      value,
-    );
-    return (value as any)[toStaticParam]() as Parameter;
-  }
-
-  return value;
 }
 
 export const TRUE: Condition = {
