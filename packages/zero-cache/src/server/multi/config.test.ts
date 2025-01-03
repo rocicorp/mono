@@ -368,7 +368,7 @@ test('zero-cache --help', () => {
        ZERO_INITIAL_SYNC_TABLE_COPY_WORKERS env                                                                                                      
                                                    The number of parallel workers used to copy tables during initial sync.                           
                                                    Each worker copies a single table at a time, fetching rows in batches of                          
-                                                   of rowBatchSize.                                                                                  
+                                                   of initial-sync-row-batch-size.                                                                   
                                                                                                                                                      
      --initial-sync-row-batch-size number          default: 10000                                                                                    
        ZERO_INITIAL_SYNC_ROW_BATCH_SIZE env                                                                                                          

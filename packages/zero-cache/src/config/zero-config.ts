@@ -350,7 +350,7 @@ export const zeroOptions = {
       desc: [
         `The number of parallel workers used to copy tables during initial sync.`,
         `Each worker copies a single table at a time, fetching rows in batches of`,
-        `of {bold rowBatchSize}.`,
+        `of {bold initial-sync-row-batch-size}.`,
       ],
     },
 
