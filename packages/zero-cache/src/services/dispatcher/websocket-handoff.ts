@@ -82,8 +82,8 @@ function truncate(val: string, maxBytes = 123) {
     return val;
   }
   val = val.substring(0, maxBytes - 3);
-  while (encoder.encode(val).length > maxBytes - 3) {
-    val.substring(0, val.length - 1);
+  while (encoder.encode(val + '...').length > maxBytes) {
+    val = val.substring(0, val.length - 1);
   }
   return val + '...';
 }

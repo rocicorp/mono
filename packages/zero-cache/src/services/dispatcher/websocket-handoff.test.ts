@@ -114,7 +114,7 @@ describe('dispatcher/websocket-handoff', () => {
     installWebSocketHandoff(
       createSilentLogContext(),
       () => {
-        throw new Error('really long stri' + 'i'.repeat(150) + 'ng');
+        throw new Error('こんにちは' + 'あ'.repeat(150));
       },
       server,
     );
@@ -129,11 +129,13 @@ describe('dispatcher/websocket-handoff', () => {
     expect(error).toMatchInlineSnapshot(`
       {
         "code": 1002,
-        "reason": "Error: really long striiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii...",
+        "reason": "Error: こんにちはああああああああああああああああああああああああああああああああ...",
       }
     `);
     // close messages must be less than or equal to 123 bytes:
     // https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/close#reason
-    expect(error.reason.length).toBeLessThanOrEqual(123);
+    expect(new TextEncoder().encode(error.reason).length).toBeLessThanOrEqual(
+      123,
+    );
   });
 });
