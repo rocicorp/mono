@@ -7,12 +7,18 @@ import type {
 } from './compiled-permissions.js';
 import {normalizeSchema} from './normalized-schema.js';
 import {AuthQuery} from '../../zql/src/query/auth-query.js';
-import type {Condition} from '../../zero-protocol/src/ast.js';
+import {
+  toStaticParam,
+  type Condition,
+  type Parameter,
+} from '../../zero-protocol/src/ast.js';
 import {staticParam} from '../../zql/src/query/query-impl.js';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.js';
+import {assert} from '../../shared/src/asserts.js';
 
 export const ANYONE_CAN = undefined;
 export const NOBODY_CAN = [];
+export type Anchor = 'authData' | 'preMutationRow';
 
 export type Queries<TSchema extends Schema> = {
   [K in keyof TSchema['tables']]: Query<TSchema['tables'][K]>;
@@ -160,22 +166,39 @@ function compileCellConfig<TAuthDataShape, TSchema extends TableSchema>(
   return ret;
 }
 
-export const authDataRef = new Proxy(
-  {},
-  {
-    get(_target, prop, _receiver) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return staticParam<any, any>('authData', prop as string);
-    },
-  },
-);
+class CallTracker {
+  readonly #anchor: Anchor;
+  readonly #path: string[];
+  constructor(anchor: Anchor, path: string[]) {
+    this.#anchor = anchor;
+    this.#path = path;
+  }
 
-export const preMutationRowRef = new Proxy(
-  {},
-  {
-    get(_target, prop, _receiver) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return staticParam<any, any>('preMutationRow', prop as string);
+  get(target: {[toStaticParam]: () => Parameter}, prop: string | symbol) {
+    if (prop === toStaticParam) {
+      return target[toStaticParam];
+    }
+    assert(typeof prop === 'string');
+    const path = [...this.#path, prop];
+    return new Proxy(
+      {
+        [toStaticParam]: () => staticParam(this.#anchor, path),
+      },
+      new CallTracker(this.#anchor, path),
+    );
+  }
+}
+
+function baseTracker(anchor: Anchor) {
+  return new Proxy(
+    {
+      [toStaticParam]: () => {
+        throw new Error('no JWT field specified');
+      },
     },
-  },
-);
+    new CallTracker(anchor, []),
+  );
+}
+
+export const authDataRef = baseTracker('authData');
+export const preMutationRowRef = baseTracker('preMutationRow');

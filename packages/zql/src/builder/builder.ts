@@ -126,7 +126,7 @@ export function bindStaticParameters(
         staticQueryParameters,
         'Static query params do not exist',
       )[value.anchor];
-      const resolvedValue = anchor?.[value.field] ?? null;
+      const resolvedValue = resolveField(anchor, value.field);
       return {
         type: 'literal',
         value: resolvedValue as LiteralValue,
@@ -136,6 +136,22 @@ export function bindStaticParameters(
   };
 
   return visit(ast);
+}
+
+function resolveField(
+  anchor: Record<string, JSONValue> | Row | undefined,
+  field: string | string[],
+): unknown {
+  if (anchor === undefined) {
+    return null;
+  }
+
+  if (Array.isArray(field)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return field.reduce((acc, f) => (acc as any)?.[f], anchor) ?? null;
+  }
+
+  return anchor[field] ?? null;
 }
 
 function isParameter(value: ValuePosition): value is Parameter {

@@ -8,6 +8,7 @@ import type {
   AST,
   Condition,
   Ordering,
+  Parameter,
   System,
 } from '../../../zero-protocol/src/ast.js';
 import type {Row as IVMRow} from '../../../zero-protocol/src/data.js';
@@ -40,7 +41,6 @@ import type {
   GetFieldTypeNoUndefined,
   MakeSingular,
   Operator,
-  Parameter,
   Query,
   QueryType,
   Row,
@@ -75,14 +75,15 @@ export interface QueryDelegate extends BuilderDelegate {
   batchViewUpdates<T>(applyViewUpdates: () => T): T;
 }
 
-export function staticParam<TAnchor, TField extends keyof TAnchor>(
+export function staticParam(
   anchorClass: 'authData' | 'preMutationRow',
-  field: TField,
-): Parameter<TAnchor, TField, TAnchor[TField]> {
+  field: string | string[],
+): Parameter {
   return {
     type: 'static',
     anchor: anchorClass,
-    field,
+    // for backwards compatibility
+    field: field.length === 1 ? field[0] : field,
   };
 }
 
@@ -293,11 +294,8 @@ export abstract class AbstractQuery<
 
   where(
     fieldOrExpressionFactory: string | ExpressionFactory<TSchema>,
-    opOrValue?:
-      | Operator
-      | GetFieldTypeNoUndefined<any, any, any>
-      | Parameter<any, any, any>,
-    value?: GetFieldTypeNoUndefined<any, any, any> | Parameter<any, any, any>,
+    opOrValue?: Operator | GetFieldTypeNoUndefined<any, any, any> | Parameter,
+    value?: GetFieldTypeNoUndefined<any, any, any> | Parameter,
   ): Query<TSchema, TReturn> {
     let cond: Condition;
 

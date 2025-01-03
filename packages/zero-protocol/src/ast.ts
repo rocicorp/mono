@@ -14,6 +14,7 @@ import * as v from '../../shared/src/valita.js';
 import {rowSchema, type Row} from './data.js';
 
 export const selectorSchema = v.string();
+export const toStaticParam = Symbol();
 
 const orderingElementSchema = v.readonly(
   v.tuple([selectorSchema, v.union(v.literal('asc'), v.literal('desc'))]),
@@ -320,7 +321,7 @@ type StaticParameter = {
   // Read and write authorization will both send the
   // current authentication data (authData).
   readonly anchor: 'authData' | 'preMutationRow';
-  readonly field: string;
+  readonly field: string | string[];
 };
 
 const normalizeCache = new WeakMap<AST, Required<AST>>();
