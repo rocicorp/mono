@@ -41,6 +41,6 @@ export class TenantDispatcher extends HttpService {
 
       return {payload: t.id, receiver: t.worker};
     }
-    throw new Error(`no matching tenant for: ${u}`);
+    throw new Error(`no matching tenant for: ${host}${pathname}`);
   }
 }

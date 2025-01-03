@@ -55,7 +55,7 @@ import type {
 import type {Data, DownstreamChange} from '../change-streamer.js';
 import type {DataChange, Identifier, MessageDelete} from '../schema/change.js';
 import {AutoResetSignal, type ReplicationConfig} from '../schema/tables.js';
-import {replicationSlot} from './initial-sync.js';
+import {replicationSlot, type InitialSyncOptions} from './initial-sync.js';
 import {fromLexiVersion, toLexiVersion, type LSN} from './lsn.js';
 import {replicationEventSchema, type DdlUpdateEvent} from './schema/ddl.js';
 import {updateShardSchema} from './schema/init.js';
@@ -82,6 +82,7 @@ export async function initializeChangeSource(
   upstreamURI: string,
   shard: ShardConfig,
   replicaDbFile: string,
+  syncOptions: InitialSyncOptions,
 ): Promise<{replicationConfig: ReplicationConfig; changeSource: ChangeSource}> {
   await initSyncSchema(
     lc,
@@ -89,6 +90,7 @@ export async function initializeChangeSource(
     shard,
     replicaDbFile,
     upstreamURI,
+    syncOptions,
   );
 
   const replica = new Database(lc, replicaDbFile);
@@ -879,7 +881,7 @@ function translateError(e: unknown): Error {
     return new Error(String(e));
   }
   if (e instanceof DatabaseError && e.code === PG_ADMIN_SHUTDOWN) {
-    return new AbortError(e.message, {cause: e});
+    return new ShutdownSignal(e);
   }
   return e;
 }
@@ -902,6 +904,19 @@ export class UnsupportedSchemaChangeError extends Error {
   constructor() {
     super(
       'Replication halted. Schema changes cannot be reliably replicated without event trigger support. Resync the replica to recover.',
+    );
+  }
+}
+
+class ShutdownSignal extends AbortError {
+  readonly name = 'ShutdownSignal';
+
+  constructor(cause: unknown) {
+    super(
+      'shutdown signal received (e.g. another zero-cache taking over the replication stream)',
+      {
+        cause,
+      },
     );
   }
 }

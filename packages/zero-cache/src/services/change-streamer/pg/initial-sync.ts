@@ -34,6 +34,11 @@ import {
 } from './schema/shard.js';
 import type {ShardConfig} from './shard-config.js';
 
+export type InitialSyncOptions = {
+  tableCopyWorkers: number;
+  rowBatchSize: number;
+};
+
 // https://www.postgresql.org/docs/current/warm-standby.html#STREAMING-REPLICATION-SLOTS-MANIPULATION
 const ALLOWED_SHARD_ID_CHARACTERS = /^[a-z0-9_]+$/;
 
@@ -46,14 +51,16 @@ export async function initialSync(
   shard: ShardConfig,
   tx: Database,
   upstreamURI: string,
+  syncOptions: InitialSyncOptions,
 ) {
   if (!ALLOWED_SHARD_ID_CHARACTERS.test(shard.id)) {
     throw new Error(
       'A shard ID may only consist of lower-case letters, numbers, and the underscore character',
     );
   }
+  const {tableCopyWorkers: numWorkers, rowBatchSize} = syncOptions;
   const upstreamDB = pgClient(lc, upstreamURI, {
-    max: MAX_WORKERS,
+    max: numWorkers,
   });
   const replicationSession = pgClient(lc, upstreamURI, {
     // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -71,7 +78,7 @@ export async function initialSync(
       await createReplicationSlot(lc, shard.id, replicationSession);
 
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
-    const copiers = startTableCopyWorkers(lc, upstreamDB, snapshot);
+    const copiers = startTableCopyWorkers(lc, upstreamDB, snapshot, numWorkers);
     let published: PublicationInfo;
     try {
       // Retrieve the published schema at the consistent_point.
@@ -87,7 +94,9 @@ export async function initialSync(
       createLiteIndices(tx, indexes);
       await Promise.all(
         tables.map(table =>
-          copiers.process(db => copy(lc, table, db, tx).then(() => [])),
+          copiers.process(db =>
+            copy(lc, table, db, tx, rowBatchSize).then(() => []),
+          ),
         ),
       );
     } finally {
@@ -182,17 +191,13 @@ async function createReplicationSlot(
   return slot;
 }
 
-// TODO: Consider parameterizing these.
-const MAX_WORKERS = 5;
-const BATCH_SIZE = 100_000;
-
 function startTableCopyWorkers(
   lc: LogContext,
   db: PostgresDB,
   snapshot: string,
+  numWorkers: number,
 ): TransactionPool {
   const {init} = importSnapshot(snapshot);
-  const numWorkers = MAX_WORKERS;
   const tableCopiers = new TransactionPool(
     lc,
     Mode.READONLY,
@@ -223,6 +228,7 @@ async function copy(
   table: PublishedTableSpec,
   from: PostgresDB,
   to: Database,
+  rowBatchSize: number,
 ) {
   let totalRows = 0;
   const tableName = liteTableName(table);
@@ -252,7 +258,7 @@ async function copy(
 
   lc.info?.(`Starting copy of ${tableName}:`, selectStmt);
 
-  const cursor = from.unsafe(selectStmt).cursor(BATCH_SIZE);
+  const cursor = from.unsafe(selectStmt).cursor(rowBatchSize);
   for await (const rows of cursor) {
     for (const row of rows) {
       insertStmt.run([

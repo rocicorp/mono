@@ -128,6 +128,7 @@ describe('change-streamer/pg/sync-schema', () => {
           {id: SHARD_ID, publications: c.requestedPublications ?? []},
           replicaFile.path,
           getConnectionURI(upstream),
+          {tableCopyWorkers: 5, rowBatchSize: 10000},
         );
 
         await expectTables(upstream, c.upstreamPostState);
