@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/ban-types */
 
 import type {Expand} from '../../../shared/src/expand.js';
-import type {Parameter} from '../../../zero-protocol/src/ast.js';
+import type {ParameterReference} from './expression.js';
 import type {Row as IVMRow} from '../../../zero-protocol/src/data.js';
 import type {
   PullSchemaForRelationship,
@@ -171,12 +171,16 @@ export interface Query<
   where<TSelector extends NoJsonSelector<TSchema>, TOperator extends Operator>(
     field: TSelector,
     op: TOperator,
-    value: GetFieldTypeNoUndefined<TSchema, TSelector, TOperator> | Parameter,
+    value:
+      | GetFieldTypeNoUndefined<TSchema, TSelector, TOperator>
+      | ParameterReference,
   ): Query<TSchema, TReturn>;
 
   where<TSelector extends NoJsonSelector<TSchema>>(
     field: TSelector,
-    value: GetFieldTypeNoUndefined<TSchema, TSelector, '='> | Parameter,
+    value:
+      | GetFieldTypeNoUndefined<TSchema, TSelector, '='>
+      | ParameterReference,
   ): Query<TSchema, TReturn>;
 
   where(expressionFactory: ExpressionFactory<TSchema>): Query<TSchema, TReturn>;
