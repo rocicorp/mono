@@ -76,8 +76,16 @@ export function installWebSocketHandoff<P>(
 
 // close messages must be less than or equal to 123 bytes:
 // https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/close#reason
-function truncate(val: string, maxLen = 123) {
-  return val.length <= maxLen ? val : val.substring(0, maxLen - 3) + '...';
+function truncate(val: string, maxBytes = 123) {
+  const encoder = new TextEncoder();
+  if (encoder.encode(val).length <= maxBytes) {
+    return val;
+  }
+  val = val.substring(0, maxBytes - 3);
+  while (encoder.encode(val).length > maxBytes - 3) {
+    val.substring(0, val.length - 1);
+  }
+  return val + '...';
 }
 
 export function installWebSocketReceiver<P>(
