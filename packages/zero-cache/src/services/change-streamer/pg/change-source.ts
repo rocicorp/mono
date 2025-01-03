@@ -910,8 +910,11 @@ class ShutdownSignal extends AbortError {
   readonly name = 'ShutdownSignal';
 
   constructor(cause: unknown) {
-    super('shutdown signal received (e.g. another zero-cache starting up)', {
-      cause,
-    });
+    super(
+      'shutdown signal received (e.g. another zero-cache taking over the replication stream)',
+      {
+        cause,
+      },
+    );
   }
 }
