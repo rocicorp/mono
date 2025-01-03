@@ -914,6 +914,7 @@ describe('replicator/initial-sync', () => {
         {id: SHARD_ID, publications: c.requestedPublications ?? []},
         replica,
         getConnectionURI(upstream),
+        {tableCopyWorkers: 5, rowBatchSize: 10000},
       );
 
       const result = await upstream.unsafe(
@@ -1004,7 +1005,10 @@ describe('replicator/initial-sync', () => {
 
     let result;
     try {
-      await initialSync(lc, shardConfig, replica, getConnectionURI(upstream));
+      await initialSync(lc, shardConfig, replica, getConnectionURI(upstream), {
+        tableCopyWorkers: 5,
+        rowBatchSize: 10000,
+      });
     } catch (e) {
       result = e;
     }
@@ -1025,6 +1029,7 @@ describe('replicator/initial-sync', () => {
         {id, publications: []},
         replica,
         getConnectionURI(upstream),
+        {tableCopyWorkers: 5, rowBatchSize: 10000},
       );
     } catch (e) {
       result = e;

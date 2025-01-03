@@ -53,6 +53,7 @@ export default async function runWorker(
         config.upstream.db,
         config.shard,
         config.replicaFile,
+        config.initialSync,
       );
 
       changeStreamer = await initializeStreamer(

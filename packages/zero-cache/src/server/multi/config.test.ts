@@ -50,6 +50,10 @@ test('parse options', () => {
           "db": "foo",
           "maxConns": 30,
         },
+        "initialSync": {
+          "rowBatchSize": 10000,
+          "tableCopyWorkers": 5,
+        },
         "log": {
           "format": "text",
           "level": "info",
@@ -100,6 +104,8 @@ test('parse options', () => {
         "ZERO_CHANGE_MAX_CONNS": "1",
         "ZERO_CVR_DB": "foo",
         "ZERO_CVR_MAX_CONNS": "30",
+        "ZERO_INITIAL_SYNC_ROW_BATCH_SIZE": "10000",
+        "ZERO_INITIAL_SYNC_TABLE_COPY_WORKERS": "5",
         "ZERO_LOG_FORMAT": "text",
         "ZERO_LOG_LEVEL": "info",
         "ZERO_PER_USER_MUTATION_LIMIT_WINDOW_MS": "60000",
@@ -357,6 +363,19 @@ test('zero-cache --help', () => {
      --storage-db-tmp-dir string                   optional                                                                                          
        ZERO_STORAGE_DB_TMP_DIR env                                                                                                                   
                                                    tmp directory for IVM operator storage. Leave unset to use os.tmpdir()                            
+                                                                                                                                                     
+     --initial-sync-table-copy-workers number      default: 5                                                                                        
+       ZERO_INITIAL_SYNC_TABLE_COPY_WORKERS env                                                                                                      
+                                                   The number of parallel workers used to copy tables during initial sync.                           
+                                                   Each worker copies a single table at a time, fetching rows in batches of                          
+                                                   of rowBatchSize.                                                                                  
+                                                                                                                                                     
+     --initial-sync-row-batch-size number          default: 10000                                                                                    
+       ZERO_INITIAL_SYNC_ROW_BATCH_SIZE env                                                                                                          
+                                                   The number of rows each table copy worker fetches at a time during                                
+                                                   initial sync. This can be increased to speed up initial sync, or decreased                        
+                                                   to reduce the amount of heap memory used during initial sync (e.g. for tables                     
+                                                   with large rows).                                                                                 
                                                                                                                                                      
      --tenants-json string                         optional                                                                                          
        ZERO_TENANTS_JSON env                                                                                                                         

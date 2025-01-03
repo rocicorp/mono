@@ -74,6 +74,7 @@ describe('change-source/pg/end-to-mid-test', () => {
         upstreamURI,
         {id: SHARD_ID, publications: ['zero_some_public', 'zero_all_test']},
         replicaDbFile.path,
+        {tableCopyWorkers: 5, rowBatchSize: 10000},
       )
     ).changeSource;
     const stream = await source.startStream('00');
