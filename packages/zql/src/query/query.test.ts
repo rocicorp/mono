@@ -483,14 +483,11 @@ describe('types', () => {
   });
 
   test('where-parameters', () => {
-    type AuthData = {
-      aud: string;
-    };
     const query = mockQuery as unknown as Query<TestSchema>;
 
-    query.where('s', '=', staticParam<AuthData, 'aud'>('authData', 'aud'));
+    query.where('s', '=', staticParam('authData', 'aud'));
 
-    const p = staticParam<AuthData, 'aud'>('authData', 'aud');
+    const p = staticParam('authData', 'aud');
     query.where('b', '=', p);
   });
 
