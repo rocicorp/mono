@@ -51,12 +51,13 @@ export function installWebSocketHandoff<P>(
       // https://nodejs.org/api/http.html#event-upgrade
       receiver.send(data, socket as Socket);
     } catch (error) {
-      lc.warn?.(`dispatch error: ${String(error)}`, error);
+      const errMsg = String(error);
+      lc.warn?.(`dispatch error: ${errMsg}`, error);
       // Returning an error on the HTTP handshake looks like a hanging connection
       // (at least from Chrome) and doesn't report any meaningful error in the browser.
       // Instead, finish the upgrade to a websocket and then close it with an error.
       wss.handleUpgrade(message as IncomingMessage, socket, head, ws =>
-        ws.close(1002 /* "protocol error" */, String(error)),
+        ws.close(1002 /* "protocol error" */, truncate(errMsg)),
       );
     }
   };
@@ -71,6 +72,20 @@ export function installWebSocketHandoff<P>(
       handle(message, socket as Socket, Buffer.from(head));
     });
   }
+}
+
+// close messages must be less than or equal to 123 bytes:
+// https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/close#reason
+function truncate(val: string, maxBytes = 123) {
+  const encoder = new TextEncoder();
+  if (encoder.encode(val).length <= maxBytes) {
+    return val;
+  }
+  val = val.substring(0, maxBytes - 3);
+  while (encoder.encode(val + '...').length > maxBytes) {
+    val = val.substring(0, val.length - 1);
+  }
+  return val + '...';
 }
 
 export function installWebSocketReceiver<P>(
