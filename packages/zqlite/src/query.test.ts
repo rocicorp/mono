@@ -1,4 +1,4 @@
-import {beforeEach, expect, test} from 'vitest';
+import {beforeEach, expect, expectTypeOf, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.js';
 import {must} from '../../shared/src/must.js';
 import {normalizeTableSchema} from '../../zero-schema/src/normalize-table-schema.js';
@@ -8,6 +8,7 @@ import {newQuery, type QueryDelegate} from '../../zql/src/query/query-impl.js';
 import {schemas} from '../../zql/src/query/test/testSchemas.js';
 import {Database} from './db.js';
 import {TableSource, toSQLiteTypeName} from './table-source.js';
+import type {Row} from '../../zql/src/query/query.js';
 
 let queryDelegate: QueryDelegate;
 beforeEach(() => {
@@ -123,6 +124,24 @@ beforeEach(() => {
       name: 'bug',
     },
   });
+});
+
+test('row type', () => {
+  const query = newQuery(queryDelegate, schemas.issue)
+    .whereExists('labels', q => q.where('name', '=', 'bug'))
+    .related('labels');
+  type RT = Row<typeof query>;
+  expectTypeOf<RT>().toEqualTypeOf<{
+    readonly id: string;
+    readonly title: string;
+    readonly description: string;
+    readonly closed: boolean;
+    readonly ownerId: string | null;
+    readonly labels: readonly {
+      readonly id: string;
+      readonly name: string;
+    }[];
+  }>();
 });
 
 test('basic query', () => {

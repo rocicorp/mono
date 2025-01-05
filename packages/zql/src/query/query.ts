@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/ban-types */
 
 import type {Expand} from '../../../shared/src/expand.js';
+import type {ParameterReference} from './expression.js';
 import type {Row as IVMRow} from '../../../zero-protocol/src/data.js';
 import type {
   PullSchemaForRelationship,
@@ -50,6 +51,8 @@ export type GetFieldTypeNoUndefined<
       SchemaValueToTSType<TSchema['columns'][TColumn]>,
       null | undefined
     >[]
+  : TOperator extends 'IS' | 'IS NOT'
+  ? Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, undefined> | null
   : Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, undefined>;
 
 export type Row<T extends TableSchema | Query<TableSchema>> =
@@ -57,7 +60,9 @@ export type Row<T extends TableSchema | Query<TableSchema>> =
     ? {
         [K in keyof T['columns']]: SchemaValueToTSType<T['columns'][K]>;
       }
-    : QueryRowType<T & Query<TableSchema>>;
+    : T extends Query<TableSchema>
+    ? QueryRowType<T>
+    : never;
 
 export type Rows<T extends TableSchema | Query<TableSchema>> =
   T extends TableSchema ? Row<T>[] : QueryReturnType<T & Query<TableSchema>>;
@@ -132,12 +137,6 @@ export type DefaultQueryResultRow<TSchema extends TableSchema> = {
   related: {};
   singular: false;
 };
-// eslint-disable-next-line @typescript-eslint/naming-convention
-export type Parameter<T, TField extends keyof T, _TReturn = T[TField]> = {
-  type: 'static';
-  anchor: 'authData' | 'preMutationRow';
-  field: TField;
-};
 
 export interface Query<
   TSchema extends TableSchema,
@@ -169,38 +168,19 @@ export interface Query<
     ) => TSub,
   ): Query<TSchema, AddSubselect<TSub, TReturn, TRelationship>>;
 
-  where<
-    TSelector extends NoJsonSelector<TSchema>,
-    TOperator extends Operator,
-    TParamAnchor = never,
-    TParamField extends keyof TParamAnchor = never,
-    TParamTypeBound extends GetFieldTypeNoUndefined<
-      TSchema,
-      TSelector,
-      TOperator
-    > = never,
-  >(
+  where<TSelector extends NoJsonSelector<TSchema>, TOperator extends Operator>(
     field: TSelector,
     op: TOperator,
     value:
       | GetFieldTypeNoUndefined<TSchema, TSelector, TOperator>
-      | Parameter<TParamAnchor, TParamField, TParamTypeBound>,
+      | ParameterReference,
   ): Query<TSchema, TReturn>;
 
-  where<
-    TSelector extends NoJsonSelector<TSchema>,
-    TParamAnchor = never,
-    TParamField extends keyof TParamAnchor = never,
-    TParamTypeBound extends GetFieldTypeNoUndefined<
-      TSchema,
-      TSelector,
-      '='
-    > = never,
-  >(
+  where<TSelector extends NoJsonSelector<TSchema>>(
     field: TSelector,
     value:
       | GetFieldTypeNoUndefined<TSchema, TSelector, '='>
-      | Parameter<TParamAnchor, TParamField, TParamTypeBound>,
+      | ParameterReference,
   ): Query<TSchema, TReturn>;
 
   where(expressionFactory: ExpressionFactory<TSchema>): Query<TSchema, TReturn>;

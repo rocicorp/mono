@@ -260,6 +260,9 @@ const schema = {
 type AuthData = {
   sub: string;
   role: string;
+  properties?: {
+    role: string;
+  };
 };
 
 // eslint-disable-next-line arrow-body-style
@@ -301,6 +304,7 @@ const permissions = must(
         isMemberOfProject(authData, eb),
         isIssueOwner(authData, eb),
         isIssueCreator(authData, eb),
+        isAdminThroughNestedData(authData, eb),
       );
 
     const canSeeComment = (
@@ -312,6 +316,13 @@ const permissions = must(
       authData: AuthData,
       {cmpLit}: ExpressionBuilder<TableSchema>,
     ) => cmpLit(authData.role, '=', 'admin');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    type TODO = any;
+    const isAdminThroughNestedData = (
+      authData: AuthData,
+      {cmpLit}: ExpressionBuilder<TableSchema>,
+      // TODO: proxy should return parameter references instead....
+    ) => cmpLit(authData.properties?.role as TODO, 'IS', 'admin');
 
     const isMemberOfProject = (
       authData: AuthData,
@@ -1443,6 +1454,42 @@ describe('read permissions against nested paths', () => {
       query,
     );
     expect(toIdsOnly(actual)).toEqual(expected);
+  });
+});
+
+describe('read permissions against nested paths', () => {
+  beforeEach(() => {
+    addUser({id: 'owner-creator', name: 'Alice', role: 'user'});
+    addUser({id: 'project-member', name: 'Bob', role: 'user'});
+    addUser({id: 'not-project-member', name: 'Charlie', role: 'user'});
+
+    addIssue({
+      id: '001',
+      title: 'Issue 1',
+      description: 'This is the first issue',
+      closed: false,
+      ownerId: 'owner-creator',
+      creatorId: 'owner-creator',
+      projectId: '001',
+    });
+  });
+
+  test('nested property access', () => {
+    let actual = runReadQueryWithPermissions(
+      {sub: 'dne', role: '', properties: {role: 'admin'}},
+      newQuery(queryDelegate, schema.tables.issue),
+    );
+    expect(toIdsOnly(actual)).toEqual([
+      {
+        id: '001',
+      },
+    ]);
+
+    actual = runReadQueryWithPermissions(
+      {sub: 'dne', role: ''},
+      newQuery(queryDelegate, schema.tables.issue),
+    );
+    expect(toIdsOnly(actual)).toEqual([]);
   });
 });
 

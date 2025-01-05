@@ -81,6 +81,7 @@ describe('change-source/pg', () => {
         upstreamURI,
         {id: SHARD_ID, publications: ['zero_foo', 'zero_zero']},
         replicaDbFile.path,
+        {tableCopyWorkers: 5, rowBatchSize: 10000},
       )
     ).changeSource;
   });
@@ -611,6 +612,7 @@ describe('change-source/pg', () => {
         upstreamURI,
         {id: SHARD_ID, publications: ['zero_different_publication']},
         replicaDbFile.path,
+        {tableCopyWorkers: 5, rowBatchSize: 10000},
       );
     } catch (e) {
       err = e;
