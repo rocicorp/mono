@@ -1,4 +1,4 @@
-import stripAnsi from 'strip-ansi';
+import {stripVTControlCharacters} from 'node:util';
 import {expect, test, vi} from 'vitest';
 import {parseOptions} from '../../../../shared/src/options.js';
 import {getMultiZeroConfig, multiConfigSchema} from './config.js';
@@ -159,7 +159,8 @@ test('zero-cache --help', () => {
     parseOptions(multiConfigSchema, ['--help'], 'ZERO_', {}, logger, exit),
   ).toThrow(ExitAfterUsage);
   expect(logger.info).toHaveBeenCalled();
-  expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
+  expect(stripVTControlCharacters(logger.info.mock.calls[0][0]))
+    .toMatchInlineSnapshot(`
     "
      --upstream-db string                          required                                                                                          
        ZERO_UPSTREAM_DB env                                                                                                                          

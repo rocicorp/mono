@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {SilentLogger} from '@rocicorp/logger';
-import stripAnsi from 'strip-ansi';
+import {stripVTControlCharacters} from 'node:util';
 import type {PartialDeep} from 'type-fest';
 import {expect, test, vi} from 'vitest';
 import {
@@ -835,7 +835,8 @@ test('--help', () => {
     parseOptions(options, ['--help'], 'Z_', {}, logger, exit),
   ).toThrow(ExitAfterUsage);
   expect(logger.info).toHaveBeenCalled();
-  expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
+  expect(stripVTControlCharacters(logger.info.mock.calls[0][0]))
+    .toMatchInlineSnapshot(`
     "
      --port, -p number                  default: 4848                                                        
        Z_PORT env                                                                                            
@@ -873,7 +874,8 @@ test('-h', () => {
     parseOptions(options, ['-h'], 'ZERO_', {}, logger, exit),
   ).toThrow(ExitAfterUsage);
   expect(logger.info).toHaveBeenCalled();
-  expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
+  expect(stripVTControlCharacters(logger.info.mock.calls[0][0]))
+    .toMatchInlineSnapshot(`
     "
      --port, -p number                  default: 4848                                                        
        ZERO_PORT env                                                                                         
@@ -921,7 +923,8 @@ test('unknown arguments', () => {
     ]
   `);
   expect(logger.info).toHaveBeenCalled();
-  expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
+  expect(stripVTControlCharacters(logger.info.mock.calls[0][0]))
+    .toMatchInlineSnapshot(`
     "
      --port, -p number                  default: 4848                                                        
        PORT env                                                                                              
