@@ -2,6 +2,7 @@ import type {Row} from '@rocicorp/zero';
 import classNames from 'classnames';
 import {memo, useState} from 'react';
 import {makePermalink} from '../../comment-permalink.js';
+import {AvatarImage} from '../../components/avatar-image.js';
 import {Button} from '../../components/button.js';
 import {CanEdit} from '../../components/can-edit.js';
 import {Confirm} from '../../components/confirm.js';
@@ -55,20 +56,21 @@ export const Comment = memo(
           [style.permalinked]: isPermalinked,
         })}
       >
-        <p className={style.commentAuthor}>
-          <img
-            src={comment.creator?.avatar}
-            style={{
-              width: '2rem',
-              height: '2rem',
-              borderRadius: '50%',
-              display: 'inline-block',
-              marginRight: '0.3rem',
-            }}
-            alt={comment.creator?.name ?? undefined}
-          />{' '}
-          {comment.creator?.login}
-        </p>
+        {comment.creator && (
+          <p className={style.commentAuthor}>
+            <AvatarImage
+              user={comment.creator}
+              style={{
+                width: '2rem',
+                height: '2rem',
+                borderRadius: '50%',
+                display: 'inline-block',
+                marginRight: '0.3rem',
+              }}
+            />{' '}
+            {comment.creator.login}
+          </p>
+        )}
         <span id={permalink} className={style.commentTimestamp}>
           <Link href={`#${permalink}`}>
             <RelativeTime timestamp={comment.created} />

@@ -10,6 +10,7 @@ import {
 import {useDocumentHasFocus} from '../hooks/use-document-has-focus.js';
 import {useNumericPref} from '../hooks/use-user-pref.js';
 import {useZero} from '../hooks/use-zero.js';
+import {AvatarImage} from './avatar-image.js';
 import {ButtonWithLoginCheck} from './button-with-login-check.js';
 import {SKIN_TONE_PREF} from './emoji-picker.js';
 import {Tooltip, TooltipContent, TooltipTrigger} from './tooltip.jsx';
@@ -131,12 +132,14 @@ export const EmojiPill = memo(
 );
 
 function TriggeredTooltipContent({emojis}: {emojis: Emoji[]}) {
-  const emoji = emojis[0];
+  const {creator} = emojis[0];
   return (
-    <>
-      <img className="tooltip-emoji-icon" src={emoji.creator?.avatar} />
-      {emoji.creator?.login}
-    </>
+    creator && (
+      <>
+        <AvatarImage className="tooltip-emoji-icon" user={creator} />
+        {creator.login}
+      </>
+    )
   );
 }
 
