@@ -17,6 +17,9 @@ test('basics', () => {
       ['b', 'asc'],
       ['a', 'asc'],
     ]),
+    undefined,
+    undefined,
+    true,
   );
 
   expect(view.data).toEqual([
@@ -56,6 +59,8 @@ test('single-format', () => {
       ['a', 'asc'],
     ]),
     {singular: true, relationships: {}},
+    undefined,
+    true,
   );
 
   expect(view.data).toEqual({a: 1, b: 'a'});
@@ -114,6 +119,8 @@ test('factory', () => {
     ]),
     {singular: false, relationships: {}},
     onDestroy,
+    () => {},
+    true,
   );
   expect(view).toBeDefined();
   expect(onDestroyCalled).false;
