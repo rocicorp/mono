@@ -15,6 +15,7 @@ import {
   type ListContext,
   type ZbugsHistoryState,
 } from '../routes.js';
+import {AvatarImage} from './avatar-image.js';
 import {ButtonWithLoginCheck} from './button-with-login-check.js';
 import {Button} from './button.js';
 import {Link} from './link.js';
@@ -116,55 +117,55 @@ export const Nav = memo(() => {
           {login.loginState === undefined ? (
             <a href={loginHref}>Login</a>
           ) : (
-            <div className="logged-in-user-container">
-              <div className="logged-in-user">
-                {isMobile ? (
-                  <div className="mobile-login-container">
-                    <Button
-                      eventName="Toggle user options (mobile)"
-                      onAction={handleClick}
-                    >
-                      <img
-                        src={user?.avatar}
-                        className="issue-creator-avatar"
-                        alt={user?.name ?? undefined}
-                        title={user?.login}
-                      />
-                    </Button>
-                    <div
-                      className={classNames('user-panel-mobile', {
-                        hidden: !showUserPanel, // Conditionally hide/show the panel
-                      })}
-                    >
+            user && (
+              <div className="logged-in-user-container">
+                <div className="logged-in-user">
+                  {isMobile ? (
+                    <div className="mobile-login-container">
                       <Button
-                        className="logout-button-mobile"
-                        eventName="Log out (mobile)"
-                        onAction={login.logout}
-                        title="Log out"
+                        eventName="Toggle user options (mobile)"
+                        onAction={handleClick}
                       >
-                        Log out
+                        <AvatarImage
+                          user={user}
+                          className="issue-creator-avatar"
+                          title={user.login}
+                        />
                       </Button>
+                      <div
+                        className={classNames('user-panel-mobile', {
+                          hidden: !showUserPanel, // Conditionally hide/show the panel
+                        })}
+                      >
+                        <Button
+                          className="logout-button-mobile"
+                          eventName="Log out (mobile)"
+                          onAction={login.logout}
+                          title="Log out"
+                        >
+                          Log out
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <img
-                    src={user?.avatar}
-                    className="issue-creator-avatar"
-                    alt={user?.name ?? undefined}
-                    title={user?.login}
-                  />
-                )}
-                <span className="logged-in-user-name">
-                  {login.loginState?.decoded.name}
-                </span>
+                  ) : (
+                    <AvatarImage
+                      user={user}
+                      className="issue-creator-avatar"
+                      title={user.login}
+                    />
+                  )}
+                  <span className="logged-in-user-name">
+                    {login.loginState?.decoded.name}
+                  </span>
+                </div>
+                <Button
+                  className="logout-button"
+                  eventName="Log out"
+                  onAction={login.logout}
+                  title="Log out"
+                ></Button>
               </div>
-              <Button
-                className="logout-button"
-                eventName="Log out"
-                onAction={login.logout}
-                title="Log out"
-              ></Button>
-            </div>
+            )
           )}
         </div>
       </div>

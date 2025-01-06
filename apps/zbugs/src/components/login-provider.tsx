@@ -1,4 +1,5 @@
-import {useCallback, useSyncExternalStore} from 'react';
+import {useCallback} from 'react';
+import {useSyncExternalStore} from 'use-sync-external-store/shim';
 import {loginContext} from '../hooks/use-login.js';
 import {clearJwt} from '../jwt.js';
 import {authRef} from '../zero-setup.js';

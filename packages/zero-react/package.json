@@ -9,11 +9,14 @@
     "check-types:watch": "tsc --watch"
   },
   "peerDependencies": {
-    "react": ">=16.0 <19.0"
+    "react": ">=16.0 <19.0",
+    "use-sync-external-store": "^1.4.0"
   },
   "devDependencies": {
     "@types/react": "18.2.13",
+    "@types/use-sync-external-store": "^0.0.6",
     "react": ">=16.0 <19.0",
+    "use-sync-external-store": "^1.4.0",
     "zero-client": "0.0.0"
   }
 }
