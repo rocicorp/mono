@@ -6,7 +6,7 @@ import commandLineUsage from 'command-line-usage';
 import kebabcase from 'lodash.kebabcase';
 import merge from 'lodash.merge';
 import snakeCase from 'lodash.snakecase';
-import {stripVTControlCharacters} from 'node:util';
+import {stripVTControlCharacters as stripAnsi} from 'node:util';
 import {assert} from './asserts.js';
 import {must} from './must.js';
 import * as v from './valita.js';
@@ -516,13 +516,11 @@ function showUsage(
       hide.push(name);
     }
     const text = template(`${name} ${typeLabel ?? ''}`);
-    const lines = stripVTControlCharacters(text).split('\n');
+    const lines = stripAnsi(text).split('\n');
     for (const l of lines) {
       leftWidth = Math.max(leftWidth, l.length + 2);
     }
-    const desc = stripVTControlCharacters(template(description ?? '')).split(
-      '\n',
-    );
+    const desc = stripAnsi(template(description ?? '')).split('\n');
     for (const l of desc) {
       rightWidth = Math.max(rightWidth, l.length + 2);
     }
