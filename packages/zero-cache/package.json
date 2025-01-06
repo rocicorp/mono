@@ -56,7 +56,6 @@
     "@rocicorp/eslint-config": "^0.5.1",
     "@rocicorp/prettier-config": "^0.2.0",
     "@testcontainers/postgresql": "^10.9.0",
-    "@types/lodash.merge": "^4.6.9",
     "@types/node": "^20.8.4",
     "@types/pg": "^8.11.2",
     "@types/pg-format": "^1.0.5",

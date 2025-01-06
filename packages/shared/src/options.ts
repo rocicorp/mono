@@ -3,8 +3,8 @@ import {template} from 'chalk-template';
 import type {OptionDefinition} from 'command-line-args';
 import commandLineArgs from 'command-line-args';
 import commandLineUsage from 'command-line-usage';
+import {defu} from 'defu';
 import {toKebabCase, toSnakeCase} from 'kasi';
-import merge from 'lodash.merge';
 import {stripVTControlCharacters as stripAnsi} from 'node:util';
 import {assert} from './asserts.js';
 import {must} from './must.js';
@@ -405,7 +405,7 @@ export function parseOptionsAdvanced<T extends Options>(
         break;
     }
 
-    const parsedArgs = merge(defaults, fromEnv, withoutDefaults);
+    const parsedArgs = defu(defaults, fromEnv, withoutDefaults);
     const env = {...env1, ...env2, ...env3};
 
     let schema = configSchema(options);
