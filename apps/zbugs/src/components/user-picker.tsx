@@ -3,6 +3,7 @@ import {useQuery} from '@rocicorp/zero/react';
 import {useEffect, useMemo, useState} from 'react';
 import {type Schema} from '../../schema.js';
 import avatarIcon from '../assets/icons/avatar-default.svg';
+import {avatarURLWithSize} from '../avatar-url-with-size.js';
 import {useZero} from '../hooks/use-zero.js';
 import {Combobox} from './combobox.js';
 
@@ -106,7 +107,7 @@ export function UserPicker({
 
 function preloadAvatar(user: User) {
   return new Promise<[string, string]>((res, rej) => {
-    fetch(user.avatar)
+    fetch(avatarURLWithSize(user.avatar))
       .then(response => response.blob())
       .then(blob => {
         const reader = new FileReader();
