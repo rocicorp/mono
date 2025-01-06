@@ -9,11 +9,11 @@ import {readonly, ref, watch, type DeepReadonly, type Ref} from 'vue';
 import {vueViewFactory} from './vue-view.js';
 import type {ResultType} from '../../zql/src/query/typed-view.js';
 
-export type QueryResultDetails = {
+export type QueryResultDetails = Readonly<{
   type: ResultType;
-};
+}>;
 
-export type QueryResult<TReturn extends QueryType> = [
+export type QueryResult<TReturn extends QueryType> = readonly [
   Ref<Smash<TReturn>>,
   Ref<QueryResultDetails>,
 ];
