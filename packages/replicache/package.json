@@ -15,10 +15,11 @@
     "check-types": "tsc && tsc --project tool/tsconfig.json",
     "check-types:watch": "tsc --watch",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "build": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json && node tool/build.js",
-    "build-bundle-sizes": "node tool/build.js --bundle-sizes",
+    "build": "rm -rf out && tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json && node tool/build.js",
+    "build-bundle-sizes": "rm -rf out && node tool/build.js --bundle-sizes",
     "prepack": "npm run lint && npm run test && npm run build && mv README.md README-org.md && mv README-external.md README.md",
-    "postpack": "mv README.md README-external.md && mv README-org.md README.md"
+    "postpack": "mv README.md README-external.md && mv README-org.md README.md",
+    "prepare": "rm -f node_modules/fetch-mock/esm/client.d.ts"
   },
   "dependencies": {
     "@badrap/valita": "0.3.11",
