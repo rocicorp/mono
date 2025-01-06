@@ -3,7 +3,7 @@ import {template} from 'chalk-template';
 import type {OptionDefinition} from 'command-line-args';
 import commandLineArgs from 'command-line-args';
 import commandLineUsage from 'command-line-usage';
-import {defu} from 'defu';
+import {createDefu} from 'defu';
 import {toKebabCase, toSnakeCase} from 'kasi';
 import {stripVTControlCharacters as stripAnsi} from 'node:util';
 import {assert} from './asserts.js';
@@ -161,6 +161,16 @@ export type Config<O extends Options> = {
     ? ValueOf<O[P]>
     : never;
 };
+
+/**
+ * Creates a defu instance that overrides arrays instead of merging them.
+ */
+const defu = createDefu((obj, key, value) => {
+  if (!Array.isArray(value)) return;
+
+  obj[key] = value;
+  return true;
+});
 
 /**
  * Converts an Options instance into its corresponding {@link Config} schema.
@@ -405,7 +415,7 @@ export function parseOptionsAdvanced<T extends Options>(
         break;
     }
 
-    const parsedArgs = defu(defaults, fromEnv, withoutDefaults);
+    const parsedArgs = defu(withoutDefaults, fromEnv, defaults);
     const env = {...env1, ...env2, ...env3};
 
     let schema = configSchema(options);
