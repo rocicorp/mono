@@ -9,9 +9,9 @@ import {readonly, ref, watch, type DeepReadonly, type Ref} from 'vue';
 import {vueViewFactory} from './vue-view.js';
 import type {ResultType} from '../../zql/src/query/typed-view.js';
 
-export type QueryResultDetails = Readonly<{
+export type QueryResultDetails = {
   type: ResultType;
-}>;
+};
 
 export type QueryResult<TReturn extends QueryType> = readonly [
   Ref<Smash<TReturn>>,
@@ -44,5 +44,5 @@ export function useQuery<
     {immediate: true},
   );
 
-  return [readonly(queryResult as Ref<Smash<TReturn>>), details];
+  return [readonly(queryResult as Ref<Smash<TReturn>>), readonly(details)];
 }
