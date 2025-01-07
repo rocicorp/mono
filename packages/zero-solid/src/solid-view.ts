@@ -9,16 +9,14 @@ import {
   type Change,
   type Entry,
   type Format,
+  type HumanReadable,
   type Input,
   type Output,
   type Query,
-  type QueryType,
-  type Smash,
-  type TableSchema,
-  type View,
   type ViewFactory,
 } from '../../zero-advanced/src/mod.js';
 import type {ResultType} from '../../zql/src/query/typed-view.js';
+import type {FullSchema} from '../../zero-schema/src/table-schema.js';
 
 export type QueryResultDetails = {
   readonly type: ResultType;
@@ -29,7 +27,7 @@ type State = [Entry, QueryResultDetails];
 const complete = {type: 'complete'} as const;
 const unknown = {type: 'unknown'} as const;
 
-export class SolidView<V extends View> implements Output {
+export class SolidView<V> implements Output {
   readonly #input: Input;
   readonly #format: Format;
   readonly #onDestroy: () => void;
@@ -100,17 +98,23 @@ export class SolidView<V extends View> implements Output {
 }
 
 export function solidViewFactory<
-  TSchema extends TableSchema,
-  TReturn extends QueryType,
+  TSchema extends FullSchema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
 >(
-  _query: Query<TSchema, TReturn>,
+  _query: Query<TSchema, TTable, TReturn>,
   input: Input,
   format: Format,
   onDestroy: () => void,
   _onTransactionCommit: (cb: () => void) => void,
   queryComplete: true | Promise<true>,
-): SolidView<Smash<TReturn>> {
-  return new SolidView<Smash<TReturn>>(input, format, onDestroy, queryComplete);
+) {
+  return new SolidView<HumanReadable<TReturn>>(
+    input,
+    format,
+    onDestroy,
+    queryComplete,
+  );
 }
 
-solidViewFactory satisfies ViewFactory<TableSchema, QueryType, unknown>;
+solidViewFactory satisfies ViewFactory<FullSchema, string, unknown, unknown>;

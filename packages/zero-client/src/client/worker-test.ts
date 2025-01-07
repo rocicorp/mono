@@ -6,6 +6,12 @@ import {deepEqual} from '../../../shared/src/json.js';
 import {sleep} from '../../../shared/src/sleep.js';
 import {MockSocket, zeroForTest} from './test-utils.js';
 import {version} from './version.js';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.js';
+import {
+  string,
+  table,
+  number,
+} from '../../../zero-schema/src/builder/table-builder.js';
 
 onmessage = async (e: MessageEvent) => {
   const {userID} = e.data;
@@ -37,19 +43,18 @@ async function testBasics(userID: string) {
 
   const r = zeroForTest({
     userID,
-    schema: {
-      version: 1,
-      tables: {
-        e: {
-          tableName: 'e',
-          columns: {
-            id: {type: 'string'},
-            value: {type: 'number'},
-          },
-          primaryKey: ['id'],
-        },
+    schema: createSchema(
+      1,
+      {
+        e: table('e')
+          .columns({
+            id: string(),
+            value: number(),
+          })
+          .primaryKey('id'),
       },
-    },
+      {},
+    ),
   });
 
   const q = r.query.e.limit(1);

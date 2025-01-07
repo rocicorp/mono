@@ -1,8 +1,8 @@
 import {h128} from '../../../shared/src/hash.js';
 import * as v from '../../../shared/src/valita.js';
+import type {CompoundKey} from '../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import {primaryKeyValueSchema} from '../../../zero-protocol/src/primary-key.js';
-import type {NormalizedPrimaryKey} from '../../../zero-schema/src/normalize-table-schema.js';
 
 export const CLIENTS_KEY_PREFIX = 'c/';
 export const DESIRED_QUERIES_KEY_PREFIX = 'd/';
@@ -27,7 +27,7 @@ export function toGotQueriesKey(hash: string): string {
 
 export function toPrimaryKeyString(
   tableName: string,
-  primaryKey: NormalizedPrimaryKey,
+  primaryKey: CompoundKey,
   value: Row,
 ): string {
   if (primaryKey.length === 1) {

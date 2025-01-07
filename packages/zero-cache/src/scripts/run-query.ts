@@ -7,7 +7,6 @@ import {Database} from '../../../zqlite/src/db.js';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {type QueryDelegate} from '../../../zql/src/query/query-impl.js';
 import {TableSource} from '../../../zqlite/src/table-source.js';
-import {normalizeSchema} from '../../../zero-schema/src/normalized-schema.js';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.js';
 import type {AST} from '../../../zero-protocol/src/ast.js';
 import {buildPipeline} from '../../../zql/src/builder/builder.js';
@@ -18,8 +17,7 @@ import {
 } from '../../../zqlite/src/runtime-debug.js';
 
 const config = getDebugConfig();
-const schema = await getSchema(config);
-const normalizedSchema = normalizeSchema(schema.schema);
+const schemaAndPermissions = await getSchema(config);
 runtimeDebugFlags.trackRowsVended = true;
 
 const ast = JSON.parse(must(config.debug.ast)) as AST;
@@ -36,8 +34,8 @@ const host: QueryDelegate = {
       '',
       db,
       name,
-      normalizedSchema.tables[name].columns,
-      normalizedSchema.tables[name].primaryKey,
+      schemaAndPermissions.schema.tables[name].columns,
+      schemaAndPermissions.schema.tables[name].primaryKey,
     );
 
     sources.set(name, source);

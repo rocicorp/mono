@@ -1,22 +1,22 @@
 import {expect, test} from 'vitest';
 import {zeroForTest} from './test-utils.js';
+import {createSchema, json, string, table} from '../mod.js';
 
 test('we can create rows with json columns and query those rows', async () => {
   const z = zeroForTest({
-    schema: {
-      version: 1,
-      tables: {
-        track: {
-          columns: {
-            id: {type: 'string'},
-            title: {type: 'string'},
-            artists: {type: 'json'},
-          },
-          primaryKey: ['id'],
-          tableName: 'track',
-        },
+    schema: createSchema(
+      1,
+      {
+        track: table('track')
+          .columns({
+            id: string(),
+            title: string(),
+            artists: json<string[]>(),
+          })
+          .primaryKey('id'),
       },
-    },
+      {},
+    ),
   });
 
   await z.mutate.track.insert({

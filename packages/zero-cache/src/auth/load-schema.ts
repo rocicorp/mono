@@ -1,6 +1,6 @@
 import path from 'node:path';
 import {type PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.js';
-import type {Schema} from '../../../zero-schema/src/schema.js';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.js';
 import {readFile} from 'node:fs/promises';
 import type {ZeroConfig} from '../config/zero-config.js';
 import {parseSchema} from '../../../zero-schema/src/schema-config.js';

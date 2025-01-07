@@ -6,27 +6,32 @@ import {MemorySource} from '../../zql/src/ivm/memory-source.js';
 import {newQuery} from '../../zql/src/query/query-impl.js';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.js';
 import {useQuery} from './use-query.js';
+import {createSchema} from '../../zero-schema/src/mod.js';
+import {number, string, table} from '../../zero-client/src/mod.js';
 
 function setupTestEnvironment() {
-  const tableSchema = {
-    tableName: 'table',
-    columns: {
-      a: {type: 'number'},
-      b: {type: 'string'},
+  const schema = createSchema(
+    1,
+    {
+      table: table('table')
+        .columns({
+          a: number(),
+          b: string(),
+        })
+        .primaryKey('a'),
     },
-    primaryKey: ['a'],
-    relationships: {},
-  } as const;
+    {},
+  );
   const ms = new MemorySource(
-    tableSchema.tableName,
-    tableSchema.columns,
-    tableSchema.primaryKey,
+    schema.tables.table.name,
+    schema.tables.table.columns,
+    schema.tables.table.primaryKey,
   );
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
   ms.push({row: {a: 2, b: 'b'}, type: 'add'});
 
   const queryDelegate = new QueryDelegateImpl({table: ms});
-  const tableQuery = newQuery(queryDelegate, tableSchema);
+  const tableQuery = newQuery(queryDelegate, schema, 'table');
 
   return {ms, tableQuery, queryDelegate};
 }

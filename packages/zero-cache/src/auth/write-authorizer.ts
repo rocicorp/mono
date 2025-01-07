@@ -6,7 +6,6 @@ import path from 'node:path';
 import {pid} from 'node:process';
 import {assert} from '../../../shared/src/asserts.js';
 import type {JSONValue} from '../../../shared/src/json.js';
-import {must} from '../../../shared/src/must.js';
 import {randInt} from '../../../shared/src/rand.js';
 import * as v from '../../../shared/src/valita.js';
 import type {Condition} from '../../../zero-protocol/src/ast.js';
@@ -25,8 +24,8 @@ import type {
   PermissionsConfig,
   Policy,
 } from '../../../zero-schema/src/compiled-permissions.js';
-import type {Schema} from '../../../zero-schema/src/schema.js';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.js';
+import type {FullSchema} from '../../../zero-schema/src/table-schema.js';
 import type {BuilderDelegate} from '../../../zql/src/builder/builder.js';
 import {
   bindStaticParameters,
@@ -294,12 +293,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     }
 
     const rowPolicies = rules.row;
-    let rowQuery = authQuery(
-      must(
-        this.#schema.tables[op.tableName],
-        'No schema found for table ' + op.tableName,
-      ),
-    );
+    let rowQuery = authQuery(this.#schema, op.tableName);
     op.primaryKey.forEach(pk => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       rowQuery = rowQuery.where(pk, '=', op.value[pk] as any);
@@ -416,7 +410,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     applicableRowPolicy: Policy | undefined,
     applicableCellPolicies: Policy[],
     authData: JWTPayload | undefined,
-    rowQuery: Query<TableSchema>,
+    rowQuery: Query<FullSchema, string>,
   ) {
     if (
       applicableRowPolicy === undefined &&
@@ -441,7 +435,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   #passesPolicy(
     policy: Policy | undefined,
     authData: JWTPayload | undefined,
-    rowQuery: Query<TableSchema>,
+    rowQuery: Query<FullSchema, string>,
   ) {
     if (policy === undefined) {
       return true;
@@ -449,7 +443,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     if (policy.length === 0) {
       return false;
     }
-    let rowQueryAst = (rowQuery as AuthQuery<TableSchema>).ast;
+    let rowQueryAst = (rowQuery as AuthQuery<FullSchema, string>).ast;
     rowQueryAst = bindStaticParameters(
       {
         ...rowQueryAst,

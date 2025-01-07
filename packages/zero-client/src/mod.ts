@@ -57,32 +57,31 @@ export type {
   VersionNotSupportedResponse,
   WriteTransaction,
 } from '../../replicache/src/mod.js';
-export * as column from '../../zero-schema/src/column.js';
 export {
   ANYONE_CAN,
   definePermissions,
   NOBODY_CAN,
 } from '../../zero-schema/src/permissions.js';
-export {createSchema, type Schema} from '../../zero-schema/src/schema.js';
 export {
-  createTableSchema,
-  type TableSchema,
-} from '../../zero-schema/src/table-schema.js';
+  createSchema,
+  type Schema,
+} from '../../zero-schema/src/builder/schema-builder.js';
+export {type TableSchema} from '../../zero-schema/src/table-schema.js';
+export {
+  table,
+  string,
+  number,
+  boolean,
+  enumeration,
+  json,
+} from '../../zero-schema/src/builder/table-builder.js';
+export {relationships} from '../../zero-schema/src/builder/relationship-builder.js';
 export {escapeLike} from '../../zql/src/query/escape-like.js';
 export type {
   ExpressionBuilder,
   ExpressionFactory,
 } from '../../zql/src/query/expression.js';
-export type {
-  DefaultQueryResultRow as EmptyQueryResultRow,
-  Query,
-  QueryReturnType,
-  QueryRowType,
-  QueryType,
-  Row,
-  Rows,
-  Smash,
-} from '../../zql/src/query/query.js';
+export type {Query, Row} from '../../zql/src/query/query.js';
 export type {TypedView} from '../../zql/src/query/typed-view.js';
 export type {ZeroOptions} from './client/options.js';
 export {Zero} from './client/zero.js';

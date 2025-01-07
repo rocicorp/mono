@@ -20,7 +20,7 @@ import {
   type UpsertOp,
 } from '../../../../zero-protocol/src/push.js';
 import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.js';
-import type {Schema} from '../../../../zero-schema/src/schema.js';
+import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {
   WriteAuthorizerImpl,

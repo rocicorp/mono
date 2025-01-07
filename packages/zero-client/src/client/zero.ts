@@ -59,11 +59,6 @@ import type {
   PullResponseMessage,
 } from '../../../zero-protocol/src/pull.js';
 import type {Schema} from '../../../zero-schema/src/mod.js';
-import {
-  type NormalizedSchema,
-  normalizeSchema,
-} from '../../../zero-schema/src/normalized-schema.js';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 import {newQuery} from '../../../zql/src/query/query-impl.js';
 import type {Query} from '../../../zql/src/query/query.js';
 import {nanoid} from '../util/nanoid.js';
@@ -123,7 +118,7 @@ type PingResult = Enum<typeof PingResult>;
 export type NoRelations = Record<string, never>;
 
 export type MakeEntityQueriesFromSchema<S extends Schema> = {
-  readonly [K in keyof S['tables']]: Query<S['tables'][K]>;
+  readonly [K in keyof S['tables'] & string]: Query<S, K>;
 };
 
 declare const TESTING: boolean;
@@ -397,10 +392,8 @@ export class Zero<const S extends Schema> {
     });
     const logOptions = this.#logOptions;
 
-    const normalizedSchema = normalizeSchema(schema);
-
     const replicacheMutators = {
-      ['_zero_crud']: makeCRUDMutator(normalizedSchema),
+      ['_zero_crud']: makeCRUDMutator(schema),
     };
 
     this.storageKey = storageKey ?? '';
@@ -408,7 +401,7 @@ export class Zero<const S extends Schema> {
     const replicacheOptions: ReplicacheOptions<WithCRUD<MutatorDefs>> = {
       // The schema stored in IDB is dependent upon both the application schema
       // and the AST schema (i.e. PROTOCOL_VERSION).
-      schemaVersion: `${normalizedSchema.version}.${PROTOCOL_VERSION}`,
+      schemaVersion: `${schema.version}.${PROTOCOL_VERSION}`,
       logLevel: logOptions.logLevel,
       logSinks: [logOptions.logSink],
       mutators: replicacheMutators,
@@ -468,10 +461,7 @@ export class Zero<const S extends Schema> {
     this.#onClientStateNotFound = onClientStateNotFoundCallback;
     this.#rep.onClientStateNotFound = onClientStateNotFoundCallback;
 
-    const {mutate, mutateBatch} = makeCRUDMutate<S>(
-      normalizedSchema,
-      rep.mutate,
-    );
+    const {mutate, mutateBatch} = makeCRUDMutate<S>(schema, rep.mutate);
     this.mutate = mutate;
     this.mutateBatch = mutateBatch;
 
@@ -483,7 +473,7 @@ export class Zero<const S extends Schema> {
     );
 
     this.#zeroContext = new ZeroContext(
-      normalizedSchema.tables,
+      schema.tables,
       (ast, gotCallback) => this.#queryManager.add(ast, gotCallback),
       batchViewUpdates,
     );
@@ -496,7 +486,7 @@ export class Zero<const S extends Schema> {
       },
     );
 
-    this.query = this.#registerQueries(normalizedSchema);
+    this.query = this.#registerQueries(schema);
 
     reportReloadReason(this.#lc);
 
@@ -515,7 +505,7 @@ export class Zero<const S extends Schema> {
       poke => this.#rep.poke(poke),
       () => this.#onPokeError(),
       rep.clientID,
-      normalizedSchema,
+      schema,
       this.#lc,
     );
 
@@ -1576,12 +1566,12 @@ export class Zero<const S extends Schema> {
     // }
   }
 
-  #registerQueries(schema: NormalizedSchema): MakeEntityQueriesFromSchema<S> {
-    const rv = {} as Record<string, Query<TableSchema>>;
+  #registerQueries(schema: Schema): MakeEntityQueriesFromSchema<S> {
+    const rv = {} as Record<string, Query<Schema, string>>;
     const context = this.#zeroContext;
     // Not using parse yet
-    for (const [name, table] of Object.entries(schema.tables)) {
-      rv[name] = newQuery(context, table);
+    for (const name of Object.keys(schema.tables)) {
+      rv[name] = newQuery(context, schema, name);
     }
 
     return rv as MakeEntityQueriesFromSchema<S>;

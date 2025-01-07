@@ -5,6 +5,7 @@ import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.js';
 import type {Mutation} from '../../../zero-protocol/src/push.js';
 import * as ConnectionState from './connection-state-enum.js';
 import {MockSocket, tickAFewTimes, zeroForTest} from './test-utils.js';
+import {createSchema, number, string, table} from '../mod.js';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
@@ -55,19 +56,18 @@ test('connection stays alive on rate limit error', async () => {
 
 test('a mutation after a rate limit error causes limited mutations to be resent', async () => {
   const z = zeroForTest({
-    schema: {
-      version: 1,
-      tables: {
-        issue: {
-          columns: {
-            id: {type: 'string'},
-            value: {type: 'number'},
-          },
-          primaryKey: ['id'],
-          tableName: 'issue',
-        },
+    schema: createSchema(
+      1,
+      {
+        issue: table('issue')
+          .columns({
+            id: string(),
+            value: number(),
+          })
+          .primaryKey('id'),
       },
-    },
+      {},
+    ),
   });
   await z.triggerConnected();
   const mockSocket = await z.socket;
@@ -100,19 +100,18 @@ test('a mutation after a rate limit error causes limited mutations to be resent'
 
 test('previously confirmed mutations are not resent after a rate limit error', async () => {
   const z = zeroForTest({
-    schema: {
-      version: 1,
-      tables: {
-        issue: {
-          columns: {
-            id: {type: 'string'},
-            value: {type: 'number'},
-          },
-          primaryKey: ['id'],
-          tableName: 'issue',
-        },
+    schema: createSchema(
+      1,
+      {
+        issue: table('issue')
+          .columns({
+            id: string(),
+            value: number(),
+          })
+          .primaryKey('id'),
       },
-    },
+      {},
+    ),
   });
   await z.triggerConnected();
   const mockSocket = await z.socket;

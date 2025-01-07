@@ -1,31 +1,30 @@
 import type {AST} from '../../../zero-protocol/src/ast.js';
-import {
-  normalizeTableSchema,
-  type NormalizedTableSchema,
-} from '../../../zero-schema/src/normalize-table-schema.js';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
+import type {FullSchema} from '../../../zero-schema/src/table-schema.js';
 import type {Format} from '../ivm/view.js';
 import {ExpressionBuilder} from './expression.js';
 import {AbstractQuery} from './query-impl.js';
-import type {DefaultQueryResultRow, Query, QueryType, Smash} from './query.js';
+import type {HumanReadable, PullRow, Query} from './query.js';
 import type {TypedView} from './typed-view.js';
 
-export function authQuery<TSchema extends TableSchema>(
-  schema: TSchema,
-): Query<TSchema> {
-  return new AuthQuery<TSchema>(normalizeTableSchema(schema));
+export function authQuery<
+  TSchema extends FullSchema,
+  TTable extends keyof TSchema['tables'] & string,
+>(schema: TSchema, tableName: TTable): Query<TSchema, TTable> {
+  return new AuthQuery<TSchema, TTable>(schema, tableName);
 }
 
 export class AuthQuery<
-  TTableSchema extends TableSchema,
-  TReturn extends QueryType = DefaultQueryResultRow<TTableSchema>,
-> extends AbstractQuery<TTableSchema, TReturn> {
+  TSchema extends FullSchema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn = PullRow<TTable, TSchema>,
+> extends AbstractQuery<TSchema, TTable, TReturn> {
   constructor(
-    schema: NormalizedTableSchema,
-    ast: AST = {table: schema.tableName},
+    schema: TSchema,
+    tableName: TTable,
+    ast: AST = {table: tableName},
     format?: Format | undefined,
   ) {
-    super(schema, ast, format);
+    super(schema, tableName, ast, format);
   }
 
   expressionBuilder() {
@@ -34,23 +33,28 @@ export class AuthQuery<
 
   protected readonly _system = 'permissions';
 
-  protected _newQuery<TSchema extends TableSchema, TReturn extends QueryType>(
-    schema: NormalizedTableSchema,
+  protected _newQuery<
+    TSchema extends FullSchema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+  >(
+    schema: TSchema,
+    tableName: TTable,
     ast: AST,
     format: Format | undefined,
-  ): Query<TSchema, TReturn> {
-    return new AuthQuery(schema, ast, format);
+  ): Query<TSchema, TTable, TReturn> {
+    return new AuthQuery(schema, tableName, ast, format);
   }
 
   get ast() {
     return this._completeAst();
   }
 
-  materialize(): TypedView<Smash<TReturn>> {
+  materialize(): TypedView<HumanReadable<TReturn>> {
     throw new Error('AuthQuery cannot be materialized');
   }
 
-  run(): Smash<TReturn> {
+  run(): HumanReadable<TReturn> {
     throw new Error('AuthQuery cannot be run');
   }
 

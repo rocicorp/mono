@@ -7,32 +7,34 @@ import {MemorySource} from '../../../zql/src/ivm/memory-source.js';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.js';
 import {type AddQuery, ZeroContext} from './context.js';
 import {ENTITIES_KEY_PREFIX} from './keys.js';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.js';
+import {string, table} from '../../../zero-schema/src/builder/table-builder.js';
 
 const testBatchViewUpdates = (applyViewUpdates: () => void) =>
   applyViewUpdates();
 
 test('getSource', () => {
-  const schemas = {
-    users: {
-      tableName: 'users',
-      columns: {
-        id: {type: 'string'},
-        name: {type: 'string'},
-      },
-      primaryKey: ['id'],
+  const schema = createSchema(
+    1,
+    {
+      users: table('users')
+        .columns({
+          id: string(),
+          name: string(),
+        })
+        .primaryKey('id'),
+      userStates: table('userStates')
+        .columns({
+          userID: string(),
+          stateCode: string(),
+        })
+        .primaryKey('userID', 'stateCode'),
     },
-    userStates: {
-      tableName: 'userStates',
-      columns: {
-        userID: {type: 'string'},
-        stateCode: {type: 'string'},
-      },
-      primaryKey: ['userID', 'stateCode'],
-    },
-  } as const;
+    {},
+  );
 
   const context = new ZeroContext(
-    schemas,
+    schema.tables,
     null as unknown as AddQuery,
     testBatchViewUpdates,
   );
@@ -85,21 +87,22 @@ test('getSource', () => {
     }
   `);
 });
+const schema = createSchema(
+  1,
+  {
+    t1: table('t1')
+      .columns({
+        id: string(),
+        name: string(),
+      })
+      .primaryKey('id'),
+  },
+  {},
+);
 
 test('processChanges', () => {
-  const schemas = {
-    t1: {
-      tableName: 't1',
-      columns: {
-        id: {type: 'string'},
-        name: {type: 'string'},
-      },
-      primaryKey: ['id'],
-    } as const,
-  };
-
   const context = new ZeroContext(
-    schemas,
+    schema.tables,
     null as unknown as AddQuery,
     testBatchViewUpdates,
   );
@@ -146,16 +149,6 @@ test('processChanges', () => {
 });
 
 test('processChanges wraps source updates with batchViewUpdates', () => {
-  const schemas = {
-    t1: {
-      tableName: 't1',
-      columns: {
-        id: {type: 'string'},
-        name: {type: 'string'},
-      },
-      primaryKey: ['id'],
-    } as const,
-  };
   let batchViewUpdatesCalls = 0;
   const batchViewUpdates = (applyViewUpdates: () => void) => {
     batchViewUpdatesCalls++;
@@ -172,7 +165,7 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
     ]);
   };
   const context = new ZeroContext(
-    schemas,
+    schema.tables,
     null as unknown as AddQuery,
     batchViewUpdates,
   );
@@ -206,27 +199,27 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
 });
 
 test('transactions', () => {
-  const schemas = {
-    server: {
-      tableName: 'server',
-      columns: {
-        id: {type: 'string'},
-      },
-      primaryKey: ['id'],
+  const schema = createSchema(
+    1,
+    {
+      server: table('server')
+        .columns({
+          id: string(),
+        })
+        .primaryKey('id'),
+      flair: table('flair')
+        .columns({
+          id: string(),
+          serverID: string(),
+          description: string(),
+        })
+        .primaryKey('id'),
     },
-    flair: {
-      tableName: 'flair',
-      columns: {
-        id: {type: 'string'},
-        serverID: {type: 'string'},
-        description: {type: 'string'},
-      },
-      primaryKey: ['id'],
-    },
-  } as const;
+    {},
+  );
 
   const context = new ZeroContext(
-    schemas,
+    schema.tables,
     null as unknown as AddQuery,
     testBatchViewUpdates,
   );
@@ -294,22 +287,12 @@ test('transactions', () => {
 });
 
 test('batchViewUpdates errors if applyViewUpdates is not called', () => {
-  const schemas = {
-    t1: {
-      tableName: 't1',
-      columns: {
-        id: {type: 'string'},
-        name: {type: 'string'},
-      },
-      primaryKey: ['id'],
-    } as const,
-  };
   let batchViewUpdatesCalls = 0;
   const batchViewUpdates = (_applyViewUpdates: () => void) => {
     batchViewUpdatesCalls++;
   };
   const context = new ZeroContext(
-    schemas,
+    schema.tables,
     null as unknown as AddQuery,
     batchViewUpdates,
   );
@@ -320,23 +303,13 @@ test('batchViewUpdates errors if applyViewUpdates is not called', () => {
 });
 
 test('batchViewUpdates returns value', () => {
-  const schemas = {
-    t1: {
-      tableName: 't1',
-      columns: {
-        id: {type: 'string'},
-        name: {type: 'string'},
-      },
-      primaryKey: ['id'],
-    } as const,
-  };
   let batchViewUpdatesCalls = 0;
   const batchViewUpdates = (applyViewUpdates: () => void) => {
     applyViewUpdates();
     batchViewUpdatesCalls++;
   };
   const context = new ZeroContext(
-    schemas,
+    schema.tables,
     null as unknown as AddQuery,
     batchViewUpdates,
   );
