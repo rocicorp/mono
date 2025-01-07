@@ -1,99 +1,88 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/ban-types */
 import {expectTypeOf, test} from 'vitest';
-import type {
-  FieldRelationship,
-  JunctionRelationship,
-  Relationship,
-  TableSchema,
-} from './table-schema.js';
+import type {Relationship, TableSchema} from './table-schema.js';
+import {number, string, table} from './builder/table-builder.js';
+import {relationships} from './builder/relationship-builder.js';
+import {createSchema} from './mod.js';
 
 test('relationship schema types', () => {
-  const issueLabelSchema = {
-    tableName: 'issueLabel',
-    primaryKey: ['id'],
-    columns: {
-      id: {type: 'number'},
-      issueID: {type: 'number'},
-      labelID: {type: 'number'},
-    },
-    relationships: {},
-  } as const;
+  const issueLabel = table('issueLabel')
+    .columns({
+      id: number(),
+      issueID: number(),
+      labelID: number(),
+    })
+    .primaryKey('id');
 
-  const commentSchema = {
-    tableName: 'comment',
-    primaryKey: ['id'],
-    columns: {
-      id: {type: 'number'},
-      issueID: {type: 'number'},
-      body: {type: 'string'},
-    },
-    relationships: {},
-  } as const;
+  const comment = table('comment')
+    .columns({
+      id: number(),
+      issueID: number(),
+      body: string(),
+    })
+    .primaryKey('id');
 
-  const labelSchema = {
-    tableName: 'label',
-    primaryKey: ['id'],
-    columns: {
-      id: {type: 'number'},
-      issueID: {type: 'number'},
-      name: {type: 'string'},
-    },
-    relationships: {},
-  } as const;
+  const label = table('label')
+    .columns({
+      id: number(),
+      issueID: number(),
+      name: string(),
+    })
+    .primaryKey('id');
 
-  const issueSchema = {
-    tableName: 'issue',
-    primaryKey: ['id'],
-    columns: {
-      id: {type: 'number'},
-      title: {type: 'string'},
-      body: {type: 'string'},
-    },
-    relationships: {
-      comments: {
+  const issue = table('issue')
+    .columns({
+      id: number(),
+      title: string(),
+      body: string(),
+    })
+    .primaryKey('id');
+
+  const issueRelationships = relationships(issue, connect => ({
+    comments: connect({
+      sourceField: ['id'],
+      destField: ['issueID'],
+      destSchema: comment,
+    }),
+    labels: connect(
+      {
         sourceField: ['id'],
         destField: ['issueID'],
-        destSchema: commentSchema,
+        destSchema: issueLabel,
       },
-      labels: [
-        {
-          sourceField: ['id'],
-          destField: ['issueID'],
-          destSchema: issueLabelSchema,
-        },
-        {
-          sourceField: ['labelID'],
-          destField: ['id'],
-          destSchema: () => labelSchema,
-        },
-      ],
+      {
+        sourceField: ['labelID'],
+        destField: ['id'],
+        destSchema: label,
+      },
+    ),
+  }));
+
+  const schema = createSchema(
+    1,
+    {
+      issueLabel,
+      comment,
+      label,
+      issue,
     },
-  } as const;
+    {
+      issueRelationships,
+    },
+  );
 
-  expectTypeOf(issueLabelSchema).toMatchTypeOf<TableSchema>();
-  type IssueLabel = typeof issueLabelSchema;
+  expectTypeOf(schema.tables.issueLabel).toMatchTypeOf<TableSchema>();
 
-  expectTypeOf(commentSchema).toMatchTypeOf<TableSchema>();
-  type Comment = typeof commentSchema;
+  expectTypeOf(schema.tables.comment).toMatchTypeOf<TableSchema>();
 
-  expectTypeOf(labelSchema).toMatchTypeOf<TableSchema>();
-  type Label = typeof labelSchema;
+  expectTypeOf(schema.tables.label).toMatchTypeOf<TableSchema>();
 
-  expectTypeOf(issueSchema).toMatchTypeOf<TableSchema>();
-  type Issue = typeof issueSchema;
+  expectTypeOf(schema.tables.issue).toMatchTypeOf<TableSchema>();
 
   expectTypeOf(
-    issueSchema.relationships.comments,
+    schema.relationships.issue.comments,
   ).toMatchTypeOf<Relationship>();
-  expectTypeOf(issueSchema.relationships.comments).toMatchTypeOf<
-    FieldRelationship<Issue, Comment>
-  >();
-  expectTypeOf(issueSchema.relationships.comments).not.toMatchTypeOf<
-    JunctionRelationship<Issue, any, Comment>
-  >();
 
-  expectTypeOf(issueSchema.relationships.labels).toMatchTypeOf<
-    JunctionRelationship<Issue, IssueLabel, Label>
-  >();
+  expectTypeOf(schema.relationships.issue.labels).toMatchTypeOf<Relationship>();
 });

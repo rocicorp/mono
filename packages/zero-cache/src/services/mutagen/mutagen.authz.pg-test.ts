@@ -6,8 +6,7 @@ import {
   definePermissions,
   NOBODY_CAN,
 } from '../../../../zero-schema/src/permissions.js';
-import {createSchema} from '../../../../zero-schema/src/schema.js';
-import type {TableSchema} from '../../../../zero-schema/src/table-schema.js';
+import type {FullSchema} from '../../../../zero-schema/src/table-schema.js';
 import {ExpressionBuilder} from '../../../../zql/src/query/expression.js';
 import type {Row} from '../../../../zql/src/query/query.js';
 import {Database} from '../../../../zqlite/src/db.js';
@@ -16,6 +15,14 @@ import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {zeroSchema} from './mutagen-test-shared.js';
 import {processMutation} from './mutagen.js';
+import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.js';
+import {
+  boolean,
+  json,
+  number,
+  string,
+  table,
+} from '../../../../zero-schema/src/builder/table-builder.js';
 
 const SHARD_ID = '0';
 const CG_ID = 'abc';
@@ -111,90 +118,78 @@ function createReplicaTables(db: Database) {
   db.exec(sqlSchema);
 }
 
-const schema = createSchema({
-  version: TEST_SCHEMA_VERSION,
-  tables: {
-    user: {
-      tableName: 'user',
-      columns: {
-        id: {type: 'string'},
-        role: {type: 'string'},
-      },
-      primaryKey: ['id'],
-      relationships: {},
-    },
-    roCell: {
-      tableName: 'roCell',
-      columns: {
-        id: {type: 'string'},
-        a: {type: 'string'},
-        b: {type: 'string', readOnly: true},
-      },
-      primaryKey: ['id'],
-      relationships: {},
-    },
-    roRow: {
-      tableName: 'roRow',
-      columns: {
-        id: {type: 'string'},
-        a: {type: 'string'},
-        b: {type: 'string'},
-      },
-      primaryKey: ['id'],
-      relationships: {},
-    },
-    adminOnlyCell: {
-      tableName: 'adminOnlyCell',
-      columns: {
-        id: {type: 'string'},
-        a: {type: 'string'},
-        adminLocked: {type: 'boolean'},
-      },
-      primaryKey: ['id'],
-      relationships: {},
-    },
-    adminOnlyRow: {
-      tableName: 'adminOnlyRow',
-      columns: {
-        id: {type: 'string'},
-        a: {type: 'string'},
-        adminLocked: {type: 'boolean'},
-      },
-      primaryKey: ['id'],
-      relationships: {},
-    },
-    loggedInRow: {
-      tableName: 'loggedInRow',
-      columns: {
-        id: {type: 'string'},
-        a: {type: 'string'},
-      },
-      primaryKey: ['id'],
-      relationships: {},
-    },
-    userMatch: {
-      tableName: 'userMatch',
-      columns: {
-        id: {type: 'string'},
-        a: {type: 'string'},
-      },
-      primaryKey: ['id'],
-      relationships: {},
-    },
-    dataTypeTest: {
-      tableName: 'dataTypeTest',
-      columns: {
-        id: {type: 'string'},
-        j: {type: 'json', optional: true},
-        b: {type: 'boolean', optional: true},
-        r: {type: 'number', optional: true},
-        i: {type: 'number', optional: true},
-      },
-      primaryKey: ['id'],
-      relationships: {},
-    },
+const schema = createSchema(
+  TEST_SCHEMA_VERSION,
+  {
+    user: table('user')
+      .columns({
+        id: string(),
+        role: string(),
+      })
+      .primaryKey('id'),
+
+    roCell: table('roCell')
+      .columns({
+        id: string(),
+        a: string(),
+        b: string(),
+      })
+      .primaryKey('id'),
+
+    roRow: table('roRow')
+      .columns({
+        id: string(),
+        a: string(),
+        b: string(),
+      })
+      .primaryKey('id'),
+
+    adminOnlyCell: table('adminOnlyCell')
+      .columns({
+        id: string(),
+        a: string(),
+        adminLocked: boolean(),
+      })
+      .primaryKey('id'),
+
+    adminOnlyRow: table('adminOnlyRow')
+      .columns({
+        id: string(),
+        a: string(),
+        adminLocked: boolean(),
+      })
+      .primaryKey('id'),
+
+    loggedInRow: table('loggedInRow')
+      .columns({
+        id: string(),
+        a: string(),
+      })
+      .primaryKey('id'),
+
+    userMatch: table('userMatch')
+      .columns({
+        id: string(),
+        a: string(),
+      })
+      .primaryKey('id'),
+
+    dataTypeTest: table('dataTypeTest')
+      .columns({
+        id: string(),
+        j: json().optional(),
+        b: boolean().optional(),
+        r: number().optional(),
+        i: number().optional(),
+      })
+      .primaryKey('id'),
   },
-});
+  {
+    // No relationships were defined in the original schema
+  },
+);
+
+type Schema = typeof schema;
 
 type AuthData = {
   sub: string;
@@ -206,24 +201,24 @@ const permissionsConfig = await definePermissions<AuthData, typeof schema>(
   () => {
     const allowIfAdmin = (
       authData: AuthData,
-      {cmpLit}: ExpressionBuilder<TableSchema>,
+      {cmpLit}: ExpressionBuilder<FullSchema, string>,
     ) => cmpLit(authData.role, '=', 'admin');
 
     const allowIfNotAdminLockedRow = (
       _authData: AuthData,
-      {cmp}: ExpressionBuilder<typeof schema.tables.adminOnlyRow>,
+      {cmp}: ExpressionBuilder<Schema, 'adminOnlyRow'>,
     ) => cmp('adminLocked', false);
     const allowIfNotAdminLockedCell = (
       _authData: AuthData,
-      {cmp}: ExpressionBuilder<typeof schema.tables.adminOnlyCell>,
+      {cmp}: ExpressionBuilder<Schema, 'adminOnlyCell'>,
     ) => cmp('adminLocked', false);
     const allowIfLoggedIn = (
       authData: AuthData,
-      {cmpLit}: ExpressionBuilder<TableSchema>,
+      {cmpLit}: ExpressionBuilder<FullSchema, string>,
     ) => cmpLit(authData.sub, 'IS NOT', null);
     const allowIfPostMutationIDMatchesLoggedInUser = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<typeof schema.tables.userMatch>,
+      {cmp}: ExpressionBuilder<Schema, 'userMatch'>,
     ) => cmp('id', '=', authData.sub);
 
     return {

@@ -1,5 +1,4 @@
 import type {AST} from '../../../../zero-protocol/src/ast.js';
-import {normalizeTables} from '../../../../zero-schema/src/normalize-table-schema.js';
 import {MemorySource} from '../../ivm/memory-source.js';
 import {MemoryStorage} from '../../ivm/memory-storage.js';
 import type {Source} from '../../ivm/source.js';
@@ -15,7 +14,7 @@ import {
   labelSchema,
   revisionSchema,
   userSchema,
-} from './testSchemas.js';
+} from './test-schemas.js';
 
 export class QueryDelegateImpl implements QueryDelegate {
   readonly #sources: Record<string, Source> = makeSources();
@@ -63,14 +62,14 @@ export class QueryDelegateImpl implements QueryDelegate {
 }
 
 function makeSources() {
-  const {user, issue, comment, revision, label, issueLabel} = normalizeTables({
+  const {user, issue, comment, revision, label, issueLabel} = {
     user: userSchema,
     issue: issueSchema,
     comment: commentSchema,
     revision: revisionSchema,
     label: labelSchema,
     issueLabel: issueLabelSchema,
-  });
+  };
 
   return {
     user: new MemorySource('user', user.columns, user.primaryKey),

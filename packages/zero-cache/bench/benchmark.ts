@@ -63,7 +63,7 @@ export function bench(opts: Options) {
     },
   };
 
-  const issueQuery = newQuery(host, schema.issue);
+  const issueQuery = newQuery(host, schema, 'issue');
   const q = issueQuery
     .related('labels')
     .orderBy('modified', 'desc')

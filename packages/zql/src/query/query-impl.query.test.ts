@@ -4,9 +4,12 @@ import {must} from '../../../shared/src/must.js';
 import {MemorySource} from '../ivm/memory-source.js';
 import {newQuery, type QueryDelegate, QueryImpl} from './query-impl.js';
 import type {AdvancedQuery} from './query-internal.js';
-import type {DefaultQueryResultRow} from './query.js';
 import {QueryDelegateImpl} from './test/query-delegate.js';
-import {issueSchema, userSchema} from './test/testSchemas.js';
+import {schema} from './test/test-schemas.js';
+import type {FullSchema} from '../../../zero-schema/src/table-schema.js';
+import {number, table} from '../../../zero-schema/src/builder/table-builder.js';
+import {relationships} from '../../../zero-schema/src/builder/relationship-builder.js';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.js';
 
 /**
  * Some basic manual tests to get us started.
@@ -131,7 +134,7 @@ function addData(queryDelegate: QueryDelegate) {
 describe('bare select', () => {
   test('empty source', () => {
     const queryDelegate = new QueryDelegateImpl();
-    const issueQuery = newQuery(queryDelegate, issueSchema);
+    const issueQuery = newQuery(queryDelegate, schema, 'issue');
     const m = issueQuery.materialize();
 
     let rows: readonly unknown[] = [];
@@ -153,7 +156,7 @@ describe('bare select', () => {
 
   test('empty source followed by changes', () => {
     const queryDelegate = new QueryDelegateImpl();
-    const issueQuery = newQuery(queryDelegate, issueSchema);
+    const issueQuery = newQuery(queryDelegate, schema, 'issue');
     const m = issueQuery.materialize();
 
     let rows: unknown[] = [];
@@ -209,7 +212,7 @@ describe('bare select', () => {
       },
     });
 
-    const issueQuery = newQuery(queryDelegate, issueSchema);
+    const issueQuery = newQuery(queryDelegate, schema, 'issue');
     const m = issueQuery.materialize();
 
     let rows: unknown[] = [];
@@ -242,7 +245,7 @@ describe('bare select', () => {
       },
     });
 
-    const issueQuery = newQuery(queryDelegate, issueSchema);
+    const issueQuery = newQuery(queryDelegate, schema, 'issue');
     const m = issueQuery.materialize();
 
     let rows: unknown[] = [];
@@ -292,7 +295,7 @@ describe('bare select', () => {
 
   test('changes after destroy', () => {
     const queryDelegate = new QueryDelegateImpl();
-    const issueQuery = newQuery(queryDelegate, issueSchema);
+    const issueQuery = newQuery(queryDelegate, schema, 'issue');
     const m = issueQuery.materialize();
 
     let rows: unknown[] = [];
@@ -352,7 +355,7 @@ describe('joins and filters', () => {
     const queryDelegate = new QueryDelegateImpl();
     addData(queryDelegate);
 
-    const issueQuery = newQuery(queryDelegate, issueSchema).where(
+    const issueQuery = newQuery(queryDelegate, schema, 'issue').where(
       'title',
       '=',
       'issue 1',
@@ -427,7 +430,7 @@ describe('joins and filters', () => {
     const queryDelegate = new QueryDelegateImpl();
     addData(queryDelegate);
 
-    const issueQuery = newQuery(queryDelegate, issueSchema)
+    const issueQuery = newQuery(queryDelegate, schema, 'issue')
       .related('labels')
       .related('owner')
       .related('comments');
@@ -547,16 +550,16 @@ describe('joins and filters', () => {
     const queryDelegate = new QueryDelegateImpl();
     addData(queryDelegate);
 
-    const q1 = newQuery(queryDelegate, issueSchema).one();
-    expect((q1 as QueryImpl<never, never>).format).toEqual({
+    const q1 = newQuery(queryDelegate, schema, 'issue').one();
+    expect((q1 as unknown as QueryImpl<FullSchema, string>).format).toEqual({
       singular: true,
       relationships: {},
     });
 
-    const q2 = newQuery(queryDelegate, issueSchema)
+    const q2 = newQuery(queryDelegate, schema, 'issue')
       .one()
       .related('comments', q => q.one());
-    expect((q2 as QueryImpl<never, never>).format).toEqual({
+    expect((q2 as unknown as QueryImpl<never, never>).format).toEqual({
       singular: true,
       relationships: {
         comments: {
@@ -566,7 +569,7 @@ describe('joins and filters', () => {
       },
     });
 
-    const q3 = newQuery(queryDelegate, issueSchema).related('comments', q =>
+    const q3 = newQuery(queryDelegate, schema, 'issue').related('comments', q =>
       q.one(),
     );
     expect((q3 as unknown as QueryImpl<never, never>).format).toEqual({
@@ -579,7 +582,7 @@ describe('joins and filters', () => {
       },
     });
 
-    const q4 = newQuery(queryDelegate, issueSchema)
+    const q4 = newQuery(queryDelegate, schema, 'issue')
       .related('comments', q =>
         q.one().where('id', '1').limit(20).orderBy('authorId', 'asc'),
       )
@@ -587,7 +590,7 @@ describe('joins and filters', () => {
       .where('closed', false)
       .limit(100)
       .orderBy('title', 'desc');
-    expect((q4 as QueryImpl<never, never>).format).toEqual({
+    expect((q4 as unknown as QueryImpl<never, never>).format).toEqual({
       singular: true,
       relationships: {
         comments: {
@@ -602,14 +605,14 @@ describe('joins and filters', () => {
 test('limit -1', () => {
   const queryDelegate = new QueryDelegateImpl();
   expect(() => {
-    newQuery(queryDelegate, issueSchema).limit(-1);
+    newQuery(queryDelegate, schema, 'issue').limit(-1);
   }).toThrow('Limit must be non-negative');
 });
 
 test('non int limit', () => {
   const queryDelegate = new QueryDelegateImpl();
   expect(() => {
-    newQuery(queryDelegate, issueSchema).limit(1.5);
+    newQuery(queryDelegate, schema, 'issue').limit(1.5);
   }).toThrow('Limit must be an integer');
 });
 
@@ -617,7 +620,7 @@ test('run', () => {
   const queryDelegate = new QueryDelegateImpl();
   addData(queryDelegate);
 
-  const issueQuery1 = newQuery(queryDelegate, issueSchema).where(
+  const issueQuery1 = newQuery(queryDelegate, schema, 'issue').where(
     'title',
     '=',
     'issue 1',
@@ -633,7 +636,7 @@ test('run', () => {
   expect(doubleFilterRows.map(r => r.id)).toEqual(['0001']);
   expect(doubleFilterWithNoResultsRows).toEqual([]);
 
-  const issueQuery2 = newQuery(queryDelegate, issueSchema)
+  const issueQuery2 = newQuery(queryDelegate, schema, 'issue')
     .related('labels')
     .related('owner')
     .related('comments');
@@ -727,12 +730,9 @@ test('view creation is wrapped in context.batchViewUpdates call', () => {
   }
   const queryDelegate = new TestQueryDelegate();
 
-  const issueQuery = newQuery(queryDelegate, issueSchema);
+  const issueQuery = newQuery(queryDelegate, schema, 'issue');
   const view = (
-    issueQuery as AdvancedQuery<
-      typeof issueSchema,
-      DefaultQueryResultRow<typeof issueSchema>
-    >
+    issueQuery as AdvancedQuery<typeof schema, 'issue'>
   ).materialize(viewFactory);
   expect(viewFactoryCalls).toEqual(1);
   expect(view).toBe(testView);
@@ -742,7 +742,7 @@ test('json columns are returned as JS objects', () => {
   const queryDelegate = new QueryDelegateImpl();
   addData(queryDelegate);
 
-  const rows = newQuery(queryDelegate, userSchema).run();
+  const rows = newQuery(queryDelegate, schema, 'user').run();
   expect(rows).toEqual([
     {
       id: '0001',
@@ -768,7 +768,7 @@ test('complex expression', () => {
   const queryDelegate = new QueryDelegateImpl();
   addData(queryDelegate);
 
-  let rows = newQuery(queryDelegate, issueSchema)
+  let rows = newQuery(queryDelegate, schema, 'issue')
     .where(({or, cmp}) =>
       or(cmp('title', '=', 'issue 1'), cmp('title', '=', 'issue 2')),
     )
@@ -793,7 +793,7 @@ test('complex expression', () => {
     ]
   `);
 
-  rows = newQuery(queryDelegate, issueSchema)
+  rows = newQuery(queryDelegate, schema, 'issue')
     .where(({and, cmp, or}) =>
       and(
         cmp('ownerId', '=', '0001'),
@@ -819,19 +819,19 @@ test('null compare', () => {
   const queryDelegate = new QueryDelegateImpl();
   addData(queryDelegate);
 
-  let rows = newQuery(queryDelegate, issueSchema)
+  let rows = newQuery(queryDelegate, schema, 'issue')
     .where('ownerId', '=', null)
     .run();
 
   expect(rows).toEqual([]);
 
-  rows = newQuery(queryDelegate, issueSchema)
+  rows = newQuery(queryDelegate, schema, 'issue')
     .where('ownerId', '!=', null)
     .run();
 
   expect(rows).toEqual([]);
 
-  rows = newQuery(queryDelegate, issueSchema)
+  rows = newQuery(queryDelegate, schema, 'issue')
     .where('ownerId', 'IS', null)
     .run();
 
@@ -845,7 +845,7 @@ test('null compare', () => {
     },
   ]);
 
-  rows = newQuery(queryDelegate, issueSchema)
+  rows = newQuery(queryDelegate, schema, 'issue')
     .where('ownerId', 'IS NOT', null)
     .run();
 
@@ -871,13 +871,13 @@ test('literal filter', () => {
   const queryDelegate = new QueryDelegateImpl();
   addData(queryDelegate);
 
-  let rows = newQuery(queryDelegate, issueSchema)
+  let rows = newQuery(queryDelegate, schema, 'issue')
     .where(({cmpLit}) => cmpLit(true, '=', false))
     .run();
 
   expect(rows).toEqual([]);
 
-  rows = newQuery(queryDelegate, issueSchema)
+  rows = newQuery(queryDelegate, schema, 'issue')
     .where(({cmpLit}) => cmpLit(true, '=', true))
     .run();
 
@@ -907,39 +907,52 @@ test('literal filter', () => {
 });
 
 test('join with compound keys', () => {
-  const bSchema = {
-    tableName: 'b',
-    columns: {
-      id: {type: 'number'},
-      b1: {type: 'number'},
-      b2: {type: 'number'},
-      b3: {type: 'number'},
-    },
-    primaryKey: ['id'],
-    relationships: {},
-  } as const;
+  const b = table('b')
+    .columns({
+      id: number(),
+      b1: number(),
+      b2: number(),
+      b3: number(),
+    })
+    .primaryKey('id');
 
-  const aSchema = {
-    tableName: 'a',
-    columns: {
-      id: {type: 'number'},
-      a1: {type: 'number'},
-      a2: {type: 'number'},
-      a3: {type: 'number'},
+  const a = table('a')
+    .columns({
+      id: number(),
+      a1: number(),
+      a2: number(),
+      a3: number(),
+    })
+    .primaryKey('id');
+
+  const aRelationships = relationships(a, connect => ({
+    b: connect({
+      sourceField: ['a1', 'a2'],
+      destField: ['b1', 'b2'],
+      destSchema: b,
+    }),
+  }));
+
+  const schema = createSchema(
+    1,
+    {
+      a,
+      b,
     },
-    primaryKey: ['id'],
-    relationships: {
-      b: {
-        sourceField: ['a1', 'a2'],
-        destField: ['b1', 'b2'],
-        destSchema: bSchema,
-      },
-    },
-  } as const;
+    {aRelationships},
+  );
 
   const sources = {
-    a: new MemorySource('a', aSchema.columns, aSchema.primaryKey),
-    b: new MemorySource('b', bSchema.columns, bSchema.primaryKey),
+    a: new MemorySource(
+      'a',
+      schema.tables.a.columns,
+      schema.tables.a.primaryKey,
+    ),
+    b: new MemorySource(
+      'b',
+      schema.tables.b.columns,
+      schema.tables.b.primaryKey,
+    ),
   };
 
   const queryDelegate = new QueryDelegateImpl(sources);
@@ -968,7 +981,7 @@ test('join with compound keys', () => {
     });
   }
 
-  const rows = newQuery(queryDelegate, aSchema).related('b').run();
+  const rows = newQuery(queryDelegate, schema, 'a').related('b').run();
 
   expect(rows).toMatchInlineSnapshot(`
     [
@@ -1057,7 +1070,7 @@ test('where exists', () => {
     },
   });
 
-  const materialized = newQuery(queryDelegate, issueSchema)
+  const materialized = newQuery(queryDelegate, schema, 'issue')
     .where('closed', true)
     .whereExists('labels', q => q.where('name', 'bug'))
     .related('labels')
@@ -1104,7 +1117,7 @@ test('where exists', () => {
 
 test('result type unknown then complete', async () => {
   const queryDelegate = new QueryDelegateImpl();
-  const issueQuery = newQuery(queryDelegate, issueSchema);
+  const issueQuery = newQuery(queryDelegate, schema, 'issue');
   const m = issueQuery.materialize();
 
   let rows: unknown[] = [undefined];
@@ -1131,7 +1144,7 @@ test('result type unknown then complete', async () => {
 test('result type initially complete', () => {
   const queryDelegate = new QueryDelegateImpl();
   queryDelegate.synchronouslyCallNextGotCallback = true;
-  const issueQuery = newQuery(queryDelegate, issueSchema);
+  const issueQuery = newQuery(queryDelegate, schema, 'issue');
   const m = issueQuery.materialize();
 
   let rows: unknown[] = [undefined];

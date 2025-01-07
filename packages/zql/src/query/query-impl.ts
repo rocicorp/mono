@@ -6,6 +6,7 @@ import type {Writable} from '../../../shared/src/writable.js';
 import {hashOfAST} from '../../../zero-protocol/src/ast-hash.js';
 import type {
   AST,
+  CompoundKey,
   Condition,
   Ordering,
   Parameter,
@@ -13,13 +14,9 @@ import type {
 } from '../../../zero-protocol/src/ast.js';
 import type {Row as IVMRow} from '../../../zero-protocol/src/data.js';
 import {
-  normalizeTableSchema,
-  type NormalizedTableSchema,
-} from '../../../zero-schema/src/normalize-table-schema.js';
-import {
-  isFieldRelationship,
-  isJunctionRelationship,
-  type PullSchemaForRelationship,
+  isOneHop,
+  isTwoHop,
+  type FullSchema,
   type TableSchema,
 } from '../../../zero-schema/src/table-schema.js';
 import {buildPipeline, type BuilderDelegate} from '../builder/builder.js';
@@ -32,39 +29,42 @@ import {
   cmp,
   ExpressionBuilder,
   type ExpressionFactory,
-  type RelationshipName,
 } from './expression.js';
 import type {AdvancedQuery} from './query-internal.js';
 import type {
-  AddSubselect,
-  DefaultQueryResultRow,
   GetFieldTypeNoUndefined,
-  MakeSingular,
+  HumanReadable,
   Operator,
+  PullRow,
   Query,
-  QueryType,
-  Row,
-  Smash,
 } from './query.js';
 import type {TypedView} from './typed-view.js';
 
+type AnyQuery = Query<FullSchema, string, any>;
+
 export function newQuery<
-  TSchema extends TableSchema,
-  TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
->(delegate: QueryDelegate, tableSchema: TSchema): Query<TSchema, TReturn> {
-  return new QueryImpl(delegate, normalizeTableSchema(tableSchema));
+  TSchema extends FullSchema,
+  TTable extends keyof TSchema['tables'] & string,
+>(
+  delegate: QueryDelegate,
+  schema: TSchema,
+  table: TTable,
+): Query<TSchema, TTable> {
+  return new QueryImpl(delegate, schema, table);
 }
 
 function newQueryWithDetails<
-  TSchema extends TableSchema,
-  TReturn extends QueryType,
+  TSchema extends FullSchema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
 >(
   delegate: QueryDelegate,
-  schema: NormalizedTableSchema,
+  schema: TSchema,
+  tableName: TTable,
   ast: AST,
   format: Format | undefined,
-): Query<TSchema, TReturn> {
-  return new QueryImpl(delegate, schema, ast, format);
+): Query<TSchema, TTable, TReturn> {
+  return new QueryImpl(delegate, schema, tableName, ast, format);
 }
 
 export type CommitListener = () => void;
@@ -90,23 +90,27 @@ export function staticParam(
 export const SUBQ_PREFIX = 'zsubq_';
 
 export abstract class AbstractQuery<
-  TSchema extends TableSchema,
-  TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
-> implements AdvancedQuery<TSchema, TReturn>
+  TSchema extends FullSchema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn = PullRow<TTable, TSchema>,
+> implements AdvancedQuery<TSchema, TTable, TReturn>
 {
   readonly #ast: AST;
-  readonly #schema: NormalizedTableSchema;
+  readonly #schema: TSchema;
+  readonly #tableName: TTable;
   readonly #format: Format;
   #hash: string = '';
 
   constructor(
-    schema: NormalizedTableSchema,
+    schema: TSchema,
+    tableName: TTable,
     ast: AST,
     format?: Format | undefined,
   ) {
     this.#ast = ast;
     this.#format = format ?? {singular: false, relationships: {}};
     this.#schema = schema;
+    this.#tableName = tableName;
   }
 
   get format(): Format {
@@ -125,17 +129,20 @@ export abstract class AbstractQuery<
   protected abstract _system: System;
 
   protected abstract _newQuery<
-    TSchema extends TableSchema,
-    TReturn extends QueryType,
+    TSchema extends FullSchema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
   >(
-    schema: NormalizedTableSchema,
+    schema: TSchema,
+    table: TTable,
     ast: AST,
     format: Format | undefined,
-  ): Query<TSchema, TReturn>;
+  ): Query<TSchema, TTable, TReturn>;
 
-  one(): Query<TSchema, MakeSingular<TReturn>> {
+  one(): Query<TSchema, TTable, TReturn | undefined> {
     return this._newQuery(
       this.#schema,
+      this.#tableName,
       {
         ...this.#ast,
         limit: 1,
@@ -146,68 +153,53 @@ export abstract class AbstractQuery<
       },
     );
   }
-
-  whereExists(relationship: RelationshipName<TSchema>): Query<TSchema, TReturn>;
-  whereExists<TRelationship extends RelationshipName<TSchema>>(
-    relationship: TRelationship,
-    cb: (
-      query: Query<
-        PullSchemaForRelationship<TSchema, TRelationship>,
-        DefaultQueryResultRow<PullSchemaForRelationship<TSchema, TRelationship>>
-      >,
-    ) => Query<TableSchema, QueryType> = q => q as any,
-  ): Query<TSchema, TReturn> {
+  whereExists(
+    relationship: string,
+    cb?: (q: AnyQuery) => AnyQuery,
+  ): Query<TSchema, TTable, TReturn> {
     return this.where(({exists}) => exists(relationship, cb));
   }
 
-  related<TRelationship extends keyof TSchema['relationships']>(
-    relationship: TRelationship,
-  ): Query<
-    TSchema,
-    AddSubselect<
-      Query<
-        PullSchemaForRelationship<TSchema, TRelationship>,
-        DefaultQueryResultRow<PullSchemaForRelationship<TSchema, TRelationship>>
-      >,
-      TReturn,
-      TRelationship & string
-    >
-  >;
-  related<
-    TRelationship extends keyof TSchema['relationships'] & string,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    TSub extends Query<any, any>,
-  >(
-    relationship: TRelationship,
-    cb: (
-      query: Query<
-        PullSchemaForRelationship<TSchema, TRelationship>,
-        DefaultQueryResultRow<PullSchemaForRelationship<TSchema, TRelationship>>
-      >,
-    ) => TSub = q => q as any,
-  ) {
+  related(relationship: string, cb?: (q: AnyQuery) => AnyQuery): AnyQuery {
     if (relationship.startsWith(SUBQ_PREFIX)) {
       throw new Error(
         `Relationship names may not start with "${SUBQ_PREFIX}". That is a reserved prefix.`,
       );
     }
-    const related = this.#schema.relationships[relationship];
+    cb = cb ?? (q => q);
+
+    const related = this.#schema.relationships[this.#tableName][relationship];
     assert(related, 'Invalid relationship');
-    if (isFieldRelationship(related)) {
-      const {destSchema} = related;
+    if (isOneHop(related)) {
+      const {destSchema, destField, sourceField} = related[0];
       const sq = cb(
         this._newQuery(
+          this.#schema,
           destSchema,
           {
-            table: destSchema.tableName,
+            table: destSchema,
             alias: relationship,
           },
           undefined,
         ),
       ) as unknown as QueryImpl<any, any>;
 
+      assert(
+        isCompoundKey(sourceField),
+        'The source of a relationship must specify at last 1 field',
+      );
+      assert(
+        isCompoundKey(destField),
+        'The destination of a relationship must specify at last 1 field',
+      );
+      assert(
+        sourceField.length === destField.length,
+        'The source and destination of a relationship must have the same number of fields',
+      );
+
       return this._newQuery(
         this.#schema,
+        this.#tableName,
         {
           ...this.#ast,
           related: [
@@ -215,10 +207,13 @@ export abstract class AbstractQuery<
             {
               system: this._system,
               correlation: {
-                parentField: related.sourceField,
-                childField: related.destField,
+                parentField: sourceField,
+                childField: destField,
               },
-              subquery: addPrimaryKeysToAst(destSchema, sq.#ast),
+              subquery: addPrimaryKeysToAst(
+                this.#schema.tables[destSchema],
+                sq.#ast,
+              ),
             },
           ],
         },
@@ -232,24 +227,31 @@ export abstract class AbstractQuery<
       );
     }
 
-    if (isJunctionRelationship(related)) {
+    if (isTwoHop(related)) {
       assert(related.length === 2, 'Invalid relationship');
       const [firstRelation, secondRelation] = related;
       const {destSchema} = secondRelation;
       const junctionSchema = firstRelation.destSchema;
       const sq = cb(
         this._newQuery(
+          this.#schema,
           destSchema,
           {
-            table: destSchema.tableName,
+            table: destSchema,
             alias: relationship,
           },
           undefined,
         ),
-      ) as unknown as QueryImpl<TableSchema, QueryType>;
+      ) as unknown as QueryImpl<FullSchema, string>;
+
+      assert(isCompoundKey(firstRelation.sourceField), 'Invalid relationship');
+      assert(isCompoundKey(firstRelation.destField), 'Invalid relationship');
+      assert(isCompoundKey(secondRelation.sourceField), 'Invalid relationship');
+      assert(isCompoundKey(secondRelation.destField), 'Invalid relationship');
 
       return this._newQuery(
         this.#schema,
+        this.#tableName,
         {
           ...this.#ast,
           related: [
@@ -261,9 +263,12 @@ export abstract class AbstractQuery<
                 childField: firstRelation.destField,
               },
               subquery: {
-                table: junctionSchema.tableName,
+                table: junctionSchema,
                 alias: relationship,
-                orderBy: addPrimaryKeys(junctionSchema, undefined),
+                orderBy: addPrimaryKeys(
+                  this.#schema.tables[junctionSchema],
+                  undefined,
+                ),
                 related: [
                   {
                     system: this._system,
@@ -272,7 +277,10 @@ export abstract class AbstractQuery<
                       childField: secondRelation.destField,
                     },
                     hidden: true,
-                    subquery: addPrimaryKeysToAst(destSchema, sq.#ast),
+                    subquery: addPrimaryKeysToAst(
+                      this.#schema.tables[destSchema],
+                      sq.#ast,
+                    ),
                   },
                 ],
               },
@@ -293,10 +301,10 @@ export abstract class AbstractQuery<
   }
 
   where(
-    fieldOrExpressionFactory: string | ExpressionFactory<TSchema>,
+    fieldOrExpressionFactory: string | ExpressionFactory<TSchema, TTable>,
     opOrValue?: Operator | GetFieldTypeNoUndefined<any, any, any> | Parameter,
     value?: GetFieldTypeNoUndefined<any, any, any> | Parameter,
-  ): Query<TSchema, TReturn> {
+  ): Query<TSchema, TTable, TReturn> {
     let cond: Condition;
 
     if (typeof fieldOrExpressionFactory === 'function') {
@@ -313,6 +321,7 @@ export abstract class AbstractQuery<
 
     return this._newQuery(
       this.#schema,
+      this.#tableName,
       {
         ...this.#ast,
         where: dnf(cond),
@@ -322,11 +331,12 @@ export abstract class AbstractQuery<
   }
 
   start(
-    row: Partial<Row<TSchema>>,
+    row: Partial<PullRow<TTable, TSchema>>,
     opts?: {inclusive: boolean} | undefined,
-  ): Query<TSchema, TReturn> {
+  ): Query<TSchema, TTable, TReturn> {
     return this._newQuery(
       this.#schema,
+      this.#tableName,
       {
         ...this.#ast,
         start: {
@@ -338,7 +348,7 @@ export abstract class AbstractQuery<
     );
   }
 
-  limit(limit: number): Query<TSchema, TReturn> {
+  limit(limit: number): Query<TSchema, TTable, TReturn> {
     if (limit < 0) {
       throw new Error('Limit must be non-negative');
     }
@@ -348,6 +358,7 @@ export abstract class AbstractQuery<
 
     return this._newQuery(
       this.#schema,
+      this.#tableName,
       {
         ...this.#ast,
         limit,
@@ -356,12 +367,13 @@ export abstract class AbstractQuery<
     );
   }
 
-  orderBy<TSelector extends keyof TSchema['columns']>(
+  orderBy<TSelector extends keyof TSchema['tables'][TTable]['columns']>(
     field: TSelector,
     direction: 'asc' | 'desc',
-  ): Query<TSchema, TReturn> {
+  ): Query<TSchema, TTable, TReturn> {
     return this._newQuery(
       this.#schema,
+      this.#tableName,
       {
         ...this.#ast,
         orderBy: [...(this.#ast.orderBy ?? []), [field as string, direction]],
@@ -372,20 +384,22 @@ export abstract class AbstractQuery<
 
   protected _exists = (
     relationship: string,
-    cb: (
-      query: Query<TableSchema, QueryType>,
-    ) => Query<TableSchema, QueryType> = q => q,
+    cb: (query: AnyQuery) => AnyQuery = q => q,
   ): Condition => {
-    const related = this.#schema.relationships[relationship];
+    const related = this.#schema.relationships[this.#tableName][relationship];
     assert(related, 'Invalid relationship');
 
-    if (isFieldRelationship(related)) {
-      const {destSchema} = related;
+    if (isOneHop(related)) {
+      const {destSchema, sourceField, destField} = related[0];
+      assert(isCompoundKey(sourceField), 'Invalid relationship');
+      assert(isCompoundKey(destField), 'Invalid relationship');
+
       const sq = cb(
         this._newQuery(
+          this.#schema,
           destSchema,
           {
-            table: destSchema.tableName,
+            table: destSchema,
             alias: `${SUBQ_PREFIX}${relationship}`,
           },
           undefined,
@@ -396,30 +410,38 @@ export abstract class AbstractQuery<
         related: {
           system: this._system,
           correlation: {
-            parentField: related.sourceField,
-            childField: related.destField,
+            parentField: sourceField,
+            childField: destField,
           },
-          subquery: addPrimaryKeysToAst(destSchema, sq.#ast),
+          subquery: addPrimaryKeysToAst(
+            this.#schema.tables[destSchema],
+            sq.#ast,
+          ),
         },
         op: 'EXISTS',
       };
     }
 
-    if (isJunctionRelationship(related)) {
+    if (isTwoHop(related)) {
       assert(related.length === 2, 'Invalid relationship');
       const [firstRelation, secondRelation] = related;
+      assert(isCompoundKey(firstRelation.sourceField), 'Invalid relationship');
+      assert(isCompoundKey(firstRelation.destField), 'Invalid relationship');
+      assert(isCompoundKey(secondRelation.sourceField), 'Invalid relationship');
+      assert(isCompoundKey(secondRelation.destField), 'Invalid relationship');
       const {destSchema} = secondRelation;
       const junctionSchema = firstRelation.destSchema;
       const queryToDest = cb(
         this._newQuery(
+          this.#schema,
           destSchema,
           {
-            table: destSchema.tableName,
+            table: destSchema,
             alias: `${SUBQ_PREFIX}${relationship}`,
           },
           undefined,
         ),
-      ) as QueryImpl<TableSchema, QueryType>;
+      );
 
       return {
         type: 'correlatedSubquery',
@@ -430,9 +452,12 @@ export abstract class AbstractQuery<
             childField: firstRelation.destField,
           },
           subquery: {
-            table: junctionSchema.tableName,
+            table: junctionSchema,
             alias: `${SUBQ_PREFIX}${relationship}`,
-            orderBy: addPrimaryKeys(junctionSchema, undefined),
+            orderBy: addPrimaryKeys(
+              this.#schema.tables[junctionSchema],
+              undefined,
+            ),
             where: {
               type: 'correlatedSubquery',
               related: {
@@ -442,7 +467,10 @@ export abstract class AbstractQuery<
                   childField: secondRelation.destField,
                 },
 
-                subquery: addPrimaryKeysToAst(destSchema, queryToDest.#ast),
+                subquery: addPrimaryKeysToAst(
+                  this.#schema.tables[destSchema],
+                  (queryToDest as QueryImpl<any, any>).#ast,
+                ),
               },
               op: 'EXISTS',
             },
@@ -459,7 +487,10 @@ export abstract class AbstractQuery<
 
   protected _completeAst(): AST {
     if (!this.#completedAST) {
-      const finalOrderBy = addPrimaryKeys(this.#schema, this.#ast.orderBy);
+      const finalOrderBy = addPrimaryKeys(
+        this.#schema.tables[this.#tableName],
+        this.#ast.orderBy,
+      );
       if (this.#ast.start) {
         const {row} = this.#ast.start;
         const narrowedRow: Writable<IVMRow> = {};
@@ -477,16 +508,19 @@ export abstract class AbstractQuery<
       } else {
         this.#completedAST = {
           ...this.#ast,
-          orderBy: addPrimaryKeys(this.#schema, this.#ast.orderBy),
+          orderBy: addPrimaryKeys(
+            this.#schema.tables[this.#tableName],
+            this.#ast.orderBy,
+          ),
         };
       }
     }
     return this.#completedAST;
   }
 
-  abstract materialize(): TypedView<Smash<TReturn>>;
-  abstract materialize<T>(factory: ViewFactory<TSchema, TReturn, T>): T;
-  abstract run(): Smash<TReturn>;
+  abstract materialize(): TypedView<HumanReadable<TReturn>>;
+  abstract materialize<T>(factory: ViewFactory<TSchema, TTable, TReturn, T>): T;
+  abstract run(): HumanReadable<TReturn>;
   abstract preload(): {
     cleanup: () => void;
     complete: Promise<void>;
@@ -497,19 +531,21 @@ export const astForTestingSymbol = Symbol();
 export const completedAstSymbol = Symbol();
 
 export class QueryImpl<
-  TSchema extends TableSchema,
-  TReturn extends QueryType = DefaultQueryResultRow<TSchema>,
-> extends AbstractQuery<TSchema, TReturn> {
+  TSchema extends FullSchema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn = PullRow<TTable, TSchema>,
+> extends AbstractQuery<TSchema, TTable, TReturn> {
   readonly #delegate: QueryDelegate;
   readonly #ast: AST;
 
   constructor(
     delegate: QueryDelegate,
-    schema: NormalizedTableSchema,
-    ast: AST = {table: schema.tableName},
+    schema: TSchema,
+    tableName: TTable,
+    ast: AST = {table: tableName},
     format?: Format | undefined,
   ) {
-    super(schema, ast, format);
+    super(schema, tableName, ast, format);
     this.#delegate = delegate;
     this.#ast = ast;
   }
@@ -525,15 +561,20 @@ export class QueryImpl<
     return this._completeAst();
   }
 
-  protected _newQuery<TSchema extends TableSchema, TReturn extends QueryType>(
-    schema: NormalizedTableSchema,
+  protected _newQuery<
+    TSchema extends FullSchema,
+    TTable extends string,
+    TReturn,
+  >(
+    schema: TSchema,
+    tableName: TTable,
     ast: AST,
     format: Format | undefined,
-  ): Query<TSchema, TReturn> {
-    return newQueryWithDetails(this.#delegate, schema, ast, format);
+  ): Query<TSchema, TTable, TReturn> {
+    return newQueryWithDetails(this.#delegate, schema, tableName, ast, format);
   }
 
-  materialize<T>(factory?: ViewFactory<TSchema, TReturn, T>): T {
+  materialize<T>(factory?: ViewFactory<TSchema, TTable, TReturn, T>): T {
     const ast = this._completeAst();
     const queryCompleteResolver = resolver<true>();
     let queryGot = false;
@@ -570,7 +611,7 @@ export class QueryImpl<
   }
 
   run() {
-    const v: TypedView<Smash<TReturn>> = this.materialize();
+    const v: TypedView<HumanReadable<TReturn>> = this.materialize();
     const ret = v.data;
     v.destroy();
     return ret;
@@ -595,7 +636,7 @@ export class QueryImpl<
 }
 
 function addPrimaryKeys(
-  schema: NormalizedTableSchema,
+  schema: TableSchema,
   orderBy: Ordering | undefined,
 ): Ordering {
   orderBy = orderBy ?? [];
@@ -616,7 +657,7 @@ function addPrimaryKeys(
   ];
 }
 
-function addPrimaryKeysToAst(schema: NormalizedTableSchema, ast: AST): AST {
+function addPrimaryKeysToAst(schema: TableSchema, ast: AST): AST {
   return {
     ...ast,
     orderBy: addPrimaryKeys(schema, ast.orderBy),
@@ -624,20 +665,25 @@ function addPrimaryKeysToAst(schema: NormalizedTableSchema, ast: AST): AST {
 }
 
 function arrayViewFactory<
-  TSchema extends TableSchema,
-  TReturn extends QueryType,
+  TSchema extends FullSchema,
+  TTable extends string,
+  TReturn,
 >(
-  _query: Query<TSchema, TReturn>,
+  _query: Query<TSchema, TTable, TReturn>,
   input: Input,
   format: Format,
   onDestroy: () => void,
   onTransactionCommit: (cb: () => void) => void,
   queryComplete: true | Promise<true>,
-): TypedView<Smash<TReturn>> {
-  const v = new ArrayView<Smash<TReturn>>(input, format, queryComplete);
+): TypedView<HumanReadable<TReturn>> {
+  const v = new ArrayView<HumanReadable<TReturn>>(input, format, queryComplete);
   v.onDestroy = onDestroy;
   onTransactionCommit(() => {
     v.flush();
   });
   return v;
+}
+
+function isCompoundKey(field: readonly string[]): field is CompoundKey {
+  return Array.isArray(field) && field.length >= 1;
 }

@@ -19,8 +19,6 @@ import {toPrimaryKeyString} from './keys.js';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.js';
 import type {Schema} from '../../../zero-schema/src/mod.js';
 import type {ReadonlyJSONObject} from '../mod.js';
-import type {NormalizedTableSchema} from '../../../zero-schema/src/normalize-table-schema.js';
-import type {NormalizedSchema} from '../../../zero-schema/src/normalized-schema.js';
 
 export type InsertValue<S extends TableSchema> = Expand<
   PrimaryKeyFields<S> & {
@@ -105,7 +103,7 @@ type ZeroCRUDMutate = {
  * `label` properties.
  */
 export function makeCRUDMutate<const S extends Schema>(
-  schema: NormalizedSchema,
+  schema: S,
   repMutate: ZeroCRUDMutate,
 ): {mutate: DBMutator<S>; mutateBatch: BatchMutator<S>} {
   const {[CRUD_MUTATION_NAME]: zeroCRUD} = repMutate;
@@ -157,7 +155,7 @@ export function makeCRUDMutate<const S extends Schema>(
  * Creates the `{insert, upsert, update, delete}` object for use outside a
  * batch.
  */
-function makeEntityCRUDMutate<S extends NormalizedTableSchema>(
+function makeEntityCRUDMutate<S extends TableSchema>(
   tableName: string,
   primaryKey: S['primaryKey'],
   zeroCRUD: CRUDMutate,
@@ -213,7 +211,7 @@ function makeEntityCRUDMutate<S extends NormalizedTableSchema>(
  */
 export function makeBatchCRUDMutate<S extends TableSchema>(
   tableName: string,
-  schema: NormalizedSchema,
+  schema: Schema,
   ops: CRUDOp[],
 ): TableMutator<S> {
   const {primaryKey} = schema.tables[tableName];
@@ -272,7 +270,7 @@ export type CRUDMutator = (
   crudArg: CRUDMutationArg,
 ) => Promise<void>;
 
-export function makeCRUDMutator(schema: NormalizedSchema): CRUDMutator {
+export function makeCRUDMutator(schema: Schema): CRUDMutator {
   return async function zeroCRUDMutator(
     tx: WriteTransaction,
     crudArg: CRUDMutationArg,
@@ -312,7 +310,7 @@ function defaultOptionalFieldsToNull(
 async function insertImpl(
   tx: WriteTransaction,
   arg: InsertOp,
-  schema: NormalizedSchema,
+  schema: Schema,
 ): Promise<void> {
   const key = toPrimaryKeyString(
     arg.tableName,
@@ -331,7 +329,7 @@ async function insertImpl(
 async function upsertImpl(
   tx: WriteTransaction,
   arg: InsertOp | UpsertOp,
-  schema: NormalizedSchema,
+  schema: Schema,
 ): Promise<void> {
   const key = toPrimaryKeyString(
     arg.tableName,
@@ -348,7 +346,7 @@ async function upsertImpl(
 async function updateImpl(
   tx: WriteTransaction,
   arg: UpdateOp,
-  schema: NormalizedSchema,
+  schema: Schema,
 ): Promise<void> {
   const key = toPrimaryKeyString(
     arg.tableName,
@@ -372,7 +370,7 @@ async function updateImpl(
 async function deleteImpl(
   tx: WriteTransaction,
   arg: DeleteOp,
-  schema: NormalizedSchema,
+  schema: Schema,
 ): Promise<void> {
   const key = toPrimaryKeyString(
     arg.tableName,

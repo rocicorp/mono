@@ -1,103 +1,105 @@
-import type {Schema} from '../../zero-schema/src/schema.js';
-import type {TableSchema} from '../../zero-schema/src/table-schema.js';
+import {relationships} from '../../zero-schema/src/builder/relationship-builder.js';
+import {createSchema} from '../../zero-schema/src/builder/schema-builder.js';
+import {
+  number,
+  string,
+  table,
+} from '../../zero-schema/src/builder/table-builder.js';
 
-const memberSchema = {
-  tableName: 'member',
-  columns: {
-    id: {type: 'string'},
-    name: {type: 'string'},
-  },
-  primaryKey: ['id'],
-} as const satisfies TableSchema;
+const member = table('member')
+  .columns({
+    id: string(),
+    name: string(),
+  })
+  .primaryKey('id');
 
-const issueSchema = {
-  tableName: 'issue',
-  columns: {
-    id: {type: 'string'},
-    title: {type: 'string'},
-    // TODO: support enum types?
-    // Should we swap the fields def to Valita?
-    priority: {type: 'number'},
-    status: {type: 'number'},
-    modified: {type: 'number'},
-    created: {type: 'number'},
-    creatorID: {type: 'string'},
-    kanbanOrder: {type: 'string'},
-    description: {type: 'string'},
-  },
-  primaryKey: ['id'],
-  relationships: {
-    labels: [
-      {
-        sourceField: ['id'],
-        destField: ['issueID'],
-        destSchema: () => issueLabelSchema,
-      },
-      {
-        sourceField: ['labelID'],
-        destField: ['id'],
-        destSchema: () => labelSchema,
-      },
-    ],
-    comments: {
+const issue = table('issue')
+  .columns({
+    id: string(),
+    title: string(),
+    priority: number(),
+    status: number(),
+    modified: number(),
+    created: number(),
+    creatorID: string(),
+    kanbanOrder: string(),
+    description: string(),
+  })
+  .primaryKey('id');
+
+const comment = table('comment')
+  .columns({
+    id: string(),
+    issueID: string(),
+    created: number(),
+    body: string(),
+    creatorID: string(),
+  })
+  .primaryKey('id');
+
+const label = table('label')
+  .columns({
+    id: string(),
+    name: string(),
+  })
+  .primaryKey('id');
+
+const issueLabel = table('issueLabel')
+  .columns({
+    id: string(),
+    issueID: string(),
+    labelID: string(),
+  })
+  .primaryKey('labelID', 'issueID');
+
+// Relationships
+const issueRelationships = relationships(issue, connect => ({
+  labels: connect(
+    {
       sourceField: ['id'],
       destField: ['issueID'],
-      destSchema: () => commentSchema,
+      destSchema: issueLabel,
     },
-    creator: {
-      sourceField: ['creatorID'],
+    {
+      sourceField: ['labelID'],
       destField: ['id'],
-      destSchema: () => memberSchema,
+      destSchema: label,
     },
-  },
-} as const satisfies TableSchema;
+  ),
+  comments: connect({
+    sourceField: ['id'],
+    destField: ['issueID'],
+    destSchema: comment,
+  }),
+  creator: connect({
+    sourceField: ['creatorID'],
+    destField: ['id'],
+    destSchema: member,
+  }),
+}));
 
-const commentSchema = {
-  tableName: 'comment',
-  columns: {
-    id: {type: 'string'},
-    issueID: {type: 'string'},
-    created: {type: 'number'},
-    body: {type: 'string'},
-    creatorID: {type: 'string'},
-  },
-  primaryKey: ['id'],
-  relationships: {
-    creator: {
-      sourceField: ['creatorID'],
-      destField: ['id'],
-      destSchema: () => memberSchema,
-    },
-  },
-} as const satisfies TableSchema;
+const commentRelationships = relationships(comment, connect => ({
+  creator: connect({
+    sourceField: ['creatorID'],
+    destField: ['id'],
+    destSchema: member,
+  }),
+}));
 
-const labelSchema = {
-  tableName: 'label',
-  columns: {
-    id: {type: 'string'},
-    name: {type: 'string'},
+export const schema = createSchema(
+  1,
+  {
+    member,
+    issue,
+    comment,
+    label,
+    issueLabel,
   },
-  primaryKey: ['id'],
-} as const satisfies TableSchema;
-
-const issueLabelSchema = {
-  tableName: 'issueLabel',
-  columns: {
-    id: {type: 'string'},
-    issueID: {type: 'string'},
-    labelID: {type: 'string'},
+  {
+    issueRelationships,
+    commentRelationships,
   },
-  // mutators require an ID field still.
-  primaryKey: ['labelID', 'issueID'],
-} as const satisfies TableSchema;
-
-export const schema = {
-  member: memberSchema,
-  issue: issueSchema,
-  comment: commentSchema,
-  label: labelSchema,
-  issueLabel: issueLabelSchema,
-} as const satisfies Schema['tables'];
+);
 
 type AppSchema = typeof schema;
 export type {AppSchema as Schema};

@@ -1,10 +1,6 @@
 import {describe, expect, test} from 'vitest';
 import {definePermissions} from '../../../zero-schema/src/permissions.js';
-import {createSchema} from '../../../zero-schema/src/schema.js';
-import {
-  createTableSchema,
-  type TableSchema,
-} from '../../../zero-schema/src/table-schema.js';
+import {type FullSchema} from '../../../zero-schema/src/table-schema.js';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.js';
 import {
   astForTestingSymbol,
@@ -12,94 +8,104 @@ import {
   QueryImpl,
   type QueryDelegate,
 } from '../../../zql/src/query/query-impl.js';
-import type {Query, QueryType} from '../../../zql/src/query/query.js';
+import type {Query} from '../../../zql/src/query/query.js';
 import {transformQuery} from './read-authorizer.js';
 import {must} from '../../../shared/src/must.js';
+import {string, table} from '../../../zero-schema/src/builder/table-builder.js';
+import {relationships} from '../../../zero-schema/src/builder/relationship-builder.js';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.js';
 
 const mockDelegate = {} as QueryDelegate;
 
-function ast(q: Query<TableSchema, QueryType>) {
-  return (q as QueryImpl<TableSchema, QueryType>)[astForTestingSymbol];
+function ast(q: Query<FullSchema, string>) {
+  return (q as QueryImpl<FullSchema, string>)[astForTestingSymbol];
 }
 
-const unreadable = createTableSchema({
-  tableName: 'unreadable',
-  columns: {
-    id: {type: 'string'},
-  },
-  primaryKey: ['id'],
-  relationships: {},
-});
-const readableThruUnreadable = createTableSchema({
-  tableName: 'readableThruUnreadable',
-  columns: {
-    id: {type: 'string'},
-    unreadableId: {type: 'string'},
-  },
-  primaryKey: ['id'],
-  relationships: {
-    unreadable: {
-      sourceField: ['unreadableId'],
-      destField: ['id'],
-      destSchema: unreadable,
-    },
-  },
-});
-const readable = {
-  tableName: 'readable',
-  columns: {
-    id: {type: 'string'},
-    unreadableId: {type: 'string'},
-    readableId: {type: 'string'},
-  },
-  primaryKey: ['id'],
-  relationships: {
-    readable: {
-      sourceField: ['readableId'],
-      destField: ['id'],
-      destSchema: () => readable,
-    },
-    unreadable: {
-      sourceField: ['unreadableId'],
-      destField: ['id'],
-      destSchema: unreadable,
-    },
-    readableThruUnreadable: {
-      sourceField: ['id'],
-      destField: ['id'],
-      destSchema: () => readableThruUnreadable,
-    },
-  },
-} as const;
-const adminReadable = {
-  tableName: 'adminReadable',
-  columns: {
-    id: {type: 'string'},
-  },
-  primaryKey: ['id'],
-  relationships: {
-    self1: {
-      sourceField: ['id'],
-      destField: ['id'],
-      destSchema: () => adminReadable,
-    },
-    self2: {
-      sourceField: ['id'],
-      destField: ['id'],
-      destSchema: () => adminReadable,
-    },
-  },
-} as const;
+const unreadable = table('unreadable')
+  .columns({
+    id: string(),
+  })
+  .primaryKey('id');
 
-const schema = createSchema({
-  version: 1,
-  tables: {
-    readable,
+const readableThruUnreadable = table('readableThruUnreadable')
+  .columns({
+    id: string(),
+    unreadableId: string(),
+  })
+  .primaryKey('id');
+
+const readable = table('readable')
+  .columns({
+    id: string(),
+    unreadableId: string(),
+    readableId: string(),
+  })
+  .primaryKey('id');
+
+const adminReadable = table('adminReadable')
+  .columns({
+    id: string(),
+  })
+  .primaryKey('id');
+
+const readableThruUnreadableRelationships = relationships(
+  readableThruUnreadable,
+  connect => ({
+    unreadable: connect({
+      sourceField: ['unreadableId'],
+      destField: ['id'],
+      destSchema: unreadable,
+    }),
+  }),
+);
+
+const readableRelationships = relationships(readable, connect => ({
+  readable: connect({
+    sourceField: ['readableId'],
+    destField: ['id'],
+    destSchema: readable,
+  }),
+  unreadable: connect({
+    sourceField: ['unreadableId'],
+    destField: ['id'],
+    destSchema: unreadable,
+  }),
+  readableThruUnreadable: connect({
+    sourceField: ['id'],
+    destField: ['id'],
+    destSchema: readableThruUnreadable,
+  }),
+}));
+
+const adminReadableRelationships = relationships(adminReadable, connect => ({
+  self1: connect({
+    sourceField: ['id'],
+    destField: ['id'],
+    destSchema: adminReadable,
+  }),
+  self2: connect({
+    sourceField: ['id'],
+    destField: ['id'],
+    destSchema: adminReadable,
+  }),
+}));
+
+const schema = createSchema(
+  1,
+  {
     unreadable,
+    readable,
     adminReadable,
     readableThruUnreadable,
   },
-});
+  {
+    readableThruUnreadable: readableThruUnreadableRelationships,
+    readable: readableRelationships,
+    adminReadable: adminReadableRelationships,
+  },
+);
+
+type Schema = typeof schema;
 
 type AuthData = {
   sub: string;
@@ -111,7 +117,7 @@ const authData: AuthData = {
   role: 'user',
 };
 const permissionRules = must(
-  await definePermissions<AuthData, typeof schema>(schema, () => ({
+  await definePermissions<AuthData, Schema>(schema, () => ({
     unreadable: {
       row: {
         select: [],
@@ -122,7 +128,7 @@ const permissionRules = must(
         select: [
           (
             authData: {role: string},
-            eb: ExpressionBuilder<typeof adminReadable>,
+            eb: ExpressionBuilder<Schema, 'adminReadable'>,
           ) => eb.cmpLit(authData.role, '=', 'admin'),
         ],
       },
@@ -132,7 +138,7 @@ const permissionRules = must(
         select: [
           (
             _authData: {role: string},
-            eb: ExpressionBuilder<typeof readableThruUnreadable>,
+            eb: ExpressionBuilder<Schema, 'readableThruUnreadable'>,
           ) => eb.exists('unreadable'),
         ],
       },
@@ -142,7 +148,7 @@ const permissionRules = must(
 
 describe('unreadable tables', () => {
   test('nuke top level queries', () => {
-    const query = newQuery(mockDelegate, schema.tables.unreadable);
+    const query = newQuery(mockDelegate, schema, 'unreadable');
     // If a top-level query tries to query a table that cannot be read,
     // that query is set to `undefined`.
     expect(transformQuery(ast(query), permissionRules, authData)).toBe(
@@ -154,7 +160,7 @@ describe('unreadable tables', () => {
   });
 
   test('nuke `related` queries', () => {
-    const query = newQuery(mockDelegate, schema.tables.readable)
+    const query = newQuery(mockDelegate, schema, 'readable')
       .related('unreadable')
       .related('readable');
 
@@ -228,9 +234,8 @@ describe('unreadable tables', () => {
     expect(
       transformQuery(
         ast(
-          newQuery(mockDelegate, schema.tables.readable).related(
-            'readable',
-            q => q.related('readable', q => q.related('unreadable')),
+          newQuery(mockDelegate, schema, 'readable').related('readable', q =>
+            q.related('readable', q => q.related('unreadable')),
           ),
         ),
         permissionRules,
@@ -295,9 +300,8 @@ describe('unreadable tables', () => {
     expect(
       transformQuery(
         ast(
-          newQuery(mockDelegate, schema.tables.readable).related(
-            'readable',
-            q => q.related('readable', q => q.related('unreadable')),
+          newQuery(mockDelegate, schema, 'readable').related('readable', q =>
+            q.related('readable', q => q.related('unreadable')),
           ),
         ),
         permissionRules,
@@ -362,9 +366,7 @@ describe('unreadable tables', () => {
     // also nukes those tables with empty row policies
     expect(
       transformQuery(
-        ast(
-          newQuery(mockDelegate, schema.tables.readable).related('unreadable'),
-        ),
+        ast(newQuery(mockDelegate, schema, 'readable').related('unreadable')),
         permissionRules,
         authData,
       ),
@@ -378,7 +380,7 @@ describe('unreadable tables', () => {
   });
 
   test('subqueries in conditions are replaced by `const true` or `const false` expressions', () => {
-    const query = newQuery(mockDelegate, schema.tables.readable).whereExists(
+    const query = newQuery(mockDelegate, schema, 'readable').whereExists(
       'unreadable',
     );
 
@@ -426,8 +428,8 @@ describe('unreadable tables', () => {
     expect(
       transformQuery(
         ast(
-          newQuery(mockDelegate, schema.tables.readable).where(
-            ({not, exists}) => not(exists('unreadable')),
+          newQuery(mockDelegate, schema, 'readable').where(({not, exists}) =>
+            not(exists('unreadable')),
           ),
         ),
         permissionRules,
@@ -454,8 +456,8 @@ describe('unreadable tables', () => {
     expect(
       transformQuery(
         ast(
-          newQuery(mockDelegate, schema.tables.readable).where(
-            ({not, exists}) => not(exists('unreadable')),
+          newQuery(mockDelegate, schema, 'readable').where(({not, exists}) =>
+            not(exists('unreadable')),
           ),
         ),
         permissionRules,
@@ -484,7 +486,7 @@ describe('unreadable tables', () => {
     expect(
       transformQuery(
         ast(
-          newQuery(mockDelegate, schema.tables.readable).whereExists(
+          newQuery(mockDelegate, schema, 'readable').whereExists(
             'readable',
             q => q.whereExists('unreadable', q => q.where('id', '1')),
           ),
@@ -540,7 +542,7 @@ describe('unreadable tables', () => {
     expect(
       transformQuery(
         ast(
-          newQuery(mockDelegate, schema.tables.readable).whereExists(
+          newQuery(mockDelegate, schema, 'readable').whereExists(
             'readable',
             q => q.whereExists('unreadable', q => q.where('id', '1')),
           ),
@@ -597,7 +599,7 @@ describe('unreadable tables', () => {
     expect(
       transformQuery(
         ast(
-          newQuery(mockDelegate, schema.tables.readable)
+          newQuery(mockDelegate, schema, 'readable')
             .where(({not, exists}) => not(exists('unreadable')))
             .whereExists('readable'),
         ),
@@ -658,7 +660,7 @@ describe('unreadable tables', () => {
     expect(
       transformQuery(
         ast(
-          newQuery(mockDelegate, schema.tables.readable)
+          newQuery(mockDelegate, schema, 'readable')
             .where(({not, exists}) => not(exists('unreadable')))
             .whereExists('readable'),
         ),
@@ -721,7 +723,7 @@ describe('unreadable tables', () => {
 test('exists rules in permissions are tagged as the permissions system', () => {
   expect(
     transformQuery(
-      ast(newQuery(mockDelegate, schema.tables.readableThruUnreadable)),
+      ast(newQuery(mockDelegate, schema, 'readableThruUnreadable')),
       permissionRules,
       undefined,
     ),
@@ -762,7 +764,7 @@ test('exists rules in permissions are tagged as the permissions system', () => {
   expect(
     transformQuery(
       ast(
-        newQuery(mockDelegate, schema.tables.readable).related(
+        newQuery(mockDelegate, schema, 'readable').related(
           'readableThruUnreadable',
         ),
       ),
@@ -837,7 +839,7 @@ describe('tables with no read policies', () => {
   }
   test('top level query is unmodified', () => {
     checkWithAndWithoutAuthData(authData => {
-      const query = newQuery(mockDelegate, schema.tables.readable);
+      const query = newQuery(mockDelegate, schema, 'readable');
       expect(transformQuery(ast(query), permissionRules, authData)).toEqual(
         ast(query),
       );
@@ -845,14 +847,14 @@ describe('tables with no read policies', () => {
   });
   test('related queries are unmodified', () => {
     checkWithAndWithoutAuthData(authData => {
-      let query = newQuery(mockDelegate, schema.tables.readable).related(
+      let query = newQuery(mockDelegate, schema, 'readable').related(
         'readable',
       );
       expect(transformQuery(ast(query), permissionRules, authData)).toEqual(
         ast(query),
       );
 
-      query = newQuery(mockDelegate, schema.tables.readable).related(
+      query = newQuery(mockDelegate, schema, 'readable').related(
         'readable',
         q => q.related('readable'),
       );
@@ -863,14 +865,14 @@ describe('tables with no read policies', () => {
   });
   test('subqueries in conditions are unmodified', () => {
     checkWithAndWithoutAuthData(authData => {
-      let query = newQuery(mockDelegate, schema.tables.readable).whereExists(
+      let query = newQuery(mockDelegate, schema, 'readable').whereExists(
         'readable',
       );
       expect(transformQuery(ast(query), permissionRules, authData)).toEqual(
         ast(query),
       );
 
-      query = newQuery(mockDelegate, schema.tables.readable).whereExists(
+      query = newQuery(mockDelegate, schema, 'readable').whereExists(
         'readable',
         q => q.whereExists('readable'),
       );
@@ -886,7 +888,7 @@ describe('admin readable', () => {
     expect(
       transformQuery(
         ast(
-          newQuery(mockDelegate, adminReadable)
+          newQuery(mockDelegate, schema, 'adminReadable')
             .related('self1')
             .related('self2'),
         ),
@@ -986,7 +988,7 @@ describe('admin readable', () => {
     expect(
       transformQuery(
         ast(
-          newQuery(mockDelegate, adminReadable)
+          newQuery(mockDelegate, schema, 'adminReadable')
             .related('self1', q => q.where('id', '1'))
             .related('self2', q =>
               q.where('id', '2').related('self1', q => q.where('id', '3')),
@@ -1191,7 +1193,9 @@ describe('admin readable', () => {
   test('exists have the rules applied', () => {
     expect(
       transformQuery(
-        ast(newQuery(mockDelegate, adminReadable).whereExists('self1')),
+        ast(
+          newQuery(mockDelegate, schema, 'adminReadable').whereExists('self1'),
+        ),
         permissionRules,
         authData,
       ),
@@ -1260,8 +1264,9 @@ describe('admin readable', () => {
     expect(
       transformQuery(
         ast(
-          newQuery(mockDelegate, adminReadable).whereExists('self1', q =>
-            q.where('id', '1'),
+          newQuery(mockDelegate, schema, 'adminReadable').whereExists(
+            'self1',
+            q => q.where('id', '1'),
           ),
         ),
         permissionRules,
@@ -1349,8 +1354,9 @@ describe('admin readable', () => {
     expect(
       transformQuery(
         ast(
-          newQuery(mockDelegate, adminReadable).whereExists('self1', q =>
-            q.whereExists('self2'),
+          newQuery(mockDelegate, schema, 'adminReadable').whereExists(
+            'self1',
+            q => q.whereExists('self2'),
           ),
         ),
         permissionRules,

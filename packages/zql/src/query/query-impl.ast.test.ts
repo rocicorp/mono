@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
+import type {FullSchema} from '../../../zero-schema/src/table-schema.js';
 import type {ExpressionFactory} from './expression.js';
 import {
   astForTestingSymbol,
@@ -7,25 +7,25 @@ import {
   QueryImpl,
   type QueryDelegate,
 } from './query-impl.js';
-import type {Query, QueryType} from './query.js';
-import {issueSchema} from './test/testSchemas.js';
+import type {Query} from './query.js';
+import {schema} from './test/test-schemas.js';
 
 const mockDelegate = {} as QueryDelegate;
 
-function ast(q: Query<TableSchema, QueryType>) {
-  return (q as QueryImpl<TableSchema, QueryType>)[astForTestingSymbol];
+function ast(q: Query<FullSchema, string>) {
+  return (q as QueryImpl<FullSchema, string>)[astForTestingSymbol];
 }
 
 describe('building the AST', () => {
   test('creates a new query', () => {
-    const issueQuery = newQuery(mockDelegate, issueSchema);
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
     expect(ast(issueQuery)).toEqual({
       table: 'issue',
     });
   });
 
   test('where inserts a condition', () => {
-    const issueQuery = newQuery(mockDelegate, issueSchema);
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
     const where = issueQuery.where('id', '=', '1');
     expect(ast(where)).toMatchInlineSnapshot(`
       {
@@ -83,7 +83,7 @@ describe('building the AST', () => {
   });
 
   test('multiple WHERE calls result in a single top level AND', () => {
-    const issueQuery = newQuery(mockDelegate, issueSchema);
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
     const where = issueQuery
       .where('id', '1')
       .where('title', 'foo')
@@ -150,7 +150,7 @@ describe('building the AST', () => {
   });
 
   test('start adds a start field', () => {
-    const issueQuery = newQuery(mockDelegate, issueSchema);
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
     const start = issueQuery.start({id: '1'});
     expect(ast(start)).toMatchInlineSnapshot(`
       {
@@ -179,7 +179,7 @@ describe('building the AST', () => {
   });
 
   test('related: field edges', () => {
-    const issueQuery = newQuery(mockDelegate, issueSchema);
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
     const related = issueQuery.related('owner', q => q);
     expect(ast(related)).toMatchInlineSnapshot(`
       {
@@ -212,7 +212,7 @@ describe('building the AST', () => {
   });
 
   test('related: junction edges', () => {
-    const issueQuery = newQuery(mockDelegate, issueSchema);
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
     const related = issueQuery.related('labels', q => q);
     expect(ast(related)).toMatchInlineSnapshot(`
       {
@@ -273,7 +273,7 @@ describe('building the AST', () => {
   });
 
   test('related: never stacked edges', () => {
-    const issueQuery = newQuery(mockDelegate, issueSchema);
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
     const related = issueQuery.related('owner', oq =>
       oq.related('issues', iq => iq.related('labels', lq => lq)),
     );
@@ -382,7 +382,7 @@ describe('building the AST', () => {
   });
 
   test('related: never siblings', () => {
-    const issueQuery = newQuery(mockDelegate, issueSchema);
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
     const related = issueQuery
       .related('owner', oq => oq)
       .related('comments', cq => cq)
@@ -489,7 +489,7 @@ describe('building the AST', () => {
 });
 
 test('where expressions', () => {
-  const issueQuery = newQuery(mockDelegate, issueSchema);
+  const issueQuery = newQuery(mockDelegate, schema, 'issue');
   expect(ast(issueQuery.where('id', '=', '1')).where).toMatchInlineSnapshot(`
     {
       "left": {
@@ -746,7 +746,7 @@ test('where expressions', () => {
 // but we should double-check that `where` uses `expression` rather than trying to
 // mutate the AST itself.
 test('where to dnf', () => {
-  const issueQuery = newQuery(mockDelegate, issueSchema);
+  const issueQuery = newQuery(mockDelegate, schema, 'issue');
   let dnf = issueQuery.where('id', '=', '1').where('closed', true);
   expect(ast(dnf).where).toMatchInlineSnapshot(`
     {
@@ -937,7 +937,7 @@ test('where to dnf', () => {
 });
 
 describe('expression builder', () => {
-  const issueQuery = newQuery(mockDelegate, issueSchema);
+  const issueQuery = newQuery(mockDelegate, schema, 'issue');
 
   test('basics', () => {
     const expr = issueQuery.where(({cmp}) => cmp('id', '=', '1'));
@@ -959,8 +959,8 @@ describe('expression builder', () => {
       }
     `);
 
-    type IssueSchema = typeof issueSchema;
-    const f: ExpressionFactory<IssueSchema> = eb => eb.cmp('id', '2');
+    const f: ExpressionFactory<typeof schema, 'issue'> = eb =>
+      eb.cmp('id', '2');
     const expr2 = issueQuery.where(f);
     expect(ast(expr2)).toMatchInlineSnapshot(`
       {
@@ -1414,7 +1414,7 @@ describe('expression builder', () => {
 
 describe('exists', () => {
   test('field relationship', () => {
-    const issueQuery = newQuery(mockDelegate, issueSchema);
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
 
     // full expression
     expect(ast(issueQuery.where(({exists}) => exists('owner'))))
@@ -1483,7 +1483,7 @@ describe('exists', () => {
   });
 
   test('field relationship with further conditions', () => {
-    const issueQuery = newQuery(mockDelegate, issueSchema);
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
 
     expect(ast(issueQuery.whereExists('owner', q => q.where('id', '1'))))
       .toMatchInlineSnapshot(`
@@ -1597,7 +1597,7 @@ describe('exists', () => {
   });
 
   test('junction edge', () => {
-    const issueQuery = newQuery(mockDelegate, issueSchema);
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
 
     expect(ast(issueQuery.whereExists('labels'))).toMatchInlineSnapshot(`
       {
@@ -1661,7 +1661,7 @@ describe('exists', () => {
   });
 
   test('existence within an or branch', () => {
-    const issueQuery = newQuery(mockDelegate, issueSchema);
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
 
     expect(
       ast(
@@ -1732,7 +1732,7 @@ describe('exists', () => {
   });
 
   test('negated existence', () => {
-    const issueQuery = newQuery(mockDelegate, issueSchema);
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
 
     expect(ast(issueQuery.where(({not, exists}) => not(exists('comments')))))
       .toMatchInlineSnapshot(`
@@ -1768,7 +1768,7 @@ describe('exists', () => {
   });
 
   test('negated existence over junction edge', () => {
-    const issueQuery = newQuery(mockDelegate, issueSchema);
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
 
     expect(ast(issueQuery.where(({not, exists}) => not(exists('labels')))))
       .toMatchInlineSnapshot(`
@@ -1833,7 +1833,7 @@ describe('exists', () => {
   });
 
   test('many exists on different relationships', () => {
-    const issueQuery = newQuery(mockDelegate, issueSchema);
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
     expect(
       ast(
         issueQuery
@@ -1958,7 +1958,7 @@ describe('exists', () => {
   });
 
   test('many exists on the same relationship', () => {
-    const issueQuery = newQuery(mockDelegate, issueSchema);
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
     expect(
       ast(
         issueQuery.where(({and, exists}) =>

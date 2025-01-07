@@ -11,7 +11,7 @@ import type {
 } from '../../../zero-protocol/src/push.js';
 import {definePermissions} from '../../../zero-schema/src/permissions.js';
 import type {
-  TableSchema,
+  FullSchema,
   ValueType,
 } from '../../../zero-schema/src/table-schema.js';
 import {
@@ -29,233 +29,234 @@ import {
   QueryImpl,
   type QueryDelegate,
 } from '../../../zql/src/query/query-impl.js';
-import type {Query, QueryType, Row} from '../../../zql/src/query/query.js';
+import type {Query, Row} from '../../../zql/src/query/query.js';
 import {Database} from '../../../zqlite/src/db.js';
 import {TableSource} from '../../../zqlite/src/table-source.js';
 import {transformQuery} from './read-authorizer.js';
 import {WriteAuthorizerImpl} from './write-authorizer.js';
+import {
+  boolean,
+  number,
+  string,
+  table,
+} from '../../../zero-schema/src/builder/table-builder.js';
+import {relationships} from '../../../zero-schema/src/builder/relationship-builder.js';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.js';
 
-const schema = {
-  version: 1,
-  tables: {
-    user: {
-      tableName: 'user',
-      columns: {
-        id: {type: 'string'},
-        name: {type: 'string'},
-        role: {type: 'string'},
-      },
-      primaryKey: ['id'],
-      relationships: {
-        ownedIssues: {
-          sourceField: ['id'],
-          destField: ['ownerId'],
-          destSchema: () => schema.tables.issue,
-        },
-        createdIssues: {
-          sourceField: ['id'],
-          destField: ['creatorId'],
-          destSchema: () => schema.tables.issue,
-        },
-        viewedIssues: [
-          {
-            sourceField: ['id'],
-            destField: ['userId'],
-            destSchema: () => schema.tables.viewState,
-          },
-          {
-            sourceField: ['issueId'],
-            destField: ['id'],
-            destSchema: () => schema.tables.issue,
-          },
-        ],
-        projects: [
-          {
-            sourceField: ['id'],
-            destField: ['userId'],
-            destSchema: () => schema.tables.projectMember,
-          },
-          {
-            sourceField: ['projectId'],
-            destField: ['id'],
-            destSchema: () => schema.tables.project,
-          },
-        ],
-      },
+const user = table('user')
+  .columns({
+    id: string(),
+    name: string(),
+    role: string(),
+  })
+  .primaryKey('id');
+
+const issue = table('issue')
+  .columns({
+    id: string(),
+    title: string(),
+    description: string(),
+    closed: boolean(),
+    ownerId: string(),
+    creatorId: string(),
+    projectId: string(),
+  })
+  .primaryKey('id');
+
+const comment = table('comment')
+  .columns({
+    id: string(),
+    issueId: string(),
+    authorId: string(),
+    text: string(),
+  })
+  .primaryKey('id');
+
+const issueLabel = table('issueLabel')
+  .columns({
+    issueId: string(),
+    labelId: string(),
+  })
+  .primaryKey('issueId', 'labelId');
+
+const label = table('label')
+  .columns({
+    id: string(),
+    name: string(),
+  })
+  .primaryKey('id');
+
+const viewState = table('viewState')
+  .columns({
+    userId: string(),
+    issueId: string(),
+    lastRead: number(),
+  })
+  .primaryKey('issueId', 'userId');
+
+const project = table('project')
+  .columns({
+    id: string(),
+    name: string(),
+  })
+  .primaryKey('id');
+
+const projectMember = table('projectMember')
+  .columns({
+    projectId: string(),
+    userId: string(),
+  })
+  .primaryKey('projectId', 'userId');
+
+// Relationships
+const userRelationships = relationships(user, connect => ({
+  ownedIssues: connect({
+    sourceField: ['id'],
+    destField: ['ownerId'],
+    destSchema: issue,
+  }),
+  createdIssues: connect({
+    sourceField: ['id'],
+    destField: ['creatorId'],
+    destSchema: issue,
+  }),
+  viewedIssues: connect(
+    {
+      sourceField: ['id'],
+      destField: ['userId'],
+      destSchema: viewState,
     },
-    issue: {
-      tableName: 'issue',
-      columns: {
-        id: {type: 'string'},
-        title: {type: 'string'},
-        description: {type: 'string'},
-        closed: {type: 'boolean'},
-        ownerId: {type: 'string'},
-        creatorId: {type: 'string'},
-        projectId: {type: 'string'},
-      },
-      primaryKey: ['id'],
-      relationships: {
-        owner: {
-          sourceField: ['ownerId'],
-          destField: ['id'],
-          destSchema: () => schema.tables.user,
-        },
-        creator: {
-          sourceField: ['creatorId'],
-          destField: ['id'],
-          destSchema: () => schema.tables.user,
-        },
-        comments: {
-          sourceField: ['id'],
-          destField: ['issueId'],
-          destSchema: () => schema.tables.comment,
-        },
-        labels: [
-          {
-            sourceField: ['id'],
-            destField: ['issueId'],
-            destSchema: () => schema.tables.issueLabel,
-          },
-          {
-            sourceField: ['labelId'],
-            destField: ['id'],
-            destSchema: () => schema.tables.label,
-          },
-        ],
-        project: {
-          sourceField: ['projectId'],
-          destField: ['id'],
-          destSchema: () => schema.tables.project,
-        },
-        viewState: {
-          sourceField: ['id'],
-          destField: ['issueId'],
-          destSchema: () => schema.tables.viewState,
-        },
-      },
+    {
+      sourceField: ['issueId'],
+      destField: ['id'],
+      destSchema: issue,
     },
-    comment: {
-      tableName: 'comment',
-      columns: {
-        id: {type: 'string'},
-        issueId: {type: 'string'},
-        authorId: {type: 'string'},
-        text: {type: 'string'},
-      },
-      primaryKey: ['id'],
-      relationships: {
-        issue: {
-          sourceField: ['issueId'],
-          destField: ['id'],
-          destSchema: () => schema.tables.issue,
-        },
-        user: {
-          sourceField: ['authorId'],
-          destField: ['id'],
-          destSchema: () => schema.tables.user,
-        },
-      },
+  ),
+  projects: connect(
+    {
+      sourceField: ['id'],
+      destField: ['userId'],
+      destSchema: projectMember,
     },
-    issueLabel: {
-      tableName: 'issueLabel',
-      columns: {
-        issueId: {type: 'string'},
-        labelId: {type: 'string'},
-      },
-      primaryKey: ['issueId', 'labelId'],
-      relationships: {
-        issue: {
-          sourceField: ['issueId'],
-          destField: ['id'],
-          destSchema: () => schema.tables.issue,
-        },
-        label: {
-          sourceField: ['labelId'],
-          destField: ['id'],
-          destSchema: () => schema.tables.label,
-        },
-      },
+    {
+      sourceField: ['projectId'],
+      destField: ['id'],
+      destSchema: project,
     },
-    label: {
-      tableName: 'label',
-      columns: {
-        id: {type: 'string'},
-        name: {type: 'string'},
-      },
-      primaryKey: ['id'],
-      relationships: {},
+  ),
+}));
+
+const issueRelationships = relationships(issue, connect => ({
+  owner: connect({
+    sourceField: ['ownerId'],
+    destField: ['id'],
+    destSchema: user,
+  }),
+  creator: connect({
+    sourceField: ['creatorId'],
+    destField: ['id'],
+    destSchema: user,
+  }),
+  comments: connect({
+    sourceField: ['id'],
+    destField: ['issueId'],
+    destSchema: comment,
+  }),
+  labels: connect(
+    {
+      sourceField: ['id'],
+      destField: ['issueId'],
+      destSchema: issueLabel,
     },
-    viewState: {
-      tableName: 'viewState',
-      columns: {
-        userId: {type: 'string'},
-        issueId: {type: 'string'},
-        lastRead: {type: 'number'},
-      },
-      primaryKey: ['issueId', 'userId'],
-      relationships: {
-        user: {
-          sourceField: ['userId'],
-          destField: ['id'],
-          destSchema: () => schema.tables.user,
-        },
-        issue: {
-          sourceField: ['issueId'],
-          destField: ['id'],
-          destSchema: () => schema.tables.issue,
-        },
-      },
+    {
+      sourceField: ['labelId'],
+      destField: ['id'],
+      destSchema: label,
     },
-    project: {
-      tableName: 'project',
-      columns: {
-        id: {type: 'string'},
-        name: {type: 'string'},
-      },
-      primaryKey: ['id'],
-      relationships: {
-        issues: {
-          sourceField: ['id'],
-          destField: ['projectId'],
-          destSchema: () => schema.tables.issue,
-        },
-        members: [
-          {
-            sourceField: ['id'],
-            destField: ['projectId'],
-            destSchema: () => schema.tables.projectMember,
-          },
-          {
-            sourceField: ['userId'],
-            destField: ['id'],
-            destSchema: () => schema.tables.user,
-          },
-        ],
-      },
+  ),
+  project: connect({
+    sourceField: ['projectId'],
+    destField: ['id'],
+    destSchema: project,
+  }),
+  viewState: connect({
+    sourceField: ['id'],
+    destField: ['issueId'],
+    destSchema: viewState,
+  }),
+}));
+
+const commentRelationships = relationships(comment, connect => ({
+  issue: connect({
+    sourceField: ['issueId'],
+    destField: ['id'],
+    destSchema: issue,
+  }),
+  user: connect({
+    sourceField: ['authorId'],
+    destField: ['id'],
+    destSchema: user,
+  }),
+}));
+
+const issueLabelRelationships = relationships(issueLabel, connect => ({
+  issue: connect({
+    sourceField: ['issueId'],
+    destField: ['id'],
+    destSchema: issue,
+  }),
+  label: connect({
+    sourceField: ['labelId'],
+    destField: ['id'],
+    destSchema: label,
+  }),
+}));
+
+const viewStateRelationships = relationships(viewState, connect => ({
+  user: connect({
+    sourceField: ['userId'],
+    destField: ['id'],
+    destSchema: user,
+  }),
+  issue: connect({
+    sourceField: ['issueId'],
+    destField: ['id'],
+    destSchema: issue,
+  }),
+}));
+
+const projectRelationships = relationships(project, connect => ({
+  issues: connect({
+    sourceField: ['id'],
+    destField: ['projectId'],
+    destSchema: issue,
+  }),
+  members: connect(
+    {
+      sourceField: ['id'],
+      destField: ['projectId'],
+      destSchema: projectMember,
     },
-    projectMember: {
-      tableName: 'projectMember',
-      columns: {
-        projectId: {type: 'string'},
-        userId: {type: 'string'},
-      },
-      primaryKey: ['projectId', 'userId'],
-      relationships: {
-        project: {
-          sourceField: ['projectId'],
-          destField: ['id'],
-          destSchema: () => schema.tables.project,
-        },
-        user: {
-          sourceField: ['userId'],
-          destField: ['id'],
-          destSchema: () => schema.tables.user,
-        },
-      },
+    {
+      sourceField: ['userId'],
+      destField: ['id'],
+      destSchema: user,
     },
-  },
-} as const;
+  ),
+}));
+
+const projectMemberRelationships = relationships(projectMember, connect => ({
+  project: connect({
+    sourceField: ['projectId'],
+    destField: ['id'],
+    destSchema: project,
+  }),
+  user: connect({
+    sourceField: ['userId'],
+    destField: ['id'],
+    destSchema: user,
+  }),
+}));
 
 type AuthData = {
   sub: string;
@@ -265,21 +266,46 @@ type AuthData = {
   };
 };
 
+const schema = createSchema(
+  1,
+  {
+    user,
+    issue,
+    comment,
+    issueLabel,
+    label,
+    viewState,
+    project,
+    projectMember,
+  },
+  {
+    userRelationships,
+    issueRelationships,
+    commentRelationships,
+    issueLabelRelationships,
+    viewStateRelationships,
+    projectRelationships,
+    projectMemberRelationships,
+  },
+);
+
+type Schema = typeof schema;
+
 // eslint-disable-next-line arrow-body-style
 const permissions = must(
   await definePermissions<AuthData, typeof schema>(schema, () => {
     const isCommentCreator = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<typeof schema.tables.comment>,
+      {cmp}: ExpressionBuilder<Schema, 'comment'>,
     ) => cmp('authorId', '=', authData.sub);
     const isViewStateOwner = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<typeof schema.tables.viewState>,
+      {cmp}: ExpressionBuilder<Schema, 'viewState'>,
     ) => cmp('userId', '=', authData.sub);
 
     const canWriteIssueLabelIfProjectMember = (
       authData: AuthData,
-      {exists}: ExpressionBuilder<typeof schema.tables.issueLabel>,
+      {exists}: ExpressionBuilder<Schema, 'issueLabel'>,
     ) =>
       exists('issue', q =>
         q.whereExists('project', q =>
@@ -288,16 +314,16 @@ const permissions = must(
       );
     const canWriteIssueLabelIfIssueCreator = (
       authData: AuthData,
-      {exists}: ExpressionBuilder<typeof schema.tables.issueLabel>,
+      {exists}: ExpressionBuilder<Schema, 'issueLabel'>,
     ) => exists('issue', q => q.where('creatorId', '=', authData.sub));
     const canWriteIssueLabelIfIssueOwner = (
       authData: AuthData,
-      {exists}: ExpressionBuilder<typeof schema.tables.issueLabel>,
+      {exists}: ExpressionBuilder<Schema, 'issueLabel'>,
     ) => exists('issue', q => q.where('ownerId', '=', authData.sub));
 
     const canSeeIssue = (
       authData: AuthData,
-      eb: ExpressionBuilder<typeof schema.tables.issue>,
+      eb: ExpressionBuilder<Schema, 'issue'>,
     ) =>
       eb.or(
         isAdmin(authData, eb),
@@ -309,24 +335,24 @@ const permissions = must(
 
     const canSeeComment = (
       authData: AuthData,
-      {exists}: ExpressionBuilder<typeof schema.tables.comment>,
+      {exists}: ExpressionBuilder<Schema, 'comment'>,
     ) => exists('issue', q => q.where(eb => canSeeIssue(authData, eb)));
 
     const isAdmin = (
       authData: AuthData,
-      {cmpLit}: ExpressionBuilder<TableSchema>,
+      {cmpLit}: ExpressionBuilder<FullSchema, string>,
     ) => cmpLit(authData.role, '=', 'admin');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     type TODO = any;
     const isAdminThroughNestedData = (
       authData: AuthData,
-      {cmpLit}: ExpressionBuilder<TableSchema>,
+      {cmpLit}: ExpressionBuilder<FullSchema, string>,
       // TODO: proxy should return parameter references instead....
     ) => cmpLit(authData.properties?.role as TODO, 'IS', 'admin');
 
     const isMemberOfProject = (
       authData: AuthData,
-      {exists}: ExpressionBuilder<typeof schema.tables.issue>,
+      {exists}: ExpressionBuilder<Schema, 'issue'>,
     ) =>
       exists('project', q =>
         q.whereExists('members', q => q.where('id', '=', authData.sub)),
@@ -334,12 +360,12 @@ const permissions = must(
 
     const isIssueOwner = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<typeof schema.tables.issue>,
+      {cmp}: ExpressionBuilder<Schema, 'issue'>,
     ) => cmp('ownerId', '=', authData.sub);
 
     const isIssueCreator = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<typeof schema.tables.issue>,
+      {cmp}: ExpressionBuilder<Schema, 'issue'>,
     ) => cmp('creatorId', '=', authData.sub);
 
     return {
@@ -356,10 +382,7 @@ const permissions = must(
       issue: {
         row: {
           insert: [
-            (
-              authData: AuthData,
-              eb: ExpressionBuilder<typeof schema.tables.issue>,
-            ) =>
+            (authData: AuthData, eb: ExpressionBuilder<Schema, 'issue'>) =>
               eb.and(
                 isIssueCreator(authData, eb),
                 eb.or(isAdmin(authData, eb), isMemberOfProject(authData, eb)),
@@ -382,10 +405,7 @@ const permissions = must(
       comment: {
         row: {
           insert: [
-            (
-              authData: AuthData,
-              eb: ExpressionBuilder<typeof schema.tables.comment>,
-            ) =>
+            (authData: AuthData, eb: ExpressionBuilder<Schema, 'comment'>) =>
               eb.and(
                 isCommentCreator(authData, eb),
                 canSeeComment(authData, eb),
@@ -456,7 +476,7 @@ beforeEach(() => {
       if (source) {
         return source;
       }
-      const tableSchema = schema.tables[name as keyof typeof schema.tables];
+      const tableSchema = schema.tables[name as keyof Schema['tables']];
       assert(tableSchema, `Table schema not found for ${name}`);
 
       // create the SQLite table
@@ -496,7 +516,7 @@ beforeEach(() => {
 
   for (const table of Object.values(schema.tables)) {
     // force the sqlite tables to be created by getting all the sources
-    must(queryDelegate.getSource(table.tableName));
+    must(queryDelegate.getSource(table.name));
   }
 
   writeAuthorizer = new WriteAuthorizerImpl(
@@ -546,7 +566,7 @@ test('cannot create an issue with the wrong creatorId, even if admin', () => {
   ).toBe(true);
 });
 
-function addUser(user: Row<typeof schema.tables.user>) {
+function addUser(user: Row<Schema['tables']['user']>) {
   const userSource = must(queryDelegate.getSource('user'));
   userSource.push({
     type: 'add',
@@ -554,7 +574,7 @@ function addUser(user: Row<typeof schema.tables.user>) {
   });
 }
 
-function addProject(project: Row<typeof schema.tables.project>) {
+function addProject(project: Row<Schema['tables']['project']>) {
   const projectSource = must(queryDelegate.getSource('project'));
   projectSource.push({
     type: 'add',
@@ -563,7 +583,7 @@ function addProject(project: Row<typeof schema.tables.project>) {
 }
 
 function addProjectMember(
-  projectMember: Row<typeof schema.tables.projectMember>,
+  projectMember: Row<Schema['tables']['projectMember']>,
 ) {
   const projectMemberSource = must(queryDelegate.getSource('projectMember'));
   projectMemberSource.push({
@@ -572,7 +592,7 @@ function addProjectMember(
   });
 }
 
-function addIssue(issue: Row<typeof schema.tables.issue>) {
+function addIssue(issue: Row<Schema['tables']['issue']>) {
   const issueSource = must(queryDelegate.getSource('issue'));
   issueSource.push({
     type: 'add',
@@ -580,7 +600,7 @@ function addIssue(issue: Row<typeof schema.tables.issue>) {
   });
 }
 
-function addComment(comment: Row<typeof schema.tables.comment>) {
+function addComment(comment: Row<Schema['tables']['comment']>) {
   const commentSource = must(queryDelegate.getSource('comment'));
   commentSource.push({
     type: 'add',
@@ -588,7 +608,7 @@ function addComment(comment: Row<typeof schema.tables.comment>) {
   });
 }
 
-function addLabel(label: Row<typeof schema.tables.label>) {
+function addLabel(label: Row<Schema['tables']['label']>) {
   const labelSource = must(queryDelegate.getSource('label'));
   labelSource.push({
     type: 'add',
@@ -596,7 +616,7 @@ function addLabel(label: Row<typeof schema.tables.label>) {
   });
 }
 
-function addIssueLabel(issueLabel: Row<typeof schema.tables.issueLabel>) {
+function addIssueLabel(issueLabel: Row<Schema['tables']['issueLabel']>) {
   const issueLabelSource = must(queryDelegate.getSource('issueLabel'));
   issueLabelSource.push({
     type: 'add',
@@ -604,7 +624,7 @@ function addIssueLabel(issueLabel: Row<typeof schema.tables.issueLabel>) {
   });
 }
 
-function addViewState(viewState: Row<typeof schema.tables.viewState>) {
+function addViewState(viewState: Row<Schema['tables']['viewState']>) {
   const viewStateSource = must(queryDelegate.getSource('viewState'));
   viewStateSource.push({
     type: 'add',
@@ -799,7 +819,7 @@ describe('issue permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '005', role: 'admin'},
-        newQuery(queryDelegate, schema.tables.issue),
+        newQuery(queryDelegate, schema, 'issue'),
       ).map(r => r.row.id),
     ).toEqual(['001', '002', '003']);
   });
@@ -809,7 +829,7 @@ describe('issue permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '001', role: 'user'},
-        newQuery(queryDelegate, schema.tables.issue),
+        newQuery(queryDelegate, schema, 'issue'),
       ).map(r => r.row.id),
     ).toEqual(['001', '002', '003']);
 
@@ -817,7 +837,7 @@ describe('issue permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '002', role: 'user'},
-        newQuery(queryDelegate, schema.tables.issue),
+        newQuery(queryDelegate, schema, 'issue'),
       ).map(r => r.row.id),
     ).toEqual([]);
 
@@ -825,7 +845,7 @@ describe('issue permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '003', role: 'user'},
-        newQuery(queryDelegate, schema.tables.issue),
+        newQuery(queryDelegate, schema, 'issue'),
       ).map(r => r.row.id),
     ).toEqual(['001', '002', '003']);
 
@@ -833,7 +853,7 @@ describe('issue permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '011', role: 'user'},
-        newQuery(queryDelegate, schema.tables.issue),
+        newQuery(queryDelegate, schema, 'issue'),
       ).map(r => r.row.id),
     ).toEqual(['001']);
 
@@ -841,7 +861,7 @@ describe('issue permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '012', role: 'user'},
-        newQuery(queryDelegate, schema.tables.issue),
+        newQuery(queryDelegate, schema, 'issue'),
       ).map(r => r.row.id),
     ).toEqual(['002', '003']);
   });
@@ -870,13 +890,13 @@ describe('issue permissions', () => {
   });
 });
 
-function ast(q: Query<TableSchema, QueryType>) {
-  return (q as QueryImpl<TableSchema, QueryType>)[completedAstSymbol];
+function ast(q: Query<FullSchema, string>) {
+  return (q as QueryImpl<FullSchema, string>)[completedAstSymbol];
 }
 
 function runReadQueryWithPermissions(
   authData: AuthData,
-  query: Query<TableSchema, QueryType>,
+  query: Query<FullSchema, string>,
 ) {
   const updatedAst = bindStaticParameters(
     must(transformQuery(ast(query), permissions, authData)),
@@ -1084,7 +1104,7 @@ describe('comment & issueLabel permissions', () => {
       expect(
         runReadQueryWithPermissions(
           {sub, role: sub === '005' ? 'admin' : 'user'},
-          newQuery(queryDelegate, schema.tables.comment),
+          newQuery(queryDelegate, schema, 'comment'),
         ).map(r => r.row.id),
       ).toEqual(['001', '002']);
     }
@@ -1092,7 +1112,7 @@ describe('comment & issueLabel permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '004', role: 'user'},
-        newQuery(queryDelegate, schema.tables.comment),
+        newQuery(queryDelegate, schema, 'comment'),
       ).map(r => r.row.id),
     ).toEqual([]);
   });
@@ -1275,7 +1295,7 @@ describe('read permissions against nested paths', () => {
     {
       name: 'User can view everything they are attached to through owner/creator relationships',
       sub: 'owner-creator',
-      query: newQuery(queryDelegate, schema.tables.user)
+      query: newQuery(queryDelegate, schema, 'user')
         .where('id', '=', 'owner-creator')
         .related('createdIssues', q => q.related('comments', q => q.limit(1)))
         .related('ownedIssues', q => q.related('comments', q => q.limit(1))),
@@ -1324,7 +1344,7 @@ describe('read permissions against nested paths', () => {
     {
       name: 'User cannot see previously viewed issues if they were moved out of the project and are not the owner/creator',
       sub: 'not-project-member',
-      query: newQuery(queryDelegate, schema.tables.user)
+      query: newQuery(queryDelegate, schema, 'user')
         .where('id', '=', 'not-project-member')
         .related('viewedIssues', q => q.related('comments')),
       expected: [
@@ -1344,7 +1364,7 @@ describe('read permissions against nested paths', () => {
     {
       name: 'User can see previously viewed issues (even if they are not in the project) if they are the owner/creator',
       sub: 'owner-creator',
-      query: newQuery(queryDelegate, schema.tables.user)
+      query: newQuery(queryDelegate, schema, 'user')
         .where('id', 'owner-creator')
         .related('viewedIssues', q => q.related('comments', q => q.limit(2))),
       expected: [
@@ -1388,9 +1408,8 @@ describe('read permissions against nested paths', () => {
     {
       name: 'User can see everything they are attached to through project membership',
       sub: 'project-member',
-      query: newQuery(queryDelegate, schema.tables.user).related(
-        'projects',
-        q => q.related('issues', q => q.related('comments')),
+      query: newQuery(queryDelegate, schema, 'user').related('projects', q =>
+        q.related('issues', q => q.related('comments')),
       ),
       expected: [
         {
@@ -1477,7 +1496,7 @@ describe('read permissions against nested paths', () => {
   test('nested property access', () => {
     let actual = runReadQueryWithPermissions(
       {sub: 'dne', role: '', properties: {role: 'admin'}},
-      newQuery(queryDelegate, schema.tables.issue),
+      newQuery(queryDelegate, schema, 'issue'),
     );
     expect(toIdsOnly(actual)).toEqual([
       {
@@ -1487,7 +1506,7 @@ describe('read permissions against nested paths', () => {
 
     actual = runReadQueryWithPermissions(
       {sub: 'dne', role: ''},
-      newQuery(queryDelegate, schema.tables.issue),
+      newQuery(queryDelegate, schema, 'issue'),
     );
     expect(toIdsOnly(actual)).toEqual([]);
   });

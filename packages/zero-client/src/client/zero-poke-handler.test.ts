@@ -10,8 +10,9 @@ import {
   vi,
 } from 'vitest';
 import type {AST} from '../../../zero-protocol/src/ast.js';
-import {normalizeSchema} from '../../../zero-schema/src/normalized-schema.js';
 import {PokeHandler, mergePokes} from './zero-poke-handler.js';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.js';
+import {string, table} from '../../../zero-schema/src/builder/table-builder.js';
 
 let rafStub: MockInstance<(cb: FrameRequestCallback) => number>;
 // The FrameRequestCallback in PokeHandler does not use
@@ -28,21 +29,24 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const schema = normalizeSchema({
-  version: 1,
-  tables: {
-    issues: {
-      tableName: 'issues',
-      primaryKey: ['id'],
-      columns: {id: {type: 'string'}, title: {type: 'string'}},
-    },
-    labels: {
-      tableName: 'labels',
-      primaryKey: ['id'],
-      columns: {id: {type: 'string'}, name: {type: 'string'}},
-    },
+const schema = createSchema(
+  1,
+  {
+    issues: table('issues')
+      .columns({
+        id: string(),
+        title: string(),
+      })
+      .primaryKey('id'),
+    labels: table('labels')
+      .columns({
+        id: string(),
+        name: string(),
+      })
+      .primaryKey('id'),
   },
-});
+  {},
+);
 
 test('completed poke plays on first raf', async () => {
   const onPokeErrorStub = vi.fn();

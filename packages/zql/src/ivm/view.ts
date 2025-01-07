@@ -1,6 +1,6 @@
 import type {Value} from '../../../zero-protocol/src/data.js';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
-import type {Query, QueryType} from '../query/query.js';
+import type {FullSchema} from '../../../zero-schema/src/table-schema.js';
+import type {Query} from '../query/query.js';
 import type {Input} from './operator.js';
 
 export type View = EntryList | Entry | undefined;
@@ -13,11 +13,12 @@ export type Format = {
 };
 
 export type ViewFactory<
-  TSchema extends TableSchema,
-  TReturn extends QueryType,
+  TSchema extends FullSchema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
   T,
 > = (
-  query: Query<TSchema, TReturn>,
+  query: Query<TSchema, TTable, TReturn>,
   input: Input,
   format: Format,
   onDestroy: () => void,

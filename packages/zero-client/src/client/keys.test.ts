@@ -4,7 +4,6 @@ import type {
   PrimaryKey,
   PrimaryKeyValueRecord,
 } from '../../../zero-protocol/src/primary-key.js';
-import {normalizePrimaryKey} from '../../../zero-schema/src/normalize-table-schema.js';
 import {toPrimaryKeyString as toPrimaryKeyStringImpl} from './keys.js';
 
 test('toPrimaryKeyString', () => {
@@ -13,11 +12,7 @@ test('toPrimaryKeyString', () => {
     primaryKey: PrimaryKey,
     id: PrimaryKeyValueRecord,
   ) {
-    return toPrimaryKeyStringImpl(
-      tableName,
-      normalizePrimaryKey(primaryKey),
-      id,
-    );
+    return toPrimaryKeyStringImpl(tableName, primaryKey, id);
   }
 
   expect(
@@ -114,16 +109,8 @@ test('no clashes - single pk', () => {
         fc.tuple(fc.boolean(), fc.boolean()),
       ),
       ([a, b]) => {
-        const keyA = toPrimaryKeyStringImpl(
-          'issue',
-          normalizePrimaryKey(['id']),
-          {id: a},
-        );
-        const keyB = toPrimaryKeyStringImpl(
-          'issue',
-          normalizePrimaryKey(['id']),
-          {id: b},
-        );
+        const keyA = toPrimaryKeyStringImpl('issue', ['id'], {id: a});
+        const keyB = toPrimaryKeyStringImpl('issue', ['id'], {id: b});
         if (a === b) {
           expect(keyA).toBe(keyB);
         } else {
@@ -135,7 +122,7 @@ test('no clashes - single pk', () => {
 });
 
 test('no clashes - multiple pk', () => {
-  const primaryKey = normalizePrimaryKey(['id', 'name']);
+  const primaryKey = ['id', 'name'] as const;
   fc.assert(
     fc.property(
       fc.tuple(

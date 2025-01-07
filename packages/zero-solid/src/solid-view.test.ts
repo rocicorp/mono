@@ -1,8 +1,10 @@
 import {resolver} from '@rocicorp/resolver';
 import {expect, test} from 'vitest';
 import {MemorySource} from '../../zql/src/ivm/memory-source.js';
-import type {Query, Smash} from '../../zql/src/query/query.js';
+import type {HumanReadable, Query} from '../../zql/src/query/query.js';
 import {SolidView, solidViewFactory} from './solid-view.js';
+import {createSchema} from '../../zero-schema/src/mod.js';
+import {number, string, table} from '../../zero-client/src/mod.js';
 
 test('basics', () => {
   const ms = new MemorySource(
@@ -107,25 +109,22 @@ test('queryComplete promise', async () => {
   expect(view.resultDetails).toEqual({type: 'complete'});
 });
 
-type TestSchema = {
-  tableName: 'test';
-  columns: {
-    a: {type: 'number'};
-    b: {type: 'string'};
-  };
-  primaryKey: ['a'];
-  /* eslint-disable-next-line @typescript-eslint/ban-types */
-  relationships: {};
-};
+const schema = createSchema(
+  1,
+  {
+    test: table('test')
+      .columns({
+        a: number(),
+        b: string(),
+      })
+      .primaryKey('a'),
+  },
+  {},
+);
 
 type TestReturn = {
-  row: {
-    a: number;
-    b: string;
-  };
-  /* eslint-disable-next-line @typescript-eslint/ban-types */
-  related: {};
-  singular: false;
+  a: number;
+  b: string;
 };
 
 test('factory', () => {
@@ -142,8 +141,8 @@ test('factory', () => {
     onDestroyCalled = true;
   };
 
-  const view: SolidView<Smash<TestReturn>> = solidViewFactory(
-    undefined as unknown as Query<TestSchema, TestReturn>,
+  const view: SolidView<HumanReadable<TestReturn>> = solidViewFactory(
+    undefined as unknown as Query<typeof schema, 'test', TestReturn>,
     ms.connect([
       ['b', 'asc'],
       ['a', 'asc'],

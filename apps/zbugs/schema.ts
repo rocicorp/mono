@@ -1,197 +1,186 @@
 import {
+  boolean,
   createSchema,
-  createTableSchema,
   definePermissions,
   NOBODY_CAN,
+  number,
+  relationships,
+  string,
+  table,
   type ExpressionBuilder,
   type Row,
-  type TableSchema,
 } from '@rocicorp/zero';
 import type {Condition} from 'zero-protocol/src/ast.js';
 
-const userSchema = {
-  tableName: 'user',
-  columns: {
-    id: 'string',
-    login: 'string',
-    name: {type: 'string', optional: true},
-    avatar: 'string',
-    role: 'string',
-  },
-  primaryKey: 'id',
-  relationships: {
-    createdIssues: {
-      sourceField: 'id',
-      destField: 'creatorID',
-      destSchema: () => issueSchema,
-    },
-  },
-} as const;
+// Table definitions
+const user = table('user')
+  .columns({
+    id: string(),
+    login: string(),
+    name: string().optional(),
+    avatar: string(),
+    role: string(),
+  })
+  .primaryKey('id');
 
-const issueSchema = {
-  tableName: 'issue',
-  columns: {
-    id: 'string',
-    shortID: {type: 'number', optional: true},
-    title: 'string',
-    open: 'boolean',
-    modified: 'number',
-    created: 'number',
-    creatorID: 'string',
-    assigneeID: {type: 'string', optional: true},
-    description: 'string',
-    visibility: {type: 'string'},
-  },
-  primaryKey: 'id',
-  relationships: {
-    labels: [
-      {
-        sourceField: 'id',
-        destField: 'issueID',
-        destSchema: () => issueLabelSchema,
-      },
-      {
-        sourceField: 'labelID',
-        destField: 'id',
-        destSchema: () => labelSchema,
-      },
-    ],
-    comments: {
-      sourceField: 'id',
-      destField: 'issueID',
-      destSchema: () => commentSchema,
-    },
-    creator: {
-      sourceField: 'creatorID',
-      destField: 'id',
-      destSchema: () => userSchema,
-    },
-    assignee: {
-      sourceField: 'assigneeID',
-      destField: 'id',
-      destSchema: () => userSchema,
-    },
-    viewState: {
-      sourceField: 'id',
-      destField: 'issueID',
-      destSchema: () => viewStateSchema,
-    },
-    emoji: {
-      sourceField: 'id',
-      destField: 'subjectID',
-      destSchema: () => emojiSchema,
-    },
-  },
-} as const;
+const issue = table('issue')
+  .columns({
+    id: string(),
+    shortID: number().optional(),
+    title: string(),
+    open: boolean(),
+    modified: number(),
+    created: number(),
+    creatorID: string(),
+    assigneeID: string().optional(),
+    description: string(),
+    visibility: string(),
+  })
+  .primaryKey('id');
 
-const viewStateSchema = createTableSchema({
-  tableName: 'viewState',
-  columns: {
-    issueID: 'string',
-    userID: 'string',
-    viewed: 'number',
-  },
-  primaryKey: ['userID', 'issueID'],
-});
+const viewState = table('viewState')
+  .columns({
+    issueID: string(),
+    userID: string(),
+    viewed: number(),
+  })
+  .primaryKey('userID', 'issueID');
 
-const commentSchema = {
-  tableName: 'comment',
-  columns: {
-    id: 'string',
-    issueID: 'string',
-    created: 'number',
-    body: 'string',
-    creatorID: 'string',
-  },
-  primaryKey: 'id',
-  relationships: {
-    creator: {
-      sourceField: 'creatorID',
-      destField: 'id',
-      destSchema: () => userSchema,
-    },
-    emoji: {
-      sourceField: 'id',
-      destField: 'subjectID',
-      destSchema: () => emojiSchema,
-    },
-    issue: {
-      sourceField: 'issueID',
-      destField: 'id',
-      destSchema: () => issueSchema,
-    },
-  },
-} as const;
+const comment = table('comment')
+  .columns({
+    id: string(),
+    issueID: string(),
+    created: number(),
+    body: string(),
+    creatorID: string(),
+  })
+  .primaryKey('id');
 
-const labelSchema = createTableSchema({
-  tableName: 'label',
-  columns: {
-    id: 'string',
-    name: 'string',
-  },
-  primaryKey: 'id',
-});
+const label = table('label')
+  .columns({
+    id: string(),
+    name: string(),
+  })
+  .primaryKey('id');
 
-const issueLabelSchema = {
-  tableName: 'issueLabel',
-  columns: {
-    issueID: 'string',
-    labelID: 'string',
-  },
-  primaryKey: ['issueID', 'labelID'],
-  relationships: {
-    issue: {
-      sourceField: 'issueID',
-      destField: 'id',
-      destSchema: () => issueSchema,
-    },
-  },
-} as const;
+const issueLabel = table('issueLabel')
+  .columns({
+    issueID: string(),
+    labelID: string(),
+  })
+  .primaryKey('issueID', 'labelID');
 
-const emojiSchema = {
-  tableName: 'emoji',
-  columns: {
-    id: 'string',
-    value: 'string',
-    annotation: 'string',
-    subjectID: 'string',
-    creatorID: 'string',
-    created: 'number',
-  },
-  primaryKey: 'id',
-  relationships: {
-    creator: {
-      sourceField: 'creatorID',
-      destField: 'id',
-      destSchema: userSchema,
-    },
-    issue: {
-      sourceField: 'subjectID',
-      destField: 'id',
-      destSchema: issueSchema,
-    },
-    comment: {
-      sourceField: 'subjectID',
-      destField: 'id',
-      destSchema: commentSchema,
-    },
-  },
-} as const;
+const emoji = table('emoji')
+  .columns({
+    id: string(),
+    value: string(),
+    annotation: string(),
+    subjectID: string(),
+    creatorID: string(),
+    created: number(),
+  })
+  .primaryKey('id');
 
-const userPrefSchema = createTableSchema({
-  tableName: 'userPref',
-  columns: {
-    key: 'string',
-    userID: 'string',
-    value: 'string',
-  },
-  primaryKey: ['userID', 'key'],
-});
+const userPref = table('userPref')
+  .columns({
+    key: string(),
+    userID: string(),
+    value: string(),
+  })
+  .primaryKey('userID', 'key');
 
-export type IssueRow = Row<typeof issueSchema>;
-export type CommentRow = Row<typeof commentSchema>;
-export type UserRow = Row<typeof userSchema>;
-export type Schema = typeof schema;
+// Relationships
+const userRelationships = relationships(user, connect => ({
+  createdIssues: connect({
+    sourceField: ['id'],
+    destField: ['creatorID'],
+    destSchema: issue,
+  }),
+}));
+
+const issueRelationships = relationships(issue, connect => ({
+  labels: connect(
+    {
+      sourceField: ['id'],
+      destField: ['issueID'],
+      destSchema: issueLabel,
+    },
+    {
+      sourceField: ['labelID'],
+      destField: ['id'],
+      destSchema: label,
+    },
+  ),
+  comments: connect({
+    sourceField: ['id'],
+    destField: ['issueID'],
+    destSchema: comment,
+  }),
+  creator: connect({
+    sourceField: ['creatorID'],
+    destField: ['id'],
+    destSchema: user,
+  }),
+  assignee: connect({
+    sourceField: ['assigneeID'],
+    destField: ['id'],
+    destSchema: user,
+  }),
+  viewState: connect({
+    sourceField: ['id'],
+    destField: ['issueID'],
+    destSchema: viewState,
+  }),
+  emoji: connect({
+    sourceField: ['id'],
+    destField: ['subjectID'],
+    destSchema: emoji,
+  }),
+}));
+
+const commentRelationships = relationships(comment, connect => ({
+  creator: connect({
+    sourceField: ['creatorID'],
+    destField: ['id'],
+    destSchema: user,
+  }),
+  emoji: connect({
+    sourceField: ['id'],
+    destField: ['subjectID'],
+    destSchema: emoji,
+  }),
+  issue: connect({
+    sourceField: ['issueID'],
+    destField: ['id'],
+    destSchema: issue,
+  }),
+}));
+
+const issueLabelRelationships = relationships(issueLabel, connect => ({
+  issue: connect({
+    sourceField: ['issueID'],
+    destField: ['id'],
+    destSchema: issue,
+  }),
+}));
+
+const emojiRelationships = relationships(emoji, connect => ({
+  creator: connect({
+    sourceField: ['creatorID'],
+    destField: ['id'],
+    destSchema: user,
+  }),
+  issue: connect({
+    sourceField: ['subjectID'],
+    destField: ['id'],
+    destSchema: issue,
+  }),
+  comment: connect({
+    sourceField: ['subjectID'],
+    destField: ['id'],
+    destSchema: comment,
+  }),
+}));
 
 /** The contents of the zbugs JWT */
 type AuthData = {
@@ -200,31 +189,42 @@ type AuthData = {
   role: 'crew' | 'user';
 };
 
-export const schema = createSchema({
-  // If you change this make sure to change apps/zbugs/docker/init_upstream/init.sql
-  // as well as updating the database on both prod and on sandbox.
-  version: 5,
-
-  tables: {
-    user: userSchema,
-    issue: issueSchema,
-    comment: commentSchema,
-    label: labelSchema,
-    issueLabel: issueLabelSchema,
-    viewState: viewStateSchema,
-    emoji: emojiSchema,
-    userPref: userPrefSchema,
+export const schema = createSchema(
+  5,
+  {
+    user,
+    issue,
+    comment,
+    label,
+    issueLabel,
+    viewState,
+    emoji,
+    userPref,
   },
-});
+  {
+    userRelationships,
+    issueRelationships,
+    commentRelationships,
+    issueLabelRelationships,
+    emojiRelationships,
+  },
+);
 
-type PermissionRule<TSchema extends TableSchema> = (
+export type Schema = typeof schema;
+type TableName = keyof Schema['tables'];
+
+export type IssueRow = Row<typeof schema.tables.issue>;
+export type CommentRow = Row<typeof schema.tables.comment>;
+export type UserRow = Row<typeof schema.tables.user>;
+
+type PermissionRule<TTable extends TableName> = (
   authData: AuthData,
-  eb: ExpressionBuilder<TSchema>,
+  eb: ExpressionBuilder<Schema, TTable>,
 ) => Condition;
 
-function and<TSchema extends TableSchema>(
-  ...rules: PermissionRule<TSchema>[]
-): PermissionRule<TSchema> {
+function and<TTable extends TableName>(
+  ...rules: PermissionRule<TTable>[]
+): PermissionRule<TTable> {
   return (authData, eb) => eb.and(...rules.map(rule => rule(authData, eb)));
 }
 
@@ -232,14 +232,12 @@ export const permissions: ReturnType<typeof definePermissions> =
   definePermissions<AuthData, Schema>(schema, () => {
     const userIsLoggedIn = (
       authData: AuthData,
-      {cmpLit}: ExpressionBuilder<TableSchema>,
+      {cmpLit}: ExpressionBuilder<Schema, TableName>,
     ) => cmpLit(authData.sub, 'IS NOT', null);
 
     const loggedInUserIsCreator = (
       authData: AuthData,
-      eb: ExpressionBuilder<
-        typeof commentSchema | typeof emojiSchema | typeof issueSchema
-      >,
+      eb: ExpressionBuilder<Schema, 'comment' | 'emoji' | 'issue'>,
     ) =>
       eb.and(
         userIsLoggedIn(authData, eb),
@@ -248,7 +246,7 @@ export const permissions: ReturnType<typeof definePermissions> =
 
     const loggedInUserIsAdmin = (
       authData: AuthData,
-      eb: ExpressionBuilder<TableSchema>,
+      eb: ExpressionBuilder<Schema, TableName>,
     ) =>
       eb.and(
         userIsLoggedIn(authData, eb),
@@ -257,12 +255,12 @@ export const permissions: ReturnType<typeof definePermissions> =
 
     const allowIfUserIDMatchesLoggedInUser = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<typeof viewStateSchema | typeof userPrefSchema>,
+      {cmp}: ExpressionBuilder<Schema, 'viewState' | 'userPref'>,
     ) => cmp('userID', '=', authData.sub);
 
     const allowIfAdminOrIssueCreator = (
       authData: AuthData,
-      eb: ExpressionBuilder<typeof issueLabelSchema>,
+      eb: ExpressionBuilder<Schema, 'issueLabel'>,
     ) =>
       eb.or(
         loggedInUserIsAdmin(authData, eb),
@@ -273,7 +271,7 @@ export const permissions: ReturnType<typeof definePermissions> =
 
     const canSeeIssue = (
       authData: AuthData,
-      eb: ExpressionBuilder<typeof issueSchema>,
+      eb: ExpressionBuilder<Schema, 'issue'>,
     ) =>
       eb.or(loggedInUserIsAdmin(authData, eb), eb.cmp('visibility', 'public'));
 
@@ -282,7 +280,7 @@ export const permissions: ReturnType<typeof definePermissions> =
      */
     const canSeeComment = (
       authData: AuthData,
-      eb: ExpressionBuilder<typeof commentSchema>,
+      eb: ExpressionBuilder<Schema, 'comment'>,
     ) => eb.exists('issue', q => q.where(eb => canSeeIssue(authData, eb)));
 
     /**
@@ -290,7 +288,7 @@ export const permissions: ReturnType<typeof definePermissions> =
      */
     const canSeeIssueLabel = (
       authData: AuthData,
-      eb: ExpressionBuilder<typeof issueLabelSchema>,
+      eb: ExpressionBuilder<Schema, 'issueLabel'>,
     ) => eb.exists('issue', q => q.where(eb => canSeeIssue(authData, eb)));
 
     /**
@@ -298,7 +296,7 @@ export const permissions: ReturnType<typeof definePermissions> =
      */
     const canSeeEmoji = (
       authData: AuthData,
-      {exists, or}: ExpressionBuilder<typeof emojiSchema>,
+      {exists, or}: ExpressionBuilder<Schema, 'emoji'>,
     ) =>
       or(
         exists('issue', q => {

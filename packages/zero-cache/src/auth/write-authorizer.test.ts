@@ -3,12 +3,13 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js'
 import {Database} from '../../../zqlite/src/db.js';
 import {WriteAuthorizerImpl} from './write-authorizer.js';
 import type {Rule} from '../../../zero-schema/src/compiled-permissions.js';
-import type {Schema} from '../../../zero-schema/src/schema.js';
 import type {
   DeleteOp,
   InsertOp,
   UpdateOp,
 } from '../../../zero-protocol/src/push.js';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.js';
+import {string, table} from '../../../zero-schema/src/builder/table-builder.js';
 
 const lc = createSilentLogContext();
 
@@ -38,20 +39,18 @@ const allowIfAIsSubject = [
   },
 ] satisfies Rule;
 
-const schema: Schema = {
-  version: 1,
-  tables: {
-    foo: {
-      tableName: 'foo',
-      columns: {
-        id: {type: 'string'},
-        a: {type: 'string'},
-      },
-      primaryKey: ['id'],
-      relationships: {},
-    },
+const schema = createSchema(
+  1,
+  {
+    foo: table('foo')
+      .columns({
+        id: string(),
+        a: string(),
+      })
+      .primaryKey('id'),
   },
-};
+  {},
+);
 
 let replica: Database;
 beforeEach(() => {

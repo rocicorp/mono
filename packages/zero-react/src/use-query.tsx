@@ -3,33 +3,36 @@ import {deepClone} from '../../shared/src/deep-clone.js';
 import type {Immutable} from '../../shared/src/immutable.js';
 import type {
   Query,
-  QueryType,
   ReadonlyJSONValue,
-  Smash,
   TypedView,
 } from '../../zero-client/src/mod.js';
-import type {TableSchema} from '../../zero-schema/src/table-schema.js';
+import type {FullSchema} from '../../zero-schema/src/table-schema.js';
 import type {AdvancedQuery} from '../../zql/src/query/query-internal.js';
 import type {ResultType} from '../../zql/src/query/typed-view.js';
 import {useZero} from './use-zero.js';
+import type {HumanReadable} from '../../zql/src/query/query.js';
 
 export type QueryResultDetails = Readonly<{
   type: ResultType;
 }>;
 
-export type QueryResult<TReturn extends QueryType> = readonly [
-  Smash<TReturn>,
+export type QueryResult<TReturn> = readonly [
+  HumanReadable<TReturn>,
   QueryResultDetails,
 ];
 
 export function useQuery<
-  TSchema extends TableSchema,
-  TReturn extends QueryType,
->(q: Query<TSchema, TReturn>, enable: boolean = true): QueryResult<TReturn> {
+  TSchema extends FullSchema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+>(
+  q: Query<TSchema, TTable, TReturn>,
+  enable: boolean = true,
+): QueryResult<TReturn> {
   const z = useZero();
   const view = viewStore.getView(
     z.clientID,
-    q as AdvancedQuery<TSchema, TReturn>,
+    q as AdvancedQuery<TSchema, TTable, TReturn>,
     enable && z.server !== null,
   );
   // https://react.dev/reference/react/useSyncExternalStore
@@ -48,9 +51,7 @@ const defaultSnapshots = {
   plural: [emptyArray, {type: 'unknown'}] as const,
 };
 
-function getDefaultSnapshot<TReturn extends QueryType>(
-  singular: boolean,
-): QueryResult<TReturn> {
+function getDefaultSnapshot<TReturn>(singular: boolean): QueryResult<TReturn> {
   return (
     singular ? defaultSnapshots.singular : defaultSnapshots.plural
   ) as QueryResult<TReturn>;
@@ -106,11 +107,15 @@ function getDefaultSnapshot<TReturn extends QueryType>(
  */
 class ViewStore {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  #views = new Map<string, ViewWrapper<any, any>>();
+  #views = new Map<string, ViewWrapper<any, any, any>>();
 
-  getView<TSchema extends TableSchema, TReturn extends QueryType>(
+  getView<
+    TSchema extends FullSchema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+  >(
     clientID: string,
-    query: AdvancedQuery<TSchema, TReturn>,
+    query: AdvancedQuery<TSchema, TTable, TReturn>,
     enabled: boolean,
   ): {
     getSnapshot: () => QueryResult<TReturn>;
@@ -141,10 +146,10 @@ class ViewStore {
         () => {
           this.#views.delete(hash);
         },
-      ) as ViewWrapper<TSchema, TReturn>;
+      ) as ViewWrapper<TSchema, TTable, TReturn>;
       this.#views.set(hash, existing);
     }
-    return existing as ViewWrapper<TSchema, TReturn>;
+    return existing as ViewWrapper<TSchema, TTable, TReturn>;
   }
 }
 
@@ -175,17 +180,21 @@ const viewStore = new ViewStore();
  * 1. The store snapshot returned by getSnapshot must be immutable. If the underlying store has mutable data, return a new immutable snapshot if the data has changed. Otherwise, return a cached last snapshot.
  * 2. If a different subscribe function is passed during a re-render, React will re-subscribe to the store using the newly passed subscribe function. You can prevent this by declaring subscribe outside the component.
  */
-class ViewWrapper<TSchema extends TableSchema, TReturn extends QueryType> {
-  #view: TypedView<Smash<TReturn>> | undefined;
+class ViewWrapper<
+  TSchema extends FullSchema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+> {
+  #view: TypedView<HumanReadable<TReturn>> | undefined;
   readonly #onDematerialized;
   readonly #onMaterialized;
-  readonly #query: AdvancedQuery<TSchema, TReturn>;
+  readonly #query: AdvancedQuery<TSchema, TTable, TReturn>;
   #snapshot: QueryResult<TReturn>;
   #reactInternals: Set<() => void>;
 
   constructor(
-    query: AdvancedQuery<TSchema, TReturn>,
-    onMaterialized: (view: ViewWrapper<TSchema, TReturn>) => void,
+    query: AdvancedQuery<TSchema, TTable, TReturn>,
+    onMaterialized: (view: ViewWrapper<TSchema, TTable, TReturn>) => void,
     onDematerialized: () => void,
   ) {
     this.#snapshot = getDefaultSnapshot(query.format.singular);
@@ -195,11 +204,14 @@ class ViewWrapper<TSchema extends TableSchema, TReturn extends QueryType> {
     this.#query = query;
   }
 
-  #onData = (snap: Immutable<Smash<TReturn>>, resultType: ResultType) => {
+  #onData = (
+    snap: Immutable<HumanReadable<TReturn>>,
+    resultType: ResultType,
+  ) => {
     const data =
       snap === undefined
         ? snap
-        : (deepClone(snap as ReadonlyJSONValue) as Smash<TReturn>);
+        : (deepClone(snap as ReadonlyJSONValue) as HumanReadable<TReturn>);
     this.#snapshot = [data, {type: resultType}] as QueryResult<TReturn>;
     for (const internals of this.#reactInternals) {
       internals();

@@ -44,6 +44,14 @@ import {PipelineDriver} from './pipeline-driver.js';
 import {initViewSyncerSchema} from './schema/init.js';
 import {Snapshotter} from './snapshotter.js';
 import {pickToken, type SyncContext, ViewSyncerService} from './view-syncer.js';
+import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.js';
+import {
+  json,
+  number,
+  string,
+  table,
+} from '../../../../zero-schema/src/builder/table-builder.js';
+import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.js';
 
 const SHARD_ID = 'ABC';
 
@@ -208,44 +216,41 @@ const USERS_QUERY: AST = {
   orderBy: [['id', 'asc']],
 };
 
-const issues = {
-  tableName: 'issues',
-  columns: {
-    id: {type: 'string'},
-    title: {type: 'string'},
-    owner: {type: 'string'},
-    parent: {type: 'string'},
-    big: {type: 'number'},
-    json: {type: 'json'},
-  },
-  primaryKey: ['id'],
-  relationships: {},
-} as const;
+const issues = table('issues')
+  .columns({
+    id: string(),
+    title: string(),
+    owner: string(),
+    parent: string(),
+    big: number(),
+    json: json(),
+  })
+  .primaryKey('id');
+const comments = table('comments')
+  .columns({
+    id: string(),
+    issueID: string(),
+    text: string(),
+  })
+  .primaryKey('id');
 
-const comments = {
-  tableName: 'comments',
-  columns: {
-    id: {type: 'string'},
-    issueID: {type: 'string'},
-    text: {type: 'string'},
-  },
-  primaryKey: ['id'],
-  relationships: {
-    issue: {
-      sourceField: 'issueID',
-      destField: 'id',
-      destSchema: issues,
-    },
-  },
-} as const;
-
-const schema = {
-  version: 1,
-  tables: {
+const schema = createSchema(
+  1,
+  {
     issues,
     comments,
   },
-} as const;
+  {
+    commentRelationships: relationships(comments, connect => ({
+      issue: connect({
+        sourceField: ['issueID'],
+        destField: ['id'],
+        destSchema: issues,
+      }),
+    })),
+  },
+);
+type Schema = typeof schema;
 
 type AuthData = {
   sub: string;
@@ -254,7 +259,7 @@ type AuthData = {
 };
 const canSeeIssue = (
   authData: AuthData,
-  eb: ExpressionBuilder<typeof schema.tables.issues>,
+  eb: ExpressionBuilder<Schema, 'issues'>,
 ) => eb.cmpLit(authData.role, '=', 'admin');
 const permissions: PermissionsConfig | undefined = await definePermissions<
   AuthData,
@@ -268,7 +273,7 @@ const permissions: PermissionsConfig | undefined = await definePermissions<
   comments: {
     row: {
       select: [
-        (authData, eb: ExpressionBuilder<typeof schema.tables.comments>) =>
+        (authData, eb: ExpressionBuilder<Schema, 'comments'>) =>
           eb.exists('issue', iq =>
             iq.where(({eb}) => canSeeIssue(authData, eb)),
           ),

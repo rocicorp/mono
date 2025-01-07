@@ -1,14 +1,12 @@
 import {beforeEach, expect, expectTypeOf, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.js';
 import {must} from '../../shared/src/must.js';
-import {normalizeTableSchema} from '../../zero-schema/src/normalize-table-schema.js';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.js';
 import type {Source} from '../../zql/src/ivm/source.js';
 import {newQuery, type QueryDelegate} from '../../zql/src/query/query-impl.js';
-import {schemas} from '../../zql/src/query/test/testSchemas.js';
+import {schema} from '../../zql/src/query/test/test-schemas.js';
 import {Database} from './db.js';
 import {TableSource, toSQLiteTypeName} from './table-source.js';
-import type {Row} from '../../zql/src/query/query.js';
 
 let queryDelegate: QueryDelegate;
 beforeEach(() => {
@@ -20,25 +18,24 @@ beforeEach(() => {
       if (source) {
         return source;
       }
-      const schema = normalizeTableSchema(
-        schemas[name as keyof typeof schemas],
-      );
+
+      const tableSchema = schema.tables[name as keyof typeof schema.tables];
 
       // create the SQLite table
       db.exec(`
       CREATE TABLE "${name}" (
-        ${Object.entries(schema.columns)
+        ${Object.entries(tableSchema.columns)
           .map(([name, c]) => `"${name}" ${toSQLiteTypeName(c.type)}`)
           .join(', ')},
-        PRIMARY KEY (${schema.primaryKey.map(k => `"${k}"`).join(', ')})
+        PRIMARY KEY (${tableSchema.primaryKey.map(k => `"${k}"`).join(', ')})
       )`);
 
       source = new TableSource(
         'query.test.ts',
         db,
         name,
-        schema.columns,
-        schema.primaryKey,
+        tableSchema.columns,
+        tableSchema.primaryKey,
       );
 
       sources.set(name, source);
@@ -127,25 +124,27 @@ beforeEach(() => {
 });
 
 test('row type', () => {
-  const query = newQuery(queryDelegate, schemas.issue)
+  const query = newQuery(queryDelegate, schema, 'issue')
     .whereExists('labels', q => q.where('name', '=', 'bug'))
     .related('labels');
-  type RT = Row<typeof query>;
-  expectTypeOf<RT>().toEqualTypeOf<{
-    readonly id: string;
-    readonly title: string;
-    readonly description: string;
-    readonly closed: boolean;
-    readonly ownerId: string | null;
-    readonly labels: readonly {
+  type RT = ReturnType<typeof query.run>;
+  expectTypeOf<RT>().toEqualTypeOf<
+    {
       readonly id: string;
-      readonly name: string;
-    }[];
-  }>();
+      readonly title: string;
+      readonly description: string;
+      readonly closed: boolean;
+      readonly ownerId: string | null;
+      readonly labels: readonly {
+        readonly id: string;
+        readonly name: string;
+      }[];
+    }[]
+  >();
 });
 
 test('basic query', () => {
-  const query = newQuery(queryDelegate, schemas.issue);
+  const query = newQuery(queryDelegate, schema, 'issue');
   const data = query.run();
   expect(data).toMatchInlineSnapshot(`
     [
@@ -175,19 +174,19 @@ test('basic query', () => {
 });
 
 test('null compare', () => {
-  let rows = newQuery(queryDelegate, schemas.issue)
+  let rows = newQuery(queryDelegate, schema, 'issue')
     .where('ownerId', '=', null)
     .run();
 
   expect(rows).toEqual([]);
 
-  rows = newQuery(queryDelegate, schemas.issue)
+  rows = newQuery(queryDelegate, schema, 'issue')
     .where('ownerId', '!=', null)
     .run();
 
   expect(rows).toEqual([]);
 
-  rows = newQuery(queryDelegate, schemas.issue)
+  rows = newQuery(queryDelegate, schema, 'issue')
     .where('ownerId', 'IS', null)
     .run();
 
@@ -203,7 +202,7 @@ test('null compare', () => {
     ]
   `);
 
-  rows = newQuery(queryDelegate, schemas.issue)
+  rows = newQuery(queryDelegate, schema, 'issue')
     .where('ownerId', 'IS NOT', null)
     .run();
 
@@ -228,7 +227,7 @@ test('null compare', () => {
 });
 
 test('or', () => {
-  const query = newQuery(queryDelegate, schemas.issue).where(({or, cmp}) =>
+  const query = newQuery(queryDelegate, schema, 'issue').where(({or, cmp}) =>
     or(cmp('ownerId', '=', '0001'), cmp('ownerId', '=', '0002')),
   );
   const data = query.run();
@@ -253,7 +252,7 @@ test('or', () => {
 });
 
 test('where exists retracts when an edit causes a row to no longer match', () => {
-  const query = newQuery(queryDelegate, schemas.issue)
+  const query = newQuery(queryDelegate, schema, 'issue')
     .whereExists('labels', q => q.where('name', '=', 'bug'))
     .related('labels');
 

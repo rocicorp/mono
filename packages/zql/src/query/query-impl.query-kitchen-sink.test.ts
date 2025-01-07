@@ -2,7 +2,7 @@ import {describe, expect, test} from 'vitest';
 import {must} from '../../../shared/src/must.js';
 import {newQuery, type QueryDelegate} from './query-impl.js';
 import {QueryDelegateImpl} from './test/query-delegate.js';
-import {issueSchema} from './test/testSchemas.js';
+import {schema} from './test/test-schemas.js';
 
 function addData(queryDelegate: QueryDelegate) {
   const userSource = must(queryDelegate.getSource('user'));
@@ -289,7 +289,7 @@ describe('kitchen sink query', () => {
   test('complex query with filters, limits, and multiple joins', () => {
     const queryDelegate = new QueryDelegateImpl();
     addData(queryDelegate);
-    const issueQuery = newQuery(queryDelegate, issueSchema)
+    const issueQuery = newQuery(queryDelegate, schema, 'issue')
       .where('ownerId', 'IN', ['001', '002', '003'])
       .where('closed', false)
       .related('owner')

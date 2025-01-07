@@ -4,7 +4,7 @@ import type {
   schemaSchema,
   schemaValueSchema,
 } from './schema-config.js';
-import type {Schema} from './schema.js';
+import type {Schema} from './builder/schema-builder.js';
 import type {Relationship, SchemaValue} from './table-schema.js';
 
 type MakeAllFieldsRequired<T> = {
