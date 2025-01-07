@@ -178,6 +178,28 @@ try {
   execute('npm publish --tag=canary', {cwd: basePath('packages', 'zero')});
 
   const dockerCanaryVersion = nextCanaryVersion.replace(/\+/g, '-');
+
+  // Ensure proper buildx setup
+  try {
+    const builders = execute('docker buildx ls', {stdio: 'pipe'});
+    const hasMultiArchBuilder =
+      builders.includes('linux/amd64') && builders.includes('linux/arm64');
+
+    if (!hasMultiArchBuilder) {
+      console.log('Setting up multi-architecture builder...');
+      execute(
+        'docker buildx create --name multiarch --driver docker-container --bootstrap',
+      );
+      execute('docker buildx use multiarch');
+    }
+
+    execute('docker buildx inspect --bootstrap');
+  } catch (e) {
+    console.error('Failed to set up Docker buildx:', e);
+    throw e;
+  }
+
+  // Proceed with build attempts
   for (let i = 0; i < 3; i++) {
     try {
       execute(
