@@ -1,4 +1,4 @@
-import {type Accessor, onCleanup} from 'solid-js';
+import {createMemo, onCleanup, type Accessor} from 'solid-js';
 import type {
   AdvancedQuery,
   Query,
@@ -6,12 +6,7 @@ import type {
   Smash,
   TableSchema,
 } from '../../zero-advanced/src/mod.js';
-import type {ResultType} from '../../zql/src/query/typed-view.js';
-import {solidViewFactory} from './solid-view.js';
-
-export type QueryResultDetails = Readonly<{
-  type: ResultType;
-}>;
+import {solidViewFactory, type QueryResultDetails} from './solid-view.js';
 
 export type QueryResult<TReturn extends QueryType> = readonly [
   Accessor<Smash<TReturn>>,
@@ -22,14 +17,18 @@ export function useQuery<
   TSchema extends TableSchema,
   TReturn extends QueryType,
 >(querySignal: () => Query<TSchema, TReturn>): QueryResult<TReturn> {
-  const query = querySignal();
-  const view = (query as AdvancedQuery<TSchema, TReturn>).materialize(
-    solidViewFactory,
-  );
+  // Wrap in in createMemo to ensure a new view is created if the querySignal changes.
+  const view = createMemo(() => {
+    const query = querySignal();
+    const view = (query as AdvancedQuery<TSchema, TReturn>).materialize(
+      solidViewFactory,
+    );
 
-  onCleanup(() => {
-    view.destroy();
+    onCleanup(() => {
+      view.destroy();
+    });
+    return view;
   });
 
-  return [() => view.data, () => ({type: view.resultType})];
+  return [() => view().data, () => view().resultDetails];
 }

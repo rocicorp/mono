@@ -1,3 +1,4 @@
+import {createEffect, createSignal} from 'solid-js';
 import {expect, test} from 'vitest';
 import {must} from '../../shared/src/must.js';
 import {MemorySource} from '../../zql/src/ivm/memory-source.js';
@@ -5,7 +6,7 @@ import {newQuery} from '../../zql/src/query/query-impl.js';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.js';
 import {useQuery} from './use-query.js';
 
-test('use-query', async () => {
+test('useQuery', async () => {
   const tableSchema = {
     tableName: 'table',
     columns: {
@@ -44,4 +45,73 @@ test('use-query', async () => {
     {a: 3, b: 'c'},
   ]);
   expect(resultType()).toEqual({type: 'complete'});
+});
+
+test('useQuery deps change', async () => {
+  const tableSchema = {
+    tableName: 'table',
+    columns: {
+      a: {type: 'number'},
+      b: {type: 'string'},
+    },
+    primaryKey: ['a'],
+    relationships: {},
+  } as const;
+  const ms = new MemorySource(
+    tableSchema.tableName,
+    tableSchema.columns,
+    tableSchema.primaryKey,
+  );
+  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
+  ms.push({row: {a: 2, b: 'b'}, type: 'add'});
+
+  const [a, setA] = createSignal(1);
+
+  const queryDelegate = new QueryDelegateImpl({table: ms});
+  const tableQuery = newQuery(queryDelegate, tableSchema);
+
+  const [rows, resultDetails] = useQuery(() => tableQuery.where('a', a()));
+
+  const rowLog: unknown[] = [];
+  const resultDetailsLog: unknown[] = [];
+  const resetLogs = () => {
+    rowLog.length = 0;
+    resultDetailsLog.length = 0;
+  };
+
+  createEffect(() => {
+    rowLog.push(rows());
+  });
+
+  createEffect(() => {
+    resultDetailsLog.push(resultDetails());
+  });
+
+  expect(rowLog).toEqual([[{a: 1, b: 'a'}]]);
+  expect(resultDetailsLog).toEqual([{type: 'unknown'}]);
+  resetLogs();
+
+  queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
+  await 1;
+
+  expect(rowLog).toEqual([]);
+  expect(resultDetailsLog).toEqual([{type: 'complete'}]);
+  resetLogs();
+
+  ms.push({type: 'edit', oldRow: {a: 1, b: 'a'}, row: {a: 1, b: 'a2'}});
+
+  expect(rowLog).toEqual([{a: 1, b: 'a2'}]);
+  expect(resultDetailsLog).toEqual([]);
+  resetLogs();
+
+  setA(2);
+  expect(rowLog).toEqual([[{a: 2, b: 'b'}]]);
+  expect(resultDetailsLog).toEqual([{type: 'unknown'}]);
+  resetLogs();
+
+  queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
+  await 1;
+
+  expect(rowLog).toEqual([]);
+  expect(resultDetailsLog).toEqual([{type: 'complete'}]);
 });
