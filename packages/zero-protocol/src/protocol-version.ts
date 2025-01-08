@@ -23,6 +23,6 @@ export const PROTOCOL_VERSION = 4;
  * from protocol versions before `MIN_SERVER_SUPPORTED_PROTOCOL_VERSION` are
  * closed with a `VersionNotSupported` error.
  */
-export const MIN_SERVER_SUPPORTED_PROTOCOL_VERSION = 3;
+export const MIN_SERVER_SUPPORTED_PROTOCOL_VERSION = 2;
 
 assert(MIN_SERVER_SUPPORTED_PROTOCOL_VERSION < PROTOCOL_VERSION);
