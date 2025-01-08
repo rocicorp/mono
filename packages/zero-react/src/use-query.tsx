@@ -193,7 +193,6 @@ class ViewWrapper<TSchema extends TableSchema, TReturn extends QueryType> {
     this.#onDematerialized = onDematerialized;
     this.#reactInternals = new Set();
     this.#query = query;
-    this.#materializeIfNeeded();
   }
 
   #onData = (snap: Immutable<Smash<TReturn>>, resultType: ResultType) => {
