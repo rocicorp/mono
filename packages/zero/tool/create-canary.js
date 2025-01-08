@@ -199,7 +199,6 @@ try {
     throw e;
   }
 
-  // Proceed with build attempts
   for (let i = 0; i < 3; i++) {
     try {
       execute(
