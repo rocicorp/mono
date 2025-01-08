@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 node:22.11.0-alpine3.20
+FROM node:22.11.0-alpine3.20
 
 ARG ZERO_VERSION
 ARG NPM_TOKEN
