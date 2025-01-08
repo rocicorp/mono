@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {SilentLogger} from '@rocicorp/logger';
-import stripAnsi from 'strip-ansi';
+import {stripVTControlCharacters as stripAnsi} from 'node:util';
 import type {PartialDeep} from 'type-fest';
 import {expect, test, vi} from 'vitest';
 import {

@@ -6,7 +6,7 @@ import commandLineUsage from 'command-line-usage';
 import kebabcase from 'lodash.kebabcase';
 import merge from 'lodash.merge';
 import snakeCase from 'lodash.snakecase';
-import stripAnsi from 'strip-ansi';
+import {stripVTControlCharacters as stripAnsi} from 'node:util';
 import {assert} from './asserts.js';
 import {must} from './must.js';
 import * as v from './valita.js';
