@@ -114,22 +114,28 @@ describe('dispatcher/websocket-handoff', () => {
     installWebSocketHandoff(
       createSilentLogContext(),
       () => {
-        throw new Error('fooz barz');
+        throw new Error('こんにちは' + 'あ'.repeat(150));
       },
       server,
     );
 
     const ws = new WebSocket(`ws://localhost:${port}/`);
-    const {promise, resolve} = resolver<unknown>();
+    const {promise, resolve} = resolver<{code: number; reason: string}>();
     ws.on('close', (code, reason) =>
       resolve({code, reason: reason.toString('utf-8')}),
     );
 
-    expect(await promise).toMatchInlineSnapshot(`
+    const error = await promise;
+    expect(error).toMatchInlineSnapshot(`
       {
         "code": 1002,
-        "reason": "Error: fooz barz",
+        "reason": "Error: こんにちはああああああああああああああああああああああああああああああああ...",
       }
     `);
+    // close messages must be less than or equal to 123 bytes:
+    // https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/close#reason
+    expect(new TextEncoder().encode(error.reason).length).toBeLessThanOrEqual(
+      123,
+    );
   });
 });

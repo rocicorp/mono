@@ -16,7 +16,10 @@ import {
   type PongMessage,
   upstreamSchema,
 } from '../../../zero-protocol/src/mod.js';
-import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.js';
+import {
+  MIN_SERVER_SUPPORTED_PROTOCOL_VERSION,
+  PROTOCOL_VERSION,
+} from '../../../zero-protocol/src/protocol-version.js';
 import type {ConnectParams} from '../services/dispatcher/connect-params.js';
 import type {Mutagen} from '../services/mutagen/mutagen.js';
 import type {
@@ -109,14 +112,16 @@ export class Connection {
    */
   init() {
     if (
-      this.#protocolVersion !== PROTOCOL_VERSION &&
-      this.#protocolVersion !== PROTOCOL_VERSION - 1
+      this.#protocolVersion > PROTOCOL_VERSION ||
+      this.#protocolVersion < MIN_SERVER_SUPPORTED_PROTOCOL_VERSION
     ) {
       this.#closeWithError({
         kind: ErrorKind.VersionNotSupported,
-        message: `server supports v${
-          PROTOCOL_VERSION - 1
-        } and v${PROTOCOL_VERSION} protocols`,
+        message: `server is at sync protocol v${PROTOCOL_VERSION} and does not support v${
+          this.#protocolVersion
+        }. The ${
+          this.#protocolVersion > PROTOCOL_VERSION ? 'server' : 'client'
+        } must be updated to a newer release.`,
       });
     } else {
       const connectedMessage: ConnectedMessage = [

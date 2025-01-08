@@ -34,7 +34,12 @@ import type {
 } from '../../../db/specs.js';
 import {StatementRunner} from '../../../db/statements.js';
 import {stringify} from '../../../types/bigint-json.js';
-import {max, oneAfter, versionFromLexi} from '../../../types/lexi-version.js';
+import {
+  max,
+  oneAfter,
+  versionFromLexi,
+  versionToLexi,
+} from '../../../types/lexi-version.js';
 import {
   pgClient,
   registerPostgresTypeParsers,
@@ -47,11 +52,11 @@ import type {
   ChangeStream,
   ChangeStreamMessage,
 } from '../change-streamer-service.js';
-import type {Commit, Data, DownstreamChange} from '../change-streamer.js';
+import type {Data, DownstreamChange} from '../change-streamer.js';
 import type {DataChange, Identifier, MessageDelete} from '../schema/change.js';
-import type {ReplicationConfig} from '../schema/tables.js';
-import {replicationSlot} from './initial-sync.js';
-import {fromLexiVersion, toLexiVersion} from './lsn.js';
+import {AutoResetSignal, type ReplicationConfig} from '../schema/tables.js';
+import {replicationSlot, type InitialSyncOptions} from './initial-sync.js';
+import {fromLexiVersion, toLexiVersion, type LSN} from './lsn.js';
 import {replicationEventSchema, type DdlUpdateEvent} from './schema/ddl.js';
 import {updateShardSchema} from './schema/init.js';
 import {getPublicationInfo, type PublishedSchema} from './schema/published.js';
@@ -77,6 +82,7 @@ export async function initializeChangeSource(
   upstreamURI: string,
   shard: ShardConfig,
   replicaDbFile: string,
+  syncOptions: InitialSyncOptions,
 ): Promise<{replicationConfig: ReplicationConfig; changeSource: ChangeSource}> {
   await initSyncSchema(
     lc,
@@ -84,6 +90,7 @@ export async function initializeChangeSource(
     shard,
     replicaDbFile,
     upstreamURI,
+    syncOptions,
   );
 
   const replica = new Database(lc, replicaDbFile);
@@ -103,6 +110,15 @@ export async function initializeChangeSource(
     }
   }
 
+  // Check that upstream is properly setup, and throw an AutoReset to re-run
+  // initial sync if not.
+  const db = pgClient(lc, upstreamURI);
+  try {
+    await checkAndUpdateUpstream(lc, db, shard);
+  } finally {
+    await db.end();
+  }
+
   const changeSource = new PostgresChangeSource(
     lc,
     upstreamURI,
@@ -111,6 +127,30 @@ export async function initializeChangeSource(
   );
 
   return {replicationConfig, changeSource};
+}
+
+async function checkAndUpdateUpstream(
+  lc: LogContext,
+  db: PostgresDB,
+  shard: ShardConfig,
+) {
+  const slot = replicationSlot(shard.id);
+  const result = await db<{restartLSN: LSN | null}[]>`
+  SELECT restart_lsn as "restartLSN" FROM pg_replication_slots WHERE slot_name = ${slot}`;
+  if (result.length === 0) {
+    throw new AutoResetSignal(`replication slot ${slot} is missing`);
+  }
+  const [{restartLSN}] = result;
+  if (restartLSN === null) {
+    throw new AutoResetSignal(
+      `replication slot ${slot} has been invalidated for exceeding the max_slot_wal_keep_size`,
+    );
+  }
+  // Perform any shard schema updates
+  await updateShardSchema(lc, db, {
+    id: shard.id,
+    publications: shard.publications,
+  });
 }
 
 const MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE = 5;
@@ -145,11 +185,6 @@ class PostgresChangeSource implements ChangeSource {
     try {
       await this.#stopExistingReplicationSlotSubscriber(db, slot);
 
-      // Perform any shard schema updates
-      await updateShardSchema(this.#lc, db, {
-        id: this.#shardID,
-        publications: this.#replicationConfig.publications,
-      });
       const config = await getInternalShardConfig(db, this.#shardID);
       this.#lc.info?.(`starting replication stream @${slot}`);
 
@@ -200,17 +235,7 @@ class PostgresChangeSource implements ChangeSource {
     clientStart: string,
     shardConfig: InternalShardConfig,
     useSSL: boolean,
-  ) {
-    let lastLSN = '0/0';
-
-    const ack = (commit?: Commit) => {
-      if (commit) {
-        const {watermark} = commit[2];
-        lastLSN = fromLexiVersion(watermark);
-      }
-      void service.acknowledge(lastLSN);
-    };
-
+  ): Promise<ChangeStream> {
     const changes = Subscription.create<ChangeStreamMessage>({
       cleanup: () => service.stop(),
     });
@@ -236,6 +261,7 @@ class PostgresChangeSource implements ChangeSource {
       }
     };
 
+    let acker: Acker | undefined = undefined;
     const changeMaker = new ChangeMaker(
       this.#lc,
       this.#shardID,
@@ -257,17 +283,19 @@ class PostgresChangeSource implements ChangeSource {
           handleError,
         ),
       )
-      .on('heartbeat', (_lsn, _time, respond) => {
-        respond && ack();
-      })
-      .on('data', (lsn, msg) =>
+      .on(
+        'heartbeat',
+        (lsn, _time, respond) => acker?.onHeartbeat(lsn, respond),
+      )
+      .on('data', (lsn, msg) => {
+        acker?.onData(lsn);
         // lock to ensure in-order processing
-        lock.withLock(async () => {
+        return lock.withLock(async () => {
           for (const change of await changeMaker.makeChanges(lsn, msg)) {
             changes.push(change);
           }
-        }),
-      )
+        });
+      })
       .on('error', handleError);
 
     service
@@ -286,7 +314,13 @@ class PostgresChangeSource implements ChangeSource {
     this.#lc.info?.(
       `replication stream@${slot} started at ${initialWatermark}`,
     );
-    return {initialWatermark, changes, acks: {push: ack}};
+    acker = new Acker(service, initialWatermark);
+
+    return {
+      initialWatermark,
+      changes,
+      acks: {push: commit => acker.onAck(commit[2].watermark)},
+    };
   }
 
   async #stopExistingReplicationSlotSubscriber(
@@ -297,6 +331,9 @@ class PostgresChangeSource implements ChangeSource {
     SELECT pg_terminate_backend(active_pid), active_pid as pid
       FROM pg_replication_slots WHERE slot_name = ${slot}`;
     if (result.length === 0) {
+      // Note: This should not happen as it is checked at initialization time,
+      //       but it is technically possible for the replication slot to be
+      //       dropped (e.g. manually).
       throw new AbortError(
         `replication slot ${slot} is missing. Delete the replica and resync.`,
       );
@@ -353,6 +390,42 @@ class PostgresChangeSource implements ChangeSource {
       oneAfter(restartWatermark),
       clientStart,
     );
+  }
+}
+
+// Exported for testing.
+export class Acker {
+  #service: LogicalReplicationService;
+  #lastAck: string;
+  #lastData: string = versionToLexi(0);
+
+  constructor(service: LogicalReplicationService, initialWatermark: string) {
+    this.#service = service;
+    this.#lastAck = initialWatermark;
+  }
+
+  onData(lsn: string) {
+    this.#lastData = max(this.#lastData, toLexiVersion(lsn));
+  }
+
+  onHeartbeat(lsn: string, respond: boolean) {
+    // Heartbeats bump the last ack unless we are behind received data.
+    if (this.#lastAck >= this.#lastData) {
+      this.#lastAck = max(this.#lastAck, toLexiVersion(lsn));
+    }
+    if (respond) {
+      this.#sendAck();
+    }
+  }
+
+  onAck(lexiVersion: string) {
+    this.#lastAck = max(this.#lastAck, lexiVersion);
+    this.#sendAck();
+  }
+
+  #sendAck() {
+    const lsn = fromLexiVersion(this.#lastAck);
+    void this.#service.acknowledge(lsn);
   }
 }
 
@@ -808,7 +881,7 @@ function translateError(e: unknown): Error {
     return new Error(String(e));
   }
   if (e instanceof DatabaseError && e.code === PG_ADMIN_SHUTDOWN) {
-    return new AbortError(e.message, {cause: e});
+    return new ShutdownSignal(e);
   }
   return e;
 }
@@ -831,6 +904,19 @@ export class UnsupportedSchemaChangeError extends Error {
   constructor() {
     super(
       'Replication halted. Schema changes cannot be reliably replicated without event trigger support. Resync the replica to recover.',
+    );
+  }
+}
+
+class ShutdownSignal extends AbortError {
+  readonly name = 'ShutdownSignal';
+
+  constructor(cause: unknown) {
+    super(
+      'shutdown signal received (e.g. another zero-cache taking over the replication stream)',
+      {
+        cause,
+      },
     );
   }
 }

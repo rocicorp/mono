@@ -119,3 +119,129 @@ test('permission rules create query ASTs', async () => {
     }
   `);
 });
+
+test('nested parameters', async () => {
+  type AuthData = {
+    sub: string;
+    attributes: {role: 'admin' | 'user'};
+  };
+  const config = await definePermissions<AuthData, typeof schema>(
+    schema,
+    () => {
+      const allowIfAdmin = (
+        authData: AuthData,
+        {cmpLit}: ExpressionBuilder<TableSchema>,
+      ) => cmpLit(authData.attributes.role, '=', 'admin');
+
+      return {
+        user: {
+          row: {
+            insert: [allowIfAdmin],
+            update: {
+              preMutation: [allowIfAdmin],
+            },
+            delete: [allowIfAdmin],
+            select: [allowIfAdmin],
+          },
+        },
+      };
+    },
+  );
+
+  expect(config).toMatchInlineSnapshot(`
+    {
+      "user": {
+        "cell": undefined,
+        "row": {
+          "delete": [
+            [
+              "allow",
+              {
+                "left": {
+                  "anchor": "authData",
+                  "field": [
+                    "attributes",
+                    "role",
+                  ],
+                  "type": "static",
+                },
+                "op": "=",
+                "right": {
+                  "type": "literal",
+                  "value": "admin",
+                },
+                "type": "simple",
+              },
+            ],
+          ],
+          "insert": [
+            [
+              "allow",
+              {
+                "left": {
+                  "anchor": "authData",
+                  "field": [
+                    "attributes",
+                    "role",
+                  ],
+                  "type": "static",
+                },
+                "op": "=",
+                "right": {
+                  "type": "literal",
+                  "value": "admin",
+                },
+                "type": "simple",
+              },
+            ],
+          ],
+          "select": [
+            [
+              "allow",
+              {
+                "left": {
+                  "anchor": "authData",
+                  "field": [
+                    "attributes",
+                    "role",
+                  ],
+                  "type": "static",
+                },
+                "op": "=",
+                "right": {
+                  "type": "literal",
+                  "value": "admin",
+                },
+                "type": "simple",
+              },
+            ],
+          ],
+          "update": {
+            "postMutation": undefined,
+            "preMutation": [
+              [
+                "allow",
+                {
+                  "left": {
+                    "anchor": "authData",
+                    "field": [
+                      "attributes",
+                      "role",
+                    ],
+                    "type": "static",
+                  },
+                  "op": "=",
+                  "right": {
+                    "type": "literal",
+                    "value": "admin",
+                  },
+                  "type": "simple",
+                },
+              ],
+            ],
+          },
+        },
+      },
+    }
+  `);
+});

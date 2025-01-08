@@ -25,6 +25,7 @@ import {difference} from '../../../../../packages/shared/src/set-utils.js';
 import type {CommentRow, IssueRow, Schema, UserRow} from '../../../schema.js';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
+import {AvatarImage} from '../../components/avatar-image.js';
 import {Button} from '../../components/button.js';
 import {CanEdit} from '../../components/can-edit.js';
 import {Combobox} from '../../components/combobox.js';
@@ -43,6 +44,10 @@ import {useIsScrolling} from '../../hooks/use-is-scrolling.js';
 import {useKeypress} from '../../hooks/use-keypress.js';
 import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
+import {
+  MAX_ISSUE_DESCRIPTION_LENGTH,
+  MAX_ISSUE_TITLE_LENGTH,
+} from '../../limits.js';
 import {LRUCache} from '../../lru-cache.js';
 import {recordPageLoad} from '../../page-load-stats.js';
 import {links, type ListContext, type ZbugsHistoryState} from '../../routes.js';
@@ -56,6 +61,17 @@ const emojiToastShowDuration = 3_000;
 // One more than we display so we can detect if there are more
 // to load.
 export const INITIAL_COMMENT_LIMIT = 101;
+
+export function commentQuery(z: Zero<Schema>, displayed: IssueRow | undefined) {
+  return z.query.comment
+    .where('issueID', 'IS', displayed?.id ?? null)
+    .related('creator', creator => creator.one())
+    .related('emoji', emoji =>
+      emoji.related('creator', creator => creator.one()),
+    )
+    .orderBy('created', 'asc')
+    .orderBy('id', 'asc');
+}
 
 export function IssuePage({onReady}: {onReady: () => void}) {
   const z = useZero();
@@ -228,14 +244,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const [displayAllComments, setDisplayAllComments] = useState(false);
 
   const [allComments, allCommentsResult] = useQuery(
-    z.query.comment
-      .where('issueID', displayed?.id ?? '')
-      .related('creator', creator => creator.one())
-      .related('emoji', emoji =>
-        emoji.related('creator', creator => creator.one()),
-      )
-      .orderBy('created', 'asc')
-      .orderBy('id', 'asc'),
+    commentQuery(z, displayed),
     displayAllComments && displayed !== undefined,
   );
 
@@ -442,6 +451,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                 autoFocus
                 onChange={e => setEdits({...edits, title: e.target.value})}
                 onKeyDown={e => isCtrlEnter(e) && save()}
+                maxLength={MAX_ISSUE_TITLE_LENGTH}
               />
             </div>
           )}
@@ -471,6 +481,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                   setEdits({...edits, description: e.target.value})
                 }
                 onKeyDown={e => isCtrlEnter(e) && save()}
+                maxLength={MAX_ISSUE_DESCRIPTION_LENGTH}
               />
             </div>
           )}
@@ -551,10 +562,9 @@ export function IssuePage({onReady}: {onReady: () => void}) {
           <div className="sidebar-item">
             <p className="issue-detail-label">Creator</p>
             <div className="issue-creator">
-              <img
-                src={displayed.creator?.avatar}
+              <AvatarImage
+                user={displayed.creator}
                 className="issue-creator-avatar"
-                alt={displayed.creator?.name ?? undefined}
               />
               {displayed.creator.login}
             </div>
@@ -723,7 +733,7 @@ function maybeShowToastForEmoji(
 
   toast(
     <ToastContent toastID={toastID}>
-      <img className="toast-avatar-icon" src={creator.avatar} />
+      <AvatarImage className="toast-avatar-icon" user={creator} />
       {creator.login + ' reacted on this issue: ' + emoji.value}
     </ToastContent>,
     {
@@ -1052,13 +1062,13 @@ function useShowToastForNewComment(
       const isCommentBelowViewport =
         virtualizer.measurementsCache[index].start > scrollTop + clientHeight;
 
-      if (!isCommentBelowViewport) {
+      if (!isCommentBelowViewport || !comment.creator) {
         continue;
       }
 
       toast(
         <ToastContent toastID={commentID}>
-          <img className="toast-avatar-icon" src={comment.creator?.avatar} />
+          <AvatarImage className="toast-avatar-icon" user={comment.creator} />
           {comment.creator?.login + ' posted a new comment'}
         </ToastContent>,
 

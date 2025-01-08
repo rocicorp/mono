@@ -10,12 +10,15 @@ import type {
   GetFieldTypeNoUndefined,
   NoJsonSelector,
   Operator,
-  Parameter,
   Query,
   QueryType,
 } from './query.js';
 
-import type {Parameter as ASTParameter} from '../../../zero-protocol/src/ast.js';
+import {type Parameter, toStaticParam} from '../../../zero-protocol/src/ast.js';
+
+export type ParameterReference = {
+  [toStaticParam](): Parameter;
+};
 
 /**
  * A factory function that creates a condition. This is used to create
@@ -61,55 +64,40 @@ export class ExpressionBuilder<TSchema extends TableSchema> {
     return this;
   }
 
-  cmp<
-    TSelector extends NoJsonSelector<TSchema>,
-    TOperator extends Operator,
-    TParamAnchor = never,
-    TParamField extends keyof TParamAnchor = never,
-    TParamTypeBound extends GetFieldTypeNoUndefined<
-      TSchema,
-      TSelector,
-      TOperator
-    > = never,
-  >(
+  cmp<TSelector extends NoJsonSelector<TSchema>, TOperator extends Operator>(
     field: TSelector,
     op: TOperator,
     value:
       | GetFieldTypeNoUndefined<TSchema, TSelector, TOperator>
-      | Parameter<TParamAnchor, TParamField, TParamTypeBound>,
+      | ParameterReference,
   ): Condition;
-  cmp<
-    TSelector extends NoJsonSelector<TSchema>,
-    TParamAnchor = never,
-    TParamField extends keyof TParamAnchor = never,
-    TParamTypeBound extends GetFieldTypeNoUndefined<
-      TSchema,
-      TSelector,
-      '='
-    > = never,
-  >(
+  cmp<TSelector extends NoJsonSelector<TSchema>>(
     field: TSelector,
     value:
       | GetFieldTypeNoUndefined<TSchema, TSelector, '='>
-      | Parameter<TParamAnchor, TParamField, TParamTypeBound>,
+      | ParameterReference,
   ): Condition;
   cmp(
     field: string,
-    opOrValue: Operator | ASTParameter | LiteralValue,
-    value?: ASTParameter | LiteralValue,
+    opOrValue: Operator | ParameterReference | LiteralValue,
+    value?: ParameterReference | LiteralValue,
   ): Condition {
     return cmp(field, opOrValue, value);
   }
 
   cmpLit(
-    left: ASTParameter | LiteralValue,
+    left: ParameterReference | LiteralValue,
     op: Operator,
-    right: ASTParameter | LiteralValue,
+    right: ParameterReference | LiteralValue,
   ): Condition {
     return {
       type: 'simple',
-      left: isParameter(left) ? left : {type: 'literal', value: left},
-      right: isParameter(right) ? right : {type: 'literal', value: right},
+      left: isParameterReference(left)
+        ? left[toStaticParam]()
+        : {type: 'literal', value: left},
+      right: isParameterReference(right)
+        ? right[toStaticParam]()
+        : {type: 'literal', value: right},
       op,
     };
   }
@@ -199,8 +187,8 @@ export function not(expression: Condition): Condition {
 
 export function cmp(
   field: string,
-  opOrValue: Operator | ASTParameter | LiteralValue,
-  value?: ASTParameter | LiteralValue,
+  opOrValue: Operator | ParameterReference | LiteralValue,
+  value?: ParameterReference | LiteralValue,
 ): Condition {
   let op: Operator;
   if (value === undefined) {
@@ -213,16 +201,18 @@ export function cmp(
   return {
     type: 'simple',
     left: {type: 'column', name: field},
-    right: isParameter(value) ? value : {type: 'literal', value},
+    right: isParameterReference(value)
+      ? value[toStaticParam]()
+      : {type: 'literal', value},
     op,
   };
 }
 
-function isParameter(
-  value: ASTParameter | LiteralValue | null,
-): value is ASTParameter {
+function isParameterReference(
+  value: ParameterReference | LiteralValue | null,
+): value is ParameterReference {
   return (
-    typeof value === 'object' && (value as {type: string})?.type === 'static'
+    value !== null && typeof value === 'object' && (value as any)[toStaticParam]
   );
 }
 

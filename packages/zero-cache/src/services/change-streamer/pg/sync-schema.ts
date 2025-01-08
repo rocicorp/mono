@@ -5,7 +5,7 @@ import {
   type IncrementalMigrationMap,
   type Migration,
 } from '../../../db/migration-lite.js';
-import {initialSync} from './initial-sync.js';
+import {initialSync, type InitialSyncOptions} from './initial-sync.js';
 import type {ShardConfig} from './shard-config.js';
 
 export async function initSyncSchema(
@@ -14,9 +14,11 @@ export async function initSyncSchema(
   shard: ShardConfig,
   dbPath: string,
   upstreamURI: string,
+  syncOptions: InitialSyncOptions,
 ): Promise<void> {
   const setupMigration: Migration = {
-    migrateSchema: (log, tx) => initialSync(log, shard, tx, upstreamURI),
+    migrateSchema: (log, tx) =>
+      initialSync(log, shard, tx, upstreamURI, syncOptions),
     minSafeVersion: 1,
   };
 

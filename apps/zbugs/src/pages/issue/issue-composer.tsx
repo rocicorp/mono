@@ -4,6 +4,10 @@ import {Button} from '../../components/button.js';
 import {Modal, ModalActions, ModalBody} from '../../components/modal.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {isCtrlEnter} from './is-ctrl-enter.js';
+import {
+  MAX_ISSUE_DESCRIPTION_LENGTH,
+  MAX_ISSUE_TITLE_LENGTH,
+} from '../../limits.js';
 
 interface Props {
   /** If id is defined the issue created by the composer. */
@@ -103,6 +107,7 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
             ref={focusInput} // Attach the inputRef to this input field
             onChange={e => setTitle(e.target.value)}
             onKeyDown={handleKeyDown}
+            maxLength={MAX_ISSUE_TITLE_LENGTH}
           />
         </div>
         <div className="w-full px-4">
@@ -112,6 +117,7 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
             onChange={e => setDescription(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Add description..."
+            maxLength={MAX_ISSUE_DESCRIPTION_LENGTH}
           ></textarea>
         </div>
       </ModalBody>

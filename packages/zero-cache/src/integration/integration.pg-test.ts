@@ -55,8 +55,24 @@ describe('integration', () => {
     zeroExited = undefined;
 
     await upDB`
-      CREATE TABLE foo(id TEXT PRIMARY KEY, val TEXT);
-      INSERT INTO foo(id, val) VALUES ('bar', 'baz');
+      CREATE TABLE foo(
+        id TEXT PRIMARY KEY, 
+        val TEXT,
+        b BOOL,
+        j1 JSON,
+        j2 JSONB,
+        j3 JSON,
+        j4 JSON
+      );
+      INSERT INTO foo(id, val, b, j1, j2, j3, j4) 
+        VALUES (
+          'bar',
+          'baz',
+          true,
+          '{"foo":"bar"}',
+          'true',
+          '123',
+          '"string"');
     `.simple();
 
     port = randInt(10000, 16000);
@@ -198,7 +214,19 @@ describe('integration', () => {
         pokeID: '00:02',
         gotQueriesPatch: [{op: 'put', hash: 'query-hash1', ast: FOO_QUERY}],
         rowsPatch: [
-          {op: 'put', tableName: 'foo', id: {id: 'bar'}, rest: {val: 'baz'}},
+          {
+            op: 'put',
+            tableName: 'foo',
+            id: {id: 'bar'},
+            rest: {
+              val: 'baz',
+              b: true,
+              j1: {foo: 'bar'},
+              j2: true,
+              j3: 123,
+              j4: 'string',
+            },
+          },
         ],
       },
     ]);
@@ -208,7 +236,9 @@ describe('integration', () => {
     ]);
 
     // Trigger an upstream change and verify replication.
-    await upDB`INSERT INTO foo(id, val) VALUES ('voo', 'doo')`;
+    await upDB`
+    INSERT INTO foo(id, val, b, j1, j2, j3, j4) 
+      VALUES ('voo', 'doo', false, '"foo"', 'false', '456.789', '{"bar":"baz"}')`;
 
     expect(await downstream.dequeue()).toMatchObject([
       'pokeStart',
@@ -219,7 +249,59 @@ describe('integration', () => {
       {
         pokeID: expect.any(String),
         rowsPatch: [
-          {op: 'put', tableName: 'foo', id: {id: 'voo'}, rest: {val: 'doo'}},
+          {
+            op: 'put',
+            tableName: 'foo',
+            id: {id: 'voo'},
+            rest: {
+              val: 'doo',
+              b: false,
+              j1: 'foo',
+              j2: false,
+              j3: 456.789,
+              j4: {bar: 'baz'},
+            },
+          },
+        ],
+      },
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokeEnd',
+      {pokeID: expect.any(String)},
+    ]);
+
+    // Test TRUNCATE
+    await upDB`TRUNCATE TABLE foo RESTART IDENTITY`;
+
+    // One canceled poke
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokeStart',
+      {pokeID: expect.any(String)},
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokeEnd',
+      {pokeID: expect.any(String), cancel: true},
+    ]);
+
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokeStart',
+      {pokeID: expect.any(String)},
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokePart',
+      {
+        pokeID: expect.any(String),
+        rowsPatch: [
+          {
+            op: 'del',
+            tableName: 'foo',
+            id: {id: 'bar'},
+          },
+          {
+            op: 'del',
+            tableName: 'foo',
+            id: {id: 'voo'},
+          },
         ],
       },
     ]);

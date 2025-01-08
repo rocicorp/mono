@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 
-import {spawn, type ChildProcess} from 'node:child_process';
-import {watch} from 'chokidar';
-import {parseOptionsAdvanced} from '../../shared/src/options.js';
 import {resolver} from '@rocicorp/resolver';
-import {buildSchemaOptions} from '../../zero-schema/src/build-schema-options.js';
+import chalk from 'chalk';
+import {watch} from 'chokidar';
+import 'dotenv/config';
+import {spawn, type ChildProcess} from 'node:child_process';
+import {parseOptionsAdvanced} from '../../shared/src/options.js';
 import {
   ZERO_ENV_VAR_PREFIX,
   zeroOptions,
 } from '../../zero-cache/src/config/zero-config.js';
-import 'dotenv/config';
-import chalk from 'chalk';
+import {buildSchemaOptions} from '../../zero-schema/src/build-schema-options.js';
 
 const buildSchemaScript = 'zero-build-schema';
 const zeroCacheScript = 'zero-cache';
@@ -46,6 +46,8 @@ async function main() {
     },
     process.argv.slice(2),
     ZERO_ENV_VAR_PREFIX,
+    false,
+    true, // allowPartial, required by server/multi/config.ts
   );
 
   const {unknown: zeroCacheArgs} = parseOptionsAdvanced(
@@ -84,6 +86,7 @@ async function main() {
     log(`Running ${buildSchemaScript}.`);
     schemaProcess = spawn(buildSchemaScript, buildSchemaArgs ?? [], {
       stdio: 'inherit',
+      shell: true,
     });
 
     schemaProcess.on('exit', (code: number) => {
@@ -94,6 +97,7 @@ async function main() {
         );
         zeroCacheProcess = spawn(zeroCacheScript, zeroCacheArgs || [], {
           stdio: 'inherit',
+          shell: true,
         });
         zeroCacheProcess.on('exit', () => {
           logError(`${zeroCacheScript} exited. Exiting.`);

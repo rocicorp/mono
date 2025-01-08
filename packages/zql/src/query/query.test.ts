@@ -16,6 +16,7 @@ import type {ExpressionFactory} from './expression.js';
 import {staticParam} from './query-impl.js';
 import type {AdvancedQuery} from './query-internal.js';
 import {type Query, type QueryType, type Row} from './query.js';
+import {toStaticParam} from '../../../zero-protocol/src/ast.js';
 
 const mockQuery = {
   select() {
@@ -483,14 +484,15 @@ describe('types', () => {
   });
 
   test('where-parameters', () => {
-    type AuthData = {
-      aud: string;
-    };
     const query = mockQuery as unknown as Query<TestSchema>;
 
-    query.where('s', '=', staticParam<AuthData, 'aud'>('authData', 'aud'));
+    query.where('s', '=', {
+      [toStaticParam]: () => staticParam('authData', 'aud'),
+    });
 
-    const p = staticParam<AuthData, 'aud'>('authData', 'aud');
+    const p = {
+      [toStaticParam]: () => staticParam('authData', 'aud'),
+    };
     query.where('b', '=', p);
   });
 
@@ -521,6 +523,9 @@ describe('types', () => {
     query.where('s', '=', null);
     // @ts-expect-error - cannot compare with undefined
     query.where('s', '=', undefined);
+
+    // IS can compare to null
+    query.where('s', 'IS', null);
   });
 
   test('start', () => {

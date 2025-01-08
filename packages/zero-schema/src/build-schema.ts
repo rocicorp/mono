@@ -18,10 +18,14 @@ async function main() {
 
   const dirname = path.dirname(fileURLToPath(import.meta.url));
   const absoluteConfigPath = path.resolve(config.schema.path);
-  const relativePath = path.join(
+  let relativePath = path.join(
     path.relative(dirname, path.dirname(absoluteConfigPath)),
     path.basename(absoluteConfigPath),
   );
+
+  // tsImport doesn't expect to receive slashes in the Windows format when running
+  // on Windows. They need to be converted to *nix format.
+  relativePath = relativePath.replace(/\\/g, "/");
 
   try {
     const module = await tsImport(relativePath, import.meta.url);

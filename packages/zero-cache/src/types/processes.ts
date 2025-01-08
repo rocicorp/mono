@@ -159,13 +159,13 @@ export function childWorker(
   const ext = path.extname(import.meta.url);
   // modulePath is .ts. If we have been compiled, it should be changed to .js
   modulePath = modulePath.replace(/\.ts$/, ext);
-  const absModulePath = new URL(`../${modulePath}`, import.meta.url).pathname;
+  const moduleUrl = new URL(`../${modulePath}`, import.meta.url);
 
   args.push(...process.argv.slice(2));
 
   if (singleProcessMode()) {
     const [parent, child] = inProcChannel();
-    import(absModulePath)
+    import(moduleUrl.href)
       .then(({default: runWorker}) =>
         runWorker(parent, env ?? process.env, ...args).then(
           () => child.emit('close', 0),
@@ -175,13 +175,16 @@ export function childWorker(
       .catch(err => child.emit('error', err));
     return child;
   }
-  return wrap(
-    fork(absModulePath, args, {
-      detached: true, // do not automatically propagate SIGINT
-      serialization: 'advanced', // use structured clone for IPC
-      env,
-    }),
-  );
+  const child = fork(moduleUrl, args, {
+    detached: true, // do not automatically propagate SIGINT
+    serialization: 'advanced', // use structured clone for IPC
+    env,
+    // silent: true,
+    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+  });
+  child.stdout?.pipe(process.stdout);
+  child.stderr?.pipe(process.stderr);
+  return wrap(child);
 }
 
 /**

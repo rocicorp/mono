@@ -102,7 +102,7 @@ export async function ensureReplicationConfig(
 
     if (resetRequired) {
       if (autoReset) {
-        throw new AutoResetSignal();
+        throw new AutoResetSignal('reset required by replication stream');
       }
       lc.warn?.('reset required but auto-reset is disabled');
     }

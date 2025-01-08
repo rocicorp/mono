@@ -11,6 +11,8 @@ import {MemoryStorage} from './memory-storage.js';
 import {Snitch, type SnitchMessage} from './snitch.js';
 import {Take, type PartitionKey} from './take.js';
 import {createSource} from './test/source-factory.js';
+import type {FetchRequest} from './operator.js';
+import type {Stream} from './stream.js';
 
 suite('take with no partition', () => {
   const base = {
@@ -413,6 +415,58 @@ suite('take with no partition', () => {
       ]
     `);
   });
+});
+
+class ThrowingSnitch extends Snitch {
+  fetch(_: FetchRequest): Stream<Node> {
+    throw new Error('ThrowingSnitch error');
+  }
+}
+
+test('exception during hydrate', () => {
+  const columns = {id: {type: 'string'}, created: {type: 'number'}} as const;
+  const primaryKey = ['id'] as const;
+  const log: SnitchMessage[] = [];
+  const source = createSource('table', columns, primaryKey);
+  const snitch = new ThrowingSnitch(
+    source.connect([['id', 'asc']]),
+    'takeSnitch',
+    log,
+  );
+  const storage = new MemoryStorage();
+  const limit = 10;
+
+  const take = new Take(snitch, storage, limit);
+  expect(() => [...take.fetch({})]).toThrow('ThrowingSnitch error');
+});
+
+test('early return during hydrate', () => {
+  const columns = {id: {type: 'string'}, created: {type: 'number'}} as const;
+  const primaryKey = ['id'] as const;
+  const log: SnitchMessage[] = [];
+  const source = createSource('table', columns, primaryKey);
+  const sourceRows = [
+    {id: 'i1', created: 100},
+    {id: 'i2', created: 200},
+    {id: 'i3', created: 300},
+  ];
+  for (const row of sourceRows) {
+    source.push({type: 'add', row});
+  }
+  const snitch = new Snitch(source.connect([['id', 'asc']]), 'takeSnitch', log);
+  const storage = new MemoryStorage();
+  const limit = 10;
+
+  const take = new Take(snitch, storage, limit);
+  expect(() => {
+    let count = 0;
+    for (const _ of take.fetch({})) {
+      count++;
+      if (count > 1) {
+        break;
+      }
+    }
+  }).toThrow('Unexpected early return prevented full hydration');
 });
 
 suite('take with partition', () => {

@@ -23,8 +23,7 @@
     "lodash.kebabcase": "^4.1.1",
     "lodash.merge": "^4.6.2",
     "lodash.snakecase": "^4.1.1",
-    "semver": "^7.5.4",
-    "strip-ansi": "^7.1.0"
+    "semver": "^7.5.4"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20231010.0",
@@ -37,7 +36,7 @@
     "@types/strip-ansi": "^3.0.0",
     "@vitest/browser": "^2.1.5",
     "fast-check": "^3.18.0",
-    "pkg-up": "^5.0.0",
+    "package-up": "^5.0.0",
     "type-fest": "^4.30.0",
     "typescript": "^5.6.3",
     "vitest": "^2.1.5"

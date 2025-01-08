@@ -1,4 +1,4 @@
-import {useSyncExternalStore} from 'react';
+import {useSyncExternalStore} from 'use-sync-external-store/shim';
 import {deepClone} from '../../shared/src/deep-clone.js';
 import type {Immutable} from '../../shared/src/immutable.js';
 import type {
@@ -8,16 +8,16 @@ import type {
   Smash,
   TypedView,
 } from '../../zero-client/src/mod.js';
-import type {AdvancedQuery} from '../../zql/src/query/query-internal.js';
-import {useZero} from './use-zero.js';
 import type {TableSchema} from '../../zero-schema/src/table-schema.js';
+import type {AdvancedQuery} from '../../zql/src/query/query-internal.js';
 import type {ResultType} from '../../zql/src/query/typed-view.js';
+import {useZero} from './use-zero.js';
 
-export type QueryResultDetails = {
+export type QueryResultDetails = Readonly<{
   type: ResultType;
-};
+}>;
 
-export type QueryResult<TReturn extends QueryType> = [
+export type QueryResult<TReturn extends QueryType> = readonly [
   Smash<TReturn>,
   QueryResultDetails,
 ];

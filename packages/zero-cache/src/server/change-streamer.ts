@@ -46,15 +46,16 @@ export default async function runWorker(
   let changeStreamer: ChangeStreamerService | undefined;
 
   for (const first of [true, false]) {
-    // Note: This performs initial sync of the replica if necessary.
-    const {changeSource, replicationConfig} = await initializeChangeSource(
-      lc,
-      config.upstream.db,
-      config.shard,
-      config.replicaFile,
-    );
-
     try {
+      // Note: This performs initial sync of the replica if necessary.
+      const {changeSource, replicationConfig} = await initializeChangeSource(
+        lc,
+        config.upstream.db,
+        config.shard,
+        config.replicaFile,
+        config.initialSync,
+      );
+
       changeStreamer = await initializeStreamer(
         lc,
         changeDB,
@@ -65,7 +66,9 @@ export default async function runWorker(
       break;
     } catch (e) {
       if (first && e instanceof AutoResetSignal) {
-        lc.warn?.(`auto-reset: resetting replica ${config.replicaFile}`);
+        lc.warn?.(`resetting replica ${config.replicaFile}`, e);
+        // TODO: Make deleteLiteDB work with litestream. It will probably have to be
+        //       a semantic wipe instead of a file delete.
         deleteLiteDB(config.replicaFile);
         continue; // execute again with a fresh initial-sync
       }

@@ -1,4 +1,8 @@
+import {assert} from '../../shared/src/asserts.js';
+
 /**
+ * The current `PROTOCOL_VERSION` of the code.
+ *
  * The `PROTOCOL_VERSION` encompasses both the wire-protocol of the `/sync/...`
  * connection between the browser and `zero-cache`, as well as the format of
  * the `AST` objects stored in both components (i.e. IDB and CVR).
@@ -7,13 +11,18 @@
  * accompanied by an increment of the `PROTOCOL_VERSION` and a new major
  * release. The server (`zero-cache`) must be deployed before clients start
  * running the new code.
- *
- * The contract for backwards compatibility is that a `zero-cache` supports
- * its current `PROTOCOL_VERSION` and the previous one (i.e.
- * `PROTOCOL_VERSION - 1`, which is necessary to support old clients when
- * the server is rolled out). This corresponds to supporting clients running
- * the current release and the previous (major) release. Any client connections
- * from earlier protocol versions are closed with a `VersionNotSupported`
- * error.
  */
 export const PROTOCOL_VERSION = 4;
+
+/**
+ * The minimum protocol version supported by the server. The contract for
+ * backwards compatibility is that a `zero-cache` supports the current
+ * `PROTOCOL_VERSION` and at least the previous one (i.e. `PROTOCOL_VERSION - 1`)
+ * if not earlier ones as well. This corresponds to supporting clients running
+ * the current release and the previous (major) release. Any client connections
+ * from protocol versions before `MIN_SERVER_SUPPORTED_PROTOCOL_VERSION` are
+ * closed with a `VersionNotSupported` error.
+ */
+export const MIN_SERVER_SUPPORTED_PROTOCOL_VERSION = 3;
+
+assert(MIN_SERVER_SUPPORTED_PROTOCOL_VERSION < PROTOCOL_VERSION);

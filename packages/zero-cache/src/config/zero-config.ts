@@ -35,10 +35,10 @@ const shardOptions = {
       `replicated to the shard. All publication names must begin with the prefix`,
       `{bold zero_}, and all tables must be in the {bold public} schema.`,
       ``,
-      `If unspecified, zero-cache will create and use a {bold zero_public} publication that`,
+      `If unspecified, zero-cache will create and use an internal publication that`,
       `publishes all tables in the {bold public} schema, i.e.:`,
       ``,
-      `CREATE PUBLICATION zero_public FOR TABLES IN SCHEMA public;`,
+      `CREATE PUBLICATION _zero_public_0 FOR TABLES IN SCHEMA public;`,
       ``,
       `Note that once a shard has begun syncing data, this list of publications`,
       `cannot be changed, and zero-cache will refuse to start if a specified`,
@@ -342,6 +342,27 @@ export const zeroOptions = {
     desc: [
       `tmp directory for IVM operator storage. Leave unset to use os.tmpdir()`,
     ],
+  },
+
+  initialSync: {
+    tableCopyWorkers: {
+      type: v.number().default(5),
+      desc: [
+        `The number of parallel workers used to copy tables during initial sync.`,
+        `Each worker copies a single table at a time, fetching rows in batches of`,
+        `of {bold initial-sync-row-batch-size}.`,
+      ],
+    },
+
+    rowBatchSize: {
+      type: v.number().default(10000),
+      desc: [
+        `The number of rows each table copy worker fetches at a time during`,
+        `initial sync. This can be increased to speed up initial sync, or decreased`,
+        `to reduce the amount of heap memory used during initial sync (e.g. for tables`,
+        `with large rows).`,
+      ],
+    },
   },
 
   tenantID: {

@@ -1,4 +1,4 @@
-import stripAnsi from 'strip-ansi';
+import {stripVTControlCharacters as stripAnsi} from 'node:util';
 import {expect, test, vi} from 'vitest';
 import {parseOptions} from '../../../shared/src/options.js';
 import {zeroOptions} from './zero-config.js';
@@ -110,10 +110,10 @@ test('zero-cache --help', () => {
                                                    replicated to the shard. All publication names must begin with the prefix                         
                                                    zero_, and all tables must be in the public schema.                                               
                                                                                                                                                      
-                                                   If unspecified, zero-cache will create and use a zero_public publication that                     
+                                                   If unspecified, zero-cache will create and use an internal publication that                       
                                                    publishes all tables in the public schema, i.e.:                                                  
                                                                                                                                                      
-                                                   CREATE PUBLICATION zero_public FOR TABLES IN SCHEMA public;                                       
+                                                   CREATE PUBLICATION _zero_public_0 FOR TABLES IN SCHEMA public;                                    
                                                                                                                                                      
                                                    Note that once a shard has begun syncing data, this list of publications                          
                                                    cannot be changed, and zero-cache will refuse to start if a specified                             
@@ -219,6 +219,19 @@ test('zero-cache --help', () => {
      --storage-db-tmp-dir string                   optional                                                                                          
        ZERO_STORAGE_DB_TMP_DIR env                                                                                                                   
                                                    tmp directory for IVM operator storage. Leave unset to use os.tmpdir()                            
+                                                                                                                                                     
+     --initial-sync-table-copy-workers number      default: 5                                                                                        
+       ZERO_INITIAL_SYNC_TABLE_COPY_WORKERS env                                                                                                      
+                                                   The number of parallel workers used to copy tables during initial sync.                           
+                                                   Each worker copies a single table at a time, fetching rows in batches of                          
+                                                   of initial-sync-row-batch-size.                                                                   
+                                                                                                                                                     
+     --initial-sync-row-batch-size number          default: 10000                                                                                    
+       ZERO_INITIAL_SYNC_ROW_BATCH_SIZE env                                                                                                          
+                                                   The number of rows each table copy worker fetches at a time during                                
+                                                   initial sync. This can be increased to speed up initial sync, or decreased                        
+                                                   to reduce the amount of heap memory used during initial sync (e.g. for tables                     
+                                                   with large rows).                                                                                 
                                                                                                                                                      
     "
   `);

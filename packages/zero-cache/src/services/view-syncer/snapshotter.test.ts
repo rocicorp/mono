@@ -11,12 +11,12 @@ import {
   ReplicationMessages,
   type FakeReplicator,
 } from '../replicator/test-utils.js';
+import {setSpecs} from './pipeline-driver.js';
 import {
   InvalidDiffError,
-  SchemaChangeError,
+  ResetPipelinesSignal,
   Snapshotter,
 } from './snapshotter.js';
-import {setSpecs} from './pipeline-driver.js';
 
 describe('view-syncer/snapshotter', () => {
   let lc: LogContext;
@@ -418,22 +418,7 @@ describe('view-syncer/snapshotter', () => {
     s2.destroy();
   });
 
-  test('noop-truncate diff', () => {
-    const {version} = s.current();
-
-    expect(version).toBe('00');
-
-    replicator.processTransaction('07', messages.truncate('comments'));
-
-    const diff = s.advance(tableSpecs);
-    expect(diff.prev.version).toBe('00');
-    expect(diff.curr.version).toBe('01');
-    expect(diff.changes).toBe(1);
-
-    expect([...diff]).toEqual([]);
-  });
-
-  test('truncate diff', () => {
+  test('truncate', () => {
     const {version} = s.current();
 
     expect(version).toBe('00');
@@ -445,157 +430,7 @@ describe('view-syncer/snapshotter', () => {
     expect(diff.curr.version).toBe('01');
     expect(diff.changes).toBe(1);
 
-    expect([...diff]).toMatchInlineSnapshot(`
-      [
-        {
-          "nextValue": null,
-          "prevValue": {
-            "_0_version": "00",
-            "handle": "alice",
-            "id": 10n,
-          },
-          "table": "users",
-        },
-        {
-          "nextValue": null,
-          "prevValue": {
-            "_0_version": "00",
-            "handle": "bob",
-            "id": 20n,
-          },
-          "table": "users",
-        },
-      ]
-    `);
-  });
-
-  test('consecutive truncates', () => {
-    const {version} = s.current();
-
-    expect(version).toBe('00');
-
-    replicator.processTransaction(
-      '08',
-      messages.truncate('issues'),
-      messages.truncate('users'),
-    );
-
-    const diff = s.advance(tableSpecs);
-    expect(diff.prev.version).toBe('00');
-    expect(diff.curr.version).toBe('01');
-    expect(diff.changes).toBe(2);
-
-    expect([...diff]).toMatchInlineSnapshot(`
-      [
-        {
-          "nextValue": null,
-          "prevValue": {
-            "_0_version": "00",
-            "desc": "foo",
-            "id": 1n,
-            "owner": 10n,
-          },
-          "table": "issues",
-        },
-        {
-          "nextValue": null,
-          "prevValue": {
-            "_0_version": "00",
-            "desc": "bar",
-            "id": 2n,
-            "owner": 10n,
-          },
-          "table": "issues",
-        },
-        {
-          "nextValue": null,
-          "prevValue": {
-            "_0_version": "00",
-            "desc": "baz",
-            "id": 3n,
-            "owner": 20n,
-          },
-          "table": "issues",
-        },
-        {
-          "nextValue": null,
-          "prevValue": {
-            "_0_version": "00",
-            "handle": "alice",
-            "id": 10n,
-          },
-          "table": "users",
-        },
-        {
-          "nextValue": null,
-          "prevValue": {
-            "_0_version": "00",
-            "handle": "bob",
-            "id": 20n,
-          },
-          "table": "users",
-        },
-      ]
-    `);
-  });
-
-  test('truncate followed by inserts into same table', () => {
-    const {version} = s.current();
-
-    expect(version).toBe('00');
-
-    replicator.processTransaction(
-      '09',
-      messages.truncate('users'),
-      messages.insert('users', {id: 20, handle: 'robert'}),
-      messages.insert('users', {id: 30, handle: 'candice'}),
-    );
-
-    const diff = s.advance(tableSpecs);
-    expect(diff.prev.version).toBe('00');
-    expect(diff.curr.version).toBe('01');
-    expect(diff.changes).toBe(3);
-
-    expect([...diff]).toMatchInlineSnapshot(`
-      [
-        {
-          "nextValue": null,
-          "prevValue": {
-            "_0_version": "00",
-            "handle": "alice",
-            "id": 10n,
-          },
-          "table": "users",
-        },
-        {
-          "nextValue": null,
-          "prevValue": {
-            "_0_version": "00",
-            "handle": "bob",
-            "id": 20n,
-          },
-          "table": "users",
-        },
-        {
-          "nextValue": {
-            "_0_version": "01",
-            "handle": "robert",
-            "id": 20,
-          },
-          "prevValue": null,
-          "table": "users",
-        },
-        {
-          "nextValue": {
-            "_0_version": "01",
-            "handle": "candice",
-            "id": 30,
-          },
-          "prevValue": null,
-          "table": "users",
-        },
-      ]
-    `);
+    expect(() => [...diff]).toThrowError(ResetPipelinesSignal);
   });
 
   test('changelog iterator cleaned up on aborted iteration', () => {
@@ -631,44 +466,6 @@ describe('view-syncer/snapshotter', () => {
     expect(diff.curr.db.statementCache.size).toBe(currStmts + 1);
   });
 
-  test('truncate iterator cleaned up on aborted iteration', () => {
-    const s = new Snapshotter(lc, dbFile.path).init();
-    const {version} = s.current();
-
-    expect(version).toBe('00');
-
-    replicator.processTransaction('07', messages.truncate('users'));
-
-    const diff = s.advance(tableSpecs);
-    let currStmts = 0;
-    let prevStmts = 0;
-
-    const abortError = new Error('aborted iteration');
-    try {
-      for (const change of diff) {
-        expect(change).toEqual({
-          nextValue: null,
-          prevValue: {
-            ['_0_version']: '00',
-            handle: 'alice',
-            id: 10n,
-          },
-          table: 'users',
-        });
-        currStmts = diff.curr.db.statementCache.size;
-        prevStmts = diff.prev.db.statementCache.size;
-        throw abortError;
-      }
-    } catch (e) {
-      expect(e).toBe(abortError);
-    }
-
-    // The Statements for both the ChangeLog (curr) and truncated-row (prev)
-    // iterations should have been returned to the cache.
-    expect(diff.curr.db.statementCache.size).toBe(currStmts + 1);
-    expect(diff.prev.db.statementCache.size).toBe(prevStmts + 1);
-  });
-
   test('schema change diff iteration throws SchemaChangeError', () => {
     const {version} = s.current();
 
@@ -684,6 +481,6 @@ describe('view-syncer/snapshotter', () => {
     expect(diff.curr.version).toBe('01');
     expect(diff.changes).toBe(1);
 
-    expect(() => [...diff]).toThrow(SchemaChangeError);
+    expect(() => [...diff]).toThrow(ResetPipelinesSignal);
   });
 });
