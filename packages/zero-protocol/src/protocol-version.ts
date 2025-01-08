@@ -12,7 +12,7 @@ import {assert} from '../../shared/src/asserts.js';
  * release. The server (`zero-cache`) must be deployed before clients start
  * running the new code.
  */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 3;
 
 /**
  * The minimum protocol version supported by the server. The contract for
