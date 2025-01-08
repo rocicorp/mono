@@ -37,7 +37,7 @@ class TestDBs {
       await this.#drop(exists);
     }
 
-    const sql = this.sql;
+    const {sql} = this;
     await sql`CREATE DATABASE ${sql(database)}`;
 
     const {host, port, user: username, pass} = sql.options;
@@ -66,7 +66,7 @@ class TestDBs {
     await db.end();
 
     for (let i = 0; i < 10; i++) {
-      const sql = this.sql;
+      const {sql} = this;
       await dropReplicationSlotsFor(sql, database);
       try {
         await sql`DROP DATABASE IF EXISTS ${sql(database)} WITH (FORCE)`;
