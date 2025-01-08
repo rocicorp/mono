@@ -19,6 +19,7 @@ describe('change-source/pg', () => {
 
   afterEach(async () => {
     await testDBs.drop(db);
+    await testDBs.sql`RESET ROLE; DROP ROLE IF EXISTS supaneon`.simple();
   });
 
   function publications() {
