@@ -179,21 +179,19 @@ try {
 
   const dockerCanaryVersion = nextCanaryVersion.replace(/\+/g, '-');
 
-  // Ensure proper buildx setup
   try {
+    // Check if our specific multiarch builder exists
     const builders = execute('docker buildx ls', {stdio: 'pipe'});
-    const hasMultiArchBuilder =
-      builders.includes('linux/amd64') && builders.includes('linux/arm64');
+    const hasMultiArchBuilder = builders.includes('zero-multiarch');
 
     if (!hasMultiArchBuilder) {
       console.log('Setting up multi-architecture builder...');
       execute(
-        'docker buildx create --name multiarch --driver docker-container --bootstrap',
+        'docker buildx create --name zero-multiarch --driver docker-container --bootstrap',
       );
-      execute('docker buildx use multiarch');
+      execute('docker buildx use zero-multiarch');
     }
-
-    execute('docker buildx inspect --bootstrap');
+    execute('docker buildx inspect zero-multiarch --bootstrap');
   } catch (e) {
     console.error('Failed to set up Docker buildx:', e);
     throw e;
