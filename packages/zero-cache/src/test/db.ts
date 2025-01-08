@@ -6,12 +6,12 @@ import {type PostgresDB, postgresTypeConfig} from '../types/pg.js';
 
 declare module 'vitest' {
   export interface ProvidedContext {
-    pgContainerConnectionString: string;
+    pgConnectionString: string;
   }
 }
 
 // Set by ./test/pg-container-setup.ts
-const CONNECTION_URI = inject('pgContainerConnectionString');
+const CONNECTION_URI = inject('pgConnectionString');
 assert(
   CONNECTION_URI,
   'test file must have suffix ".pg-test.ts" to setup postgres container',
@@ -24,7 +24,7 @@ const defaultOnNotice: OnNoticeFn = n => {
 };
 
 class TestDBs {
-  readonly #sql = postgres(CONNECTION_URI, {
+  readonly sql = postgres(CONNECTION_URI, {
     onnotice: n => n.severity !== 'NOTICE' && console.log(n),
     ...postgresTypeConfig(),
   });
@@ -37,7 +37,7 @@ class TestDBs {
       await this.#drop(exists);
     }
 
-    const sql = this.#sql;
+    const {sql} = this;
     await sql`CREATE DATABASE ${sql(database)}`;
 
     const {host, port, user: username, pass} = sql.options;
@@ -66,7 +66,7 @@ class TestDBs {
     await db.end();
 
     for (let i = 0; i < 10; i++) {
-      const sql = this.#sql;
+      const {sql} = this;
       await dropReplicationSlotsFor(sql, database);
       try {
         await sql`DROP DATABASE IF EXISTS ${sql(database)} WITH (FORCE)`;
@@ -90,7 +90,7 @@ class TestDBs {
    * it manually.
    */
   async end() {
-    await this.#sql.end();
+    await this.sql.end();
   }
 }
 

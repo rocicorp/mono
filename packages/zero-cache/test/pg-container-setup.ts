@@ -7,7 +7,7 @@ export function runPostgresContainer(image: string) {
       .start();
 
     // Referenced by ./src/test/db.ts
-    provide('pgContainerConnectionString', container.getConnectionUri());
+    provide('pgConnectionString', container.getConnectionUri());
 
     return async () => {
       await container.stop();
