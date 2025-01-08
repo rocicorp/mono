@@ -244,5 +244,5 @@ test('protocol version', () => {
   // old code will not understand the new schema, bump the
   // PROTOCOL_VERSION and update the expected values.
   expect(hash).toEqual('1g60qx4dfwety');
-  expect(PROTOCOL_VERSION).toEqual(4);
+  expect(PROTOCOL_VERSION).toEqual(3);
 });

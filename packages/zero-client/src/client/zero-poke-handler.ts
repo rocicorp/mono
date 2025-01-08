@@ -6,7 +6,6 @@ import type {
 } from '../../../replicache/src/impl.js';
 import type {ClientID, PatchOperation} from '../../../replicache/src/mod.js';
 import {getBrowserGlobalMethod} from '../../../shared/src/browser-env.js';
-import {must} from '../../../shared/src/must.js';
 import type {
   ClientsPatchOp,
   PokeEndBody,
@@ -15,13 +14,13 @@ import type {
   QueriesPatchOp,
   RowPatchOp,
 } from '../../../zero-protocol/src/mod.js';
-import type {NormalizedSchema} from '../../../zero-schema/src/normalized-schema.js';
 import {
   toClientsKey,
   toDesiredQueriesKey,
   toGotQueriesKey,
   toPrimaryKeyString,
 } from './keys.js';
+import type {NormalizedSchema} from '../../../zero-schema/src/normalized-schema.js';
 
 type PokeAccumulator = {
   readonly pokeStart: PokeStartBody;
@@ -318,7 +317,7 @@ function rowsPatchOpToReplicachePatchOp(
         key: toPrimaryKeyString(
           op.tableName,
           schema.tables[op.tableName].primaryKey,
-          must(op.value ?? op.id),
+          op.id,
         ),
       };
     case 'put':
