@@ -189,8 +189,8 @@ try {
       execute(
         'docker buildx create --name zero-multiarch --driver docker-container --bootstrap',
       );
-      execute('docker buildx use zero-multiarch');
     }
+    execute('docker buildx use zero-multiarch');
     execute('docker buildx inspect zero-multiarch --bootstrap');
   } catch (e) {
     console.error('Failed to set up Docker buildx:', e);
