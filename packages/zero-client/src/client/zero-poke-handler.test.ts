@@ -1328,7 +1328,18 @@ test('mergePokes with all optionals defined', () => {
                 hash: 'h1',
               },
             ],
-            rowsPatch: [{op: 'del', tableName: 'issues', id: {id: 'issue3'}}],
+            rowsPatch: [
+              {
+                op: 'del',
+                tableName: 'issues',
+                id: {id: 'issue3', other: 'ignored'},
+              },
+              {
+                op: 'del',
+                tableName: 'issues',
+                value: {id: 'issue4', other: 'ignored'},
+              },
+            ],
           },
         ],
       },
@@ -1425,6 +1436,10 @@ test('mergePokes with all optionals defined', () => {
         {
           op: 'del',
           key: 'e/issues/issue3',
+        },
+        {
+          op: 'del',
+          key: 'e/issues/issue4',
         },
       ],
     },
