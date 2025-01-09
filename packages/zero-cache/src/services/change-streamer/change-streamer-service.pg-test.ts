@@ -20,18 +20,18 @@ import type {PostgresDB} from '../../types/pg.js';
 import type {Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import {
+  type ChangeSourceDownstream,
+  type Commit,
+} from '../change-source/protocol/v0/downstream.js';
+import {
   getSubscriptionState,
   initReplicationState,
 } from '../replicator/schema/replication-state.js';
 import {ReplicationMessages} from '../replicator/test-utils.js';
-import {
-  initializeStreamer,
-  type ChangeStreamMessage,
-} from './change-streamer-service.js';
+import {initializeStreamer} from './change-streamer-service.js';
 import {
   ErrorType,
   type ChangeStreamerService,
-  type Commit,
   type Downstream,
 } from './change-streamer.js';
 import {
@@ -46,7 +46,7 @@ describe('change-streamer/service', () => {
   let replicaConfig: ReplicationConfig;
   let changeDB: PostgresDB;
   let streamer: ChangeStreamerService;
-  let changes: Subscription<ChangeStreamMessage>;
+  let changes: Subscription<ChangeSourceDownstream>;
   let acks: Queue<Commit>;
   let streamerDone: Promise<void>;
 

@@ -4,7 +4,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {Database} from '../../../../zqlite/src/db.js';
 import {StatementRunner} from '../../db/statements.js';
 import {expectTables} from '../../test/lite.js';
-import type {DownstreamChange} from '../change-streamer/change-streamer.js';
+import type {DataPlaneMessage} from '../change-source/protocol/v0/downstream.js';
 import {initChangeLog} from './schema/change-log.js';
 import {
   getSubscriptionState,
@@ -34,7 +34,7 @@ describe('replicator/message-processor', () => {
 
   type Case = {
     name: string;
-    messages: DownstreamChange[];
+    messages: DataPlaneMessage[];
     finalCommit: string;
     expectedVersionChanges: number;
     replicated: Record<string, object[]>;

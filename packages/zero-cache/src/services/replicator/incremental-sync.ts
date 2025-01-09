@@ -25,11 +25,6 @@ import {liteTableName} from '../../types/names.js';
 import {id} from '../../types/sql.js';
 import type {Source} from '../../types/streams.js';
 import type {
-  ChangeStreamer,
-  Downstream,
-  DownstreamChange,
-} from '../change-streamer/change-streamer.js';
-import type {
   Change,
   ColumnAdd,
   ColumnDrop,
@@ -44,7 +39,12 @@ import type {
   TableCreate,
   TableDrop,
   TableRename,
-} from '../change-streamer/schema/change.js';
+} from '../change-source/protocol/v0/data.js';
+import type {DataPlaneMessage} from '../change-source/protocol/v0/downstream.js';
+import type {
+  ChangeStreamer,
+  Downstream,
+} from '../change-streamer/change-streamer.js';
 import {RunningState} from '../running-state.js';
 import {Notifier} from './notifier.js';
 import type {ReplicaState, ReplicatorMode} from './replicator.js';
@@ -230,7 +230,7 @@ export class MessageProcessor {
   }
 
   /** @return If a transaction was committed. */
-  processMessage(lc: LogContext, downstream: DownstreamChange): boolean {
+  processMessage(lc: LogContext, downstream: DataPlaneMessage): boolean {
     const [type, message] = downstream;
     if (this.#failure) {
       lc.debug?.(`Dropping ${message.tag}`);

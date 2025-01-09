@@ -4,7 +4,7 @@ import {
   versionToLexi,
   type LexiVersion,
 } from '../../../types/lexi-version.js';
-import type {Change} from '../schema/change.js';
+import type {Change} from '../protocol/v0/data.js';
 
 /**
  * Parsing and conversion utilities for the pg_lsn Type, which represents

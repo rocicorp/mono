@@ -3,7 +3,7 @@ import postgres from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.js';
 import {equals} from '../../../../../shared/src/set-utils.js';
 import type {PostgresDB} from '../../../types/pg.js';
-import type {Change} from './change.js';
+import type {Change} from '../../change-source/protocol/v0/data.js';
 
 export const PG_SCHEMA = 'cdc';
 

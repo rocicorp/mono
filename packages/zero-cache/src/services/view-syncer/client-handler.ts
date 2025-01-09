@@ -21,7 +21,7 @@ import {
   type SchemaVersions,
 } from '../../types/schema-versions.js';
 import type {Subscription} from '../../types/subscription.js';
-import {unescapedSchema as schema} from '../change-streamer/pg/schema/shard.js';
+import {unescapedSchema as schema} from '../change-source/pg/schema/shard.js';
 import {
   type ClientPatch,
   cmpVersions,

@@ -100,6 +100,7 @@ async function buildZeroClient() {
     react: basePath('src/react.ts'),
     solid: basePath('src/solid.ts'),
     advanced: basePath('src/advanced.ts'),
+    ['change-protocol']: basePath('src/change-protocol.ts'),
   };
   await esbuild.build({
     ...sharedOptions(false, false),
