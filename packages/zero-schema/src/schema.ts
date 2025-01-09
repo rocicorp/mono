@@ -7,6 +7,8 @@ export type Schema = {
 };
 
 export function createSchema<const S extends Schema>(schema: S): S {
+  // normalizeSchema will throw if the schema is invalid.
   normalizeSchema(schema);
+  // We still want to return s to cause less surprises.
   return schema as S;
 }

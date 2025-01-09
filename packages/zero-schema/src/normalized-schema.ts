@@ -10,6 +10,8 @@ import {
 } from './normalize-table-schema.js';
 import type {Schema} from './schema.js';
 
+const normalizedCache = new WeakMap<Schema, NormalizedSchema>();
+
 /**
  * Creates a normalized schema from a schema.
  *
@@ -20,7 +22,12 @@ export function normalizeSchema(schema: Schema): NormalizedSchema {
   if (schema instanceof NormalizedSchema) {
     return schema;
   }
-  return new NormalizedSchema(schema);
+
+  let s;
+  if (!(s = normalizedCache.get(schema))) {
+    normalizedCache.set(schema, (s = new NormalizedSchema(schema)));
+  }
+  return s;
 }
 
 export class NormalizedSchema {
