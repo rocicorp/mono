@@ -7,7 +7,7 @@ import {v0} from './mod.js';
 
 function t(
   module: {
-    changeStreamSchema: unknown;
+    changeStreamMessageSchema: unknown;
     changeSourceUpstreamSchema: unknown;
     ['CHANGE_SOURCE_PATH']: string;
   },
@@ -15,7 +15,7 @@ function t(
   path: string,
 ) {
   const h = h64(
-    JSON.stringify(module.changeStreamSchema) +
+    JSON.stringify(module.changeStreamMessageSchema) +
       JSON.stringify(module.changeSourceUpstreamSchema),
   ).toString(36);
 
@@ -25,7 +25,7 @@ function t(
 
 test('protocol versions', () => {
   const current = {
-    changeStreamSchema: changeStreamMessageSchema,
+    changeStreamMessageSchema,
     changeSourceUpstreamSchema,
     // eslint-disable-next-line @typescript-eslint/naming-convention
     CHANGE_SOURCE_PATH,
