@@ -21,8 +21,8 @@ test('Unexpected tableName should throw', () => {
       },
     },
   } as const;
-  expect(() => createSchema(schema)).toThrow(
-    'createSchema tableName mismatch, expected bar === bars',
+  expect(() => createSchema(schema)).toThrowErrorMatchingInlineSnapshot(
+    `[Error: Table name mismatch: "bars" !== "bar"]`,
   );
 });
 
@@ -40,11 +40,11 @@ test('Missing table in direct relationship should throw', () => {
     primaryKey: ['id'],
     columns: {
       id: {type: 'number'},
-      bar_id: {type: 'number'},
+      barID: {type: 'number'},
     },
     relationships: {
-      bar: {
-        sourceField: 'bar_id',
+      barRelation: {
+        sourceField: 'barID',
         destSchema: () => bar,
         destField: 'id',
       },
@@ -54,57 +54,57 @@ test('Missing table in direct relationship should throw', () => {
   const schema = {
     version: 1,
     tables: {
-      foo: foo,
+      foo,
     },
   } as const;
 
-  expect(() => createSchema(schema)).toThrow(
-    'createSchema relationship missing, foo relationship bar not present in schema.tables',
+  expect(() => createSchema(schema)).toThrowErrorMatchingInlineSnapshot(
+    `[Error: Relationship "foo"."barRelation" destination "bar" is missing in schema]`,
   );
 });
 
 test('Missing table in junction relationship should throw', () => {
-  const baz = {
-    tableName: 'baz',
+  const tableA = {
+    tableName: 'tableA',
     primaryKey: ['id'],
     columns: {
       id: {type: 'number'},
     },
   } as const;
 
-  const bar = {
-    tableName: 'bar',
+  const tableB = {
+    tableName: 'tableB',
     primaryKey: ['id'],
     columns: {
       id: {type: 'number'},
-      baz_id: {type: 'number'},
+      aID: {type: 'number'},
     },
     relationships: {
-      baz: {
-        sourceField: 'baz_id',
-        destSchema: () => baz,
+      relationBToA: {
+        sourceField: 'aID',
+        destSchema: () => tableA,
         destField: 'id',
       },
     },
   } as const;
 
-  const foo = {
-    tableName: 'foo',
+  const tableC = {
+    tableName: 'tableC',
     primaryKey: ['id'],
     columns: {
       id: {type: 'number'},
-      bar_id: {type: 'number'},
+      bID: {type: 'number'},
     },
     relationships: {
-      baz: [
+      relationCToB: [
         {
-          sourceField: 'bar_id',
-          destSchema: () => bar,
+          sourceField: 'bID',
+          destSchema: () => tableB,
           destField: 'id',
         },
         {
-          sourceField: 'baz_id',
-          destSchema: () => baz,
+          sourceField: 'aID',
+          destSchema: () => tableA,
           destField: 'id',
         },
       ],
@@ -114,12 +114,12 @@ test('Missing table in junction relationship should throw', () => {
   const schema = {
     version: 1,
     tables: {
-      foo: foo,
-      bar: bar,
+      tableB,
+      tableC,
     },
   } as const;
 
-  expect(() => createSchema(schema)).toThrow(
-    'createSchema relationship missing, foo relationship baz not present in schema.tables',
+  expect(() => createSchema(schema)).toThrowErrorMatchingInlineSnapshot(
+    `[Error: Relationship "tableB"."relationBToA" destination "tableA" is missing in schema]`,
   );
 });

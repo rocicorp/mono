@@ -1,7 +1,9 @@
+import {assert} from '../../shared/src/asserts.js';
 import {sortedEntries} from '../../shared/src/sorted-entries.js';
 import type {Writable} from '../../shared/src/writable.js';
 import {
   normalizeTableSchemaWithCache,
+  type AssertDestFunc,
   type DecycledNormalizedTableSchema,
   type NormalizedTableSchema,
   type TableSchemaCache,
@@ -46,8 +48,22 @@ function normalizeTables(tables: Schema['tables']): {
     readonly [table: string]: NormalizedTableSchema;
   }> = {};
   const tableSchemaCache: TableSchemaCache = new Map();
+  const assertDest: AssertDestFunc = (
+    tableName,
+    relationShipName,
+    destTableName,
+  ) =>
+    assert(
+      destTableName in tables,
+      `Relationship "${tableName}"."${relationShipName}" destination "${destTableName}" is missing in schema`,
+    );
   for (const [name, table] of sortedEntries(tables)) {
-    rv[name] = normalizeTableSchemaWithCache(table, name, tableSchemaCache);
+    rv[name] = normalizeTableSchemaWithCache(
+      table,
+      name,
+      tableSchemaCache,
+      assertDest,
+    );
   }
   return rv;
 }
