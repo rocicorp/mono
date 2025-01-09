@@ -33,7 +33,7 @@ export class NormalizedTableSchema implements TableSchema {
   constructor(
     tableSchema: TableSchema,
     tableSchemaCache: TableSchemaCache,
-    assertDest: AssertDestFunc,
+    assertFieldRelation: AssertFieldRelation,
   ) {
     this.tableName = tableSchema.tableName;
     const primaryKey = normalizePrimaryKey(tableSchema.primaryKey);
@@ -44,7 +44,7 @@ export class NormalizedTableSchema implements TableSchema {
       this.tableName,
       tableSchema.relationships,
       tableSchemaCache,
-      assertDest,
+      assertFieldRelation,
     );
   }
 }
@@ -62,17 +62,17 @@ export function normalizeTableSchema(
   );
 }
 
-export type AssertDestFunc = (
+export type AssertFieldRelation = (
   tableName: string,
   relationShipName: string,
-  destTableName: string,
+  relation: NormalizedFieldRelationship,
 ) => void;
 
 export function normalizeTableSchemaWithCache(
   tableSchema: TableSchema | NormalizedTableSchema,
   expectedTableName: string,
   tableSchemaCache: TableSchemaCache,
-  assertDest: AssertDestFunc,
+  assertFieldRelation: AssertFieldRelation,
 ): NormalizedTableSchema {
   if (tableSchema instanceof NormalizedTableSchema) {
     return tableSchema;
@@ -90,7 +90,7 @@ export function normalizeTableSchemaWithCache(
   normalizedTableSchema = new NormalizedTableSchema(
     tableSchema,
     tableSchemaCache,
-    assertDest,
+    assertFieldRelation,
   );
   return normalizedTableSchema as NormalizedTableSchema;
 }
@@ -157,7 +157,7 @@ function normalizeRelationships(
   tableName: string,
   relationships: Relationships,
   tableSchemaCache: TableSchemaCache,
-  assertDest: AssertDestFunc,
+  assertFieldRelation: AssertFieldRelation,
 ): NormalizedRelationships {
   const rv: Writable<NormalizedRelationships> = {};
   if (relationships) {
@@ -169,7 +169,7 @@ function normalizeRelationships(
         relationshipName,
         relationship,
         tableSchemaCache,
-        assertDest,
+        assertFieldRelation,
       );
     }
   }
@@ -204,7 +204,7 @@ function normalizeRelationship(
   relationshipName: string,
   relationship: Relationship,
   tableSchemaCache: TableSchemaCache,
-  assertDest: AssertDestFunc,
+  assertFieldRelation: AssertFieldRelation,
 ): NormalizedRelationship {
   if (isFieldRelationship(relationship)) {
     return normalizeFieldRelationship(
@@ -212,7 +212,7 @@ function normalizeRelationship(
       relationshipName,
       relationship,
       tableSchemaCache,
-      assertDest,
+      assertFieldRelation,
     );
   }
   return normalizeJunctionRelationship(
@@ -220,11 +220,11 @@ function normalizeRelationship(
     relationshipName,
     relationship,
     tableSchemaCache,
-    assertDest,
+    assertFieldRelation,
   );
 }
 
-type NormalizedFieldRelationship = {
+export type NormalizedFieldRelationship = {
   sourceField: CompoundKey;
   destField: CompoundKey;
   destSchema: NormalizedTableSchema;
@@ -235,7 +235,7 @@ function normalizeFieldRelationship(
   relationshipName: string,
   relationship: FieldRelationship,
   tableSchemaCache: TableSchemaCache,
-  assertDest: AssertDestFunc,
+  assertFieldRelation: AssertFieldRelation,
 ): NormalizedFieldRelationship {
   const sourceField = normalizeFieldName(relationship.sourceField);
   const destField = normalizeFieldName(relationship.destField);
@@ -246,14 +246,15 @@ function normalizeFieldRelationship(
   const destSchema = normalizeLazyTableSchema(
     relationship.destSchema,
     tableSchemaCache,
-    assertDest,
+    assertFieldRelation,
   );
-  assertDest(tableName, relationshipName, destSchema.tableName);
-  return {
+  const normalized: NormalizedFieldRelationship = {
     sourceField,
     destField,
     destSchema,
   };
+  assertFieldRelation(tableName, relationshipName, normalized);
+  return normalized;
 }
 
 export type NormalizedJunctionRelationship = readonly [
@@ -266,30 +267,29 @@ function normalizeJunctionRelationship(
   relationshipName: string,
   relationship: JunctionRelationship,
   tableSchemaCache: TableSchemaCache,
-  assertDest: AssertDestFunc,
+  assertFieldRelation: AssertFieldRelation,
 ): NormalizedJunctionRelationship {
-  return [
-    normalizeFieldRelationship(
-      tableName,
-      relationshipName,
-      relationship[0],
-      tableSchemaCache,
-      assertDest,
-    ),
-    normalizeFieldRelationship(
-      tableName,
-      relationshipName,
-      relationship[1],
-      tableSchemaCache,
-      assertDest,
-    ),
-  ];
+  const first = normalizeFieldRelationship(
+    tableName,
+    relationshipName,
+    relationship[0],
+    tableSchemaCache,
+    assertFieldRelation,
+  );
+  const second = normalizeFieldRelationship(
+    first.destSchema.tableName,
+    relationshipName,
+    relationship[1],
+    tableSchemaCache,
+    assertFieldRelation,
+  );
+  return [first, second];
 }
 
 function normalizeLazyTableSchema<TS extends TableSchema>(
   tableSchema: TS | (() => TS),
   buildCache: TableSchemaCache,
-  assertDest: AssertDestFunc,
+  assertFieldRelation: AssertFieldRelation,
 ): NormalizedTableSchema {
   const tableSchemaInstance =
     typeof tableSchema === 'function' ? tableSchema() : tableSchema;
@@ -297,7 +297,7 @@ function normalizeLazyTableSchema<TS extends TableSchema>(
     tableSchemaInstance,
     tableSchemaInstance.tableName, // Don't care about name here.
     buildCache,
-    assertDest,
+    assertFieldRelation,
   );
 }
 
@@ -313,13 +313,14 @@ export function normalizeTables(
   tables: Record<string, TableSchema>,
 ): Record<string, NormalizedTableSchema> {
   const result: Record<string, NormalizedTableSchema> = {};
-  const assertDest: AssertDestFunc = tableName => tableName in tables;
+  const assertFieldRelation: AssertFieldRelation = tableName =>
+    tableName in tables;
   for (const [name, table] of sortedEntries(tables)) {
     result[name] = normalizeTableSchemaWithCache(
       table,
       name,
       new Map(),
-      assertDest,
+      assertFieldRelation,
     );
   }
   return result;

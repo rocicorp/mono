@@ -1,14 +1,16 @@
 import {assert} from '../../shared/src/asserts.js';
 import {sortedEntries} from '../../shared/src/sorted-entries.js';
 import type {Writable} from '../../shared/src/writable.js';
+import type {CompoundKey} from '../../zero-protocol/src/ast.js';
 import {
   normalizeTableSchemaWithCache,
-  type AssertDestFunc,
   type DecycledNormalizedTableSchema,
+  type NormalizedFieldRelationship,
   type NormalizedTableSchema,
   type TableSchemaCache,
 } from './normalize-table-schema.js';
 import type {Schema} from './schema.js';
+import type {TableSchema} from './table-schema.js';
 
 const normalizedCache = new WeakMap<Schema, NormalizedSchema>();
 
@@ -55,21 +57,36 @@ function normalizeTables(tables: Schema['tables']): {
     readonly [table: string]: NormalizedTableSchema;
   }> = {};
   const tableSchemaCache: TableSchemaCache = new Map();
-  const assertDest: AssertDestFunc = (
-    tableName,
-    relationShipName,
-    destTableName,
-  ) =>
+
+  function assertFieldRelation(
+    tableName: string,
+    relationShipName: string,
+    relation: NormalizedFieldRelationship,
+  ) {
+    const destTableName = relation.destSchema.tableName;
     assert(
       destTableName in tables,
       `Relationship "${tableName}"."${relationShipName}" destination "${destTableName}" is missing in schema`,
     );
+    assertColumns(relation.sourceField, tables[tableName]);
+    assertColumns(relation.destField, tables[destTableName]);
+  }
+
+  function assertColumns(columnNames: CompoundKey, table: TableSchema) {
+    for (const columnName of columnNames) {
+      assert(
+        columnName in table.columns,
+        `Column "${columnName}" is missing in table "${table.tableName}"`,
+      );
+    }
+  }
+
   for (const [name, table] of sortedEntries(tables)) {
     rv[name] = normalizeTableSchemaWithCache(
       table,
       name,
       tableSchemaCache,
-      assertDest,
+      assertFieldRelation,
     );
   }
   return rv;
