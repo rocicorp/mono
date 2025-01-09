@@ -4,7 +4,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {Database} from '../../../../zqlite/src/db.js';
 import {StatementRunner} from '../../db/statements.js';
 import {expectTables} from '../../test/lite.js';
-import type {DataPlaneMessage} from '../change-source/protocol/v0/downstream.js';
+import type {DataPlaneMessage} from '../change-source/protocol/current/downstream.js';
 import {initChangeLog} from './schema/change-log.js';
 import {
   getSubscriptionState,

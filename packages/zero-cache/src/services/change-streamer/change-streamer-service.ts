@@ -16,7 +16,7 @@ import {
   type Commit,
   type ControlPlaneMessage,
   type DataPlaneMessage,
-} from '../change-source/protocol/v0/downstream.js';
+} from '../change-source/protocol/current/downstream.js';
 import {DEFAULT_MAX_RETRY_DELAY_MS, RunningState} from '../running-state.js';
 import {
   ErrorType,

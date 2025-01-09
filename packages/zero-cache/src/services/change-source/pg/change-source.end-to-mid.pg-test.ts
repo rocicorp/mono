@@ -12,8 +12,8 @@ import type {PostgresDB} from '../../../types/pg.js';
 import type {Source} from '../../../types/streams.js';
 import type {MessageProcessor} from '../../replicator/incremental-sync.js';
 import {createMessageProcessor} from '../../replicator/test-utils.js';
-import type {DataChange} from '../protocol/v0/data.js';
-import type {ChangeSourceDownstream} from '../protocol/v0/downstream.js';
+import type {DataChange} from '../protocol/current/data.js';
+import type {ChangeSourceDownstream} from '../protocol/current/downstream.js';
 import {initializeChangeSource} from './change-source.js';
 
 const SHARD_ID = 'change_source_end_to_mid_test_id';

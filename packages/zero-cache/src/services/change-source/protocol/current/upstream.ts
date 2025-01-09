@@ -13,4 +13,5 @@ export const ackSchema = v.union(
 );
 
 /** At the moment, the only upstream messages are acks.  */
-export type ChangeSourceUpstream = v.Infer<typeof ackSchema>;
+export const changeSourceUpstreamSchema = ackSchema;
+export type ChangeSourceUpstream = v.Infer<typeof changeSourceUpstreamSchema>;

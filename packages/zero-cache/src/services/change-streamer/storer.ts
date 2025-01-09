@@ -6,7 +6,7 @@ import {promiseVoid} from '../../../../shared/src/resolved-promises.js';
 import {Mode, TransactionPool} from '../../db/transaction-pool.js';
 import type {JSONValue} from '../../types/bigint-json.js';
 import type {PostgresDB} from '../../types/pg.js';
-import {type Commit} from '../change-source/protocol/v0/downstream.js';
+import {type Commit} from '../change-source/protocol/current/downstream.js';
 import type {Service} from '../service.js';
 import type {WatermarkedChange} from './change-streamer-service.js';
 import {ErrorType, type ChangeEntry} from './change-streamer.js';

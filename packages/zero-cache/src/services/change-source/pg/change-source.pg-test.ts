@@ -29,7 +29,7 @@ import {getSubscriptionState} from '../../replicator/schema/replication-state.js
 import type {
   ChangeSourceDownstream,
   Commit,
-} from '../protocol/v0/downstream.js';
+} from '../protocol/current/downstream.js';
 import {initializeChangeSource} from './change-source.js';
 import {replicationSlot} from './initial-sync.js';
 import {fromLexiVersion} from './lsn.js';

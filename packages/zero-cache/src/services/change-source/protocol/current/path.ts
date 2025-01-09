@@ -1,5 +1,3 @@
-// TODO: Repackage and export this in a `change-protocol` package.
-
 /**
  * The path required for a custom Change Source endpoint implementing the
  * Change Source protocol. The version in the path indicates the current

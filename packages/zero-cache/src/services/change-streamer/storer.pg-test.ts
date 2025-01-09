@@ -5,7 +5,7 @@ import {sleep} from '../../../../shared/src/sleep.js';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {Subscription} from '../../types/subscription.js';
-import {type Commit} from '../change-source/protocol/v0/downstream.js';
+import {type Commit} from '../change-source/protocol/current/downstream.js';
 import {ReplicationMessages} from '../replicator/test-utils.js';
 import {ErrorType, type Downstream} from './change-streamer.js';
 import {setupCDCTables} from './schema/tables.js';

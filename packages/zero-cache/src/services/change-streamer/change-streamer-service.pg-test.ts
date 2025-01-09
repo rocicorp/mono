@@ -22,7 +22,7 @@ import {Subscription} from '../../types/subscription.js';
 import {
   type ChangeSourceDownstream,
   type Commit,
-} from '../change-source/protocol/v0/downstream.js';
+} from '../change-source/protocol/current/downstream.js';
 import {
   getSubscriptionState,
   initReplicationState,

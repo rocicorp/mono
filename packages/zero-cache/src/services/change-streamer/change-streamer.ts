@@ -1,7 +1,7 @@
 import * as v from '../../../../shared/src/valita.js';
 import type {Source} from '../../types/streams.js';
-import {type Change} from '../change-source/protocol/v0/data.js';
-import {dataPlaneMessageSchema} from '../change-source/protocol/v0/downstream.js';
+import {type Change} from '../change-source/protocol/current/data.js';
+import {dataPlaneMessageSchema} from '../change-source/protocol/current/downstream.js';
 import type {ReplicatorMode} from '../replicator/replicator.js';
 import type {Service} from '../service.js';
 

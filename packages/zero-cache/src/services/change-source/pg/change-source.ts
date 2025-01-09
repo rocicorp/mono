@@ -59,12 +59,12 @@ import type {
   DataChange,
   Identifier,
   MessageDelete,
-} from '../protocol/v0/data.js';
+} from '../protocol/current/data.js';
 import type {
   ChangeSourceDownstream,
   Data,
   DataPlaneMessage,
-} from '../protocol/v0/downstream.js';
+} from '../protocol/current/downstream.js';
 import {replicationSlot, type InitialSyncOptions} from './initial-sync.js';
 import {fromLexiVersion, toLexiVersion, type LSN} from './lsn.js';
 import {replicationEventSchema, type DdlUpdateEvent} from './schema/ddl.js';

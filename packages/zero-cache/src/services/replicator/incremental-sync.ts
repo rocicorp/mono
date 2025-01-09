@@ -39,8 +39,8 @@ import type {
   TableCreate,
   TableDrop,
   TableRename,
-} from '../change-source/protocol/v0/data.js';
-import type {DataPlaneMessage} from '../change-source/protocol/v0/downstream.js';
+} from '../change-source/protocol/current/data.js';
+import type {DataPlaneMessage} from '../change-source/protocol/current/downstream.js';
 import type {
   ChangeStreamer,
   Downstream,
