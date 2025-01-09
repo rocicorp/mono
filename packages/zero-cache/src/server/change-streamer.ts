@@ -2,10 +2,10 @@ import {assert} from '../../../shared/src/asserts.js';
 import {must} from '../../../shared/src/must.js';
 import {getZeroConfig} from '../config/zero-config.js';
 import {deleteLiteDB} from '../db/delete-lite-db.js';
+import {initializeChangeSource} from '../services/change-source/pg/change-source.js';
 import {ChangeStreamerHttpServer} from '../services/change-streamer/change-streamer-http.js';
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.js';
 import type {ChangeStreamerService} from '../services/change-streamer/change-streamer.js';
-import {initializeChangeSource} from '../services/change-streamer/pg/change-source.js';
 import {AutoResetSignal} from '../services/change-streamer/schema/tables.js';
 import {pgClient} from '../types/pg.js';
 import {

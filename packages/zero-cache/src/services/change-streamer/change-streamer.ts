@@ -1,14 +1,9 @@
 import * as v from '../../../../shared/src/valita.js';
 import type {Source} from '../../types/streams.js';
+import {type Change} from '../change-source/protocol/current/data.js';
+import {changeStreamDataSchema} from '../change-source/protocol/current/downstream.js';
 import type {ReplicatorMode} from '../replicator/replicator.js';
 import type {Service} from '../service.js';
-import {
-  beginSchema,
-  commitSchema,
-  dataChangeSchema,
-  rollbackSchema,
-  type Change,
-} from './schema/change.js';
 
 /**
  * The ChangeStreamer is the component between replicators ("subscribers")
@@ -113,27 +108,11 @@ const subscriptionErrorSchema = v.object({
 
 export type SubscriptionError = v.Infer<typeof subscriptionErrorSchema>;
 
-const begin = v.tuple([v.literal('begin'), beginSchema]);
-const data = v.tuple([v.literal('data'), dataChangeSchema]);
-const commit = v.tuple([
-  v.literal('commit'),
-  commitSchema,
-  v.object({watermark: v.string()}),
-]);
-const rollback = v.tuple([v.literal('rollback'), rollbackSchema]);
 const error = v.tuple([v.literal('error'), subscriptionErrorSchema]);
 
-export const downstreamChange = v.union(begin, data, commit, rollback);
+export const downstreamSchema = v.union(changeStreamDataSchema, error);
 
-export const downstreamSchema = v.union(downstreamChange, error);
-
-export type Begin = v.Infer<typeof begin>;
-export type Data = v.Infer<typeof data>;
-export type Commit = v.Infer<typeof commit>;
-export type Rollback = v.Infer<typeof rollback>;
 export type Error = v.Infer<typeof error>;
-
-export type DownstreamChange = v.Infer<typeof downstreamChange>;
 
 /**
  * A stream of transactions, each starting with a {@link Begin} message,

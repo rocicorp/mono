@@ -22,7 +22,7 @@ import type {
   TableCreate,
   TableDrop,
   TableRename,
-} from '../change-streamer/schema/change.js';
+} from '../change-source/protocol/current/data.js';
 import {MessageProcessor} from './incremental-sync.js';
 
 export interface FakeReplicator {

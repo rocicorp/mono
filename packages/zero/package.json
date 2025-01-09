@@ -89,6 +89,10 @@
     "./advanced": {
       "types": "./out/zero/src/advanced.d.ts",
       "default": "./out/advanced.js"
+    },
+    "./change-protocol": {
+      "types": "./out/zero-cache/src/services/change-source/protocol/mod.d.ts",
+      "default": "./out/change-protocol.js"
     }
   },
   "bin": {
