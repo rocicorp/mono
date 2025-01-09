@@ -1,13 +1,13 @@
 import {expect, test} from 'vitest';
 import {h64} from '../../../../../shared/src/hash.js';
-import {changeSourceDownstreamSchema} from './current/downstream.js';
+import {changeStreamMessageSchema} from './current/downstream.js';
 import {CHANGE_SOURCE_PATH} from './current/path.js';
 import {changeSourceUpstreamSchema} from './current/upstream.js';
 import {v0} from './mod.js';
 
 function t(
   module: {
-    changeSourceDownstreamSchema: unknown;
+    changeStreamSchema: unknown;
     changeSourceUpstreamSchema: unknown;
     ['CHANGE_SOURCE_PATH']: string;
   },
@@ -15,7 +15,7 @@ function t(
   path: string,
 ) {
   const h = h64(
-    JSON.stringify(module.changeSourceDownstreamSchema) +
+    JSON.stringify(module.changeStreamSchema) +
       JSON.stringify(module.changeSourceUpstreamSchema),
   ).toString(36);
 
@@ -25,7 +25,7 @@ function t(
 
 test('protocol versions', () => {
   const current = {
-    changeSourceDownstreamSchema,
+    changeStreamSchema: changeStreamMessageSchema,
     changeSourceUpstreamSchema,
     // eslint-disable-next-line @typescript-eslint/naming-convention
     CHANGE_SOURCE_PATH,

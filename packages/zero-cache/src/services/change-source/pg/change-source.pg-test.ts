@@ -27,7 +27,7 @@ import type {
 } from '../../change-streamer/change-streamer-service.js';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
 import type {
-  ChangeSourceDownstream,
+  ChangeStreamMessage,
   Commit,
 } from '../protocol/current/downstream.js';
 import {initializeChangeSource} from './change-source.js';
@@ -95,9 +95,9 @@ describe('change-source/pg', () => {
   });
 
   function drainToQueue(
-    sub: Source<ChangeSourceDownstream>,
-  ): Queue<ChangeSourceDownstream> {
-    const queue = new Queue<ChangeSourceDownstream>();
+    sub: Source<ChangeStreamMessage>,
+  ): Queue<ChangeStreamMessage> {
+    const queue = new Queue<ChangeStreamMessage>();
     void (async () => {
       for await (const msg of sub) {
         void queue.enqueue(msg);

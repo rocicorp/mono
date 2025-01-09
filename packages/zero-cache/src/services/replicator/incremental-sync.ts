@@ -40,7 +40,7 @@ import type {
   TableDrop,
   TableRename,
 } from '../change-source/protocol/current/data.js';
-import type {DataPlaneMessage} from '../change-source/protocol/current/downstream.js';
+import type {ChangeStreamData} from '../change-source/protocol/current/downstream.js';
 import type {
   ChangeStreamer,
   Downstream,
@@ -230,7 +230,7 @@ export class MessageProcessor {
   }
 
   /** @return If a transaction was committed. */
-  processMessage(lc: LogContext, downstream: DataPlaneMessage): boolean {
+  processMessage(lc: LogContext, downstream: ChangeStreamData): boolean {
     const [type, message] = downstream;
     if (this.#failure) {
       lc.debug?.(`Dropping ${message.tag}`);

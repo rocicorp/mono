@@ -61,9 +61,9 @@ import type {
   MessageDelete,
 } from '../protocol/current/data.js';
 import type {
-  ChangeSourceDownstream,
+  ChangeStreamData,
+  ChangeStreamMessage,
   Data,
-  DataPlaneMessage,
 } from '../protocol/current/downstream.js';
 import {replicationSlot, type InitialSyncOptions} from './initial-sync.js';
 import {fromLexiVersion, toLexiVersion, type LSN} from './lsn.js';
@@ -246,7 +246,7 @@ class PostgresChangeSource implements ChangeSource {
     shardConfig: InternalShardConfig,
     useSSL: boolean,
   ): Promise<ChangeStream> {
-    const changes = Subscription.create<ChangeSourceDownstream>({
+    const changes = Subscription.create<ChangeStreamMessage>({
       cleanup: () => service.stop(),
     });
 
@@ -476,7 +476,7 @@ class ChangeMaker {
   async makeChanges(
     lsn: string,
     msg: Pgoutput.Message,
-  ): Promise<ChangeSourceDownstream[]> {
+  ): Promise<ChangeStreamMessage[]> {
     if (this.#error) {
       this.#logError(this.#error);
       return [];
@@ -515,7 +515,7 @@ class ChangeMaker {
   async #makeChanges(
     lsn: string,
     msg: Pgoutput.Message,
-  ): Promise<DataPlaneMessage[]> {
+  ): Promise<ChangeStreamData[]> {
     switch (msg.tag) {
       case 'begin':
         return [['begin', msg]];
@@ -785,7 +785,7 @@ class ChangeMaker {
    * this mechanism cannot be used to reliably *replicate* schema changes.
    * However, they serve the purpose determining if schemas have changed.
    */
-  async #handleRelation(rel: MessageRelation): Promise<DataPlaneMessage[]> {
+  async #handleRelation(rel: MessageRelation): Promise<ChangeStreamData[]> {
     const {publications, ddlDetection, initialSchema} = this.#shardConfig;
     if (ddlDetection) {
       return [];

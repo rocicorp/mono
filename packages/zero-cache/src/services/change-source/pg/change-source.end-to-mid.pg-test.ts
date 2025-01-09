@@ -13,7 +13,7 @@ import type {Source} from '../../../types/streams.js';
 import type {MessageProcessor} from '../../replicator/incremental-sync.js';
 import {createMessageProcessor} from '../../replicator/test-utils.js';
 import type {DataChange} from '../protocol/current/data.js';
-import type {ChangeSourceDownstream} from '../protocol/current/downstream.js';
+import type {ChangeStreamMessage} from '../protocol/current/downstream.js';
 import {initializeChangeSource} from './change-source.js';
 
 const SHARD_ID = 'change_source_end_to_mid_test_id';
@@ -31,8 +31,8 @@ describe('change-source/pg/end-to-mid-test', () => {
   let upstream: PostgresDB;
   let replicaDbFile: DbFile;
   let replica: Database;
-  let changes: Source<ChangeSourceDownstream>;
-  let downstream: Queue<ChangeSourceDownstream>;
+  let changes: Source<ChangeStreamMessage>;
+  let downstream: Queue<ChangeStreamMessage>;
   let replicator: MessageProcessor;
 
   beforeAll(async () => {
@@ -91,9 +91,9 @@ describe('change-source/pg/end-to-mid-test', () => {
   });
 
   function drainToQueue(
-    sub: Source<ChangeSourceDownstream>,
-  ): Queue<ChangeSourceDownstream> {
-    const queue = new Queue<ChangeSourceDownstream>();
+    sub: Source<ChangeStreamMessage>,
+  ): Queue<ChangeStreamMessage> {
+    const queue = new Queue<ChangeStreamMessage>();
     void (async () => {
       for await (const msg of sub) {
         void queue.enqueue(msg);

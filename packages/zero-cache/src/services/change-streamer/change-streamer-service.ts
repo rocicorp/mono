@@ -12,10 +12,10 @@ import type {Sink, Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import {orTimeout} from '../../types/timeout.js';
 import {
-  type ChangeSourceDownstream,
+  type ChangeStreamControl,
+  type ChangeStreamData,
+  type ChangeStreamMessage,
   type Commit,
-  type ControlPlaneMessage,
-  type DataPlaneMessage,
 } from '../change-source/protocol/current/downstream.js';
 import {DEFAULT_MAX_RETRY_DELAY_MS, RunningState} from '../running-state.js';
 import {
@@ -71,13 +71,13 @@ export async function initializeStreamer(
  * subscribers, as that is the only semantically correct watermark to
  * use for tracking a position in a replication stream.
  */
-export type WatermarkedChange = [watermark: string, DataPlaneMessage];
+export type WatermarkedChange = [watermark: string, ChangeStreamData];
 
 export type ChangeStream = {
   /** The watermark at which the ChangeStream begins (i.e. inclusive). */
   initialWatermark: string;
 
-  changes: Source<ChangeSourceDownstream>;
+  changes: Source<ChangeStreamMessage>;
 
   /**
    * A Sink to push the {@link Commit} messages that have been successfully
@@ -102,7 +102,7 @@ export interface ChangeSource {
 const MAX_SERVING_DELAY = 30_000;
 
 /**
- * Upstream-agnostic dispatch of messages in a {@link ChangeStream} to a
+ * Upstream-agnostic dispatch of messages in a {@link ChangeStreamMessage} to a
  * {@link Forwarder} and {@link Storer} to execute the forward-store-ack
  * procedure described in {@link ChangeStreamer}.
  *
@@ -350,7 +350,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#lc.info?.('ChangeStreamer stopped');
   }
 
-  async #handleControlMessage(msg: ControlPlaneMessage[1]) {
+  async #handleControlMessage(msg: ChangeStreamControl[1]) {
     this.#lc.info?.('received control message', msg);
     const {tag} = msg;
 

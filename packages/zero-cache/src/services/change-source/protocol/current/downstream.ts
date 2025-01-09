@@ -21,21 +21,19 @@ export type Data = v.Infer<typeof data>;
 export type Commit = v.Infer<typeof commit>;
 export type Rollback = v.Infer<typeof rollback>;
 
-export const dataPlaneMessageSchema = v.union(begin, data, commit, rollback);
-export type DataPlaneMessage = v.Infer<typeof dataPlaneMessageSchema>;
+export const changeStreamDataSchema = v.union(begin, data, commit, rollback);
+export type ChangeStreamData = v.Infer<typeof changeStreamDataSchema>;
 
-export const controlPlaneMessageSchema = v.tuple([
+export const changeStreamControlSchema = v.tuple([
   v.literal('control'),
   resetRequiredSchema, // TODO: Add statusRequestedSchema
 ]);
-export type ControlPlaneMessage = v.Infer<typeof controlPlaneMessageSchema>;
+export type ChangeStreamControl = v.Infer<typeof changeStreamControlSchema>;
 
 /** Downstream messages consist of data plane and control plane messages. */
-export const changeSourceDownstreamSchema = v.union(
-  dataPlaneMessageSchema,
-  controlPlaneMessageSchema,
+export const changeStreamMessageSchema = v.union(
+  changeStreamDataSchema,
+  changeStreamControlSchema,
 );
 
-export type ChangeSourceDownstream = v.Infer<
-  typeof changeSourceDownstreamSchema
->;
+export type ChangeStreamMessage = v.Infer<typeof changeStreamMessageSchema>;

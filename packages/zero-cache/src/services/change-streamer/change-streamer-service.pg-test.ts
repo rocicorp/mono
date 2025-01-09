@@ -20,7 +20,7 @@ import type {PostgresDB} from '../../types/pg.js';
 import type {Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import {
-  type ChangeSourceDownstream,
+  type ChangeStreamMessage,
   type Commit,
 } from '../change-source/protocol/current/downstream.js';
 import {
@@ -46,7 +46,7 @@ describe('change-streamer/service', () => {
   let replicaConfig: ReplicationConfig;
   let changeDB: PostgresDB;
   let streamer: ChangeStreamerService;
-  let changes: Subscription<ChangeSourceDownstream>;
+  let changes: Subscription<ChangeStreamMessage>;
   let acks: Queue<Commit>;
   let streamerDone: Promise<void>;
 

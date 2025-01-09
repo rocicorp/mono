@@ -1,7 +1,7 @@
 import * as v from '../../../../shared/src/valita.js';
 import type {Source} from '../../types/streams.js';
 import {type Change} from '../change-source/protocol/current/data.js';
-import {dataPlaneMessageSchema} from '../change-source/protocol/current/downstream.js';
+import {changeStreamDataSchema} from '../change-source/protocol/current/downstream.js';
 import type {ReplicatorMode} from '../replicator/replicator.js';
 import type {Service} from '../service.js';
 
@@ -110,7 +110,7 @@ export type SubscriptionError = v.Infer<typeof subscriptionErrorSchema>;
 
 const error = v.tuple([v.literal('error'), subscriptionErrorSchema]);
 
-export const downstreamSchema = v.union(dataPlaneMessageSchema, error);
+export const downstreamSchema = v.union(changeStreamDataSchema, error);
 
 export type Error = v.Infer<typeof error>;
 
