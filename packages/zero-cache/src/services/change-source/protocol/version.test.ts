@@ -9,7 +9,7 @@ function t(
   module: {
     changeSourceDownstreamSchema: unknown;
     changeSourceUpstreamSchema: unknown;
-    CHANGE_SOURCE_PATH: string;
+    ['CHANGE_SOURCE_PATH']: string;
   },
   hash: string,
   path: string,
@@ -20,13 +20,14 @@ function t(
   ).toString(36);
 
   expect(h).toBe(hash);
-  expect(module.CHANGE_SOURCE_PATH).toBe(path);
+  expect(module['CHANGE_SOURCE_PATH']).toBe(path);
 }
 
 test('protocol versions', () => {
   const current = {
     changeSourceDownstreamSchema,
     changeSourceUpstreamSchema,
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     CHANGE_SOURCE_PATH,
   };
 
