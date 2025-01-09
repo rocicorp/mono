@@ -1,4 +1,4 @@
-import stripAnsi from 'strip-ansi';
+import {stripVTControlCharacters as stripAnsi} from 'node:util';
 import {expect, test, vi} from 'vitest';
 import {parseOptions} from '../../../../shared/src/options.js';
 import {getMultiZeroConfig, multiConfigSchema} from './config.js';

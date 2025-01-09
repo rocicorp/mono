@@ -147,6 +147,7 @@ export class Take implements Operator {
     let size = 0;
     let bound: Row | undefined;
     let downstreamEarlyReturn = true;
+    let exceptionThrown = false;
     try {
       for (const inputNode of this.#input.fetch(req)) {
         yield inputNode;
@@ -157,21 +158,26 @@ export class Take implements Operator {
         }
       }
       downstreamEarlyReturn = false;
+    } catch (e) {
+      exceptionThrown = true;
+      throw e;
     } finally {
-      this.#setTakeState(
-        takeStateKey,
-        size,
-        bound,
-        this.#storage.get(MAX_BOUND_KEY),
-      );
-      // If it becomes necessary to support downstream early return, this
-      // assert should be removed, and replaced with code that consumes
-      // the input stream until limit is reached or the input stream is
-      // exhausted so that takeState is properly hydrated.
-      assert(
-        !downstreamEarlyReturn,
-        'Unexpected early return prevented full hydration',
-      );
+      if (!exceptionThrown) {
+        this.#setTakeState(
+          takeStateKey,
+          size,
+          bound,
+          this.#storage.get(MAX_BOUND_KEY),
+        );
+        // If it becomes necessary to support downstream early return, this
+        // assert should be removed, and replaced with code that consumes
+        // the input stream until limit is reached or the input stream is
+        // exhausted so that takeState is properly hydrated.
+        assert(
+          !downstreamEarlyReturn,
+          'Unexpected early return prevented full hydration',
+        );
+      }
     }
   }
 
