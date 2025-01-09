@@ -1,8 +1,8 @@
-import {expect, test} from 'vitest';
 import {resolver} from '@rocicorp/resolver';
+import {expect, test} from 'vitest';
 import {MemorySource} from '../../zql/src/ivm/memory-source.js';
-import {SolidView, solidViewFactory} from './solid-view.js';
 import type {Query, Smash} from '../../zql/src/query/query.js';
+import {SolidView, solidViewFactory} from './solid-view.js';
 
 test('basics', () => {
   const ms = new MemorySource(
@@ -25,7 +25,7 @@ test('basics', () => {
     {a: 2, b: 'b'},
   ]);
 
-  expect(view.resultType).toEqual('complete');
+  expect(view.resultDetails).toEqual({type: 'complete'});
 
   ms.push({row: {a: 3, b: 'c'}, type: 'add'});
 
@@ -100,11 +100,11 @@ test('queryComplete promise', async () => {
     {a: 2, b: 'b'},
   ]);
 
-  expect(view.resultType).toEqual('unknown');
+  expect(view.resultDetails).toEqual({type: 'unknown'});
 
   queryCompleteResolver.resolve(true);
   await 1;
-  expect(view.resultType).toEqual('complete');
+  expect(view.resultDetails).toEqual({type: 'complete'});
 });
 
 type TestSchema = {
