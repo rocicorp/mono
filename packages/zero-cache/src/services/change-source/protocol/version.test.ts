@@ -5,21 +5,38 @@ import {CHANGE_SOURCE_PATH} from './current/path.js';
 import {changeSourceUpstreamSchema} from './current/upstream.js';
 import {v0} from './mod.js';
 
-test('protocol version', () => {
-  const hash = h64(
-    JSON.stringify(changeSourceDownstreamSchema) +
-      JSON.stringify(changeSourceUpstreamSchema),
+function t(
+  module: {
+    changeSourceDownstreamSchema: unknown;
+    changeSourceUpstreamSchema: unknown;
+    CHANGE_SOURCE_PATH: string;
+  },
+  hash: string,
+  path: string,
+) {
+  const h = h64(
+    JSON.stringify(module.changeSourceDownstreamSchema) +
+      JSON.stringify(module.changeSourceUpstreamSchema),
   ).toString(36);
 
-  // If this test fails because the change-source/protocol has changed such that
-  // old code will not understand the new schema, make a copy of the previous
-  // current/ into a v#/ archive that is exported in mod.ts appropriately.
-  // Then bump the version of the `CHANGE_SOURCE_PATH` and reference current/*
-  // as the new version in mod.ts.
-  expect(hash).toBe('1wkotqe19ed3k');
-  expect(CHANGE_SOURCE_PATH).toBe('/changes/v0/stream');
-});
+  expect(h).toBe(hash);
+  expect(module.CHANGE_SOURCE_PATH).toBe(path);
+}
 
-test('paths', () => {
-  expect(v0.CHANGE_SOURCE_PATH).toBe('/changes/v0/stream');
+test('protocol versions', () => {
+  const current = {
+    changeSourceDownstreamSchema,
+    changeSourceUpstreamSchema,
+    CHANGE_SOURCE_PATH,
+  };
+
+  // Before making a breaking change to the protocol
+  // (which may be indicated by a new hash),
+  // copy the files in `current/` to the an appropriate
+  // `v#/` directory and very that that hash did not change.
+  // Then update the version number of the `CHANGE_SOURCE_PATH`
+  // in current and export it appropriately as the new version
+  // in `mod.ts`.
+  t(current, '1wkotqe19ed3k', '/changes/v0/stream');
+  t(v0, '1wkotqe19ed3k', '/changes/v0/stream');
 });
