@@ -136,11 +136,12 @@ test('Mutually resolving relationships should be supported', () => {
     primaryKey: ['id'],
     columns: {
       id: {type: 'string'},
+      fooField: {type: 'string'},
     },
     relationships: {
       bar: {
-        sourceField: ['bar-source'],
-        destField: ['field'],
+        sourceField: ['fooField'],
+        destField: ['barField'],
         destSchema: () => barTableSchema,
       },
     },
@@ -151,11 +152,12 @@ test('Mutually resolving relationships should be supported', () => {
     primaryKey: ['id'],
     columns: {
       id: {type: 'string'},
+      barField: {type: 'string'},
     },
     relationships: {
       foo: {
-        sourceField: ['foo-source'],
-        destField: ['field'],
+        sourceField: ['barField'],
+        destField: ['fooField'],
         destSchema: () => fooTableSchema,
       },
     },

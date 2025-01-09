@@ -3,9 +3,8 @@ import {template} from 'chalk-template';
 import type {OptionDefinition} from 'command-line-args';
 import commandLineArgs from 'command-line-args';
 import commandLineUsage from 'command-line-usage';
-import kebabcase from 'lodash.kebabcase';
-import merge from 'lodash.merge';
-import snakeCase from 'lodash.snakecase';
+import {createDefu} from 'defu';
+import {toKebabCase, toSnakeCase} from 'kasi';
 import {stripVTControlCharacters as stripAnsi} from 'node:util';
 import {assert} from './asserts.js';
 import {must} from './must.js';
@@ -164,6 +163,16 @@ export type Config<O extends Options> = {
 };
 
 /**
+ * Creates a defu instance that overrides arrays instead of merging them.
+ */
+const defu = createDefu((obj, key, value) => {
+  if (!Array.isArray(value)) return;
+
+  obj[key] = value;
+  return true;
+});
+
+/**
  * Converts an Options instance into its corresponding {@link Config} schema.
  */
 function configSchema<T extends Options>(options: T): v.Type<Config<T>> {
@@ -204,7 +213,7 @@ export function envSchema<T extends Options>(options: T, envNamePrefix = '') {
 
   function addField(name: string, type: OptionType, group?: string) {
     const flag = group ? `${group}_${name}` : name;
-    const env = snakeCase(`${envNamePrefix}${flag}`).toUpperCase();
+    const env = toSnakeCase(`${envNamePrefix}${flag}`).toUpperCase();
 
     const {required} = getRequiredOrDefault(type);
     fields.push([env, required ? v.string() : v.string().optional()]);
@@ -281,7 +290,7 @@ export function parseOptionsAdvanced<T extends Options>(
     const {type, desc = [], alias, hidden} = option;
 
     // The group name is prepended to the flag name.
-    const flag = group ? kebabcase(`${group}-${field}`) : kebabcase(field);
+    const flag = group ? toKebabCase(`${group}-${field}`) : toKebabCase(field);
 
     const {required, defaultValue} = getRequiredOrDefault(type);
     let multiple = type.name === 'array';
@@ -317,7 +326,7 @@ export function parseOptionsAdvanced<T extends Options>(
     assert(terminalTypes.size === 1);
     const terminalType = [...terminalTypes][0];
 
-    const env = snakeCase(`${envNamePrefix}${flag}`).toUpperCase();
+    const env = toSnakeCase(`${envNamePrefix}${flag}`).toUpperCase();
     if (processEnv[env]) {
       if (multiple) {
         // Technically not water-tight; assumes values for the string[] flag don't contain commas.
@@ -406,7 +415,7 @@ export function parseOptionsAdvanced<T extends Options>(
         break;
     }
 
-    const parsedArgs = merge(defaults, fromEnv, withoutDefaults);
+    const parsedArgs = defu(withoutDefaults, fromEnv, defaults);
     const env = {...env1, ...env2, ...env3};
 
     let schema = configSchema(options);

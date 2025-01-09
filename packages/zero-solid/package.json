@@ -14,6 +14,7 @@
     "solid-js": "^1.0.0"
   },
   "devDependencies": {
+    "@solidjs/testing-library": "^0.8.10",
     "solid-js": "^1.0.0",
     "zero-advanced": "0.0.0"
   }
