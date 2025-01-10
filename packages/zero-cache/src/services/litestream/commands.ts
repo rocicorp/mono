@@ -80,7 +80,9 @@ async function tryRestore(config: ZeroLitestreamConfig) {
   return existsSync(config.replicaFile);
 }
 
-export function backupReplica(config: ZeroLitestreamConfig): ChildProcess {
+export function startReplicaBackupProcess(
+  config: ZeroLitestreamConfig,
+): ChildProcess {
   const {litestream, env} = getLitestream(config);
   return spawn(litestream, ['replicate'], {env, stdio: 'inherit'});
 }

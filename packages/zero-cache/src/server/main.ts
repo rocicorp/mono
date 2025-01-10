@@ -4,8 +4,8 @@ import path from 'node:path';
 import {getZeroConfig} from '../config/zero-config.js';
 import {SyncDispatcher} from '../services/dispatcher/sync-dispatcher.js';
 import {
-  backupReplica,
   restoreReplica,
+  startReplicaBackupProcess,
 } from '../services/litestream/commands.js';
 import type {Service} from '../services/service.js';
 import {initViewSyncerSchema} from '../services/view-syncer/schema/init.js';
@@ -111,7 +111,11 @@ export default async function runWorker(
   await changeStreamerReady;
 
   if (runChangeStreamer && litestream) {
-    processes.addSubprocess(backupReplica(config), 'supporting', 'litestream');
+    processes.addSubprocess(
+      startReplicaBackupProcess(config),
+      'supporting',
+      'litestream',
+    );
   }
 
   if (litestream) {
