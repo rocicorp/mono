@@ -46,14 +46,7 @@ export {
   dropDatabase,
   type DropDatabaseOptions,
 } from './persist/collect-idb-databases.js';
-export type {
-  Puller,
-  PullerResult,
-  PullerResultV1,
-  PullResponse,
-  PullResponseOKV1,
-  PullResponseV1,
-} from './puller.js';
+export type {Puller, PullerResult, PullResponse} from './puller.js';
 export type {Pusher, PusherResult, PushError, PushResponse} from './pusher.js';
 export type {ReplicacheOptions} from './replicache-options.js';
 export {makeIDBName, Replicache} from './replicache.js';
