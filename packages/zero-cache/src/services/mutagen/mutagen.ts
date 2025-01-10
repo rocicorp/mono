@@ -31,7 +31,7 @@ import {Mode} from '../../db/transaction-pool.js';
 import {ErrorForClient} from '../../types/error-for-client.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
 import {throwErrorForClientIfSchemaVersionNotSupported} from '../../types/schema-versions.js';
-import {unescapedSchema as schema} from '../change-streamer/pg/schema/shard.js';
+import {unescapedSchema as schema} from '../change-source/pg/schema/shard.js';
 import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.js';
 import type {Service} from '../service.js';
 

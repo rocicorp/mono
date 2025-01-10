@@ -1,7 +1,16 @@
-import * as v from '../../../../../shared/src/valita.js';
-import {columnSpec, indexSpec, tableSpec} from '../../../db/specs.js';
-import {jsonValueSchema, type JSONObject} from '../../../types/bigint-json.js';
-import type {Satisfies} from '../../../types/satisfies.js';
+/**
+ * Data plane messages encapsulate changes that are sent by ChangeSources,
+ * forwarded / fanned out to subscribers by the ChangeStreamerService, and
+ * stored in the Change DB for catchup of old subscribers.
+ */
+
+import * as v from '../../../../../../shared/src/valita.js';
+import {columnSpec, indexSpec, tableSpec} from '../../../../db/specs.js';
+import {
+  jsonValueSchema,
+  type JSONObject,
+} from '../../../../types/bigint-json.js';
+import type {Satisfies} from '../../../../types/satisfies.js';
 
 export const beginSchema = v.object({
   tag: v.literal('begin'),

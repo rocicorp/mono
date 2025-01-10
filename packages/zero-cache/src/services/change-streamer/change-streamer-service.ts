@@ -1,7 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {unreachable} from '../../../../shared/src/asserts.js';
-import * as v from '../../../../shared/src/valita.js';
 import {
   min,
   oneAfter,
@@ -12,14 +11,17 @@ import type {PostgresDB} from '../../types/pg.js';
 import type {Sink, Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import {orTimeout} from '../../types/timeout.js';
+import {
+  type ChangeStreamControl,
+  type ChangeStreamData,
+  type ChangeStreamMessage,
+  type Commit,
+} from '../change-source/protocol/current/downstream.js';
 import {DEFAULT_MAX_RETRY_DELAY_MS, RunningState} from '../running-state.js';
 import {
-  downstreamChange,
   ErrorType,
   type ChangeStreamerService,
-  type Commit,
   type Downstream,
-  type DownstreamChange,
   type SubscriberContext,
 } from './change-streamer.js';
 import {Forwarder} from './forwarder.js';
@@ -59,22 +61,6 @@ export async function initializeStreamer(
   );
 }
 
-// ControlMessages can be sent from the ChangeSource to the ChangeStreamer
-// for non-content signals that initiate action in the ChangeStreamer
-// but otherwise do not constitute a Downstream message.
-//
-// Currently, only one type of message is defined: `reset-required`.
-const controlMessage = v.tuple([
-  v.literal('control'),
-  v.object({tag: v.literal('reset-required')}),
-]);
-
-type ControlMessage = v.Infer<typeof controlMessage>;
-
-const changeStreamMessage = v.union(downstreamChange, controlMessage);
-
-export type ChangeStreamMessage = v.Infer<typeof changeStreamMessage>;
-
 /**
  * Internally all Downstream messages (not just commits) are given a watermark.
  * These are used for internal ordering for:
@@ -85,7 +71,7 @@ export type ChangeStreamMessage = v.Infer<typeof changeStreamMessage>;
  * subscribers, as that is the only semantically correct watermark to
  * use for tracking a position in a replication stream.
  */
-export type WatermarkedChange = [watermark: string, DownstreamChange];
+export type WatermarkedChange = [watermark: string, ChangeStreamData];
 
 export type ChangeStream = {
   /** The watermark at which the ChangeStream begins (i.e. inclusive). */
@@ -116,7 +102,7 @@ export interface ChangeSource {
 const MAX_SERVING_DELAY = 30_000;
 
 /**
- * Upstream-agnostic dispatch of messages in a {@link ChangeStream} to a
+ * Upstream-agnostic dispatch of messages in a {@link ChangeStreamMessage} to a
  * {@link Forwarder} and {@link Storer} to execute the forward-store-ack
  * procedure described in {@link ChangeStreamer}.
  *
@@ -364,7 +350,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#lc.info?.('ChangeStreamer stopped');
   }
 
-  async #handleControlMessage(msg: ControlMessage[1]) {
+  async #handleControlMessage(msg: ChangeStreamControl[1]) {
     this.#lc.info?.('received control message', msg);
     const {tag} = msg;
 

@@ -21,13 +21,15 @@ import {
 } from '../../../types/lexi-version.js';
 import type {PostgresDB} from '../../../types/pg.js';
 import type {Source} from '../../../types/streams.js';
-import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
 import type {
   ChangeSource,
   ChangeStream,
+} from '../../change-streamer/change-streamer-service.js';
+import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
+import type {
   ChangeStreamMessage,
-} from '../change-streamer-service.js';
-import type {Commit} from '../change-streamer.js';
+  Commit,
+} from '../protocol/current/downstream.js';
 import {initializeChangeSource} from './change-source.js';
 import {replicationSlot} from './initial-sync.js';
 import {fromLexiVersion} from './lsn.js';

@@ -46,15 +46,25 @@ import {
   type PostgresDB,
 } from '../../../types/pg.js';
 import {Subscription} from '../../../types/subscription.js';
-import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
 import type {
   ChangeSource,
   ChangeStream,
+} from '../../change-streamer/change-streamer-service.js';
+import {
+  AutoResetSignal,
+  type ReplicationConfig,
+} from '../../change-streamer/schema/tables.js';
+import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
+import type {
+  DataChange,
+  Identifier,
+  MessageDelete,
+} from '../protocol/current/data.js';
+import type {
+  ChangeStreamData,
   ChangeStreamMessage,
-} from '../change-streamer-service.js';
-import type {Data, DownstreamChange} from '../change-streamer.js';
-import type {DataChange, Identifier, MessageDelete} from '../schema/change.js';
-import {AutoResetSignal, type ReplicationConfig} from '../schema/tables.js';
+  Data,
+} from '../protocol/current/downstream.js';
 import {replicationSlot, type InitialSyncOptions} from './initial-sync.js';
 import {fromLexiVersion, toLexiVersion, type LSN} from './lsn.js';
 import {replicationEventSchema, type DdlUpdateEvent} from './schema/ddl.js';
@@ -505,7 +515,7 @@ class ChangeMaker {
   async #makeChanges(
     lsn: string,
     msg: Pgoutput.Message,
-  ): Promise<DownstreamChange[]> {
+  ): Promise<ChangeStreamData[]> {
     switch (msg.tag) {
       case 'begin':
         return [['begin', msg]];
@@ -775,7 +785,7 @@ class ChangeMaker {
    * this mechanism cannot be used to reliably *replicate* schema changes.
    * However, they serve the purpose determining if schemas have changed.
    */
-  async #handleRelation(rel: MessageRelation): Promise<DownstreamChange[]> {
+  async #handleRelation(rel: MessageRelation): Promise<ChangeStreamData[]> {
     const {publications, ddlDetection, initialSchema} = this.#shardConfig;
     if (ddlDetection) {
       return [];

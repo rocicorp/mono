@@ -8,8 +8,6 @@ test('parse options', () => {
     getMultiZeroConfig(
       {
         ['ZERO_UPSTREAM_DB']: 'foo',
-        ['ZERO_CVR_DB']: 'foo',
-        ['ZERO_CHANGE_DB']: 'foo',
       },
       [
         '--tenants-json',
@@ -19,19 +17,32 @@ test('parse options', () => {
               id: 'tenboo',
               host: 'Normalize.ME',
               path: 'tenboo',
-              env: {['ZERO_REPLICA_FILE']: 'tenboo.db'},
+              env: {
+                ['ZERO_REPLICA_FILE']: 'tenboo.db',
+                ['ZERO_CVR_DB']: 'foo',
+                ['ZERO_CHANGE_DB']: 'foo',
+                ['ZERO_SHARD_ID']: 'foo',
+              },
             },
             {
               id: 'tenbar',
               path: '/tenbar',
-              env: {['ZERO_REPLICA_FILE']: 'tenbar.db'},
+              env: {
+                ['ZERO_REPLICA_FILE']: 'tenbar.db',
+                ['ZERO_CVR_DB']: 'bar',
+                ['ZERO_CHANGE_DB']: 'bar',
+                ['ZERO_SHARD_ID']: 'bar',
+              },
             },
             {
               id: 'tenbaz',
               path: '/tenbaz',
               env: {
                 ['ZERO_REPLICA_FILE']: 'tenbar.db',
-                ['ZERO_CHANGE_DB']: 'overridden',
+                ['ZERO_UPSTREAM_DB']: 'overridden',
+                ['ZERO_CVR_DB']: 'baz',
+                ['ZERO_CHANGE_DB']: 'baz',
+                ['ZERO_SHARD_ID']: 'foo',
               },
             },
           ],
@@ -43,11 +54,9 @@ test('parse options', () => {
       "config": {
         "auth": {},
         "change": {
-          "db": "foo",
           "maxConns": 1,
         },
         "cvr": {
-          "db": "foo",
           "maxConns": 30,
         },
         "initialSync": {
@@ -72,7 +81,10 @@ test('parse options', () => {
         "tenants": [
           {
             "env": {
+              "ZERO_CHANGE_DB": "foo",
+              "ZERO_CVR_DB": "foo",
               "ZERO_REPLICA_FILE": "tenboo.db",
+              "ZERO_SHARD_ID": "foo",
             },
             "host": "normalize.me",
             "id": "tenboo",
@@ -80,15 +92,21 @@ test('parse options', () => {
           },
           {
             "env": {
+              "ZERO_CHANGE_DB": "bar",
+              "ZERO_CVR_DB": "bar",
               "ZERO_REPLICA_FILE": "tenbar.db",
+              "ZERO_SHARD_ID": "bar",
             },
             "id": "tenbar",
             "path": "/tenbar",
           },
           {
             "env": {
-              "ZERO_CHANGE_DB": "overridden",
+              "ZERO_CHANGE_DB": "baz",
+              "ZERO_CVR_DB": "baz",
               "ZERO_REPLICA_FILE": "tenbar.db",
+              "ZERO_SHARD_ID": "foo",
+              "ZERO_UPSTREAM_DB": "overridden",
             },
             "id": "tenbaz",
             "path": "/tenbaz",
@@ -100,9 +118,7 @@ test('parse options', () => {
         },
       },
       "env": {
-        "ZERO_CHANGE_DB": "foo",
         "ZERO_CHANGE_MAX_CONNS": "1",
-        "ZERO_CVR_DB": "foo",
         "ZERO_CVR_MAX_CONNS": "30",
         "ZERO_INITIAL_SYNC_ROW_BATCH_SIZE": "10000",
         "ZERO_INITIAL_SYNC_TABLE_COPY_WORKERS": "5",
@@ -113,7 +129,7 @@ test('parse options', () => {
         "ZERO_SCHEMA_FILE": "zero-schema.json",
         "ZERO_SHARD_ID": "0",
         "ZERO_SHARD_PUBLICATIONS": "",
-        "ZERO_TENANTS_JSON": "{"tenants":[{"id":"tenboo","host":"Normalize.ME","path":"tenboo","env":{"ZERO_REPLICA_FILE":"tenboo.db"}},{"id":"tenbar","path":"/tenbar","env":{"ZERO_REPLICA_FILE":"tenbar.db"}},{"id":"tenbaz","path":"/tenbaz","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_CHANGE_DB":"overridden"}}]}",
+        "ZERO_TENANTS_JSON": "{"tenants":[{"id":"tenboo","host":"Normalize.ME","path":"tenboo","env":{"ZERO_REPLICA_FILE":"tenboo.db","ZERO_CVR_DB":"foo","ZERO_CHANGE_DB":"foo","ZERO_SHARD_ID":"foo"}},{"id":"tenbar","path":"/tenbar","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_CVR_DB":"bar","ZERO_CHANGE_DB":"bar","ZERO_SHARD_ID":"bar"}},{"id":"tenbaz","path":"/tenbaz","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_UPSTREAM_DB":"overridden","ZERO_CVR_DB":"baz","ZERO_CHANGE_DB":"baz","ZERO_SHARD_ID":"foo"}}]}",
         "ZERO_UPSTREAM_DB": "foo",
         "ZERO_UPSTREAM_MAX_CONNS": "20",
       },
@@ -127,15 +143,24 @@ test.each([
     {
       id: 'tenboo',
       path: '/too/many-slashes',
-      env: {['ZERO_REPLICA_FILE']: 'foo.db'},
+      env: {
+        ['ZERO_REPLICA_FILE']: 'foo.db',
+        ['ZERO_CVR_DB']: 'foo',
+        ['ZERO_CHANGE_DB']: 'foo',
+      },
     },
   ],
   [
-    'Unexpected property ZERO_REPLICA_FILEZZ',
+    'Unexpected property ZERO_UPSTREAM_DBZ',
     {
       id: 'tenboo',
       path: '/zero',
-      env: {['ZERO_REPLICA_FILEZZ']: 'foo.db'},
+      env: {
+        ['ZERO_UPSTREAM_DBZ']: 'oops',
+        ['ZERO_REPLICA_FILE']: 'boo.db',
+        ['ZERO_CVR_DB']: 'boo',
+        ['ZERO_CHANGE_DB']: 'boo',
+      },
     },
   ],
 ])('%s', (errMsg, tenant) => {
@@ -401,8 +426,10 @@ test('zero-cache --help', () => {
                                                          * and are overridden by values in the tenant's env object.                                  
                                                          */                                                                                          
                                                         env: {                                                                                       
-                                                          ZERO_REPLICA_DB_FILE: string                                                               
+                                                          ZERO_REPLICA_FILE: string                                                                  
                                                           ZERO_UPSTREAM_DB: string                                                                   
+                                                          ZERO_CVR_DB: string                                                                        
+                                                          ZERO_CHANGE_DB: string                                                                     
                                                           ...                                                                                        
                                                         };                                                                                           
                                                      }[];                                                                                            

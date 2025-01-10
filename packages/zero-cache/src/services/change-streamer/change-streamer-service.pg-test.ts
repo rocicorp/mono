@@ -20,18 +20,18 @@ import type {PostgresDB} from '../../types/pg.js';
 import type {Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
 import {
+  type ChangeStreamMessage,
+  type Commit,
+} from '../change-source/protocol/current/downstream.js';
+import {
   getSubscriptionState,
   initReplicationState,
 } from '../replicator/schema/replication-state.js';
 import {ReplicationMessages} from '../replicator/test-utils.js';
-import {
-  initializeStreamer,
-  type ChangeStreamMessage,
-} from './change-streamer-service.js';
+import {initializeStreamer} from './change-streamer-service.js';
 import {
   ErrorType,
   type ChangeStreamerService,
-  type Commit,
   type Downstream,
 } from './change-streamer.js';
 import {

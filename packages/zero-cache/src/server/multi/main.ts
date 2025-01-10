@@ -40,7 +40,12 @@ export default async function runWorker(
     // Run a single tenant on main `port`, and skip the TenantDispatcher.
     config.tenants.push({
       id: '',
-      env: {['ZERO_PORT']: String(port)},
+      env: {
+        ['ZERO_PORT']: String(port),
+        ['ZERO_CVR_DB']: config.cvr.db,
+        ['ZERO_CHANGE_DB']: config.change.db,
+        ['ZERO_REPLICA_FILE']: config.replicaFile,
+      },
     });
   }
 

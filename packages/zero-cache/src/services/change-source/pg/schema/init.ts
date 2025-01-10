@@ -6,7 +6,7 @@ import {
   type Migration,
 } from '../../../../db/migration.js';
 import type {PostgresDB, PostgresTransaction} from '../../../../types/pg.js';
-import {AutoResetSignal} from '../../schema/tables.js';
+import {AutoResetSignal} from '../../../change-streamer/schema/tables.js';
 import type {ShardConfig} from '../shard-config.js';
 import {getPublicationInfo, type PublishedSchema} from './published.js';
 import {
