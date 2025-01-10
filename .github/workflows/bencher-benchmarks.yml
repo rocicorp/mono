@@ -9,6 +9,7 @@ jobs:
     name: Continuous Monitoring of file sizes
     permissions:
       checks: write
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
