@@ -9,12 +9,10 @@ import {
   type ClientID,
   type ExperimentalNoIndexDiff,
   type MutatorDefs,
-  type PullRequestV0,
-  type PullRequestV1,
+  type PullRequest,
   type Puller,
-  type PullerResultV1,
-  type PushRequestV0,
-  type PushRequestV1,
+  type PullerResult,
+  type PushRequest,
   type Pusher,
   type PusherResult,
   type ReplicacheOptions,
@@ -1109,10 +1107,7 @@ export class Zero<const S extends Schema> {
     resolver.resolve(pullResponseMessage[1]);
   }
 
-  async #pusher(
-    req: PushRequestV0 | PushRequestV1,
-    requestID: string,
-  ): Promise<PusherResult> {
+  async #pusher(req: PushRequest, requestID: string): Promise<PusherResult> {
     // The deprecation of pushVersion 0 predates zero-client
     assert(req.pushVersion === 1);
     // If we are connecting we wait until we are connected.
@@ -1407,10 +1402,7 @@ export class Zero<const S extends Schema> {
     }
   }
 
-  async #puller(
-    req: PullRequestV0 | PullRequestV1,
-    requestID: string,
-  ): Promise<PullerResultV1> {
+  async #puller(req: PullRequest, requestID: string): Promise<PullerResult> {
     // The deprecation of pushVersion 0 predates zero-client
     assert(req.pullVersion === 1);
     const lc = this.#lc.withContext('requestID', requestID);

@@ -46,20 +46,10 @@ export {
   dropDatabase,
   type DropDatabaseOptions,
 } from './persist/collect-idb-databases.js';
-export type {
-  PullResponse,
-  PullResponseOKV0,
-  PullResponseOKV1,
-  PullResponseV0,
-  PullResponseV1,
-  Puller,
-  PullerResult,
-  PullerResultV0,
-  PullerResultV1,
-} from './puller.js';
-export type {PushError, PushResponse, Pusher, PusherResult} from './pusher.js';
+export type {Puller, PullerResult, PullResponse} from './puller.js';
+export type {Pusher, PusherResult, PushError, PushResponse} from './pusher.js';
 export type {ReplicacheOptions} from './replicache-options.js';
-export {Replicache, makeIDBName} from './replicache.js';
+export {makeIDBName, Replicache} from './replicache.js';
 export {makeScanResult} from './scan-iterator.js';
 export type {
   AsyncIterableIteratorToArray,
@@ -86,14 +76,8 @@ export type {
 } from './subscriptions.js';
 export type {ClientGroupID, ClientID} from './sync/ids.js';
 export {PullError} from './sync/pull-error.js';
-export type {PullRequest, PullRequestV0, PullRequestV1} from './sync/pull.js';
-export type {
-  MutationV0,
-  MutationV1,
-  PushRequest,
-  PushRequestV0,
-  PushRequestV1,
-} from './sync/push.js';
+export type {PullRequest} from './sync/pull.js';
+export type {Mutation, PushRequest} from './sync/push.js';
 export {TEST_LICENSE_KEY} from './test-license-key.js';
 export {TransactionClosedError} from './transaction-closed-error.js';
 export type {

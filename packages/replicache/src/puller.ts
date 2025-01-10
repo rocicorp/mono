@@ -1,4 +1,3 @@
-import type {ReadonlyJSONValue} from '../../shared/src/json.js';
 import type {Cookie} from './cookies.js';
 import type {
   ClientStateNotFoundResponse,
@@ -12,11 +11,6 @@ import type {
 import type {ClientID} from './sync/ids.js';
 import type {PullRequest} from './sync/pull.js';
 
-export type PullerResultV0 = {
-  response?: PullResponseV0 | undefined;
-  httpRequestInfo: HTTPRequestInfo;
-};
-
 // TODO(arv): Does it really make sense to call this httpRequestInfo? It is
 // really the response status code and error message!
 
@@ -25,7 +19,7 @@ export type PullerResultV1 = {
   httpRequestInfo: HTTPRequestInfo;
 };
 
-export type PullerResult = PullerResultV1 | PullerResultV0;
+export type PullerResult = PullerResultV1;
 
 /**
  * Puller is the function type used to do the fetch part of a pull.
@@ -41,15 +35,6 @@ export type Puller = (
   requestBody: PullRequest,
   requestID: string,
 ) => Promise<PullerResult>;
-
-/**
- * The shape of a pull response under normal circumstances.
- */
-export type PullResponseOKV0 = {
-  cookie?: ReadonlyJSONValue | undefined;
-  lastMutationID: number;
-  patch: PatchOperation[];
-};
 
 /**
  * The shape of a pull response under normal circumstances.
@@ -74,15 +59,6 @@ export type PullResponseOKV1Internal = {
  * PullResponse defines the shape and type of the response of a pull. This is
  * the JSON you should return from your pull server endpoint.
  */
-export type PullResponseV0 =
-  | PullResponseOKV0
-  | ClientStateNotFoundResponse
-  | VersionNotSupportedResponse;
-
-/**
- * PullResponse defines the shape and type of the response of a pull. This is
- * the JSON you should return from your pull server endpoint.
- */
 export type PullResponseV1 =
   | PullResponseOKV1
   | ClientStateNotFoundResponse
@@ -93,4 +69,4 @@ export type PullResponseV1Internal =
   | ClientStateNotFoundResponse
   | VersionNotSupportedResponse;
 
-export type PullResponse = PullResponseV1 | PullResponseV0;
+export type PullResponse = PullResponseV1;

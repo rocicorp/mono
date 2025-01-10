@@ -2,11 +2,9 @@ import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import * as sinon from 'sinon';
 import {afterEach, beforeEach, expect, suite, test} from 'vitest';
-import type {
-  PullRequestV1,
-  PushRequestV1,
-} from '../../../replicache/src/mod.js';
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.js';
+import type {PullRequest} from '../../../replicache/src/sync/pull.js';
+import type {PushRequest} from '../../../replicache/src/sync/push.js';
 import {assert} from '../../../shared/src/asserts.js';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.js';
 import * as valita from '../../../shared/src/valita.js';
@@ -19,6 +17,7 @@ import {
   initConnectionMessageSchema,
   type QueriesPatchOp,
 } from '../../../zero-protocol/src/mod.js';
+import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.js';
 import {
   type Mutation,
   MutationType,
@@ -49,7 +48,6 @@ import {
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
 } from './zero.js';
-import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.js';
 
 let realSetTimeout: typeof setTimeout;
 let clock: sinon.SinonFakeTimers;
@@ -767,7 +765,7 @@ test('pusher sends one mutation per push message', async () => {
         requestID = 'test-request-id',
       } = push;
 
-      const pushReq: PushRequestV1 = {
+      const pushReq: PushRequest = {
         profileID: 'p1',
         clientGroupID: clientGroupID ?? (await r.clientGroupID),
         pushVersion: 1,
@@ -982,7 +980,7 @@ test('pusher adjusts mutation timestamps to be unix timestamps', async () => {
   ];
   const requestID = 'test-request-id';
 
-  const pushReq: PushRequestV1 = {
+  const pushReq: PushRequest = {
     profileID: 'p1',
     clientGroupID: await r.clientGroupID,
     pushVersion: 1,
@@ -1013,7 +1011,7 @@ test('puller with mutation recovery pull, success response', async () => {
 
   const mockSocket = await r.socket;
 
-  const pullReq: PullRequestV1 = {
+  const pullReq: PullRequest = {
     profileID: 'test-profile-id',
     clientGroupID: 'test-client-group-id',
     cookie: '1',
@@ -1062,7 +1060,7 @@ test('puller with mutation recovery pull, response timeout', async () => {
 
   const mockSocket = await r.socket;
 
-  const pullReq: PullRequestV1 = {
+  const pullReq: PullRequest = {
     profileID: 'test-profile-id',
     clientGroupID: 'test-client-group-id',
     cookie: '1',
@@ -1097,7 +1095,7 @@ test('puller with mutation recovery pull, response timeout', async () => {
 
 test('puller with normal non-mutation recovery pull', async () => {
   const r = zeroForTest();
-  const pullReq: PullRequestV1 = {
+  const pullReq: PullRequest = {
     profileID: 'test-profile-id',
     clientGroupID: await r.clientGroupID,
     cookie: '1',
@@ -1598,7 +1596,7 @@ async function testWaitsForConnection(
 
 test('pusher waits for connection', async () => {
   await testWaitsForConnection(async r => {
-    const pushReq: PushRequestV1 = {
+    const pushReq: PushRequest = {
       profileID: 'p1',
       clientGroupID: await r.clientGroupID,
       pushVersion: 1,
@@ -1611,7 +1609,7 @@ test('pusher waits for connection', async () => {
 
 test('puller waits for connection', async () => {
   await testWaitsForConnection(r => {
-    const pullReq: PullRequestV1 = {
+    const pullReq: PullRequest = {
       profileID: 'test-profile-id',
       clientGroupID: 'test-client-group-id',
       cookie: 1,

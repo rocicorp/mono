@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.js';
-import {deepEqual, type ReadonlyJSONValue} from '../../../shared/src/json.js';
+import {deepEqual} from '../../../shared/src/json.js';
 import {diff} from '../btree/diff.js';
 import {BTreeRead} from '../btree/read.js';
 import {compareCookies, type Cookie} from '../cookies.js';
@@ -20,10 +20,7 @@ import {newWriteSnapshotDD31} from '../db/write.js';
 import {isErrorResponse} from '../error-responses.js';
 import * as FormatVersion from '../format-version-enum.js';
 import {deepFreeze, type FrozenJSONValue} from '../frozen-json.js';
-import {
-  assertPullerResultV0,
-  assertPullerResultV1,
-} from '../get-default-puller.js';
+import {assertPullerResultV1} from '../get-default-puller.js';
 import {emptyHash, type Hash} from '../hash.js';
 import type {HTTPRequestInfo} from '../http-request-info.js';
 import type {
@@ -31,7 +28,6 @@ import type {
   PullerResult,
   PullerResultV1,
   PullResponseOKV1Internal,
-  PullResponseV0,
   PullResponseV1,
 } from '../puller.js';
 import {ReportError} from '../replicache.js';
@@ -55,25 +51,7 @@ export const PULL_VERSION_DD31 = 1;
  * The JSON value used as the body when doing a POST to the [pull
  * endpoint](/reference/server-pull).
  */
-export type PullRequest = PullRequestV1 | PullRequestV0;
-
-/**
- * The JSON value used as the body when doing a POST to the [pull
- * endpoint](/reference/server-pull). This is the legacy version (V0) and it is
- * still used when recovering mutations from old clients.
- */
-export type PullRequestV0 = {
-  pullVersion: 0;
-  // schemaVersion can optionally be used by the customer's app
-  // to indicate to the data layer what format of Client View the
-  // app understands.
-  schemaVersion: string;
-  profileID: string;
-  cookie: ReadonlyJSONValue;
-
-  clientID: ClientID;
-  lastMutationID: number;
-};
+export type PullRequest = PullRequestV1;
 
 /**
  * The JSON value used as the body when doing a POST to the [pull
@@ -98,12 +76,6 @@ export function isPullRequestV1(pr: PullRequest): pr is PullRequestV1 {
 export type BeginPullResponseV1 = {
   httpRequestInfo: HTTPRequestInfo;
   pullResponse?: PullResponseV1;
-  syncHead: Hash;
-};
-
-export type BeginPullResponseV0 = {
-  httpRequestInfo: HTTPRequestInfo;
-  pullResponse?: PullResponseV0;
   syncHead: Hash;
 };
 
@@ -201,11 +173,7 @@ async function callPuller(
     throw new PullError(toError(e));
   }
   try {
-    if (isPullRequestV1(pullReq)) {
-      assertPullerResultV1(pullerResult);
-    } else {
-      assertPullerResultV0(pullerResult);
-    }
+    assertPullerResultV1(pullerResult);
     return pullerResult;
   } catch (e) {
     throw new ReportError('Invalid puller result', toError(e));
