@@ -3,7 +3,6 @@ import {
   assertObject,
   assertString,
 } from '../../shared/src/asserts.js';
-import {assertJSONValue} from '../../shared/src/json.js';
 import {callDefaultFetch} from './call-default-fetch.js';
 import {assertCookie} from './cookies.js';
 import {
@@ -13,12 +12,9 @@ import {
 import {assertHTTPRequestInfo} from './http-request-info.js';
 import {assertPatchOperations} from './patch-operation.js';
 import type {
-  PullResponseOKV0,
-  PullResponseV0,
   PullResponseV1,
   Puller,
   PullerResult,
-  PullerResultV0,
   PullerResultV1,
 } from './puller.js';
 import type {PullRequest} from './sync/pull.js';
@@ -57,19 +53,6 @@ export function isDefaultPuller(puller: Puller): boolean {
   return defaultPullers.has(puller);
 }
 
-export function assertPullResponseV0(v: unknown): asserts v is PullResponseV0 {
-  assertObject(v);
-  if (isClientStateNotFoundResponse(v) || isVersionNotSupportedResponse(v)) {
-    return;
-  }
-  const v2 = v as Partial<PullResponseOKV0>;
-  if (v2.cookie !== undefined) {
-    assertJSONValue(v2.cookie);
-  }
-  assertNumber(v2.lastMutationID);
-  assertPatchOperations(v2.patch);
-}
-
 export function assertPullResponseV1(v: unknown): asserts v is PullResponseV1 {
   assertObject(v);
   if (isClientStateNotFoundResponse(v) || isVersionNotSupportedResponse(v)) {
@@ -98,13 +81,5 @@ export function assertPullerResultV1(v: unknown): asserts v is PullerResultV1 {
   assertHTTPRequestInfo(v.httpRequestInfo);
   if (v.response !== undefined) {
     assertPullResponseV1(v.response);
-  }
-}
-
-export function assertPullerResultV0(v: unknown): asserts v is PullerResultV0 {
-  assertObject(v);
-  assertHTTPRequestInfo(v.httpRequestInfo);
-  if (v.response !== undefined) {
-    assertPullResponseV0(v.response);
   }
 }

@@ -47,19 +47,16 @@ export {
   type DropDatabaseOptions,
 } from './persist/collect-idb-databases.js';
 export type {
-  PullResponse,
-  PullResponseOKV0,
-  PullResponseOKV1,
-  PullResponseV0,
-  PullResponseV1,
   Puller,
   PullerResult,
-  PullerResultV0,
   PullerResultV1,
+  PullResponse,
+  PullResponseOKV1,
+  PullResponseV1,
 } from './puller.js';
-export type {PushError, PushResponse, Pusher, PusherResult} from './pusher.js';
+export type {Pusher, PusherResult, PushError, PushResponse} from './pusher.js';
 export type {ReplicacheOptions} from './replicache-options.js';
-export {Replicache, makeIDBName} from './replicache.js';
+export {makeIDBName, Replicache} from './replicache.js';
 export {makeScanResult} from './scan-iterator.js';
 export type {
   AsyncIterableIteratorToArray,
@@ -86,7 +83,7 @@ export type {
 } from './subscriptions.js';
 export type {ClientGroupID, ClientID} from './sync/ids.js';
 export {PullError} from './sync/pull-error.js';
-export type {PullRequest, PullRequestV0, PullRequestV1} from './sync/pull.js';
+export type {PullRequest, PullRequestV1} from './sync/pull.js';
 export type {
   MutationV0,
   MutationV1,
