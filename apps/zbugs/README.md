@@ -65,6 +65,10 @@ ZERO_AUTH_SECRET = "my-localhost-testing-secret"
 GITHUB_CLIENT_ID = ""
 # The secret for the client
 GITHUB_CLIENT_SECRET = ""
+
+
+#### Vite Variables ####
+VITE_PUBLIC_SERVER="http://localhost:4848"
 ```
 
 Then start the server:
@@ -78,7 +82,7 @@ npm run zero
 In still another tab:
 
 ```bash
-VITE_PUBLIC_SERVER="http://localhost:4848" npm run dev
+npm run dev
 ```
 
 After you have visited the local website and the sync / replica tables have populated.
