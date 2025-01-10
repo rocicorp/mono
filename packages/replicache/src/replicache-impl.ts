@@ -54,7 +54,6 @@ import {
 import {initClientGroupGC} from './persist/client-group-gc.js';
 import {disableClientGroup} from './persist/client-groups.js';
 import {
-  type ClientMap,
   ClientStateNotFoundError,
   initClientV6,
   hasClientState as persistHasClientState,
@@ -519,7 +518,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     await closingInstances.get(this.name);
     await this.#idbDatabases.getProfileID().then(profileIDResolver);
     await this.#idbDatabases.putDatabase(this.#idbDatabase);
-    const [client, headHash, clients, isNewClientGroup] = await initClientV6(
+    const [client, headHash, , isNewClientGroup] = await initClientV6(
       clientID,
       this.#lc,
       this.perdag,
@@ -590,7 +589,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       RECOVER_MUTATIONS_INTERVAL_MS,
       signal,
     );
-    void this.recoverMutations(clients);
+    void this.recoverMutations();
 
     getBrowserGlobal('document')?.addEventListener(
       'visibilitychange',
@@ -1499,9 +1498,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     return ex;
   }
 
-  recoverMutations(preReadClientMap?: ClientMap): Promise<boolean> {
+  recoverMutations(): Promise<boolean> {
     const result = this.#mutationRecovery.recoverMutations(
-      preReadClientMap,
       this.#ready,
       this.perdag,
       this.#idbDatabase,

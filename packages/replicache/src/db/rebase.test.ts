@@ -16,7 +16,6 @@ import {
   type LocalMetaDD31,
   type Meta,
   type SnapshotMetaDD31,
-  type SnapshotMetaSDD,
   assertLocalCommitDD31,
   commitFromHead,
   commitIsLocal,
@@ -449,7 +448,7 @@ async function testThrowsErrorOnClientIDMismatch(
   await b.addLocal(clientID);
   const localCommit = b.chain[b.chain.length - 1] as Commit<LocalMetaDD31>;
   const syncChain = await b.addSyncSnapshot(1, clientID);
-  const syncSnapshotCommit = syncChain[0] as Commit<SnapshotMetaSDD>;
+  const syncSnapshotCommit = syncChain[0] as Commit<SnapshotMetaDD31>;
 
   let testMutatorCallCount = 0;
   const testMutator = async (tx: WriteTransaction, args?: unknown) => {
@@ -508,7 +507,7 @@ async function testThrowsErrorOnMutationIDMismatch(
   await b.addLocal(clientID);
   const localCommit2 = b.chain[b.chain.length - 1] as Commit<LocalMetaDD31>;
   const syncChain = await b.addSyncSnapshot(1, clientID);
-  const syncSnapshotCommit = syncChain[0] as Commit<SnapshotMetaSDD>;
+  const syncSnapshotCommit = syncChain[0] as Commit<SnapshotMetaDD31>;
 
   let testMutator1CallCount = 0;
   const testMutator1 = async (tx: WriteTransaction, args?: unknown) => {
