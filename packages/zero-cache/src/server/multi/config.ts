@@ -36,8 +36,10 @@ export const multiConfigSchema = {
       `      * and are overridden by values in the tenant's {bold env} object.`,
       `      */`,
       `     env: \\{`,
-      `       ZERO_REPLICA_DB_FILE: string`,
+      `       ZERO_REPLICA_FILE: string`,
       `       ZERO_UPSTREAM_DB: string`,
+      `       ZERO_CVR_DB: string`,
+      `       ZERO_CHANGE_DB: string`,
       `       ...`,
       `     \\};`,
       `  \\}[];`,
@@ -63,7 +65,13 @@ const tenantSchema = v.object({
       return v.ok(p[0] === '/' ? p : '/' + p);
     })
     .optional(),
-  env: zeroEnvSchema.partial(),
+  env: zeroEnvSchema.partial().extend({
+    // Keep these as required fields. Note that ZERO_UPSTREAM_DB is optional as
+    // it can be shared provided that each tenant has its own ZERO_SHARD_ID.
+    ['ZERO_REPLICA_FILE']: v.string(),
+    ['ZERO_CVR_DB']: v.string(),
+    ['ZERO_CHANGE_DB']: v.string(),
+  }),
 });
 
 const tenantsSchema = v.object({
