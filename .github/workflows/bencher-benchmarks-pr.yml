@@ -1,0 +1,60 @@
+name: Bencher File Sizes PR
+
+on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+
+jobs:
+  file_sizes:
+    name: Continuous Monitoring of file sizes
+    # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+      - uses: bencherdev/bencher@main
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Build npm zero package
+        working-directory: packages/zero
+        run: |
+          npm pack --pack-destination ./out
+          mv ./out/*.tgz ./out/zero-package.tgz
+
+      - name: Build zero client single file package
+        working-directory: packages/zero
+        run: node tool/build.js --bundle-sizes --minify
+
+      - name: Compress
+        working-directory: packages/zero
+        run: brotli out/zero.js
+
+      - name: Track PR benchmarks with Bencher
+        working-directory: packages/zero
+        run: |
+          bencher run \
+          --project zero-file-sizes \
+          --token '${{ secrets.BENCHER_API_TOKEN }}' \
+          --adapter json \
+          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+          --threshold-measure file-size \
+          --threshold-test percentage \
+          --threshold-upper-boundary 0.05 \
+          --err \
+          --branch "$GITHUB_HEAD_REF" \
+          --start-point "$GITHUB_BASE_REF" \
+          --start-point-hash '${{ github.event.pull_request.base.sha }}' \
+          --start-point-clone-thresholds \
+          --start-point-reset \
+          --file-size out/zero-package.tgz \
+          --file-size out/zero.js.br \
+          --file-size out/zero.js
