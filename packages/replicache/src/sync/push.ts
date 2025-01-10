@@ -31,24 +31,6 @@ export const PUSH_VERSION_SDD = 0;
 export const PUSH_VERSION_DD31 = 1;
 
 /**
- * Mutation describes a single mutation done on the client. This is the legacy
- * version (V0) and it is used when recovering mutations from old clients.
- */
-export type MutationV0 = {
-  readonly id: number;
-  readonly name: string;
-  readonly args: ReadonlyJSONValue;
-  readonly timestamp: number;
-};
-
-const mutationV0Schema: valita.Type<MutationV0> = valita.readonlyObject({
-  id: valita.number(),
-  name: valita.string(),
-  args: jsonSchema,
-  timestamp: valita.number(),
-});
-
-/**
  * Mutation describes a single mutation done on the client.
  */
 export type MutationV1 = {
@@ -59,43 +41,14 @@ export type MutationV1 = {
   readonly clientID: ClientID;
 };
 
+export type Mutation = MutationV1;
+
 const mutationV1Schema: valita.Type<MutationV1> = valita.readonlyObject({
   id: valita.number(),
   name: valita.string(),
   args: jsonSchema,
   timestamp: valita.number(),
   clientID: clientIDSchema,
-});
-
-type FrozenMutationV0 = Omit<MutationV0, 'args'> & {
-  readonly args: FrozenJSONValue;
-};
-
-/**
- * The JSON value used as the body when doing a POST to the [push
- * endpoint](/reference/server-push). This is the legacy version (V0) and it is
- * still used when recovering mutations from old clients.
- */
-export type PushRequestV0 = {
-  pushVersion: 0;
-  /**
-   * `schemaVersion` can optionally be used to specify to the push endpoint
-   * version information about the mutators the app is using (e.g., format of
-   * mutator args).
-   */
-  schemaVersion: string;
-  profileID: string;
-
-  clientID: ClientID;
-  mutations: MutationV0[];
-};
-
-const pushRequestV0Schema: valita.Type<PushRequestV0> = valita.object({
-  pushVersion: valita.literal(0),
-  schemaVersion: valita.string(),
-  profileID: valita.string(),
-  clientID: clientIDSchema,
-  mutations: valita.array(mutationV0Schema),
 });
 
 /**
@@ -124,13 +77,7 @@ const pushRequestV1Schema = valita.object({
   mutations: valita.array(mutationV1Schema),
 });
 
-export type PushRequest = PushRequestV0 | PushRequestV1;
-
-export function assertPushRequestV0(
-  value: unknown,
-): asserts value is PushRequestV0 {
-  valita.assert(value, pushRequestV0Schema);
-}
+export type PushRequest = PushRequestV1;
 
 export function assertPushRequestV1(
   value: unknown,
@@ -141,7 +88,11 @@ export function assertPushRequestV1(
 /**
  * Mutation describes a single mutation done on the client.
  */
-type FrozenMutationV1 = FrozenMutationV0 & {
+type FrozenMutationV1 = {
+  readonly id: number;
+  readonly name: string;
+  readonly args: FrozenJSONValue;
+  readonly timestamp: number;
   readonly clientID: ClientID;
 };
 
@@ -213,7 +164,7 @@ export async function push(
 
 async function callPusher(
   pusher: Pusher,
-  body: PushRequestV0 | PushRequestV1,
+  body: PushRequestV1,
   requestID: string,
 ): Promise<PusherResult> {
   let pusherResult: PusherResult;

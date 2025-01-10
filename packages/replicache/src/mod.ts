@@ -76,14 +76,8 @@ export type {
 } from './subscriptions.js';
 export type {ClientGroupID, ClientID} from './sync/ids.js';
 export {PullError} from './sync/pull-error.js';
-export type {PullRequest, PullRequestV1} from './sync/pull.js';
-export type {
-  MutationV0,
-  MutationV1,
-  PushRequest,
-  PushRequestV0,
-  PushRequestV1,
-} from './sync/push.js';
+export type {PullRequest} from './sync/pull.js';
+export type {Mutation, PushRequest} from './sync/push.js';
 export {TEST_LICENSE_KEY} from './test-license-key.js';
 export {TransactionClosedError} from './transaction-closed-error.js';
 export type {
