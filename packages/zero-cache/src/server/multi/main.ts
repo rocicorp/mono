@@ -69,7 +69,7 @@ export default async function runWorker(
 
   const s = tenants.length > 1 ? 's' : '';
   lc.info?.(`waiting for zero-cache${s} to be ready ...`);
-  if ((await orTimeout(processes.allWorkersReady(), 30_000)) === 'timed-out') {
+  if ((await orTimeout(processes.allWorkersReady(), 60_000)) === 'timed-out') {
     lc.info?.(`timed out waiting for readiness (${Date.now() - startMs} ms)`);
   } else {
     lc.info?.(`zero-cache${s} ready (${Date.now() - startMs} ms)`);

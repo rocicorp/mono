@@ -99,7 +99,7 @@ Resources:
       Cluster: !Ref Cluster
       LaunchType: FARGATE
       EnableExecuteCommand: true
-      HealthCheckGracePeriodSeconds: 5
+      HealthCheckGracePeriodSeconds: 300
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
@@ -116,6 +116,9 @@ Resources:
         # (Connection counts are currently safe for up to 12 tasks at a time)
         MaximumPercent: 120
         MinimumHealthyPercent: 50
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: false
       DesiredCount: 10
       TaskDefinition: !Ref "TaskDefinitionViewSyncer"
       LoadBalancers:
@@ -312,6 +315,9 @@ Resources:
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 50
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: false
       DesiredCount: 1
       TaskDefinition: !Ref "TaskDefinitionReplicationManager"
       ServiceConnectConfiguration:

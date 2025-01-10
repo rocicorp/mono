@@ -151,7 +151,7 @@ export default async function runWorker(
   }
 
   lc.info?.('waiting for workers to be ready ...');
-  if ((await orTimeout(processes.allWorkersReady(), 30_000)) === 'timed-out') {
+  if ((await orTimeout(processes.allWorkersReady(), 60_000)) === 'timed-out') {
     lc.info?.(`timed out waiting for readiness (${Date.now() - startMs} ms)`);
   } else {
     lc.info?.(`all workers ready (${Date.now() - startMs} ms)`);
