@@ -1,4 +1,4 @@
-import type {LogContext} from '@rocicorp/logger';
+import type {LogContext, LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {ChildProcess, spawn} from 'node:child_process';
 import {existsSync} from 'node:fs';
@@ -36,7 +36,10 @@ export async function restoreReplica(
   throw new Error(`max attempts exceeded restoring replica`);
 }
 
-function getLitestream(config: ZeroLitestreamConfig): {
+function getLitestream(
+  config: ZeroLitestreamConfig,
+  logLevelOverride?: LogLevel,
+): {
   litestream: string;
   env: NodeJS.ProcessEnv;
 } {
@@ -47,7 +50,7 @@ function getLitestream(config: ZeroLitestreamConfig): {
       ...process.env,
       ['ZERO_REPLICA_FILE']: config.replicaFile,
       ['ZERO_LITESTREAM_BACKUP_URL']: must(backupURL),
-      ['ZERO_LITESTREAM_LOG_LEVEL']: logLevel,
+      ['ZERO_LITESTREAM_LOG_LEVEL']: logLevelOverride ?? logLevel,
       ['ZERO_LOG_FORMAT']: config.log.format,
       ['LITESTREAM_CONFIG']: configPath,
     },
@@ -55,18 +58,12 @@ function getLitestream(config: ZeroLitestreamConfig): {
 }
 
 async function tryRestore(config: ZeroLitestreamConfig) {
-  const {litestream, env} = getLitestream(config);
+  // The log output for litestream restore is minimal. Include it all.
+  const {litestream, env} = getLitestream(config, 'debug');
   const proc = spawn(
     litestream,
     ['restore', '-if-db-not-exists', '-if-replica-exists', config.replicaFile],
-    {
-      env: {
-        ...env,
-        // The output for litestream restore is minimal. Include it all.
-        ['ZERO_LITESTREAM_LOG_LEVEL']: 'debug',
-      },
-      stdio: 'inherit',
-    },
+    {env, stdio: 'inherit'},
   );
   const {promise, resolve, reject} = resolver();
   proc.on('error', reject);
