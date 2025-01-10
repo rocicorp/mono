@@ -2,11 +2,17 @@
 
 import * as esbuild from 'esbuild';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
+import {readFile, writeFile} from 'node:fs/promises';
 import {builtinModules} from 'node:module';
 import {resolve as resolvePath} from 'node:path';
 import {makeDefine, sharedOptions} from '../../shared/src/build.js';
 import {getExternalFromPackageJSON} from '../../shared/src/tool/get-external-from-package-json.js';
+
+const forBundleSizeDashboard = process.argv.includes('--bundle-sizes');
+const minify = process.argv.includes('--minify');
+// You can then visualize the metafile at https://esbuild.github.io/analyze/
+const metafile = process.argv.includes('--metafile');
+const splitting = !forBundleSizeDashboard;
 
 /**
  * @param {string} path
@@ -95,23 +101,28 @@ async function verifyDependencies(external) {
 
 async function buildZeroClient() {
   const define = makeDefine('unknown');
-  const entryPoints = {
-    zero: basePath('src/zero.ts'),
-    react: basePath('src/react.ts'),
-    solid: basePath('src/solid.ts'),
-    advanced: basePath('src/advanced.ts'),
-    ['change-protocol']: basePath('src/change-protocol.ts'),
-  };
-  await esbuild.build({
-    ...sharedOptions(false, false),
+  const entryPoints = forBundleSizeDashboard
+    ? {zero: basePath('src/zero.ts')}
+    : {
+        zero: basePath('src/zero.ts'),
+        react: basePath('src/react.ts'),
+        solid: basePath('src/solid.ts'),
+        advanced: basePath('src/advanced.ts'),
+        ['change-protocol']: basePath('src/change-protocol.ts'),
+      };
+  const result = await esbuild.build({
+    ...sharedOptions(minify, metafile),
     external: await getExternal(true),
-    splitting: true,
+    splitting,
     // Use neutral to remove the automatic define for process.env.NODE_ENV
     platform: 'neutral',
     define,
     outdir: basePath('out'),
     entryPoints,
   });
+  if (metafile) {
+    await writeFile(basePath('out/meta.json'), JSON.stringify(result.metafile));
+  }
 }
 
 await buildZeroClient();
