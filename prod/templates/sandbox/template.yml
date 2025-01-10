@@ -196,8 +196,6 @@ Resources:
               Value: !Sub "s3://${ApplicationBucket}/0102"
             - Name: ZERO_LOG_LEVEL
               Value: debug
-            - Name: ZERO_LOG_FORMAT
-              Value: json
             - Name: ZERO_UPSTREAM_MAX_CONNS
               # limit: 190 max_connections / (10 tasks * 1.2 maximum-percent)
               Value: 15
