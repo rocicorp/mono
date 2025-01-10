@@ -86,7 +86,7 @@ export default async function runWorker(
   try {
     await runUntilKilled(lc, parent ?? process, ...mainServices);
   } catch (err) {
-    processes.logErrorAndExit(err);
+    processes.logErrorAndExit(err, 'main');
   }
 
   await processes.done();

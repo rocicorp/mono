@@ -3,6 +3,10 @@ import {availableParallelism} from 'node:os';
 import path from 'node:path';
 import {getZeroConfig} from '../config/zero-config.js';
 import {SyncDispatcher} from '../services/dispatcher/sync-dispatcher.js';
+import {
+  backupReplica,
+  restoreReplica,
+} from '../services/litestream/commands.js';
 import type {Service} from '../services/service.js';
 import {initViewSyncerSchema} from '../services/view-syncer/schema/init.js';
 import {pgClient} from '../types/pg.js';
@@ -75,13 +79,23 @@ export default async function runWorker(
     return processes.addWorker(worker, type, name);
   }
 
+  const {backupLocation} = config.litestream;
+  const litestream = backupLocation?.length;
+  const runChangeStreamer = !config.changeStreamerURI;
+
+  if (litestream) {
+    // For view-syncers, attempt a restore for up to 10 times over 30 seconds.
+    // For the replication-manager, only attempt once.
+    await restoreReplica(lc, config, config.changeStreamerURI ? 10 : 1, 3000);
+  }
+
   const {promise: changeStreamerReady, resolve} = resolver();
-  const changeStreamer = config.changeStreamerURI
-    ? resolve()
-    : loadWorker('./server/change-streamer.ts', 'supporting').once(
+  const changeStreamer = runChangeStreamer
+    ? loadWorker('./server/change-streamer.ts', 'supporting').once(
         'message',
         resolve,
-      );
+      )
+    : resolve();
 
   if (numSyncers) {
     // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
@@ -92,11 +106,15 @@ export default async function runWorker(
     void cvrDB.end();
   }
 
-  // Start the replicator after the change-streamer is running to avoid
-  // connect error messages and exponential backoff.
+  // Wait for the change-streamer to be ready to guarantee that a replica
+  // file is present.
   await changeStreamerReady;
 
-  if (config.litestream) {
+  if (runChangeStreamer && litestream) {
+    processes.addSubprocess(backupReplica(config), 'supporting', 'litestream');
+  }
+
+  if (litestream) {
     const mode: ReplicaFileMode = 'backup';
     const replicator = loadWorker(
       './server/replicator.ts',
@@ -112,9 +130,7 @@ export default async function runWorker(
 
   const syncers: Worker[] = [];
   if (numSyncers) {
-    const mode: ReplicaFileMode = config.litestream
-      ? 'serving-copy'
-      : 'serving';
+    const mode: ReplicaFileMode = litestream ? 'serving-copy' : 'serving';
     const replicator = loadWorker(
       './server/replicator.ts',
       'supporting',
@@ -149,7 +165,7 @@ export default async function runWorker(
   try {
     await runUntilKilled(lc, parent ?? process, ...mainServices);
   } catch (err) {
-    processes.logErrorAndExit(err);
+    processes.logErrorAndExit(err, 'dispatcher');
   }
 
   await processes.done();

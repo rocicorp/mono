@@ -63,6 +63,10 @@ test('parse options', () => {
           "rowBatchSize": 10000,
           "tableCopyWorkers": 5,
         },
+        "litestream": {
+          "configPath": "./src/services/litestream/config.yml",
+          "logLevel": "warn",
+        },
         "log": {
           "format": "text",
           "level": "info",
@@ -122,6 +126,8 @@ test('parse options', () => {
         "ZERO_CVR_MAX_CONNS": "30",
         "ZERO_INITIAL_SYNC_ROW_BATCH_SIZE": "10000",
         "ZERO_INITIAL_SYNC_TABLE_COPY_WORKERS": "5",
+        "ZERO_LITESTREAM_CONFIG_PATH": "./src/services/litestream/config.yml",
+        "ZERO_LITESTREAM_LOG_LEVEL": "warn",
         "ZERO_LOG_FORMAT": "text",
         "ZERO_LOG_LEVEL": "info",
         "ZERO_PER_USER_MUTATION_LIMIT_WINDOW_MS": "60000",
@@ -370,20 +376,28 @@ test('zero-cache --help', () => {
                                                    clients. This is a heavy-weight operation and can result in user-visible                          
                                                    slowness or downtime if compute resources are scarce.                                             
                                                                                                                                                      
-                                                   Moreover, auto-reset is only supported for single-node configurations                             
-                                                   with a permanent volume for the replica. Specifically, it is incompatible                         
-                                                   with the litestream option, and will be ignored with a warning if                                 
-                                                   set in combination with litestream.                                                               
+     --litestream-executable string                optional                                                                                          
+       ZERO_LITESTREAM_EXECUTABLE env                                                                                                                
+                                                   Path to the litestream executable. This option has no effect if                                   
+                                                   litestream-backup-location is unspecified.                                                        
                                                                                                                                                      
-     --litestream boolean                          optional                                                                                          
-       ZERO_LITESTREAM env                                                                                                                           
-                                                   Indicates that a litestream replicate process is backing up the                                   
-                                                   replica-file. This should be the production configuration for the                                 
-                                                   replication-manager. It is okay to run this in development too.                                   
+     --litestream-config-path string               default: "./src/services/litestream/config.yml"                                                   
+       ZERO_LITESTREAM_CONFIG_PATH env                                                                                                               
+                                                   Path to the litestream yaml config file. zero-cache will run this with its                        
+                                                   environment variables, which can be referenced in the file via \${ENV}                             
+                                                   substitution, for example:                                                                        
+                                                   * ZERO_REPLICA_FILE for the db path                                                               
+                                                   * ZERO_LITESTREAM_BACKUP_LOCATION for the db replica url                                          
+                                                   * ZERO_LITESTREAM_LOG_LEVEL for the log level                                                     
+                                                   * ZERO_LOG_FORMAT for the log type                                                                
                                                                                                                                                      
-                                                   Note that this flag does not actually run litestream; rather, it                                  
-                                                   configures the internal replication logic to operate on the DB file in                            
-                                                   a manner that is compatible with litestream.                                                      
+     --litestream-log-level debug,info,warn,error  default: "warn"                                                                                   
+       ZERO_LITESTREAM_LOG_LEVEL env                                                                                                                 
+                                                                                                                                                     
+     --litestream-backup-location string           optional                                                                                          
+       ZERO_LITESTREAM_BACKUP_LOCATION env                                                                                                           
+                                                   The location of the litestream backup, usually an s3:// path.                                     
+                                                   If set, the litestream-executable must also be specified.                                         
                                                                                                                                                      
      --storage-db-tmp-dir string                   optional                                                                                          
        ZERO_STORAGE_DB_TMP_DIR env                                                                                                                   
