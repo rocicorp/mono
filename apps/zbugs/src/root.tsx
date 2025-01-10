@@ -7,6 +7,7 @@ import {IssuePage} from './pages/issue/issue-page.js';
 import {ListPage} from './pages/list/list-page.js';
 import {routes} from './routes.js';
 import {zeroRef} from './zero-setup.js';
+import {useSoftNav} from './hooks/use-softnav.js';
 
 export function Root() {
   const z = useSyncExternalStore(
@@ -15,6 +16,8 @@ export function Root() {
   );
 
   const [contentReady, setContentReady] = useState(false);
+
+  useSoftNav();
 
   if (!z) {
     return null;
