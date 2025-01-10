@@ -41,6 +41,11 @@ jobs:
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+          --start-point main \
+          --threshold-measure file-size \
+          --threshold-test percentage \
+          --threshold-upper-boundary 0.05 \
+          --err \
           --file-size out/zero-package.tgz \
           --file-size out/zero.js.br \
-          --file-size out/zero.js \
+          --file-size out/zero.js
