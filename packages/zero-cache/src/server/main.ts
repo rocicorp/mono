@@ -79,8 +79,8 @@ export default async function runWorker(
     return processes.addWorker(worker, type, name);
   }
 
-  const {backupLocation} = config.litestream;
-  const litestream = backupLocation?.length;
+  const {backupURL} = config.litestream;
+  const litestream = backupURL?.length;
   const runChangeStreamer = !config.changeStreamerURI;
 
   if (litestream) {

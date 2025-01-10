@@ -40,13 +40,13 @@ function getLitestream(config: ZeroLitestreamConfig): {
   litestream: string;
   env: NodeJS.ProcessEnv;
 } {
-  const {executable, backupLocation, logLevel, configPath} = config.litestream;
+  const {executable, backupURL, logLevel, configPath} = config.litestream;
   return {
     litestream: must(executable, `Missing --litestream-executable`),
     env: {
       ...process.env,
       ['ZERO_REPLICA_FILE']: config.replicaFile,
-      ['ZERO_LITESTREAM_BACKUP_LOCATION']: must(backupLocation),
+      ['ZERO_LITESTREAM_BACKUP_URL']: must(backupURL),
       ['ZERO_LITESTREAM_LOG_LEVEL']: logLevel,
       ['ZERO_LOG_FORMAT']: config.log.format,
       ['LITESTREAM_CONFIG']: configPath,

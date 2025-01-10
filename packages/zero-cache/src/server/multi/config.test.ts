@@ -379,7 +379,7 @@ test('zero-cache --help', () => {
      --litestream-executable string                optional                                                                                          
        ZERO_LITESTREAM_EXECUTABLE env                                                                                                                
                                                    Path to the litestream executable. This option has no effect if                                   
-                                                   litestream-backup-location is unspecified.                                                        
+                                                   litestream-backup-url is unspecified.                                                             
                                                                                                                                                      
      --litestream-config-path string               default: "./src/services/litestream/config.yml"                                                   
        ZERO_LITESTREAM_CONFIG_PATH env                                                                                                               
@@ -394,9 +394,9 @@ test('zero-cache --help', () => {
      --litestream-log-level debug,info,warn,error  default: "warn"                                                                                   
        ZERO_LITESTREAM_LOG_LEVEL env                                                                                                                 
                                                                                                                                                      
-     --litestream-backup-location string           optional                                                                                          
-       ZERO_LITESTREAM_BACKUP_LOCATION env                                                                                                           
-                                                   The location of the litestream backup, usually an s3:// path.                                     
+     --litestream-backup-url string                optional                                                                                          
+       ZERO_LITESTREAM_BACKUP_URL env                                                                                                                
+                                                   The location of the litestream backup, usually an s3:// URL.                                      
                                                    If set, the litestream-executable must also be specified.                                         
                                                                                                                                                      
      --storage-db-tmp-dir string                   optional                                                                                          

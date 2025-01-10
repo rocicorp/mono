@@ -1,7 +1,7 @@
 dbs:
   - path: ${ZERO_REPLICA_FILE}
     replicas:
-      - url: ${ZERO_LITESTREAM_BACKUP_LOCATION}
+      - url: ${ZERO_LITESTREAM_BACKUP_URL}
 logging:
   level: ${ZERO_LITESTREAM_LOG_LEVEL}
   type: ${ZERO_LOG_FORMAT}

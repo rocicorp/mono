@@ -324,7 +324,7 @@ export const zeroOptions = {
       type: v.string().optional(),
       desc: [
         `Path to the {bold litestream} executable. This option has no effect if`,
-        `{bold litestream-backup-location} is unspecified.`,
+        `{bold litestream-backup-url} is unspecified.`,
       ],
     },
 
@@ -352,10 +352,10 @@ export const zeroOptions = {
         .default('warn'),
     },
 
-    backupLocation: {
+    backupURL: {
       type: v.string().optional(),
       desc: [
-        `The location of the litestream backup, usually an {bold s3://} path.`,
+        `The location of the litestream backup, usually an {bold s3://} URL.`,
         `If set, the {bold litestream-executable} must also be specified.`,
       ],
     },

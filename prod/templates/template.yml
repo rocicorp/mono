@@ -370,9 +370,7 @@ Resources:
           Environment:
             - Name: ZERO_NUM_SYNC_WORKERS
               Value: "0"
-            - Name: ZERO_LITESTREAM
-              Value: "1"
-            - Name: REPLICA_URL
+            - Name: ZERO_LITESTREAM_BACKUP_LOCATION
               Value: !Sub "s3://${ApplicationBucket}/1208b"
             - Name: ZERO_LOG_FORMAT
               Value: json
