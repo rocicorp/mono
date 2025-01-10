@@ -24,7 +24,7 @@ export const Button = memo(
     const {onAction, eventName, children, ...rest} = props;
 
     const handleMouseDown = (e: React.MouseEvent) => {
-      if (isPrimaryMouseButton(e)) {
+      if (isPrimaryMouseButton(e.nativeEvent)) {
         onAction?.();
         if (eventName) {
           umami.track(eventName);
