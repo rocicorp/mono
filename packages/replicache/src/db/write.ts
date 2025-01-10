@@ -21,7 +21,6 @@ import {
   baseSnapshotHashFromHash,
   commitFromHash,
   newLocalDD31 as commitNewLocalDD31,
-  newLocalSDD as commitNewLocalSDD,
   newSnapshotDD31 as commitNewSnapshotDD31,
   newSnapshotSDD as commitNewSnapshotSDD,
   getMutationID,
@@ -120,29 +119,6 @@ export class Write extends Read {
     let commit: Commit<Meta>;
     const meta = this.#meta;
     switch (meta.type) {
-      case MetaType.LocalSDD: {
-        const {
-          basisHash,
-          mutationID,
-          mutatorName,
-          mutatorArgsJSON,
-          originalHash,
-          timestamp,
-        } = meta;
-        commit = commitNewLocalSDD(
-          this.#dagWrite.createChunk,
-          basisHash,
-          mutationID,
-          mutatorName,
-          mutatorArgsJSON,
-          originalHash,
-          valueHash,
-          indexRecords,
-          timestamp,
-        );
-        break;
-      }
-
       case MetaType.LocalDD31: {
         assert(this.#formatVersion >= FormatVersion.DD31);
         const {
@@ -296,31 +272,23 @@ export async function newWriteLocal(
   const bTreeWrite = new BTreeWrite(dagWrite, formatVersion, basis.valueHash);
   const mutationID = await basis.getNextMutationID(clientID, dagWrite);
   const indexes = readIndexesForWrite(basis, dagWrite, formatVersion);
+  assert(formatVersion >= FormatVersion.DD31);
   return new Write(
     dagWrite,
     bTreeWrite,
     basis,
-    formatVersion >= FormatVersion.DD31
-      ? {
-          type: MetaType.LocalDD31,
-          basisHash,
-          baseSnapshotHash: await baseSnapshotHashFromHash(basisHash, dagWrite),
-          mutatorName,
-          mutatorArgsJSON,
-          mutationID,
-          originalHash,
-          timestamp,
-          clientID,
-        }
-      : {
-          type: MetaType.LocalSDD,
-          basisHash,
-          mutatorName,
-          mutatorArgsJSON,
-          mutationID,
-          originalHash,
-          timestamp,
-        },
+
+    {
+      type: MetaType.LocalDD31,
+      basisHash,
+      baseSnapshotHash: await baseSnapshotHashFromHash(basisHash, dagWrite),
+      mutatorName,
+      mutatorArgsJSON,
+      mutationID,
+      originalHash,
+      timestamp,
+      clientID,
+    },
     indexes,
     clientID,
     formatVersion,

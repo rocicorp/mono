@@ -15,7 +15,6 @@ import {
   chunkIndexDefinitionEqualIgnoreName,
   commitChain,
   newLocalDD31 as commitNewLocalDD31,
-  newLocalSDD as commitNewLocalSDD,
   newSnapshotDD31 as commitNewSnapshotDD31,
   newSnapshotSDD as commitNewSnapshotSDD,
   fromChunk,
@@ -246,33 +245,6 @@ test('load roundtrip', () => {
     t(
       makeCommit(
         {
-          type: MetaType.LocalSDD,
-          basisHash,
-          mutationID: 0,
-          mutatorName: 'mutator-name',
-          mutatorArgsJSON: 42,
-          originalHash: original,
-          timestamp,
-        },
-        valueHash,
-        basisHash === null ? [valueHash] : [valueHash, basisHash],
-      ),
-      commitNewLocalSDD(
-        createChunk,
-        basisHash,
-        0,
-        'mutator-name',
-        42,
-        original,
-        valueHash,
-        [],
-        timestamp,
-      ),
-    );
-
-    t(
-      makeCommit(
-        {
           type: MetaType.LocalDD31,
           basisHash,
           baseSnapshotHash,
@@ -305,23 +277,6 @@ test('load roundtrip', () => {
   t(
     makeCommit(
       {
-        type: MetaType.LocalSDD,
-        basisHash: fakeHash('ba515'),
-        mutationID: 0,
-        mutatorName: '',
-        mutatorArgsJSON: 43,
-        originalHash: emptyStringHash,
-        timestamp,
-      },
-      fakeHash('face4'),
-      [fakeHash('001'), fakeHash('002')],
-    ),
-    new Error('Missing mutator name'),
-  );
-
-  t(
-    makeCommit(
-      {
         type: MetaType.LocalDD31,
         basisHash: fakeHash('ba515'),
         baseSnapshotHash: fakeHash('ba516'),
@@ -336,23 +291,6 @@ test('load roundtrip', () => {
       [fakeHash('001'), fakeHash('002')],
     ),
     new Error('Missing mutator name'),
-  );
-
-  t(
-    makeCommit(
-      {
-        type: MetaType.LocalSDD,
-        basisHash: emptyStringHash,
-        mutationID: 0,
-        // @ts-expect-error We are testing invalid types
-        mutatorName: null,
-        mutatorArgsJSON: 43,
-        originalHash: emptyStringHash,
-      },
-      fakeHash('face4'),
-      ['a', 'b'],
-    ),
-    new Error('Invalid type: null, expected string'),
   );
 
   t(
@@ -377,35 +315,6 @@ test('load roundtrip', () => {
     t(
       makeCommit(
         {
-          type: MetaType.LocalSDD,
-          basisHash,
-          mutationID: 0,
-          mutatorName: 'mutator-name',
-          mutatorArgsJSON: 44,
-          originalHash: null,
-          timestamp,
-        },
-        fakeHash('face6'),
-        basisHash === null
-          ? [fakeHash('face6')]
-          : [fakeHash('face6'), basisHash],
-      ),
-      commitNewLocalSDD(
-        createChunk,
-        basisHash,
-        0,
-        'mutator-name',
-        44,
-        null,
-        fakeHash('face6'),
-        [],
-        timestamp,
-      ),
-    );
-
-    t(
-      makeCommit(
-        {
           type: MetaType.LocalDD31,
           basisHash,
           baseSnapshotHash,
@@ -436,24 +345,6 @@ test('load roundtrip', () => {
       ),
     );
   }
-
-  t(
-    makeCommit(
-      {
-        type: MetaType.LocalSDD,
-        basisHash: emptyStringHash,
-        mutationID: 0,
-        mutatorName: 'mutator-name',
-        mutatorArgsJSON: 45,
-        originalHash: emptyStringHash,
-        timestamp,
-      },
-      //@ts-expect-error we are testing invalid types
-      null,
-      ['a', 'b'],
-    ),
-    new Error('Invalid type: null, expected string'),
-  );
 
   t(
     makeCommit(
@@ -554,38 +445,6 @@ test('load roundtrip', () => {
 test('accessors', async () => {
   const clientID = 'client-id';
 
-  const originalHash = fakeHash('face7');
-  const basisHash = fakeHash('face8');
-  const valueHash = fakeHash('face4');
-  const timestamp = 42;
-  const local = fromChunk(
-    makeCommit(
-      {
-        type: MetaType.LocalSDD,
-        basisHash,
-        mutationID: 1,
-        mutatorName: 'foo_mutator',
-        mutatorArgsJSON: 42,
-        originalHash,
-        timestamp,
-      },
-      valueHash,
-      [valueHash, basisHash],
-    ),
-  );
-  const lm = local.meta;
-  if (lm.type === MetaType.LocalSDD) {
-    expect(lm.mutationID).to.equal(1);
-    expect(lm.mutatorName).to.equal('foo_mutator');
-    expect(lm.mutatorArgsJSON).to.equal(42);
-    expect(lm.originalHash).to.equal(originalHash);
-    expect(lm.timestamp).equal(timestamp);
-  } else {
-    throw new Error('unexpected type');
-  }
-  expect(local.meta.basisHash).to.equal(basisHash);
-  expect(local.valueHash).to.equal(valueHash);
-
   const fakeRead = {
     // eslint-disable-next-line require-await
     async mustGetChunk() {
@@ -593,8 +452,6 @@ test('accessors', async () => {
       throw new Error('Method not implemented.');
     },
   };
-
-  expect(await local.getNextMutationID(clientID, fakeRead)).to.equal(2);
 
   const snapshot = fromChunk(
     makeCommit(

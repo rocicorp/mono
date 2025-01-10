@@ -14,7 +14,6 @@ import {
   commitIsLocalDD31,
   DEFAULT_HEAD_NAME,
   type LocalMeta,
-  type LocalMetaSDD,
   localMutations as localMutations_1,
   type Meta,
   snapshotMetaParts,
@@ -562,14 +561,6 @@ export function handlePullResponseV1(
   });
 }
 
-type MaybeEndPullResultBase<M extends Meta> = {
-  replayMutations?: Commit<M>[];
-  syncHead: Hash;
-  diffs: DiffsMap;
-};
-
-export type MaybeEndPullResultV0 = MaybeEndPullResultBase<LocalMetaSDD>;
-
 export function maybeEndPull<M extends LocalMeta>(
   store: Store,
   lc: LogContext,
@@ -625,9 +616,9 @@ export function maybeEndPull<M extends LocalMeta>(
     const localMutations = await localMutations_1(mainHeadHash, dagRead);
     for (const commit of localMutations) {
       let cid = clientID;
-      if (commitIsLocalDD31(commit)) {
-        cid = commit.meta.clientID;
-      }
+      assert(commitIsLocalDD31(commit));
+      cid = commit.meta.clientID;
+
       if (
         (await commit.getMutationID(cid, dagRead)) >
         (await syncHead.getMutationID(cid, dagRead))

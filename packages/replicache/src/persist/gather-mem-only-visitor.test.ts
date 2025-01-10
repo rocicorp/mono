@@ -123,15 +123,13 @@ describe('dag with some persisted hashes and some memory-only hashes on top', ()
         originalHash: null,
         timestamp: 42,
       };
-      const meta =
-        formatVersion >= FormatVersion.DD31
-          ? {
-              type: MetaType.LocalDD31,
-              ...metaBase,
-              baseSnapshotHash: fakeHash(1),
-              clientID,
-            }
-          : {type: MetaType.LocalSDD, ...metaBase};
+      assert(formatVersion >= FormatVersion.DD31);
+      const meta = {
+        type: MetaType.LocalDD31,
+        ...metaBase,
+        baseSnapshotHash: fakeHash(1),
+        clientID,
+      };
       expect(Object.fromEntries(visitor.gatheredChunks)).to.deep.equal({
         [fakeHash(4)]: {
           data: [
