@@ -75,6 +75,10 @@ export interface Receiver {
   kill(signal?: NodeJS.Signals): void;
 }
 
+export interface Subprocess extends Receiver, EventEmitter {
+  pid?: number | undefined;
+}
+
 export interface Sender extends EventEmitter {
   /**
    * The receiving side of {@link Receiver.send()} that is a wrapper around
@@ -97,9 +101,7 @@ export interface Sender extends EventEmitter {
   ): this;
 }
 
-export interface Worker extends Sender, Receiver {
-  pid?: number | undefined;
-}
+export interface Worker extends Subprocess, Sender {}
 
 /**
  * Adds the {@link Sender.onMessageType()} and {@link Sender.onceMessageType()}
