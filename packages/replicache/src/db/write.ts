@@ -20,7 +20,6 @@ import {
   type Meta,
   baseSnapshotHashFromHash,
   commitFromHash,
-  newIndexChange as commitNewIndexChange,
   newLocalDD31 as commitNewLocalDD31,
   newLocalSDD as commitNewLocalSDD,
   newSnapshotDD31 as commitNewSnapshotDD31,
@@ -77,9 +76,6 @@ export class Write extends Read {
     key: string,
     value: FrozenJSONValue,
   ): Promise<void> {
-    if (this.#meta.type === MetaType.IndexChangeSDD) {
-      throw new Error('Not allowed');
-    }
     const oldVal = lazy(() => this.map.get(key));
     await updateIndexes(lc, this.indexes, key, oldVal, value);
 
@@ -91,10 +87,6 @@ export class Write extends Read {
   }
 
   async del(lc: LogContext, key: string): Promise<boolean> {
-    if (this.#meta.type === MetaType.IndexChangeSDD) {
-      throw new Error('Not allowed');
-    }
-
     // TODO(arv): This does the binary search twice. We can do better.
     const oldVal = lazy(() => this.map.get(key));
     if (oldVal !== undefined) {
@@ -104,10 +96,6 @@ export class Write extends Read {
   }
 
   async clear(): Promise<void> {
-    if (this.#meta.type === MetaType.IndexChangeSDD) {
-      throw new Error('Not allowed');
-    }
-
     await this.map.clear();
     const ps = [];
     for (const idx of this.indexes.values()) {
@@ -203,31 +191,6 @@ export class Write extends Read {
           basisHash,
           lastMutationIDs,
           cookieJSON,
-          valueHash,
-          indexRecords,
-        );
-        break;
-      }
-
-      case MetaType.IndexChangeSDD: {
-        const {basisHash, lastMutationID} = meta;
-        if (this.#basis !== undefined) {
-          if (
-            (await this.#basis.getMutationID(
-              this.#clientID,
-              this.#dagWrite,
-            )) !== lastMutationID
-          ) {
-            throw new Error('Index change must not change mutationID');
-          }
-          if (this.#basis.valueHash !== valueHash) {
-            throw new Error('Index change must not change valueHash');
-          }
-        }
-        commit = commitNewIndexChange(
-          this.#dagWrite.createChunk,
-          basisHash,
-          lastMutationID,
           valueHash,
           indexRecords,
         );

@@ -100,9 +100,6 @@ export async function getMutationID(
   meta: Meta,
 ): Promise<number> {
   switch (meta.type) {
-    case MetaType.IndexChangeSDD:
-      return meta.lastMutationID;
-
     case MetaType.SnapshotSDD:
       return meta.lastMutationID;
 
@@ -286,32 +283,6 @@ export async function commitFromHead(
   return commitFromHash(hash, dagRead);
 }
 
-export type IndexChangeMetaSDD = {
-  readonly type: MetaType.IndexChangeSDD;
-  readonly basisHash: Hash;
-  readonly lastMutationID: number;
-};
-
-function assertIndexChangeMeta(
-  v: Record<string, unknown>,
-): asserts v is IndexChangeMetaSDD {
-  // type already asserted
-  assertNumber(v.lastMutationID);
-
-  // Note: indexes are already validated for all commit types. Only additional
-  // things to validate are:
-  //   - lastMutationID is equal to the basis
-  //   - valueHash has not been changed
-  // However we don't have a write transaction this deep, so these validated at
-  // commit time.
-}
-
-export function assertIndexChangeCommit(
-  c: Commit<Meta>,
-): asserts c is Commit<IndexChangeMetaSDD> {
-  assertIndexChangeMeta(c.meta);
-}
-
 export type LocalMetaSDD = {
   readonly type: MetaType.LocalSDD;
   readonly basisHash: Hash;
@@ -428,7 +399,6 @@ export function assertSnapshotCommitSDD(
 }
 
 export type Meta =
-  | IndexChangeMetaSDD
   | LocalMetaSDD
   | LocalMetaDD31
   | SnapshotMetaSDD
@@ -457,9 +427,6 @@ function assertMeta(v: unknown): asserts v is Meta {
 
   assertNumber(v.type);
   switch (v.type) {
-    case MetaType.IndexChangeSDD:
-      assertIndexChangeMeta(v);
-      break;
     case MetaType.LocalSDD:
       assertLocalMetaSDD(v);
       break;
@@ -674,24 +641,6 @@ export function newSnapshotCommitDataDD31(
   return makeCommitData(meta, valueHash, indexes);
 }
 
-export function newIndexChange(
-  createChunk: CreateChunk,
-  basisHash: Hash,
-  lastMutationID: number,
-  valueHash: Hash,
-  indexes: readonly IndexRecord[],
-): Commit<IndexChangeMetaSDD> {
-  const meta: IndexChangeMetaSDD = {
-    type: MetaType.IndexChangeSDD,
-    basisHash,
-    lastMutationID,
-  };
-  return commitFromCommitData(
-    createChunk,
-    makeCommitData(meta, valueHash, indexes),
-  );
-}
-
 export function fromChunk(chunk: Chunk): Commit<Meta> {
   validateChunk(chunk);
   return new Commit(chunk);
@@ -709,9 +658,6 @@ export function getRefs(data: CommitData<Meta>): Refs {
   refs.add(data.valueHash);
   const {meta} = data;
   switch (meta.type) {
-    case MetaType.IndexChangeSDD:
-      meta.basisHash && refs.add(meta.basisHash);
-      break;
     case MetaType.LocalSDD:
     case MetaType.LocalDD31:
       meta.basisHash && refs.add(meta.basisHash);

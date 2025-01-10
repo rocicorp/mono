@@ -1,4 +1,5 @@
 import {describe, expect, test} from 'vitest';
+import {assert} from '../../../shared/src/asserts.js';
 import {Chunk, type Refs, toRefs} from '../dag/chunk.js';
 import {TestStore} from '../dag/test-store.js';
 import * as FormatVersion from '../format-version-enum.js';
@@ -9,12 +10,10 @@ import {
   type ChunkIndexDefinition,
   Commit,
   type CommitData,
-  type IndexChangeMetaSDD,
   type Meta,
   baseSnapshotFromHash,
   chunkIndexDefinitionEqualIgnoreName,
   commitChain,
-  newIndexChange as commitNewIndexChange,
   newLocalDD31 as commitNewLocalDD31,
   newLocalSDD as commitNewLocalSDD,
   newSnapshotDD31 as commitNewSnapshotDD31,
@@ -42,9 +41,7 @@ describe('base snapshot', () => {
     });
 
     await b.addLocal(clientID);
-    if (formatVersion <= FormatVersion.SDD) {
-      await b.addIndexChange(clientID);
-    }
+    assert(formatVersion >= FormatVersion.DD31);
     await b.addLocal(clientID);
     genesisHash = b.chain[0].chunk.hash;
     await withRead(store, async dagRead => {
@@ -87,7 +84,6 @@ describe('base snapshot', () => {
   };
 
   test('DD31', () => t(FormatVersion.Latest));
-  test('SDD', () => t(FormatVersion.SDD));
 });
 
 describe('local mutations', () => {
@@ -102,13 +98,10 @@ describe('local mutations', () => {
     });
 
     await b.addLocal(clientID);
-    if (formatVersion <= FormatVersion.SDD) {
-      await b.addIndexChange(clientID);
-    }
+    assert(formatVersion >= FormatVersion.DD31);
+
     await b.addLocal(clientID);
-    if (formatVersion <= FormatVersion.SDD) {
-      await b.addIndexChange(clientID);
-    }
+
     const headHash = b.chain[b.chain.length - 1].chunk.hash;
     const commits = await withRead(store, dagRead =>
       localMutations(headHash, dagRead),
@@ -120,7 +113,6 @@ describe('local mutations', () => {
   };
 
   test('DD31', () => t(FormatVersion.Latest));
-  test('SDD', () => t(FormatVersion.SDD));
 });
 test('local mutations greater than', async () => {
   const clientID1 = 'client-id-1';
@@ -214,11 +206,9 @@ describe('chain', () => {
 
     await b.addSnapshot(undefined, clientID);
     await b.addLocal(clientID);
-    if (formatVersion <= FormatVersion.SDD) {
-      await b.addIndexChange(clientID);
-    } else {
-      await b.addLocal(clientID);
-    }
+    assert(formatVersion >= FormatVersion.DD31);
+    await b.addLocal(clientID);
+
     const headHash = b.chain[b.chain.length - 1].chunk.hash;
     got = await withRead(store, dagRead => commitChain(headHash, dagRead));
     expect(got).to.have.lengthOf(3);
@@ -228,7 +218,6 @@ describe('chain', () => {
   };
 
   test('dd31', () => t(FormatVersion.Latest));
-  test('sdd', () => t(FormatVersion.SDD));
 });
 
 test('load roundtrip', () => {
@@ -560,19 +549,6 @@ test('load roundtrip', () => {
     ),
     new Error('Invalid type: undefined, expected JSON value'),
   );
-
-  for (const basisHash of [fakeHash('000'), fakeHash('face3')]) {
-    t(
-      makeCommit(
-        makeIndexChangeMeta(basisHash, 0),
-        fakeHash('face2'),
-        basisHash === null
-          ? [fakeHash('face2')]
-          : [fakeHash('face2'), basisHash],
-      ),
-      commitNewIndexChange(createChunk, basisHash, 0, fakeHash('face2'), []),
-    );
-  }
 });
 
 test('accessors', async () => {
@@ -642,21 +618,6 @@ test('accessors', async () => {
   expect(sm.basisHash).to.equal(fakeHash('face9'));
   expect(snapshot.valueHash).to.equal(fakeHash('face10'));
   expect(await snapshot.getNextMutationID(clientID, fakeRead)).to.equal(3);
-
-  const indexChange = fromChunk(
-    makeCommit(makeIndexChangeMeta(fakeHash('face11'), 3), fakeHash('face12'), [
-      fakeHash('face12'),
-      fakeHash('face11'),
-    ]),
-  );
-  const ic = indexChange.meta;
-  if (ic.type === MetaType.IndexChangeSDD) {
-    expect(ic.lastMutationID).to.equal(3);
-  } else {
-    throw new Error('unexpected type');
-  }
-  expect(indexChange.meta.basisHash).to.equal(fakeHash('face11'));
-  expect(indexChange.valueHash).to.equal(fakeHash('face12'));
 });
 
 test('accessors DD31', async () => {
@@ -732,21 +693,6 @@ test('accessors DD31', async () => {
   expect(sm.basisHash).to.equal(fakeHash('face9'));
   expect(snapshot.valueHash).to.equal(fakeHash('face10'));
   expect(await snapshot.getNextMutationID(clientID, fakeRead)).to.equal(3);
-
-  const indexChange = fromChunk(
-    makeCommit(makeIndexChangeMeta(fakeHash('face11'), 3), fakeHash('face12'), [
-      fakeHash('face12'),
-      fakeHash('face11'),
-    ]),
-  );
-  const ic = indexChange.meta;
-  if (ic.type === MetaType.IndexChangeSDD) {
-    expect(ic.lastMutationID).to.equal(3);
-  } else {
-    throw new Error('unexpected type');
-  }
-  expect(indexChange.meta.basisHash).to.equal(fakeHash('face11'));
-  expect(indexChange.valueHash).to.equal(fakeHash('face12'));
 });
 
 const chunkHasher = makeNewFakeHashFunction('face55');
@@ -771,17 +717,6 @@ function makeCommit<M extends Meta>(
 ): Chunk<CommitData<M>> {
   const data: CommitData<M> = makeCommitData(meta, valueHash, []);
   return createChunk(data, toRefs(refs));
-}
-
-function makeIndexChangeMeta(
-  basisHash: Hash,
-  lastMutationID: number,
-): IndexChangeMetaSDD {
-  return {
-    type: MetaType.IndexChangeSDD,
-    basisHash,
-    lastMutationID,
-  };
 }
 
 test('getMutationID across commits with different clients', async () => {

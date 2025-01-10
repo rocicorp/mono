@@ -3,7 +3,6 @@ import {expect} from 'vitest';
 import {assert, assertNotUndefined} from '../../../shared/src/asserts.js';
 import type {JSONValue} from '../../../shared/src/json.js';
 import {emptyDataNode} from '../btree/node.js';
-import type {BTreeRead} from '../btree/read.js';
 import {BTreeWrite} from '../btree/write.js';
 import type {Cookie} from '../cookies.js';
 import type {Chunk} from '../dag/chunk.js';
@@ -16,7 +15,7 @@ import {Visitor} from '../dag/visitor.js';
 import * as FormatVersion from '../format-version-enum.js';
 import {deepFreeze} from '../frozen-json.js';
 import {type Hash, emptyHash} from '../hash.js';
-import type {IndexDefinition, IndexDefinitions} from '../index-defs.js';
+import type {IndexDefinitions} from '../index-defs.js';
 import type {ClientID} from '../sync/ids.js';
 import {addSyncSnapshot} from '../sync/test-helpers.js';
 import {
@@ -25,7 +24,6 @@ import {
   withWriteNoImplicitCommit,
 } from '../with-transactions.js';
 import {
-  type ChunkIndexDefinition,
   Commit,
   DEFAULT_HEAD_NAME,
   type IndexRecord,
@@ -33,13 +31,10 @@ import {
   type Meta,
   type SnapshotMetaDD31,
   type SnapshotMetaSDD,
-  assertIndexChangeCommit,
   assertLocalCommitDD31,
   assertLocalCommitSDD,
   assertSnapshotCommitDD31,
   assertSnapshotCommitSDD,
-  chunkIndexDefinitionEqualIgnoreName,
-  commitFromHash,
   commitFromHead,
   toChunkIndexDefinition,
 } from './commit.js';
@@ -47,7 +42,6 @@ import {IndexWrite} from './index.js';
 import * as MetaType from './meta-type-enum.js';
 import {
   Write,
-  createIndexBTree,
   newWriteLocal,
   newWriteSnapshotDD31,
   newWriteSnapshotSDD,
@@ -144,74 +138,6 @@ async function createLocal(
 
 export function createMutatorName(chainIndex: number): string {
   return `mutator_name_${chainIndex}`;
-}
-
-async function addIndexChange(
-  chain: Chain,
-  store: Store,
-  clientID: ClientID,
-  indexName: string | undefined,
-  indexDefinition: IndexDefinition | undefined,
-  headName: string,
-  formatVersion: FormatVersion.Type,
-): Promise<Chain> {
-  assert(formatVersion <= FormatVersion.SDD);
-  expect(chain).to.have.length.greaterThan(0);
-  const i = chain.length;
-  const name = indexName ?? `${i}`;
-  const {
-    prefix = 'local',
-    jsonPointer = '',
-    allowEmpty = false,
-  } = indexDefinition ?? {};
-
-  const commit = await createIndex(
-    store,
-    clientID,
-    name,
-    prefix,
-    jsonPointer,
-    allowEmpty,
-    headName,
-    formatVersion,
-  );
-  chain.push(commit);
-  return chain;
-}
-
-async function createIndex(
-  store: Store,
-  clientID: ClientID,
-  name: string,
-  prefix: string,
-  jsonPointer: string,
-  allowEmpty: boolean,
-  headName: string,
-  formatVersion: FormatVersion.Type,
-): Promise<Commit<Meta>> {
-  assert(formatVersion <= FormatVersion.SDD);
-  const lc = new LogContext();
-  await withWriteNoImplicitCommit(store, async dagWrite => {
-    const w = await newWriteIndexChange(
-      await mustGetHeadHash(headName, dagWrite),
-      dagWrite,
-      clientID,
-      formatVersion,
-    );
-    await createIndexForTesting(
-      lc,
-      name,
-      prefix,
-      jsonPointer,
-      allowEmpty,
-      w.indexes,
-      dagWrite,
-      w.map,
-      formatVersion,
-    );
-    await w.commit(headName);
-  });
-  return withRead(store, dagRead => commitFromHead(headName, dagRead));
 }
 
 // See also sync.test_helpers for addSyncSnapshot, which can't go here because
@@ -359,27 +285,6 @@ export class ChainBuilder {
     return commit;
   }
 
-  async addIndexChange(
-    clientID: ClientID,
-    indexName?: string,
-    indexDefinition?: IndexDefinition,
-  ): Promise<Commit<Meta>> {
-    assert(this.formatVersion <= FormatVersion.SDD);
-    await addIndexChange(
-      this.chain,
-      this.store,
-      clientID,
-      indexName,
-      indexDefinition,
-      this.headName,
-      this.formatVersion,
-    );
-    const commit = this.chain.at(-1);
-    assertNotUndefined(commit);
-    assertIndexChangeCommit(commit);
-    return commit;
-  }
-
   addSyncSnapshot(takeIndexesFrom: number, clientID: ClientID) {
     return addSyncSnapshot(
       this.chain,
@@ -491,80 +396,4 @@ export function getChunkSnapshot(
     await v.visit(hash);
     return v.snapshot;
   });
-}
-
-async function newWriteIndexChange(
-  basisHash: Hash,
-  dagWrite: DagWrite,
-  clientID: ClientID,
-  formatVersion: FormatVersion.Type,
-): Promise<Write> {
-  assert(formatVersion <= FormatVersion.SDD);
-  const basis = await commitFromHash(basisHash, dagWrite);
-  const bTreeWrite = new BTreeWrite(dagWrite, formatVersion, basis.valueHash);
-  const lastMutationID = await basis.getMutationID(clientID, dagWrite);
-  const indexes = readIndexesForWrite(basis, dagWrite, formatVersion);
-  return new Write(
-    dagWrite,
-    bTreeWrite,
-    basis,
-    {basisHash, type: MetaType.IndexChangeSDD, lastMutationID},
-    indexes,
-    clientID,
-    formatVersion,
-  );
-}
-
-async function createIndexForTesting(
-  lc: LogContext,
-  name: string,
-  prefix: string,
-  jsonPointer: string,
-  allowEmpty: boolean,
-  indexes: Map<string, IndexWrite>,
-  dagWrite: DagWrite,
-  map: BTreeRead,
-  formatVersion: FormatVersion.Type,
-): Promise<void> {
-  const chunkIndexDefinition: ChunkIndexDefinition = {
-    name,
-    keyPrefix: prefix,
-    jsonPointer,
-    allowEmpty,
-  };
-
-  // Check to see if the index already exists.
-  const index = indexes.get(name);
-  if (index) {
-    if (
-      // Name already checked
-      !chunkIndexDefinitionEqualIgnoreName(
-        chunkIndexDefinition,
-        index.meta.definition,
-      )
-    ) {
-      throw new Error('Index exists with different definition');
-    }
-  }
-
-  const indexMap = await createIndexBTree(
-    lc,
-    dagWrite,
-    map,
-    prefix,
-    jsonPointer,
-    allowEmpty,
-    formatVersion,
-  );
-
-  indexes.set(
-    name,
-    new IndexWrite(
-      {
-        definition: chunkIndexDefinition,
-        valueHash: emptyHash,
-      },
-      indexMap,
-    ),
-  );
 }
