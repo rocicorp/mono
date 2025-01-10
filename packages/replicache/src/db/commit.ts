@@ -25,12 +25,6 @@ import * as MetaType from './meta-type-enum.js';
 
 export const DEFAULT_HEAD_NAME = 'main';
 
-export function commitIsLocalSDD(
-  commit: Commit<Meta>,
-): commit is Commit<LocalMetaSDD> {
-  return isLocalMetaSDD(commit.meta);
-}
-
 export function commitIsLocalDD31(
   commit: Commit<Meta>,
 ): commit is Commit<LocalMetaDD31> {
@@ -39,8 +33,8 @@ export function commitIsLocalDD31(
 
 export function commitIsLocal(
   commit: Commit<Meta>,
-): commit is Commit<LocalMetaDD31 | LocalMetaSDD> {
-  return commitIsLocalDD31(commit) || commitIsLocalSDD(commit);
+): commit is Commit<LocalMetaDD31> {
+  return commitIsLocalDD31(commit);
 }
 
 function commitIsSnapshotDD31(
@@ -106,9 +100,6 @@ export async function getMutationID(
     case MetaType.SnapshotDD31:
       return meta.lastMutationIDs[clientID] ?? 0;
 
-    case MetaType.LocalSDD:
-      return meta.mutationID;
-
     case MetaType.LocalDD31: {
       if (meta.clientID === clientID) {
         return meta.mutationID;
@@ -136,12 +127,10 @@ export async function getMutationID(
 export async function localMutations(
   fromCommitHash: Hash,
   dagRead: Read,
-): Promise<Commit<LocalMetaSDD | LocalMetaDD31>[]> {
+): Promise<Commit<LocalMetaDD31>[]> {
   const commits = await commitChain(fromCommitHash, dagRead);
   // Filter does not deal with type narrowing.
-  return commits.filter(c => commitIsLocal(c)) as Commit<
-    LocalMetaSDD | LocalMetaDD31
-  >[];
+  return commits.filter(c => commitIsLocal(c)) as Commit<LocalMetaDD31>[];
 }
 
 export async function localMutationsDD31(
@@ -283,28 +272,25 @@ export async function commitFromHead(
   return commitFromHash(hash, dagRead);
 }
 
-export type LocalMetaSDD = {
-  readonly type: MetaType.LocalSDD;
+export type LocalMetaDD31 = {
+  readonly type: MetaType.LocalDD31;
   readonly basisHash: Hash;
   readonly mutationID: number;
   readonly mutatorName: string;
   readonly mutatorArgsJSON: FrozenJSONValue;
   readonly originalHash: Hash | null;
   readonly timestamp: number;
-};
-
-export type LocalMetaDD31 = Omit<LocalMetaSDD, 'type'> & {
-  readonly type: MetaType.LocalDD31;
   readonly clientID: ClientID;
   readonly baseSnapshotHash: Hash;
 };
 
-export type LocalMeta = LocalMetaSDD | LocalMetaDD31;
+export type LocalMeta = LocalMetaDD31;
 
-function assertLocalMetaSDD(
+export function assertLocalMetaDD31(
   v: Record<string, unknown>,
-): asserts v is LocalMetaSDD {
+): asserts v is LocalMetaDD31 {
   // type already asserted
+  assertString(v.clientID);
   assertNumber(v.mutationID);
   assertString(v.mutatorName);
   if (!v.mutatorName) {
@@ -317,32 +303,14 @@ function assertLocalMetaSDD(
   assertNumber(v.timestamp);
 }
 
-export function assertLocalMetaDD31(
-  v: Record<string, unknown>,
-): asserts v is LocalMetaDD31 {
-  // type already asserted
-  assertString(v.clientID);
-  assertLocalMetaSDD(v);
-}
-
 export function isLocalMetaDD31(meta: Meta): meta is LocalMetaDD31 {
   return meta.type === MetaType.LocalDD31;
-}
-
-function isLocalMetaSDD(meta: Meta): meta is LocalMetaSDD {
-  return meta.type === MetaType.LocalSDD;
 }
 
 export function assertLocalCommitDD31(
   c: Commit<Meta>,
 ): asserts c is Commit<LocalMetaDD31> {
   assertLocalMetaDD31(c.meta);
-}
-
-export function assertLocalCommitSDD(
-  c: Commit<Meta>,
-): asserts c is Commit<LocalMetaSDD> {
-  assertLocalMetaSDD(c.meta);
 }
 
 export type SnapshotMetaSDD = {
@@ -398,11 +366,7 @@ export function assertSnapshotCommitSDD(
   assertSnapshotMetaSDD(c.meta);
 }
 
-export type Meta =
-  | LocalMetaSDD
-  | LocalMetaDD31
-  | SnapshotMetaSDD
-  | SnapshotMetaDD31;
+export type Meta = LocalMetaDD31 | SnapshotMetaSDD | SnapshotMetaDD31;
 
 export function assertSnapshotCommitDD31(
   c: Commit<Meta>,
@@ -427,9 +391,6 @@ function assertMeta(v: unknown): asserts v is Meta {
 
   assertNumber(v.type);
   switch (v.type) {
-    case MetaType.LocalSDD:
-      assertLocalMetaSDD(v);
-      break;
     case MetaType.LocalDD31:
       assertLocalMetaDD31(v);
       break;
@@ -511,32 +472,6 @@ function assertIndexRecords(v: unknown): asserts v is IndexRecord[] {
   for (const ir of v) {
     assertIndexRecord(ir);
   }
-}
-
-export function newLocalSDD(
-  createChunk: CreateChunk,
-  basisHash: Hash,
-  mutationID: number,
-  mutatorName: string,
-  mutatorArgsJSON: FrozenJSONValue,
-  originalHash: Hash | null,
-  valueHash: Hash,
-  indexes: readonly IndexRecord[],
-  timestamp: number,
-): Commit<LocalMetaSDD | LocalMetaDD31> {
-  const meta: LocalMetaSDD = {
-    type: MetaType.LocalSDD,
-    basisHash,
-    mutationID,
-    mutatorName,
-    mutatorArgsJSON,
-    originalHash,
-    timestamp,
-  };
-  return commitFromCommitData(
-    createChunk,
-    makeCommitData(meta, valueHash, indexes),
-  );
 }
 
 export function newLocalDD31(
@@ -658,7 +593,6 @@ export function getRefs(data: CommitData<Meta>): Refs {
   refs.add(data.valueHash);
   const {meta} = data;
   switch (meta.type) {
-    case MetaType.LocalSDD:
     case MetaType.LocalDD31:
       meta.basisHash && refs.add(meta.basisHash);
       // Local has weak originalHash

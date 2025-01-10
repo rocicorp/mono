@@ -32,7 +32,6 @@ import {
   type SnapshotMetaDD31,
   type SnapshotMetaSDD,
   assertLocalCommitDD31,
-  assertLocalCommitSDD,
   assertSnapshotCommitDD31,
   assertSnapshotCommitSDD,
   commitFromHead,
@@ -251,11 +250,9 @@ export class ChainBuilder {
     );
     const commit = this.chain.at(-1);
     assertNotUndefined(commit);
-    if (this.formatVersion >= FormatVersion.DD31) {
-      assertLocalCommitDD31(commit);
-    } else {
-      assertLocalCommitSDD(commit);
-    }
+    assert(this.formatVersion >= FormatVersion.DD31);
+    assertLocalCommitDD31(commit);
+
     return commit;
   }
 

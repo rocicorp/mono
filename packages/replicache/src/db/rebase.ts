@@ -10,7 +10,6 @@ import {
   Commit,
   type LocalMeta,
   type LocalMetaDD31,
-  type LocalMetaSDD,
   type Meta,
   assertLocalMetaDD31,
   commitFromHash,
@@ -19,7 +18,7 @@ import {
 import {Write, newWriteLocal} from './write.js';
 
 async function rebaseMutation(
-  mutation: Commit<LocalMetaDD31 | LocalMetaSDD>,
+  mutation: Commit<LocalMetaDD31>,
   dagWrite: DagWrite,
   basisHash: Hash,
   mutators: MutatorDefs,

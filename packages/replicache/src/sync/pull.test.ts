@@ -60,9 +60,7 @@ import type {DiffsMap} from './diff.js';
 import * as HandlePullResponseResultEnum from './handle-pull-response-result-type-enum.js';
 import {
   type BeginPullResponseV1,
-  type MaybeEndPullResultV0,
   PULL_VERSION_DD31,
-  PULL_VERSION_SDD,
   type PullRequestV0,
   type PullRequestV1,
   beginPullV0,
@@ -741,7 +739,7 @@ describe('maybe end try pull', () => {
       }
       const syncHead = basisHash;
 
-      let result: MaybeEndPullResultV0 | string;
+      let result;
       try {
         result = await maybeEndPull(
           store,
@@ -913,36 +911,19 @@ describe('changed keys', () => {
 
       const newCookie = 'new_cookie';
 
-      const expPullReq: PullRequestV0 | PullRequestV1 =
-        formatVersion >= FormatVersion.DD31
-          ? {
-              profileID,
-              clientGroupID,
-              cookie: baseCookie as FrozenCookie,
-              pullVersion: PULL_VERSION_DD31,
-              schemaVersion,
-            }
-          : {
-              profileID,
-              clientID,
-              cookie: baseCookie,
-              lastMutationID: baseLastMutationID,
-              pullVersion: PULL_VERSION_SDD,
-              schemaVersion,
-            };
-
-      const pullResp: PullResponseV1 | PullResponseV0 =
-        formatVersion >= FormatVersion.DD31
-          ? {
-              cookie: newCookie,
-              lastMutationIDChanges: {[clientID]: baseLastMutationID},
-              patch,
-            }
-          : {
-              cookie: newCookie,
-              lastMutationID: baseLastMutationID,
-              patch,
-            };
+      assert(formatVersion >= FormatVersion.DD31);
+      const expPullReq: PullRequestV1 = {
+        profileID,
+        clientGroupID,
+        cookie: baseCookie as FrozenCookie,
+        pullVersion: PULL_VERSION_DD31,
+        schemaVersion,
+      };
+      const pullResp: PullResponseV1 = {
+        cookie: newCookie,
+        lastMutationIDChanges: {[clientID]: baseLastMutationID},
+        patch,
+      };
 
       const puller = makeFakePuller({
         expPullReq,

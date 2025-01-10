@@ -7,9 +7,7 @@ import type {Store} from '../dag/store.js';
 import {
   DEFAULT_HEAD_NAME,
   type LocalMetaDD31,
-  type LocalMetaSDD,
   commitIsLocalDD31,
-  commitIsLocalSDD,
   localMutations,
 } from '../db/commit.js';
 import type {FrozenJSONValue} from '../frozen-json.js';
@@ -147,15 +145,6 @@ type FrozenMutationV1 = FrozenMutationV0 & {
   readonly clientID: ClientID;
 };
 
-function convertSDD(lm: LocalMetaSDD): FrozenMutationV0 {
-  return {
-    id: lm.mutationID,
-    name: lm.mutatorName,
-    args: lm.mutatorArgsJSON,
-    timestamp: lm.timestamp,
-  };
-}
-
 function convertDD31(lm: LocalMetaDD31): FrozenMutationV1 {
   return {
     id: lm.mutationID,
@@ -172,7 +161,7 @@ export async function push(
   lc: LogContext,
   profileID: string,
   clientGroupID: ClientGroupID | undefined,
-  clientID: ClientID,
+  _clientID: ClientID,
   pusher: Pusher,
   schemaVersion: string,
   pushVersion: typeof PUSH_VERSION_SDD | typeof PUSH_VERSION_DD31,
@@ -196,44 +185,25 @@ export async function push(
   // want tail first (in mutation id order).
   pending.reverse();
 
-  let pushReq: PushRequestV0 | PushRequestV1;
+  assert(pushVersion === PUSH_VERSION_DD31);
 
-  if (pushVersion === PUSH_VERSION_DD31) {
-    const pushMutations: FrozenMutationV1[] = [];
-    for (const commit of pending) {
-      if (commitIsLocalDD31(commit)) {
-        pushMutations.push(convertDD31(commit.meta));
-      } else {
-        throw new Error('Internal non local pending commit');
-      }
+  const pushMutations: FrozenMutationV1[] = [];
+  for (const commit of pending) {
+    if (commitIsLocalDD31(commit)) {
+      pushMutations.push(convertDD31(commit.meta));
+    } else {
+      throw new Error('Internal non local pending commit');
     }
-    assert(clientGroupID);
-    const r: PushRequestV1 = {
-      profileID,
-      clientGroupID,
-      mutations: pushMutations,
-      pushVersion: PUSH_VERSION_DD31,
-      schemaVersion,
-    };
-    pushReq = r;
-  } else {
-    assert(pushVersion === PUSH_VERSION_SDD);
-    const pushMutations: FrozenMutationV0[] = [];
-    for (const commit of pending) {
-      if (commitIsLocalSDD(commit)) {
-        pushMutations.push(convertSDD(commit.meta));
-      } else {
-        throw new Error('Internal non local pending commit');
-      }
-    }
-    pushReq = {
-      profileID,
-      clientID,
-      mutations: pushMutations,
-      pushVersion: PUSH_VERSION_SDD,
-      schemaVersion,
-    };
   }
+  assert(clientGroupID);
+  const pushReq: PushRequestV1 = {
+    profileID,
+    clientGroupID,
+    mutations: pushMutations,
+    pushVersion: PUSH_VERSION_DD31,
+    schemaVersion,
+  };
+
   lc.debug?.('Starting push...');
   const pushStart = Date.now();
   const pusherResult = await callPusher(pusher, pushReq, requestID);

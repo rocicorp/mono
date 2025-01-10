@@ -98,7 +98,6 @@ describe('basics w/ commit', () => {
   };
 
   test('dd31', () => t(FormatVersion.Latest));
-  test('sdd', () => t(FormatVersion.SDD));
 });
 
 describe('basics w/ putCommit', () => {
@@ -191,7 +190,6 @@ describe('basics w/ putCommit', () => {
     });
   };
   test('dd31', () => t(FormatVersion.Latest));
-  test('sdd', () => t(FormatVersion.SDD));
 });
 
 test('clear', async () => {

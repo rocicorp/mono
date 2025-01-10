@@ -40,5 +40,4 @@ describe('basics', () => {
     expect(val).to.deep.equal('bar');
   };
   test('dd31', () => t(FormatVersion.Latest));
-  test('sdd', () => t(FormatVersion.SDD));
 });
