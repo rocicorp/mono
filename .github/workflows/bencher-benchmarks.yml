@@ -14,7 +14,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 18.x
+          node-version: 20.x
           cache: 'npm'
       - uses: bencherdev/bencher@main
 
@@ -23,7 +23,9 @@ jobs:
 
       - name: Build npm zero package
         working-directory: packages/zero
-        run: npm pack --pack-destination ./out/zero-package.tgz
+        run: |
+          npm pack --pack-destination ./out
+          mv ./out/*.tgz ./out/zero-package.tgz
 
       - name: Build zero client single file package
         working-directory: packages/zero
