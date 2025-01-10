@@ -1,4 +1,5 @@
 import {expect} from 'vitest';
+import {assert} from '../../../shared/src/asserts.js';
 import type {Store} from '../dag/store.js';
 import {
   Commit,
@@ -7,11 +8,7 @@ import {
   commitIsSnapshot,
 } from '../db/commit.js';
 import type {Chain} from '../db/test-helpers.js';
-import {
-  newWriteSnapshotDD31,
-  newWriteSnapshotSDD,
-  readIndexesForWrite,
-} from '../db/write.js';
+import {newWriteSnapshotDD31} from '../db/write.js';
 import * as FormatVersion from '../format-version-enum.js';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import type {ClientID} from './ids.js';
@@ -28,7 +25,7 @@ import {SYNC_HEAD_NAME} from './sync-head-name.js';
 export async function addSyncSnapshot(
   chain: Chain,
   store: Store,
-  takeIndexesFrom: number,
+  _takeIndexesFrom: number,
   clientID: ClientID,
   formatVersion: FormatVersion.Type,
 ): Promise<Chain> {
@@ -51,33 +48,16 @@ export async function addSyncSnapshot(
   // Add sync snapshot.
   const cookie = `sync_cookie_${chain.length}`;
   await withWriteNoImplicitCommit(store, async dagWrite => {
-    if (formatVersion >= FormatVersion.DD31) {
-      const w = await newWriteSnapshotDD31(
-        baseSnapshot.chunk.hash,
-        {[clientID]: await baseSnapshot.getMutationID(clientID, dagWrite)},
-        cookie,
-        dagWrite,
-        clientID,
-        formatVersion,
-      );
-      await w.commit(SYNC_HEAD_NAME);
-    } else {
-      const indexes = readIndexesForWrite(
-        chain[takeIndexesFrom],
-        dagWrite,
-        formatVersion,
-      );
-      const w = await newWriteSnapshotSDD(
-        baseSnapshot.chunk.hash,
-        await baseSnapshot.getMutationID(clientID, dagWrite),
-        cookie,
-        dagWrite,
-        indexes,
-        clientID,
-        formatVersion,
-      );
-      await w.commit(SYNC_HEAD_NAME);
-    }
+    assert(formatVersion >= FormatVersion.DD31);
+    const w = await newWriteSnapshotDD31(
+      baseSnapshot.chunk.hash,
+      {[clientID]: await baseSnapshot.getMutationID(clientID, dagWrite)},
+      cookie,
+      dagWrite,
+      clientID,
+      formatVersion,
+    );
+    await w.commit(SYNC_HEAD_NAME);
   });
   const commit = await withRead(store, dagRead =>
     commitFromHead(SYNC_HEAD_NAME, dagRead),

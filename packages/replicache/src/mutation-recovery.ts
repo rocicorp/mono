@@ -24,27 +24,15 @@ import {
   disableClientGroup as persistDisableClientGroup,
   setClientGroups,
 } from './persist/client-groups.js';
-import {
-  type Client,
-  type ClientMap,
-  assertClientV4,
-  getClients,
-  setClients,
-} from './persist/clients.js';
 import type {
   IDBDatabasesStore,
   IndexedDBDatabase,
 } from './persist/idb-databases-store.js';
-import type {
-  PullResponseOKV1,
-  PullResponseV0,
-  PullResponseV1,
-  Puller,
-} from './puller.js';
+import type {PullResponseOKV1, PullResponseV1, Puller} from './puller.js';
 import type {PushResponse, Pusher} from './pusher.js';
 import type {ClientGroupID, ClientID} from './sync/ids.js';
-import {beginPullV0, beginPullV1} from './sync/pull.js';
-import {PUSH_VERSION_DD31, PUSH_VERSION_SDD, push} from './sync/push.js';
+import {beginPullV1} from './sync/pull.js';
+import {PUSH_VERSION_DD31, push} from './sync/push.js';
 import {withRead, withWrite} from './with-transactions.js';
 
 const MUTATION_RECOVERY_LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 10 * 2 ** 20; // 10 MB
@@ -98,7 +86,6 @@ export class MutationRecovery {
   }
 
   async recoverMutations(
-    preReadClientMap: ClientMap | undefined,
     ready: Promise<unknown>,
     perdag: Store,
     idbDatabase: IndexedDBDatabase,
@@ -122,12 +109,7 @@ export class MutationRecovery {
     try {
       this.#recoveringMutations = true;
       await ready;
-      await recoverMutationsFromPerdag(
-        idbDatabase,
-        this.#options,
-        perdag,
-        preReadClientMap,
-      );
+      await recoverMutationsFromPerdag(idbDatabase, this.#options, perdag);
       for (const database of Object.values(await idbDatabases.getDatabases())) {
         if (delegate.closed) {
           lc.debug?.('Exiting early due to close:', stepDescription);
@@ -145,7 +127,6 @@ export class MutationRecovery {
               await recoverMutationsWithNewPerdag(
                 database,
                 this.#options,
-                undefined,
                 createStore,
               );
           }
@@ -180,227 +161,15 @@ function logMutationRecoveryError(
   }
 }
 
-/**
- * @returns When mutations are recovered the resulting updated client map.
- *   Otherwise undefined, which can be because there were no mutations to
- *   recover, or because an error occurred when trying to recover the
- *   mutations.
- */
-async function recoverMutationsOfClientV4(
-  client: Client,
-  clientID: ClientID,
-  perdag: Store,
-  database: IndexedDBDatabase,
-  options: MutationRecoveryOptions,
-  formatVersion: FormatVersion.Type,
-): Promise<ClientMap | undefined> {
-  assert(database.replicacheFormatVersion === FormatVersion.SDD);
-  assertClientV4(client);
-
-  const {
-    delegate,
-    lc,
-    wrapInOnlineCheck,
-    wrapInReauthRetries,
-    isPushDisabled,
-    isPullDisabled,
-  } = options;
-  const selfClientID = delegate.clientID;
-  if (selfClientID === clientID) {
-    return;
-  }
-  if (client.lastServerAckdMutationID >= client.mutationID) {
-    return;
-  }
-  const stepDescription = `Recovering mutations for ${clientID}.`;
-  lc.debug?.('Start:', stepDescription);
-  const lazyDagForOtherClient = new LazyStore(
-    perdag,
-    MUTATION_RECOVERY_LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT,
-    throwChunkHasher,
-    assertHash,
-  );
-  try {
-    await withWrite(lazyDagForOtherClient, write =>
-      write.setHead(DEFAULT_HEAD_NAME, client.headHash),
-    );
-
-    if (isPushDisabled()) {
-      lc.debug?.(
-        `Cannot recover mutations for client ${clientID} because push is disabled.`,
-      );
-      return;
-    }
-    const {pusher} = delegate;
-
-    const pushDescription = 'recoveringMutationsPush';
-    const pushSucceeded = await wrapInOnlineCheck(async () => {
-      const {result: pusherResult} = await wrapInReauthRetries(
-        async (requestID: string, requestLc: LogContext) => {
-          assertNotUndefined(lazyDagForOtherClient);
-          const pusherResult = await push(
-            requestID,
-            lazyDagForOtherClient,
-            requestLc,
-            await delegate.profileID,
-            undefined,
-            clientID,
-            pusher,
-            database.schemaVersion,
-            PUSH_VERSION_SDD,
-          );
-          return {
-            result: pusherResult,
-            httpRequestInfo: pusherResult?.httpRequestInfo,
-          };
-        },
-        pushDescription,
-        lc,
-      );
-
-      return (
-        !!pusherResult && pusherResult.httpRequestInfo.httpStatusCode === 200
-      );
-    }, pushDescription);
-    if (!pushSucceeded) {
-      lc.debug?.(
-        `Failed to recover mutations for client ${clientID} due to a push error.`,
-      );
-      return;
-    }
-
-    if (isPullDisabled()) {
-      lc.debug?.(
-        `Cannot confirm mutations were recovered for client ${clientID} ` +
-          `because pull is disabled.`,
-      );
-      return;
-    }
-    const {puller} = delegate;
-
-    const pullDescription = 'recoveringMutationsPull';
-    let pullResponse: PullResponseV0 | undefined;
-    const pullSucceeded = await wrapInOnlineCheck(async () => {
-      const {result: beginPullResponse} = await wrapInReauthRetries(
-        async (requestID: string, requestLc: LogContext) => {
-          const beginPullResponse = await beginPullV0(
-            await delegate.profileID,
-            clientID,
-            database.schemaVersion,
-            puller,
-            requestID,
-            lazyDagForOtherClient,
-            formatVersion,
-            requestLc,
-            false,
-          );
-          return {
-            result: beginPullResponse,
-            httpRequestInfo: beginPullResponse.httpRequestInfo,
-          };
-        },
-        pullDescription,
-        lc,
-      );
-      ({pullResponse} = beginPullResponse);
-      return (
-        !!pullResponse &&
-        beginPullResponse.httpRequestInfo.httpStatusCode === 200
-      );
-    }, pullDescription);
-    if (!pullSucceeded) {
-      lc.debug?.(
-        `Failed to recover mutations for client ${clientID} due to a pull error.`,
-      );
-      return;
-    }
-
-    if (lc.debug && pullResponse) {
-      if (isClientStateNotFoundResponse(pullResponse)) {
-        lc.debug?.(
-          `Client ${selfClientID} cannot recover mutations for client ` +
-            `${clientID}. The client no longer exists on the server.`,
-        );
-      } else if (isVersionNotSupportedResponse(pullResponse)) {
-        lc.debug?.(
-          `Version is not supported on the server. versionType: ${pullResponse.versionType}. Cannot recover mutations for client ${clientID}.`,
-        );
-      } else {
-        lc.debug?.(
-          `Client ${selfClientID} recovered mutations for client ` +
-            `${clientID}.  Details`,
-          {
-            mutationID: client.mutationID,
-            lastServerAckdMutationID: client.lastServerAckdMutationID,
-            lastMutationID: pullResponse.lastMutationID,
-          },
-        );
-      }
-    }
-
-    return await withWrite(perdag, async dagWrite => {
-      const clients = await getClients(dagWrite);
-      const clientToUpdate = clients.get(clientID);
-      if (!clientToUpdate) {
-        return clients;
-      }
-
-      assertClientV4(clientToUpdate);
-
-      const setNewClients = async (newClients: ClientMap) => {
-        await setClients(newClients, dagWrite);
-        return newClients;
-      };
-
-      if (
-        isClientStateNotFoundResponse(pullResponse) ||
-        // Even though SDD did not have VersionNotSupported we can still get
-        // this if the server was upgraded to handle this. It seems better to
-        // delete the client at this point.
-        isVersionNotSupportedResponse(pullResponse)
-      ) {
-        const newClients = new Map(clients);
-        newClients.delete(clientID);
-        return setNewClients(newClients);
-      }
-
-      assert(pullResponse);
-      if (
-        clientToUpdate.lastServerAckdMutationID >= pullResponse.lastMutationID
-      ) {
-        return clients;
-      }
-
-      const newClients = new Map(clients).set(clientID, {
-        ...clientToUpdate,
-        lastServerAckdMutationID: pullResponse.lastMutationID,
-      });
-      return setNewClients(newClients);
-    });
-  } catch (e) {
-    logMutationRecoveryError(e, lc, stepDescription, delegate);
-  } finally {
-    await lazyDagForOtherClient.close();
-    lc.debug?.('End:', stepDescription);
-  }
-  return;
-}
-
 async function recoverMutationsWithNewPerdag(
   database: IndexedDBDatabase,
   options: MutationRecoveryOptions,
-  preReadClientMap: ClientMap | undefined,
   createStore: CreateStore,
 ) {
   const perKvStore = createStore(database.name);
   const perdag = new StoreImpl(perKvStore, newRandomHash, assertHash);
   try {
-    await recoverMutationsFromPerdag(
-      database,
-      options,
-      perdag,
-      preReadClientMap,
-    );
+    await recoverMutationsFromPerdag(database, options, perdag);
   } finally {
     await perdag.close();
   }
@@ -410,61 +179,9 @@ function recoverMutationsFromPerdag(
   database: IndexedDBDatabase,
   options: MutationRecoveryOptions,
   perdag: Store,
-  preReadClientMap: ClientMap | undefined,
 ): Promise<void> {
-  if (database.replicacheFormatVersion >= FormatVersion.DD31) {
-    return recoverMutationsFromPerdagDD31(database, options, perdag);
-  }
-  return recoverMutationsFromPerdagSDD(
-    database,
-    options,
-    perdag,
-    preReadClientMap,
-  );
-}
-
-async function recoverMutationsFromPerdagSDD(
-  database: IndexedDBDatabase,
-  options: MutationRecoveryOptions,
-  perdag: Store,
-  preReadClientMap: ClientMap | undefined,
-): Promise<void> {
-  const {delegate, lc} = options;
-  const stepDescription = `Recovering mutations from db ${database.name}.`;
-  lc.debug?.('Start:', stepDescription);
-  try {
-    const formatVersion = parseFormatVersion(database.replicacheFormatVersion);
-    let clientMap: ClientMap | undefined =
-      preReadClientMap || (await withRead(perdag, read => getClients(read)));
-    const clientIDsVisited = new Set<ClientID>();
-    while (clientMap) {
-      let newClientMap: ClientMap | undefined;
-      for (const [clientID, client] of clientMap) {
-        if (delegate.closed) {
-          lc.debug?.('Exiting early due to close:', stepDescription);
-          return;
-        }
-        if (!clientIDsVisited.has(clientID)) {
-          clientIDsVisited.add(clientID);
-          newClientMap = await recoverMutationsOfClientV4(
-            client,
-            clientID,
-            perdag,
-            database,
-            options,
-            formatVersion,
-          );
-          if (newClientMap) {
-            break;
-          }
-        }
-      }
-      clientMap = newClientMap;
-    }
-  } catch (e) {
-    logMutationRecoveryError(e, lc, stepDescription, delegate);
-  }
-  lc.debug?.('End:', stepDescription);
+  assert(database.replicacheFormatVersion >= FormatVersion.DD31);
+  return recoverMutationsFromPerdagDD31(database, options, perdag);
 }
 
 async function recoverMutationsFromPerdagDD31(

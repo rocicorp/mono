@@ -22,7 +22,6 @@ import {
   commitFromHash,
   newLocalDD31 as commitNewLocalDD31,
   newSnapshotDD31 as commitNewSnapshotDD31,
-  newSnapshotSDD as commitNewSnapshotSDD,
   getMutationID,
 } from './commit.js';
 import * as IndexOperation from './index-operation-enum.js';
@@ -141,20 +140,6 @@ export class Write extends Read {
           indexRecords,
           timestamp,
           this.#clientID,
-        );
-        break;
-      }
-
-      case MetaType.SnapshotSDD: {
-        assert(this.#formatVersion <= FormatVersion.SDD);
-        const {basisHash, lastMutationID, cookieJSON} = meta;
-        commit = commitNewSnapshotSDD(
-          this.#dagWrite.createChunk,
-          basisHash,
-          lastMutationID,
-          cookieJSON,
-          valueHash,
-          indexRecords,
         );
         break;
       }
@@ -289,29 +274,6 @@ export async function newWriteLocal(
       timestamp,
       clientID,
     },
-    indexes,
-    clientID,
-    formatVersion,
-  );
-}
-
-export async function newWriteSnapshotSDD(
-  basisHash: Hash,
-  lastMutationID: number,
-  cookieJSON: FrozenJSONValue,
-  dagWrite: DagWrite,
-  indexes: Map<string, IndexWrite>,
-  clientID: ClientID,
-  formatVersion: FormatVersion.Type,
-): Promise<Write> {
-  assert(formatVersion <= FormatVersion.SDD);
-  const basis = await commitFromHash(basisHash, dagWrite);
-  const bTreeWrite = new BTreeWrite(dagWrite, formatVersion, basis.valueHash);
-  return new Write(
-    dagWrite,
-    bTreeWrite,
-    basis,
-    {basisHash, type: MetaType.SnapshotSDD, lastMutationID, cookieJSON},
     indexes,
     clientID,
     formatVersion,

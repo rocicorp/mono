@@ -30,22 +30,14 @@ import {
   type LocalMeta,
   type Meta,
   type SnapshotMetaDD31,
-  type SnapshotMetaSDD,
   assertLocalCommitDD31,
   assertSnapshotCommitDD31,
-  assertSnapshotCommitSDD,
   commitFromHead,
   toChunkIndexDefinition,
 } from './commit.js';
 import {IndexWrite} from './index.js';
 import * as MetaType from './meta-type-enum.js';
-import {
-  Write,
-  newWriteLocal,
-  newWriteSnapshotDD31,
-  newWriteSnapshotSDD,
-  readIndexesForWrite,
-} from './write.js';
+import {Write, newWriteLocal, newWriteSnapshotDD31} from './write.js';
 
 export type Chain = Commit<Meta>[];
 
@@ -156,32 +148,20 @@ async function addSnapshot(
   expect(chain).to.have.length.greaterThan(0);
   const lc = new LogContext();
   await withWriteNoImplicitCommit(store, async dagWrite => {
-    let w;
-    if (formatVersion >= FormatVersion.DD31) {
-      w = await newWriteSnapshotDD31(
-        await mustGetHeadHash(headName, dagWrite),
-        lastMutationIDs ?? {
-          [clientID]: await chain[chain.length - 1].getNextMutationID(
-            clientID,
-            dagWrite,
-          ),
-        },
-        deepFreeze(cookie),
-        dagWrite,
-        clientID,
-        formatVersion,
-      );
-    } else {
-      w = await newWriteSnapshotSDD(
-        await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite),
-        await chain[chain.length - 1].getNextMutationID(clientID, dagWrite),
-        deepFreeze(cookie),
-        dagWrite,
-        readIndexesForWrite(chain[chain.length - 1], dagWrite, formatVersion),
-        clientID,
-        formatVersion,
-      );
-    }
+    assert(formatVersion >= FormatVersion.DD31);
+    const w = await newWriteSnapshotDD31(
+      await mustGetHeadHash(headName, dagWrite),
+      lastMutationIDs ?? {
+        [clientID]: await chain[chain.length - 1].getNextMutationID(
+          clientID,
+          dagWrite,
+        ),
+      },
+      deepFreeze(cookie),
+      dagWrite,
+      clientID,
+      formatVersion,
+    );
 
     if (map) {
       for (const [k, v] of map) {
@@ -217,7 +197,7 @@ export class ChainBuilder {
   async addGenesis(
     clientID: ClientID,
     indexDefinitions: IndexDefinitions = {},
-  ): Promise<Commit<SnapshotMetaSDD | SnapshotMetaDD31>> {
+  ): Promise<Commit<SnapshotMetaDD31>> {
     await addGenesis(
       this.chain,
       this.store,
@@ -228,11 +208,8 @@ export class ChainBuilder {
     );
     const commit = this.chain.at(-1);
     assertNotUndefined(commit);
-    if (this.formatVersion >= FormatVersion.DD31) {
-      assertSnapshotCommitDD31(commit);
-    } else {
-      assertSnapshotCommitSDD(commit);
-    }
+    assert(this.formatVersion >= FormatVersion.DD31);
+    assertSnapshotCommitDD31(commit);
     return commit;
   }
 
@@ -261,7 +238,7 @@ export class ChainBuilder {
     clientID: ClientID,
     cookie: Cookie = `cookie_${this.chain.length}`,
     lastMutationIDs?: Record<ClientID, number>,
-  ): Promise<Commit<SnapshotMetaSDD | SnapshotMetaDD31>> {
+  ): Promise<Commit<SnapshotMetaDD31>> {
     await addSnapshot(
       this.chain,
       this.store,
@@ -274,11 +251,8 @@ export class ChainBuilder {
     );
     const commit = this.chain.at(-1);
     assertNotUndefined(commit);
-    if (this.formatVersion >= FormatVersion.DD31) {
-      assertSnapshotCommitDD31(commit);
-    } else {
-      assertSnapshotCommitSDD(commit);
-    }
+    assert(this.formatVersion >= FormatVersion.DD31);
+    assertSnapshotCommitDD31(commit);
     return commit;
   }
 
@@ -318,20 +292,13 @@ export async function initDB(
     dagWrite,
     formatVersion,
   );
-  const meta =
-    formatVersion >= FormatVersion.DD31
-      ? ({
-          basisHash,
-          type: MetaType.SnapshotDD31,
-          lastMutationIDs: {},
-          cookieJSON: null,
-        } as const)
-      : ({
-          basisHash,
-          type: MetaType.SnapshotSDD,
-          lastMutationID: 0,
-          cookieJSON: null,
-        } as const);
+  assert(formatVersion >= FormatVersion.DD31);
+  const meta = {
+    basisHash,
+    type: MetaType.SnapshotDD31,
+    lastMutationIDs: {},
+    cookieJSON: null,
+  } as const;
 
   const w = new Write(
     dagWrite,

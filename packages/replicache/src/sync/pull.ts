@@ -9,21 +9,14 @@ import {
   assertSnapshotMetaDD31,
   baseSnapshotFromHash,
   Commit,
-  commitChain,
   commitFromHash,
   commitIsLocalDD31,
   DEFAULT_HEAD_NAME,
   type LocalMeta,
   localMutations as localMutations_1,
-  type Meta,
   snapshotMetaParts,
 } from '../db/commit.js';
-import {
-  newWriteSnapshotDD31,
-  newWriteSnapshotSDD,
-  readIndexesForWrite,
-  updateIndexes,
-} from '../db/write.js';
+import {newWriteSnapshotDD31} from '../db/write.js';
 import {isErrorResponse} from '../error-responses.js';
 import * as FormatVersion from '../format-version-enum.js';
 import {deepFreeze, type FrozenJSONValue} from '../frozen-json.js';
@@ -36,9 +29,7 @@ import type {HTTPRequestInfo} from '../http-request-info.js';
 import type {
   Puller,
   PullerResult,
-  PullerResultV0,
   PullerResultV1,
-  PullResponseOKV0,
   PullResponseOKV1Internal,
   PullResponseV0,
   PullResponseV1,
@@ -115,83 +106,6 @@ export type BeginPullResponseV0 = {
   pullResponse?: PullResponseV0;
   syncHead: Hash;
 };
-
-export async function beginPullV0(
-  profileID: string,
-  clientID: ClientID,
-  schemaVersion: string,
-  puller: Puller,
-  requestID: string,
-  store: Store,
-  formatVersion: FormatVersion.Type,
-  lc: LogContext,
-  createSyncBranch = true,
-): Promise<BeginPullResponseV0> {
-  const [lastMutationID, baseCookie] = await withRead(store, async dagRead => {
-    const mainHeadHash = await dagRead.getHead(DEFAULT_HEAD_NAME);
-    if (!mainHeadHash) {
-      throw new Error('Internal no main head found');
-    }
-    const baseSnapshot = await baseSnapshotFromHash(mainHeadHash, dagRead);
-    const baseSnapshotMeta = baseSnapshot.meta;
-    const baseCookie = baseSnapshotMeta.cookieJSON;
-    const lastMutationID = await baseSnapshot.getMutationID(clientID, dagRead);
-    return [lastMutationID, baseCookie];
-  });
-
-  const pullReq: PullRequestV0 = {
-    profileID,
-    clientID,
-    cookie: baseCookie,
-    lastMutationID,
-    pullVersion: PULL_VERSION_SDD,
-    schemaVersion,
-  };
-
-  const {response, httpRequestInfo} = (await callPuller(
-    lc,
-    puller,
-    pullReq,
-    requestID,
-  )) as PullerResultV0;
-
-  // If Puller did not get a pull response we still want to return the HTTP
-  // request info to the JS SDK.
-  if (!response) {
-    return {
-      httpRequestInfo,
-      syncHead: emptyHash,
-    };
-  }
-
-  if (!createSyncBranch || isErrorResponse(response)) {
-    return {
-      httpRequestInfo,
-      pullResponse: response,
-      syncHead: emptyHash,
-    };
-  }
-
-  const result = await handlePullResponseV0(
-    lc,
-    store,
-    baseCookie,
-    response,
-    clientID,
-    formatVersion,
-  );
-  if (result.type === HandlePullResponseResultType.CookieMismatch) {
-    throw new Error('Overlapping sync');
-  }
-  return {
-    httpRequestInfo,
-    pullResponse: response,
-    syncHead:
-      result.type === HandlePullResponseResultType.Applied
-        ? result.syncHead
-        : emptyHash,
-  };
-}
 
 export async function beginPullV1(
   profileID: string,
@@ -296,148 +210,6 @@ async function callPuller(
   } catch (e) {
     throw new ReportError('Invalid puller result', toError(e));
   }
-}
-
-// Returns new sync head, or null if response did not apply due to mismatched cookie.
-export function handlePullResponseV0(
-  lc: LogContext,
-  store: Store,
-  expectedBaseCookie: ReadonlyJSONValue,
-  response: PullResponseOKV0,
-  clientID: ClientID,
-  formatVersion: FormatVersion.Type,
-): Promise<HandlePullResponseResult> {
-  // It is possible that another sync completed while we were pulling. Ensure
-  // that is not the case by re-checking the base snapshot.
-  return withWriteNoImplicitCommit(store, async dagWrite => {
-    assert(formatVersion <= FormatVersion.SDD);
-    const dagRead = dagWrite;
-    const mainHead = await dagRead.getHead(DEFAULT_HEAD_NAME);
-
-    if (mainHead === undefined) {
-      throw new Error('Main head disappeared');
-    }
-    const baseSnapshot = await baseSnapshotFromHash(mainHead, dagRead);
-    const [baseLastMutationID, baseCookie] = snapshotMetaParts(
-      baseSnapshot,
-      clientID,
-    );
-
-    // TODO(MP) Here we are using whether the cookie has changes as a proxy for whether
-    // the base snapshot changed, which is the check we used to do. I don't think this
-    // is quite right. We need to firm up under what conditions we will/not accept an
-    // update from the server: https://github.com/rocicorp/replicache/issues/713.
-    if (!deepEqual(expectedBaseCookie, baseCookie)) {
-      return {
-        type: HandlePullResponseResultType.CookieMismatch,
-      };
-    }
-
-    // If other entities (eg, other clients) are modifying the client view
-    // the client view can change but the lastMutationID stays the same.
-    // So be careful here to reject only a lesser lastMutationID.
-    if (response.lastMutationID < baseLastMutationID) {
-      throw new Error(
-        badOrderMessage(
-          `lastMutationID`,
-          String(response.lastMutationID),
-          String(baseLastMutationID),
-        ),
-      );
-    }
-
-    const frozenCookie = deepFreeze(response.cookie ?? null);
-
-    // If the cookie didn't change, it's a nop.
-    // Otherwise, we will write a new commit, including for the case of just
-    // a cookie change.
-    if (deepEqual(frozenCookie, baseCookie)) {
-      if (response.patch.length > 0) {
-        lc.error?.(
-          `handlePullResponse: cookie ${JSON.stringify(
-            baseCookie,
-          )} did not change, but patch is not empty`,
-        );
-      }
-      if (response.lastMutationID !== baseLastMutationID) {
-        lc.error?.(
-          `handlePullResponse: cookie ${JSON.stringify(
-            baseCookie,
-          )} did not change, but lastMutationID did change`,
-        );
-      }
-      return {
-        type: HandlePullResponseResultType.NoOp,
-      };
-    }
-
-    // We are going to need to adjust the indexes. Imagine we have just pulled:
-    //
-    // S1 - M1 - main
-    //    \ S2 - sync
-    //
-    // Let's say S2 says that it contains up to M1. Are we safe at this moment
-    // to set main to S2?
-    //
-    // No, because the Replicache protocol does not require a snapshot
-    // containing M1 to have the same data as the client computed for M1!
-    //
-    // We must diff the main map in M1 against the main map in S2 and see if it
-    // contains any changes. Whatever changes it contains must be applied to
-    // all indexes.
-    //
-    // We start with the index definitions in the last commit that was
-    // integrated into the new snapshot.
-    const chain = await commitChain(mainHead, dagRead);
-    let lastIntegrated: Commit<Meta> | undefined;
-    for (const commit of chain) {
-      if (
-        (await commit.getMutationID(clientID, dagRead)) <=
-        response.lastMutationID
-      ) {
-        lastIntegrated = commit;
-        break;
-      }
-    }
-
-    if (!lastIntegrated) {
-      throw new Error('Internal invalid chain');
-    }
-
-    const dbWrite = await newWriteSnapshotSDD(
-      baseSnapshot.chunk.hash,
-      response.lastMutationID,
-      frozenCookie,
-      dagWrite,
-      readIndexesForWrite(lastIntegrated, dagWrite, formatVersion),
-      clientID,
-      formatVersion,
-    );
-
-    await patch.apply(lc, dbWrite, response.patch);
-
-    const lastIntegratedMap = new BTreeRead(
-      dagRead,
-      formatVersion,
-      lastIntegrated.valueHash,
-    );
-
-    for await (const change of dbWrite.map.diff(lastIntegratedMap)) {
-      await updateIndexes(
-        lc,
-        dbWrite.indexes,
-        change.key,
-        () =>
-          Promise.resolve((change as {oldValue?: FrozenJSONValue}).oldValue),
-        (change as {newValue?: FrozenJSONValue}).newValue,
-      );
-    }
-
-    return {
-      type: HandlePullResponseResultType.Applied,
-      syncHead: await dbWrite.commit(SYNC_HEAD_NAME),
-    };
-  });
 }
 
 type HandlePullResponseResult =

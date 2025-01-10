@@ -22,12 +22,7 @@ import {
 import {encodeIndexKey} from '../db/index.js';
 import {readFromDefaultHead, readFromHead} from '../db/read.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {
-  newWriteLocal,
-  newWriteSnapshotDD31,
-  newWriteSnapshotSDD,
-  readIndexesForWrite,
-} from '../db/write.js';
+import {newWriteLocal, newWriteSnapshotDD31} from '../db/write.js';
 import {
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
@@ -63,7 +58,6 @@ import {
   PULL_VERSION_DD31,
   type PullRequestV0,
   type PullRequestV1,
-  beginPullV0,
   beginPullV1,
   handlePullResponseV1,
   isPullRequestV1,
@@ -684,25 +678,16 @@ describe('maybe end try pull', () => {
         );
 
         // Add snapshot and replayed commits to the sync chain.
-        const w =
-          formatVersion >= FormatVersion.DD31
-            ? await newWriteSnapshotDD31(
-                b.chain[0].chunk.hash,
-                {[clientID]: 0},
-                'sync_cookie',
-                dagWrite,
-                clientID,
-                formatVersion,
-              )
-            : await newWriteSnapshotSDD(
-                b.chain[0].chunk.hash,
-                0,
-                'sync_cookie',
-                dagWrite,
-                readIndexesForWrite(b.chain[0], dagWrite, formatVersion),
-                clientID,
-                formatVersion,
-              );
+        assert(formatVersion >= FormatVersion.DD31);
+        const w = await newWriteSnapshotDD31(
+          b.chain[0].chunk.hash,
+          {[clientID]: 0},
+          'sync_cookie',
+          dagWrite,
+          clientID,
+          formatVersion,
+        );
+
         await w.put(lc, `key/${i}`, `${i}`);
         return w.commit(SYNC_HEAD_NAME);
       });
@@ -932,29 +917,18 @@ describe('changed keys', () => {
         err: undefined,
       });
 
-      const pullResult =
-        formatVersion >= FormatVersion.DD31
-          ? await beginPullV1(
-              profileID,
-              clientID,
-              clientGroupID,
-              schemaVersion,
-              puller,
-              requestID,
-              store,
-              formatVersion,
-              new LogContext(),
-            )
-          : await beginPullV0(
-              profileID,
-              clientID,
-              schemaVersion,
-              puller,
-              requestID,
-              store,
-              formatVersion,
-              new LogContext(),
-            );
+      assert(formatVersion >= FormatVersion.DD31);
+      const pullResult = await beginPullV1(
+        profileID,
+        clientID,
+        clientGroupID,
+        schemaVersion,
+        puller,
+        requestID,
+        store,
+        formatVersion,
+        new LogContext(),
+      );
 
       const result = await maybeEndPull(
         store,
