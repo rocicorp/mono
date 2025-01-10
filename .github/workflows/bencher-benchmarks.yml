@@ -1,8 +1,6 @@
 on:
   push:
     branches: main
-  pull_request:
-    branches: main
 
 jobs:
   file_sizes:
@@ -46,4 +44,3 @@ jobs:
           --file-size out/zero-package.tgz \
           --file-size out/zero.js.br \
           --file-size out/zero.js \
-          --dry-run
