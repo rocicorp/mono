@@ -118,7 +118,7 @@ Resources:
         MinimumHealthyPercent: 50
         DeploymentCircuitBreaker:
           Enable: true
-          Rollback: false
+          Rollback: true
       DesiredCount: 10
       TaskDefinition: !Ref "TaskDefinitionViewSyncer"
       LoadBalancers:
@@ -317,7 +317,7 @@ Resources:
         MinimumHealthyPercent: 50
         DeploymentCircuitBreaker:
           Enable: true
-          Rollback: false
+          Rollback: true
       DesiredCount: 1
       TaskDefinition: !Ref "TaskDefinitionReplicationManager"
       ServiceConnectConfiguration:
