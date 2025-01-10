@@ -1,4 +1,5 @@
 import {describe, expect, test} from 'vitest';
+import {assert} from '../../../shared/src/asserts.js';
 import {LazyStore} from '../dag/lazy-store.js';
 import {TestLazyStore} from '../dag/test-lazy-store.js';
 import {TestStore} from '../dag/test-store.js';
@@ -25,10 +26,7 @@ describe('dag with no memory-only hashes gathers nothing', () => {
     const pb = new ChainBuilder(perdag, undefined, formatVersion);
     await pb.addGenesis(clientID);
     await pb.addLocal(clientID);
-    if (formatVersion <= FormatVersion.SDD) {
-      await pb.addIndexChange(clientID);
-    }
-    await pb.addLocal(clientID);
+    if (formatVersion >= FormatVersion.DD31) await pb.addLocal(clientID);
 
     await withRead(memdag, async dagRead => {
       for (const commit of pb.chain) {
@@ -48,7 +46,6 @@ describe('dag with no memory-only hashes gathers nothing', () => {
   };
 
   test('dd31', () => t(FormatVersion.Latest));
-  test('sdd', () => t(FormatVersion.SDD));
 });
 
 describe('dag with only memory-only hashes gathers everything', () => {
@@ -81,16 +78,13 @@ describe('dag with only memory-only hashes gathers everything', () => {
 
     await mb.addLocal(clientID);
     await testGatheredChunks();
-    if (formatVersion <= FormatVersion.SDD) {
-      await mb.addIndexChange(clientID);
-    }
+    assert(formatVersion >= FormatVersion.DD31);
 
     await mb.addSnapshot(undefined, clientID);
     await testGatheredChunks();
   };
 
   test('dd31', () => t(FormatVersion.Latest));
-  test('sdd', () => t(FormatVersion.SDD));
 });
 
 describe('dag with some persisted hashes and some memory-only hashes on top', () => {
@@ -164,7 +158,6 @@ describe('dag with some persisted hashes and some memory-only hashes on top', ()
     });
   };
   test('dd31', () => t(FormatVersion.Latest));
-  test('sdd', () => t(FormatVersion.SDD));
 });
 
 describe('dag with some permanent hashes and some memory-only hashes on top w index', () => {
@@ -201,13 +194,7 @@ describe('dag with some permanent hashes and some memory-only hashes on top w in
     });
 
     mb.chain = pb.chain.slice();
-    if (formatVersion <= FormatVersion.SDD) {
-      await mb.addIndexChange(clientID, 'testIndex', {
-        prefix: '',
-        jsonPointer: '/name',
-        allowEmpty: true,
-      });
-    }
+    assert(formatVersion >= FormatVersion.DD31);
     await mb.addLocal(clientID, [['c', {name: 'c-name'}]]);
 
     await withRead(memdag, async dagRead => {
@@ -408,5 +395,4 @@ describe('dag with some permanent hashes and some memory-only hashes on top w in
   };
 
   test('dd31', () => t(FormatVersion.Latest));
-  test('sdd', () => t(FormatVersion.SDD));
 });

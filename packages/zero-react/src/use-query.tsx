@@ -1,4 +1,4 @@
-import {useSyncExternalStore} from 'use-sync-external-store/shim';
+import {useSyncExternalStore} from 'react';
 import {deepClone} from '../../shared/src/deep-clone.js';
 import type {Immutable} from '../../shared/src/immutable.js';
 import type {

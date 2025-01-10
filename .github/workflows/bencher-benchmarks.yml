@@ -1,0 +1,53 @@
+name: Bencher File Sizes
+
+on:
+  push:
+    branches: main
+
+jobs:
+  file_sizes:
+    name: Continuous Monitoring of file sizes
+    permissions:
+      checks: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+      - uses: bencherdev/bencher@main
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Build npm zero package
+        working-directory: packages/zero
+        run: |
+          npm pack --pack-destination ./out
+          mv ./out/*.tgz ./out/zero-package.tgz
+
+      - name: Build zero client single file package
+        working-directory: packages/zero
+        run: node tool/build.js --bundle-sizes --minify
+
+      - name: Compress
+        working-directory: packages/zero
+        run: brotli out/zero.js
+
+      - name: Track benchmarks with Bencher
+        working-directory: packages/zero
+        run: |
+          bencher run \
+          --project zero-file-sizes \
+          --token '${{ secrets.BENCHER_API_TOKEN }}' \
+          --adapter json \
+          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+          --start-point main \
+          --threshold-measure file-size \
+          --threshold-test percentage \
+          --threshold-upper-boundary 0.05 \
+          --err \
+          --file-size out/zero-package.tgz \
+          --file-size out/zero.js.br \
+          --file-size out/zero.js
