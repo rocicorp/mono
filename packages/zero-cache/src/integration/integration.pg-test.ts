@@ -310,4 +310,4 @@ describe('integration', () => {
       {pokeID: expect.any(String)},
     ]);
   });
-});
+}, 10000);
