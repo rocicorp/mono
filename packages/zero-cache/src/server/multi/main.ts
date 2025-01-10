@@ -55,6 +55,7 @@ export default async function runWorker(
   const tenants = config.tenants.map(tenant => ({
     ...tenant,
     worker: childWorker('./server/main.ts', {
+      ...process.env, // propagate all ENV variables from this process
       ...baseEnv, // defaults
       ['ZERO_TENANT_ID']: tenant.id,
       ['ZERO_PORT']: String((tenantPort += 2)), // and bump the port by 2 thereafter.
