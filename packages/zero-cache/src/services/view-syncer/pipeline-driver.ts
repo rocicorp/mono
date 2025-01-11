@@ -9,6 +9,10 @@ import type {Node} from '../../../../zql/src/ivm/data.js';
 import type {Input, Storage} from '../../../../zql/src/ivm/operator.js';
 import type {SourceSchema} from '../../../../zql/src/ivm/schema.js';
 import type {Source, SourceChange} from '../../../../zql/src/ivm/source.js';
+import {
+  runtimeDebugFlags,
+  runtimeDebugStats,
+} from '../../../../zqlite/src/runtime-debug.js';
 import {TableSource} from '../../../../zqlite/src/table-source.js';
 import {listTables} from '../../db/lite-tables.js';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.js';
@@ -21,10 +25,6 @@ import type {SchemaVersions} from '../../types/schema-versions.js';
 import {getSubscriptionState} from '../replicator/schema/replication-state.js';
 import type {ClientGroupStorage} from './database-storage.js';
 import {type SnapshotDiff, Snapshotter} from './snapshotter.js';
-import {
-  runtimeDebugFlags,
-  runtimeDebugStats,
-} from '../../../../zqlite/src/runtime-debug.js';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -351,7 +351,11 @@ export class PipelineDriver {
 
     const tableSpec = this.#tableSpecs.get(tableName);
     if (!tableSpec) {
-      throw new Error(`Unknown table ${tableName}`);
+      throw new Error(
+        `table '${tableName}' is not one of: ${[...this.#tableSpecs.keys()]
+          .filter(t => !t.includes('.') && !t.startsWith('_litestream_'))
+          .sort()}`,
+      );
     }
     const {primaryKey} = tableSpec.tableSpec;
     assert(primaryKey.length);
