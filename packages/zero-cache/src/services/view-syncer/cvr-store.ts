@@ -367,9 +367,9 @@ class RowRecordCache {
       pending.push(
         tx`
   INSERT INTO cvr.rows(
-    "clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts"
+      "clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts"
   ) SELECT
-    "clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts"
+      "clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts"
     FROM json_to_recordset(${rowRecordRows}) AS x(
       "clientGroupID" TEXT,
       "schema" TEXT,
@@ -379,9 +379,9 @@ class RowRecordCache {
       "patchVersion" TEXT,
       "refCounts" JSONB
   ) ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
-      DO UPDATE SET "rowVersion" = excluded."rowVersion",
-        "patchVersion" = excluded."patchVersion",
-        "refCounts" = excluded."refCounts"
+    DO UPDATE SET "rowVersion" = excluded."rowVersion",
+      "patchVersion" = excluded."patchVersion",
+      "refCounts" = excluded."refCounts"
     `.execute(),
       );
       this.#lc.debug?.(`flushing ${rowRecordRows.length} rows`);
