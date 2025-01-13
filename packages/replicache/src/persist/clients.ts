@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert, assertObject} from '../../../shared/src/asserts.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import {hasOwn} from '../../../shared/src/has-own.js';
 import * as valita from '../../../shared/src/valita.js';
 import {emptyDataNode} from '../btree/node.js';
@@ -20,7 +21,7 @@ import {
   toChunkIndexDefinition,
 } from '../db/commit.js';
 import {createIndexBTree} from '../db/write.js';
-import type {FormatVersion} from '../format-version-enum.js';
+import * as FormatVersion from '../format-version-enum.js';
 import {type FrozenJSONValue, deepFreeze} from '../frozen-json.js';
 import {type Hash, hashSchema} from '../hash.js';
 import {type IndexDefinitions, indexDefinitionsEqual} from '../index-defs.js';
@@ -38,6 +39,8 @@ import {
   setClientGroup,
 } from './client-groups.js';
 import {makeClientID} from './make-client-id.js';
+
+type FormatVersion = Enum<typeof FormatVersion>;
 
 export type ClientMap = ReadonlyMap<ClientID, ClientV4 | ClientV5 | ClientV6>;
 export type ClientMapDD31 = ReadonlyMap<ClientID, ClientV5 | ClientV6>;

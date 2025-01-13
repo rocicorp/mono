@@ -2,8 +2,8 @@ import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
+import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.js';
 import {
-  ErrorKind,
   MutationType,
   type CRUDMutation,
   type CRUDOp,

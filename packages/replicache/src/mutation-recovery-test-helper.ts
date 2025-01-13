@@ -1,5 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {assert} from '../../shared/src/asserts.js';
+import type {Enum} from '../../shared/src/enum.js';
 import type {ReadonlyJSONObject} from '../../shared/src/json.js';
 import {LazyStore} from './dag/lazy-store.js';
 import {StoreImpl} from './dag/store-impl.js';
@@ -18,10 +19,12 @@ import {PUSH_VERSION_DD31} from './sync/push.js';
 import {closeablesToClose, dbsToDrop} from './test-util.js';
 import type {MutatorDefs} from './types.js';
 
+type FormatVersion = Enum<typeof FormatVersion>;
+
 export async function createPerdag(args: {
   replicacheName: string;
   schemaVersion: string;
-  formatVersion: FormatVersion.Type;
+  formatVersion: FormatVersion;
 }): Promise<Store> {
   const {replicacheName, schemaVersion, formatVersion: formatVersion} = args;
   const idbName = makeIDBNameForTesting(
@@ -63,7 +66,7 @@ export async function createAndPersistClientWithPendingLocalDD31({
   numLocal: number;
   mutatorNames: string[];
   cookie: string | number;
-  formatVersion: FormatVersion.Type;
+  formatVersion: FormatVersion;
   snapshotLastMutationIDs?: Record<ClientID, number> | undefined;
 }): Promise<LocalMetaDD31[]> {
   assert(formatVersion >= FormatVersion.DD31);
@@ -123,7 +126,7 @@ export async function persistSnapshotDD31(
   cookie: string | number,
   mutatorNames: string[],
   snapshotLastMutationIDs: Record<ClientID, number>,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<void> {
   const testMemdag = new LazyStore(
     perdag,

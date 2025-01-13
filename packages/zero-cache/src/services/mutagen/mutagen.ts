@@ -5,7 +5,7 @@ import type {JWTPayload} from 'jose';
 import postgres from 'postgres';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
 import * as v from '../../../../shared/src/valita.js';
-import {ErrorKind} from '../../../../zero-protocol/src/mod.js';
+import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.js';
 import {
   primaryKeyValueSchema,
   type PrimaryKeyValue,

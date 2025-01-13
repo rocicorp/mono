@@ -14,7 +14,7 @@ import {must} from '../../../../shared/src/must.js';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.js';
 import {sleep} from '../../../../shared/src/sleep.js';
 import {astSchema} from '../../../../zero-protocol/src/ast.js';
-import {ErrorKind} from '../../../../zero-protocol/src/error.js';
+import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.js';
 import {multiInsertParams, multiInsertStatement} from '../../db/queries.js';
 import {Mode, TransactionPool} from '../../db/transaction-pool.js';
 import type {JSONValue} from '../../types/bigint-json.js';

@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import type {Enum} from '../../../shared/src/enum.js';
 import {sleep} from '../../../shared/src/sleep.js';
 import type {LazyStore} from '../dag/lazy-store.js';
 import type {Store} from '../dag/store.js';
@@ -16,7 +17,7 @@ import {
   localMutationsGreaterThan,
 } from '../db/commit.js';
 import {rebaseMutationAndPutCommit} from '../db/rebase.js';
-import type {FormatVersion} from '../format-version-enum.js';
+import * as FormatVersion from '../format-version-enum.js';
 import type {Hash} from '../hash.js';
 import {
   type DiffComputationConfig,
@@ -38,6 +39,8 @@ import {
   type ChunkWithSize,
   GatherNotCachedVisitor,
 } from './gather-not-cached-visitor.js';
+
+type FormatVersion = Enum<typeof FormatVersion>;
 
 const GATHER_SIZE_LIMIT = 5 * 2 ** 20; // 5 MB
 const DELAY_MS = 300;

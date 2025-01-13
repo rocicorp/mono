@@ -3,10 +3,10 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {Queue} from '../../../../shared/src/queue.js';
 import {sleep} from '../../../../shared/src/sleep.js';
 import type {AST} from '../../../../zero-protocol/src/ast.js';
+import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.js';
 import {
   type Downstream,
   type ErrorBody,
-  ErrorKind,
   type PokePartBody,
   type PokeStartBody,
   type QueriesPatch,

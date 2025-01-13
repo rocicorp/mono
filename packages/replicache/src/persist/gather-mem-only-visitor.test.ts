@@ -1,5 +1,6 @@
 import {describe, expect, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import {LazyStore} from '../dag/lazy-store.js';
 import {TestLazyStore} from '../dag/test-lazy-store.js';
 import {TestStore} from '../dag/test-store.js';
@@ -11,8 +12,10 @@ import {assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
 
+type FormatVersion = Enum<typeof FormatVersion>;
+
 describe('dag with no memory-only hashes gathers nothing', () => {
-  const t = async (formatVersion: FormatVersion.Type) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const hashFunction = makeNewFakeHashFunction();
     const perdag = new TestStore(undefined, hashFunction);
@@ -49,7 +52,7 @@ describe('dag with no memory-only hashes gathers nothing', () => {
 });
 
 describe('dag with only memory-only hashes gathers everything', () => {
-  const t = async (formatVersion: FormatVersion.Type) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const hashFunction = makeNewFakeHashFunction();
     const perdag = new TestStore(undefined, hashFunction);
@@ -88,7 +91,7 @@ describe('dag with only memory-only hashes gathers everything', () => {
 });
 
 describe('dag with some persisted hashes and some memory-only hashes on top', () => {
-  const t = async (formatVersion: FormatVersion.Type) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const hashFunction = makeNewFakeHashFunction();
     const perdag = new TestStore(undefined, hashFunction);
@@ -159,7 +162,7 @@ describe('dag with some persisted hashes and some memory-only hashes on top', ()
 });
 
 describe('dag with some permanent hashes and some memory-only hashes on top w index', () => {
-  const t = async (formatVersion: FormatVersion.Type) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const hashFunction = makeNewFakeHashFunction();
     const perdag = new TestStore(undefined, hashFunction);

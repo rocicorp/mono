@@ -25,11 +25,13 @@ import {
   mustGetBrowserGlobal,
 } from '../../../shared/src/browser-env.js';
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import {must} from '../../../shared/src/must.js';
 import {navigator} from '../../../shared/src/navigator.js';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.js';
 import * as valita from '../../../shared/src/valita.js';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.js';
+import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.js';
 import {
   type CRUDMutation,
   type CRUDMutationArg,
@@ -37,7 +39,6 @@ import {
   type ConnectedMessage,
   type CustomMutation,
   type Downstream,
-  ErrorKind,
   type ErrorMessage,
   MutationType,
   type NullableVersion,
@@ -67,6 +68,7 @@ import {newQuery} from '../../../zql/src/query/query-impl.js';
 import type {Query} from '../../../zql/src/query/query.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
+import * as ConnectionState from './connection-state-enum.js';
 import {ZeroContext} from './context.js';
 import {
   type BatchMutator,
@@ -97,6 +99,7 @@ import type {
   ZeroAdvancedOptions,
   ZeroOptions,
 } from './options.js';
+import * as PingResult from './ping-result-enum.js';
 import {QueryManager} from './query-manager.js';
 import {
   reloadScheduled,
@@ -113,6 +116,9 @@ import {
 import {getServer} from './server-option.js';
 import {version} from './version.js';
 import {PokeHandler} from './zero-poke-handler.js';
+
+type ConnectionState = Enum<typeof ConnectionState>;
+type PingResult = Enum<typeof PingResult>;
 
 export type NoRelations = Record<string, never>;
 
@@ -147,12 +153,6 @@ interface TestZero {
 
 function asTestZero<S extends Schema>(z: Zero<S>): TestZero {
   return z as TestZero;
-}
-
-export const enum ConnectionState {
-  Disconnected,
-  Connecting,
-  Connected,
 }
 
 export const RUN_LOOP_INTERVAL_MS = 5_000;
@@ -227,11 +227,6 @@ function onClientStateNotFoundServerReason(serverErrMsg: string) {
 }
 const ON_CLIENT_STATE_NOT_FOUND_REASON_CLIENT =
   'The local persistent state needed to synchronize this client has been garbage collected.';
-
-const enum PingResult {
-  TimedOut = 0,
-  Success = 1,
-}
 
 // Keep in sync with packages/replicache/src/replicache-options.ts
 export interface ReplicacheInternalAPI {
@@ -332,7 +327,7 @@ export class Zero<const S extends Schema> {
 
     this.#connectionState = state;
     this.#connectionStateChangeResolver.resolve(state);
-    this.#connectionStateChangeResolver = resolver();
+    this.#connectionStateChangeResolver = resolver<ConnectionState>();
 
     if (TESTING) {
       asTestZero(this)[onSetConnectionStateSymbol]?.(state);
@@ -1285,10 +1280,8 @@ export class Zero<const S extends Schema> {
 
             this.#rejectMessageError = resolver();
 
-            const enum RaceCases {
-              Ping = 0,
-              Hidden = 2,
-            }
+            const PING = 0;
+            const HIDDEN = 2;
 
             const raceResult = await promiseRace([
               pingTimeoutPromise,
@@ -1304,7 +1297,7 @@ export class Zero<const S extends Schema> {
             }
 
             switch (raceResult) {
-              case RaceCases.Ping: {
+              case PING: {
                 const pingResult = await this.#ping(
                   lc,
                   this.#rejectMessageError.promise,
@@ -1314,7 +1307,7 @@ export class Zero<const S extends Schema> {
                 }
                 break;
               }
-              case RaceCases.Hidden:
+              case HIDDEN:
                 this.#disconnect(lc, {
                   client: 'Hidden',
                 });
@@ -1438,19 +1431,18 @@ export class Zero<const S extends Schema> {
     const pullResponseResolver: Resolver<PullResponseBody> = resolver();
     this.#pendingPullsByRequestID.set(requestID, pullResponseResolver);
     try {
-      const enum RaceCases {
-        Timeout = 0,
-        Response = 1,
-      }
+      const TIMEOUT = 0;
+      const RESPONSE = 1;
+
       const raceResult = await promiseRace([
         sleep(PULL_TIMEOUT_MS),
         pullResponseResolver.promise,
       ]);
       switch (raceResult) {
-        case RaceCases.Timeout:
+        case TIMEOUT:
           lc.debug?.('Mutation recovery pull timed out');
           throw new Error('Pull timed out');
-        case RaceCases.Response: {
+        case RESPONSE: {
           lc.debug?.('Returning mutation recovery pull response');
           const response = await pullResponseResolver.promise;
           return {

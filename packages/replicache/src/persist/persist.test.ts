@@ -6,6 +6,7 @@ import {
   assertNotNull,
   assertNotUndefined,
 } from '../../../shared/src/asserts.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import type {JSONValue} from '../../../shared/src/json.js';
 import {promiseVoid} from '../../../shared/src/resolved-promises.js';
 import {BTreeRead} from '../btree/read.js';
@@ -52,6 +53,9 @@ import {makeClientID} from './make-client-id.js';
 import {persistDD31} from './persist.js';
 import * as PersistedExpectation from './persisted-expectation-enum.js';
 
+type FormatVersion = Enum<typeof FormatVersion>;
+type PersistedExpectation = Enum<typeof PersistedExpectation>;
+
 const PERDAG_TEST_SETUP_HEAD_NAME = 'test-setup-head';
 
 describe('persistDD31', () => {
@@ -62,7 +66,7 @@ describe('persistDD31', () => {
     clients: {clientID: ClientID; client: Client}[],
     clientGroupID: ClientGroupID,
     testPersist: (
-      persistedExpectation: PersistedExpectation.Type,
+      persistedExpectation: PersistedExpectation,
       onGatherMemOnlyChunksForTest?: () => Promise<void>,
     ) => Promise<void>;
 
@@ -915,7 +919,7 @@ async function setupPersistTest() {
   assertNotUndefined(clientGroupID);
 
   const testPersist = async (
-    persistedExpectation: PersistedExpectation.Type,
+    persistedExpectation: PersistedExpectation,
     onGatherMemOnlyChunksForTest = () => promiseVoid,
   ) => {
     chunksPersistedSpy.resetHistory();

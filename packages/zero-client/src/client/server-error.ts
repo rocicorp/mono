@@ -1,8 +1,10 @@
+import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.js';
 import {
-  ErrorKind,
   type ErrorBody,
   type ServerOverloadedBody,
 } from '../../../zero-protocol/src/error.js';
+
+type ErrorKind = (typeof ErrorKind)[keyof typeof ErrorKind];
 
 /**
  * Represents an error sent by server as part of Zero protocol.

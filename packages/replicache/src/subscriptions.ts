@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {compareUTF8, greaterThan, lessThan, lessThanEq} from 'compare-utf8';
 import {assert} from '../../shared/src/asserts.js';
+import type {Enum} from '../../shared/src/enum.js';
 import {deepEqual} from '../../shared/src/json.js';
 import {binarySearch} from './binary-search.js';
 import type {
@@ -22,12 +23,14 @@ import {
 } from './transactions.js';
 import type {QueryInternal} from './types.js';
 
+type InvokeKind = Enum<typeof InvokeKind>;
+
 export interface Subscription<R> {
   hasIndexSubscription(indexName: string): boolean;
 
   invoke(
     tx: ReadTransaction,
-    kind: InvokeKind.Type,
+    kind: InvokeKind,
     diffs: DiffsMap | undefined,
   ): Promise<R>;
 
@@ -85,7 +88,7 @@ export class SubscriptionImpl<R> implements Subscription<R> {
 
   invoke(
     tx: ReadTransaction,
-    _kind: InvokeKind.Type,
+    _kind: InvokeKind,
     _diffs: DiffsMap | undefined,
   ): Promise<R> {
     return this.#body(tx);
@@ -210,7 +213,7 @@ export class WatchSubscription implements Subscription<Diff | undefined> {
 
   invoke(
     tx: ReadTransaction,
-    kind: InvokeKind.Type,
+    kind: InvokeKind,
     diffs: DiffsMap | undefined,
   ): Promise<Diff | undefined> {
     const invoke = async <Key extends IndexKey | string>(
@@ -409,7 +412,7 @@ export class SubscriptionsManagerImpl implements SubscriptionsManager {
 
   async #fireSubscriptions(
     subscriptions: Iterable<UnknownSubscription>,
-    kind: InvokeKind.Type,
+    kind: InvokeKind,
     diffs: DiffsMap | undefined,
   ) {
     if (this.#signal.aborted) {

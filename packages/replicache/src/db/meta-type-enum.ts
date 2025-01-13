@@ -9,5 +9,3 @@ export const SnapshotDD31 = 5;
 
 export type LocalDD31 = typeof LocalDD31;
 export type SnapshotDD31 = typeof SnapshotDD31;
-
-export type Type = LocalDD31 | SnapshotDD31;
