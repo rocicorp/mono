@@ -9,8 +9,8 @@ import {umami} from '../umami.js';
 export function useSoftNav() {
   useEffect(() => {
     const getElm = (e: Event) => {
-      const elm = e.target as HTMLAnchorElement | null;
-      if (!elm || elm.tagName !== 'A') {
+      const elm = (e.target as HTMLAnchorElement | null)?.closest('a');
+      if (!elm) {
         return null;
       }
       const url = new URL(elm.href, window.location.href);
@@ -29,7 +29,8 @@ export function useSoftNav() {
     const onMouseDown = (e: MouseEvent) => {
       const elm = getElm(e);
       if (elm && isPrimaryMouseButton(e)) {
-        navigate(elm.href, {state: elm.dataset.zbugsHistoryState});
+        const state = elm.dataset.zbugsHistoryState;
+        navigate(elm.href, {state: state ? JSON.parse(state) : undefined});
         if (elm.dataset.zbugsEventName) {
           umami.track(elm.dataset.zbugsEventName);
         }
@@ -49,7 +50,8 @@ export function useSoftNav() {
       // what is a link vs a button in our UI.
       const elm = getElm(e);
       if (elm && (e.key === 'Enter' || e.key === ' ')) {
-        navigate(elm.href, {state: elm.dataset.zbugsHistoryState});
+        const state = elm.dataset.zbugsHistoryState;
+        navigate(elm.href, {state: state ? JSON.parse(state) : undefined});
         e.preventDefault();
       }
     };
