@@ -84,18 +84,21 @@ export default async function runWorker(
   const runChangeStreamer = !config.changeStreamerURI;
 
   if (litestream) {
+    // For the replication-manager (i.e. authoritative replica), only attempt
+    // a restore once, allowing the backup to be absent.
     // For view-syncers, attempt a restore for up to 10 times over 30 seconds.
-    // For the replication-manager, only attempt once.
-    await restoreReplica(lc, config, config.changeStreamerURI ? 10 : 1, 3000);
+    await restoreReplica(lc, config, runChangeStreamer ? 1 : 10, 3000);
   }
 
   const {promise: changeStreamerReady, resolve} = resolver();
-  const changeStreamer = runChangeStreamer
-    ? loadWorker('./server/change-streamer.ts', 'supporting').once(
-        'message',
-        resolve,
-      )
-    : resolve();
+  if (runChangeStreamer) {
+    loadWorker('./server/change-streamer.ts', 'supporting').once(
+      'message',
+      resolve,
+    );
+  } else {
+    resolve();
+  }
 
   if (numSyncers) {
     // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
@@ -111,25 +114,15 @@ export default async function runWorker(
   await changeStreamerReady;
 
   if (runChangeStreamer && litestream) {
+    // Start a backup replicator and corresponding litestream backup process.
+    const mode: ReplicaFileMode = 'backup';
+    loadWorker('./server/replicator.ts', 'supporting', mode, mode);
+
     processes.addSubprocess(
       startReplicaBackupProcess(config),
       'supporting',
       'litestream',
     );
-  }
-
-  if (litestream) {
-    const mode: ReplicaFileMode = 'backup';
-    const replicator = loadWorker(
-      './server/replicator.ts',
-      'supporting',
-      mode,
-      mode,
-    ).once('message', () => subscribeTo(lc, replicator));
-    const notifier = createNotifierFrom(lc, replicator);
-    if (changeStreamer) {
-      handleSubscriptionsFrom(lc, changeStreamer, notifier);
-    }
   }
 
   const syncers: Worker[] = [];
