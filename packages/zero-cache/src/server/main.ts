@@ -127,7 +127,8 @@ export default async function runWorker(
 
   const syncers: Worker[] = [];
   if (numSyncers) {
-    const mode: ReplicaFileMode = litestream ? 'serving-copy' : 'serving';
+    const mode: ReplicaFileMode =
+      runChangeStreamer && litestream ? 'serving-copy' : 'serving';
     const replicator = loadWorker(
       './server/replicator.ts',
       'supporting',
