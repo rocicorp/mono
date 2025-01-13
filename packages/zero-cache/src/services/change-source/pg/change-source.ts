@@ -482,7 +482,7 @@ class ChangeMaker {
       return [];
     }
     try {
-      return await this.#makeChanges(lsn, msg);
+      return await this.#makeChanges(msg);
     } catch (err) {
       this.#error = {lsn, msg, err, lastLogTime: 0};
       this.#logError(this.#error);
@@ -512,13 +512,12 @@ class ChangeMaker {
   }
 
   // eslint-disable-next-line require-await
-  async #makeChanges(
-    lsn: string,
-    msg: Pgoutput.Message,
-  ): Promise<ChangeStreamData[]> {
+  async #makeChanges(msg: Pgoutput.Message): Promise<ChangeStreamData[]> {
     switch (msg.tag) {
       case 'begin':
-        return [['begin', msg]];
+        return [
+          ['begin', msg, {commitWatermark: toLexiVersion(must(msg.commitLsn))}],
+        ];
 
       case 'delete':
         assert(msg.key);
@@ -536,10 +535,10 @@ class ChangeMaker {
         }
         return this.#handleCustomMessage(msg);
 
-      case 'commit': {
-        const watermark = toLexiVersion(lsn);
-        return [['commit', msg, {watermark}]];
-      }
+      case 'commit':
+        return [
+          ['commit', msg, {watermark: toLexiVersion(must(msg.commitLsn))}],
+        ];
 
       case 'relation':
         return this.#handleRelation(msg);
