@@ -101,6 +101,8 @@ async function verifyDependencies(external) {
 
 async function buildZeroClient() {
   const define = makeDefine('unknown');
+  define['process.env.DISABLE_MUTATION_RECOVERY'] = 'true';
+
   const entryPoints = forBundleSizeDashboard
     ? {zero: basePath('src/zero.ts')}
     : {
