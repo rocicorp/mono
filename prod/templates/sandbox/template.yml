@@ -203,8 +203,8 @@ Resources:
               # limit: 190 max_connections / (10 tasks * 1.2 maximum-percent)
               Value: 15
             - Name: ZERO_CVR_MAX_CONNS
-              # limit: 5000 max_connections / (10 tasks * 1.2 maximum-percent)
-              Value: 400
+              # limit: 2000 max_connections / (10 tasks * 1.2 maximum-percent)
+              Value: 160
             - Name: ZERO_SCHEMA_FILE
               Value: /opt/app/packages/zero-cache/zero-schema.json
           Secrets:
