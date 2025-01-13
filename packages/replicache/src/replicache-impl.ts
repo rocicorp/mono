@@ -124,6 +124,12 @@ import {
 
 declare const TESTING: boolean;
 
+declare const process: {
+  env: {
+    ['DISABLE_MUTATION_RECOVERY']?: string | undefined;
+  };
+};
+
 /**
  * The maximum number of time to call out to getAuth before giving up
  * and throwing an error.
@@ -1501,7 +1507,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
 
   recoverMutations(): Promise<boolean> | void {
-    if (!process.env.DISABLE_RECOVER_MUTATIONS) {
+    if (!process.env.DISABLE_MUTATION_RECOVERY) {
       const result = this.#mutationRecovery!.recoverMutations(
         this.#ready,
         this.perdag,
