@@ -5,16 +5,13 @@ import {
   createIndexStatement,
   createTableStatement,
 } from '../../../db/create.js';
+import * as Mode from '../../../db/mode-enum.js';
 import {
   mapPostgresToLite,
   mapPostgresToLiteIndex,
 } from '../../../db/pg-to-lite.js';
 import type {IndexSpec, PublishedTableSpec} from '../../../db/specs.js';
-import {
-  importSnapshot,
-  Mode,
-  TransactionPool,
-} from '../../../db/transaction-pool.js';
+import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.js';
 import {liteValues} from '../../../types/lite.js';
 import {liteTableName} from '../../../types/names.js';
 import {pgClient, type PostgresDB} from '../../../types/pg.js';

@@ -1,6 +1,6 @@
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import {MutationType} from '../../../../zero-protocol/src/push.js';
+import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.js';
 import {
   ANYONE_CAN,
   definePermissions,
@@ -9,13 +9,13 @@ import {
 import {createSchema} from '../../../../zero-schema/src/schema.js';
 import type {TableSchema} from '../../../../zero-schema/src/table-schema.js';
 import {ExpressionBuilder} from '../../../../zql/src/query/expression.js';
+import type {Row} from '../../../../zql/src/query/query.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {WriteAuthorizerImpl} from '../../auth/write-authorizer.js';
 import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {zeroSchema} from './mutagen-test-shared.js';
 import {processMutation} from './mutagen.js';
-import type {Row} from '../../../../zql/src/query/query.js';
 
 const SHARD_ID = '0';
 const CG_ID = 'abc';

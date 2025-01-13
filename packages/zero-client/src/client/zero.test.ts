@@ -17,10 +17,10 @@ import {
   initConnectionMessageSchema,
   type QueriesPatchOp,
 } from '../../../zero-protocol/src/mod.js';
+import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.js';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.js';
 import {
   type Mutation,
-  MutationType,
   pushMessageSchema,
 } from '../../../zero-protocol/src/push.js';
 import type {NullableVersion} from '../../../zero-protocol/src/version.js';

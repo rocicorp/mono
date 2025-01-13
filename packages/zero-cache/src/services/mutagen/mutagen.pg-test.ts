@@ -4,13 +4,13 @@ import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.js';
 import {
-  MutationType,
   type CRUDMutation,
   type CRUDOp,
   type UpsertOp,
 } from '../../../../zero-protocol/src/mod.js';
+import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.js';
 import type {WriteAuthorizer} from '../../auth/write-authorizer.js';
-import {Mode} from '../../db/transaction-pool.js';
+import * as Mode from '../../db/mode-enum.js';
 import {expectTables, testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {zeroSchema} from './mutagen-test-shared.js';

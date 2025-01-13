@@ -40,7 +40,6 @@ import {
   type CustomMutation,
   type Downstream,
   type ErrorMessage,
-  MutationType,
   type NullableVersion,
   type PingMessage,
   type PokeEndMessage,
@@ -52,6 +51,7 @@ import {
   encodeSecProtocols,
   nullableVersionSchema,
 } from '../../../zero-protocol/src/mod.js';
+import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.js';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.js';
 import type {
   PullRequestMessage,

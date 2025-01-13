@@ -3,13 +3,15 @@ import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../../shared/src/asserts.js';
 import {Queue} from '../../../../shared/src/queue.js';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.js';
-import {Mode, TransactionPool} from '../../db/transaction-pool.js';
+import * as Mode from '../../db/mode-enum.js';
+import {TransactionPool} from '../../db/transaction-pool.js';
 import type {JSONValue} from '../../types/bigint-json.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {type Commit} from '../change-source/protocol/current/downstream.js';
 import type {Service} from '../service.js';
 import type {WatermarkedChange} from './change-streamer-service.js';
-import {ErrorType, type ChangeEntry} from './change-streamer.js';
+import {type ChangeEntry} from './change-streamer.js';
+import * as ErrorType from './error-type-enum.js';
 import {Subscriber} from './subscriber.js';
 
 type QueueEntry = ['change', WatermarkedChange] | ['subscriber', Subscriber];

@@ -7,12 +7,9 @@ import {testDBs} from '../test/db.js';
 import {createTableStatement} from './create.js';
 import {listTables} from './lite-tables.js';
 import {mapPostgresToLite} from './pg-to-lite.js';
+import * as PostgresTypeClass from './postgres-type-class-enum.js';
 import {stripCommentsAndWhitespace} from './query-test-util.js';
-import {
-  PostgresTypeClass,
-  type LiteTableSpec,
-  type TableSpec,
-} from './specs.js';
+import {type LiteTableSpec, type TableSpec} from './specs.js';
 
 describe('tables/create', () => {
   type Case = {

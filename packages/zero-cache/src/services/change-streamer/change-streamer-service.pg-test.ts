@@ -30,10 +30,10 @@ import {
 import {ReplicationMessages} from '../replicator/test-utils.js';
 import {initializeStreamer} from './change-streamer-service.js';
 import {
-  ErrorType,
   type ChangeStreamerService,
   type Downstream,
 } from './change-streamer.js';
+import * as ErrorType from './error-type-enum.js';
 import {
   AutoResetSignal,
   ensureReplicationConfig,
