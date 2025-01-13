@@ -1,5 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect, test} from 'vitest';
+import type {Enum} from '../../../shared/src/enum.js';
 import type {JSONValue} from '../../../shared/src/json.js';
 import {stringCompare} from '../../../shared/src/string-compare.js';
 import {asyncIterableToArray} from '../async-iterable-to-array.js';
@@ -20,6 +21,8 @@ import {
   getIndexKeys,
   indexValue,
 } from './index.js';
+
+type IndexOperation = Enum<typeof IndexOperation>;
 
 test('test index key', () => {
   const testValid = (secondary: string, primary: string) => {
@@ -198,7 +201,7 @@ test('index value', async () => {
     key: string,
     value: JSONValue,
     jsonPointer: string,
-    op: IndexOperation.Type,
+    op: IndexOperation,
     expected: number[] | string,
   ) => {
     const dagStore = new TestStore();

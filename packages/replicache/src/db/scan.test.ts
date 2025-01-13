@@ -1,4 +1,5 @@
 import {expect, test} from 'vitest';
+import type {Enum} from '../../../shared/src/enum.js';
 import {BTreeWrite} from '../btree/write.js';
 import type {Write} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
@@ -7,6 +8,8 @@ import {fromKeyForIndexScanInternal} from '../scan-iterator.js';
 import {withWrite} from '../with-transactions.js';
 import {decodeIndexKey} from './index.js';
 import type {ScanItem} from './scan.js';
+
+type FormatVersion = Enum<typeof FormatVersion>;
 
 test('scan', async () => {
   const formatVersion = FormatVersion.Latest;
@@ -41,7 +44,7 @@ test('scan', async () => {
 async function makeBTreeWrite(
   dagWrite: Write,
   entries: Iterable<[string, string]>,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<BTreeWrite> {
   const map = new BTreeWrite(dagWrite, formatVersion);
   for (const [k, v] of entries) {

@@ -1,15 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {MaybePromise} from '../../../shared/src/types.js';
-import type {ErrorKind as ServerErrorKind} from '../../../zero-protocol/src/mod.js';
+import * as ServerErrorKind from '../../../zero-protocol/src/error-kind-enum.js';
+import * as MetricName from './metric-name-enum.js';
 
-export enum MetricName {
-  TimeToConnectMs = 'time_to_connect_ms',
-  LastConnectError = 'last_connect_error',
-  TimeToConnectMsV2 = 'time_to_connect_ms_v2',
-  LastConnectErrorV2 = 'last_connect_error_v2',
-  TotalTimeToConnectMs = 'total_time_to_connect_ms',
-  NotConnected = 'not_connected',
-}
+type ServerErrorKind = (typeof ServerErrorKind)[keyof typeof ServerErrorKind];
 
 // This value is used to indicate that the client's last connection attempt
 // failed. We don't make this -1 because we want to stack this never connected

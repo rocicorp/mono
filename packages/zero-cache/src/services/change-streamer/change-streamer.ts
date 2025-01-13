@@ -94,13 +94,6 @@ export type ChangeEntry = {
   watermark: string;
 };
 
-export const enum ErrorType {
-  Unknown,
-  WrongReplicaVersion,
-  WatermarkTooOld,
-  WatermarkNotFound,
-}
-
 const subscriptionErrorSchema = v.object({
   type: v.number(), // ErrorType
   message: v.string().optional(),

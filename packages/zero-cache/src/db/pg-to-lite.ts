@@ -2,8 +2,8 @@ import type {LogContext} from '@rocicorp/logger';
 import {ZERO_VERSION_COLUMN_NAME} from '../services/replicator/schema/replication-state.js';
 import {dataTypeToZqlValueType, textEnumTypeName} from '../types/lite.js';
 import {liteTableName} from '../types/names.js';
+import * as PostgresTypeClass from './postgres-type-class-enum.js';
 import {
-  PostgresTypeClass,
   type ColumnSpec,
   type IndexSpec,
   type LiteIndexSpec,

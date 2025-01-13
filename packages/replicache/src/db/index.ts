@@ -1,10 +1,13 @@
 import type {LogContext} from '@rocicorp/logger';
+import type {Enum} from '../../../shared/src/enum.js';
 import type {BTreeRead} from '../btree/read.js';
 import type {BTreeWrite} from '../btree/write.js';
 import type {FrozenJSONObject, FrozenJSONValue} from '../frozen-json.js';
 import type {Hash} from '../hash.js';
 import type {IndexRecord} from './commit.js';
 import * as IndexOperation from './index-operation-enum.js';
+
+type IndexOperation = Enum<typeof IndexOperation>;
 
 export class IndexRead<BTree = BTreeRead> {
   readonly meta: IndexRecord;
@@ -32,7 +35,7 @@ export class IndexWrite extends IndexRead<BTreeWrite> {
 export async function indexValue(
   lc: LogContext,
   index: BTreeWrite,
-  op: IndexOperation.Type,
+  op: IndexOperation,
   key: string,
   val: FrozenJSONValue,
   jsonPointer: string,

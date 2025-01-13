@@ -1,5 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import type {Store} from '../dag/store.js';
 import * as FormatVersion from '../format-version-enum.js';
 import type {IndexDefinitions} from '../index-defs.js';
@@ -15,6 +16,8 @@ import {
   initClientV6,
   setClients,
 } from './clients.js';
+
+type FormatVersion = Enum<typeof FormatVersion>;
 
 export function setClientsForTesting(
   clients: ClientMap,
@@ -87,7 +90,7 @@ export async function initClientWithClientID(
   dagStore: Store,
   mutatorNames: string[],
   indexes: IndexDefinitions,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<void> {
   assert(formatVersion >= FormatVersion.DD31);
   await initClientV6(

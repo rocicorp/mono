@@ -14,6 +14,8 @@ import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
 import type {ClientID} from './ids.js';
 import {SYNC_HEAD_NAME} from './sync-head-name.js';
 
+type FormatVersion = (typeof FormatVersion)[keyof typeof FormatVersion];
+
 // See db.test_helpers for addLocal, addSnapshot, etc. We can't put addLocalRebase
 // there because sync depends on db, and addLocalRebase depends on sync.
 
@@ -27,7 +29,7 @@ export async function addSyncSnapshot(
   store: Store,
   _takeIndexesFrom: number,
   clientID: ClientID,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<Chain> {
   expect(chain.length >= 2).to.be.true;
 

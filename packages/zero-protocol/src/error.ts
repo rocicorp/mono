@@ -1,26 +1,5 @@
 import * as v from '../../shared/src/valita.js';
-
-// Note: Metric names depend on these values,
-// so if you add or change on here a corresponding dashboard
-// change will likely be needed.
-
-export enum ErrorKind {
-  AuthInvalidated = 'AuthInvalidated',
-  ClientNotFound = 'ClientNotFound',
-  InvalidConnectionRequest = 'InvalidConnectionRequest',
-  InvalidConnectionRequestBaseCookie = 'InvalidConnectionRequestBaseCookie',
-  InvalidConnectionRequestLastMutationID = 'InvalidConnectionRequestLastMutationID',
-  InvalidConnectionRequestClientDeleted = 'InvalidConnectionRequestClientDeleted',
-  InvalidMessage = 'InvalidMessage',
-  InvalidPush = 'InvalidPush',
-  MutationFailed = 'MutationFailed',
-  MutationRateLimited = 'MutationRateLimited',
-  Unauthorized = 'Unauthorized',
-  VersionNotSupported = 'VersionNotSupported',
-  SchemaVersionNotSupported = 'SchemaVersionNotSupported',
-  ServerOverloaded = 'ServerOverloaded',
-  Internal = 'Internal',
-}
+import * as ErrorKind from './error-kind-enum.js';
 
 export const errorKindSchema = v.union(
   v.literal(ErrorKind.AuthInvalidated),

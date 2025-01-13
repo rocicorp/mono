@@ -1,12 +1,15 @@
 import {assert} from '../../../shared/src/asserts.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import {diff as btreeDiff} from '../btree/diff.js';
 import type {InternalDiff} from '../btree/node.js';
 import {allEntriesAsDiff, BTreeRead} from '../btree/read.js';
 import type {Read} from '../dag/store.js';
 import {Commit, commitFromHash, type Meta} from '../db/commit.js';
 import {readIndexesForRead} from '../db/read.js';
-import type {FormatVersion} from '../format-version-enum.js';
+import * as FormatVersion from '../format-version-enum.js';
 import type {Hash} from '../hash.js';
+
+type FormatVersion = Enum<typeof FormatVersion>;
 
 /**
  * Interface allowing different diff functions to skip costly diff computations.

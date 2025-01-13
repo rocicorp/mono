@@ -1,5 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {describe, expect, test} from 'vitest';
+import type {Enum} from '../../../shared/src/enum.js';
 import {mustGetHeadHash} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
 import * as FormatVersion from '../format-version-enum.js';
@@ -8,8 +9,10 @@ import {readFromDefaultHead} from './read.js';
 import {initDB} from './test-helpers.js';
 import {newWriteLocal} from './write.js';
 
+type FormatVersion = Enum<typeof FormatVersion>;
+
 describe('basics', () => {
-  const t = async (replicacheFormatVersion: FormatVersion.Type) => {
+  const t = async (replicacheFormatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const dagStore = new TestStore();
     const lc = new LogContext();

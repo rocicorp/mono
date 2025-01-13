@@ -44,6 +44,8 @@ import * as patch from './patch.js';
 import {PullError} from './pull-error.js';
 import {SYNC_HEAD_NAME} from './sync-head-name.js';
 
+type FormatVersion = (typeof FormatVersion)[keyof typeof FormatVersion];
+
 export const PULL_VERSION_SDD = 0;
 export const PULL_VERSION_DD31 = 1;
 
@@ -87,7 +89,7 @@ export async function beginPullV1(
   puller: Puller,
   requestID: string,
   store: Store,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
   lc: LogContext,
   createSyncBranch = true,
 ): Promise<BeginPullResponseV1> {
@@ -205,7 +207,7 @@ export function handlePullResponseV1(
   expectedBaseCookie: FrozenJSONValue,
   response: PullResponseOKV1Internal,
   clientID: ClientID,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<HandlePullResponseResult> {
   // It is possible that another sync completed while we were pulling. Ensure
   // that is not the case by re-checking the base snapshot.
@@ -307,7 +309,7 @@ export function maybeEndPull<M extends LocalMeta>(
   expectedSyncHead: Hash,
   clientID: ClientID,
   diffConfig: DiffComputationConfig,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<{
   syncHead: Hash;
   replayMutations: Commit<M>[];

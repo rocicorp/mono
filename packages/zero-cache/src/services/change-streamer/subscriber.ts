@@ -1,8 +1,12 @@
 import {assert} from '../../../../shared/src/asserts.js';
+import type {Enum} from '../../../../shared/src/enum.js';
 import {max} from '../../types/lexi-version.js';
 import {Subscription} from '../../types/subscription.js';
 import type {WatermarkedChange} from './change-streamer-service.js';
-import {type Downstream, ErrorType} from './change-streamer.js';
+import {type Downstream} from './change-streamer.js';
+import * as ErrorType from './error-type-enum.js';
+
+type ErrorType = Enum<typeof ErrorType>;
 
 /**
  * Encapsulates a subscriber to changes. All subscribers start in a

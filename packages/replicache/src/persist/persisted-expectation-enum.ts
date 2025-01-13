@@ -9,5 +9,3 @@ export type Snapshot = typeof Snapshot;
 export type SnapshotAndLocals = typeof SnapshotAndLocals;
 export type Locals = typeof Locals;
 export type Nothing = typeof Nothing;
-
-export type Type = Snapshot | SnapshotAndLocals | Locals | Nothing;

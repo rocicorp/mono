@@ -1,5 +1,6 @@
 import {describe, expect, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import {Chunk, type Refs, toRefs} from '../dag/chunk.js';
 import {TestStore} from '../dag/test-store.js';
 import * as FormatVersion from '../format-version-enum.js';
@@ -25,8 +26,10 @@ import {
 import * as MetaType from './meta-type-enum.js';
 import {ChainBuilder} from './test-helpers.js';
 
+type FormatVersion = Enum<typeof FormatVersion>;
+
 describe('base snapshot', () => {
-  const t = async (formatVersion: FormatVersion.Type) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const store = new TestStore();
     const b = new ChainBuilder(store, undefined, formatVersion);
@@ -85,7 +88,7 @@ describe('base snapshot', () => {
 });
 
 describe('local mutations', () => {
-  const t = async (formatVersion: FormatVersion.Type) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const store = new TestStore();
     const b = new ChainBuilder(store, undefined, formatVersion);
@@ -189,7 +192,7 @@ test('local mutations greater than', async () => {
 });
 
 describe('chain', () => {
-  const t = async (formatVersion: FormatVersion.Type) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const store = new TestStore();
     const b = new ChainBuilder(store, undefined, formatVersion);

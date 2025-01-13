@@ -9,5 +9,3 @@ export type ChunkData = typeof ChunkData;
 export type ChunkMeta = typeof ChunkMeta;
 export type ChunkRefCount = typeof ChunkRefCount;
 export type Head = typeof Head;
-
-export type Type = ChunkData | ChunkMeta | ChunkRefCount | Head;

@@ -7,5 +7,3 @@ export const CookieMismatch = 2;
 export type Applied = typeof Applied;
 export type NoOp = typeof NoOp;
 export type CookieMismatch = typeof CookieMismatch;
-
-export type Type = Applied | NoOp | CookieMismatch;

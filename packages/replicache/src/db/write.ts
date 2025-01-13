@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import {diff} from '../btree/diff.js';
 import type {InternalDiff} from '../btree/node.js';
 import {BTreeRead, allEntriesAsDiff} from '../btree/read.js';
@@ -29,6 +30,8 @@ import {IndexRead, IndexWrite, indexValue} from './index.js';
 import * as MetaType from './meta-type-enum.js';
 import {Read, readIndexesForRead} from './read.js';
 
+type FormatVersion = Enum<typeof FormatVersion>;
+
 export class Write extends Read {
   readonly #dagWrite: DagWrite;
   readonly #basis: Commit<CommitMeta> | undefined;
@@ -38,7 +41,7 @@ export class Write extends Read {
 
   declare readonly indexes: Map<string, IndexWrite>;
   readonly #clientID: ClientID;
-  readonly #formatVersion: FormatVersion.Type;
+  readonly #formatVersion: FormatVersion;
 
   constructor(
     dagWrite: DagWrite,
@@ -47,7 +50,7 @@ export class Write extends Read {
     meta: CommitMeta,
     indexes: Map<string, IndexWrite>,
     clientID: ClientID,
-    formatVersion: FormatVersion.Type,
+    formatVersion: FormatVersion,
   ) {
     // TypeScript has trouble
     super(dagWrite, map, indexes);
@@ -251,7 +254,7 @@ export async function newWriteLocal(
   dagWrite: DagWrite,
   timestamp: number,
   clientID: ClientID,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<Write> {
   const basis = await commitFromHash(basisHash, dagWrite);
   const bTreeWrite = new BTreeWrite(dagWrite, formatVersion, basis.valueHash);
@@ -286,7 +289,7 @@ export async function newWriteSnapshotDD31(
   cookieJSON: FrozenCookie,
   dagWrite: DagWrite,
   clientID: ClientID,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<Write> {
   const basis = await commitFromHash(basisHash, dagWrite);
   const bTreeWrite = new BTreeWrite(dagWrite, formatVersion, basis.valueHash);
@@ -347,7 +350,7 @@ export async function updateIndexes(
 export function readIndexesForWrite(
   commit: Commit<CommitMeta>,
   dagWrite: DagWrite,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Map<string, IndexWrite> {
   const m = new Map();
   for (const index of commit.indexes) {
@@ -369,7 +372,7 @@ export async function createIndexBTree(
   prefix: string,
   jsonPointer: string,
   allowEmpty: boolean,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<BTreeWrite> {
   const indexMap = new BTreeWrite(dagWrite, formatVersion);
   for await (const entry of valueMap.scan(prefix)) {

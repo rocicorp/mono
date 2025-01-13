@@ -1,6 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'vitest';
 import {assert, assertNotUndefined} from '../../../shared/src/asserts.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import type {JSONValue} from '../../../shared/src/json.js';
 import {emptyDataNode} from '../btree/node.js';
 import {BTreeWrite} from '../btree/write.js';
@@ -39,6 +40,8 @@ import {IndexWrite} from './index.js';
 import * as MetaType from './meta-type-enum.js';
 import {Write, newWriteLocal, newWriteSnapshotDD31} from './write.js';
 
+type FormatVersion = Enum<typeof FormatVersion>;
+
 export type Chain = Commit<Meta>[];
 
 async function addGenesis(
@@ -47,7 +50,7 @@ async function addGenesis(
   clientID: ClientID,
   headName = DEFAULT_HEAD_NAME,
   indexDefinitions: IndexDefinitions,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<Chain> {
   expect(chain).to.have.length(0);
   const commit = await createGenesis(
@@ -66,7 +69,7 @@ async function createGenesis(
   clientID: ClientID,
   headName: string,
   indexDefinitions: IndexDefinitions,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<Commit<Meta>> {
   await withWriteNoImplicitCommit(store, async w => {
     await initDB(w, headName, clientID, indexDefinitions, formatVersion);
@@ -82,7 +85,7 @@ async function addLocal(
   clientID: ClientID,
   entries: [string, JSONValue][] | undefined,
   headName: string,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<Chain> {
   expect(chain).to.have.length.greaterThan(0);
   const i = chain.length;
@@ -105,7 +108,7 @@ async function createLocal(
   i: number,
   clientID: ClientID,
   headName: string,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<Commit<Meta>> {
   const lc = new LogContext();
   await withWriteNoImplicitCommit(store, async dagWrite => {
@@ -143,7 +146,7 @@ async function addSnapshot(
   cookie: Cookie = `cookie_${chain.length}`,
   lastMutationIDs: Record<ClientID, number> | undefined,
   headName: string,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<Chain> {
   expect(chain).to.have.length.greaterThan(0);
   const lc = new LogContext();
@@ -181,12 +184,12 @@ export class ChainBuilder {
   readonly store: Store;
   readonly headName: string;
   chain: Chain;
-  readonly formatVersion: FormatVersion.Type;
+  readonly formatVersion: FormatVersion;
 
   constructor(
     store: Store,
     headName = DEFAULT_HEAD_NAME,
-    formatVersion: FormatVersion.Type = FormatVersion.Latest,
+    formatVersion: FormatVersion = FormatVersion.Latest,
   ) {
     this.store = store;
     this.headName = headName;
@@ -284,7 +287,7 @@ export async function initDB(
   headName: string,
   clientID: ClientID,
   indexDefinitions: IndexDefinitions,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<Hash> {
   const basisHash = emptyHash;
   const indexes = await createEmptyIndexMaps(
@@ -316,7 +319,7 @@ export async function initDB(
 async function createEmptyIndexMaps(
   indexDefinitions: IndexDefinitions,
   dagWrite: DagWrite,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<Map<string, IndexWrite>> {
   const indexes = new Map();
 

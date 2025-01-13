@@ -2,8 +2,12 @@ import type {LogContext} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
 import type postgres from 'postgres';
 import {assert} from '../../../shared/src/asserts.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import {Queue} from '../../../shared/src/queue.js';
 import type {PostgresDB, PostgresTransaction} from '../types/pg.js';
+import * as Mode from './mode-enum.js';
+
+type Mode = Enum<typeof Mode>;
 
 type MaybePromise<T> = Promise<T> | T;
 
@@ -31,11 +35,6 @@ export type ReadTask<T> = (
   tx: PostgresTransaction,
   lc: LogContext,
 ) => MaybePromise<T>;
-
-export enum Mode {
-  SERIALIZABLE = 'ISOLATION LEVEL SERIALIZABLE',
-  READONLY = 'ISOLATION LEVEL REPEATABLE READ READ ONLY',
-}
 
 /**
  * A TransactionPool is a pool of one or more {@link postgres.TransactionSql}

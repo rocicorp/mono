@@ -19,11 +19,11 @@ import {
 } from '../change-source/protocol/current/downstream.js';
 import {DEFAULT_MAX_RETRY_DELAY_MS, RunningState} from '../running-state.js';
 import {
-  ErrorType,
   type ChangeStreamerService,
   type Downstream,
   type SubscriberContext,
 } from './change-streamer.js';
+import * as ErrorType from './error-type-enum.js';
 import {Forwarder} from './forwarder.js';
 import {initChangeStreamerSchema} from './schema/init.js';
 import {

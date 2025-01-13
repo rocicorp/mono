@@ -1,17 +1,7 @@
 import type {DeepReadonly} from '../../../shared/src/json.js';
 import * as v from '../../../shared/src/valita.js';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
-
-// Values of the `typtype` column in https://www.postgresql.org/docs/17/catalog-pg-type.html#CATALOG-PG-TYPE
-export enum PostgresTypeClass {
-  Base = 'b',
-  Composite = 'c',
-  Domain = 'd',
-  Enum = 'e',
-  Pseudo = 'p',
-  Range = 'r',
-  Multirange = 'm',
-}
+import * as PostgresTypeClass from './postgres-type-class-enum.js';
 
 export const pgTypeClassSchema = v.union(
   v.literal(PostgresTypeClass.Base),

@@ -66,16 +66,7 @@
     "!*.tsbuildinfo"
   ],
   "eslintConfig": {
-    "extends": "../../eslint-config.json",
-    "rules": {
-      "no-restricted-syntax": [
-        "error",
-        {
-          "selector": "TSEnumDeclaration",
-          "message": "Enums are not allowed"
-        }
-      ]
-    }
+    "extends": "../../eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config"
 }

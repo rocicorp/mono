@@ -5,6 +5,7 @@ import {
   assertObject,
   assertString,
 } from '../../../shared/src/asserts.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 import {stringCompare} from '../../../shared/src/string-compare.js';
 import {asyncIterableToArray} from '../async-iterable-to-array.js';
@@ -58,6 +59,10 @@ import {
   maybeEndPull,
 } from './pull.js';
 import {SYNC_HEAD_NAME} from './sync-head-name.js';
+
+type FormatVersion = Enum<typeof FormatVersion>;
+type HandlePullResponseResultEnum = Enum<typeof HandlePullResponseResultEnum>;
+
 test('begin try pull DD31', async () => {
   const formatVersion = FormatVersion.Latest;
   const clientID = 'test_client_id';
@@ -596,7 +601,7 @@ test('begin try pull DD31', async () => {
 });
 
 describe('maybe end try pull', () => {
-  const t = async (formatVersion: FormatVersion.Type) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     type Case = {
       name: string;
@@ -836,7 +841,7 @@ function makeFakePuller(options: FakePullerArgs): Puller {
 }
 
 describe('changed keys', () => {
-  const t = async (formatVersion: FormatVersion.Type) => {
+  const t = async (formatVersion: FormatVersion) => {
     type IndexDef = {
       name: string;
       prefix: string;
@@ -1279,7 +1284,7 @@ describe('handlePullResponseDD31', () => {
   }: {
     expectedBaseCookieJSON: ReadonlyJSONValue;
     responseCookie: Cookie;
-    expectedResultType: HandlePullResponseResultEnum.Type;
+    expectedResultType: HandlePullResponseResultEnum;
     setupChain?: (b: ChainBuilder) => Promise<unknown>;
     responseLastMutationIDChanges?: {[clientID: string]: number};
     responsePatch?: PatchOperation[];

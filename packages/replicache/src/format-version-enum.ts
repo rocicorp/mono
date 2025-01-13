@@ -13,6 +13,3 @@ export type DD31 = typeof DD31;
 export type V6 = typeof V6;
 export type V7 = typeof V7;
 export type Latest = typeof Latest;
-
-export type Type = SDD | DD31 | V6 | V7 | Latest;
-export type {Type as FormatVersion};

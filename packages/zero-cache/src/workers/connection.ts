@@ -8,11 +8,11 @@ import {startAsyncSpan, startSpan} from '../../../otel/src/span.js';
 import {version} from '../../../otel/src/version.js';
 import {unreachable} from '../../../shared/src/asserts.js';
 import * as valita from '../../../shared/src/valita.js';
+import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.js';
 import {type ErrorBody} from '../../../zero-protocol/src/error.js';
 import {
   type ConnectedMessage,
   type Downstream,
-  ErrorKind,
   type PongMessage,
   upstreamSchema,
 } from '../../../zero-protocol/src/mod.js';

@@ -15,8 +15,8 @@ import {CustomKeyMap} from '../../../../shared/src/custom-key-map.js';
 import {must} from '../../../../shared/src/must.js';
 import {randInt} from '../../../../shared/src/rand.js';
 import type {AST} from '../../../../zero-protocol/src/ast.js';
+import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.js';
 import {
-  ErrorKind,
   type ChangeDesiredQueriesBody,
   type ChangeDesiredQueriesMessage,
   type Downstream,
