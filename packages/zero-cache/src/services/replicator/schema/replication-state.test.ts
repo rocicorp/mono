@@ -32,8 +32,7 @@ describe('replicator/schema/replication-state', () => {
       ['_zero.replicationState']: [
         {
           lock: 1,
-          watermark: '0a',
-          stateVersion: '00',
+          stateVersion: '0a',
         },
       ],
     });
@@ -49,8 +48,7 @@ describe('replicator/schema/replication-state', () => {
 
   test('get versions', () => {
     expect(getReplicationVersions(db)).toEqual({
-      stateVersion: '00',
-      nextStateVersion: '0a',
+      stateVersion: '0a',
     });
   });
 
@@ -60,14 +58,12 @@ describe('replicator/schema/replication-state', () => {
       ['_zero.replicationState']: [
         {
           lock: 1,
-          watermark: '0f',
-          stateVersion: '0a',
+          stateVersion: '0f',
         },
       ],
     });
     expect(getReplicationVersions(db)).toEqual({
-      stateVersion: '0a',
-      nextStateVersion: '0f',
+      stateVersion: '0f',
     });
     expect(getSubscriptionState(db)).toEqual({
       replicaVersion: '0a',
@@ -80,14 +76,12 @@ describe('replicator/schema/replication-state', () => {
       ['_zero.replicationState']: [
         {
           lock: 1,
-          watermark: '0r',
-          stateVersion: '0f',
+          stateVersion: '0r',
         },
       ],
     });
     expect(getReplicationVersions(db)).toEqual({
-      stateVersion: '0f',
-      nextStateVersion: '0r',
+      stateVersion: '0r',
     });
     expect(getSubscriptionState(db)).toEqual({
       replicaVersion: '0a',

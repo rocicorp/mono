@@ -49,7 +49,7 @@ describe('view-syncer/pipeline-driver', () => {
         _0_version            TEXT NOT NULL
       );
       INSERT INTO "zero.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
-        VALUES (1, 1, 1, '00');  
+        VALUES (1, 1, 1, '123');  
       CREATE TABLE issues (
         id TEXT PRIMARY KEY,
         closed BOOL,
@@ -74,16 +74,16 @@ describe('view-syncer/pipeline-driver', () => {
         _0_version TEXT NOT NULL
       );
 
-      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('1', 0, 1728345600000, '00');
-      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('2', 1, 1722902400000, '00');
-      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('3', 0, null, '00');
-      INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('10', '1', 0, '00');
-      INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('20', '2', 1, '00');
-      INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('21', '2', 10000, '00');
-      INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('22', '2', 20000, '00');
+      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('1', 0, 1728345600000, '123');
+      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('2', 1, 1722902400000, '123');
+      INSERT INTO ISSUES (id, closed, ignored, _0_version) VALUES ('3', 0, null, '123');
+      INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('10', '1', 0, '123');
+      INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('20', '2', 1, '123');
+      INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('21', '2', 10000, '123');
+      INSERT INTO COMMENTS (id, issueID, upvotes, _0_version) VALUES ('22', '2', 20000, '123');
 
-      INSERT INTO "issueLabels" (issueID, labelID, _0_version) VALUES ('1', '1', '00');
-      INSERT INTO "labels" (id, name, _0_version) VALUES ('1', 'bug', '00');
+      INSERT INTO "issueLabels" (issueID, labelID, _0_version) VALUES ('1', '1', '123');
+      INSERT INTO "labels" (id, name, _0_version) VALUES ('1', 'bug', '123');
       `);
     replicator = fakeReplicator(lc, db);
   });
@@ -291,7 +291,7 @@ describe('view-syncer/pipeline-driver', () => {
           {
             "queryHash": "hash1",
             "row": {
-              "_0_version": "00",
+              "_0_version": "123",
               "closed": false,
               "id": "3",
             },
@@ -304,7 +304,7 @@ describe('view-syncer/pipeline-driver', () => {
           {
             "queryHash": "hash1",
             "row": {
-              "_0_version": "00",
+              "_0_version": "123",
               "closed": true,
               "id": "2",
             },
@@ -317,7 +317,7 @@ describe('view-syncer/pipeline-driver', () => {
           {
             "queryHash": "hash1",
             "row": {
-              "_0_version": "00",
+              "_0_version": "123",
               "id": "22",
               "issueID": "2",
               "upvotes": 20000,
@@ -331,7 +331,7 @@ describe('view-syncer/pipeline-driver', () => {
           {
             "queryHash": "hash1",
             "row": {
-              "_0_version": "00",
+              "_0_version": "123",
               "id": "21",
               "issueID": "2",
               "upvotes": 10000,
@@ -345,7 +345,7 @@ describe('view-syncer/pipeline-driver', () => {
           {
             "queryHash": "hash1",
             "row": {
-              "_0_version": "00",
+              "_0_version": "123",
               "id": "20",
               "issueID": "2",
               "upvotes": 1,
@@ -359,7 +359,7 @@ describe('view-syncer/pipeline-driver', () => {
           {
             "queryHash": "hash1",
             "row": {
-              "_0_version": "00",
+              "_0_version": "123",
               "closed": false,
               "id": "1",
             },
@@ -372,7 +372,7 @@ describe('view-syncer/pipeline-driver', () => {
           {
             "queryHash": "hash1",
             "row": {
-              "_0_version": "00",
+              "_0_version": "123",
               "id": "10",
               "issueID": "1",
               "upvotes": 0,
@@ -407,7 +407,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "123",
+            "_0_version": "134",
             "id": "31",
             "issueID": "3",
             "upvotes": 0,
@@ -421,7 +421,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "123",
+            "_0_version": "134",
             "closed": false,
             "id": "4",
           },
@@ -434,7 +434,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "123",
+            "_0_version": "134",
             "id": "41",
             "issueID": "4",
             "upvotes": 9007199254740991,
@@ -526,7 +526,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "123",
+            "_0_version": "134",
             "id": "22",
             "issueID": "3",
             "upvotes": 20000,
@@ -550,7 +550,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "134",
+            "_0_version": "135",
             "id": "22",
             "issueID": "3",
             "upvotes": 10,
@@ -583,107 +583,107 @@ describe('view-syncer/pipeline-driver', () => {
     // The newColumn should be reflected after a reset.
     expect([...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)])
       .toMatchInlineSnapshot(`
-      [
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "123",
-            "closed": false,
-            "id": "3",
-            "newColumn": null,
+        [
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "134",
+              "closed": false,
+              "id": "3",
+              "newColumn": null,
+            },
+            "rowKey": {
+              "id": "3",
+            },
+            "table": "issues",
+            "type": "add",
           },
-          "rowKey": {
-            "id": "3",
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "134",
+              "closed": true,
+              "id": "2",
+              "newColumn": null,
+            },
+            "rowKey": {
+              "id": "2",
+            },
+            "table": "issues",
+            "type": "add",
           },
-          "table": "issues",
-          "type": "add",
-        },
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "123",
-            "closed": true,
-            "id": "2",
-            "newColumn": null,
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "123",
+              "id": "22",
+              "issueID": "2",
+              "upvotes": 20000,
+            },
+            "rowKey": {
+              "id": "22",
+            },
+            "table": "comments",
+            "type": "add",
           },
-          "rowKey": {
-            "id": "2",
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "123",
+              "id": "21",
+              "issueID": "2",
+              "upvotes": 10000,
+            },
+            "rowKey": {
+              "id": "21",
+            },
+            "table": "comments",
+            "type": "add",
           },
-          "table": "issues",
-          "type": "add",
-        },
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "00",
-            "id": "22",
-            "issueID": "2",
-            "upvotes": 20000,
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "123",
+              "id": "20",
+              "issueID": "2",
+              "upvotes": 1,
+            },
+            "rowKey": {
+              "id": "20",
+            },
+            "table": "comments",
+            "type": "add",
           },
-          "rowKey": {
-            "id": "22",
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "134",
+              "closed": false,
+              "id": "1",
+              "newColumn": null,
+            },
+            "rowKey": {
+              "id": "1",
+            },
+            "table": "issues",
+            "type": "add",
           },
-          "table": "comments",
-          "type": "add",
-        },
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "00",
-            "id": "21",
-            "issueID": "2",
-            "upvotes": 10000,
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "123",
+              "id": "10",
+              "issueID": "1",
+              "upvotes": 0,
+            },
+            "rowKey": {
+              "id": "10",
+            },
+            "table": "comments",
+            "type": "add",
           },
-          "rowKey": {
-            "id": "21",
-          },
-          "table": "comments",
-          "type": "add",
-        },
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "00",
-            "id": "20",
-            "issueID": "2",
-            "upvotes": 1,
-          },
-          "rowKey": {
-            "id": "20",
-          },
-          "table": "comments",
-          "type": "add",
-        },
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "123",
-            "closed": false,
-            "id": "1",
-            "newColumn": null,
-          },
-          "rowKey": {
-            "id": "1",
-          },
-          "table": "issues",
-          "type": "add",
-        },
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "00",
-            "id": "10",
-            "issueID": "1",
-            "upvotes": 0,
-          },
-          "rowKey": {
-            "id": "10",
-          },
-          "table": "comments",
-          "type": "add",
-        },
-      ]
-    `);
+        ]
+      `);
   });
 
   test('whereExists query', () => {
@@ -738,7 +738,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "00",
+            "_0_version": "123",
             "closed": false,
             "id": "1",
           },
@@ -761,7 +761,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash2",
           "row": {
-            "_0_version": "00",
+            "_0_version": "123",
             "closed": false,
             "id": "1",
           },
@@ -774,7 +774,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash2",
           "row": {
-            "_0_version": "00",
+            "_0_version": "123",
             "issueID": "1",
             "labelID": "1",
           },
@@ -904,7 +904,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "00",
+            "_0_version": "123",
             "closed": true,
             "id": "2",
           },
@@ -917,7 +917,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "123",
+            "_0_version": "134",
             "issueID": "2",
             "labelID": "1",
           },
@@ -931,7 +931,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "00",
+            "_0_version": "123",
             "id": "1",
             "name": "bug",
           },
@@ -944,7 +944,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "123",
+            "_0_version": "134",
             "issueID": "2",
             "labelID": "1",
           },
@@ -958,7 +958,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "00",
+            "_0_version": "123",
             "id": "1",
             "name": "bug",
           },
@@ -1038,14 +1038,14 @@ describe('view-syncer/pipeline-driver', () => {
     expect(pipelines.getRow('issues', {id: '1'})).toEqual({
       id: '1',
       closed: false,
-      ['_0_version']: '00',
+      ['_0_version']: '123',
     });
 
     expect(pipelines.getRow('comments', {id: '22'})).toEqual({
       id: '22',
       issueID: '2',
       upvotes: 20000,
-      ['_0_version']: '00',
+      ['_0_version']: '123',
     });
 
     replicator.processTransaction(
@@ -1059,7 +1059,7 @@ describe('view-syncer/pipeline-driver', () => {
       id: '22',
       issueID: '3',
       upvotes: 20000,
-      ['_0_version']: '123',
+      ['_0_version']: '134',
     });
   });
 
@@ -1070,7 +1070,7 @@ describe('view-syncer/pipeline-driver', () => {
     replicator.processTransaction(
       '134',
       messages.insert('issues', {id: '4', closed: 0}),
-      zeroMessages.insert('schemaVersions', {
+      zeroMessages.update('schemaVersions', {
         lock: true,
         minSupportedVersion: 1,
         maxSupportedVersion: 2,
@@ -1087,7 +1087,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "123",
+            "_0_version": "134",
             "closed": false,
             "id": "4",
           },
@@ -1120,7 +1120,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "123",
+            "_0_version": "134",
             "closed": false,
             "id": "4",
           },
@@ -1143,7 +1143,7 @@ describe('view-syncer/pipeline-driver', () => {
         {
           "queryHash": "hash1",
           "row": {
-            "_0_version": "134",
+            "_0_version": "156",
             "id": "41",
             "issueID": "4",
             "upvotes": 10,
@@ -1198,9 +1198,9 @@ describe('view-syncer/pipeline-driver', () => {
       messages.insert('issues', {id: '4', closed: 1}),
     );
 
-    expect(pipelines.currentVersion()).toBe('00');
-    expect([...pipelines.advance().changes]).toHaveLength(0);
     expect(pipelines.currentVersion()).toBe('123');
+    expect([...pipelines.advance().changes]).toHaveLength(0);
+    expect(pipelines.currentVersion()).toBe('134');
   });
 
   test('push fails on out of bounds numbers', () => {

@@ -9,6 +9,7 @@ import {
 import {
   DbFile,
   expectTables as expectLiteTables,
+  expectMatchingObjectsInTables,
   initDB as initLiteDB,
 } from '../../../test/lite.js';
 import type {PostgresDB} from '../../../types/pg.js';
@@ -19,11 +20,12 @@ const SHARD_ID = 'sync_schema_test_id';
 
 // Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
-  dataVersion: 1,
-  schemaVersion: 1,
+  dataVersion: 2,
+  schemaVersion: 2,
   minSafeVersion: 1,
   lock: 1, // Internal column, always 1
 };
+const WATERMARK_REGEX = /[0-9a-z]{4,}/;
 
 describe('change-streamer/pg/sync-schema', () => {
   type Case = {
@@ -55,7 +57,7 @@ describe('change-streamer/pg/sync-schema', () => {
             lock: 1,
             minSupportedVersion: 1,
             maxSupportedVersion: 1,
-            ['_0_version']: '00',
+            ['_0_version']: WATERMARK_REGEX,
           },
         ],
         ['_zero.versionHistory']: [CURRENT_SCHEMA_VERSIONS],
@@ -88,13 +90,13 @@ describe('change-streamer/pg/sync-schema', () => {
             lock: 1,
             minSupportedVersion: 1,
             maxSupportedVersion: 1,
-            ['_0_version']: '00',
+            ['_0_version']: WATERMARK_REGEX,
           },
         ],
         ['_zero.versionHistory']: [CURRENT_SCHEMA_VERSIONS],
         users: [
-          {userID: 123, handle: '@zoot', ['_0_version']: '00'},
-          {userID: 456, handle: '@bonk', ['_0_version']: '00'},
+          {userID: 123, handle: '@zoot', ['_0_version']: WATERMARK_REGEX},
+          {userID: 456, handle: '@bonk', ['_0_version']: WATERMARK_REGEX},
         ],
       },
     },
@@ -132,7 +134,7 @@ describe('change-streamer/pg/sync-schema', () => {
         );
 
         await expectTables(upstream, c.upstreamPostState);
-        expectLiteTables(replica, c.replicaPostState);
+        expectMatchingObjectsInTables(replica, c.replicaPostState);
 
         expectLiteTables(replica, {
           ['_zero.changeLog']: [],

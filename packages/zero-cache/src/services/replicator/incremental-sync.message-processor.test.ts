@@ -67,58 +67,11 @@ describe('replicator/message-processor', () => {
       expectedVersionChanges: 1,
       replicated: {
         foo: [
-          {id: 123, big: null, ['_0_version']: '02'},
-          {id: 234, big: null, ['_0_version']: '02'},
+          {id: 123, big: null, ['_0_version']: '07'},
+          {id: 234, big: null, ['_0_version']: '07'},
         ],
       },
       expectFailure: true,
-    },
-    {
-      name: 'transaction replay',
-      messages: [
-        ['begin', messages.begin(), {commitWatermark: '08'}],
-        ['data', messages.insert('foo', {id: 123})],
-        ['commit', messages.commit(), {watermark: '08'}],
-
-        ['begin', messages.begin(), {commitWatermark: '0c'}],
-        ['data', messages.insert('foo', {id: 234})],
-        ['commit', messages.commit(), {watermark: '0c'}],
-
-        // Simulate Postgres resending the first two transactions (e.g. reconnecting after
-        // the acknowledgements were lost). Both should be dropped (i.e. rolled back).
-        ['begin', messages.begin(), {commitWatermark: '08'}],
-        ['data', messages.insert('foo', {id: 123})],
-        // For good measure, add new inserts that didn't appear in the previous transaction.
-        // This would not actually happen, but it allows us to confirm that no mutations
-        // are applied.
-        ['data', messages.insert('foo', {id: 456})],
-        ['commit', messages.commit(), {watermark: '08'}],
-
-        ['begin', messages.begin(), {commitWatermark: '0c'}],
-        ['data', messages.insert('foo', {id: 234})],
-        // For good measure, add new inserts that didn't appear in the previous transaction.
-        // This would not actually happen, but it allows us to confirm that no mutations
-        // are applied.
-        ['data', messages.insert('foo', {id: 654})],
-        ['commit', messages.commit(), {watermark: '0c'}],
-
-        // This should succeed.
-        ['begin', messages.begin(), {commitWatermark: '0g'}],
-        ['data', messages.insert('foo', {id: 789})],
-        ['data', messages.insert('foo', {id: 987})],
-        ['commit', messages.commit(), {watermark: '0g'}],
-      ],
-      finalCommit: '0g',
-      expectedVersionChanges: 3,
-      replicated: {
-        foo: [
-          {id: 123, big: null, ['_0_version']: '02'},
-          {id: 234, big: null, ['_0_version']: '08'},
-          {id: 789, big: null, ['_0_version']: '0c'},
-          {id: 987, big: null, ['_0_version']: '0c'},
-        ],
-      },
-      expectFailure: false,
     },
   ];
 

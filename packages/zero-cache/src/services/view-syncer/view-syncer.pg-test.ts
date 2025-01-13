@@ -337,27 +337,27 @@ async function setup(permissions: PermissionsConfig = {}) {
   );
 
   INSERT INTO "zero_ABC.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
-    VALUES ('9876', 'foo', 42, '00');
+    VALUES ('9876', 'foo', 42, '01');
   INSERT INTO "zero.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
-    VALUES (1, 2, 3, '00');  
+    VALUES (1, 2, 3, '01');  
 
-  INSERT INTO users (id, name, _0_version) VALUES ('100', 'Alice', '00');
-  INSERT INTO users (id, name, _0_version) VALUES ('101', 'Bob', '00');
-  INSERT INTO users (id, name, _0_version) VALUES ('102', 'Candice', '00');
+  INSERT INTO users (id, name, _0_version) VALUES ('100', 'Alice', '01');
+  INSERT INTO users (id, name, _0_version) VALUES ('101', 'Bob', '01');
+  INSERT INTO users (id, name, _0_version) VALUES ('102', 'Candice', '01');
 
-  INSERT INTO issues (id, title, owner, big, _0_version) VALUES ('1', 'parent issue foo', 100, 9007199254740991, '00');
-  INSERT INTO issues (id, title, owner, big, _0_version) VALUES ('2', 'parent issue bar', 101, -9007199254740991, '00');
-  INSERT INTO issues (id, title, owner, parent, big, _0_version) VALUES ('3', 'foo', 102, 1, 123, '00');
-  INSERT INTO issues (id, title, owner, parent, big, _0_version) VALUES ('4', 'bar', 101, 2, 100, '00');
+  INSERT INTO issues (id, title, owner, big, _0_version) VALUES ('1', 'parent issue foo', 100, 9007199254740991, '01');
+  INSERT INTO issues (id, title, owner, big, _0_version) VALUES ('2', 'parent issue bar', 101, -9007199254740991, '01');
+  INSERT INTO issues (id, title, owner, parent, big, _0_version) VALUES ('3', 'foo', 102, 1, 123, '01');
+  INSERT INTO issues (id, title, owner, parent, big, _0_version) VALUES ('4', 'bar', 101, 2, 100, '01');
   -- The last row should not match the ISSUES_TITLE_QUERY: "WHERE id IN (1, 2, 3, 4)"
   INSERT INTO issues (id, title, owner, parent, big, json, _0_version) VALUES 
-    ('5', 'not matched', 101, 2, 100, '[123,{"foo":456,"bar":789},"baz"]', '00');
+    ('5', 'not matched', 101, 2, 100, '[123,{"foo":456,"bar":789},"baz"]', '01');
 
-  INSERT INTO "issueLabels" (issueID, labelID, _0_version) VALUES ('1', '1', '00');
-  INSERT INTO "labels" (id, name, _0_version) VALUES ('1', 'bug', '00');
+  INSERT INTO "issueLabels" (issueID, labelID, _0_version) VALUES ('1', '1', '01');
+  INSERT INTO "labels" (id, name, _0_version) VALUES ('1', 'bug', '01');
 
-  INSERT INTO "comments" (id, issueID, text, _0_version) VALUES ('1', '1', 'comment 1', '00');
-  INSERT INTO "comments" (id, issueID, text, _0_version) VALUES ('2', '1', 'comment 2', '00');
+  INSERT INTO "comments" (id, issueID, text, _0_version) VALUES ('1', '1', 'comment 1', '01');
+  INSERT INTO "comments" (id, issueID, text, _0_version) VALUES ('2', '1', 'comment 2', '01');
   `);
 
   const cvrDB = await testDBs.create('view_syncer_service_test');
@@ -662,8 +662,8 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": "00:01",
-            "cookie": "00:02",
-            "pokeID": "00:02",
+            "cookie": "01",
+            "pokeID": "01",
             "schemaVersions": {
               "maxSupportedVersion": 3,
               "minSupportedVersion": 2,
@@ -708,7 +708,7 @@ describe('view-syncer/service', () => {
             "lastMutationIDChanges": {
               "foo": 42,
             },
-            "pokeID": "00:02",
+            "pokeID": "01",
             "rowsPatch": [
               {
                 "op": "put",
@@ -764,7 +764,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
-            "pokeID": "00:02",
+            "pokeID": "01",
           },
         ],
       ]
@@ -774,7 +774,7 @@ describe('view-syncer/service', () => {
       Result [
         {
           "clientGroupID": "9876",
-          "patchVersion": "00:02",
+          "patchVersion": "01",
           "refCounts": {
             "lmids": 1,
           },
@@ -782,59 +782,59 @@ describe('view-syncer/service', () => {
             "clientGroupID": "9876",
             "clientID": "foo",
           },
-          "rowVersion": "00",
+          "rowVersion": "01",
           "schema": "",
           "table": "zero_ABC.clients",
         },
         {
           "clientGroupID": "9876",
-          "patchVersion": "00:02",
+          "patchVersion": "01",
           "refCounts": {
             "query-hash1": 1,
           },
           "rowKey": {
             "id": "1",
           },
-          "rowVersion": "00",
+          "rowVersion": "01",
           "schema": "",
           "table": "issues",
         },
         {
           "clientGroupID": "9876",
-          "patchVersion": "00:02",
+          "patchVersion": "01",
           "refCounts": {
             "query-hash1": 1,
           },
           "rowKey": {
             "id": "2",
           },
-          "rowVersion": "00",
+          "rowVersion": "01",
           "schema": "",
           "table": "issues",
         },
         {
           "clientGroupID": "9876",
-          "patchVersion": "00:02",
+          "patchVersion": "01",
           "refCounts": {
             "query-hash1": 1,
           },
           "rowKey": {
             "id": "3",
           },
-          "rowVersion": "00",
+          "rowVersion": "01",
           "schema": "",
           "table": "issues",
         },
         {
           "clientGroupID": "9876",
-          "patchVersion": "00:02",
+          "patchVersion": "01",
           "refCounts": {
             "query-hash1": 1,
           },
           "rowKey": {
             "id": "4",
           },
-          "rowVersion": "00",
+          "rowVersion": "01",
           "schema": "",
           "table": "issues",
         },
@@ -927,156 +927,156 @@ describe('view-syncer/service', () => {
 
     stateChanges.push({state: 'version-ready'});
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
-    [
       [
-        "pokeStart",
-        {
-          "baseCookie": "00:01",
-          "cookie": "00:02",
-          "pokeID": "00:02",
-          "schemaVersions": {
-            "maxSupportedVersion": 3,
-            "minSupportedVersion": 2,
+        [
+          "pokeStart",
+          {
+            "baseCookie": "00:01",
+            "cookie": "01",
+            "pokeID": "01",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
           },
-        },
-      ],
-      [
-        "pokePart",
-        {
-          "gotQueriesPatch": [
-            {
-              "ast": {
-                "orderBy": [
-                  [
-                    "id",
-                    "asc",
-                  ],
-                ],
-                "table": "issues",
-                "where": {
-                  "left": {
-                    "name": "id",
-                    "type": "column",
-                  },
-                  "op": "IN",
-                  "right": {
-                    "type": "literal",
-                    "value": [
-                      "1",
-                      "2",
-                      "3",
-                      "4",
+        ],
+        [
+          "pokePart",
+          {
+            "gotQueriesPatch": [
+              {
+                "ast": {
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
                     ],
+                  ],
+                  "table": "issues",
+                  "where": {
+                    "left": {
+                      "name": "id",
+                      "type": "column",
+                    },
+                    "op": "IN",
+                    "right": {
+                      "type": "literal",
+                      "value": [
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                      ],
+                    },
+                    "type": "simple",
                   },
-                  "type": "simple",
+                },
+                "hash": "query-hash1",
+                "op": "put",
+              },
+              {
+                "ast": {
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "issues",
+                },
+                "hash": "query-hash2",
+                "op": "put",
+              },
+            ],
+            "lastMutationIDChanges": {
+              "foo": 42,
+            },
+            "pokeID": "01",
+            "rowsPatch": [
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 9007199254740991,
+                  "id": "1",
+                  "json": null,
+                  "owner": "100",
+                  "parent": null,
+                  "title": "parent issue foo",
                 },
               },
-              "hash": "query-hash1",
-              "op": "put",
-            },
-            {
-              "ast": {
-                "orderBy": [
-                  [
-                    "id",
-                    "asc",
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": -9007199254740991,
+                  "id": "2",
+                  "json": null,
+                  "owner": "101",
+                  "parent": null,
+                  "title": "parent issue bar",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 123,
+                  "id": "3",
+                  "json": null,
+                  "owner": "102",
+                  "parent": "1",
+                  "title": "foo",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 100,
+                  "id": "4",
+                  "json": null,
+                  "owner": "101",
+                  "parent": "2",
+                  "title": "bar",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 100,
+                  "id": "5",
+                  "json": [
+                    123,
+                    {
+                      "bar": 789,
+                      "foo": 456,
+                    },
+                    "baz",
                   ],
-                ],
-                "table": "issues",
+                  "owner": "101",
+                  "parent": "2",
+                  "title": "not matched",
+                },
               },
-              "hash": "query-hash2",
-              "op": "put",
-            },
-          ],
-          "lastMutationIDChanges": {
-            "foo": 42,
+            ],
           },
-          "pokeID": "00:02",
-          "rowsPatch": [
-            {
-              "op": "put",
-              "tableName": "issues",
-              "value": {
-                "big": 9007199254740991,
-                "id": "1",
-                "json": null,
-                "owner": "100",
-                "parent": null,
-                "title": "parent issue foo",
-              },
-            },
-            {
-              "op": "put",
-              "tableName": "issues",
-              "value": {
-                "big": -9007199254740991,
-                "id": "2",
-                "json": null,
-                "owner": "101",
-                "parent": null,
-                "title": "parent issue bar",
-              },
-            },
-            {
-              "op": "put",
-              "tableName": "issues",
-              "value": {
-                "big": 123,
-                "id": "3",
-                "json": null,
-                "owner": "102",
-                "parent": "1",
-                "title": "foo",
-              },
-            },
-            {
-              "op": "put",
-              "tableName": "issues",
-              "value": {
-                "big": 100,
-                "id": "4",
-                "json": null,
-                "owner": "101",
-                "parent": "2",
-                "title": "bar",
-              },
-            },
-            {
-              "op": "put",
-              "tableName": "issues",
-              "value": {
-                "big": 100,
-                "id": "5",
-                "json": [
-                  123,
-                  {
-                    "bar": 789,
-                    "foo": 456,
-                  },
-                  "baz",
-                ],
-                "owner": "101",
-                "parent": "2",
-                "title": "not matched",
-              },
-            },
-          ],
-        },
-      ],
-      [
-        "pokeEnd",
-        {
-          "pokeID": "00:02",
-        },
-      ],
-    ]
-  `);
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "01",
+          },
+        ],
+      ]
+    `);
 
     expect(await cvrDB`SELECT * from cvr.rows`).toMatchInlineSnapshot(`
       Result [
         {
           "clientGroupID": "9876",
-          "patchVersion": "00:02",
+          "patchVersion": "01",
           "refCounts": {
             "lmids": 1,
           },
@@ -1084,13 +1084,13 @@ describe('view-syncer/service', () => {
             "clientGroupID": "9876",
             "clientID": "foo",
           },
-          "rowVersion": "00",
+          "rowVersion": "01",
           "schema": "",
           "table": "zero_ABC.clients",
         },
         {
           "clientGroupID": "9876",
-          "patchVersion": "00:02",
+          "patchVersion": "01",
           "refCounts": {
             "query-hash1": 1,
             "query-hash2": 1,
@@ -1098,13 +1098,13 @@ describe('view-syncer/service', () => {
           "rowKey": {
             "id": "1",
           },
-          "rowVersion": "00",
+          "rowVersion": "01",
           "schema": "",
           "table": "issues",
         },
         {
           "clientGroupID": "9876",
-          "patchVersion": "00:02",
+          "patchVersion": "01",
           "refCounts": {
             "query-hash1": 1,
             "query-hash2": 1,
@@ -1112,13 +1112,13 @@ describe('view-syncer/service', () => {
           "rowKey": {
             "id": "2",
           },
-          "rowVersion": "00",
+          "rowVersion": "01",
           "schema": "",
           "table": "issues",
         },
         {
           "clientGroupID": "9876",
-          "patchVersion": "00:02",
+          "patchVersion": "01",
           "refCounts": {
             "query-hash1": 1,
             "query-hash2": 1,
@@ -1126,13 +1126,13 @@ describe('view-syncer/service', () => {
           "rowKey": {
             "id": "3",
           },
-          "rowVersion": "00",
+          "rowVersion": "01",
           "schema": "",
           "table": "issues",
         },
         {
           "clientGroupID": "9876",
-          "patchVersion": "00:02",
+          "patchVersion": "01",
           "refCounts": {
             "query-hash1": 1,
             "query-hash2": 1,
@@ -1140,20 +1140,20 @@ describe('view-syncer/service', () => {
           "rowKey": {
             "id": "4",
           },
-          "rowVersion": "00",
+          "rowVersion": "01",
           "schema": "",
           "table": "issues",
         },
         {
           "clientGroupID": "9876",
-          "patchVersion": "00:02",
+          "patchVersion": "01",
           "refCounts": {
             "query-hash2": 1,
           },
           "rowKey": {
             "id": "5",
           },
-          "rowVersion": "00",
+          "rowVersion": "01",
           "schema": "",
           "table": "issues",
         },
@@ -1357,8 +1357,8 @@ describe('view-syncer/service', () => {
         "pokeStart",
         {
           "baseCookie": "00:01",
-          "cookie": "00:02",
-          "pokeID": "00:02",
+          "cookie": "01",
+          "pokeID": "01",
           "schemaVersions": {
             "maxSupportedVersion": 3,
             "minSupportedVersion": 2,
@@ -1385,9 +1385,9 @@ describe('view-syncer/service', () => {
         [
           "pokeStart",
           {
-            "baseCookie": "00:02",
-            "cookie": "01",
-            "pokeID": "01",
+            "baseCookie": "01",
+            "cookie": "123",
+            "pokeID": "123",
             "schemaVersions": {
               "maxSupportedVersion": 3,
               "minSupportedVersion": 2,
@@ -1397,7 +1397,7 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "pokeID": "01",
+            "pokeID": "123",
             "rowsPatch": [
               {
                 "op": "put",
@@ -1424,7 +1424,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
-            "pokeID": "01",
+            "pokeID": "123",
           },
         ],
       ]
@@ -1434,7 +1434,7 @@ describe('view-syncer/service', () => {
       Result [
         {
           "clientGroupID": "9876",
-          "patchVersion": "00:02",
+          "patchVersion": "01",
           "refCounts": {
             "lmids": 1,
           },
@@ -1442,50 +1442,9 @@ describe('view-syncer/service', () => {
             "clientGroupID": "9876",
             "clientID": "foo",
           },
-          "rowVersion": "00",
+          "rowVersion": "01",
           "schema": "",
           "table": "zero_ABC.clients",
-        },
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "00:02",
-          "refCounts": {
-            "query-hash1": 1,
-            "query-hash2": 1,
-          },
-          "rowKey": {
-            "id": "3",
-          },
-          "rowVersion": "00",
-          "schema": "",
-          "table": "issues",
-        },
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "00:02",
-          "refCounts": {
-            "query-hash1": 1,
-            "query-hash2": 1,
-          },
-          "rowKey": {
-            "id": "4",
-          },
-          "rowVersion": "00",
-          "schema": "",
-          "table": "issues",
-        },
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "00:02",
-          "refCounts": {
-            "query-hash2": 1,
-          },
-          "rowKey": {
-            "id": "5",
-          },
-          "rowVersion": "00",
-          "schema": "",
-          "table": "issues",
         },
         {
           "clientGroupID": "9876",
@@ -1495,7 +1454,7 @@ describe('view-syncer/service', () => {
             "query-hash2": 1,
           },
           "rowKey": {
-            "id": "1",
+            "id": "3",
           },
           "rowVersion": "01",
           "schema": "",
@@ -1504,11 +1463,52 @@ describe('view-syncer/service', () => {
         {
           "clientGroupID": "9876",
           "patchVersion": "01",
+          "refCounts": {
+            "query-hash1": 1,
+            "query-hash2": 1,
+          },
+          "rowKey": {
+            "id": "4",
+          },
+          "rowVersion": "01",
+          "schema": "",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "01",
+          "refCounts": {
+            "query-hash2": 1,
+          },
+          "rowKey": {
+            "id": "5",
+          },
+          "rowVersion": "01",
+          "schema": "",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "123",
+          "refCounts": {
+            "query-hash1": 1,
+            "query-hash2": 1,
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "rowVersion": "123",
+          "schema": "",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "123",
           "refCounts": null,
           "rowKey": {
             "id": "2",
           },
-          "rowVersion": "00",
+          "rowVersion": "01",
           "schema": "",
           "table": "issues",
         },
@@ -1525,9 +1525,9 @@ describe('view-syncer/service', () => {
         [
           "pokeStart",
           {
-            "baseCookie": "01",
-            "cookie": "123",
-            "pokeID": "123",
+            "baseCookie": "123",
+            "cookie": "124",
+            "pokeID": "124",
             "schemaVersions": {
               "maxSupportedVersion": 3,
               "minSupportedVersion": 2,
@@ -1538,7 +1538,7 @@ describe('view-syncer/service', () => {
           "pokeEnd",
           {
             "cancel": true,
-            "pokeID": "123",
+            "pokeID": "124",
           },
         ],
       ]
@@ -1550,9 +1550,9 @@ describe('view-syncer/service', () => {
         [
           "pokeStart",
           {
-            "baseCookie": "01",
-            "cookie": "123",
-            "pokeID": "123",
+            "baseCookie": "123",
+            "cookie": "124",
+            "pokeID": "124",
             "schemaVersions": {
               "maxSupportedVersion": 3,
               "minSupportedVersion": 2,
@@ -1562,7 +1562,7 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "pokeID": "123",
+            "pokeID": "124",
             "rowsPatch": [
               {
                 "id": {
@@ -1598,7 +1598,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
-            "pokeID": "123",
+            "pokeID": "124",
           },
         ],
       ]
@@ -1608,7 +1608,7 @@ describe('view-syncer/service', () => {
       Result [
         {
           "clientGroupID": "9876",
-          "patchVersion": "00:02",
+          "patchVersion": "01",
           "refCounts": {
             "lmids": 1,
           },
@@ -1616,27 +1616,16 @@ describe('view-syncer/service', () => {
             "clientGroupID": "9876",
             "clientID": "foo",
           },
-          "rowVersion": "00",
+          "rowVersion": "01",
           "schema": "",
           "table": "zero_ABC.clients",
-        },
-        {
-          "clientGroupID": "9876",
-          "patchVersion": "01",
-          "refCounts": null,
-          "rowKey": {
-            "id": "2",
-          },
-          "rowVersion": "00",
-          "schema": "",
-          "table": "issues",
         },
         {
           "clientGroupID": "9876",
           "patchVersion": "123",
           "refCounts": null,
           "rowKey": {
-            "id": "1",
+            "id": "2",
           },
           "rowVersion": "01",
           "schema": "",
@@ -1644,34 +1633,45 @@ describe('view-syncer/service', () => {
         },
         {
           "clientGroupID": "9876",
-          "patchVersion": "123",
+          "patchVersion": "124",
+          "refCounts": null,
+          "rowKey": {
+            "id": "1",
+          },
+          "rowVersion": "123",
+          "schema": "",
+          "table": "issues",
+        },
+        {
+          "clientGroupID": "9876",
+          "patchVersion": "124",
           "refCounts": null,
           "rowKey": {
             "id": "3",
           },
-          "rowVersion": "00",
+          "rowVersion": "01",
           "schema": "",
           "table": "issues",
         },
         {
           "clientGroupID": "9876",
-          "patchVersion": "123",
+          "patchVersion": "124",
           "refCounts": null,
           "rowKey": {
             "id": "4",
           },
-          "rowVersion": "00",
+          "rowVersion": "01",
           "schema": "",
           "table": "issues",
         },
         {
           "clientGroupID": "9876",
-          "patchVersion": "123",
+          "patchVersion": "124",
           "refCounts": null,
           "rowKey": {
             "id": "5",
           },
-          "rowVersion": "00",
+          "rowVersion": "01",
           "schema": "",
           "table": "issues",
         },
@@ -1826,8 +1826,8 @@ describe('view-syncer/service', () => {
         "pokeStart",
         {
           "baseCookie": "00:02",
-          "cookie": "00:03",
-          "pokeID": "00:03",
+          "cookie": "01",
+          "pokeID": "01",
           "schemaVersions": {
             "maxSupportedVersion": 3,
             "minSupportedVersion": 2,
@@ -1840,8 +1840,8 @@ describe('view-syncer/service', () => {
         "pokeStart",
         {
           "baseCookie": null,
-          "cookie": "00:03",
-          "pokeID": "00:03",
+          "cookie": "01",
+          "pokeID": "01",
           "schemaVersions": {
             "maxSupportedVersion": 3,
             "minSupportedVersion": 2,
@@ -1884,9 +1884,9 @@ describe('view-syncer/service', () => {
         [
           "pokeStart",
           {
-            "baseCookie": "00:03",
-            "cookie": "01",
-            "pokeID": "01",
+            "baseCookie": "01",
+            "cookie": "123",
+            "pokeID": "123",
             "schemaVersions": {
               "maxSupportedVersion": 3,
               "minSupportedVersion": 3,
@@ -1896,7 +1896,7 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "pokeID": "01",
+            "pokeID": "123",
             "rowsPatch": [
               {
                 "op": "put",
@@ -1923,7 +1923,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
-            "pokeID": "01",
+            "pokeID": "123",
           },
         ],
       ]
@@ -2004,8 +2004,8 @@ describe('view-syncer/service', () => {
       'pokeStart',
       {
         baseCookie: '00:01',
-        cookie: '00:02',
-        pokeID: '00:02',
+        cookie: '01',
+        pokeID: '01',
         schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
       },
     ]);
@@ -2023,9 +2023,9 @@ describe('view-syncer/service', () => {
         [
           "pokeStart",
           {
-            "baseCookie": "00:02",
-            "cookie": "01",
-            "pokeID": "01",
+            "baseCookie": "01",
+            "cookie": "07",
+            "pokeID": "07",
             "schemaVersions": {
               "maxSupportedVersion": 3,
               "minSupportedVersion": 2,
@@ -2036,7 +2036,7 @@ describe('view-syncer/service', () => {
           "pokeEnd",
           {
             "cancel": true,
-            "pokeID": "01",
+            "pokeID": "07",
           },
         ],
       ]
@@ -2048,9 +2048,9 @@ describe('view-syncer/service', () => {
         [
           "pokeStart",
           {
-            "baseCookie": "00:02",
-            "cookie": "01",
-            "pokeID": "01",
+            "baseCookie": "01",
+            "cookie": "07",
+            "pokeID": "07",
             "schemaVersions": {
               "maxSupportedVersion": 3,
               "minSupportedVersion": 2,
@@ -2060,7 +2060,7 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "pokeID": "01",
+            "pokeID": "07",
             "rowsPatch": [
               {
                 "op": "put",
@@ -2120,7 +2120,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
-            "pokeID": "01",
+            "pokeID": "07",
           },
         ],
       ]
@@ -2200,8 +2200,8 @@ describe('view-syncer/service', () => {
     const preAdvancement = (await nextPoke(client1))[0][1] as PokeStartBody;
     expect(preAdvancement).toEqual({
       baseCookie: '00:01',
-      cookie: '00:02',
-      pokeID: '00:02',
+      cookie: '01',
+      pokeID: '01',
       schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
     });
 
@@ -2239,7 +2239,7 @@ describe('view-syncer/service', () => {
           op: 'del',
         },
       ],
-      pokeID: '01',
+      pokeID: '123',
     });
 
     // Connect with another client (i.e. tab) at older version '00:02'
@@ -2260,164 +2260,164 @@ describe('view-syncer/service', () => {
     const response2 = await nextPoke(client2);
     expect(response2[1][1]).toMatchObject({
       ...advancement,
-      pokeID: '01:01',
+      pokeID: '123:01',
     });
     expect(response2).toMatchInlineSnapshot(`
+      [
         [
-          [
-            "pokeStart",
-            {
-              "baseCookie": "00:02",
-              "cookie": "01:01",
-              "pokeID": "01:01",
-              "schemaVersions": {
-                "maxSupportedVersion": 3,
-                "minSupportedVersion": 2,
-              },
+          "pokeStart",
+          {
+            "baseCookie": "01",
+            "cookie": "123:01",
+            "pokeID": "123:01",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
             },
-          ],
-          [
-            "pokePart",
-            {
-              "clientsPatch": [
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "clientsPatch": [
+              {
+                "clientID": "bar",
+                "op": "put",
+              },
+            ],
+            "desiredQueriesPatches": {
+              "bar": [
                 {
-                  "clientID": "bar",
-                  "op": "put",
-                },
-              ],
-              "desiredQueriesPatches": {
-                "bar": [
-                  {
-                    "ast": {
-                      "orderBy": [
-                        [
-                          "id",
-                          "asc",
-                        ],
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
                       ],
-                      "table": "issues",
-                      "where": {
-                        "left": {
-                          "name": "id",
-                          "type": "column",
-                        },
-                        "op": "IN",
-                        "right": {
-                          "type": "literal",
-                          "value": [
-                            "1",
-                            "2",
-                            "3",
-                            "4",
-                          ],
-                        },
-                        "type": "simple",
+                    ],
+                    "table": "issues",
+                    "where": {
+                      "left": {
+                        "name": "id",
+                        "type": "column",
                       },
+                      "op": "IN",
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                      "type": "simple",
                     },
-                    "hash": "query-hash1",
-                    "op": "put",
                   },
-                ],
-              },
-              "pokeID": "01:01",
-              "rowsPatch": [
-                {
+                  "hash": "query-hash1",
                   "op": "put",
-                  "tableName": "issues",
-                  "value": {
-                    "big": 9007199254740991,
-                    "id": "1",
-                    "json": null,
-                    "owner": "100.0",
-                    "parent": null,
-                    "title": "new title",
-                  },
-                },
-                {
-                  "id": {
-                    "id": "2",
-                  },
-                  "op": "del",
-                  "tableName": "issues",
                 },
               ],
             },
-          ],
-          [
-            "pokeEnd",
-            {
-              "pokeID": "01:01",
-            },
-          ],
-        ]
-      `);
+            "pokeID": "123:01",
+            "rowsPatch": [
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 9007199254740991,
+                  "id": "1",
+                  "json": null,
+                  "owner": "100.0",
+                  "parent": null,
+                  "title": "new title",
+                },
+              },
+              {
+                "id": {
+                  "id": "2",
+                },
+                "op": "del",
+                "tableName": "issues",
+              },
+            ],
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "123:01",
+          },
+        ],
+      ]
+    `);
 
     // client1 should be poked to get the new client2 config,
     // but no new entities.
     expect(await nextPoke(client1)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "123",
+            "cookie": "123:01",
+            "pokeID": "123:01",
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "clientsPatch": [
+              {
+                "clientID": "bar",
+                "op": "put",
+              },
+            ],
+            "desiredQueriesPatches": {
+              "bar": [
+                {
+                  "ast": {
+                    "orderBy": [
                       [
-                        [
-                          "pokeStart",
-                          {
-                            "baseCookie": "01",
-                            "cookie": "01:01",
-                            "pokeID": "01:01",
-                          },
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": {
+                      "left": {
+                        "name": "id",
+                        "type": "column",
+                      },
+                      "op": "IN",
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
                         ],
-                        [
-                          "pokePart",
-                          {
-                            "clientsPatch": [
-                              {
-                                "clientID": "bar",
-                                "op": "put",
-                              },
-                            ],
-                            "desiredQueriesPatches": {
-                              "bar": [
-                                {
-                                  "ast": {
-                                    "orderBy": [
-                                      [
-                                        "id",
-                                        "asc",
-                                      ],
-                                    ],
-                                    "table": "issues",
-                                    "where": {
-                                      "left": {
-                                        "name": "id",
-                                        "type": "column",
-                                      },
-                                      "op": "IN",
-                                      "right": {
-                                        "type": "literal",
-                                        "value": [
-                                          "1",
-                                          "2",
-                                          "3",
-                                          "4",
-                                        ],
-                                      },
-                                      "type": "simple",
-                                    },
-                                  },
-                                  "hash": "query-hash1",
-                                  "op": "put",
-                                },
-                              ],
-                            },
-                            "pokeID": "01:01",
-                          },
-                        ],
-                        [
-                          "pokeEnd",
-                          {
-                            "pokeID": "01:01",
-                          },
-                        ],
-                      ]
-                    `);
+                      },
+                      "type": "simple",
+                    },
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+            },
+            "pokeID": "123:01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "123:01",
+          },
+        ],
+      ]
+    `);
   });
 
   test('catch up new client before advancement', async () => {
@@ -2430,8 +2430,8 @@ describe('view-syncer/service', () => {
     const preAdvancement = (await nextPoke(client1))[0][1] as PokeStartBody;
     expect(preAdvancement).toEqual({
       baseCookie: '00:01',
-      cookie: '00:02',
-      pokeID: '00:02',
+      cookie: '01',
+      pokeID: '01',
       schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
     });
 
@@ -2462,8 +2462,8 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": null,
-            "cookie": "01:01",
-            "pokeID": "01:01",
+            "cookie": "123:01",
+            "pokeID": "123:01",
             "schemaVersions": {
               "maxSupportedVersion": 3,
               "minSupportedVersion": 2,
@@ -2584,7 +2584,7 @@ describe('view-syncer/service', () => {
             "lastMutationIDChanges": {
               "foo": 42,
             },
-            "pokeID": "01:01",
+            "pokeID": "123:01",
             "rowsPatch": [
               {
                 "op": "put",
@@ -2635,7 +2635,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
-            "pokeID": "01:01",
+            "pokeID": "123:01",
           },
         ],
       ]
@@ -2644,7 +2644,7 @@ describe('view-syncer/service', () => {
 
   test('waits for replica to catch up', async () => {
     // Before connecting, artificially set the CVR version to '07',
-    // which is ahead of the current replica version '00'.
+    // which is ahead of the current replica version '01'.
     const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
     await new CVRQueryDrivenUpdater(
       cvrStore,
@@ -2675,14 +2675,14 @@ describe('view-syncer/service', () => {
     await expectNoPokes(client);
 
     replica.prepare(`DELETE from issues where id = '3'`).run();
-    updateReplicationWatermark(db, '07');
+    updateReplicationWatermark(db, '06');
     stateChanges.push({state: 'version-ready'});
     await expectNoPokes(client);
 
     replica
       .prepare(`UPDATE issues SET title = 'caught up' where id = '4'`)
       .run();
-    updateReplicationWatermark(db, '09'); // Caught up with stateVersion=07, watermark=09.
+    updateReplicationWatermark(db, '07'); // Caught up with stateVersion=07, watermark=09.
     stateChanges.push({state: 'version-ready'});
 
     // The single poke should only contain issues {id='4', title='caught up'}
@@ -2805,36 +2805,6 @@ describe('view-syncer/service', () => {
     `);
   });
 
-  test('sends reset for CVR from different replica version up', async () => {
-    const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
-    await new CVRQueryDrivenUpdater(
-      cvrStore,
-      await cvrStore.load(lc, Date.now()),
-      '07',
-      '1' + REPLICA_VERSION, // Different replica version.
-    ).flush(lc, Date.now());
-
-    // Connect the client.
-    const client = connect(SYNC_CONTEXT, [
-      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
-    ]);
-
-    // Signal that the replica is ready.
-    stateChanges.push({state: 'version-ready'});
-
-    let result;
-    try {
-      result = await client.dequeue();
-    } catch (e) {
-      result = e;
-    }
-    expect(result).toBeInstanceOf(ErrorForClient);
-    expect((result as ErrorForClient).errorBody).toEqual({
-      kind: ErrorKind.ClientNotFound,
-      message: 'Replica Version mismatch: CVR=101, DB=01',
-    } satisfies ErrorBody);
-  });
-
   test('sends client not found if CVR is not found', async () => {
     // Connect the client at a non-empty base cookie.
     const client = connect({...SYNC_CONTEXT, baseCookie: '00:02'}, [
@@ -2945,57 +2915,57 @@ describe('view-syncer/service', () => {
 
     stateChanges.push({state: 'version-ready'});
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
-                  [
-                    [
-                      "pokeStart",
-                      {
-                        "baseCookie": "00:02",
-                        "cookie": "01",
-                        "pokeID": "01",
-                        "schemaVersions": {
-                          "maxSupportedVersion": 3,
-                          "minSupportedVersion": 2,
-                        },
-                      },
-                    ],
-                    [
-                      "pokePart",
-                      {
-                        "pokeID": "01",
-                        "rowsPatch": [
-                          {
-                            "id": {
-                              "issueID": "1",
-                              "labelID": "1",
-                            },
-                            "op": "del",
-                            "tableName": "issueLabels",
-                          },
-                          {
-                            "id": {
-                              "id": "1",
-                            },
-                            "op": "del",
-                            "tableName": "labels",
-                          },
-                          {
-                            "id": {
-                              "id": "2",
-                            },
-                            "op": "del",
-                            "tableName": "issues",
-                          },
-                        ],
-                      },
-                    ],
-                    [
-                      "pokeEnd",
-                      {
-                        "pokeID": "01",
-                      },
-                    ],
-                  ]
-                `);
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "01",
+            "cookie": "123",
+            "pokeID": "123",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "pokeID": "123",
+            "rowsPatch": [
+              {
+                "id": {
+                  "issueID": "1",
+                  "labelID": "1",
+                },
+                "op": "del",
+                "tableName": "issueLabels",
+              },
+              {
+                "id": {
+                  "id": "1",
+                },
+                "op": "del",
+                "tableName": "labels",
+              },
+              {
+                "id": {
+                  "id": "2",
+                },
+                "op": "del",
+                "tableName": "issues",
+              },
+            ],
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "pokeID": "123",
+          },
+        ],
+      ]
+    `);
   });
 });
 
@@ -3054,8 +3024,8 @@ describe('permissions', () => {
           "pokeStart",
           {
             "baseCookie": "00:01",
-            "cookie": "00:02",
-            "pokeID": "00:02",
+            "cookie": "01",
+            "pokeID": "01",
             "schemaVersions": {
               "maxSupportedVersion": 3,
               "minSupportedVersion": 2,
@@ -3100,13 +3070,13 @@ describe('permissions', () => {
             "lastMutationIDChanges": {
               "foo": 42,
             },
-            "pokeID": "00:02",
+            "pokeID": "01",
           },
         ],
         [
           "pokeEnd",
           {
-            "pokeID": "00:02",
+            "pokeID": "01",
           },
         ],
       ]
@@ -3132,8 +3102,8 @@ describe('permissions', () => {
           "pokeStart",
           {
             "baseCookie": null,
-            "cookie": "00:04",
-            "pokeID": "00:04",
+            "cookie": "01:02",
+            "pokeID": "01:02",
             "schemaVersions": {
               "maxSupportedVersion": 3,
               "minSupportedVersion": 2,
@@ -3254,7 +3224,7 @@ describe('permissions', () => {
             "lastMutationIDChanges": {
               "foo": 42,
             },
-            "pokeID": "00:04",
+            "pokeID": "01:02",
             "rowsPatch": [
               {
                 "op": "put",
@@ -3310,7 +3280,7 @@ describe('permissions', () => {
         [
           "pokeEnd",
           {
-            "pokeID": "00:04",
+            "pokeID": "01:02",
           },
         ],
       ]
@@ -3330,8 +3300,8 @@ describe('permissions', () => {
           "pokeStart",
           {
             "baseCookie": "00:01",
-            "cookie": "00:02",
-            "pokeID": "00:02",
+            "cookie": "01",
+            "pokeID": "01",
             "schemaVersions": {
               "maxSupportedVersion": 3,
               "minSupportedVersion": 2,
@@ -3359,13 +3329,13 @@ describe('permissions', () => {
             "lastMutationIDChanges": {
               "foo": 42,
             },
-            "pokeID": "00:02",
+            "pokeID": "01",
           },
         ],
         [
           "pokeEnd",
           {
-            "pokeID": "00:02",
+            "pokeID": "01",
           },
         ],
       ]
@@ -3394,8 +3364,8 @@ describe('permissions', () => {
           "pokeStart",
           {
             "baseCookie": "00:01",
-            "cookie": "00:02",
-            "pokeID": "00:02",
+            "cookie": "01",
+            "pokeID": "01",
             "schemaVersions": {
               "maxSupportedVersion": 3,
               "minSupportedVersion": 2,
@@ -3423,7 +3393,7 @@ describe('permissions', () => {
             "lastMutationIDChanges": {
               "foo": 42,
             },
-            "pokeID": "00:02",
+            "pokeID": "01",
             "rowsPatch": [
               {
                 "op": "put",
@@ -3449,7 +3419,7 @@ describe('permissions', () => {
         [
           "pokeEnd",
           {
-            "pokeID": "00:02",
+            "pokeID": "01",
           },
         ],
       ]

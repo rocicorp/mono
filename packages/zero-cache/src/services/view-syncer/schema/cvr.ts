@@ -27,6 +27,7 @@ export type InstancesRow = {
   grantedAt: number | null;
 };
 
+// TODO: Remove replicaVersion from the table.
 const CREATE_CVR_INSTANCES_TABLE = `
 CREATE TABLE cvr.instances (
   "clientGroupID"  TEXT PRIMARY KEY,

@@ -14,6 +14,7 @@ import {Queue} from '../../../shared/src/queue.js';
 import {randInt} from '../../../shared/src/rand.js';
 import type {AST} from '../../../zero-protocol/src/ast.js';
 import type {InitConnectionMessage} from '../../../zero-protocol/src/connect.js';
+import type {PokeStartMessage} from '../../../zero-protocol/src/poke.js';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.js';
 import {getConnectionURI, testDBs} from '../test/db.js';
 import {DbFile} from '../test/lite.js';
@@ -119,6 +120,8 @@ describe('integration', () => {
     }
   });
 
+  const WATERMARK_REGEX = /[0-9a-z]{4,}/;
+
   test.each([
     ['standalone', './server/multi/main.ts', () => env],
     [
@@ -204,14 +207,16 @@ describe('integration', () => {
       'pokeEnd',
       {pokeID: '00:01'},
     ]);
-    expect(await downstream.dequeue()).toMatchObject([
+    const contentPokeStart = (await downstream.dequeue()) as PokeStartMessage;
+    expect(contentPokeStart).toMatchObject([
       'pokeStart',
-      {pokeID: '00:02'},
+      {pokeID: /[0-9a-z]{2,}/},
     ]);
+    const contentPokeID = contentPokeStart[1].pokeID;
     expect(await downstream.dequeue()).toMatchObject([
       'pokePart',
       {
-        pokeID: '00:02',
+        pokeID: contentPokeID,
         gotQueriesPatch: [{op: 'put', hash: 'query-hash1', ast: FOO_QUERY}],
         rowsPatch: [
           {
@@ -232,7 +237,7 @@ describe('integration', () => {
     ]);
     expect(await downstream.dequeue()).toMatchObject([
       'pokeEnd',
-      {pokeID: '00:02'},
+      {pokeID: contentPokeID},
     ]);
 
     // Trigger an upstream change and verify replication.
@@ -242,12 +247,12 @@ describe('integration', () => {
 
     expect(await downstream.dequeue()).toMatchObject([
       'pokeStart',
-      {pokeID: expect.any(String)},
+      {pokeID: WATERMARK_REGEX},
     ]);
     expect(await downstream.dequeue()).toMatchObject([
       'pokePart',
       {
-        pokeID: expect.any(String),
+        pokeID: WATERMARK_REGEX,
         rowsPatch: [
           {
             op: 'put',
@@ -267,7 +272,7 @@ describe('integration', () => {
     ]);
     expect(await downstream.dequeue()).toMatchObject([
       'pokeEnd',
-      {pokeID: expect.any(String)},
+      {pokeID: WATERMARK_REGEX},
     ]);
 
     // Test TRUNCATE
@@ -276,21 +281,21 @@ describe('integration', () => {
     // One canceled poke
     expect(await downstream.dequeue()).toMatchObject([
       'pokeStart',
-      {pokeID: expect.any(String)},
+      {pokeID: WATERMARK_REGEX},
     ]);
     expect(await downstream.dequeue()).toMatchObject([
       'pokeEnd',
-      {pokeID: expect.any(String), cancel: true},
+      {pokeID: WATERMARK_REGEX, cancel: true},
     ]);
 
     expect(await downstream.dequeue()).toMatchObject([
       'pokeStart',
-      {pokeID: expect.any(String)},
+      {pokeID: WATERMARK_REGEX},
     ]);
     expect(await downstream.dequeue()).toMatchObject([
       'pokePart',
       {
-        pokeID: expect.any(String),
+        pokeID: WATERMARK_REGEX,
         rowsPatch: [
           {
             op: 'del',
@@ -307,7 +312,7 @@ describe('integration', () => {
     ]);
     expect(await downstream.dequeue()).toMatchObject([
       'pokeEnd',
-      {pokeID: expect.any(String)},
+      {pokeID: WATERMARK_REGEX},
     ]);
   });
 }, 10000);

@@ -193,18 +193,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           this.#pipelines.init();
         }
         await this.#runInLockWithCVR(async (lc, cvr) => {
-          if (
-            (cvr.replicaVersion !== null ||
-              cvr.version.stateVersion !== '00') &&
-            cvr.replicaVersion !== this.#pipelines.replicaVersion
-          ) {
-            const message = `Replica Version mismatch: CVR=${
-              cvr.replicaVersion
-            }, DB=${this.#pipelines.replicaVersion}`;
-            lc.info?.(`resetting CVR: ${message}`);
-            throw new ErrorForClient({kind: ErrorKind.ClientNotFound, message});
-          }
-
           if (this.#pipelinesSynced) {
             const result = await this.#advancePipelines(lc, cvr);
             if (result === 'success') {
