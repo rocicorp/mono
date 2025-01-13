@@ -34,12 +34,7 @@ import type {
 } from '../../../db/specs.js';
 import {StatementRunner} from '../../../db/statements.js';
 import {stringify} from '../../../types/bigint-json.js';
-import {
-  max,
-  oneAfter,
-  versionFromLexi,
-  versionToLexi,
-} from '../../../types/lexi-version.js';
+import {max, oneAfter, versionToLexi} from '../../../types/lexi-version.js';
 import {
   pgClient,
   registerPostgresTypeParsers,
@@ -211,7 +206,7 @@ class PostgresChangeSource implements ChangeSource {
           // Unlike the postgres.js client, the pg client does not have an option to
           // only use SSL if the server supports it. We achieve it manually by
           // trying SSL first, and then falling back to connecting without SSL.
-          return await this.#startStream(db, slot, clientStart, config, useSSL);
+          return await this.#startStream(slot, clientStart, config, useSSL);
         } catch (e) {
           if (e instanceof SSLUnsupportedError) {
             this.#lc.info?.('retrying upstream connection without SSL');
@@ -240,7 +235,6 @@ class PostgresChangeSource implements ChangeSource {
   }
 
   async #startStream(
-    db: PostgresDB,
     slot: string,
     clientStart: string,
     shardConfig: InternalShardConfig,
@@ -254,7 +248,7 @@ class PostgresChangeSource implements ChangeSource {
     // between tasks, query the `confirmed_flush_lsn` for the replication
     // slot only after the replication stream starts, as that is when it
     // is guaranteed not to change (i.e. until we ACK a commit).
-    const {promise: nextWatermark, resolve, reject} = resolver<string>();
+    const {promise: started, resolve, reject} = resolver();
 
     const ssl = useSSL ? {rejectUnauthorized: false} : undefined;
     const handleError = (err: Error) => {
@@ -287,12 +281,7 @@ class PostgresChangeSource implements ChangeSource {
       },
       {acknowledge: {auto: false, timeoutSeconds: 0}},
     )
-      .on('start', () =>
-        this.#getNextWatermark(db, slot, clientStart).then(
-          resolve,
-          handleError,
-        ),
-      )
+      .on('start', resolve)
       .on(
         'heartbeat',
         (lsn, _time, respond) => acker?.onHeartbeat(lsn, respond),
@@ -320,14 +309,11 @@ class PostgresChangeSource implements ChangeSource {
       )
       .then(() => changes.cancel(), handleError);
 
-    const initialWatermark = await nextWatermark;
-    this.#lc.info?.(
-      `replication stream@${slot} started at ${initialWatermark}`,
-    );
-    acker = new Acker(service, initialWatermark);
+    await started;
+    this.#lc.info?.(`started replication stream@${slot}`);
+    acker = new Acker(service, clientStart);
 
     return {
-      initialWatermark,
       changes,
       acks: {push: commit => acker.onAck(commit[2].watermark)},
     };
@@ -352,54 +338,6 @@ class PostgresChangeSource implements ChangeSource {
     if (pid) {
       this.#lc.info?.(`signaled subscriber ${pid} to shut down`);
     }
-  }
-
-  // Sometimes the `confirmed_flush_lsn` gets wiped, e.g.
-  //
-  // ```
-  //  slot_name | restart_lsn | confirmed_flush_lsn
-  //  -----------+-------------+---------------------
-  //  zero_slot | 8F/38ACB2F8 | 0/1
-  // ```
-  //
-  // Using the greatest of three values should always yield a correct result:
-  // * `clientWatermark`    : ahead of `confirmed_flush_lsn` if an ACK was lost,
-  //                          or if the `confirmed_flush_lsn` was wiped.
-  // * `confirmed_flush_lsn`: ahead of the `clientWatermark` if the ChangeDB was wiped.
-  // * `restart_lsn`        : if both the `confirmed_flush_lsn` and ChangeDB were wiped.
-  async #getNextWatermark(
-    db: PostgresDB,
-    slot: string,
-    clientStart: string,
-  ): Promise<string> {
-    const result = await db<{restart: string; confirmed: string}[]>`
-      SELECT restart_lsn as restart, confirmed_flush_lsn as confirmed FROM pg_replication_slots 
-        WHERE slot_name = ${slot}`;
-    if (result.length === 0) {
-      throw new Error(`Upstream is missing replication slot ${slot}`);
-    }
-    const {restart, confirmed} = result[0];
-    const confirmedWatermark = toLexiVersion(confirmed);
-    const restartWatermark = toLexiVersion(restart);
-
-    // Postgres sometimes stores the `confirmed_flush_lsn` as is (making it an even number),
-    // and sometimes it stores the lsn + 1.
-    // Normalize this behavior to produce consistent starting points.
-    const confirmedWatermarkIsEven =
-      versionFromLexi(confirmedWatermark) % 2n === 0n;
-
-    this.#lc.info?.(
-      `confirmed_flush_lsn:${confirmed}, restart_lsn:${restart}, clientWatermark:${fromLexiVersion(
-        clientStart,
-      )}`,
-    );
-    return max(
-      confirmedWatermarkIsEven
-        ? oneAfter(confirmedWatermark)
-        : confirmedWatermark,
-      oneAfter(restartWatermark),
-      clientStart,
-    );
   }
 }
 

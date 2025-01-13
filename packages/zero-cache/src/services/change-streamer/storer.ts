@@ -157,33 +157,9 @@ export class Storer implements Service {
         change: change as unknown as JSONValue,
       };
 
-      tx.pool.process(tx => [
-        // Ignore conflicts to take into account transaction replay when an
-        // acknowledgement doesn't reach upstream.
-        tx`INSERT INTO cdc."changeLog" ${tx(entry)} ON CONFLICT DO NOTHING`,
-      ]);
+      tx.pool.process(tx => [tx`INSERT INTO cdc."changeLog" ${tx(entry)}`]);
 
       if (tag === 'commit') {
-        // Sanity check that there are no records between the preCommitWatermark
-        // and the commit watermark.
-        const {count} = await tx.pool.processReadTask(async db => {
-          assert(tx);
-          const results = await db<{count: number}[]>`
-          SELECT COUNT(*) as count FROM cdc."changeLog"
-              WHERE watermark > ${tx.preCommitWatermark} AND
-                    watermark < ${entry.watermark}
-          `;
-          return results[0];
-        });
-        if (count > 0) {
-          const err = new Error(
-            `Unexpected entries between precommit ${tx.preCommitWatermark} and commit ${watermark}`,
-          );
-          tx.pool.fail(err);
-          await tx.pool.done();
-          throw err; // tx.pool.done() throws, but this makes it clearer.
-        }
-
         tx.pool.setDone();
         await tx.pool.done();
         tx = null;

@@ -643,6 +643,24 @@ describe('change-streamer/service', () => {
     await streamerDone;
   });
 
+  test('shutdown on unexpected invalid stream', async () => {
+    await streamer.subscribe({
+      id: 'myid',
+      mode: 'serving',
+      watermark: '01',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
+    changes.push(['data', messages.insert('foo', {id: 'hello'})]);
+
+    // Streamer should be shut down because of the error.
+    await streamerDone;
+
+    // Nothing should be committed
+    expect(await changeDB`SELECT watermark FROM cdc."changeLog"`).toEqual([]);
+  });
+
   test('shutdown on unexpected storage error', async () => {
     await streamer.subscribe({
       id: 'myid',
@@ -654,19 +672,19 @@ describe('change-streamer/service', () => {
 
     // Insert unexpected data simulating that the stream and store are not in the expected state.
     await changeDB`INSERT INTO cdc."changeLog" (watermark, pos, change)
-      VALUES ('03', 0, ${{intervening: 'entry'}})`;
+      VALUES ('05', 3, ${{conflicting: 'entry'}})`;
 
     changes.push(['begin', messages.begin(), {commitWatermark: '05'}]);
     changes.push(['data', messages.insert('foo', {id: 'hello'})]);
     changes.push(['data', messages.insert('foo', {id: 'world'})]);
     changes.push(['commit', messages.commit(), {watermark: '05'}]);
 
-    // Commit should not have succeeded
-    expect(await changeDB`SELECT watermark FROM cdc."changeLog"`).toEqual([
-      {watermark: '03'},
-    ]);
-
     // Streamer should be shut down because of the error.
     await streamerDone;
+
+    // Commit should not have succeeded
+    expect(await changeDB`SELECT watermark, pos FROM cdc."changeLog"`).toEqual([
+      {watermark: '05', pos: 3n},
+    ]);
   });
 });

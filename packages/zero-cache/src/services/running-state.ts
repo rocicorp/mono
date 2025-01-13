@@ -137,7 +137,7 @@ export class RunningState {
     const delay = this.#retryDelay;
     this.#retryDelay = Math.min(delay * 2, this.#maxRetryDelay);
 
-    if (err instanceof AbortError) {
+    if (err instanceof AbortError || err instanceof UnrecoverableError) {
       this.stop(lc, err);
     } else if (this.shouldRun()) {
       if (err) {
@@ -157,4 +157,12 @@ export class RunningState {
   resetBackoff() {
     this.#retryDelay = this.#initialRetryDelay;
   }
+}
+
+/**
+ * Superclass for Errors that should bypass exponential backoff
+ * and immediately shut down the server.
+ */
+export class UnrecoverableError extends Error {
+  readonly name = 'UnrecoverableError';
 }
