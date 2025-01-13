@@ -297,7 +297,7 @@ function toDownstream(entry: ChangeEntry): WatermarkedChange {
   const {watermark, change} = entry;
   switch (change.tag) {
     case 'begin':
-      return [watermark, ['begin', change]];
+      return [watermark, ['begin', change, {commitWatermark: watermark}]];
     case 'commit':
       return [watermark, ['commit', change, {watermark}]];
     case 'rollback':
