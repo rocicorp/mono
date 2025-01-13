@@ -74,7 +74,7 @@ export class ReplicacheTest<
   }
 
   recoverMutations(): Promise<boolean> {
-    return this.#impl.recoverMutations();
+    return this.#impl.recoverMutations() as Promise<boolean>;
   }
 
   get perdag() {
