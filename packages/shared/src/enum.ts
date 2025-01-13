@@ -1,5 +1,4 @@
 /**
- *
  * The way to transition old TS enums to non TS enums is to do:
  *
  * ```
