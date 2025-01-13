@@ -17,6 +17,12 @@ export function useSoftNav() {
       if (url.origin !== window.location.origin) {
         return null;
       }
+
+      // We need to do hard nav for login due to redirects.
+      if (url.pathname.startsWith('/api/login/')) {
+        return null;
+      }
+
       return elm;
     };
 
