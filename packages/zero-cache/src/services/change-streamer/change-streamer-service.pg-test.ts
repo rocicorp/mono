@@ -120,7 +120,7 @@ describe('change-streamer/service', () => {
     });
     const downstream = drainToQueue(sub);
 
-    changes.push(['begin', messages.begin()]);
+    changes.push(['begin', messages.begin(), {commitWatermark: '09'}]);
     changes.push(['data', messages.insert('foo', {id: 'hello'})]);
     changes.push(['data', messages.insert('foo', {id: 'world'})]);
     changes.push([
@@ -159,7 +159,7 @@ describe('change-streamer/service', () => {
 
   test('subscriber catchup and continuation', async () => {
     // Process some changes upstream.
-    changes.push(['begin', messages.begin()]);
+    changes.push(['begin', messages.begin(), {commitWatermark: '09'}]);
     changes.push(['data', messages.insert('foo', {id: 'hello'})]);
     changes.push(['data', messages.insert('foo', {id: 'world'})]);
     changes.push([
@@ -178,7 +178,7 @@ describe('change-streamer/service', () => {
     });
 
     // Process more upstream changes.
-    changes.push(['begin', messages.begin()]);
+    changes.push(['begin', messages.begin(), {commitWatermark: '0b'}]);
     changes.push(['data', messages.delete('foo', {id: 'world'})]);
     changes.push([
       'commit',
@@ -231,7 +231,7 @@ describe('change-streamer/service', () => {
 
   test('subscriber catchup and continuation after rollback', async () => {
     // Process some changes upstream.
-    changes.push(['begin', messages.begin()]);
+    changes.push(['begin', messages.begin(), {commitWatermark: '09'}]);
     changes.push(['data', messages.insert('foo', {id: 'hello'})]);
     changes.push(['data', messages.insert('foo', {id: 'world'})]);
     changes.push([
@@ -250,7 +250,7 @@ describe('change-streamer/service', () => {
     });
 
     // Process more upstream changes.
-    changes.push(['begin', messages.begin()]);
+    changes.push(['begin', messages.begin(), {commitWatermark: '0a'}]);
     changes.push(['data', messages.delete('foo', {id: 'world'})]);
     changes.push(['rollback', messages.rollback()]);
 
@@ -301,7 +301,7 @@ describe('change-streamer/service', () => {
     });
     const downstream = drainToQueue(sub);
 
-    changes.push(['begin', messages.begin()]);
+    changes.push(['begin', messages.begin(), {commitWatermark: '09'}]);
     changes.push([
       'data',
       messages.insert('foo', {
@@ -656,7 +656,7 @@ describe('change-streamer/service', () => {
     await changeDB`INSERT INTO cdc."changeLog" (watermark, pos, change)
       VALUES ('03', 0, ${{intervening: 'entry'}})`;
 
-    changes.push(['begin', messages.begin()]);
+    changes.push(['begin', messages.begin(), {commitWatermark: '05'}]);
     changes.push(['data', messages.insert('foo', {id: 'hello'})]);
     changes.push(['data', messages.insert('foo', {id: 'world'})]);
     changes.push(['commit', messages.commit(), {watermark: '05'}]);

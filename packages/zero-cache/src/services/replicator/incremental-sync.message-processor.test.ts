@@ -47,7 +47,7 @@ describe('replicator/message-processor', () => {
     {
       name: 'malformed replication stream',
       messages: [
-        ['begin', messages.begin()],
+        ['begin', messages.begin(), {commitWatermark: '07'}],
         ['data', messages.insert('foo', {id: 123})],
         ['data', messages.insert('foo', {id: 234})],
         ['commit', messages.commit(), {watermark: '07'}],
@@ -58,7 +58,7 @@ describe('replicator/message-processor', () => {
         ['commit', messages.commit(), {watermark: '0a'}],
 
         // This should be dropped.
-        ['begin', messages.begin()],
+        ['begin', messages.begin(), {commitWatermark: '0e'}],
         ['data', messages.insert('foo', {id: 789})],
         ['data', messages.insert('foo', {id: 987})],
         ['commit', messages.commit(), {watermark: '0e'}],
@@ -76,17 +76,17 @@ describe('replicator/message-processor', () => {
     {
       name: 'transaction replay',
       messages: [
-        ['begin', messages.begin()],
+        ['begin', messages.begin(), {commitWatermark: '08'}],
         ['data', messages.insert('foo', {id: 123})],
         ['commit', messages.commit(), {watermark: '08'}],
 
-        ['begin', messages.begin()],
+        ['begin', messages.begin(), {commitWatermark: '0c'}],
         ['data', messages.insert('foo', {id: 234})],
         ['commit', messages.commit(), {watermark: '0c'}],
 
         // Simulate Postgres resending the first two transactions (e.g. reconnecting after
         // the acknowledgements were lost). Both should be dropped (i.e. rolled back).
-        ['begin', messages.begin()],
+        ['begin', messages.begin(), {commitWatermark: '08'}],
         ['data', messages.insert('foo', {id: 123})],
         // For good measure, add new inserts that didn't appear in the previous transaction.
         // This would not actually happen, but it allows us to confirm that no mutations
@@ -94,7 +94,7 @@ describe('replicator/message-processor', () => {
         ['data', messages.insert('foo', {id: 456})],
         ['commit', messages.commit(), {watermark: '08'}],
 
-        ['begin', messages.begin()],
+        ['begin', messages.begin(), {commitWatermark: '0c'}],
         ['data', messages.insert('foo', {id: 234})],
         // For good measure, add new inserts that didn't appear in the previous transaction.
         // This would not actually happen, but it allows us to confirm that no mutations
@@ -103,7 +103,7 @@ describe('replicator/message-processor', () => {
         ['commit', messages.commit(), {watermark: '0c'}],
 
         // This should succeed.
-        ['begin', messages.begin()],
+        ['begin', messages.begin(), {commitWatermark: '0g'}],
         ['data', messages.insert('foo', {id: 789})],
         ['data', messages.insert('foo', {id: 987})],
         ['commit', messages.commit(), {watermark: '0g'}],
@@ -155,7 +155,11 @@ describe('replicator/message-processor', () => {
     const processor = createMessageProcessor(replica);
 
     expect(replica.inTransaction).toBe(false);
-    processor.processMessage(lc, ['begin', {tag: 'begin'}]);
+    processor.processMessage(lc, [
+      'begin',
+      {tag: 'begin'},
+      {commitWatermark: '0a'},
+    ]);
     expect(replica.inTransaction).toBe(true);
     processor.processMessage(lc, ['rollback', {tag: 'rollback'}]);
     expect(replica.inTransaction).toBe(false);
@@ -165,7 +169,11 @@ describe('replicator/message-processor', () => {
     const processor = createMessageProcessor(replica);
 
     expect(replica.inTransaction).toBe(false);
-    processor.processMessage(lc, ['begin', {tag: 'begin'}]);
+    processor.processMessage(lc, [
+      'begin',
+      {tag: 'begin'},
+      {commitWatermark: '0e'},
+    ]);
     expect(replica.inTransaction).toBe(true);
     processor.abort(lc);
     expect(replica.inTransaction).toBe(false);

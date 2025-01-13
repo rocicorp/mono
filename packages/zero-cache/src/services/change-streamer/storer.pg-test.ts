@@ -108,7 +108,7 @@ describe('change-streamer/storer', () => {
     const [sub, _, stream] = createSubscriber('00');
 
     // This should be buffered until catchup is complete.
-    sub.send(['07', ['begin', messages.begin()]]);
+    sub.send(['07', ['begin', messages.begin(), {commitWatermark: '08'}]]);
     sub.send(['08', ['commit', messages.commit(), {watermark: '08'}]]);
 
     // Catchup should start immediately since there are no txes in progress.
@@ -121,6 +121,9 @@ describe('change-streamer/storer', () => {
           {
             "foo": "bar",
             "tag": "begin",
+          },
+          {
+            "commitWatermark": "02",
           },
         ],
         [
@@ -145,6 +148,9 @@ describe('change-streamer/storer', () => {
             "boo": "dar",
             "tag": "begin",
           },
+          {
+            "commitWatermark": "04",
+          },
         ],
         [
           "data",
@@ -166,6 +172,9 @@ describe('change-streamer/storer', () => {
           "begin",
           {
             "tag": "begin",
+          },
+          {
+            "commitWatermark": "08",
           },
         ],
         [
@@ -218,19 +227,19 @@ describe('change-streamer/storer', () => {
     const [sub2, _1, stream2] = createSubscriber('06');
 
     // This should be buffered until catchup is complete.
-    sub1.send(['09', ['begin', messages.begin()]]);
+    sub1.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
     sub1.send([
       '0a',
       ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
     ]);
-    sub2.send(['09', ['begin', messages.begin()]]);
+    sub2.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
     sub2.send([
       '0a',
       ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
     ]);
 
     // Start a transaction before enqueuing catchup.
-    storer.store(['07', ['begin', messages.begin()]]);
+    storer.store(['07', ['begin', messages.begin(), {commitWatermark: '08'}]]);
     // Enqueue catchup before transaction completes.
     storer.catchup(sub1);
     storer.catchup(sub2);
@@ -249,6 +258,9 @@ describe('change-streamer/storer', () => {
           {
             "boo": "dar",
             "tag": "begin",
+          },
+          {
+            "commitWatermark": "04",
           },
         ],
         [
@@ -272,6 +284,9 @@ describe('change-streamer/storer', () => {
           {
             "tag": "begin",
           },
+          {
+            "commitWatermark": "07",
+          },
         ],
         [
           "commit",
@@ -287,6 +302,9 @@ describe('change-streamer/storer', () => {
           "begin",
           {
             "tag": "begin",
+          },
+          {
+            "commitWatermark": "0a",
           },
         ],
         [
@@ -311,6 +329,9 @@ describe('change-streamer/storer', () => {
           {
             "tag": "begin",
           },
+          {
+            "commitWatermark": "07",
+          },
         ],
         [
           "commit",
@@ -326,6 +347,9 @@ describe('change-streamer/storer', () => {
           "begin",
           {
             "tag": "begin",
+          },
+          {
+            "commitWatermark": "0a",
           },
         ],
         [
@@ -423,19 +447,19 @@ describe('change-streamer/storer', () => {
     const [sub2, _1, stream2] = createSubscriber('06');
 
     // This should be buffered until catchup is complete.
-    sub1.send(['09', ['begin', messages.begin()]]);
+    sub1.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
     sub1.send([
       '0a',
       ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
     ]);
-    sub2.send(['09', ['begin', messages.begin()]]);
+    sub2.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
     sub2.send([
       '0a',
       ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
     ]);
 
     // Start a transaction before enqueuing catchup.
-    storer.store(['07', ['begin', messages.begin()]]);
+    storer.store(['07', ['begin', messages.begin(), {commitWatermark: '08'}]]);
     // Enqueue catchup before transaction completes.
     storer.catchup(sub1);
     storer.catchup(sub2);
@@ -451,6 +475,9 @@ describe('change-streamer/storer', () => {
           {
             "boo": "dar",
             "tag": "begin",
+          },
+          {
+            "commitWatermark": "04",
           },
         ],
         [
@@ -474,6 +501,9 @@ describe('change-streamer/storer', () => {
           {
             "tag": "begin",
           },
+          {
+            "commitWatermark": "0a",
+          },
         ],
         [
           "commit",
@@ -496,6 +526,9 @@ describe('change-streamer/storer', () => {
           "begin",
           {
             "tag": "begin",
+          },
+          {
+            "commitWatermark": "0a",
           },
         ],
         [
@@ -574,14 +607,14 @@ describe('change-streamer/storer', () => {
     const [sub, _0, stream] = createSubscriber('03');
 
     // This should be buffered until catchup is complete.
-    sub.send(['0b', ['begin', messages.begin()]]);
+    sub.send(['0b', ['begin', messages.begin(), {commitWatermark: '0c'}]]);
     sub.send([
       '0c',
       ['commit', messages.commit({waa: 'hoo'}), {watermark: '0c'}],
     ]);
 
     // Start a transaction before enqueuing catchup.
-    storer.store(['07', ['begin', messages.begin()]]);
+    storer.store(['07', ['begin', messages.begin(), {commitWatermark: '08'}]]);
     // Enqueue catchup before transaction completes.
     storer.catchup(sub);
     // Finish the transaction.
@@ -593,7 +626,7 @@ describe('change-streamer/storer', () => {
     // And finish another the transaction. In reality, these would be
     // sent by the forwarder, but we skip it in the test to confirm that
     // catchup doesn't include the next transaction.
-    storer.store(['09', ['begin', messages.begin()]]);
+    storer.store(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
     storer.store(['0a', ['commit', messages.commit(), {watermark: '0a'}]]);
 
     // Wait for the storer to commit that transaction.
@@ -618,6 +651,9 @@ describe('change-streamer/storer', () => {
             "boo": "dar",
             "tag": "begin",
           },
+          {
+            "commitWatermark": "04",
+          },
         ],
         [
           "data",
@@ -640,6 +676,9 @@ describe('change-streamer/storer', () => {
           {
             "tag": "begin",
           },
+          {
+            "commitWatermark": "07",
+          },
         ],
         [
           "commit",
@@ -655,6 +694,9 @@ describe('change-streamer/storer', () => {
           "begin",
           {
             "tag": "begin",
+          },
+          {
+            "commitWatermark": "0c",
           },
         ],
         [
@@ -672,7 +714,7 @@ describe('change-streamer/storer', () => {
   });
 
   test('change positioning and replay detection', async () => {
-    storer.store(['07', ['begin', messages.begin()]]);
+    storer.store(['07', ['begin', messages.begin(), {commitWatermark: '09'}]]);
     storer.store(['08', ['data', messages.truncate('issues')]]);
     storer.store([
       '09',
@@ -685,7 +727,7 @@ describe('change-streamer/storer', () => {
     ]);
 
     // Simulate a replay.
-    storer.store(['07', ['begin', messages.begin()]]);
+    storer.store(['07', ['begin', messages.begin(), {commitWatermark: '09'}]]);
     storer.store(['08', ['data', messages.truncate('issues')]]);
     storer.store([
       '09',
@@ -699,7 +741,7 @@ describe('change-streamer/storer', () => {
     ]);
 
     // Continue to the next transaction.
-    storer.store(['0a', ['begin', messages.begin()]]);
+    storer.store(['0a', ['begin', messages.begin(), {commitWatermark: '0c'}]]);
     storer.store(['0b', ['data', messages.truncate('issues')]]);
     storer.store([
       '0c',

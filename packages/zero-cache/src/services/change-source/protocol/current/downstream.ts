@@ -7,15 +7,11 @@ import {
   rollbackSchema,
 } from './data.js';
 
-const begin = v.union(
-  // TODO: Migrate to the commitWatermark containing schema.
-  v.tuple([v.literal('begin'), beginSchema]),
-  v.tuple([
-    v.literal('begin'),
-    beginSchema,
-    v.object({commitWatermark: v.string()}),
-  ]),
-);
+const begin = v.tuple([
+  v.literal('begin'),
+  beginSchema,
+  v.object({commitWatermark: v.string()}),
+]);
 const data = v.tuple([v.literal('data'), dataChangeSchema]);
 const commit = v.tuple([
   v.literal('commit'),

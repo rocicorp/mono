@@ -94,12 +94,12 @@ describe('replicator/incremental-sync', () => {
       );
       `,
       downstream: [
-        ['begin', issues.begin()],
+        ['begin', issues.begin(), {commitWatermark: '06'}],
         ['data', issues.insert('issues', {issueID: 123, bool: true})],
         ['data', issues.insert('issues', {issueID: 456, bool: false})],
         ['commit', issues.commit(), {watermark: '06'}],
 
-        ['begin', issues.begin()],
+        ['begin', issues.begin(), {commitWatermark: '0b'}],
         [
           'data',
           issues.insert('issues', {
@@ -235,7 +235,7 @@ describe('replicator/incremental-sync', () => {
       );
       `,
       downstream: [
-        ['begin', orgIssues.begin()],
+        ['begin', orgIssues.begin(), {commitWatermark: '06'}],
         [
           'data',
           orgIssues.insert('issues', {orgID: 1, issueID: 123, bool: true}),
@@ -250,7 +250,7 @@ describe('replicator/incremental-sync', () => {
         ],
         ['commit', orgIssues.commit(), {watermark: '06'}],
 
-        ['begin', orgIssues.begin()],
+        ['begin', orgIssues.begin(), {commitWatermark: '0a'}],
         [
           'data',
           orgIssues.update('issues', {
@@ -340,7 +340,7 @@ describe('replicator/incremental-sync', () => {
       );
       `,
       downstream: [
-        ['begin', orgIssues.begin()],
+        ['begin', orgIssues.begin(), {commitWatermark: '07'}],
         [
           'data',
           orgIssues.insert('issues', {orgID: 1, issueID: 123, bool: true}),
@@ -359,7 +359,7 @@ describe('replicator/incremental-sync', () => {
         ],
         ['commit', orgIssues.commit(), {watermark: '07'}],
 
-        ['begin', orgIssues.begin()],
+        ['begin', orgIssues.begin(), {commitWatermark: '0c'}],
         [
           'data',
           orgIssues.delete('issues', {orgID: 1, issueID: 123, bool: true}),
@@ -420,7 +420,7 @@ describe('replicator/incremental-sync', () => {
       CREATE TABLE baz(id INTEGER PRIMARY KEY, _0_version TEXT);
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         ['data', fooBarBaz.insert('foo', {id: 1})],
         ['data', fooBarBaz.insert('foo', {id: 2})],
         ['data', fooBarBaz.insert('foo', {id: 3})],
@@ -434,7 +434,7 @@ describe('replicator/incremental-sync', () => {
         ['data', fooBarBaz.truncate('foo')], // Redundant. Shouldn't cause problems.
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
 
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0i'}],
         ['data', fooBarBaz.truncate('foo')],
         ['data', fooBarBaz.insert('foo', {id: 101})],
         ['commit', fooBarBaz.commit(), {watermark: '0i'}],
@@ -498,7 +498,7 @@ describe('replicator/incremental-sync', () => {
       );
       `,
       downstream: [
-        ['begin', orgIssues.begin()],
+        ['begin', orgIssues.begin(), {commitWatermark: '07'}],
         ['data', tables.truncate('transaction')],
         [
           'data',
@@ -552,7 +552,7 @@ describe('replicator/incremental-sync', () => {
       );
       `,
       downstream: [
-        ['begin', orgIssues.begin()],
+        ['begin', orgIssues.begin(), {commitWatermark: '08'}],
         [
           'data',
           orgIssues.insert('issues', {orgID: 1, issueID: 123, bool: true}),
@@ -620,7 +620,7 @@ describe('replicator/incremental-sync', () => {
       name: 'create table',
       setup: ``,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         [
           'data',
           fooBarBaz.createTable({
@@ -735,7 +735,7 @@ describe('replicator/incremental-sync', () => {
         INSERT INTO foo(id, _0_version) VALUES (3, '00');
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         ['data', fooBarBaz.renameTable('foo', 'bar')],
         ['data', fooBarBaz.insert('bar', {id: 4})],
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
@@ -801,7 +801,7 @@ describe('replicator/incremental-sync', () => {
         INSERT INTO foo(id, _0_version) VALUES (3, '00');
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         [
           'data',
           fooBarBaz.addColumn('foo', 'newInt', {
@@ -936,7 +936,7 @@ describe('replicator/incremental-sync', () => {
         INSERT INTO foo(id, dropMe, _0_version) VALUES (3, 'bye', '00');
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         ['data', fooBarBaz.update('foo', {id: 3, dropMe: 'stillDropped'})],
         ['data', fooBarBaz.dropColumn('foo', 'dropMe')],
         ['data', fooBarBaz.insert('foo', {id: 4})],
@@ -997,7 +997,7 @@ describe('replicator/incremental-sync', () => {
         INSERT INTO foo(id, renameMe, _0_version) VALUES (3, 'orl', '00');
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         ['data', fooBarBaz.update('foo', {id: 3, renameMe: 'olrd'})],
         [
           'data',
@@ -1073,7 +1073,7 @@ describe('replicator/incremental-sync', () => {
         INSERT INTO foo(id, renameMe, _0_version) VALUES (3, 'orl', '00');
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         ['data', fooBarBaz.update('foo', {id: 3, renameMe: 'olrd'})],
         [
           'data',
@@ -1155,7 +1155,7 @@ describe('replicator/incremental-sync', () => {
         INSERT INTO foo(id, num, _0_version) VALUES (3, '3', '00');
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         ['data', fooBarBaz.update('foo', {id: 3, num: '1'})],
         [
           'data',
@@ -1232,7 +1232,7 @@ describe('replicator/incremental-sync', () => {
         INSERT INTO foo(id, num, _0_version) VALUES (3, '0', '00');
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         ['data', fooBarBaz.update('foo', {id: 3, num: '1'})],
         [
           'data',
@@ -1320,7 +1320,7 @@ describe('replicator/incremental-sync', () => {
         INSERT INTO foo(id, numburr, _0_version) VALUES (3, '3', '00');
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         ['data', fooBarBaz.update('foo', {id: 3, numburr: '1'})],
         [
           'data',
@@ -1395,7 +1395,7 @@ describe('replicator/incremental-sync', () => {
         INSERT INTO foo(id, _0_version) VALUES (3, '00');
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         ['data', fooBarBaz.insert('foo', {id: 4})],
         ['data', fooBarBaz.dropTable('foo')],
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
@@ -1419,7 +1419,7 @@ describe('replicator/incremental-sync', () => {
         CREATE TABLE foo(id INT8 PRIMARY KEY, handle TEXT, _0_version TEXT);
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         [
           'data',
           fooBarBaz.createIndex({
@@ -1454,7 +1454,7 @@ describe('replicator/incremental-sync', () => {
         CREATE INDEX drop_me ON foo (handle DESC);
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         ['data', fooBarBaz.dropIndex('drop_me')],
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
@@ -1477,7 +1477,7 @@ describe('replicator/incremental-sync', () => {
       name: 'reserved words in DDL',
       setup: ``,
       downstream: [
-        ['begin', tables.begin()],
+        ['begin', tables.begin(), {commitWatermark: '0e'}],
         [
           'data',
           tables.createTable({

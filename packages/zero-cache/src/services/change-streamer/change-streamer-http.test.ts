@@ -112,11 +112,11 @@ describe('change-streamer/http', () => {
     } as const;
     const sub = await client.subscribe(ctx);
 
-    downstream.push(['begin', {tag: 'begin'}]);
+    downstream.push(['begin', {tag: 'begin'}, {commitWatermark: '456'}]);
     downstream.push(['commit', {tag: 'commit'}, {watermark: '456'}]);
 
     expect(await drain(2, sub)).toEqual([
-      ['begin', {tag: 'begin'}],
+      ['begin', {tag: 'begin'}, {commitWatermark: '456'}],
       ['commit', {tag: 'commit'}, {watermark: '456'}],
     ]);
 
