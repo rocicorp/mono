@@ -2805,6 +2805,36 @@ describe('view-syncer/service', () => {
     `);
   });
 
+  test('sends reset for CVR from older replica version up', async () => {
+    const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
+    await new CVRQueryDrivenUpdater(
+      cvrStore,
+      await cvrStore.load(lc, Date.now()),
+      '07',
+      '1' + REPLICA_VERSION, // CVR is at a newer replica version.
+    ).flush(lc, Date.now());
+
+    // Connect the client.
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+
+    // Signal that the replica is ready.
+    stateChanges.push({state: 'version-ready'});
+
+    let result;
+    try {
+      result = await client.dequeue();
+    } catch (e) {
+      result = e;
+    }
+    expect(result).toBeInstanceOf(ErrorForClient);
+    expect((result as ErrorForClient).errorBody).toEqual({
+      kind: ErrorKind.ClientNotFound,
+      message: 'Cannot sync from older replica: CVR=101, DB=01',
+    } satisfies ErrorBody);
+  });
+
   test('sends client not found if CVR is not found', async () => {
     // Connect the client at a non-empty base cookie.
     const client = connect({...SYNC_CONTEXT, baseCookie: '00:02'}, [

@@ -322,8 +322,15 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     stateVersion: LexiVersion,
     replicaVersion: string,
   ) {
-    super(cvrStore, cvr, cvr.replicaVersion ?? replicaVersion);
+    super(cvrStore, cvr, replicaVersion);
 
+    assert(
+      // We should either be setting the cvr.replicaVersion for the first time, or it should
+      // be something newer than the current cvr.replicaVersion. Otherwise, the CVR should
+      // have been rejected by the ViewSyncer.
+      (cvr.replicaVersion ?? replicaVersion) <= replicaVersion,
+      `Cannot sync from an older replicaVersion: CVR=${cvr.replicaVersion}, DB=${replicaVersion}`,
+    );
     assert(stateVersion >= cvr.version.stateVersion);
     if (stateVersion > cvr.version.stateVersion) {
       this._setVersion({stateVersion});
