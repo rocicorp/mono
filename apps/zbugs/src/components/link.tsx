@@ -20,7 +20,7 @@ export const Link = memo(
       <a
         href={href}
         title={title}
-        data-zbugs-history-state={state}
+        data-zbugs-history-state={JSON.stringify(state)}
         data-zbugs-event-name={eventName}
         className={className}
       >
