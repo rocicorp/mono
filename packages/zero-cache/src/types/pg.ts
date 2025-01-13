@@ -186,8 +186,8 @@ export function pgClient(
   return postgres(connectionURI, {
     ...postgresTypeConfig(),
     onnotice,
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    max_lifetime: maxLifetimeSeconds,
+    ['max_lifetime']: maxLifetimeSeconds,
+    ['connect_timeout']: 60, // scale-from-zero dbs need more than 30 seconds
     ssl: ssl === 'disable' || ssl === 'false' ? false : (ssl as 'prefer'),
     ...options,
   });
