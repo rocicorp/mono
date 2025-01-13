@@ -9,7 +9,7 @@ import {
 } from '@rocicorp/zero';
 import type {Condition} from 'zero-protocol/src/ast.js';
 
-const userSchema = createTableSchema({
+const userSchema = {
   tableName: 'user',
   columns: {
     id: 'string',
@@ -19,7 +19,14 @@ const userSchema = createTableSchema({
     role: 'string',
   },
   primaryKey: 'id',
-});
+  relationships: {
+    createdIssues: {
+      sourceField: 'id',
+      destField: 'creatorID',
+      destSchema: () => issueSchema,
+    },
+  },
+} as const;
 
 const issueSchema = {
   tableName: 'issue',

@@ -14,7 +14,7 @@ type Props = {
   unselectedLabel?: string | undefined;
   placeholder?: string | undefined;
   allowNone?: boolean | undefined;
-  crewOnly?: boolean | undefined;
+  filter?: 'crew' | 'creators' | undefined;
 };
 
 type User = Row<Schema['tables']['user']>;
@@ -26,15 +26,23 @@ export function UserPicker({
   unselectedLabel,
   placeholder,
   allowNone = true,
-  crewOnly = false,
+  filter = undefined,
 }: Props) {
   const z = useZero();
 
   let q = z.query.user;
   if (disabled && selected?.login) {
     q = q.where('login', selected.login);
-  } else if (crewOnly) {
-    q = q.where('role', 'crew');
+  } else if (filter) {
+    if (filter === 'crew') {
+      q = q.where(({cmp, not, and}) =>
+        and(cmp('role', 'crew'), not(cmp('login', 'LIKE', 'rocibot%'))),
+      );
+    } else if (filter === 'creators') {
+      q = q.whereExists('createdIssues');
+    } else {
+      throw new Error(`Unknown filter: ${filter}`);
+    }
   }
 
   const [unsortedUsers] = useQuery(q);
