@@ -93,7 +93,7 @@
     },
     "./change-protocol": {
       "types": "./out/zero-cache/src/services/change-source/protocol/mod.d.ts",
-      "default": "./out/change-protocol.js"
+      "default": "./out/zero-cache/src/services/change-source/protocol/mod.js"
     }
   },
   "bin": {
