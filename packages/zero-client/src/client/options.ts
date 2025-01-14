@@ -38,14 +38,21 @@ export interface ZeroOptions<S extends Schema> {
   /**
    * A unique identifier for the user. Must be non-empty.
    *
-   * For efficiency, a new Zero instance will initialize its state from
-   * the persisted state of an existing Zero instance with the same
-   * `userID`, domain and browser profile.
+   * Each userID gets its own client-side storage so that the app can switch
+   * between users without losing state.
    *
    * This must match the user identified by the `auth` token if
    * `auth` is provided.
    */
   userID: string;
+
+  /**
+   * Distinguishes the storage used by this Zero instance from that of other
+   * instances with the same userID. Useful in the case where the app wants to
+   * have multiple Zero instances for the same user for different parts of the
+   * app.
+   */
+  storageKey?: string | undefined;
 
   /**
    * Determines the level of detail at which Zero logs messages about
