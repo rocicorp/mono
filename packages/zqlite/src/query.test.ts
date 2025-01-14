@@ -1,63 +1,16 @@
 import {beforeEach, expect, expectTypeOf, test} from 'vitest';
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.js';
 import {must} from '../../shared/src/must.js';
-import {normalizeTableSchema} from '../../zero-schema/src/normalize-table-schema.js';
-import {MemoryStorage} from '../../zql/src/ivm/memory-storage.js';
-import type {Source} from '../../zql/src/ivm/source.js';
 import {newQuery, type QueryDelegate} from '../../zql/src/query/query-impl.js';
 import {schemas} from '../../zql/src/query/test/testSchemas.js';
-import {Database} from './db.js';
-import {TableSource, toSQLiteTypeName} from './table-source.js';
 import type {Row} from '../../zql/src/query/query.js';
+import {createQueryDelegate} from './test/source-factory.js';
 
 let queryDelegate: QueryDelegate;
 beforeEach(() => {
-  const db = new Database(createSilentLogContext(), ':memory:');
-  const sources = new Map<string, Source>();
-  queryDelegate = {
-    getSource: (name: string) => {
-      let source = sources.get(name);
-      if (source) {
-        return source;
-      }
-      const schema = normalizeTableSchema(
-        schemas[name as keyof typeof schemas],
-      );
-
-      // create the SQLite table
-      db.exec(`
-      CREATE TABLE "${name}" (
-        ${Object.entries(schema.columns)
-          .map(([name, c]) => `"${name}" ${toSQLiteTypeName(c.type)}`)
-          .join(', ')},
-        PRIMARY KEY (${schema.primaryKey.map(k => `"${k}"`).join(', ')})
-      )`);
-
-      source = new TableSource(
-        'query.test.ts',
-        db,
-        name,
-        schema.columns,
-        schema.primaryKey,
-      );
-
-      sources.set(name, source);
-      return source;
-    },
-
-    createStorage() {
-      return new MemoryStorage();
-    },
-    addServerQuery() {
-      return () => {};
-    },
-    onTransactionCommit() {
-      return () => {};
-    },
-    batchViewUpdates<T>(applyViewUpdates: () => T): T {
-      return applyViewUpdates();
-    },
-  };
+  const queryDelegate = createQueryDelegate({
+    version: 1,
+    tables: schemas,
+  });
 
   const userSource = must(queryDelegate.getSource('user'));
   const issueSource = must(queryDelegate.getSource('issue'));
