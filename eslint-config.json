@@ -32,7 +32,6 @@
           }
         ],
         "paths": [
-          {"name": "btree", "message": "Use relative imports instead"},
           {"name": "datadog", "message": "Use relative imports instead"},
           {"name": "replicache", "message": "Use relative imports instead"},
           {

@@ -56,7 +56,6 @@ async function getExternal(includePeerDeps) {
   //
   // Instead we list the internal packages here.
   for (const dep of [
-    'btree',
     'datadog',
     'replicache',
     'shared',
