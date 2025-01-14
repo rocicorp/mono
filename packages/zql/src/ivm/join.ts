@@ -4,7 +4,13 @@ import type {Row, Value} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
 import type {Change, ChildChange} from './change.js';
 import {valuesEqual, type Node} from './data.js';
-import type {FetchRequest, Input, Output, Storage} from './operator.js';
+import {
+  throwOutput,
+  type FetchRequest,
+  type Input,
+  type Output,
+  type Storage,
+} from './operator.js';
 import type {SourceSchema} from './schema.js';
 import {take, type Stream} from './stream.js';
 
@@ -42,7 +48,7 @@ export class Join implements Input {
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
 
-  #output: Output | null = null;
+  #output: Output = throwOutput;
 
   constructor({
     parent,
@@ -122,8 +128,6 @@ export class Join implements Input {
   }
 
   #pushParent(change: Change): void {
-    assert(this.#output, 'Output not set');
-
     switch (change.type) {
       case 'add':
         this.#output.push({
@@ -194,8 +198,6 @@ export class Join implements Input {
 
   #pushChild(change: Change): void {
     const pushChildChange = (childRow: Row, change: Change) => {
-      assert(this.#output, 'Output not set');
-
       const parentNodes = this.#parent.fetch({
         constraint: Object.fromEntries(
           this.#parentKey.map((key, i) => [key, childRow[this.#childKey[i]]]),
