@@ -57,23 +57,37 @@ export async function initialSync(
     );
   }
   const {tableCopyWorkers: numWorkers, rowBatchSize} = syncOptions;
-  const upstreamDB = pgClient(lc, upstreamURI, {
-    max: numWorkers,
-  });
+  const upstreamDB = pgClient(lc, upstreamURI, {max: numWorkers});
   const replicationSession = pgClient(lc, upstreamURI, {
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    fetch_types: false, // Necessary for the streaming protocol
+    ['fetch_types']: false, // Necessary for the streaming protocol
     connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
   });
   try {
     await checkUpstreamConfig(upstreamDB);
+
+    // Kill the active_pid on the existing slot before altering publications,
+    // as deleting a publication associated with an existing subscriber causes
+    // weirdness; the active_pid becomes null and thus unable to be terminated.
+    const slotName = replicationSlot(shard.id);
+    const slots = await upstreamDB<{pid: string | null}[]>`
+    SELECT pg_terminate_backend(active_pid), active_pid as pid
+      FROM pg_replication_slots WHERE slot_name = ${slotName}`;
+    if (slots.length > 0 && slots[0].pid !== null) {
+      lc.info?.(`signaled subscriber ${slots[0].pid} to shut down`);
+    }
+
     const {publications} = await ensurePublishedTables(lc, upstreamDB, shard);
     lc.info?.(`Upstream is setup with publications [${publications}]`);
 
     const {database, host} = upstreamDB.options;
     lc.info?.(`opening replication session to ${database}@${host}`);
     const {snapshot_name: snapshot, consistent_point: lsn} =
-      await createReplicationSlot(lc, shard.id, replicationSession);
+      await createReplicationSlot(
+        lc,
+        replicationSession,
+        slotName,
+        slots.length > 0,
+      );
     const initialVersion = toLexiVersion(lsn);
 
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
@@ -158,20 +172,15 @@ type ReplicationSlot = {
 };
 /* eslint-enable @typescript-eslint/naming-convention */
 
+// Note: The replication connection does not support the extended query protocol,
+//       so all commands must be sent using sql.unsafe(). This is technically safe
+//       because all placeholder values are under our control (i.e. "slotName").
 async function createReplicationSlot(
   lc: LogContext,
-  shardID: string,
   session: postgres.Sql,
+  slotName: string,
+  dropExisting: boolean,
 ): Promise<ReplicationSlot> {
-  // Note: The replication connection does not support the extended query protocol,
-  //       so all commands must be sent using sql.unsafe(). This is technically safe
-  //       because all placeholder values are under our control (i.e. "slotName").
-  const slotName = replicationSlot(shardID);
-  const slots = await session.unsafe<{pid: string | null}[]>(
-    `SELECT pg_terminate_backend(active_pid), active_pid as pid
-       FROM pg_replication_slots WHERE slot_name = '${slotName}'`,
-  );
-
   // Because a snapshot created by CREATE_REPLICATION_SLOT only lasts for the lifetime
   // of the replication session, if there is an existing slot, it must be deleted so that
   // the slot (and corresponding snapshot) can be created anew.
@@ -180,11 +189,7 @@ async function createReplicationSlot(
   // within the lifetime of a replication session. Note that this is same requirement
   // (and behavior) for Postgres-to-Postgres initial sync:
   // https://github.com/postgres/postgres/blob/5304fec4d8a141abe6f8f6f2a6862822ec1f3598/src/backend/replication/logical/tablesync.c#L1358
-  if (slots.length > 0) {
-    const {pid} = slots[0];
-    if (pid !== null) {
-      lc.info?.(`signaled subscriber ${pid} to shut down`);
-    }
+  if (dropExisting) {
     lc.info?.(`Dropping existing replication slot ${slotName}`);
     await session.unsafe(`DROP_REPLICATION_SLOT ${slotName} WAIT`);
   }
