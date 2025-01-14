@@ -248,6 +248,7 @@ export class Zero<const S extends Schema> {
   readonly #rep: ReplicacheImpl<WithCRUD<MutatorDefs>>;
   readonly #server: HTTPString | null;
   readonly userID: string;
+  readonly storageKey: string;
 
   readonly #lc: LogContext;
   readonly #logOptions: LogOptions;
@@ -361,6 +362,7 @@ export class Zero<const S extends Schema> {
   constructor(options: ZeroOptions<S>) {
     const {
       userID,
+      storageKey,
       onOnlineChange,
       onUpdateNeeded,
       onClientStateNotFound,
@@ -401,6 +403,8 @@ export class Zero<const S extends Schema> {
       ['_zero_crud']: makeCRUDMutator(normalizedSchema),
     };
 
+    this.storageKey = storageKey ?? '';
+
     const replicacheOptions: ReplicacheOptions<WithCRUD<MutatorDefs>> = {
       // The schema stored in IDB is dependent upon both the application schema
       // and the AST schema (i.e. PROTOCOL_VERSION).
@@ -408,7 +412,7 @@ export class Zero<const S extends Schema> {
       logLevel: logOptions.logLevel,
       logSinks: [logOptions.logSink],
       mutators: replicacheMutators,
-      name: `zero-${userID}`,
+      name: `zero-${userID}-${this.storageKey}`,
       pusher: (req, reqID) => this.#pusher(req, reqID),
       puller: (req, reqID) => this.#puller(req, reqID),
       pushDelay: 0,
