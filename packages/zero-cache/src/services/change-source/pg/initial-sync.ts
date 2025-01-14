@@ -167,8 +167,9 @@ async function createReplicationSlot(
   //       so all commands must be sent using sql.unsafe(). This is technically safe
   //       because all placeholder values are under our control (i.e. "slotName").
   const slotName = replicationSlot(shardID);
-  const slots = await session.unsafe(
-    `SELECT * FROM pg_replication_slots WHERE slot_name = '${slotName}'`,
+  const slots = await session.unsafe<{pid: string | null}[]>(
+    `SELECT pg_terminate_backend(active_pid), active_pid as pid
+       FROM pg_replication_slots WHERE slot_name = '${slotName}'`,
   );
 
   // Because a snapshot created by CREATE_REPLICATION_SLOT only lasts for the lifetime
@@ -180,6 +181,10 @@ async function createReplicationSlot(
   // (and behavior) for Postgres-to-Postgres initial sync:
   // https://github.com/postgres/postgres/blob/5304fec4d8a141abe6f8f6f2a6862822ec1f3598/src/backend/replication/logical/tablesync.c#L1358
   if (slots.length > 0) {
+    const {pid} = slots[0];
+    if (pid !== null) {
+      lc.info?.(`signaled subscriber ${pid} to shut down`);
+    }
     lc.info?.(`Dropping existing replication slot ${slotName}`);
     await session.unsafe(`DROP_REPLICATION_SLOT ${slotName} WAIT`);
   }
