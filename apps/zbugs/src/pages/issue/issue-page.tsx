@@ -520,7 +520,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               selected={{login: displayed.assignee?.login}}
               placeholder="Assign to..."
               unselectedLabel="Nobody"
-              crewOnly={true}
+              filter="crew"
               onSelect={user => {
                 z.mutate.issue.update({
                   id: displayed.id,
