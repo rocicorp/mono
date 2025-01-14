@@ -94,7 +94,7 @@ export function updateReplicationWatermark(
   db.run(`UPDATE "_zero.replicationState" SET stateVersion=?`, watermark);
 }
 
-export function getReplicationVersions(db: StatementRunner): ReplicationState {
+export function getReplicationState(db: StatementRunner): ReplicationState {
   const result = db.get(`SELECT stateVersion FROM "_zero.replicationState"`);
   return v.parse(result, replicationStateSchema);
 }

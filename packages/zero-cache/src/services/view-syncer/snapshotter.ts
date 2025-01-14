@@ -21,7 +21,7 @@ import {
   TRUNCATE_OP,
 } from '../replicator/schema/change-log.js';
 import {
-  getReplicationVersions,
+  getReplicationState,
   ZERO_VERSION_COLUMN_NAME as ROW_VERSION,
 } from '../replicator/schema/replication-state.js';
 
@@ -257,7 +257,7 @@ class Snapshot {
     // Note: The subsequent read is necessary to acquire the read lock
     // (which results in the logical creation of the snapshot). Calling
     // `BEGIN CONCURRENT` alone does not result in acquiring the read lock.
-    const {stateVersion} = getReplicationVersions(db);
+    const {stateVersion} = getReplicationState(db);
     const schemaVersions = getSchemaVersions(db);
     return new Snapshot(db, stateVersion, schemaVersions);
   }
@@ -327,7 +327,7 @@ class Snapshot {
   resetToHead(): Snapshot {
     this.db.rollback();
     this.db.beginConcurrent();
-    const {stateVersion} = getReplicationVersions(this.db);
+    const {stateVersion} = getReplicationState(this.db);
     const schemaVersions = getSchemaVersions(this.db);
     return new Snapshot(this.db, stateVersion, schemaVersions);
   }
