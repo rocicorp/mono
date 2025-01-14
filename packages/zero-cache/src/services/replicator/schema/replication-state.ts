@@ -13,11 +13,9 @@ export const ZERO_VERSION_COLUMN_NAME = '_0_version';
 
 const CREATE_REPLICATION_STATE_SCHEMA =
   // replicaVersion   : A value identifying the version at which the initial sync happened, i.e.
-  //                    at which all rows were copied and initialized with `_0_version: "00"`. This
-  //                    value is used to distinguish data from other replicas (e.g. if a replica is
-  //                    reset or if there are ever multiple replicas). Data from replicas with
-  //                    different versions are incompatible, as their "00" version will correspond
-  //                    to different snapshots of the upstream database.
+  //                    the version at which all rows were copied, and to `_0_version` was set.
+  //                    This value is used to distinguish data from other replicas (e.g. if a
+  //                    replica is reset or if there are ever multiple replicas).
   // publications     : JSON stringified array of publication names
   // lock             : Auto-magic column for enforcing single-row semantics.
   `
@@ -27,14 +25,13 @@ const CREATE_REPLICATION_STATE_SCHEMA =
     lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
   );
   ` +
-  // watermark        : Lexicographically sortable watermark denoting the point from which replication
-  //                    should continue. For a Postgres upstream, for example, this is the
-  //                    LexiVersion-encoded LSN. This is also used as the state version for rows
-  //                    modified in the **next** transaction.
-  // stateVersion     : The value of the _0_version column for the newest rows in the database.
+  // stateVersion     : The latest version replicated from upstream, starting with the initial
+  //                    `replicaVersion` and moving forward to each subsequent commit watermark
+  //                    (e.g. corresponding to a Postgres LSN). Versions are represented as
+  //                    lexicographically sortable watermarks (e.g. LexiVersions).
+  //
   `
   CREATE TABLE "_zero.replicationState" (
-    watermark TEXT NOT NULL,
     stateVersion TEXT NOT NULL,
     lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
   );
@@ -53,12 +50,11 @@ const subscriptionStateSchema = v
     publications: v.parse(JSON.parse(s.publications), stringArray),
   }));
 
-const versionsSchema = v.object({
+const replicationStateSchema = v.object({
   stateVersion: v.string(),
-  nextStateVersion: v.string(),
 });
 
-export type ReplicationVersions = v.Infer<typeof versionsSchema>;
+export type ReplicationState = v.Infer<typeof replicationStateSchema>;
 
 export function initReplicationState(
   db: Database,
@@ -74,8 +70,7 @@ export function initReplicationState(
   ).run(watermark, JSON.stringify(publications.sort()));
   db.prepare(
     `
-    INSERT INTO "_zero.replicationState" 
-       (watermark, stateVersion) VALUES (?,'00')
+    INSERT INTO "_zero.replicationState" (stateVersion) VALUES (?)
     `,
   ).run(watermark);
 }
@@ -83,7 +78,7 @@ export function initReplicationState(
 export function getSubscriptionState(db: StatementRunner) {
   const result = db.get(
     `
-      SELECT c.replicaVersion, c.publications, s.watermark 
+      SELECT c.replicaVersion, c.publications, s.stateVersion as watermark
         FROM "_zero.replicationConfig" as c
         JOIN "_zero.replicationState" as s
         ON c.lock = s.lock
@@ -96,17 +91,10 @@ export function updateReplicationWatermark(
   db: StatementRunner,
   watermark: string,
 ) {
-  db.run(
-    `UPDATE "_zero.replicationState" SET stateVersion=watermark, watermark=?`,
-    watermark,
-  );
+  db.run(`UPDATE "_zero.replicationState" SET stateVersion=?`, watermark);
 }
 
-export function getReplicationVersions(
-  db: StatementRunner,
-): ReplicationVersions {
-  const result = db.get(
-    `SELECT stateVersion, watermark as nextStateVersion FROM "_zero.replicationState"`,
-  );
-  return v.parse(result, versionsSchema);
+export function getReplicationState(db: StatementRunner): ReplicationState {
+  const result = db.get(`SELECT stateVersion FROM "_zero.replicationState"`);
+  return v.parse(result, replicationStateSchema);
 }

@@ -12,6 +12,7 @@ import {
 } from '../../../db/pg-to-lite.js';
 import type {IndexSpec, PublishedTableSpec} from '../../../db/specs.js';
 import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.js';
+import type {LexiVersion} from '../../../types/lexi-version.js';
 import {liteValues} from '../../../types/lite.js';
 import {liteTableName} from '../../../types/names.js';
 import {pgClient, type PostgresDB} from '../../../types/pg.js';
@@ -73,6 +74,7 @@ export async function initialSync(
     lc.info?.(`opening replication session to ${database}@${host}`);
     const {snapshot_name: snapshot, consistent_point: lsn} =
       await createReplicationSlot(lc, shard.id, replicationSession);
+    const initialVersion = toLexiVersion(lsn);
 
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
     const copiers = startTableCopyWorkers(lc, upstreamDB, snapshot, numWorkers);
@@ -92,7 +94,9 @@ export async function initialSync(
       await Promise.all(
         tables.map(table =>
           copiers.process(db =>
-            copy(lc, table, db, tx, rowBatchSize).then(() => []),
+            copy(lc, table, db, tx, initialVersion, rowBatchSize).then(
+              () => [],
+            ),
           ),
         ),
       );
@@ -102,7 +106,7 @@ export async function initialSync(
     }
     await setInitialSchema(upstreamDB, shard.id, published);
 
-    initReplicationState(tx, publications, toLexiVersion(lsn));
+    initReplicationState(tx, publications, initialVersion);
     initChangeLog(tx);
     lc.info?.(`Synced initial data from ${publications} up to ${lsn}`);
   } finally {
@@ -225,6 +229,7 @@ async function copy(
   table: PublishedTableSpec,
   from: PostgresDB,
   to: Database,
+  initialVersion: LexiVersion,
   rowBatchSize: number,
 ) {
   let totalRows = 0;
@@ -258,10 +263,7 @@ async function copy(
   const cursor = from.unsafe(selectStmt).cursor(rowBatchSize);
   for await (const rows of cursor) {
     for (const row of rows) {
-      insertStmt.run([
-        ...liteValues(row, table),
-        '00', // initial _0_version
-      ]);
+      insertStmt.run([...liteValues(row, table), initialVersion]);
     }
     totalRows += rows.length;
     lc.debug?.(`Copied ${totalRows} rows from ${table.schema}.${table.name}`);

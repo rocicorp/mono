@@ -194,11 +194,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
         await this.#runInLockWithCVR(async (lc, cvr) => {
           if (
-            (cvr.replicaVersion !== null ||
-              cvr.version.stateVersion !== '00') &&
-            cvr.replicaVersion !== this.#pipelines.replicaVersion
+            cvr.replicaVersion !== null &&
+            cvr.version.stateVersion !== '00' &&
+            this.#pipelines.replicaVersion < cvr.replicaVersion
           ) {
-            const message = `Replica Version mismatch: CVR=${
+            const message = `Cannot sync from older replica: CVR=${
               cvr.replicaVersion
             }, DB=${this.#pipelines.replicaVersion}`;
             lc.info?.(`resetting CVR: ${message}`);

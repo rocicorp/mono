@@ -326,9 +326,10 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
     assert(
       // We should either be setting the cvr.replicaVersion for the first time, or it should
-      // be the same as the cvr.replicaVersion.
-      (cvr.replicaVersion ?? replicaVersion) === replicaVersion,
-      `CVR replicaVersion: ${cvr.replicaVersion}, DB replicaVersion: ${replicaVersion}`,
+      // be something newer than the current cvr.replicaVersion. Otherwise, the CVR should
+      // have been rejected by the ViewSyncer.
+      (cvr.replicaVersion ?? replicaVersion) <= replicaVersion,
+      `Cannot sync from an older replicaVersion: CVR=${cvr.replicaVersion}, DB=${replicaVersion}`,
     );
     assert(stateVersion >= cvr.version.stateVersion);
     if (stateVersion > cvr.version.stateVersion) {
