@@ -41,7 +41,7 @@ describe('view-syncer/pipeline-driver', () => {
     db = dbFile.connect(lc);
     initReplicationState(db, ['zero_data'], '123');
     initChangeLog(db);
-    db.exec(`
+    db.exec(/* sql */ `
       CREATE TABLE "zero.schemaVersions" (
         "lock"                INTEGER PRIMARY KEY,
         "minSupportedVersion" INTEGER,

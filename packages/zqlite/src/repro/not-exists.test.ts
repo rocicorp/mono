@@ -3,12 +3,25 @@ import {beforeEach, describe, expect, test} from 'vitest';
 import type {Schema} from '../../../zero-schema/src/schema.js';
 import {createQueryDelegate} from '../test/source-factory.js';
 import {
+  astForTestingSymbol,
   newQuery,
+  QueryImpl,
   type QueryDelegate,
 } from '../../../zql/src/query/query-impl.js';
 import {must} from '../../../shared/src/must.js';
+import type {Query, QueryType} from '../../../zql/src/query/query.js';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.js';
 
-describe('discord not-exists user report', () => {
+function ast(q: Query<TableSchema, QueryType>) {
+  return (q as QueryImpl<TableSchema, QueryType>)[astForTestingSymbol];
+}
+
+/**
+ * The user report succeeds at this level of the stack.
+ * It fails in the `pipeline-driver`.
+ * See `pipeline-driver.repro.test.ts`.
+ */
+describe('discord not-exists user report - https://discord.com/channels/830183651022471199/1326515508534579240/1326515834763612241', () => {
   let queryDelegate: QueryDelegate;
   const TYL_trackableGroup = {
     tableName: 'TYL_trackableGroup',
@@ -62,6 +75,8 @@ describe('discord not-exists user report', () => {
       )
       .related('trackableGroup');
 
+    console.log('query ast', JSON.stringify(ast(query)));
+
     const view = query.materialize();
 
     // trackable is there
@@ -87,7 +102,7 @@ describe('discord not-exists user report', () => {
       },
     });
 
-    // trackable removed due to `not exists trackableGroup where group = 'archived'`
+    // trackable is removed due to `not exists trackableGroup where group = 'archived'`
     expect(view.data).toMatchInlineSnapshot(`[]`);
 
     trackableGroupSource.push({
@@ -99,7 +114,7 @@ describe('discord not-exists user report', () => {
       },
     });
 
-    // trackable back since we deleted the archived group
+    // trackable is back since we deleted the archived group
     expect(view.data).toMatchInlineSnapshot(`
       [
         {
