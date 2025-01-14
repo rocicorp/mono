@@ -25,6 +25,7 @@ import {difference} from '../../../../../packages/shared/src/set-utils.js';
 import type {CommentRow, IssueRow, Schema, UserRow} from '../../../schema.js';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
+import {commentQuery} from '../../comment-query.js';
 import {AvatarImage} from '../../components/avatar-image.js';
 import {Button} from '../../components/button.js';
 import {CanEdit} from '../../components/can-edit.js';
@@ -61,17 +62,6 @@ const emojiToastShowDuration = 3_000;
 // One more than we display so we can detect if there are more
 // to load.
 export const INITIAL_COMMENT_LIMIT = 101;
-
-export function commentQuery(z: Zero<Schema>, displayed: IssueRow | undefined) {
-  return z.query.comment
-    .where('issueID', 'IS', displayed?.id ?? null)
-    .related('creator', creator => creator.one())
-    .related('emoji', emoji =>
-      emoji.related('creator', creator => creator.one()),
-    )
-    .orderBy('created', 'asc')
-    .orderBy('id', 'asc');
-}
 
 export function IssuePage({onReady}: {onReady: () => void}) {
   const z = useZero();
