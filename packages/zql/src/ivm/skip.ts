@@ -1,9 +1,15 @@
-import {assert} from '../../../shared/src/asserts.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import type {AddChange, Change, ChildChange, RemoveChange} from './change.js';
 import type {Comparator, Node} from './data.js';
 import {maybeSplitAndPushEditChange} from './maybe-split-and-push-edit-change.js';
-import type {FetchRequest, Input, Operator, Output, Start} from './operator.js';
+import {
+  throwOutput,
+  type FetchRequest,
+  type Input,
+  type Operator,
+  type Output,
+  type Start,
+} from './operator.js';
 import type {SourceSchema} from './schema.js';
 import type {Stream} from './stream.js';
 
@@ -21,7 +27,7 @@ export class Skip implements Operator {
   readonly #bound: Bound;
   readonly #comparator: Comparator;
 
-  #output: Output | undefined;
+  #output: Output = throwOutput;
 
   constructor(input: Input, bound: Bound) {
     this.#input = input;
@@ -74,8 +80,6 @@ export class Skip implements Operator {
   }
 
   push(change: Change): void {
-    assert(this.#output, 'Output not set');
-
     const shouldBePresent = (row: Row) => this.#shouldBePresent(row);
     if (change.type === 'edit') {
       maybeSplitAndPushEditChange(change, shouldBePresent, this.#output);

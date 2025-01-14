@@ -12,12 +12,13 @@ import {
 } from './change.js';
 import type {Constraint} from './constraint.js';
 import {compareValues, type Comparator, type Node} from './data.js';
-import type {
-  FetchRequest,
-  Input,
-  Operator,
-  Output,
-  Storage,
+import {
+  throwOutput,
+  type FetchRequest,
+  type Input,
+  type Operator,
+  type Output,
+  type Storage,
 } from './operator.js';
 import type {SourceSchema} from './schema.js';
 import {first, take, type Stream} from './stream.js';
@@ -54,7 +55,7 @@ export class Take implements Operator {
   readonly #partitionKey: PartitionKey | undefined;
   readonly #partitionKeyComparator: Comparator | undefined;
 
-  #output: Output | null = null;
+  #output: Output = throwOutput;
 
   constructor(
     input: Input,
@@ -231,8 +232,6 @@ export class Take implements Operator {
       return;
     }
 
-    assert(this.#output, 'Output not set');
-
     const {takeState, takeStateKey, maxBound, constraint} =
       this.#getStateAndConstraint(rowForChange(change));
     if (!takeState) {
@@ -385,8 +384,6 @@ export class Take implements Operator {
   }
 
   #pushEditChange(change: EditChange): void {
-    assert(this.#output, 'Output not set');
-
     if (
       this.#partitionKeyComparator &&
       this.#partitionKeyComparator(change.oldNode.row, change.node.row) !== 0
@@ -430,7 +427,7 @@ export class Take implements Operator {
         change.node.row,
         maxBound,
       );
-      this.#output!.push(change);
+      this.#output.push(change);
     };
 
     // The bounds row was changed.

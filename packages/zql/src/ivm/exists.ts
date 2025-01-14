@@ -5,12 +5,13 @@ import type {CompoundKey} from '../../../zero-protocol/src/ast.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import {rowForChange, type Change} from './change.js';
 import {normalizeUndefined, type NormalizedValue} from './data.js';
-import type {
-  FetchRequest,
-  Input,
-  Operator,
-  Output,
-  Storage,
+import {
+  throwOutput,
+  type FetchRequest,
+  type Input,
+  type Operator,
+  type Output,
+  type Storage,
 } from './operator.js';
 import type {SourceSchema} from './schema.js';
 import {first} from './stream.js';
@@ -37,7 +38,7 @@ export class Exists implements Operator {
   readonly #parentJoinKey: CompoundKey;
   readonly #skipCache: boolean;
 
-  #output: Output | undefined;
+  #output: Output = throwOutput;
 
   constructor(
     input: Input,
@@ -91,8 +92,6 @@ export class Exists implements Operator {
   }
 
   push(change: Change) {
-    assert(this.#output, 'Output not set');
-
     switch (change.type) {
       // add, remove and edit cannot change the size of the
       // this.#relationshipName relationship, so simply #pushWithFilter
@@ -216,7 +215,7 @@ export class Exists implements Operator {
   #pushWithFilter(change: Change, size?: number): void {
     const row = rowForChange(change);
     if (this.#filter(row, size)) {
-      must(this.#output).push(change);
+      this.#output.push(change);
     }
   }
 

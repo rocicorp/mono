@@ -1,8 +1,13 @@
-import {assert, unreachable} from '../../../shared/src/asserts.js';
+import {unreachable} from '../../../shared/src/asserts.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import type {Change} from './change.js';
 import type {Node} from './data.js';
-import type {FetchRequest, Input, Operator, Output} from './operator.js';
+import {
+  type FetchRequest,
+  type Input,
+  type Operator,
+  type Output,
+} from './operator.js';
 import type {SourceSchema} from './schema.js';
 import type {Stream} from './stream.js';
 
@@ -51,7 +56,6 @@ export class Snitch implements Operator {
   }
 
   fetch(req: FetchRequest): Stream<Node> {
-    assert(this.#output);
     this.#log([this.#name, 'fetch', req]);
     return this.fetchGenerator(req);
   }
@@ -69,7 +73,6 @@ export class Snitch implements Operator {
   }
 
   cleanup(req: FetchRequest) {
-    assert(this.#output);
     this.#log([this.#name, 'cleanup', req]);
     return this.#input.cleanup(req);
   }

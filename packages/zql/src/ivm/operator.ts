@@ -74,6 +74,16 @@ export interface Output {
 }
 
 /**
+ * An implementation of Output that throws if pushed to. It is used as the
+ * initial value for for an operator's output before it is set.
+ */
+export const throwOutput: Output = {
+  push(_change: Change): void {
+    throw new Error('Output not set');
+  },
+};
+
+/**
  * Operators are arranged into pipelines.
  * They are stateful.
  * Each operator is an input to the next operator in the chain and an output
