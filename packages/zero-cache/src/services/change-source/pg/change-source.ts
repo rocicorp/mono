@@ -34,7 +34,7 @@ import type {
 } from '../../../db/specs.js';
 import {StatementRunner} from '../../../db/statements.js';
 import {stringify} from '../../../types/bigint-json.js';
-import {max, oneAfter, versionToLexi} from '../../../types/lexi-version.js';
+import {oneAfter, type LexiVersion} from '../../../types/lexi-version.js';
 import {
   pgClient,
   registerPostgresTypeParsers,
@@ -282,20 +282,34 @@ class PostgresChangeSource implements ChangeSource {
       {acknowledge: {auto: false, timeoutSeconds: 0}},
     )
       .on('start', resolve)
-      .on(
-        'heartbeat',
-        (lsn, _time, respond) => acker?.onHeartbeat(lsn, respond),
-      )
-      .on('data', (lsn, msg) => {
-        acker?.onData(lsn);
+      .on('heartbeat', (lsn, time, respond) => {
+        if (respond) {
+          // immediately set a timeout that responds with a keepalive if it
+          // takes too long for the 'status' message to flow to (and back from)
+          // the change-streamer.
+          acker?.keepalive();
+
+          // lock to ensure in-order processing
+          void lock.withLock(() => {
+            changes.push([
+              'status',
+              {lsn, time},
+              {watermark: toLexiVersion(lsn)},
+            ]);
+          });
+        }
+      })
+      .on('data', (lsn, msg) =>
         // lock to ensure in-order processing
-        return lock.withLock(async () => {
+        lock.withLock(async () => {
           for (const change of await changeMaker.makeChanges(lsn, msg)) {
             changes.push(change);
           }
-        });
-      })
+        }),
+      )
       .on('error', handleError);
+
+    acker = new Acker(service);
 
     service
       .subscribe(
@@ -311,11 +325,10 @@ class PostgresChangeSource implements ChangeSource {
 
     await started;
     this.#lc.info?.(`started replication stream@${slot}`);
-    acker = new Acker(service, clientStart);
 
     return {
       changes,
-      acks: {push: commit => acker.onAck(commit[2].watermark)},
+      acks: {push: commit => acker.ack(commit[2].watermark)},
     };
   }
 
@@ -344,35 +357,40 @@ class PostgresChangeSource implements ChangeSource {
 // Exported for testing.
 export class Acker {
   #service: LogicalReplicationService;
-  #lastAck: string;
-  #lastData: string = versionToLexi(0);
+  #keepaliveTimer: NodeJS.Timeout | undefined;
 
-  constructor(service: LogicalReplicationService, initialWatermark: string) {
+  constructor(service: LogicalReplicationService) {
     this.#service = service;
-    this.#lastAck = initialWatermark;
   }
 
-  onData(lsn: string) {
-    this.#lastData = max(this.#lastData, toLexiVersion(lsn));
+  keepalive() {
+    // Sets a timeout to send a standby status update in response to
+    // a primary keepalive message.
+    //
+    // https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-PRIMARY-KEEPALIVE-MESSAGE
+    //
+    // A primary keepalive message is streamed to the change-streamer as a
+    // 'status' message, which in turn responds with an ack. However, in the
+    // event that the change-streamer is backed up processing preceding
+    // changes, this timeout will fire to send a status update that does not
+    // change the confirmed flush position. This timeout must be shorter than
+    // the `wal_sender_timeout`, which defaults to 60 seconds.
+    //
+    // https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-WAL-SENDER-TIMEOUT
+    this.#keepaliveTimer ??= setTimeout(() => this.#sendAck(), 1000);
   }
 
-  onHeartbeat(lsn: string, respond: boolean) {
-    // Heartbeats bump the last ack unless we are behind received data.
-    if (this.#lastAck >= this.#lastData) {
-      this.#lastAck = max(this.#lastAck, toLexiVersion(lsn));
-    }
-    if (respond) {
-      this.#sendAck();
-    }
+  ack(watermark: LexiVersion) {
+    this.#sendAck(watermark);
   }
 
-  onAck(lexiVersion: string) {
-    this.#lastAck = max(this.#lastAck, lexiVersion);
-    this.#sendAck();
-  }
+  #sendAck(watermark?: LexiVersion) {
+    clearTimeout(this.#keepaliveTimer);
+    this.#keepaliveTimer = undefined;
 
-  #sendAck() {
-    const lsn = fromLexiVersion(this.#lastAck);
+    // Note: Sending '0/0' means "keep alive but do not update confirmed_flush_lsn"
+    // https://github.com/postgres/postgres/blob/3edc67d337c2e498dad1cd200e460f7c63e512e6/src/backend/replication/walsender.c#L2457
+    const lsn = watermark ? fromLexiVersion(watermark) : '0/0';
     void this.#service.acknowledge(lsn);
   }
 }

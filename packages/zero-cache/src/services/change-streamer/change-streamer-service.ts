@@ -14,8 +14,8 @@ import {
   type ChangeStreamControl,
   type ChangeStreamData,
   type ChangeStreamMessage,
-  type Commit,
 } from '../change-source/protocol/current/downstream.js';
+import type {ChangeSourceUpstream} from '../change-source/protocol/current/upstream.js';
 import {
   DEFAULT_MAX_RETRY_DELAY_MS,
   RunningState,
@@ -80,10 +80,11 @@ export type ChangeStream = {
   changes: Source<ChangeStreamMessage>;
 
   /**
-   * A Sink to push the {@link Commit} messages that have been successfully
-   * stored by the {@link Storer}.
+   * A Sink to push the {@link StatusMessage}s that reflect Commits
+   * that have been successfully stored by the {@link Storer}, or
+   * downstream {@link StatusMessage}s henceforth.
    */
-  acks: Sink<Commit>;
+  acks: Sink<ChangeSourceUpstream>;
 };
 
 /** Encapsulates an upstream-specific implementation of a stream of Changes. */
@@ -281,7 +282,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       lc,
       changeDB,
       replicaVersion,
-      commit => this.#stream?.acks.push(commit),
+      consumed => this.#stream?.acks.push(['status', consumed[1], consumed[2]]),
     );
     this.#forwarder = new Forwarder();
     this.#autoReset = autoReset;
@@ -323,6 +324,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         for await (const change of stream.changes) {
           const [type, msg] = change;
           switch (type) {
+            case 'status':
+              this.#storer.status(change); // storer acks once it gets through its queue
+              continue;
             case 'control':
               await this.#handleControlMessage(msg);
               continue; // control messages are not stored/forwarded

@@ -6,6 +6,7 @@ import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {Subscription} from '../../types/subscription.js';
 import {type Commit} from '../change-source/protocol/current/downstream.js';
+import type {StatusMessage} from '../change-source/protocol/current/status.js';
 import {ReplicationMessages} from '../replicator/test-utils.js';
 import {type Downstream} from './change-streamer.js';
 import * as ErrorType from './error-type-enum.js';
@@ -18,7 +19,7 @@ describe('change-streamer/storer', () => {
   let db: PostgresDB;
   let storer: Storer;
   let done: Promise<void>;
-  let commits: Queue<Commit>;
+  let consumed: Queue<Commit | StatusMessage>;
 
   const REPLICA_VERSION = '00';
 
@@ -37,10 +38,8 @@ describe('change-streamer/storer', () => {
         ].map(row => tx`INSERT INTO cdc."changeLog" ${tx(row)}`),
       );
     });
-    commits = new Queue();
-    storer = new Storer(lc, db, REPLICA_VERSION, commit =>
-      commits.enqueue(commit),
-    );
+    consumed = new Queue();
+    storer = new Storer(lc, db, REPLICA_VERSION, msg => consumed.enqueue(msg));
     done = storer.run();
   });
 
@@ -49,6 +48,12 @@ describe('change-streamer/storer', () => {
     void storer.stop();
     await done;
   });
+
+  async function expectConsumed(...watermarks: string[]) {
+    for (const watermark of watermarks) {
+      expect((await consumed.dequeue())[2].watermark).toBe(watermark);
+    }
+  }
 
   const messages = new ReplicationMessages({issues: 'id'});
 
@@ -250,6 +255,9 @@ describe('change-streamer/storer', () => {
       ['commit', messages.commit({extra: 'stuff'}), {watermark: '08'}],
     ]);
 
+    storer.status(['status', {}, {watermark: '0e'}]);
+    storer.status(['status', {}, {watermark: '0f'}]);
+
     // Catchup should wait for the transaction to complete before querying
     // the database, and start after watermark '03'.
     expect(await drain(stream1, '0a')).toMatchInlineSnapshot(`
@@ -440,6 +448,8 @@ describe('change-streamer/storer', () => {
         },
       ]
     `);
+
+    await expectConsumed('08', '0e', '0f');
   });
 
   // Similar to "queued if transaction is in progress" but tests rollback.
@@ -466,6 +476,9 @@ describe('change-streamer/storer', () => {
     storer.catchup(sub2);
     // Rollback the transaction.
     storer.store(['08', ['rollback', messages.rollback()]]);
+
+    storer.status(['status', {}, {watermark: '0a'}]);
+    storer.status(['status', {}, {watermark: '0c'}]);
 
     // Catchup should wait for the transaction to complete before querying
     // the database, and start after watermark '03'.
@@ -602,6 +615,8 @@ describe('change-streamer/storer', () => {
         },
       ]
     `);
+
+    await expectConsumed('0a', '0c');
   });
 
   test('catchup does not include subsequent transactions', async () => {
@@ -629,6 +644,9 @@ describe('change-streamer/storer', () => {
     // catchup doesn't include the next transaction.
     storer.store(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
     storer.store(['0a', ['commit', messages.commit(), {watermark: '0a'}]]);
+
+    storer.status(['status', {}, {watermark: '0d'}]);
+    storer.status(['status', {}, {watermark: '0e'}]);
 
     // Wait for the storer to commit that transaction.
     for (let i = 0; i < 10; i++) {
@@ -712,5 +730,6 @@ describe('change-streamer/storer', () => {
         ],
       ]
     `);
+    await expectConsumed('08', '0a', '0d', '0e');
   });
 });

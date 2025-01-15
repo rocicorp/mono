@@ -19,10 +19,8 @@ import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import type {Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
-import {
-  type ChangeStreamMessage,
-  type Commit,
-} from '../change-source/protocol/current/downstream.js';
+import {type ChangeStreamMessage} from '../change-source/protocol/current/downstream.js';
+import type {StatusMessage} from '../change-source/protocol/current/status.js';
 import {
   getSubscriptionState,
   initReplicationState,
@@ -47,7 +45,7 @@ describe('change-streamer/service', () => {
   let changeDB: PostgresDB;
   let streamer: ChangeStreamerService;
   let changes: Subscription<ChangeStreamMessage>;
-  let acks: Queue<Commit>;
+  let acks: Queue<StatusMessage>;
   let streamerDone: Promise<void>;
 
   // vi.useFakeTimers() does not play well with the postgres client.
@@ -77,7 +75,7 @@ describe('change-streamer/service', () => {
           Promise.resolve({
             initialWatermark: '02',
             changes,
-            acks: {push: commit => acks.enqueue(commit)},
+            acks: {push: status => acks.enqueue(status)},
           }),
       },
       replicaConfig,
@@ -108,6 +106,12 @@ describe('change-streamer/service', () => {
     return down[1];
   }
 
+  async function expectAcks(...watermarks: string[]) {
+    for (const watermark of watermarks) {
+      expect((await acks.dequeue())[2].watermark).toBe(watermark);
+    }
+  }
+
   const messages = new ReplicationMessages({foo: 'id'});
 
   test('immediate forwarding, transaction storage', async () => {
@@ -129,6 +133,8 @@ describe('change-streamer/service', () => {
       {watermark: '09'},
     ]);
 
+    changes.push(['status', {}, {watermark: '0b'}]);
+
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
     expect(await nextChange(downstream)).toMatchObject({
       tag: 'insert',
@@ -143,8 +149,8 @@ describe('change-streamer/service', () => {
       extra: 'fields',
     });
 
-    // Await the ACK for the single commit.
-    await acks.dequeue();
+    // Await the ACK for the single commit, then the status message.
+    await expectAcks('09', '0b');
 
     const logEntries = await changeDB<
       ChangeLogEntry[]
@@ -177,6 +183,8 @@ describe('change-streamer/service', () => {
       initial: true,
     });
 
+    changes.push(['status', {}, {watermark: '0a'}]);
+
     // Process more upstream changes.
     changes.push(['begin', messages.begin(), {commitWatermark: '0b'}]);
     changes.push(['data', messages.delete('foo', {id: 'world'})]);
@@ -185,6 +193,8 @@ describe('change-streamer/service', () => {
       messages.commit({more: 'stuff'}),
       {watermark: '0b'},
     ]);
+
+    changes.push(['status', {}, {watermark: '0d'}]);
 
     // Verify that all changes were sent to the subscriber ...
     const downstream = drainToQueue(sub);
@@ -211,9 +221,8 @@ describe('change-streamer/service', () => {
       more: 'stuff',
     });
 
-    // Two commits
-    await acks.dequeue();
-    await acks.dequeue();
+    // Two commits with intervening status messages
+    await expectAcks('09', '0a', '0b', '0d');
 
     const logEntries = await changeDB<
       ChangeLogEntry[]
@@ -254,6 +263,8 @@ describe('change-streamer/service', () => {
     changes.push(['data', messages.delete('foo', {id: 'world'})]);
     changes.push(['rollback', messages.rollback()]);
 
+    changes.push(['status', {}, {watermark: '0d'}]);
+
     // Verify that all changes were sent to the subscriber ...
     const downstream = drainToQueue(sub);
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
@@ -276,8 +287,8 @@ describe('change-streamer/service', () => {
     });
     expect(await nextChange(downstream)).toMatchObject({tag: 'rollback'});
 
-    // One commit to ACK
-    await acks.dequeue();
+    // One commit to ACK, then the status message
+    await expectAcks('09', '0d');
 
     // Only the changes for the committed (i.e. first) transaction are persisted.
     const logEntries = await changeDB<
@@ -334,7 +345,7 @@ describe('change-streamer/service', () => {
       extra: 'info',
     });
 
-    await acks.dequeue();
+    await expectAcks('09');
 
     const logEntries = await changeDB<
       ChangeLogEntry[]

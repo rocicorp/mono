@@ -229,7 +229,7 @@ describe('change-source/pg', () => {
         {tag: 'commit'},
         {watermark: begin1[2]?.commitWatermark},
       ]);
-      acks.push(commit1);
+      acks.push(['status', {}, commit1[2]]);
 
       // Write more upstream changes.
       await upstream.begin(async tx => {
