@@ -1,6 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
 import {SqliteError} from '@rocicorp/zero-sqlite3';
-import {LogicalReplicationService} from 'pg-logical-replication';
 import {AbortError} from '../../../../shared/src/abort-error.js';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
 import {must} from '../../../../shared/src/must.js';
@@ -77,7 +76,6 @@ export class IncrementalSyncer {
   readonly #notifier: Notifier;
 
   readonly #state = new RunningState('IncrementalSyncer');
-  #service: LogicalReplicationService | undefined;
 
   constructor(
     id: string,
@@ -152,7 +150,6 @@ export class IncrementalSyncer {
 
   async stop(lc: LogContext, err?: unknown) {
     this.#state.stop(lc, err);
-    await this.#service?.stop();
   }
 }
 
