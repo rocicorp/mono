@@ -75,11 +75,9 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
 
   constructor(lc: LogContext, uri: string) {
     const url = new URL(uri);
-    if (!url.pathname.endsWith(V0_CHANGES_PATH)) {
-      url.pathname += url.pathname.endsWith('/')
-        ? V0_CHANGES_PATH.substring(1)
-        : V0_CHANGES_PATH;
-    }
+    url.pathname += url.pathname.endsWith('/')
+      ? V0_CHANGES_PATH.substring(1)
+      : V0_CHANGES_PATH;
     uri = url.toString();
     this.#lc = lc;
     this.#uri = uri;

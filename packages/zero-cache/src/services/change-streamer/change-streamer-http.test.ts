@@ -127,19 +127,6 @@ describe('change-streamer/http', () => {
       () => new ChangeStreamerHttpClient(lc, `${serverURL}/foo_bar/`),
     ],
     [
-      'fully specified url',
-      () =>
-        new ChangeStreamerHttpClient(lc, `${serverURL}/replication/v0/changes`),
-    ],
-    [
-      'fully specified url with path',
-      () =>
-        new ChangeStreamerHttpClient(
-          lc,
-          `${serverURL}/tenant-id/replication/v0/changes`,
-        ),
-    ],
-    [
       'websocket handoff hostname',
       () => new ChangeStreamerHttpClient(lc, `${dispatcherURL}`),
     ],
@@ -150,6 +137,10 @@ describe('change-streamer/http', () => {
     [
       'websocket handoff hostname with path',
       () => new ChangeStreamerHttpClient(lc, `${dispatcherURL}/tenant-id`),
+    ],
+    [
+      'websocket handoff hostname with path and trailing slash',
+      () => new ChangeStreamerHttpClient(lc, `${dispatcherURL}/foo_bar/`),
     ],
   ])('basic messages streamed over websocket: %s', async (_name, client) => {
     const ctx = {
