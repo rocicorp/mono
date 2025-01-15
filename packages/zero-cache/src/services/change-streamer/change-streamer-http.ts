@@ -15,10 +15,10 @@ import {
   type SubscriberContext,
 } from './change-streamer.js';
 
-const CHANGES_URL_PATTERN1 = '/replication/:version/changes';
-const CHANGES_URL_PATTERN2 = '/:base/replication/:version/changes';
+const DIRECT_PATH_PATTERN = '/replication/:version/changes';
+const TENANT_PATH_PATTERN = '/:tenant' + DIRECT_PATH_PATTERN;
 
-export const V0_CHANGES_URL = '/replication/v0/changes';
+const V0_CHANGES_PATH = '/replication/v0/changes';
 
 export class ChangeStreamerHttpServer extends HttpService {
   readonly id = 'change-streamer-http-server';
@@ -36,8 +36,8 @@ export class ChangeStreamerHttpServer extends HttpService {
 
       // fastify does not support optional path components, so we just
       // register both patterns.
-      fastify.get(CHANGES_URL_PATTERN1, {websocket: true}, this.#subscribe);
-      fastify.get(CHANGES_URL_PATTERN2, {websocket: true}, this.#subscribe);
+      fastify.get(DIRECT_PATH_PATTERN, {websocket: true}, this.#subscribe);
+      fastify.get(TENANT_PATH_PATTERN, {websocket: true}, this.#subscribe);
 
       installWebSocketReceiver<SubscriberContext>(
         fastify.websocketServer,
@@ -75,10 +75,10 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
 
   constructor(lc: LogContext, uri: string) {
     const url = new URL(uri);
-    if (!url.pathname.endsWith(V0_CHANGES_URL)) {
+    if (!url.pathname.endsWith(V0_CHANGES_PATH)) {
       url.pathname += url.pathname.endsWith('/')
-        ? V0_CHANGES_URL.substring(1)
-        : V0_CHANGES_URL;
+        ? V0_CHANGES_PATH.substring(1)
+        : V0_CHANGES_PATH;
     }
     uri = url.toString();
     this.#lc = lc;
