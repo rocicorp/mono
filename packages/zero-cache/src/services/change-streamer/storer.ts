@@ -8,13 +8,17 @@ import {TransactionPool} from '../../db/transaction-pool.js';
 import type {JSONValue} from '../../types/bigint-json.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {type Commit} from '../change-source/protocol/current/downstream.js';
+import type {StatusMessage} from '../change-source/protocol/current/status.js';
 import type {Service} from '../service.js';
 import type {WatermarkedChange} from './change-streamer-service.js';
 import {type ChangeEntry} from './change-streamer.js';
 import * as ErrorType from './error-type-enum.js';
 import {Subscriber} from './subscriber.js';
 
-type QueueEntry = ['change', WatermarkedChange] | ['subscriber', Subscriber];
+type QueueEntry =
+  | ['change', WatermarkedChange]
+  | ['subscriber', Subscriber]
+  | StatusMessage;
 
 type PendingTransaction = {
   pool: TransactionPool;
@@ -57,7 +61,7 @@ export class Storer implements Service {
   readonly #lc: LogContext;
   readonly #db: PostgresDB;
   readonly #replicaVersion: string;
-  readonly #onCommit: (c: Commit) => void;
+  readonly #onConsumed: (c: Commit | StatusMessage) => void;
   readonly #queue = new Queue<QueueEntry>();
   readonly stopped = resolver<false>();
 
@@ -65,12 +69,12 @@ export class Storer implements Service {
     lc: LogContext,
     db: PostgresDB,
     replicaVersion: string,
-    onCommit: (c: Commit) => void,
+    onConsumed: (c: Commit | StatusMessage) => void,
   ) {
     this.#lc = lc;
     this.#db = db;
     this.#replicaVersion = replicaVersion;
-    this.#onCommit = onCommit;
+    this.#onConsumed = onConsumed;
   }
 
   async getLastStoredWatermark(): Promise<string | null> {
@@ -110,20 +114,25 @@ export class Storer implements Service {
     void this.#queue.enqueue(['change', entry]);
   }
 
+  status(s: StatusMessage) {
+    void this.#queue.enqueue(s);
+  }
+
   catchup(sub: Subscriber) {
     void this.#queue.enqueue(['subscriber', sub]);
   }
 
   async run() {
     let tx: PendingTransaction | null = null;
-    let next: QueueEntry | false;
+    let msg: QueueEntry | false;
 
     const catchupQueue: Subscriber[] = [];
     while (
-      (next = await Promise.race([this.#queue.dequeue(), this.stopped.promise]))
+      (msg = await Promise.race([this.#queue.dequeue(), this.stopped.promise]))
     ) {
-      if (next[0] === 'subscriber') {
-        const subscriber = next[1];
+      const [msgType] = msg;
+      if (msgType === 'subscriber') {
+        const subscriber = msg[1];
         if (tx) {
           catchupQueue.push(subscriber); // Wait for the current tx to complete.
         } else {
@@ -131,8 +140,12 @@ export class Storer implements Service {
         }
         continue;
       }
-      // next[0] === 'change'
-      const [watermark, downstream] = next[1];
+      if (msgType === 'status') {
+        this.#onConsumed(msg);
+        continue;
+      }
+      // msgType === 'change'
+      const [watermark, downstream] = msg[1];
       const [tag, change] = downstream;
       if (tag === 'begin') {
         assert(!tx, 'received BEGIN in the middle of a transaction');
@@ -165,7 +178,7 @@ export class Storer implements Service {
         tx = null;
 
         // ACK the LSN to the upstream Postgres.
-        this.#onCommit(downstream);
+        this.#onConsumed(downstream);
 
         // Before beginning the next transaction, open a READONLY snapshot to
         // concurrently catchup any queued subscribers.

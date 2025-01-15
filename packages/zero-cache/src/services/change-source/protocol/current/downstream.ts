@@ -6,6 +6,7 @@ import {
   dataChangeSchema,
   rollbackSchema,
 } from './data.js';
+import {statusMessageSchema} from './status.js';
 
 const begin = v.tuple([
   v.literal('begin'),
@@ -38,6 +39,7 @@ export type ChangeStreamControl = v.Infer<typeof changeStreamControlSchema>;
 export const changeStreamMessageSchema = v.union(
   changeStreamDataSchema,
   changeStreamControlSchema,
+  statusMessageSchema,
 );
 
 export type ChangeStreamMessage = v.Infer<typeof changeStreamMessageSchema>;
