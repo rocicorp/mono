@@ -484,8 +484,7 @@ test('zero-cache --help', () => {
                                                       */                                                                                             
                                                      tenants: {                                                                                      
                                                         /**                                                                                          
-                                                         * Unique ID that identifies the tenant in logs (as the "tid") and is used                   
-                                                         * internally for multi-node dispatch.                                                       
+                                                         * Unique per-tenant ID used internally for multi-node dispatch.                             
                                                          *                                                                                           
                                                          * The ID may only contain alphanumeric characters, underscores, and hyphens.                
                                                          * Note that changing the ID may result in temporary disruption in multi-node                
