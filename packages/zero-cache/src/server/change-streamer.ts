@@ -75,6 +75,7 @@ export default async function runWorker(
     lc,
     changeStreamer,
     {port},
+    parent,
   );
 
   parent.send(['ready', {ready: true}]);

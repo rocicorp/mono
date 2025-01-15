@@ -37,9 +37,9 @@ export default async function runWorker(
   const replica = setupReplica(lc, fileMode, config.replicaFile);
 
   const changeStreamerPort = config.changeStreamerPort ?? config.port + 1;
-  const changeStreamer = config.changeStreamerURI
-    ? new ChangeStreamerHttpClient(lc, config.changeStreamerURI)
-    : new ChangeStreamerHttpClient(lc, changeStreamerPort);
+  const changeStreamerURI =
+    config.changeStreamerURI ?? `ws://localhost:${changeStreamerPort}`;
+  const changeStreamer = new ChangeStreamerHttpClient(lc, changeStreamerURI);
 
   const replicator = new ReplicatorService(
     lc,

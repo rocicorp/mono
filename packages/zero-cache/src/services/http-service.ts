@@ -31,13 +31,14 @@ export class HttpService implements Service {
 
   // start() is used in unit tests.
   // run() is the lifecycle method called by the ServiceRunner.
-  async start(): Promise<void> {
+  async start(): Promise<string> {
     await this.#init(this.#fastify);
     const address = await this.#fastify.listen({
       host: '::',
       port: this.#port,
     });
     this._lc.info?.(`${this.id} listening at ${address}`);
+    return address;
   }
 
   async run(): Promise<void> {
