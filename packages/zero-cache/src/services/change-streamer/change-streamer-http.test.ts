@@ -95,22 +95,20 @@ describe('change-streamer/http', () => {
 
   describe('request bad requests', () => {
     test.each([
-      [
-        'invalid querystring - missing id',
-        () => `${serverURL}/api/replication/v0/changes`,
-      ],
+      ['invalid querystring - missing id', `/api/replication/v0/changes`],
       [
         'invalid querystring - missing watermark',
-        () =>
-          `${serverURL}/api/replication/v0/changes?id=foo&replicaVersion=bar&initial=true`,
+        `/api/replication/v0/changes?id=foo&replicaVersion=bar&initial=true`,
       ],
-    ])('%s', async (error, url) => {
-      const {promise: result, resolve} = resolver<unknown>();
+    ])('%s: %s', async (error, path) => {
+      for (const baseURL of [serverURL, dispatcherURL]) {
+        const {promise: result, resolve} = resolver<unknown>();
 
-      const ws = new WebSocket(url());
-      ws.on('close', (_code, reason) => resolve(reason));
+        const ws = new WebSocket(new URL(path, baseURL));
+        ws.on('close', (_code, reason) => resolve(reason));
 
-      expect(String(await result)).toEqual(`Error: ${error}`);
+        expect(String(await result)).toEqual(`Error: ${error}`);
+      }
     });
   });
 
@@ -142,15 +140,15 @@ describe('change-streamer/http', () => {
         ),
     ],
     [
-      'dispatched hostname',
+      'websocket handoff hostname',
       () => new ChangeStreamerHttpClient(lc, `${dispatcherURL}`),
     ],
     [
-      'dispatched hostname with slash',
+      'websocket handoff hostname with slash',
       () => new ChangeStreamerHttpClient(lc, `${dispatcherURL}/`),
     ],
     [
-      'dispatched hostname with path',
+      'websocket handoff hostname with path',
       () => new ChangeStreamerHttpClient(lc, `${dispatcherURL}/tenant-id`),
     ],
   ])('basic messages streamed over websocket: %s', async (_name, client) => {
