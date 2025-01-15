@@ -2,20 +2,23 @@ import {PG_UNIQUE_VIOLATION} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import type {Enum} from '../../../shared/src/enum.js';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {Queue} from '../../../shared/src/queue.js';
 import {sleep} from '../../../shared/src/sleep.js';
 import {expectTables, testDBs} from '../test/db.js';
 import type {PostgresDB} from '../types/pg.js';
+import * as Mode from './mode-enum.js';
 import {
   importSnapshot,
-  Mode,
   sharedSnapshot,
   synchronizedSnapshots,
   TIMEOUT_TASKS,
   TransactionPool,
   type Task,
 } from './transaction-pool.js';
+
+type Mode = Enum<typeof Mode>;
 
 describe('db/transaction-pool', () => {
   let db: PostgresDB;

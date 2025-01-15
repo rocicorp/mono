@@ -9,22 +9,23 @@ import {assert} from '../../../shared/src/asserts.js';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.js';
 import * as valita from '../../../shared/src/valita.js';
 import type {AST} from '../../../zero-protocol/src/ast.js';
+import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.js';
 import {
   changeDesiredQueriesMessageSchema,
   decodeSecProtocols,
   encodeSecProtocols,
-  ErrorKind,
   initConnectionMessageSchema,
   type QueriesPatchOp,
 } from '../../../zero-protocol/src/mod.js';
+import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.js';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.js';
 import {
   type Mutation,
-  MutationType,
   pushMessageSchema,
 } from '../../../zero-protocol/src/push.js';
 import type {NullableVersion} from '../../../zero-protocol/src/version.js';
 import type {Schema} from '../../../zero-schema/src/mod.js';
+import * as ConnectionState from './connection-state-enum.js';
 import type {WSString} from './http-string.js';
 import type {UpdateNeededReason, ZeroOptions} from './options.js';
 import type {QueryManager} from './query-manager.js';
@@ -40,7 +41,6 @@ import {
 } from './test-utils.js'; // Why use fakes when we can use the real thing!
 import {
   CONNECT_TIMEOUT_MS,
-  ConnectionState,
   createSocket,
   DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
   PING_INTERVAL_MS,

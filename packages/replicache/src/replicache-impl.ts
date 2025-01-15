@@ -124,6 +124,12 @@ import {
 
 declare const TESTING: boolean;
 
+declare const process: {
+  env: {
+    ['DISABLE_MUTATION_RECOVERY']?: string | undefined;
+  };
+};
+
 /**
  * The maximum number of time to call out to getAuth before giving up
  * and throwing an error.
@@ -202,7 +208,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   readonly name: string;
 
   readonly #subscriptions: SubscriptionsManager;
-  readonly #mutationRecovery: MutationRecovery;
+  readonly #mutationRecovery: MutationRecovery | undefined;
 
   /**
    * Client groups gets disabled when the server does not know about it.
@@ -475,16 +481,18 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     const clientGroupIDResolver = resolver<string>();
     this.#clientGroupIDPromise = clientGroupIDResolver.promise;
 
-    this.#mutationRecovery = new MutationRecovery({
-      delegate: this,
-      lc: this.#lc,
-      enableMutationRecovery,
-      wrapInOnlineCheck: this.#wrapInOnlineCheck.bind(this),
-      wrapInReauthRetries: this.#wrapInReauthRetries.bind(this),
-      isPullDisabled: this.#isPullDisabled.bind(this),
-      isPushDisabled: this.#isPushDisabled.bind(this),
-      clientGroupIDPromise: this.#clientGroupIDPromise,
-    });
+    if (!process.env.DISABLE_MUTATION_RECOVERY) {
+      this.#mutationRecovery = new MutationRecovery({
+        delegate: this,
+        lc: this.#lc,
+        enableMutationRecovery,
+        wrapInOnlineCheck: this.#wrapInOnlineCheck.bind(this),
+        wrapInReauthRetries: this.#wrapInReauthRetries.bind(this),
+        isPullDisabled: this.#isPullDisabled.bind(this),
+        isPushDisabled: this.#isPushDisabled.bind(this),
+        clientGroupIDPromise: this.#clientGroupIDPromise,
+      });
+    }
 
     this.#onPersist = initOnPersistChannel(
       this.name,
@@ -1498,18 +1506,20 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     return ex;
   }
 
-  recoverMutations(): Promise<boolean> {
-    const result = this.#mutationRecovery.recoverMutations(
-      this.#ready,
-      this.perdag,
-      this.#idbDatabase,
-      this.#idbDatabases,
-      this.#kvStoreProvider.create,
-    );
-    if (TESTING) {
-      void this.onRecoverMutations(result);
+  recoverMutations(): Promise<boolean> | void {
+    if (!process.env.DISABLE_MUTATION_RECOVERY) {
+      const result = this.#mutationRecovery!.recoverMutations(
+        this.#ready,
+        this.perdag,
+        this.#idbDatabase,
+        this.#idbDatabases,
+        this.#kvStoreProvider.create,
+      );
+      if (TESTING) {
+        void this.onRecoverMutations(result);
+      }
+      return result;
     }
-    return result;
   }
 
   /**

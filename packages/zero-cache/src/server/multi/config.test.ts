@@ -14,7 +14,7 @@ test('parse options', () => {
         JSON.stringify({
           tenants: [
             {
-              id: 'tenboo',
+              id: 'ten-boo',
               host: 'Normalize.ME',
               path: 'tenboo',
               env: {
@@ -25,7 +25,7 @@ test('parse options', () => {
               },
             },
             {
-              id: 'tenbar',
+              id: 'ten_bar',
               path: '/tenbar',
               env: {
                 ['ZERO_REPLICA_FILE']: 'tenbar.db',
@@ -35,7 +35,7 @@ test('parse options', () => {
               },
             },
             {
-              id: 'tenbaz',
+              id: 'tenbaz-123',
               path: '/tenbaz',
               env: {
                 ['ZERO_REPLICA_FILE']: 'tenbar.db',
@@ -91,7 +91,7 @@ test('parse options', () => {
               "ZERO_SHARD_ID": "foo",
             },
             "host": "normalize.me",
-            "id": "tenboo",
+            "id": "ten-boo",
             "path": "/tenboo",
           },
           {
@@ -101,7 +101,7 @@ test('parse options', () => {
               "ZERO_REPLICA_FILE": "tenbar.db",
               "ZERO_SHARD_ID": "bar",
             },
-            "id": "tenbar",
+            "id": "ten_bar",
             "path": "/tenbar",
           },
           {
@@ -112,7 +112,7 @@ test('parse options', () => {
               "ZERO_SHARD_ID": "foo",
               "ZERO_UPSTREAM_DB": "overridden",
             },
-            "id": "tenbaz",
+            "id": "tenbaz-123",
             "path": "/tenbaz",
           },
         ],
@@ -135,7 +135,7 @@ test('parse options', () => {
         "ZERO_SCHEMA_FILE": "zero-schema.json",
         "ZERO_SHARD_ID": "0",
         "ZERO_SHARD_PUBLICATIONS": "",
-        "ZERO_TENANTS_JSON": "{"tenants":[{"id":"tenboo","host":"Normalize.ME","path":"tenboo","env":{"ZERO_REPLICA_FILE":"tenboo.db","ZERO_CVR_DB":"foo","ZERO_CHANGE_DB":"foo","ZERO_SHARD_ID":"foo"}},{"id":"tenbar","path":"/tenbar","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_CVR_DB":"bar","ZERO_CHANGE_DB":"bar","ZERO_SHARD_ID":"bar"}},{"id":"tenbaz","path":"/tenbaz","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_UPSTREAM_DB":"overridden","ZERO_CVR_DB":"baz","ZERO_CHANGE_DB":"baz","ZERO_SHARD_ID":"foo"}}]}",
+        "ZERO_TENANTS_JSON": "{"tenants":[{"id":"ten-boo","host":"Normalize.ME","path":"tenboo","env":{"ZERO_REPLICA_FILE":"tenboo.db","ZERO_CVR_DB":"foo","ZERO_CHANGE_DB":"foo","ZERO_SHARD_ID":"foo"}},{"id":"ten_bar","path":"/tenbar","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_CVR_DB":"bar","ZERO_CHANGE_DB":"bar","ZERO_SHARD_ID":"bar"}},{"id":"tenbaz-123","path":"/tenbaz","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_UPSTREAM_DB":"overridden","ZERO_CVR_DB":"baz","ZERO_CHANGE_DB":"baz","ZERO_SHARD_ID":"foo"}}]}",
         "ZERO_UPSTREAM_DB": "foo",
         "ZERO_UPSTREAM_MAX_CONNS": "20",
       },
@@ -146,35 +146,87 @@ test('parse options', () => {
 test.each([
   [
     'Only a single path component may be specified',
-    {
-      id: 'tenboo',
-      path: '/too/many-slashes',
-      env: {
-        ['ZERO_REPLICA_FILE']: 'foo.db',
-        ['ZERO_CVR_DB']: 'foo',
-        ['ZERO_CHANGE_DB']: 'foo',
+    [
+      {
+        id: 'tenboo',
+        path: '/too/many-slashes',
+        env: {
+          ['ZERO_REPLICA_FILE']: 'foo.db',
+          ['ZERO_CVR_DB']: 'foo',
+          ['ZERO_CHANGE_DB']: 'foo',
+        },
       },
-    },
+    ],
   ],
   [
     'Unexpected property ZERO_UPSTREAM_DBZ',
-    {
-      id: 'tenboo',
-      path: '/zero',
-      env: {
-        ['ZERO_UPSTREAM_DBZ']: 'oops',
-        ['ZERO_REPLICA_FILE']: 'boo.db',
-        ['ZERO_CVR_DB']: 'boo',
-        ['ZERO_CHANGE_DB']: 'boo',
+    [
+      {
+        id: 'tenboo',
+        path: '/zero',
+        env: {
+          ['ZERO_UPSTREAM_DBZ']: 'oops',
+          ['ZERO_REPLICA_FILE']: 'boo.db',
+          ['ZERO_CVR_DB']: 'boo',
+          ['ZERO_CHANGE_DB']: 'boo',
+        },
       },
-    },
+    ],
   ],
-])('%s', (errMsg, tenant) => {
+  [
+    'Must be non-empty',
+    [
+      {
+        id: '',
+        path: '/foo',
+        env: {
+          ['ZERO_REPLICA_FILE']: 'foo.db',
+          ['ZERO_CVR_DB']: 'foo',
+          ['ZERO_CHANGE_DB']: 'foo',
+        },
+      },
+    ],
+  ],
+  [
+    'contain only alphanumeric characters, underscores, and hyphens',
+    [
+      {
+        id: 'id/with/slashes',
+        path: '/foo',
+        env: {
+          ['ZERO_REPLICA_FILE']: 'foo.db',
+          ['ZERO_CVR_DB']: 'foo',
+          ['ZERO_CHANGE_DB']: 'foo',
+        },
+      },
+    ],
+  ],
+  [
+    'Multiple tenants with ID',
+    [
+      {
+        id: 'foo',
+        path: '/foo',
+        env: {
+          ['ZERO_REPLICA_FILE']: 'foo.db',
+          ['ZERO_CVR_DB']: 'foo',
+          ['ZERO_CHANGE_DB']: 'foo',
+        },
+      },
+      {
+        id: 'foo',
+        path: '/bar',
+        env: {
+          ['ZERO_REPLICA_FILE']: 'bar.db',
+          ['ZERO_CVR_DB']: 'bar',
+          ['ZERO_CHANGE_DB']: 'bar',
+        },
+      },
+    ],
+  ],
+])('%s', (errMsg, tenants) => {
   expect(() =>
-    getMultiZeroConfig({}, [
-      '--tenants-json',
-      JSON.stringify({tenants: [tenant]}),
-    ]),
+    getMultiZeroConfig({}, ['--tenants-json', JSON.stringify({tenants})]),
   ).toThrowError(errMsg);
 });
 
@@ -431,7 +483,14 @@ test('zero-cache --help', () => {
                                                       * matching is necessary.                                                                       
                                                       */                                                                                             
                                                      tenants: {                                                                                      
-                                                        id: string;     // value of the "tid" context key in debug logs                              
+                                                        /**                                                                                          
+                                                         * Unique per-tenant ID used internally for multi-node dispatch.                             
+                                                         *                                                                                           
+                                                         * The ID may only contain alphanumeric characters, underscores, and hyphens.                
+                                                         * Note that changing the ID may result in temporary disruption in multi-node                
+                                                         * mode, when the configs in the view-syncer and replication-manager differ.                 
+                                                         */                                                                                          
+                                                        id: string;                                                                                  
                                                         host?: string;  // case-insensitive full Host: header match                                  
                                                         path?: string;  // first path component, with or without leading slash                       
                                                                                                                                                      

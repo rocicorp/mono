@@ -2,11 +2,12 @@ import type {LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type {SinonFakeTimers} from 'sinon';
 import {assert} from '../../../shared/src/asserts.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.js';
+import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.js';
 import {
   type ConnectedMessage,
   type Downstream,
-  ErrorKind,
   type ErrorMessage,
   type PokeEndBody,
   type PokeEndMessage,
@@ -20,16 +21,19 @@ import {
   upstreamSchema,
 } from '../../../zero-protocol/src/mod.js';
 import type {Schema} from '../../../zero-schema/src/mod.js';
+import * as ConnectionState from './connection-state-enum.js';
 import type {LogOptions} from './log-options.js';
 import type {ZeroOptions} from './options.js';
 import {
-  ConnectionState,
   type TestingContext,
   Zero,
   createLogOptionsSymbol,
   exposedToTestingSymbol,
   onSetConnectionStateSymbol,
 } from './zero.js';
+
+type ConnectionState = Enum<typeof ConnectionState>;
+type ErrorKind = Enum<typeof ErrorKind>;
 
 export async function tickAFewTimes(clock: SinonFakeTimers, duration = 100) {
   const n = 10;

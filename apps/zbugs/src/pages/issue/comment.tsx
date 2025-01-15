@@ -2,6 +2,7 @@ import type {Row} from '@rocicorp/zero';
 import classNames from 'classnames';
 import {memo, useState} from 'react';
 import {makePermalink} from '../../comment-permalink.js';
+import type {commentQuery} from '../../comment-query.js';
 import {AvatarImage} from '../../components/avatar-image.js';
 import {Button} from '../../components/button.js';
 import {CanEdit} from '../../components/can-edit.js';
@@ -15,7 +16,6 @@ import {useLogin} from '../../hooks/use-login.js';
 import {useZero} from '../../hooks/use-zero.js';
 import {CommentComposer} from './comment-composer.js';
 import style from './comment.module.css';
-import type {commentQuery} from './issue-page.js';
 
 type Props = {
   id: string;

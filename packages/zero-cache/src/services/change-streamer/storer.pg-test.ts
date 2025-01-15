@@ -6,8 +6,10 @@ import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {Subscription} from '../../types/subscription.js';
 import {type Commit} from '../change-source/protocol/current/downstream.js';
+import type {StatusMessage} from '../change-source/protocol/current/status.js';
 import {ReplicationMessages} from '../replicator/test-utils.js';
-import {ErrorType, type Downstream} from './change-streamer.js';
+import {type Downstream} from './change-streamer.js';
+import * as ErrorType from './error-type-enum.js';
 import {setupCDCTables} from './schema/tables.js';
 import {Storer} from './storer.js';
 import {createSubscriber} from './test-utils.js';
@@ -17,7 +19,7 @@ describe('change-streamer/storer', () => {
   let db: PostgresDB;
   let storer: Storer;
   let done: Promise<void>;
-  let commits: Queue<Commit>;
+  let consumed: Queue<Commit | StatusMessage>;
 
   const REPLICA_VERSION = '00';
 
@@ -36,10 +38,8 @@ describe('change-streamer/storer', () => {
         ].map(row => tx`INSERT INTO cdc."changeLog" ${tx(row)}`),
       );
     });
-    commits = new Queue();
-    storer = new Storer(lc, db, REPLICA_VERSION, commit =>
-      commits.enqueue(commit),
-    );
+    consumed = new Queue();
+    storer = new Storer(lc, db, REPLICA_VERSION, msg => consumed.enqueue(msg));
     done = storer.run();
   });
 
@@ -48,6 +48,12 @@ describe('change-streamer/storer', () => {
     void storer.stop();
     await done;
   });
+
+  async function expectConsumed(...watermarks: string[]) {
+    for (const watermark of watermarks) {
+      expect((await consumed.dequeue())[2].watermark).toBe(watermark);
+    }
+  }
 
   const messages = new ReplicationMessages({issues: 'id'});
 
@@ -108,7 +114,7 @@ describe('change-streamer/storer', () => {
     const [sub, _, stream] = createSubscriber('00');
 
     // This should be buffered until catchup is complete.
-    sub.send(['07', ['begin', messages.begin()]]);
+    sub.send(['07', ['begin', messages.begin(), {commitWatermark: '08'}]]);
     sub.send(['08', ['commit', messages.commit(), {watermark: '08'}]]);
 
     // Catchup should start immediately since there are no txes in progress.
@@ -121,6 +127,9 @@ describe('change-streamer/storer', () => {
           {
             "foo": "bar",
             "tag": "begin",
+          },
+          {
+            "commitWatermark": "02",
           },
         ],
         [
@@ -145,6 +154,9 @@ describe('change-streamer/storer', () => {
             "boo": "dar",
             "tag": "begin",
           },
+          {
+            "commitWatermark": "04",
+          },
         ],
         [
           "data",
@@ -166,6 +178,9 @@ describe('change-streamer/storer', () => {
           "begin",
           {
             "tag": "begin",
+          },
+          {
+            "commitWatermark": "08",
           },
         ],
         [
@@ -218,19 +233,19 @@ describe('change-streamer/storer', () => {
     const [sub2, _1, stream2] = createSubscriber('06');
 
     // This should be buffered until catchup is complete.
-    sub1.send(['09', ['begin', messages.begin()]]);
+    sub1.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
     sub1.send([
       '0a',
       ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
     ]);
-    sub2.send(['09', ['begin', messages.begin()]]);
+    sub2.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
     sub2.send([
       '0a',
       ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
     ]);
 
     // Start a transaction before enqueuing catchup.
-    storer.store(['07', ['begin', messages.begin()]]);
+    storer.store(['07', ['begin', messages.begin(), {commitWatermark: '08'}]]);
     // Enqueue catchup before transaction completes.
     storer.catchup(sub1);
     storer.catchup(sub2);
@@ -239,6 +254,9 @@ describe('change-streamer/storer', () => {
       '08',
       ['commit', messages.commit({extra: 'stuff'}), {watermark: '08'}],
     ]);
+
+    storer.status(['status', {}, {watermark: '0e'}]);
+    storer.status(['status', {}, {watermark: '0f'}]);
 
     // Catchup should wait for the transaction to complete before querying
     // the database, and start after watermark '03'.
@@ -249,6 +267,9 @@ describe('change-streamer/storer', () => {
           {
             "boo": "dar",
             "tag": "begin",
+          },
+          {
+            "commitWatermark": "04",
           },
         ],
         [
@@ -272,6 +293,9 @@ describe('change-streamer/storer', () => {
           {
             "tag": "begin",
           },
+          {
+            "commitWatermark": "07",
+          },
         ],
         [
           "commit",
@@ -287,6 +311,9 @@ describe('change-streamer/storer', () => {
           "begin",
           {
             "tag": "begin",
+          },
+          {
+            "commitWatermark": "0a",
           },
         ],
         [
@@ -311,6 +338,9 @@ describe('change-streamer/storer', () => {
           {
             "tag": "begin",
           },
+          {
+            "commitWatermark": "07",
+          },
         ],
         [
           "commit",
@@ -326,6 +356,9 @@ describe('change-streamer/storer', () => {
           "begin",
           {
             "tag": "begin",
+          },
+          {
+            "commitWatermark": "0a",
           },
         ],
         [
@@ -415,6 +448,8 @@ describe('change-streamer/storer', () => {
         },
       ]
     `);
+
+    await expectConsumed('08', '0e', '0f');
   });
 
   // Similar to "queued if transaction is in progress" but tests rollback.
@@ -423,24 +458,27 @@ describe('change-streamer/storer', () => {
     const [sub2, _1, stream2] = createSubscriber('06');
 
     // This should be buffered until catchup is complete.
-    sub1.send(['09', ['begin', messages.begin()]]);
+    sub1.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
     sub1.send([
       '0a',
       ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
     ]);
-    sub2.send(['09', ['begin', messages.begin()]]);
+    sub2.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
     sub2.send([
       '0a',
       ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
     ]);
 
     // Start a transaction before enqueuing catchup.
-    storer.store(['07', ['begin', messages.begin()]]);
+    storer.store(['07', ['begin', messages.begin(), {commitWatermark: '08'}]]);
     // Enqueue catchup before transaction completes.
     storer.catchup(sub1);
     storer.catchup(sub2);
     // Rollback the transaction.
     storer.store(['08', ['rollback', messages.rollback()]]);
+
+    storer.status(['status', {}, {watermark: '0a'}]);
+    storer.status(['status', {}, {watermark: '0c'}]);
 
     // Catchup should wait for the transaction to complete before querying
     // the database, and start after watermark '03'.
@@ -451,6 +489,9 @@ describe('change-streamer/storer', () => {
           {
             "boo": "dar",
             "tag": "begin",
+          },
+          {
+            "commitWatermark": "04",
           },
         ],
         [
@@ -474,6 +515,9 @@ describe('change-streamer/storer', () => {
           {
             "tag": "begin",
           },
+          {
+            "commitWatermark": "0a",
+          },
         ],
         [
           "commit",
@@ -496,6 +540,9 @@ describe('change-streamer/storer', () => {
           "begin",
           {
             "tag": "begin",
+          },
+          {
+            "commitWatermark": "0a",
           },
         ],
         [
@@ -568,20 +615,22 @@ describe('change-streamer/storer', () => {
         },
       ]
     `);
+
+    await expectConsumed('0a', '0c');
   });
 
   test('catchup does not include subsequent transactions', async () => {
     const [sub, _0, stream] = createSubscriber('03');
 
     // This should be buffered until catchup is complete.
-    sub.send(['0b', ['begin', messages.begin()]]);
+    sub.send(['0b', ['begin', messages.begin(), {commitWatermark: '0c'}]]);
     sub.send([
       '0c',
       ['commit', messages.commit({waa: 'hoo'}), {watermark: '0c'}],
     ]);
 
     // Start a transaction before enqueuing catchup.
-    storer.store(['07', ['begin', messages.begin()]]);
+    storer.store(['07', ['begin', messages.begin(), {commitWatermark: '08'}]]);
     // Enqueue catchup before transaction completes.
     storer.catchup(sub);
     // Finish the transaction.
@@ -593,8 +642,11 @@ describe('change-streamer/storer', () => {
     // And finish another the transaction. In reality, these would be
     // sent by the forwarder, but we skip it in the test to confirm that
     // catchup doesn't include the next transaction.
-    storer.store(['09', ['begin', messages.begin()]]);
+    storer.store(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
     storer.store(['0a', ['commit', messages.commit(), {watermark: '0a'}]]);
+
+    storer.status(['status', {}, {watermark: '0d'}]);
+    storer.status(['status', {}, {watermark: '0e'}]);
 
     // Wait for the storer to commit that transaction.
     for (let i = 0; i < 10; i++) {
@@ -618,6 +670,9 @@ describe('change-streamer/storer', () => {
             "boo": "dar",
             "tag": "begin",
           },
+          {
+            "commitWatermark": "04",
+          },
         ],
         [
           "data",
@@ -640,6 +695,9 @@ describe('change-streamer/storer', () => {
           {
             "tag": "begin",
           },
+          {
+            "commitWatermark": "07",
+          },
         ],
         [
           "commit",
@@ -656,6 +714,9 @@ describe('change-streamer/storer', () => {
           {
             "tag": "begin",
           },
+          {
+            "commitWatermark": "0c",
+          },
         ],
         [
           "commit",
@@ -669,125 +730,6 @@ describe('change-streamer/storer', () => {
         ],
       ]
     `);
-  });
-
-  test('change positioning and replay detection', async () => {
-    storer.store(['07', ['begin', messages.begin()]]);
-    storer.store(['08', ['data', messages.truncate('issues')]]);
-    storer.store([
-      '09',
-      ['commit', messages.commit({foo: 'bar'}), {watermark: '09'}],
-    ]);
-    expect(await commits.dequeue()).toEqual([
-      'commit',
-      {tag: 'commit', foo: 'bar'},
-      {watermark: '09'},
-    ]);
-
-    // Simulate a replay.
-    storer.store(['07', ['begin', messages.begin()]]);
-    storer.store(['08', ['data', messages.truncate('issues')]]);
-    storer.store([
-      '09',
-      ['commit', messages.commit({foo: 'bar'}), {watermark: '09'}],
-    ]);
-    // ACK should be resent.
-    expect(await commits.dequeue()).toEqual([
-      'commit',
-      {tag: 'commit', foo: 'bar'},
-      {watermark: '09'},
-    ]);
-
-    // Continue to the next transaction.
-    storer.store(['0a', ['begin', messages.begin()]]);
-    storer.store(['0b', ['data', messages.truncate('issues')]]);
-    storer.store([
-      '0c',
-      ['commit', messages.commit({bar: 'baz'}), {watermark: '0c'}],
-    ]);
-    expect(await commits.dequeue()).toEqual([
-      'commit',
-      {tag: 'commit', bar: 'baz'},
-      {watermark: '0c'},
-    ]);
-
-    expect(
-      await db`SELECT * FROM cdc."changeLog" WHERE watermark >= '07' ORDER BY watermark, pos`,
-    ).toMatchInlineSnapshot(`
-      Result [
-        {
-          "change": {
-            "tag": "begin",
-          },
-          "pos": 0n,
-          "precommit": null,
-          "watermark": "07",
-        },
-        {
-          "change": {
-            "relations": [
-              {
-                "keyColumns": [
-                  "id",
-                ],
-                "name": "issues",
-                "replicaIdentity": "default",
-                "schema": "public",
-                "tag": "relation",
-              },
-            ],
-            "tag": "truncate",
-          },
-          "pos": 1n,
-          "precommit": null,
-          "watermark": "07",
-        },
-        {
-          "change": {
-            "foo": "bar",
-            "tag": "commit",
-          },
-          "pos": 2n,
-          "precommit": "07",
-          "watermark": "09",
-        },
-        {
-          "change": {
-            "tag": "begin",
-          },
-          "pos": 0n,
-          "precommit": null,
-          "watermark": "0a",
-        },
-        {
-          "change": {
-            "relations": [
-              {
-                "keyColumns": [
-                  "id",
-                ],
-                "name": "issues",
-                "replicaIdentity": "default",
-                "schema": "public",
-                "tag": "relation",
-              },
-            ],
-            "tag": "truncate",
-          },
-          "pos": 1n,
-          "precommit": null,
-          "watermark": "0a",
-        },
-        {
-          "change": {
-            "bar": "baz",
-            "tag": "commit",
-          },
-          "pos": 2n,
-          "precommit": "0a",
-          "watermark": "0c",
-        },
-      ]
-    `);
+    await expectConsumed('08', '0a', '0d', '0e');
   });
 });

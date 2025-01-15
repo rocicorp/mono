@@ -5,6 +5,7 @@ import {
   type IncrementalMigrationMap,
   type Migration,
 } from '../../../db/migration-lite.js';
+import {AutoResetSignal} from '../../change-streamer/schema/tables.js';
 import {initialSync, type InitialSyncOptions} from './initial-sync.js';
 import type {ShardConfig} from './shard-config.js';
 
@@ -23,12 +24,12 @@ export async function initSyncSchema(
   };
 
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
-    1: setupMigration,
-    // There are no incremental migrations yet, but if we were to, say introduce
-    // another column, initialSync would be updated to create the table with
-    // the new column, and then there would be an incremental migration here at
-    // version `2` that adds the column for databases that were initialized to
-    // version `1`.
+    // There's no incremental migration from v1. Just reset the replica.
+    2: {
+      migrateSchema: () => {
+        throw new AutoResetSignal('resetting replica at obsolete v1');
+      },
+    },
   };
 
   await runSchemaMigrations(

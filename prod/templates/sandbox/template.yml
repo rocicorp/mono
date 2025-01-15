@@ -196,15 +196,15 @@ Resources:
             - Name: ZERO_REPLICA_FILE
               Value: /data/db/sync-replica.db
             - Name: ZERO_LITESTREAM_BACKUP_URL
-              Value: !Sub "s3://${ApplicationBucket}/0102"
+              Value: !Sub "s3://${ApplicationBucket}/0113"
             - Name: ZERO_LOG_LEVEL
               Value: debug
             - Name: ZERO_UPSTREAM_MAX_CONNS
               # limit: 190 max_connections / (10 tasks * 1.2 maximum-percent)
               Value: 15
             - Name: ZERO_CVR_MAX_CONNS
-              # limit: 5000 max_connections / (10 tasks * 1.2 maximum-percent)
-              Value: 400
+              # limit: 2000 max_connections / (10 tasks * 1.2 maximum-percent)
+              Value: 160
             - Name: ZERO_SCHEMA_FILE
               Value: /opt/app/packages/zero-cache/zero-schema.json
           Secrets:
@@ -357,7 +357,7 @@ Resources:
             - Name: ZERO_NUM_SYNC_WORKERS
               Value: "0"
             - Name: ZERO_LITESTREAM_BACKUP_URL
-              Value: !Sub "s3://${ApplicationBucket}/0102"
+              Value: !Sub "s3://${ApplicationBucket}/0113"
             - Name: ZERO_LOG_FORMAT
               Value: json
             - Name: ZERO_REPLICA_FILE

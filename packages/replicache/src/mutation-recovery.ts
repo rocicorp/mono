@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert, assertNotUndefined} from '../../shared/src/asserts.js';
+import type {Enum} from '../../shared/src/enum.js';
 import type {MaybePromise} from '../../shared/src/types.js';
 import {throwChunkHasher} from './dag/chunk.js';
 import {LazyStore} from './dag/lazy-store.js';
@@ -34,6 +35,8 @@ import type {ClientGroupID, ClientID} from './sync/ids.js';
 import {beginPullV1} from './sync/pull.js';
 import {PUSH_VERSION_DD31, push} from './sync/push.js';
 import {withRead, withWrite} from './with-transactions.js';
+
+type FormatVersion = Enum<typeof FormatVersion>;
 
 const MUTATION_RECOVERY_LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT = 10 * 2 ** 20; // 10 MB
 
@@ -273,7 +276,7 @@ async function recoverMutationsOfClientGroupDD31(
   perdag: Store,
   database: IndexedDBDatabase,
   options: MutationRecoveryOptions,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<ClientGroupMap | undefined> {
   assert(database.replicacheFormatVersion >= FormatVersion.DD31);
 

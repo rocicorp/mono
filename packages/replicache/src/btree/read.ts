@@ -1,6 +1,7 @@
+import type {Enum} from '../../../shared/src/enum.js';
 import {deepEqual} from '../../../shared/src/json.js';
 import type {Read} from '../dag/store.js';
-import type {FormatVersion} from '../format-version-enum.js';
+import * as FormatVersion from '../format-version-enum.js';
 import type {FrozenJSONValue} from '../frozen-json.js';
 import {type Hash, emptyHash} from '../hash.js';
 import {getSizeOfEntry} from '../size-of-value.js';
@@ -27,6 +28,8 @@ import {
   SPLICE_REMOVED,
   computeSplices,
 } from './splice.js';
+
+type FormatVersion = Enum<typeof FormatVersion>;
 
 /**
  * The size of the header of a node. (If we had compile time

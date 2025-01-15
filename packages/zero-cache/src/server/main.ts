@@ -2,7 +2,9 @@ import {resolver} from '@rocicorp/resolver';
 import {availableParallelism} from 'node:os';
 import path from 'node:path';
 import {getZeroConfig} from '../config/zero-config.js';
+import {getSubscriberContext} from '../services/change-streamer/change-streamer-http.js';
 import {SyncDispatcher} from '../services/dispatcher/sync-dispatcher.js';
+import {installWebSocketHandoff} from '../services/dispatcher/websocket-handoff.js';
 import {
   restoreReplica,
   startReplicaBackupProcess,
@@ -84,9 +86,10 @@ export default async function runWorker(
   const runChangeStreamer = !config.changeStreamerURI;
 
   if (litestream) {
+    // For the replication-manager (i.e. authoritative replica), only attempt
+    // a restore once, allowing the backup to be absent.
     // For view-syncers, attempt a restore for up to 10 times over 30 seconds.
-    // For the replication-manager, only attempt once.
-    await restoreReplica(lc, config, config.changeStreamerURI ? 10 : 1, 3000);
+    await restoreReplica(lc, config, runChangeStreamer ? 1 : 10, 3000);
   }
 
   const {promise: changeStreamerReady, resolve} = resolver();
@@ -111,6 +114,10 @@ export default async function runWorker(
   await changeStreamerReady;
 
   if (runChangeStreamer && litestream) {
+    // Start a backup replicator and corresponding litestream backup process.
+    const mode: ReplicaFileMode = 'backup';
+    loadWorker('./server/replicator.ts', 'supporting', mode, mode);
+
     processes.addSubprocess(
       startReplicaBackupProcess(config),
       'supporting',
@@ -118,23 +125,10 @@ export default async function runWorker(
     );
   }
 
-  if (litestream) {
-    const mode: ReplicaFileMode = 'backup';
-    const replicator = loadWorker(
-      './server/replicator.ts',
-      'supporting',
-      mode,
-      mode,
-    ).once('message', () => subscribeTo(lc, replicator));
-    const notifier = createNotifierFrom(lc, replicator);
-    if (changeStreamer) {
-      handleSubscriptionsFrom(lc, changeStreamer, notifier);
-    }
-  }
-
   const syncers: Worker[] = [];
   if (numSyncers) {
-    const mode: ReplicaFileMode = litestream ? 'serving-copy' : 'serving';
+    const mode: ReplicaFileMode =
+      runChangeStreamer && litestream ? 'serving-copy' : 'serving';
     const replicator = loadWorker(
       './server/replicator.ts',
       'supporting',
@@ -162,6 +156,15 @@ export default async function runWorker(
 
   if (numSyncers) {
     mainServices.push(new SyncDispatcher(lc, parent, syncers, {port}));
+  } else if (changeStreamer && parent) {
+    // When running as the replication-manager, the dispatcher process
+    // hands off websockets from the main (tenant) dispatcher to the
+    // change-streamer process.
+    installWebSocketHandoff(
+      lc,
+      req => ({payload: getSubscriberContext(req), receiver: changeStreamer}),
+      parent,
+    );
   }
 
   parent?.send(['ready', {ready: true}]);

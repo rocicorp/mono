@@ -15,12 +15,18 @@ describe('change-streamer/forwarder', () => {
     const [sub4, stream4] = createSubscriber('00', true);
 
     forwarder.add(sub1);
-    forwarder.forward(['11', ['begin', messages.begin()]]);
+    forwarder.forward([
+      '11',
+      ['begin', messages.begin(), {commitWatermark: '13'}],
+    ]);
     forwarder.add(sub2);
     forwarder.forward(['12', ['data', messages.truncate('issues')]]);
     forwarder.forward(['13', ['commit', messages.commit(), {watermark: '13'}]]);
     forwarder.add(sub3);
-    forwarder.forward(['14', ['begin', messages.begin()]]);
+    forwarder.forward([
+      '14',
+      ['begin', messages.begin(), {commitWatermark: '15'}],
+    ]);
     forwarder.add(sub4);
 
     for (const sub of [sub1, sub2, sub3, sub4]) {
@@ -34,6 +40,9 @@ describe('change-streamer/forwarder', () => {
           "begin",
           {
             "tag": "begin",
+          },
+          {
+            "commitWatermark": "13",
           },
         ],
         [
@@ -67,6 +76,9 @@ describe('change-streamer/forwarder', () => {
           {
             "tag": "begin",
           },
+          {
+            "commitWatermark": "15",
+          },
         ],
       ]
     `);
@@ -80,6 +92,9 @@ describe('change-streamer/forwarder', () => {
           {
             "tag": "begin",
           },
+          {
+            "commitWatermark": "15",
+          },
         ],
       ]
     `);
@@ -89,6 +104,9 @@ describe('change-streamer/forwarder', () => {
           "begin",
           {
             "tag": "begin",
+          },
+          {
+            "commitWatermark": "15",
           },
         ],
       ]
@@ -107,12 +125,18 @@ describe('change-streamer/forwarder', () => {
     const [sub4, stream4] = createSubscriber('00', true);
 
     forwarder.add(sub1);
-    forwarder.forward(['11', ['begin', messages.begin()]]);
+    forwarder.forward([
+      '11',
+      ['begin', messages.begin(), {commitWatermark: '14'}],
+    ]);
     forwarder.add(sub2);
     forwarder.forward(['12', ['data', messages.truncate('issues')]]);
     forwarder.forward(['13', ['rollback', messages.rollback()]]);
     forwarder.add(sub3);
-    forwarder.forward(['14', ['begin', messages.begin()]]);
+    forwarder.forward([
+      '14',
+      ['begin', messages.begin(), {commitWatermark: '15'}],
+    ]);
     forwarder.add(sub4);
 
     for (const sub of [sub1, sub2, sub3, sub4]) {
@@ -126,6 +150,9 @@ describe('change-streamer/forwarder', () => {
           "begin",
           {
             "tag": "begin",
+          },
+          {
+            "commitWatermark": "14",
           },
         ],
         [
@@ -156,6 +183,9 @@ describe('change-streamer/forwarder', () => {
           {
             "tag": "begin",
           },
+          {
+            "commitWatermark": "15",
+          },
         ],
       ]
     `);
@@ -169,6 +199,9 @@ describe('change-streamer/forwarder', () => {
           {
             "tag": "begin",
           },
+          {
+            "commitWatermark": "15",
+          },
         ],
       ]
     `);
@@ -178,6 +211,9 @@ describe('change-streamer/forwarder', () => {
           "begin",
           {
             "tag": "begin",
+          },
+          {
+            "commitWatermark": "15",
           },
         ],
       ]

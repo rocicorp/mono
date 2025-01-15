@@ -1,6 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {describe, expect, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import type {JSONValue} from '../../../shared/src/json.js';
 import {TestStore} from '../dag/test-store.js';
 import {ChainBuilder} from '../db/test-helpers.js';
@@ -14,8 +15,10 @@ import {
 import {withWriteNoImplicitCommit} from '../with-transactions.js';
 import {apply} from './patch.js';
 
+type FormatVersion = Enum<typeof FormatVersion>;
+
 describe('patch', () => {
-  const t = (formatVersion: FormatVersion.Type) => {
+  const t = (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const store = new TestStore();
     const lc = new LogContext();

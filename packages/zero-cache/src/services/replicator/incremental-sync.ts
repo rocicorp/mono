@@ -1,6 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
 import {SqliteError} from '@rocicorp/zero-sqlite3';
-import {LogicalReplicationService} from 'pg-logical-replication';
 import {AbortError} from '../../../../shared/src/abort-error.js';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
 import {must} from '../../../../shared/src/must.js';
@@ -56,7 +55,6 @@ import {
 } from './schema/change-log.js';
 import {
   ZERO_VERSION_COLUMN_NAME,
-  getReplicationVersions,
   getSubscriptionState,
   updateReplicationWatermark,
 } from './schema/replication-state.js';
@@ -78,7 +76,6 @@ export class IncrementalSyncer {
   readonly #notifier: Notifier;
 
   readonly #state = new RunningState('IncrementalSyncer');
-  #service: LogicalReplicationService | undefined;
 
   constructor(
     id: string,
@@ -151,9 +148,8 @@ export class IncrementalSyncer {
     return this.#notifier.subscribe();
   }
 
-  async stop(lc: LogContext, err?: unknown) {
+  stop(lc: LogContext, err?: unknown) {
     this.#state.stop(lc, err);
-    await this.#service?.stop();
   }
 }
 
@@ -164,15 +160,6 @@ function ensureError(err: unknown): Error {
   const error = new Error();
   error.cause = err;
   return error;
-}
-
-class ReplayedTransactionError extends Error {
-  readonly watermark: string;
-
-  constructor(watermark: string, commit: MessageCommit) {
-    super(`${watermark} has already been processed: ${stringify(commit)}`);
-    this.watermark = watermark;
-  }
 }
 
 /**
@@ -237,19 +224,23 @@ export class MessageProcessor {
       return false;
     }
     try {
-      const watermark = type === 'commit' ? downstream[2].watermark : undefined;
+      const watermark =
+        type === 'begin'
+          ? downstream[2].commitWatermark
+          : type === 'commit'
+          ? downstream[2].watermark
+          : undefined;
       return this.#processMessage(lc, message, watermark);
     } catch (e) {
-      if (e instanceof ReplayedTransactionError) {
-        lc.info?.(e);
-      } else {
-        this.#fail(lc, e);
-      }
+      this.#fail(lc, e);
     }
     return false;
   }
 
-  #beginTransaction(lc: LogContext): TransactionProcessor {
+  #beginTransaction(
+    lc: LogContext,
+    commitVersion: string,
+  ): TransactionProcessor {
     let start = Date.now();
     for (let i = 0; ; i++) {
       try {
@@ -258,6 +249,7 @@ export class MessageProcessor {
           this.#db,
           this.#txMode,
           this.#tableSpecs,
+          commitVersion,
         );
       } catch (e) {
         // The db occasionally errors with a 'database is locked' error when
@@ -291,7 +283,7 @@ export class MessageProcessor {
       if (this.#currentTx) {
         throw new Error(`Already in a transaction ${stringify(msg)}`);
       }
-      this.#currentTx = this.#beginTransaction(lc);
+      this.#currentTx = this.#beginTransaction(lc, must(watermark));
       return false;
     }
 
@@ -396,6 +388,7 @@ class TransactionProcessor {
     db: StatementRunner,
     txMode: TransactionMode,
     tableSpecs: Map<string, LiteTableSpec>,
+    commitVersion: LexiVersion,
   ) {
     this.#startMs = Date.now();
 
@@ -415,10 +408,9 @@ class TransactionProcessor {
       // so it is important to use vanilla transactions in this configuration.
       db.beginImmediate();
     }
-    const {nextStateVersion} = getReplicationVersions(db);
     this.#db = db;
-    this.#version = nextStateVersion;
-    this.#lc = lc.withContext('version', nextStateVersion);
+    this.#version = commitVersion;
+    this.#lc = lc.withContext('version', commitVersion);
     this.#tableSpecs = tableSpecs;
 
     if (this.#tableSpecs.size === 0) {
@@ -437,22 +429,6 @@ class TransactionProcessor {
     return must(this.#tableSpecs.get(name), `Unknown table ${name}`);
   }
 
-  /**
-   * Note: All INSERTs are processed a UPSERTs in order to properly handle
-   * replayed transactions (e.g. if an acknowledgement was lost). In the case
-   * of a replayed transaction, the final commit results in an rollback if the
-   * watermark is earlier than what has already been processed.
-   * See {@link processCommit}.
-   *
-   * Note that a transaction replay could theoretically be detected at the BEGIN message
-   * since it contains the commitEndLsn (from which a watermark can be derived), but
-   * that would not generalize to streaming transactions for which the commitEndLsn
-   * is not known until STREAM COMMIT.
-   *
-   * This UPSERT strategy instead handles both protocols by accepting all messages and
-   * making the COMMIT/ROLLBACK decision when the commit watermark is guaranteed to be
-   * available.
-   */
   processInsert(insert: MessageInsert) {
     const table = liteTableName(insert.relation);
     const newRow = liteRow(insert.new, this.#tableSpec(table));
@@ -463,16 +439,11 @@ class TransactionProcessor {
     const key = Object.fromEntries(
       insert.relation.keyColumns.map(col => [col, newRow[col]]),
     );
-    const rawColumns = Object.keys(row);
-    const keyColumns = insert.relation.keyColumns.map(c => id(c));
-    const columns = rawColumns.map(c => id(c));
-    const upsert = rawColumns.map(c => `${id(c)}=EXCLUDED.${id(c)}`);
+    const columns = Object.keys(row).map(c => id(c));
     this.#db.run(
       `
       INSERT INTO ${id(table)} (${columns.join(',')})
         VALUES (${new Array(columns.length).fill('?').join(',')})
-        ON CONFLICT (${keyColumns.join(',')})
-        DO UPDATE SET ${upsert.join(',')}
       `,
       Object.values(row),
     );
@@ -657,12 +628,14 @@ class TransactionProcessor {
   }
 
   processCommit(commit: MessageCommit, watermark: string) {
-    const nextVersion = watermark;
-    if (nextVersion <= this.#version) {
-      this.#db.rollback();
-      throw new ReplayedTransactionError(watermark, commit);
+    if (watermark !== this.#version) {
+      throw new Error(
+        `'commit' version ${watermark} does not match 'begin' version ${
+          this.#version
+        }: ${stringify(commit)}`,
+      );
     }
-    updateReplicationWatermark(this.#db, nextVersion);
+    updateReplicationWatermark(this.#db, watermark);
     this.#db.commit();
 
     const elapsedMs = Date.now() - this.#startMs;

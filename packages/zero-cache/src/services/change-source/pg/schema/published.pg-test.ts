@@ -1,7 +1,7 @@
 import type postgres from 'postgres';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {assert} from '../../../../../../shared/src/asserts.js';
-import {PostgresTypeClass} from '../../../../db/specs.js';
+import * as PostgresTypeClass from '../../../../db/postgres-type-class-enum.js';
 import {testDBs} from '../../../../test/db.js';
 import {type PublicationInfo, getPublicationInfo} from './published.js';
 

@@ -4,7 +4,13 @@ import {must} from '../../../shared/src/must.js';
 import type {Change} from './change.js';
 import type {Node} from './data.js';
 import type {FanOut} from './fan-out.js';
-import type {FetchRequest, Input, Operator, Output} from './operator.js';
+import {
+  throwOutput,
+  type FetchRequest,
+  type Input,
+  type Operator,
+  type Output,
+} from './operator.js';
 import type {SourceSchema} from './schema.js';
 import type {Stream} from './stream.js';
 
@@ -26,7 +32,7 @@ export class FanIn implements Operator {
   readonly #inputs: readonly Input[];
   readonly #fanOut: FanOut;
   readonly #schema: SourceSchema;
-  #output: Output | undefined;
+  #output: Output = throwOutput;
 
   constructor(fanOut: FanOut, inputs: Input[]) {
     this.#inputs = inputs;
@@ -71,6 +77,6 @@ export class FanIn implements Operator {
 
   push(change: Change) {
     this.#fanOut.onFanInReceivedPush();
-    this.#output?.push(change);
+    this.#output.push(change);
   }
 }

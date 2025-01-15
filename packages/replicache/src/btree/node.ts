@@ -5,6 +5,7 @@ import {
   assertNumber,
   assertString,
 } from '../../../shared/src/asserts.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import {joinIterables} from '../../../shared/src/iterables.js';
 import {
   type JSONValue,
@@ -25,6 +26,8 @@ import {type Hash, emptyHash, newRandomHash} from '../hash.js';
 import type {BTreeRead} from './read.js';
 import type {BTreeWrite} from './write.js';
 
+type FormatVersion = Enum<typeof FormatVersion>;
+
 export type Entry<V> = readonly [key: string, value: V, sizeOfEntry: number];
 
 export const NODE_LEVEL = 0;
@@ -43,7 +46,7 @@ export type DataNode = BaseNode<FrozenJSONValue>;
 export function makeNodeChunkData<V>(
   level: number,
   entries: ReadonlyArray<Entry<V>>,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): BaseNode<V> {
   return deepFreeze([
     level,
@@ -173,7 +176,7 @@ export function binarySearchFound(
 
 export function parseBTreeNode(
   v: unknown,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
   getSizeOfEntry: <K, V>(key: K, value: V) => number,
 ): InternalNode | DataNode {
   if (skipBTreeNodeAsserts && formatVersion >= FormatVersion.V7) {
@@ -291,7 +294,7 @@ abstract class NodeImpl<Value> {
 
 export function toChunkData<V>(
   node: NodeImpl<V>,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): BaseNode<V> {
   return makeNodeChunkData(node.level, node.entries, formatVersion);
 }

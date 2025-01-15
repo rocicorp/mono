@@ -1,6 +1,13 @@
 {
   "extends": ["@rocicorp/eslint-config"],
   "rules": {
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "TSEnumDeclaration",
+        "message": "Enums are not allowed. See shared/enum.ts"
+      }
+    ],
     "no-restricted-imports": [
       "error",
       {
