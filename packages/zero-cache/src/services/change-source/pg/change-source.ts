@@ -328,7 +328,7 @@ class PostgresChangeSource implements ChangeSource {
 
     return {
       changes,
-      acks: {push: commit => acker.ack(commit[2].watermark)},
+      acks: {push: status => acker.ack(status[2].watermark)},
     };
   }
 
