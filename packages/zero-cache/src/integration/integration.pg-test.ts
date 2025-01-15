@@ -197,6 +197,46 @@ describe('integration', () => {
         },
       ],
     ],
+    [
+      'multi-node multi-tenant',
+      () => [
+        // The replication-manager must be started first for initial-sync
+        {
+          ['ZERO_PORT']: String(port2),
+          ['ZERO_LOG_LEVEL']: LOG_LEVEL,
+          ['ZERO_NUM_SYNC_WORKERS']: '0',
+          ['ZERO_TENANTS_JSON']: JSON.stringify({
+            tenants: [
+              {
+                id: 'tenant',
+                path: '/zero',
+                env: {
+                  ...env,
+                  ['ZERO_PORT']: String(port2 + 3),
+                  ['ZERO_NUM_SYNC_WORKERS']: '0',
+                },
+              },
+            ],
+          }),
+        },
+        // startZero() will then copy to replicaDbFile2 for the view-syncer
+        {
+          ['ZERO_PORT']: String(port),
+          ['ZERO_LOG_LEVEL']: LOG_LEVEL,
+          ['ZERO_CHANGE_STREAMER_URI']: `http://localhost:${port2 + 1}`,
+          ['ZERO_REPLICA_FILE']: replicaDbFile2.path,
+          ['ZERO_TENANTS_JSON']: JSON.stringify({
+            tenants: [
+              {
+                id: 'tenant',
+                path: '/zero',
+                env: {...env, ['ZERO_PORT']: String(port + 3)},
+              },
+            ],
+          }),
+        },
+      ],
+    ],
   ] satisfies [string, () => Envs][])('%s', async (_name, makeEnvs) => {
     await startZero(makeEnvs());
 

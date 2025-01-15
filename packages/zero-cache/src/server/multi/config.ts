@@ -27,7 +27,15 @@ export const multiConfigSchema = {
       `   * matching is necessary.`,
       `   */`,
       `  tenants: \\{`,
-      `     id: string;     // value of the "tid" context key in debug logs`,
+      `     /**`,
+      `      * Unique ID that identifies the tenant in logs (as the "tid") and is used`,
+      `      * internally for multi-node dispatch.`,
+      `      *`,
+      `      * The ID may only contain alphanumeric characters, underscores, and hyphens.`,
+      `      * Note that changing the ID may result in temporary disruption in multi-node`,
+      `      * mode, when the configs in the view-syncer and replication-manager differ.`,
+      `      */`,
+      `     id: string;`,
       `     host?: string;  // case-insensitive full Host: header match`,
       `     path?: string;  // first path component, with or without leading slash`,
       ``,
@@ -74,9 +82,27 @@ const tenantSchema = v.object({
   }),
 });
 
-const tenantsSchema = v.object({
-  tenants: v.array(tenantSchema),
-});
+const ID_REGEX = /^[A-Za-z0-9_-]+$/;
+
+const tenantsSchema = v
+  .object({
+    tenants: v.array(tenantSchema),
+  })
+  .chain(val => {
+    const ids = new Set();
+    for (const {id} of val.tenants) {
+      if (!ID_REGEX.test(id)) {
+        return v.err(
+          `Invalid tenant ID "${id}". Must be non-empty, and contain only alphanumeric characters, underscores, and hyphens`,
+        );
+      }
+      if (ids.has(id)) {
+        return v.err(`Multiple tenants with ID ${id}`);
+      }
+      ids.add(id);
+    }
+    return v.ok(val);
+  });
 
 export type MultiZeroConfig = v.Infer<typeof tenantsSchema> &
   Omit<Config<typeof multiConfigSchema>, 'tenantsJSON'>;

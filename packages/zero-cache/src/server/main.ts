@@ -2,7 +2,9 @@ import {resolver} from '@rocicorp/resolver';
 import {availableParallelism} from 'node:os';
 import path from 'node:path';
 import {getZeroConfig} from '../config/zero-config.js';
+import {getSubscriberContext} from '../services/change-streamer/change-streamer-http.js';
 import {SyncDispatcher} from '../services/dispatcher/sync-dispatcher.js';
+import {installWebSocketHandoff} from '../services/dispatcher/websocket-handoff.js';
 import {
   restoreReplica,
   startReplicaBackupProcess,
@@ -91,14 +93,12 @@ export default async function runWorker(
   }
 
   const {promise: changeStreamerReady, resolve} = resolver();
-  if (runChangeStreamer) {
-    loadWorker('./server/change-streamer.ts', 'supporting').once(
-      'message',
-      resolve,
-    );
-  } else {
-    resolve();
-  }
+  const changeStreamer = runChangeStreamer
+    ? loadWorker('./server/change-streamer.ts', 'supporting').once(
+        'message',
+        resolve,
+      )
+    : resolve();
 
   if (numSyncers) {
     // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
@@ -156,6 +156,15 @@ export default async function runWorker(
 
   if (numSyncers) {
     mainServices.push(new SyncDispatcher(lc, parent, syncers, {port}));
+  } else if (changeStreamer && parent) {
+    // When running as the replication-manager, the dispatcher process
+    // hands off websockets from the main (tenant) dispatcher to the
+    // change-streamer process.
+    installWebSocketHandoff(
+      lc,
+      req => ({payload: getSubscriberContext(req), receiver: changeStreamer}),
+      parent,
+    );
   }
 
   parent?.send(['ready', {ready: true}]);
