@@ -1,4 +1,6 @@
+import type {LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {copyFileSync} from 'fs';
 import {
   afterAll,
   afterEach,
@@ -21,15 +23,20 @@ import {DbFile} from '../test/lite.js';
 import type {PostgresDB} from '../types/pg.js';
 import {childWorker, type Worker} from '../types/processes.js';
 
+// Adjust to debug.
+const LOG_LEVEL: LogLevel = 'error';
+
 describe('integration', () => {
   let upDB: PostgresDB;
   let cvrDB: PostgresDB;
   let changeDB: PostgresDB;
   let replicaDbFile: DbFile;
+  let replicaDbFile2: DbFile;
   let env: Record<string, string>;
   let port: number;
-  let zero: Worker | undefined;
-  let zeroExited: Promise<number> | undefined;
+  let port2: number;
+  let zeros: Worker[];
+  let zerosExited: Promise<number>[];
 
   const SCHEMA = {
     permissions: {},
@@ -52,8 +59,9 @@ describe('integration', () => {
     cvrDB = await testDBs.create('integration_test_cvr');
     changeDB = await testDBs.create('integration_test_change');
     replicaDbFile = new DbFile('integration_test_replica');
-    zero = undefined;
-    zeroExited = undefined;
+    replicaDbFile2 = new DbFile('integration_test_replica2');
+    zeros = [];
+    zerosExited = [];
 
     await upDB`
       CREATE TABLE foo(
@@ -76,15 +84,18 @@ describe('integration', () => {
           '"string"');
     `.simple();
 
-    port = randInt(10000, 16000);
+    port = randInt(5000, 16000);
+    port2 = randInt(5000, 16000);
 
     process.env['SINGLE_PROCESS'] = '1';
 
     env = {
       ['ZERO_PORT']: String(port),
-      ['ZERO_LOG_LEVEL']: 'error',
+      ['ZERO_LOG_LEVEL']: LOG_LEVEL,
       ['ZERO_UPSTREAM_DB']: getConnectionURI(upDB),
+      ['ZERO_UPSTREAM_MAX_CONNS']: '3',
       ['ZERO_CVR_DB']: getConnectionURI(cvrDB),
+      ['ZERO_CVR_MAX_CONNS']: '3',
       ['ZERO_CHANGE_DB']: getConnectionURI(changeDB),
       ['ZERO_REPLICA_FILE']: replicaDbFile.path,
       ['ZERO_SCHEMA_JSON']: JSON.stringify(SCHEMA),
@@ -97,63 +108,97 @@ describe('integration', () => {
     orderBy: [['id', 'asc']],
   };
 
-  async function startZero(module: string, env: NodeJS.ProcessEnv) {
-    assert(zero === undefined);
-    assert(zeroExited === undefined);
-    const {promise: ready, resolve: onReady} = resolver<unknown>();
-    const {promise: done, resolve: onClose} = resolver<number>();
+  // One or two zero-caches (i.e. multi-node)
+  type Envs = [NodeJS.ProcessEnv] | [NodeJS.ProcessEnv, NodeJS.ProcessEnv];
 
-    zeroExited = done;
-    zero = childWorker(module, env);
-    zero.onMessageType('ready', onReady);
-    zero.on('close', onClose);
-    await ready;
+  async function startZero(envs: Envs) {
+    assert(zeros.length === 0);
+    assert(zerosExited.length === 0);
+
+    let i = 0;
+    for (const env of envs) {
+      if (++i === 2) {
+        // For multi-node, copy the initially-synced replica file from the
+        // replication-manager to the replica file for the view-syncer.
+        copyFileSync(replicaDbFile.path, replicaDbFile2.path);
+      }
+      const {promise: ready, resolve: onReady} = resolver<unknown>();
+      const {promise: done, resolve: onClose} = resolver<number>();
+
+      zerosExited.push(done);
+
+      const zero = childWorker('./server/multi/main.ts', env);
+      zero.onMessageType('ready', onReady);
+      zero.on('close', onClose);
+      zeros.push(zero);
+      await ready;
+    }
   }
 
   afterEach(async () => {
     try {
-      zero?.kill('SIGTERM'); // initiate and await graceful shutdown
-      expect(await zeroExited).toBe(0);
+      zeros.forEach(zero => zero.kill('SIGTERM')); // initiate and await graceful shutdown
+      (await Promise.all(zerosExited)).forEach(code => expect(code).toBe(0));
     } finally {
-      await testDBs.drop(upDB);
+      await testDBs.drop(upDB, cvrDB, changeDB);
       replicaDbFile.delete();
+      replicaDbFile2.delete();
     }
   });
 
   const WATERMARK_REGEX = /[0-9a-z]{4,}/;
 
   test.each([
-    ['standalone', './server/multi/main.ts', () => env],
+    ['single-node standalone', () => [env]],
     [
-      'multi-tenant, direct-dispatch',
-      './server/multi/main.ts',
-      () => ({
-        ['ZERO_PORT']: String(port - 3),
-        ['ZERO_LOG_LEVEL']: 'error',
-        ['ZERO_TENANTS_JSON']: JSON.stringify({
-          tenants: [{id: 'tenant', path: '/zero', env}],
-        }),
-      }),
+      'single-node multi-tenant direct-dispatch',
+      () => [
+        {
+          ['ZERO_PORT']: String(port - 3),
+          ['ZERO_LOG_LEVEL']: LOG_LEVEL,
+          ['ZERO_TENANTS_JSON']: JSON.stringify({
+            tenants: [{id: 'tenant', path: '/zero', env}],
+          }),
+        },
+      ],
     ],
     [
-      'multi-tenant, double-dispatch',
-      './server/multi/main.ts',
-      () => ({
-        ['ZERO_PORT']: String(port),
-        ['ZERO_LOG_LEVEL']: 'error',
-        ['ZERO_TENANTS_JSON']: JSON.stringify({
-          tenants: [
-            {
-              id: 'tenant',
-              path: '/zero',
-              env: {...env, ['ZERO_PORT']: String(port + 3)},
-            },
-          ],
-        }),
-      }),
+      'single-node multi-tenant, double-dispatch',
+      () => [
+        {
+          ['ZERO_PORT']: String(port),
+          ['ZERO_LOG_LEVEL']: LOG_LEVEL,
+          ['ZERO_TENANTS_JSON']: JSON.stringify({
+            tenants: [
+              {
+                id: 'tenant',
+                path: '/zero',
+                env: {...env, ['ZERO_PORT']: String(port + 3)},
+              },
+            ],
+          }),
+        },
+      ],
     ],
-  ])('%s', async (_name, module, makeEnv) => {
-    await startZero(module, makeEnv());
+    [
+      'multi-node standalone',
+      () => [
+        // The replication-manager must be started first for initial-sync
+        {
+          ...env,
+          ['ZERO_PORT']: `${port2}`,
+          ['ZERO_NUM_SYNC_WORKERS']: '0',
+        },
+        // startZero() will then copy to replicaDbFile2 for the view-syncer
+        {
+          ...env,
+          ['ZERO_CHANGE_STREAMER_URI']: `http://localhost:${port2 + 1}`,
+          ['ZERO_REPLICA_FILE']: replicaDbFile2.path,
+        },
+      ],
+    ],
+  ] satisfies [string, () => Envs][])('%s', async (_name, makeEnvs) => {
+    await startZero(makeEnvs());
 
     const downstream = new Queue<unknown>();
     const ws = new WebSocket(
