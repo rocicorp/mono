@@ -71,9 +71,8 @@ export class ProcessManager {
     this.#exitImpl = (code: number) => {
       if (singleProcessMode()) {
         return proc.emit('exit', code) as never; // For unit / integration tests.
-      } else {
-        process.exit(code);
       }
+      process.exit(code);
     };
   }
 
