@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {ReadonlyJSONObject} from '../../../../shared/src/json.js';
+import {promiseVoid} from '../../../../shared/src/resolved-promises.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import type {Source} from '../../types/streams.js';
 import type {ChangeStreamer} from '../change-streamer/change-streamer.js';
@@ -89,7 +90,8 @@ export class ReplicatorService implements Replicator, Service {
     return this.#incrementalSyncer.subscribe();
   }
 
-  async stop() {
-    await this.#incrementalSyncer.stop(this.#lc);
+  stop() {
+    this.#incrementalSyncer.stop(this.#lc);
+    return promiseVoid;
   }
 }
