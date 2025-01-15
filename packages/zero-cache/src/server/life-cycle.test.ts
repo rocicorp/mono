@@ -63,6 +63,9 @@ describe('shutdown', () => {
   }
 
   beforeEach(async () => {
+    // For testing process.exit()
+    process.env['SINGLE_PROCESS'] = '1';
+
     proc = new EventEmitter();
     processes = new ProcessManager(lc, proc);
     events = [];

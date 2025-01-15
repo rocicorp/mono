@@ -5,7 +5,11 @@ import type {EventEmitter} from 'stream';
 import {HttpService, type Options} from '../services/http-service.js';
 import {RunningState} from '../services/running-state.js';
 import type {SingletonService} from '../services/service.js';
-import type {Subprocess, Worker} from '../types/processes.js';
+import {
+  singleProcessMode,
+  type Subprocess,
+  type Worker,
+} from '../types/processes.js';
 
 /**
  * * `user-facing` workers serve external requests and are the first to
@@ -64,10 +68,13 @@ export class ProcessManager {
       proc.on(signal, () => this.#exit(-1));
     }
 
-    this.#exitImpl = (code: number) =>
-      proc === process
-        ? process.exit(code)
-        : (proc.emit('exit', code) as never); // For unit / integration tests.
+    this.#exitImpl = (code: number) => {
+      if (singleProcessMode()) {
+        return proc.emit('exit', code) as never; // For unit / integration tests.
+      } else {
+        process.exit(code);
+      }
+    };
   }
 
   done() {
