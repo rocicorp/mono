@@ -168,12 +168,16 @@ export function childWorker(
   if (singleProcessMode()) {
     const [parent, child] = inProcChannel();
     import(moduleUrl.href)
-      .then(({default: runWorker}) =>
-        runWorker(parent, env ?? process.env, ...args).then(
-          () => child.emit('close', 0),
-          (err: unknown) => child.emit('error', err),
-        ),
-      )
+      .then(async ({default: runWorker}) => {
+        try {
+          await runWorker(parent, env ?? process.env, ...args);
+          child.emit('close', 0);
+          return;
+        } catch (err) {
+          child.emit('error', err);
+          child.emit('close', -1);
+        }
+      })
       .catch(err => child.emit('error', err));
     return child;
   }
