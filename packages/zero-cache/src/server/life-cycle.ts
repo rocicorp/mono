@@ -39,11 +39,7 @@ export class ProcessManager {
   #runningState = new RunningState('process-manager');
   #drainStart = 0;
 
-  constructor(
-    lc: LogContext,
-    proc: EventEmitter = process,
-    exit = (code: number) => process.exit(code),
-  ) {
+  constructor(lc: LogContext, proc: EventEmitter = process) {
     this.#lc = lc.withContext('component', 'process-manager');
 
     // Propagate `SIGTERM` and `SIGINT` to all user-facing workers,
@@ -65,10 +61,13 @@ export class ProcessManager {
     // to send a `SIGQUIT` to all workers. For this signal, workers are
     // stopped immediately without draining. See `runUntilKilled()`.
     for (const signal of FORCEFUL_SHUTDOWN) {
-      proc.on(signal, () => exit(-1));
+      proc.on(signal, () => this.#exit(-1));
     }
 
-    this.#exitImpl = exit;
+    this.#exitImpl = (code: number) =>
+      proc === process
+        ? process.exit(code)
+        : (proc.emit('exit', code) as never); // For unit / integration tests.
   }
 
   done() {
@@ -206,6 +205,9 @@ export async function runUntilKilled(
   parent: Worker | NodeJS.Process,
   ...services: SingletonService[]
 ): Promise<void> {
+  if (services.length === 0) {
+    return;
+  }
   for (const signal of [...GRACEFUL_SHUTDOWN, ...FORCEFUL_SHUTDOWN]) {
     parent.once(signal, () => {
       const GRACEFUL_SIGNALS = GRACEFUL_SHUTDOWN as readonly NodeJS.Signals[];
