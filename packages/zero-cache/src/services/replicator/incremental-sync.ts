@@ -3,7 +3,6 @@ import {SqliteError} from '@rocicorp/zero-sqlite3';
 import {AbortError} from '../../../../shared/src/abort-error.js';
 import {assert, unreachable} from '../../../../shared/src/asserts.js';
 import {must} from '../../../../shared/src/must.js';
-import {promiseVoid} from '../../../../shared/src/resolved-promises.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {
   columnDef,
@@ -149,9 +148,8 @@ export class IncrementalSyncer {
     return this.#notifier.subscribe();
   }
 
-  stop(lc: LogContext, err?: unknown): Promise<void> {
+  stop(lc: LogContext, err?: unknown) {
     this.#state.stop(lc, err);
-    return promiseVoid;
   }
 }
 
