@@ -1,0 +1,58 @@
+{
+  "name": "btree",
+  "private": true,
+  "version": "0.0.0",
+  "description": "A sorted list of key-value pairs in a fast, typed in-memory B+ tree with a powerful API.",
+  "main": "b+tree.js",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check-types": "tsc",
+    "check-types:watch": "tsc --watch",
+    "benchmark": "npm run build && node benchmarks.js"
+  },
+  "files": [
+    "b+tree.js",
+    "b+tree.d.ts",
+    "b+tree.min.js",
+    "sorted-array.js",
+    "sorted-array.d.ts",
+    "interfaces.d.ts",
+    "readme.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qwertie/btree-typescript.git"
+  },
+  "keywords": [
+    "B+",
+    "tree",
+    "btree",
+    "sorted",
+    "set",
+    "map",
+    "list",
+    "collection",
+    "fast-cloning",
+    "copy-on-write",
+    "optimized"
+  ],
+  "author": "David Piepgrass",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/qwertie/btree-typescript/issues"
+  },
+  "homepage": "https://github.com/qwertie/btree-typescript#readme",
+  "devDependencies": {
+    "@types/bintrees": "^1.0.2",
+    "@types/collections": "^5.0.2",
+    "@types/mersenne-twister": "^1.1.2",
+    "bintrees": "^1.0.2",
+    "collections": "^5.1.11",
+    "functional-red-black-tree": "^1.0.1",
+    "mersenne-twister": "^1.1.0",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3"
+  }
+}

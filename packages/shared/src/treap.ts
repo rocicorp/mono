@@ -10,8 +10,8 @@ class Node<T> {
   constructor(
     value: T,
     priority: number,
-    left: Node<T> | null = null,
-    right: Node<T> | null = null,
+    left: Node<T> | null,
+    right: Node<T> | null,
   ) {
     this.value = value;
     this.priority = priority;
@@ -25,11 +25,9 @@ export type {Node};
 export class Treap<T> {
   readonly #comparator: Comparator<T>;
   #root: Node<T> | null = null;
-  #version: number;
 
   constructor(comparator: Comparator<T>) {
     this.#comparator = comparator;
-    this.#version = 0;
   }
 
   get size(): number {
@@ -41,21 +39,18 @@ export class Treap<T> {
   }
 
   add(value: T): Treap<T> {
-    this.#version++;
-    const priority = randomSMI(); // Random priority
+    const priority = Math.random(); // Random priority
     this.#root = insert(this.#root, value, priority, this.#comparator);
     return this;
   }
 
   delete(value: T): Treap<T> {
     this.#root = remove(this.#root, value, this.#comparator);
-    this.#version++;
     return this;
   }
 
   clear(): Treap<T> {
     this.#root = null;
-    this.#version++;
     return this;
   }
 
@@ -247,7 +242,7 @@ function insert<T>(
   comparator: Comparator<T>,
 ): Node<T> {
   if (!node) {
-    return new Node(value, priority);
+    return new Node(value, priority, null, null);
   }
 
   const cmp = comparator(value, node.value);
@@ -302,10 +297,4 @@ function remove<T>(
     (newNode.left ? newNode.left.size : 0) +
     (newNode.right ? newNode.right.size : 0); // Recalculate the size.
   return balance(newNode);
-}
-
-// Returns a random Small Int (SMI). We use a SMI to allow the Node to keep the
-// number in the object instead of a heap allocated float64.
-function randomSMI(): number {
-  return (Math.random() * 0x7fffffff) | 0;
 }

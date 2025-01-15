@@ -10,7 +10,9 @@
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "bench": "vitest bench --run --project chromium",
+    "bench:watch": "vitest bench --project chromium"
   },
   "dependencies": {
     "@badrap/valita": "0.3.11",
