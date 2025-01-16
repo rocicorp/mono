@@ -63,18 +63,18 @@ const revision = table('revision')
   })
   .primaryKey('id');
 
-const issueRelationships = relationships(issue, connect => ({
-  owner: connect({
+const issueRelationships = relationships(issue, ({one, many}) => ({
+  owner: one({
     sourceField: ['ownerId'],
     destField: ['id'],
     destSchema: user,
   }),
-  comments: connect({
+  comments: many({
     sourceField: ['id'],
     destField: ['issueId'],
     destSchema: comment,
   }),
-  labels: connect(
+  labels: many(
     {
       sourceField: ['id'],
       destField: ['issueId'],
@@ -88,47 +88,47 @@ const issueRelationships = relationships(issue, connect => ({
   ),
 }));
 
-const userRelationships = relationships(user, connect => ({
-  issues: connect({
+const userRelationships = relationships(user, ({many}) => ({
+  issues: many({
     sourceField: ['id'],
     destField: ['ownerId'],
     destSchema: issue,
   }),
 }));
 
-const commentRelationships = relationships(comment, connect => ({
-  issue: connect({
+const commentRelationships = relationships(comment, ({one, many}) => ({
+  issue: one({
     sourceField: ['issueId'],
     destField: ['id'],
     destSchema: issue,
   }),
-  revisions: connect({
+  revisions: many({
     sourceField: ['id'],
     destField: ['commentId'],
     destSchema: revision,
   }),
-  author: connect({
+  author: one({
     sourceField: ['authorId'],
     destField: ['id'],
     destSchema: user,
   }),
 }));
 
-const revisionRelationships = relationships(revision, connect => ({
-  comment: connect({
+const revisionRelationships = relationships(revision, ({one}) => ({
+  comment: one({
     sourceField: ['commentId'],
     destField: ['id'],
     destSchema: comment,
   }),
-  author: connect({
+  author: one({
     sourceField: ['authorId'],
     destField: ['id'],
     destSchema: user,
   }),
 }));
 
-const labelRelationships = relationships(label, connect => ({
-  issues: connect(
+const labelRelationships = relationships(label, ({many}) => ({
+  issues: many(
     {
       sourceField: ['id'],
       destField: ['labelId'],

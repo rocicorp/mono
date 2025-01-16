@@ -81,7 +81,11 @@ type Connection = {
   readonly sourceField: readonly string[];
   readonly destField: readonly string[];
   readonly destSchema: string;
+  readonly cardinality: Cardinality;
 };
+
+export type Cardinality = 'one' | 'many';
+
 export type Relationship =
   | readonly [Connection]
   | readonly [Connection, Connection];
