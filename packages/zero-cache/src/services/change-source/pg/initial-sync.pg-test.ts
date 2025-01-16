@@ -238,6 +238,7 @@ describe('replicator/initial-sync', () => {
     {
       name: 'existing table, default publication',
       setupUpstreamQuery: `
+        CREATE TYPE ENUMZ AS ENUM ('1', '2', '3');
         CREATE TABLE issues(
           "issueID" INTEGER,
           "orgID" INTEGER,
@@ -251,6 +252,7 @@ describe('replicator/initial-sync', () => {
           "date" DATE,
           "time" TIME,
           "serial" SERIAL,
+          "enumz" ENUMZ,
           PRIMARY KEY ("orgID", "issueID")
         );
       `,
@@ -451,8 +453,15 @@ describe('replicator/initial-sync', () => {
               notNull: false,
               dflt: null,
             },
-            ['_0_version']: {
+            enumz: {
               pos: 13,
+              characterMaximumLength: null,
+              dataType: 'TEXT_ENUM_enumz',
+              dflt: null,
+              notNull: false,
+            },
+            ['_0_version']: {
+              pos: 14,
               characterMaximumLength: null,
               dataType: 'TEXT',
               notNull: false,
