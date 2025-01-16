@@ -1,5 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
-import {warnIfDataTypeSupported} from '../../../../db/pg-to-lite.js';
+import {
+  mapPostgresToLite,
+  warnIfDataTypeSupported,
+} from '../../../../db/pg-to-lite.js';
 import type {TableSpec} from '../../../../db/specs.js';
 import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/replication-state.js';
 import {unescapedSchema} from './shard.js';
@@ -29,7 +32,7 @@ export function validate(lc: LogContext, shardID: string, table: TableSpec) {
       `Table "${table.name}" has invalid characters.`,
     );
   }
-  for (const [col, spec] of Object.entries(table.columns)) {
+  for (const [col, spec] of Object.entries(mapPostgresToLite(table).columns)) {
     if (!ALLOWED_IDENTIFIER_CHARS.test(col)) {
       throw new UnsupportedTableSchemaError(
         `Column "${col}" in table "${table.name}" has invalid characters.`,
