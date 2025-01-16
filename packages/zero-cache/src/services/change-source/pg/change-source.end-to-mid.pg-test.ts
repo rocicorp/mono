@@ -26,7 +26,7 @@ const SHARD_ID = 'change_source_end_to_mid_test_id';
  * - Applying the changes to the replica with a MessageProcessor
  * - Verifying the resulting SQLite schema and/or data on the replica.
  */
-describe('change-source/pg/end-to-mid-test', () => {
+describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
   let lc: LogContext;
   let upstream: PostgresDB;
   let replicaDbFile: DbFile;

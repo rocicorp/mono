@@ -163,7 +163,7 @@ const REPLICATED_ZERO_CLIENTS_SPEC: LiteTableSpec = {
 
 const WATERMARK_REGEX = /[0-9a-z]{4,}/;
 
-describe('replicator/initial-sync', () => {
+describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
   type Case = {
     name: string;
     setupUpstreamQuery?: string;

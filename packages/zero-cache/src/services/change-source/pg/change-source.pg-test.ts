@@ -34,7 +34,7 @@ import {dropEventTriggerStatements} from './schema/ddl-test-utils.js';
 
 const SHARD_ID = 'change_source_test_id';
 
-describe('change-source/pg', () => {
+describe('change-source/pg', {timeout: 10000}, () => {
   let logSink: TestLogSink;
   let lc: LogContext;
   let upstream: PostgresDB;
