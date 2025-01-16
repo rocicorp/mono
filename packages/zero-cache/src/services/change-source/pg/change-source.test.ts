@@ -1,6 +1,14 @@
 import type {LogicalReplicationService} from 'pg-logical-replication';
-import {expect, test, vi} from 'vitest';
+import {afterEach, beforeEach, expect, test, vi} from 'vitest';
 import {Acker} from './change-source.js';
+
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 test('acker', () => {
   const service = {acknowledge: vi.fn()};
@@ -12,21 +20,19 @@ test('acker', () => {
     expect(service.acknowledge.mock.calls[acks - 1][0]).toBe(expected);
   };
 
-  const acker = new Acker(
-    service as unknown as LogicalReplicationService,
-    '0a',
-  );
+  const acker = new Acker(service as unknown as LogicalReplicationService);
 
-  acker.onHeartbeat('0/1', true);
-  expectAck('0/A');
+  acker.keepalive();
+  acker.ack('0b');
+  expectAck('0/B');
 
-  acker.onData('0/B');
-  acker.onHeartbeat('0/C', true);
-  expectAck('0/A'); // Outstanding data is unacked.
+  // Should be a no-op (i.e. no '0/0' sent).
+  vi.advanceTimersToNextTimer();
+  acker.ack('0d');
+  expectAck('0/D');
 
-  acker.onAck('0b');
-  expectAck('0/B'); // Now the data is acked.
-
-  acker.onHeartbeat('0/D', true);
-  expectAck('0/D'); // If the data is acked, heartbeats move acks forward.
+  // Keepalive ('0/0') is sent if no ack is sent before the timer fires.
+  acker.keepalive();
+  vi.advanceTimersToNextTimer();
+  expectAck('0/0');
 });

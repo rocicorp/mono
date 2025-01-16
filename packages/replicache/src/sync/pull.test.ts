@@ -5,6 +5,7 @@ import {
   assertObject,
   assertString,
 } from '../../../shared/src/asserts.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 import {stringCompare} from '../../../shared/src/string-compare.js';
 import {asyncIterableToArray} from '../async-iterable-to-array.js';
@@ -22,32 +23,22 @@ import {
 import {encodeIndexKey} from '../db/index.js';
 import {readFromDefaultHead, readFromHead} from '../db/read.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {
-  newWriteLocal,
-  newWriteSnapshotDD31,
-  newWriteSnapshotSDD,
-  readIndexesForWrite,
-} from '../db/write.js';
+import {newWriteLocal, newWriteSnapshotDD31} from '../db/write.js';
 import {
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
 } from '../error-responses.js';
 import * as FormatVersion from '../format-version-enum.js';
 import {type FrozenJSONValue, deepFreeze} from '../frozen-json.js';
-import {
-  assertPullResponseV0,
-  assertPullResponseV1,
-} from '../get-default-puller.js';
+import {assertPullResponseV1} from '../get-default-puller.js';
 import {assertHash, emptyHash, fakeHash} from '../hash.js';
 import type {HTTPRequestInfo} from '../http-request-info.js';
 import type {IndexDefinitions} from '../index-defs.js';
 import type {PatchOperation} from '../patch-operation.js';
 import type {
   PullResponseOKV1,
-  PullResponseV0,
   PullResponseV1,
   Puller,
-  PullerResultV0,
   PullerResultV1,
 } from '../puller.js';
 import {testSubscriptionsManagerOptions} from '../test-util.js';
@@ -61,15 +52,17 @@ import * as HandlePullResponseResultEnum from './handle-pull-response-result-typ
 import {
   type BeginPullResponseV1,
   PULL_VERSION_DD31,
-  type PullRequestV0,
   type PullRequestV1,
-  beginPullV0,
   beginPullV1,
   handlePullResponseV1,
   isPullRequestV1,
   maybeEndPull,
 } from './pull.js';
 import {SYNC_HEAD_NAME} from './sync-head-name.js';
+
+type FormatVersion = Enum<typeof FormatVersion>;
+type HandlePullResponseResultEnum = Enum<typeof HandlePullResponseResultEnum>;
+
 test('begin try pull DD31', async () => {
   const formatVersion = FormatVersion.Latest;
   const clientID = 'test_client_id';
@@ -608,7 +601,7 @@ test('begin try pull DD31', async () => {
 });
 
 describe('maybe end try pull', () => {
-  const t = async (formatVersion: FormatVersion.Type) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     type Case = {
       name: string;
@@ -684,25 +677,16 @@ describe('maybe end try pull', () => {
         );
 
         // Add snapshot and replayed commits to the sync chain.
-        const w =
-          formatVersion >= FormatVersion.DD31
-            ? await newWriteSnapshotDD31(
-                b.chain[0].chunk.hash,
-                {[clientID]: 0},
-                'sync_cookie',
-                dagWrite,
-                clientID,
-                formatVersion,
-              )
-            : await newWriteSnapshotSDD(
-                b.chain[0].chunk.hash,
-                0,
-                'sync_cookie',
-                dagWrite,
-                readIndexesForWrite(b.chain[0], dagWrite, formatVersion),
-                clientID,
-                formatVersion,
-              );
+        assert(formatVersion >= FormatVersion.DD31);
+        const w = await newWriteSnapshotDD31(
+          b.chain[0].chunk.hash,
+          {[clientID]: 0},
+          'sync_cookie',
+          dagWrite,
+          clientID,
+          formatVersion,
+        );
+
         await w.put(lc, `key/${i}`, `${i}`);
         return w.commit(SYNC_HEAD_NAME);
       });
@@ -799,18 +783,18 @@ describe('maybe end try pull', () => {
 });
 
 type FakePullerArgs = {
-  expPullReq: PullRequestV1 | PullRequestV0;
+  expPullReq: PullRequestV1;
   expRequestID: string;
-  resp?: PullResponseV1 | PullResponseV0 | undefined;
+  resp?: PullResponseV1 | undefined;
   err?: string | undefined;
 };
 
 function makeFakePuller(options: FakePullerArgs): Puller {
   return async (
-    pullReq: PullRequestV1 | PullRequestV0,
+    pullReq: PullRequestV1,
     requestID: string,
     // eslint-disable-next-line require-await
-  ): Promise<PullerResultV1 | PullerResultV0> => {
+  ): Promise<PullerResultV1> => {
     expect(options.expPullReq).to.deep.equal(pullReq);
     expect(options.expRequestID).to.equal(requestID);
 
@@ -847,15 +831,8 @@ function makeFakePuller(options: FakePullerArgs): Puller {
       };
     }
 
-    if (isPullRequestV1(options.expPullReq)) {
-      assertPullResponseV1(resp);
-      return {
-        response: resp,
-        httpRequestInfo,
-      };
-    }
-
-    assertPullResponseV0(resp);
+    assert(isPullRequestV1(options.expPullReq));
+    assertPullResponseV1(resp);
     return {
       response: resp,
       httpRequestInfo,
@@ -864,7 +841,7 @@ function makeFakePuller(options: FakePullerArgs): Puller {
 }
 
 describe('changed keys', () => {
-  const t = async (formatVersion: FormatVersion.Type) => {
+  const t = async (formatVersion: FormatVersion) => {
     type IndexDef = {
       name: string;
       prefix: string;
@@ -932,29 +909,18 @@ describe('changed keys', () => {
         err: undefined,
       });
 
-      const pullResult =
-        formatVersion >= FormatVersion.DD31
-          ? await beginPullV1(
-              profileID,
-              clientID,
-              clientGroupID,
-              schemaVersion,
-              puller,
-              requestID,
-              store,
-              formatVersion,
-              new LogContext(),
-            )
-          : await beginPullV0(
-              profileID,
-              clientID,
-              schemaVersion,
-              puller,
-              requestID,
-              store,
-              formatVersion,
-              new LogContext(),
-            );
+      assert(formatVersion >= FormatVersion.DD31);
+      const pullResult = await beginPullV1(
+        profileID,
+        clientID,
+        clientGroupID,
+        schemaVersion,
+        puller,
+        requestID,
+        store,
+        formatVersion,
+        new LogContext(),
+      );
 
       const result = await maybeEndPull(
         store,
@@ -1318,7 +1284,7 @@ describe('handlePullResponseDD31', () => {
   }: {
     expectedBaseCookieJSON: ReadonlyJSONValue;
     responseCookie: Cookie;
-    expectedResultType: HandlePullResponseResultEnum.Type;
+    expectedResultType: HandlePullResponseResultEnum;
     setupChain?: (b: ChainBuilder) => Promise<unknown>;
     responseLastMutationIDChanges?: {[clientID: string]: number};
     responsePatch?: PatchOperation[];

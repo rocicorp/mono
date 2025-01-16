@@ -101,6 +101,8 @@ async function verifyDependencies(external) {
 
 async function buildZeroClient() {
   const define = makeDefine('unknown');
+  define['process.env.DISABLE_MUTATION_RECOVERY'] = 'true';
+
   const entryPoints = forBundleSizeDashboard
     ? {zero: basePath('src/zero.ts')}
     : {
@@ -108,7 +110,6 @@ async function buildZeroClient() {
         react: basePath('src/react.ts'),
         solid: basePath('src/solid.ts'),
         advanced: basePath('src/advanced.ts'),
-        ['change-protocol']: basePath('src/change-protocol.ts'),
       };
   const result = await esbuild.build({
     ...sharedOptions(minify, metafile),

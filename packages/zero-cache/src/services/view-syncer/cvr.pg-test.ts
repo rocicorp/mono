@@ -1054,16 +1054,16 @@ describe('view-syncer/cvr', () => {
       Date.UTC(2024, 3, 23, 1),
     );
     expect(stats).toMatchInlineSnapshot(`
-        {
-          "clients": 0,
-          "desires": 0,
-          "instances": 1,
-          "queries": 0,
-          "rows": 0,
-          "rowsDeferred": 0,
-          "statements": 2,
-        }
-      `);
+      {
+        "clients": 0,
+        "desires": 0,
+        "instances": 1,
+        "queries": 0,
+        "rows": 0,
+        "rowsDeferred": 0,
+        "statements": 2,
+      }
+    `);
 
     expect(updated).toEqual({
       ...cvr,

@@ -1,5 +1,6 @@
 import {describe, expect, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import {Chunk, type Refs, toRefs} from '../dag/chunk.js';
 import {TestStore} from '../dag/test-store.js';
 import * as FormatVersion from '../format-version-enum.js';
@@ -16,7 +17,6 @@ import {
   commitChain,
   newLocalDD31 as commitNewLocalDD31,
   newSnapshotDD31 as commitNewSnapshotDD31,
-  newSnapshotSDD as commitNewSnapshotSDD,
   fromChunk,
   getMutationID,
   localMutations,
@@ -26,8 +26,10 @@ import {
 import * as MetaType from './meta-type-enum.js';
 import {ChainBuilder} from './test-helpers.js';
 
+type FormatVersion = Enum<typeof FormatVersion>;
+
 describe('base snapshot', () => {
-  const t = async (formatVersion: FormatVersion.Type) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const store = new TestStore();
     const b = new ChainBuilder(store, undefined, formatVersion);
@@ -86,7 +88,7 @@ describe('base snapshot', () => {
 });
 
 describe('local mutations', () => {
-  const t = async (formatVersion: FormatVersion.Type) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const store = new TestStore();
     const b = new ChainBuilder(store, undefined, formatVersion);
@@ -190,7 +192,7 @@ test('local mutations greater than', async () => {
 });
 
 describe('chain', () => {
-  const t = async (formatVersion: FormatVersion.Type) => {
+  const t = async (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const store = new TestStore();
     const b = new ChainBuilder(store, undefined, formatVersion);
@@ -371,27 +373,6 @@ test('load roundtrip', () => {
     t(
       makeCommit(
         {
-          type: MetaType.SnapshotSDD,
-          basisHash,
-          lastMutationID: 0,
-          cookieJSON: cookie,
-        },
-        fakeHash('face6'),
-        [fakeHash('face6')],
-      ),
-      commitNewSnapshotSDD(
-        createChunk,
-        basisHash,
-        0,
-        cookie,
-        fakeHash('face6'),
-        [],
-      ),
-    );
-
-    t(
-      makeCommit(
-        {
           type: MetaType.SnapshotDD31,
           basisHash,
           lastMutationIDs: {[clientID]: 0},
@@ -413,21 +394,6 @@ test('load roundtrip', () => {
 
   t(
     makeCommit(
-      // @ts-expect-error We are testing invalid types
-      {
-        type: MetaType.SnapshotSDD,
-        basisHash: emptyStringHash,
-        lastMutationID: 0,
-        // missing cookieJSON
-      },
-      fakeHash('face6'),
-      [fakeHash('face6'), fakeHash('000')],
-    ),
-    new Error('Invalid type: undefined, expected JSON value'),
-  );
-
-  t(
-    makeCommit(
       // @ts-expect-error we are testing invalid types
       {
         type: MetaType.SnapshotDD31,
@@ -443,41 +409,6 @@ test('load roundtrip', () => {
 });
 
 test('accessors', async () => {
-  const clientID = 'client-id';
-
-  const fakeRead = {
-    // eslint-disable-next-line require-await
-    async mustGetChunk() {
-      // This test does not read from the dag and if it does, lets just fail.
-      throw new Error('Method not implemented.');
-    },
-  };
-
-  const snapshot = fromChunk(
-    makeCommit(
-      {
-        type: MetaType.SnapshotSDD,
-        basisHash: fakeHash('face9'),
-        lastMutationID: 2,
-        cookieJSON: 'cookie 2',
-      },
-      fakeHash('face10'),
-      [fakeHash('face10'), fakeHash('face9')],
-    ),
-  );
-  const sm = snapshot.meta;
-  if (sm.type === MetaType.SnapshotSDD) {
-    expect(sm.lastMutationID).to.equal(2);
-  } else {
-    throw new Error('unexpected type');
-  }
-  expect(sm.cookieJSON).to.deep.equal('cookie 2');
-  expect(sm.basisHash).to.equal(fakeHash('face9'));
-  expect(snapshot.valueHash).to.equal(fakeHash('face10'));
-  expect(await snapshot.getNextMutationID(clientID, fakeRead)).to.equal(3);
-});
-
-test('accessors DD31', async () => {
   const clientID = 'client-id';
 
   const originalHash = fakeHash('face7');
@@ -541,8 +472,6 @@ test('accessors DD31', async () => {
   const sm = snapshot.meta;
   if (sm.type === MetaType.SnapshotDD31) {
     expect(sm.lastMutationIDs[clientID]).to.equal(2);
-  } else if (sm.type === MetaType.SnapshotSDD) {
-    expect(sm.lastMutationID).to.equal(2);
   } else {
     throw new Error('unexpected type');
   }

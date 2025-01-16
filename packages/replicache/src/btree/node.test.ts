@@ -1,5 +1,6 @@
 import {beforeEach, describe, expect, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 import {toRefs} from '../dag/chunk.js';
 import type {Read, Store, Write} from '../dag/store.js';
@@ -31,6 +32,8 @@ import {
 import {BTreeRead, NODE_HEADER_SIZE} from './read.js';
 import {BTreeWrite} from './write.js';
 
+type FormatVersion = Enum<typeof FormatVersion>;
+
 describe('btree node', () => {
   function createSizedEntry<K, V>(
     key: K,
@@ -47,7 +50,7 @@ describe('btree node', () => {
   function makeTree(
     node: TreeData,
     dagStore: Store,
-    formatVersion: FormatVersion.Type,
+    formatVersion: FormatVersion,
   ): Promise<Hash> {
     return withWrite(dagStore, async dagWrite => {
       const [h] = await makeTreeInner(node, dagWrite);
@@ -96,7 +99,7 @@ describe('btree node', () => {
   async function readTreeData(
     rootHash: Hash,
     dagRead: Read,
-    formatVersion: FormatVersion.Type,
+    formatVersion: FormatVersion,
   ): Promise<Record<string, unknown>> {
     const chunk = await dagRead.getChunk(rootHash);
     const node = parseBTreeNode(chunk?.data, formatVersion, getEntrySize);
@@ -129,7 +132,7 @@ describe('btree node', () => {
   async function expectTree(
     rootHash: Hash,
     dagStore: Store,
-    formatVersion: FormatVersion.Type,
+    formatVersion: FormatVersion,
     expected: TreeData,
   ) {
     await withRead(dagStore, async dagRead => {
@@ -154,7 +157,7 @@ describe('btree node', () => {
   function doRead<R>(
     rootHash: Hash,
     dagStore: Store,
-    formatVersion: FormatVersion.Type,
+    formatVersion: FormatVersion,
     fn: (r: BTreeRead) => R | Promise<R>,
   ): Promise<R> {
     return withRead(dagStore, dagWrite => {
@@ -172,7 +175,7 @@ describe('btree node', () => {
   function doWrite(
     rootHash: Hash,
     dagStore: Store,
-    formatVersion: FormatVersion.Type,
+    formatVersion: FormatVersion,
     fn: (w: BTreeWrite) => void | Promise<void>,
   ): Promise<Hash> {
     return withWrite(dagStore, async dagWrite => {
@@ -1656,7 +1659,7 @@ describe('Write nodes using ChainBuilder', () => {
     );
   }
 
-  const getBTreeNodes = async (formatVersion: FormatVersion.Type) => {
+  const getBTreeNodes = async (formatVersion: FormatVersion) => {
     const dagStore = new TestStore();
     const clientID = 'client1';
     const b = new ChainBuilder(dagStore, undefined, formatVersion);

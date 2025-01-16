@@ -11,19 +11,18 @@ import {
 } from 'vitest';
 import WebSocket from 'ws';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import {randInt} from '../../../../shared/src/rand.js';
+import {inProcChannel} from '../../types/processes.js';
 import type {Source} from '../../types/streams.js';
 import {Subscription} from '../../types/subscription.js';
+import {installWebSocketHandoff} from '../dispatcher/websocket-handoff.js';
+import {HttpService} from '../http-service.js';
 import {ReplicationMessages} from '../replicator/test-utils.js';
 import {
   ChangeStreamerHttpClient,
   ChangeStreamerHttpServer,
+  getSubscriberContext,
 } from './change-streamer-http.js';
-import type {
-  ChangeStreamer,
-  Downstream,
-  SubscriberContext,
-} from './change-streamer.js';
+import type {Downstream, SubscriberContext} from './change-streamer.js';
 
 describe('change-streamer/http', () => {
   let lc: LogContext;
@@ -31,9 +30,10 @@ describe('change-streamer/http', () => {
   let subscribeFn: MockedFunction<
     (ctx: SubscriberContext) => Promise<Subscription<Downstream>>
   >;
-  let port: number;
+  let serverURL: string;
+  let dispatcherURL: string;
   let server: ChangeStreamerHttpServer;
-  let client: ChangeStreamer;
+  let dispatcher: HttpService;
   let connectionClosed: Promise<Downstream[]>;
 
   beforeEach(async () => {
@@ -44,21 +44,33 @@ describe('change-streamer/http', () => {
     downstream = Subscription.create({cleanup});
     subscribeFn = vi.fn();
 
+    const [parent, receiver] = inProcChannel();
+
+    dispatcher = new HttpService('dispatcher', lc, {port: 0}, fastify => {
+      installWebSocketHandoff(
+        lc,
+        req => ({payload: getSubscriberContext(req), receiver}),
+        fastify.server,
+      );
+    });
+
     // Run the server for real instead of using `injectWS()`, as that has a
     // different behavior for ws.close().
-    port = 3000 + Math.floor(randInt(0, 5000));
     server = new ChangeStreamerHttpServer(
       lc,
       {subscribe: subscribeFn.mockResolvedValue(downstream)},
-      {port},
+      {port: 0},
+      parent,
     );
-    await server.start();
 
-    client = new ChangeStreamerHttpClient(lc, port);
+    [dispatcherURL, serverURL] = await Promise.all([
+      dispatcher.start(),
+      server.start(),
+    ]);
   });
 
   afterEach(async () => {
-    await server.stop();
+    await Promise.all([dispatcher.stop(), server.stop]);
   });
 
   async function drain<T>(num: number, sub: Source<T>): Promise<T[]> {
@@ -74,35 +86,63 @@ describe('change-streamer/http', () => {
   }
 
   test('health check', async () => {
-    let res = await fetch(`http://localhost:${port}/`);
+    let res = await fetch(`${serverURL}/`);
     expect(res.ok).toBe(true);
 
-    res = await fetch(`http://localhost:${port}/?foo=bar`);
+    res = await fetch(`${serverURL}/?foo=bar`);
     expect(res.ok).toBe(true);
   });
 
   describe('request bad requests', () => {
     test.each([
-      ['no query', `ws://localhost:%PORT%/api/replication/v0/changes`],
+      ['invalid querystring - missing id', `/api/replication/v0/changes`],
       [
-        'missing required query params',
-        `ws://localhost:%PORT%/api/replication/v0/changes?id=foo&replicaVersion=bar&initial=true`,
+        'invalid querystring - missing watermark',
+        `/api/replication/v0/changes?id=foo&replicaVersion=bar&initial=true`,
       ],
-    ])('%s', async (_, url) => {
-      url = url.replace('%PORT%', String(port));
-      const {promise: result, resolve} = resolver<unknown>();
+    ])('%s: %s', async (error, path) => {
+      for (const baseURL of [serverURL, dispatcherURL]) {
+        const {promise: result, resolve} = resolver<unknown>();
 
-      const ws = new WebSocket(url);
-      ws.on('upgrade', () => resolve('success'));
-      ws.on('error', resolve);
+        const ws = new WebSocket(new URL(path, baseURL));
+        ws.on('close', (_code, reason) => resolve(reason));
 
-      expect(String(await result)).toEqual(
-        'Error: Unexpected server response: 400',
-      );
+        expect(String(await result)).toEqual(`Error: ${error}`);
+      }
     });
   });
 
-  test('basic messages streamed over websocket', async () => {
+  test.each([
+    ['hostname', () => new ChangeStreamerHttpClient(lc, `${serverURL}`)],
+    [
+      'hostname with slash',
+      () => new ChangeStreamerHttpClient(lc, `${serverURL}/`),
+    ],
+    [
+      'hostname with path',
+      () => new ChangeStreamerHttpClient(lc, `${serverURL}/tenant-id`),
+    ],
+    [
+      'hostname with path and trailing slash',
+      () => new ChangeStreamerHttpClient(lc, `${serverURL}/foo_bar/`),
+    ],
+    [
+      'websocket handoff hostname',
+      () => new ChangeStreamerHttpClient(lc, `${dispatcherURL}`),
+    ],
+    [
+      'websocket handoff hostname with slash',
+      () => new ChangeStreamerHttpClient(lc, `${dispatcherURL}/`),
+    ],
+    [
+      'websocket handoff hostname with path',
+      () => new ChangeStreamerHttpClient(lc, `${dispatcherURL}/tenant-id`),
+    ],
+    [
+      'websocket handoff hostname with path and trailing slash',
+      () => new ChangeStreamerHttpClient(lc, `${dispatcherURL}/foo_bar/`),
+    ],
+  ])('basic messages streamed over websocket: %s', async (_name, client) => {
     const ctx = {
       id: 'foo',
       mode: 'serving',
@@ -110,13 +150,13 @@ describe('change-streamer/http', () => {
       watermark: '123',
       initial: true,
     } as const;
-    const sub = await client.subscribe(ctx);
+    const sub = await client().subscribe(ctx);
 
-    downstream.push(['begin', {tag: 'begin'}]);
+    downstream.push(['begin', {tag: 'begin'}, {commitWatermark: '456'}]);
     downstream.push(['commit', {tag: 'commit'}, {watermark: '456'}]);
 
     expect(await drain(2, sub)).toEqual([
-      ['begin', {tag: 'begin'}],
+      ['begin', {tag: 'begin'}, {commitWatermark: '456'}],
       ['commit', {tag: 'commit'}, {watermark: '456'}],
     ]);
 
@@ -128,8 +168,8 @@ describe('change-streamer/http', () => {
     expect(subscribeFn.mock.calls[0][0]).toEqual(ctx);
   });
 
-  test('bigint and non-JSON fields', async () => {
-    const sub = await client.subscribe({
+  test('bigint fields', async () => {
+    const sub = await new ChangeStreamerHttpClient(lc, serverURL).subscribe({
       id: 'foo',
       mode: 'serving',
       replicaVersion: 'abc',

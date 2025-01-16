@@ -316,25 +316,49 @@ export const zeroOptions = {
       `by shutting down, and when restarted, resetting the replica and all synced `,
       `clients. This is a heavy-weight operation and can result in user-visible`,
       `slowness or downtime if compute resources are scarce.`,
-      ``,
-      `Moreover, {bold auto-reset} is only supported for single-node configurations`,
-      `with a permanent volume for the replica. Specifically, it is incompatible`,
-      `with the {bold litestream} option, and will be ignored with a warning if`,
-      `set in combination with {bold litestream}.`,
     ],
   },
 
   litestream: {
-    type: v.boolean().optional(),
-    desc: [
-      `Indicates that a {bold litestream replicate} process is backing up the`,
-      `{bold replica-file}. This should be the production configuration for the`,
-      `{bold replication-manager}. It is okay to run this in development too.`,
-      ``,
-      `Note that this flag does not actually run {bold litestream}; rather, it `,
-      `configures the internal replication logic to operate on the DB file in `,
-      `a manner that is compatible with {bold litestream}.`,
-    ],
+    executable: {
+      type: v.string().optional(),
+      desc: [
+        `Path to the {bold litestream} executable. This option has no effect if`,
+        `{bold litestream-backup-url} is unspecified.`,
+      ],
+    },
+
+    configPath: {
+      type: v.string().default('./src/services/litestream/config.yml'),
+      desc: [
+        `Path to the litestream yaml config file. zero-cache will run this with its`,
+        `environment variables, which can be referenced in the file via $\\{ENV\\}`,
+        `substitution, for example:`,
+        `* {bold ZERO_REPLICA_FILE} for the db path`,
+        `* {bold ZERO_LITESTREAM_BACKUP_LOCATION} for the db replica url`,
+        `* {bold ZERO_LITESTREAM_LOG_LEVEL} for the log level`,
+        `* {bold ZERO_LOG_FORMAT} for the log type`,
+      ],
+    },
+
+    logLevel: {
+      type: v
+        .union(
+          v.literal('debug'),
+          v.literal('info'),
+          v.literal('warn'),
+          v.literal('error'),
+        )
+        .default('warn'),
+    },
+
+    backupURL: {
+      type: v.string().optional(),
+      desc: [
+        `The location of the litestream backup, usually an {bold s3://} URL.`,
+        `If set, the {bold litestream-executable} must also be specified.`,
+      ],
+    },
   },
 
   storageDBTmpDir: {

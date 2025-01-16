@@ -63,12 +63,11 @@ describe('shutdown', () => {
   }
 
   beforeEach(async () => {
+    // For testing process.exit()
+    process.env['SINGLE_PROCESS'] = '1';
+
     proc = new EventEmitter();
-    processes = new ProcessManager(
-      lc,
-      proc,
-      code => proc.emit('exit', code) as never,
-    );
+    processes = new ProcessManager(lc, proc);
     events = [];
     changeStreamer = startWorker('cs', 'supporting');
     replicator = startWorker('rep', 'supporting');
@@ -225,11 +224,7 @@ describe('shutdown', () => {
 
   test('graceful shutdown with no user-facing workers', async () => {
     proc = new EventEmitter();
-    processes = new ProcessManager(
-      lc,
-      proc,
-      code => proc.emit('exit', code) as never,
-    );
+    processes = new ProcessManager(lc, proc);
     const changeStreamer = startWorker('cs', 'supporting');
     const replicator = startWorker('rep', 'supporting');
     const all = [changeStreamer, replicator];

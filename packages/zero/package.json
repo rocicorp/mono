@@ -1,6 +1,6 @@
 {
   "name": "@rocicorp/zero",
-  "version": "0.10.2025010800+ca1811",
+  "version": "0.11.2025011402+73df1d",
   "scripts": {
     "build": "rm -rf out && npm run build-server && npm run build-client",
     "build-client": "tsc -p tsconfig.client.json && tsc-alias -p tsconfig.client.json && node tool/build.js",
@@ -11,7 +11,8 @@
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "prepack": "cp ../zero-cache/src/services/litestream/config.yml ./out/zero-cache/src/services/litestream/"
   },
   "dependencies": {
     "@badrap/valita": "0.3.11",
@@ -90,9 +91,9 @@
       "types": "./out/zero/src/advanced.d.ts",
       "default": "./out/advanced.js"
     },
-    "./change-protocol": {
-      "types": "./out/zero-cache/src/services/change-source/protocol/mod.d.ts",
-      "default": "./out/change-protocol.js"
+    "./change-protocol/v0": {
+      "types": "./out/zero-cache/src/services/change-source/protocol/current/mod.d.ts",
+      "default": "./out/zero-cache/src/services/change-source/protocol/current/mod.js"
     }
   },
   "bin": {

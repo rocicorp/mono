@@ -14,11 +14,7 @@ import {
   testDBs,
 } from '../../../test/db.js';
 import {DbFile} from '../../../test/lite.js';
-import {
-  oneAfter,
-  versionFromLexi,
-  versionToLexi,
-} from '../../../types/lexi-version.js';
+import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.js';
 import type {PostgresDB} from '../../../types/pg.js';
 import type {Source} from '../../../types/streams.js';
 import type {
@@ -27,6 +23,7 @@ import type {
 } from '../../change-streamer/change-streamer-service.js';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
 import type {
+  Begin,
   ChangeStreamMessage,
   Commit,
 } from '../protocol/current/downstream.js';
@@ -153,7 +150,7 @@ describe('change-source/pg', () => {
         new StatementRunner(replicaDbFile.connect(lc)),
       );
 
-      const {initialWatermark, changes, acks} = await startStream('00');
+      const {changes, acks} = await startStream('00');
       const downstream = drainToQueue(changes);
 
       await upstream.begin(async tx => {
@@ -179,11 +176,13 @@ describe('change-source/pg', () => {
       `;
       });
 
-      expect(initialWatermark).toEqual(oneAfter(replicaVersion));
-      expect(await downstream.dequeue()).toMatchObject([
+      const begin1 = (await downstream.dequeue()) as Begin;
+      expect(begin1).toMatchObject([
         'begin',
         {tag: 'begin'},
+        {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
       ]);
+      expect(begin1[2].commitWatermark > replicaVersion).toBe(true);
       expect(await downstream.dequeue()).toMatchObject([
         'data',
         {
@@ -224,13 +223,13 @@ describe('change-source/pg', () => {
           new: {minSupportedVersion: 1, maxSupportedVersion: 2},
         },
       ]);
-      const firstCommit = (await downstream.dequeue()) as Commit;
-      expect(firstCommit).toMatchObject([
+      const commit1 = (await downstream.dequeue()) as Commit;
+      expect(commit1).toMatchObject([
         'commit',
         {tag: 'commit'},
-        {watermark: expect.stringMatching(WATERMARK_REGEX)},
+        {watermark: begin1[2]?.commitWatermark},
       ]);
-      acks.push(firstCommit);
+      acks.push(['status', {}, commit1[2]]);
 
       // Write more upstream changes.
       await upstream.begin(async tx => {
@@ -247,9 +246,11 @@ describe('change-source/pg', () => {
         );
       });
 
-      expect(await downstream.dequeue()).toMatchObject([
+      const begin2 = (await downstream.dequeue()) as Begin;
+      expect(begin2).toMatchObject([
         'begin',
         {tag: 'begin'},
+        {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
       ]);
       expect(await downstream.dequeue()).toMatchObject([
         'data',
@@ -293,7 +294,7 @@ describe('change-source/pg', () => {
       expect(await downstream.dequeue()).toMatchObject([
         'commit',
         {tag: 'commit'},
-        {watermark: expect.stringMatching(WATERMARK_REGEX)},
+        {watermark: begin2[2]?.commitWatermark},
       ]);
 
       // Close the stream.
@@ -304,7 +305,7 @@ describe('change-source/pg', () => {
       const results = await upstream<{confirmed: string}[]>`
     SELECT confirmed_flush_lsn as confirmed FROM pg_replication_slots
         WHERE slot_name = ${replicationSlot(SHARD_ID)}`;
-      const expected = versionFromLexi(firstCommit[2].watermark) + 1n;
+      const expected = versionFromLexi(commit1[2].watermark) + 1n;
       expect(results).toEqual([
         {confirmed: fromLexiVersion(versionToLexi(expected))},
       ]);
@@ -327,32 +328,47 @@ describe('change-source/pg', () => {
       const stream1 = await startStream('00');
       const changes1 = drainToQueue(stream1.changes);
 
-      expect(stream1.initialWatermark).toEqual(oneAfter(replicaVersion));
-      expect(await changes1.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
+      const begin1 = (await changes1.dequeue()) as Begin;
+      expect(begin1).toMatchObject([
+        'begin',
+        {tag: 'begin'},
+        {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
+      ]);
+      expect(begin1[2].commitWatermark > replicaVersion).toBe(true);
       expect(await changes1.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
-      const firstCommit = (await changes1.dequeue()) as Commit;
-      expect(firstCommit).toMatchObject([
+      const commit1 = (await changes1.dequeue()) as Commit;
+      expect(commit1).toMatchObject([
         'commit',
         {tag: 'commit'},
-        {watermark: expect.stringMatching(WATERMARK_REGEX)},
+        {watermark: begin1[2]?.commitWatermark},
       ]);
 
-      expect(await changes1.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
+      const begin2 = (await changes1.dequeue()) as Begin;
+      expect(begin2).toMatchObject([
+        'begin',
+        {tag: 'begin'},
+        {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
+      ]);
       expect(await changes1.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
-      const secondCommit = (await changes1.dequeue()) as Commit;
-      expect(secondCommit).toMatchObject([
+      const commit2 = (await changes1.dequeue()) as Commit;
+      expect(commit2).toMatchObject([
         'commit',
         {tag: 'commit'},
-        {watermark: expect.stringMatching(WATERMARK_REGEX)},
+        {watermark: begin2[2]?.commitWatermark},
       ]);
 
-      expect(await changes1.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
+      const begin3 = (await changes1.dequeue()) as Begin;
+      expect(begin3).toMatchObject([
+        'begin',
+        {tag: 'begin'},
+        {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
+      ]);
       expect(await changes1.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
-      const thirdCommit = (await changes1.dequeue()) as Commit;
-      expect(thirdCommit).toMatchObject([
+      const commit3 = (await changes1.dequeue()) as Commit;
+      expect(commit3).toMatchObject([
         'commit',
         {tag: 'commit'},
-        {watermark: expect.stringMatching(WATERMARK_REGEX)},
+        {watermark: begin3[2]?.commitWatermark},
       ]);
 
       stream1.changes.cancel();
@@ -361,23 +377,19 @@ describe('change-source/pg', () => {
       const stream2 = await startStream('00');
       const changes2 = drainToQueue(stream2.changes);
 
-      expect(stream2.initialWatermark).toEqual(oneAfter(replicaVersion));
-      expect(await changes2.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
+      expect(await changes2.dequeue()).toMatchObject(begin1);
       expect(await changes2.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
-      expect(await changes2.dequeue()).toEqual(firstCommit);
+      expect(await changes2.dequeue()).toEqual(commit1);
 
       stream2.changes.cancel();
 
       // Still with no ACK, start a stream from after the secondCommit.
-      const stream3 = await startStream(secondCommit[2].watermark);
+      const stream3 = await startStream(commit2[2].watermark);
       const changes3 = drainToQueue(stream3.changes);
 
-      expect(stream3.initialWatermark).toEqual(
-        oneAfter(secondCommit[2].watermark),
-      );
-      expect(await changes3.dequeue()).toMatchObject(['begin', {tag: 'begin'}]);
+      expect(await changes3.dequeue()).toMatchObject(begin3);
       expect(await changes3.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
-      expect(await changes3.dequeue()).toEqual(thirdCommit);
+      expect(await changes3.dequeue()).toEqual(commit3);
 
       stream3.changes.cancel();
     },
@@ -393,6 +405,7 @@ describe('change-source/pg', () => {
       expect(await downstream.dequeue()).toMatchObject([
         'begin',
         {tag: 'begin'},
+        {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
       ]);
       expect(await downstream.dequeue()).toMatchObject([
         'data',
@@ -416,6 +429,7 @@ describe('change-source/pg', () => {
       expect(await downstream.dequeue()).toMatchObject([
         'begin',
         {tag: 'begin'},
+        {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
       ]);
       expect(await downstream.dequeue()).toMatchObject([
         'data',
@@ -499,6 +513,7 @@ describe('change-source/pg', () => {
         expect(await downstream.dequeue()).toMatchObject([
           'begin',
           {tag: 'begin'},
+          {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
         ]);
         expect(await downstream.dequeue()).toMatchObject([
           'data',
@@ -525,6 +540,7 @@ describe('change-source/pg', () => {
         expect(await downstream.dequeue()).toMatchObject([
           'begin',
           {tag: 'begin'},
+          {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
         ]);
         expect(await downstream.dequeue()).toMatchObject([
           'rollback',

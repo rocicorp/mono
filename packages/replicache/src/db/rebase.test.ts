@@ -2,6 +2,7 @@ import {LogContext} from '@rocicorp/logger';
 import sinon from 'sinon';
 import {afterEach, describe, expect, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import {BTreeRead} from '../btree/read.js';
 import type {Read} from '../dag/store.js';
 import {TestStore} from '../dag/test-store.js';
@@ -16,7 +17,6 @@ import {
   type LocalMetaDD31,
   type Meta,
   type SnapshotMetaDD31,
-  type SnapshotMetaSDD,
   assertLocalCommitDD31,
   commitFromHead,
   commitIsLocal,
@@ -25,12 +25,14 @@ import {
 import {rebaseMutationAndCommit, rebaseMutationAndPutCommit} from './rebase.js';
 import {ChainBuilder} from './test-helpers.js';
 
+type FormatVersion = Enum<typeof FormatVersion>;
+
 afterEach(() => {
   sinon.restore();
 });
 
 async function createMutationSequenceFixture() {
-  const formatVersion: FormatVersion.Type = FormatVersion.Latest;
+  const formatVersion = FormatVersion.Latest;
   const clientID = 'test_client_id';
   const store = new TestStore();
   const b = new ChainBuilder(store, undefined, formatVersion);
@@ -55,7 +57,7 @@ async function createMutationSequenceFixture() {
   };
 
   const fixture = {
-    formatVersion,
+    formatVersion: formatVersion as FormatVersion,
     clientID,
     store,
     localCommit1,
@@ -140,7 +142,7 @@ async function createMutationSequenceFixture() {
 }
 
 async function createMissingMutatorFixture() {
-  const formatVersion: FormatVersion.Type = FormatVersion.Latest;
+  const formatVersion = FormatVersion.Latest;
   const consoleErrorStub = sinon.stub(console, 'error');
   const clientID = 'test_client_id';
   const store = new TestStore();
@@ -153,7 +155,7 @@ async function createMissingMutatorFixture() {
   const syncSnapshotCommit = syncChain[0] as Commit<SnapshotMetaDD31>;
 
   const fixture = {
-    formatVersion,
+    formatVersion: formatVersion as FormatVersion,
     clientID,
     store,
     localCommit,
@@ -205,7 +207,7 @@ async function createMissingMutatorFixture() {
 async function commitAndBTree(
   name = SYNC_HEAD_NAME,
   read: Read,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<[Commit<Meta>, BTreeRead]> {
   const commit = await commitFromHead(name, read);
   const btreeRead = new BTreeRead(read, formatVersion, commit.valueHash);
@@ -438,7 +440,7 @@ describe('rebaseMutationAndPutCommit', () => {
 
 async function testThrowsErrorOnClientIDMismatch(
   variant: 'commit' | 'putCommit',
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ) {
   assert(formatVersion >= FormatVersion.DD31);
   const clientID = 'test_client_id';
@@ -449,7 +451,7 @@ async function testThrowsErrorOnClientIDMismatch(
   await b.addLocal(clientID);
   const localCommit = b.chain[b.chain.length - 1] as Commit<LocalMetaDD31>;
   const syncChain = await b.addSyncSnapshot(1, clientID);
-  const syncSnapshotCommit = syncChain[0] as Commit<SnapshotMetaSDD>;
+  const syncSnapshotCommit = syncChain[0] as Commit<SnapshotMetaDD31>;
 
   let testMutatorCallCount = 0;
   const testMutator = async (tx: WriteTransaction, args?: unknown) => {
@@ -508,7 +510,7 @@ async function testThrowsErrorOnMutationIDMismatch(
   await b.addLocal(clientID);
   const localCommit2 = b.chain[b.chain.length - 1] as Commit<LocalMetaDD31>;
   const syncChain = await b.addSyncSnapshot(1, clientID);
-  const syncSnapshotCommit = syncChain[0] as Commit<SnapshotMetaSDD>;
+  const syncSnapshotCommit = syncChain[0] as Commit<SnapshotMetaDD31>;
 
   let testMutator1CallCount = 0;
   const testMutator1 = async (tx: WriteTransaction, args?: unknown) => {

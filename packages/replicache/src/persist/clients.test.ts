@@ -8,7 +8,6 @@ import {TestStore} from '../dag/test-store.js';
 import {
   Commit,
   type SnapshotMetaDD31,
-  type SnapshotMetaSDD,
   commitFromHash,
   commitIsSnapshot,
   fromChunk,
@@ -379,7 +378,7 @@ test('initClient creates new empty snapshot when no existing snapshot to bootstr
     assertNotUndefined(headChunk);
     const commit = fromChunk(headChunk);
     expect(commitIsSnapshot(commit)).to.be.true;
-    const snapshotMeta = commit.meta as SnapshotMetaSDD;
+    const snapshotMeta = commit.meta as SnapshotMetaDD31;
     expect(snapshotMeta.basisHash).to.be.null;
     expect(snapshotMeta.cookieJSON).to.be.null;
     expect(await commit.getMutationID(clientID, dagRead)).to.equal(0);

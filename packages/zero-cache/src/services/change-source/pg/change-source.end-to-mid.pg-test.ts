@@ -106,11 +106,12 @@ describe('change-source/pg/end-to-mid-test', () => {
     const data: DataChange[] = [];
     for (;;) {
       const change = await downstream.dequeue();
-      if (change[0] !== 'control') {
+      const [type] = change;
+      if (type !== 'control' && type !== 'status') {
         replicator.processMessage(lc, change);
       }
 
-      switch (change[0]) {
+      switch (type) {
         case 'begin':
           break;
         case 'data':
@@ -119,6 +120,7 @@ describe('change-source/pg/end-to-mid-test', () => {
         case 'commit':
         case 'rollback':
         case 'control':
+        case 'status':
           return data;
         default:
           change satisfies never;

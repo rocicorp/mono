@@ -14,15 +14,25 @@ type Tenant = {
 export class TenantDispatcher extends HttpService {
   readonly id = 'tenant-dispatcher';
   readonly #tenants: Tenant[];
+  readonly #runAsReplicationManager: boolean;
 
-  constructor(lc: LogContext, tenants: Tenant[], opts: Options) {
+  constructor(
+    lc: LogContext,
+    runAsReplicationManager: boolean,
+    tenants: Tenant[],
+    opts: Options,
+  ) {
     super('tenant-dispatcher', lc, opts, fastify => {
       fastify.get('/', (_req, res) => res.send('OK'));
       installWebSocketHandoff(lc, req => this.#handoff(req), fastify.server);
     });
 
-    // Only tenants with a host or path can be dispatched to.
-    this.#tenants = tenants.filter(t => t.host || t.path);
+    this.#runAsReplicationManager = runAsReplicationManager;
+    this.#tenants = tenants.filter(
+      // Only tenants with a host or path can be dispatched to
+      // in the view-syncer.
+      t => runAsReplicationManager || t.host || t.path,
+    );
   }
 
   #handoff(req: IncomingMessageSubset) {
@@ -31,6 +41,14 @@ export class TenantDispatcher extends HttpService {
     const {pathname} = new URL(u ?? '', `http://${host}/`);
 
     for (const t of this.#tenants) {
+      if (this.#runAsReplicationManager) {
+        // The replication-manager dispatches internally using the
+        // tenant ID as the first path component
+        if (pathname.startsWith('/' + t.id + '/')) {
+          return {payload: t.id, receiver: t.worker};
+        }
+        continue;
+      }
       if (t.host && t.host !== host) {
         continue;
       }

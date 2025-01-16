@@ -54,7 +54,6 @@ import {
 import {initClientGroupGC} from './persist/client-group-gc.js';
 import {disableClientGroup} from './persist/client-groups.js';
 import {
-  type ClientMap,
   ClientStateNotFoundError,
   initClientV6,
   hasClientState as persistHasClientState,
@@ -124,6 +123,12 @@ import {
 } from './with-transactions.js';
 
 declare const TESTING: boolean;
+
+declare const process: {
+  env: {
+    ['DISABLE_MUTATION_RECOVERY']?: string | undefined;
+  };
+};
 
 /**
  * The maximum number of time to call out to getAuth before giving up
@@ -203,7 +208,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   readonly name: string;
 
   readonly #subscriptions: SubscriptionsManager;
-  readonly #mutationRecovery: MutationRecovery;
+  readonly #mutationRecovery: MutationRecovery | undefined;
 
   /**
    * Client groups gets disabled when the server does not know about it.
@@ -476,16 +481,18 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     const clientGroupIDResolver = resolver<string>();
     this.#clientGroupIDPromise = clientGroupIDResolver.promise;
 
-    this.#mutationRecovery = new MutationRecovery({
-      delegate: this,
-      lc: this.#lc,
-      enableMutationRecovery,
-      wrapInOnlineCheck: this.#wrapInOnlineCheck.bind(this),
-      wrapInReauthRetries: this.#wrapInReauthRetries.bind(this),
-      isPullDisabled: this.#isPullDisabled.bind(this),
-      isPushDisabled: this.#isPushDisabled.bind(this),
-      clientGroupIDPromise: this.#clientGroupIDPromise,
-    });
+    if (!process.env.DISABLE_MUTATION_RECOVERY) {
+      this.#mutationRecovery = new MutationRecovery({
+        delegate: this,
+        lc: this.#lc,
+        enableMutationRecovery,
+        wrapInOnlineCheck: this.#wrapInOnlineCheck.bind(this),
+        wrapInReauthRetries: this.#wrapInReauthRetries.bind(this),
+        isPullDisabled: this.#isPullDisabled.bind(this),
+        isPushDisabled: this.#isPushDisabled.bind(this),
+        clientGroupIDPromise: this.#clientGroupIDPromise,
+      });
+    }
 
     this.#onPersist = initOnPersistChannel(
       this.name,
@@ -519,7 +526,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     await closingInstances.get(this.name);
     await this.#idbDatabases.getProfileID().then(profileIDResolver);
     await this.#idbDatabases.putDatabase(this.#idbDatabase);
-    const [client, headHash, clients, isNewClientGroup] = await initClientV6(
+    const [client, headHash, , isNewClientGroup] = await initClientV6(
       clientID,
       this.#lc,
       this.perdag,
@@ -590,7 +597,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       RECOVER_MUTATIONS_INTERVAL_MS,
       signal,
     );
-    void this.recoverMutations(clients);
+    void this.recoverMutations();
 
     getBrowserGlobal('document')?.addEventListener(
       'visibilitychange',
@@ -1499,19 +1506,20 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     return ex;
   }
 
-  recoverMutations(preReadClientMap?: ClientMap): Promise<boolean> {
-    const result = this.#mutationRecovery.recoverMutations(
-      preReadClientMap,
-      this.#ready,
-      this.perdag,
-      this.#idbDatabase,
-      this.#idbDatabases,
-      this.#kvStoreProvider.create,
-    );
-    if (TESTING) {
-      void this.onRecoverMutations(result);
+  recoverMutations(): Promise<boolean> | void {
+    if (!process.env.DISABLE_MUTATION_RECOVERY) {
+      const result = this.#mutationRecovery!.recoverMutations(
+        this.#ready,
+        this.perdag,
+        this.#idbDatabase,
+        this.#idbDatabases,
+        this.#kvStoreProvider.create,
+      );
+      if (TESTING) {
+        void this.onRecoverMutations(result);
+      }
+      return result;
     }
-    return result;
   }
 
   /**

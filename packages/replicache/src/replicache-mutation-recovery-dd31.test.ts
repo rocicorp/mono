@@ -1,6 +1,7 @@
 import sinon from 'sinon';
 import {describe, expect, test} from 'vitest';
 import {assert} from '../../shared/src/asserts.js';
+import type {Enum} from '../../shared/src/enum.js';
 import {type JSONObject, assertJSONObject} from '../../shared/src/json.js';
 import {randomUint64} from '../../shared/src/random-uint64.js';
 import {LazyStore} from './dag/lazy-store.js';
@@ -41,6 +42,8 @@ import {withRead, withWriteNoImplicitCommit} from './with-transactions.js';
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
 
+type FormatVersion = Enum<typeof FormatVersion>;
+
 // Add test for ClientV5, logic is same as ClientV6
 describe('DD31', () => {
   initReplicacheTesting();
@@ -54,7 +57,7 @@ describe('DD31', () => {
     expectedLastServerAckdMutationIDs?: Record<ClientID, number> | undefined;
     pullResponse?: PullResponseV1 | undefined;
     pushResponse?: PushResponse | undefined;
-    formatVersion: FormatVersion.Type;
+    formatVersion: FormatVersion;
     expectClientGroupDisabled?: boolean;
   }) {
     sinon.stub(console, 'error');

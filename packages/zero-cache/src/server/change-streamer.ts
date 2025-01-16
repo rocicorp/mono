@@ -35,14 +35,7 @@ export default async function runWorker(
     ),
   );
 
-  let {autoReset} = config;
-  if (autoReset && config.litestream) {
-    lc.warn?.(
-      '--auto-reset is incompatible with --litestream. Disabling --auto-reset.',
-    );
-    autoReset = false;
-  }
-
+  const {autoReset} = config;
   let changeStreamer: ChangeStreamerService | undefined;
 
   for (const first of [true, false]) {
@@ -82,6 +75,7 @@ export default async function runWorker(
     lc,
     changeStreamer,
     {port},
+    parent,
   );
 
   parent.send(['ready', {ready: true}]);

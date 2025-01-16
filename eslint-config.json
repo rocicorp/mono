@@ -1,13 +1,19 @@
 {
   "extends": ["@rocicorp/eslint-config"],
   "rules": {
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "TSEnumDeclaration",
+        "message": "Enums are not allowed. See shared/enum.ts"
+      }
+    ],
     "no-restricted-imports": [
       "error",
       {
         "patterns": [
           {
             "group": [
-              "btree/*",
               "datadog/*",
               "replicache/*",
               "replicache-perf/*",
@@ -25,7 +31,6 @@
           }
         ],
         "paths": [
-          {"name": "btree", "message": "Use relative imports instead"},
           {"name": "datadog", "message": "Use relative imports instead"},
           {"name": "replicache", "message": "Use relative imports instead"},
           {

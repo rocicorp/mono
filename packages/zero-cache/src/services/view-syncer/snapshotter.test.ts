@@ -39,17 +39,17 @@ describe('view-syncer/snapshotter', () => {
           _0_version            TEXT NOT NULL
         );
         INSERT INTO "zero.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
-          VALUES (1, 1, 1, '00');  
+          VALUES (1, 1, 1, '01');  
         CREATE TABLE issues(id INTEGER PRIMARY KEY, owner INTEGER, desc TEXT, ignore TEXT, _0_version TEXT NOT NULL);
         CREATE TABLE users(id INTEGER PRIMARY KEY, handle TEXT, ignore TEXT, _0_version TEXT NOT NULL);
         CREATE TABLE comments(id INTEGER PRIMARY KEY, desc TEXT, ignore TEXT, _0_version TEXT NOT NULL);
 
-        INSERT INTO issues(id, owner, desc, ignore, _0_version) VALUES(1, 10, 'foo', 'zzz', '00');
-        INSERT INTO issues(id, owner, desc, ignore, _0_version) VALUES(2, 10, 'bar', 'xyz', '00');
-        INSERT INTO issues(id, owner, desc, ignore, _0_version) VALUES(3, 20, 'baz', 'yyy', '00');
+        INSERT INTO issues(id, owner, desc, ignore, _0_version) VALUES(1, 10, 'foo', 'zzz', '01');
+        INSERT INTO issues(id, owner, desc, ignore, _0_version) VALUES(2, 10, 'bar', 'xyz', '01');
+        INSERT INTO issues(id, owner, desc, ignore, _0_version) VALUES(3, 20, 'baz', 'yyy', '01');
 
-        INSERT INTO users(id, handle, ignore, _0_version) VALUES(10, 'alice', 'vvv', '00');
-        INSERT INTO users(id, handle, ignore, _0_version) VALUES(20, 'bob', 'vxv', '00');
+        INSERT INTO users(id, handle, ignore, _0_version) VALUES(10, 'alice', 'vvv', '01');
+        INSERT INTO users(id, handle, ignore, _0_version) VALUES(20, 'bob', 'vxv', '01');
       `,
     );
     initReplicationState(db, ['zero_data'], '01');
@@ -73,20 +73,20 @@ describe('view-syncer/snapshotter', () => {
   test('initial snapshot', () => {
     const {db, version, schemaVersions} = s.current();
 
-    expect(version).toBe('00');
+    expect(version).toBe('01');
     expect(schemaVersions).toEqual({
       minSupportedVersion: 1,
       maxSupportedVersion: 1,
     });
     expectTables(db.db, {
       issues: [
-        {id: 1, owner: 10, desc: 'foo', ignore: 'zzz', ['_0_version']: '00'},
-        {id: 2, owner: 10, desc: 'bar', ignore: 'xyz', ['_0_version']: '00'},
-        {id: 3, owner: 20, desc: 'baz', ignore: 'yyy', ['_0_version']: '00'},
+        {id: 1, owner: 10, desc: 'foo', ignore: 'zzz', ['_0_version']: '01'},
+        {id: 2, owner: 10, desc: 'bar', ignore: 'xyz', ['_0_version']: '01'},
+        {id: 3, owner: 20, desc: 'baz', ignore: 'yyy', ['_0_version']: '01'},
       ],
       users: [
-        {id: 10, handle: 'alice', ignore: 'vvv', ['_0_version']: '00'},
-        {id: 20, handle: 'bob', ignore: 'vxv', ['_0_version']: '00'},
+        {id: 10, handle: 'alice', ignore: 'vvv', ['_0_version']: '01'},
+        {id: 20, handle: 'bob', ignore: 'vxv', ['_0_version']: '01'},
       ],
     });
   });
@@ -94,11 +94,11 @@ describe('view-syncer/snapshotter', () => {
   test('empty diff', () => {
     const {version} = s.current();
 
-    expect(version).toBe('00');
+    expect(version).toBe('01');
 
     const diff = s.advance(tableSpecs);
-    expect(diff.prev.version).toBe('00');
-    expect(diff.curr.version).toBe('00');
+    expect(diff.prev.version).toBe('01');
+    expect(diff.curr.version).toBe('01');
     expect(diff.changes).toBe(0);
 
     expect([...diff]).toEqual([]);
@@ -118,7 +118,7 @@ describe('view-syncer/snapshotter', () => {
   );
 
   test('schemaVersions change', () => {
-    expect(s.current().version).toBe('00');
+    expect(s.current().version).toBe('01');
     expect(s.current().schemaVersions).toEqual({
       minSupportedVersion: 1,
       maxSupportedVersion: 1,
@@ -126,7 +126,7 @@ describe('view-syncer/snapshotter', () => {
 
     replicator.processTransaction(
       '07',
-      zeroMessages.insert('schemaVersions', {
+      zeroMessages.update('schemaVersions', {
         lock: true,
         minSupportedVersion: 1,
         maxSupportedVersion: 2,
@@ -134,11 +134,11 @@ describe('view-syncer/snapshotter', () => {
     );
 
     const diff = s.advance(tableSpecs);
-    expect(diff.prev.version).toBe('00');
-    expect(diff.curr.version).toBe('01');
+    expect(diff.prev.version).toBe('01');
+    expect(diff.curr.version).toBe('07');
     expect(diff.changes).toBe(1);
 
-    expect(s.current().version).toBe('01');
+    expect(s.current().version).toBe('07');
     expect(s.current().schemaVersions).toEqual({
       minSupportedVersion: 1,
       maxSupportedVersion: 2,
@@ -148,13 +148,13 @@ describe('view-syncer/snapshotter', () => {
       [
         {
           "nextValue": {
-            "_0_version": "01",
+            "_0_version": "07",
             "lock": 1,
             "maxSupportedVersion": 2,
             "minSupportedVersion": 1,
           },
           "prevValue": {
-            "_0_version": "00",
+            "_0_version": "01",
             "lock": 1,
             "maxSupportedVersion": 1,
             "minSupportedVersion": 1,
@@ -169,8 +169,8 @@ describe('view-syncer/snapshotter', () => {
     const s1 = new Snapshotter(lc, dbFile.path).init();
     const s2 = new Snapshotter(lc, dbFile.path).init();
 
-    expect(s1.current().version).toBe('00');
-    expect(s2.current().version).toBe('00');
+    expect(s1.current().version).toBe('01');
+    expect(s2.current().version).toBe('01');
 
     replicator.processTransaction(
       '09',
@@ -181,21 +181,21 @@ describe('view-syncer/snapshotter', () => {
     );
 
     const diff1 = s1.advance(tableSpecs);
-    expect(diff1.prev.version).toBe('00');
-    expect(diff1.curr.version).toBe('01');
+    expect(diff1.prev.version).toBe('01');
+    expect(diff1.curr.version).toBe('09');
     expect(diff1.changes).toBe(5); // The key update results in a del(old) + set(new).
 
     expect([...diff1]).toMatchInlineSnapshot(`
       [
         {
           "nextValue": {
-            "_0_version": "01",
+            "_0_version": "09",
             "desc": "food",
             "id": 1,
             "owner": 10,
           },
           "prevValue": {
-            "_0_version": "00",
+            "_0_version": "01",
             "desc": "foo",
             "id": 1,
             "owner": 10,
@@ -205,7 +205,7 @@ describe('view-syncer/snapshotter', () => {
         {
           "nextValue": null,
           "prevValue": {
-            "_0_version": "00",
+            "_0_version": "01",
             "desc": "bar",
             "id": 2,
             "owner": 10,
@@ -215,7 +215,7 @@ describe('view-syncer/snapshotter', () => {
         {
           "nextValue": null,
           "prevValue": {
-            "_0_version": "00",
+            "_0_version": "01",
             "desc": "baz",
             "id": 3,
             "owner": 20,
@@ -224,7 +224,7 @@ describe('view-syncer/snapshotter', () => {
         },
         {
           "nextValue": {
-            "_0_version": "01",
+            "_0_version": "09",
             "desc": null,
             "id": 4,
             "owner": 20,
@@ -234,7 +234,7 @@ describe('view-syncer/snapshotter', () => {
         },
         {
           "nextValue": {
-            "_0_version": "01",
+            "_0_version": "09",
             "desc": "bard",
             "id": 5,
             "owner": 10,
@@ -250,13 +250,13 @@ describe('view-syncer/snapshotter', () => {
       [
         {
           "nextValue": {
-            "_0_version": "01",
+            "_0_version": "09",
             "desc": "food",
             "id": 1,
             "owner": 10,
           },
           "prevValue": {
-            "_0_version": "00",
+            "_0_version": "01",
             "desc": "foo",
             "id": 1,
             "owner": 10,
@@ -266,7 +266,7 @@ describe('view-syncer/snapshotter', () => {
         {
           "nextValue": null,
           "prevValue": {
-            "_0_version": "00",
+            "_0_version": "01",
             "desc": "bar",
             "id": 2,
             "owner": 10,
@@ -276,7 +276,7 @@ describe('view-syncer/snapshotter', () => {
         {
           "nextValue": null,
           "prevValue": {
-            "_0_version": "00",
+            "_0_version": "01",
             "desc": "baz",
             "id": 3,
             "owner": 20,
@@ -285,7 +285,7 @@ describe('view-syncer/snapshotter', () => {
         },
         {
           "nextValue": {
-            "_0_version": "01",
+            "_0_version": "09",
             "desc": null,
             "id": 4,
             "owner": 20,
@@ -295,7 +295,7 @@ describe('view-syncer/snapshotter', () => {
         },
         {
           "nextValue": {
-            "_0_version": "01",
+            "_0_version": "09",
             "desc": "bard",
             "id": 5,
             "owner": 10,
@@ -314,15 +314,15 @@ describe('view-syncer/snapshotter', () => {
     );
 
     const diff2 = s1.advance(tableSpecs);
-    expect(diff2.prev.version).toBe('01');
-    expect(diff2.curr.version).toBe('09');
+    expect(diff2.prev.version).toBe('09');
+    expect(diff2.curr.version).toBe('0d');
     expect(diff2.changes).toBe(3);
 
     expect([...diff2]).toMatchInlineSnapshot(`
       [
         {
           "nextValue": {
-            "_0_version": "09",
+            "_0_version": "0d",
             "desc": "bard",
             "id": 2,
             "owner": 10,
@@ -333,7 +333,7 @@ describe('view-syncer/snapshotter', () => {
         {
           "nextValue": null,
           "prevValue": {
-            "_0_version": "01",
+            "_0_version": "09",
             "desc": null,
             "id": 4,
             "owner": 20,
@@ -343,7 +343,7 @@ describe('view-syncer/snapshotter', () => {
         {
           "nextValue": null,
           "prevValue": {
-            "_0_version": "01",
+            "_0_version": "09",
             "desc": "bard",
             "id": 5,
             "owner": 10,
@@ -366,20 +366,20 @@ describe('view-syncer/snapshotter', () => {
     // This will coalesce multiple changes to a row, and can result in some noops,
     // (e.g. rows that return to their original state).
     const diff3 = s2.advance(tableSpecs);
-    expect(diff3.prev.version).toBe('00');
-    expect(diff3.curr.version).toBe('09');
+    expect(diff3.prev.version).toBe('01');
+    expect(diff3.curr.version).toBe('0d');
     expect(diff3.changes).toBe(5);
     expect([...diff3]).toMatchInlineSnapshot(`
       [
         {
           "nextValue": {
-            "_0_version": "01",
+            "_0_version": "09",
             "desc": "food",
             "id": 1,
             "owner": 10,
           },
           "prevValue": {
-            "_0_version": "00",
+            "_0_version": "01",
             "desc": "foo",
             "id": 1,
             "owner": 10,
@@ -389,7 +389,7 @@ describe('view-syncer/snapshotter', () => {
         {
           "nextValue": null,
           "prevValue": {
-            "_0_version": "00",
+            "_0_version": "01",
             "desc": "baz",
             "id": 3,
             "owner": 20,
@@ -398,13 +398,13 @@ describe('view-syncer/snapshotter', () => {
         },
         {
           "nextValue": {
-            "_0_version": "09",
+            "_0_version": "0d",
             "desc": "bard",
             "id": 2,
             "owner": 10,
           },
           "prevValue": {
-            "_0_version": "00",
+            "_0_version": "01",
             "desc": "bar",
             "id": 2,
             "owner": 10,
@@ -421,13 +421,13 @@ describe('view-syncer/snapshotter', () => {
   test('truncate', () => {
     const {version} = s.current();
 
-    expect(version).toBe('00');
+    expect(version).toBe('01');
 
     replicator.processTransaction('07', messages.truncate('users'));
 
     const diff = s.advance(tableSpecs);
-    expect(diff.prev.version).toBe('00');
-    expect(diff.curr.version).toBe('01');
+    expect(diff.prev.version).toBe('01');
+    expect(diff.curr.version).toBe('07');
     expect(diff.changes).toBe(1);
 
     expect(() => [...diff]).toThrowError(ResetPipelinesSignal);
@@ -436,7 +436,7 @@ describe('view-syncer/snapshotter', () => {
   test('changelog iterator cleaned up on aborted iteration', () => {
     const {version} = s.current();
 
-    expect(version).toBe('00');
+    expect(version).toBe('01');
 
     replicator.processTransaction('07', messages.insert('comments', {id: 1}));
 
@@ -448,7 +448,7 @@ describe('view-syncer/snapshotter', () => {
       for (const change of diff) {
         expect(change).toEqual({
           nextValue: {
-            ['_0_version']: '01',
+            ['_0_version']: '07',
             desc: null,
             id: 1,
           },
@@ -469,7 +469,7 @@ describe('view-syncer/snapshotter', () => {
   test('schema change diff iteration throws SchemaChangeError', () => {
     const {version} = s.current();
 
-    expect(version).toBe('00');
+    expect(version).toBe('01');
 
     replicator.processTransaction(
       '07',
@@ -477,8 +477,8 @@ describe('view-syncer/snapshotter', () => {
     );
 
     const diff = s.advance(tableSpecs);
-    expect(diff.prev.version).toBe('00');
-    expect(diff.curr.version).toBe('01');
+    expect(diff.prev.version).toBe('01');
+    expect(diff.curr.version).toBe('07');
     expect(diff.changes).toBe(1);
 
     expect(() => [...diff]).toThrow(ResetPipelinesSignal);

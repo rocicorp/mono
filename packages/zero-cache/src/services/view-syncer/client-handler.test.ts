@@ -1,7 +1,7 @@
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
+import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.js';
 import {
-  ErrorKind,
   type Downstream,
   type PokeEndMessage,
   type PokePartMessage,

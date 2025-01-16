@@ -1,4 +1,5 @@
 import 'dotenv/config'; // Imports ENV variables from .env
+import {assert} from '../../../../shared/src/asserts.js';
 import type {Service} from '../../services/service.js';
 import {
   childWorker,
@@ -27,7 +28,11 @@ export default async function runWorker(
   const lc = createLogContext(config, {worker: 'main'});
   const processes = new ProcessManager(lc, parent ?? process);
 
-  const {port, heartbeatMonitorPort} = config;
+  const {
+    port,
+    changeStreamerPort = port + 1,
+    heartbeatMonitorPort = port + 2,
+  } = config;
   let {taskID} = config;
   if (!taskID) {
     taskID = await getTaskID(lc);
@@ -49,18 +54,42 @@ export default async function runWorker(
     });
   }
 
+  // In the multi-node configuration, determine if this process
+  // should be dispatching sync requests (i.e. by `host` / `port`),
+  // or change-streamer requests (i.e. by tenant `id`).
+  const runAsReplicationManager = config.numSyncWorkers === 0;
+
   // Start the first tenant at (port + 1 + 2) unless explicitly
   // overridden by its own ZERO_PORT ...
   let tenantPort = port + 1;
-  const tenants = config.tenants.map(tenant => ({
-    ...tenant,
-    worker: childWorker('./server/main.ts', {
+  const tenants = config.tenants.map(tenant => {
+    const mergedEnv: NodeJS.ProcessEnv = {
+      ...process.env, // propagate all ENV variables from this process
       ...baseEnv, // defaults
       ['ZERO_TENANT_ID']: tenant.id,
       ['ZERO_PORT']: String((tenantPort += 2)), // and bump the port by 2 thereafter.
       ...tenant.env, // overrides
-    }),
-  }));
+    };
+
+    if (runAsReplicationManager) {
+      // Sanity-check. It doesn't make sense to run sync workers in the
+      // replication-manager.
+      assert(
+        mergedEnv['ZERO_NUM_SYNC_WORKERS'] === '0',
+        `Tenant ${tenant.id} cannot run sync workers in the replication-manager`,
+      );
+    }
+
+    const changeStreamerURI = mergedEnv['ZERO_CHANGE_STREAMER_URI'];
+    if (changeStreamerURI && multiMode) {
+      // Requests from the view-syncer to the replication-manager are
+      // delineated/dispatched by the tenant ID as the first path component.
+      mergedEnv['ZERO_CHANGE_STREAMER_URI'] += changeStreamerURI.endsWith('/')
+        ? tenant.id
+        : `/${tenant.id}`;
+    }
+    return {...tenant, worker: childWorker('./server/main.ts', mergedEnv)};
+  });
 
   for (const tenant of tenants) {
     processes.addWorker(tenant.worker, 'user-facing', tenant.id);
@@ -68,17 +97,21 @@ export default async function runWorker(
 
   const s = tenants.length > 1 ? 's' : '';
   lc.info?.(`waiting for zero-cache${s} to be ready ...`);
-  if ((await orTimeout(processes.allWorkersReady(), 30_000)) === 'timed-out') {
+  if ((await orTimeout(processes.allWorkersReady(), 60_000)) === 'timed-out') {
     lc.info?.(`timed out waiting for readiness (${Date.now() - startMs} ms)`);
   } else {
     lc.info?.(`zero-cache${s} ready (${Date.now() - startMs} ms)`);
   }
 
   const mainServices: Service[] = [
-    new HeartbeatMonitor(lc, {port: heartbeatMonitorPort ?? port + 2}),
+    new HeartbeatMonitor(lc, {port: heartbeatMonitorPort}),
   ];
   if (multiMode) {
-    mainServices.push(new TenantDispatcher(lc, tenants, {port}));
+    mainServices.push(
+      new TenantDispatcher(lc, runAsReplicationManager, tenants, {
+        port: runAsReplicationManager ? changeStreamerPort : port,
+      }),
+    );
   }
 
   parent?.send(['ready', {ready: true}]);
@@ -86,7 +119,7 @@ export default async function runWorker(
   try {
     await runUntilKilled(lc, parent ?? process, ...mainServices);
   } catch (err) {
-    processes.logErrorAndExit(err);
+    processes.logErrorAndExit(err, 'main');
   }
 
   await processes.done();

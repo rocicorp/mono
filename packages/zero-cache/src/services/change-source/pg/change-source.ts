@@ -34,12 +34,7 @@ import type {
 } from '../../../db/specs.js';
 import {StatementRunner} from '../../../db/statements.js';
 import {stringify} from '../../../types/bigint-json.js';
-import {
-  max,
-  oneAfter,
-  versionFromLexi,
-  versionToLexi,
-} from '../../../types/lexi-version.js';
+import {oneAfter, type LexiVersion} from '../../../types/lexi-version.js';
 import {
   pgClient,
   registerPostgresTypeParsers,
@@ -211,7 +206,7 @@ class PostgresChangeSource implements ChangeSource {
           // Unlike the postgres.js client, the pg client does not have an option to
           // only use SSL if the server supports it. We achieve it manually by
           // trying SSL first, and then falling back to connecting without SSL.
-          return await this.#startStream(db, slot, clientStart, config, useSSL);
+          return await this.#startStream(slot, clientStart, config, useSSL);
         } catch (e) {
           if (e instanceof SSLUnsupportedError) {
             this.#lc.info?.('retrying upstream connection without SSL');
@@ -240,7 +235,6 @@ class PostgresChangeSource implements ChangeSource {
   }
 
   async #startStream(
-    db: PostgresDB,
     slot: string,
     clientStart: string,
     shardConfig: InternalShardConfig,
@@ -254,7 +248,7 @@ class PostgresChangeSource implements ChangeSource {
     // between tasks, query the `confirmed_flush_lsn` for the replication
     // slot only after the replication stream starts, as that is when it
     // is guaranteed not to change (i.e. until we ACK a commit).
-    const {promise: nextWatermark, resolve, reject} = resolver<string>();
+    const {promise: started, resolve, reject} = resolver();
 
     const ssl = useSSL ? {rejectUnauthorized: false} : undefined;
     const handleError = (err: Error) => {
@@ -287,26 +281,35 @@ class PostgresChangeSource implements ChangeSource {
       },
       {acknowledge: {auto: false, timeoutSeconds: 0}},
     )
-      .on('start', () =>
-        this.#getNextWatermark(db, slot, clientStart).then(
-          resolve,
-          handleError,
-        ),
-      )
-      .on(
-        'heartbeat',
-        (lsn, _time, respond) => acker?.onHeartbeat(lsn, respond),
-      )
-      .on('data', (lsn, msg) => {
-        acker?.onData(lsn);
+      .on('start', resolve)
+      .on('heartbeat', (lsn, time, respond) => {
+        if (respond) {
+          // immediately set a timeout that responds with a keepalive if it
+          // takes too long for the 'status' message to flow to (and back from)
+          // the change-streamer.
+          acker?.keepalive();
+
+          // lock to ensure in-order processing
+          void lock.withLock(() => {
+            changes.push([
+              'status',
+              {lsn, time},
+              {watermark: toLexiVersion(lsn)},
+            ]);
+          });
+        }
+      })
+      .on('data', (lsn, msg) =>
         // lock to ensure in-order processing
-        return lock.withLock(async () => {
+        lock.withLock(async () => {
           for (const change of await changeMaker.makeChanges(lsn, msg)) {
             changes.push(change);
           }
-        });
-      })
+        }),
+      )
       .on('error', handleError);
+
+    acker = new Acker(service);
 
     service
       .subscribe(
@@ -320,16 +323,12 @@ class PostgresChangeSource implements ChangeSource {
       )
       .then(() => changes.cancel(), handleError);
 
-    const initialWatermark = await nextWatermark;
-    this.#lc.info?.(
-      `replication stream@${slot} started at ${initialWatermark}`,
-    );
-    acker = new Acker(service, initialWatermark);
+    await started;
+    this.#lc.info?.(`started replication stream@${slot}`);
 
     return {
-      initialWatermark,
       changes,
-      acks: {push: commit => acker.onAck(commit[2].watermark)},
+      acks: {push: status => acker.ack(status[2].watermark)},
     };
   }
 
@@ -353,88 +352,45 @@ class PostgresChangeSource implements ChangeSource {
       this.#lc.info?.(`signaled subscriber ${pid} to shut down`);
     }
   }
-
-  // Sometimes the `confirmed_flush_lsn` gets wiped, e.g.
-  //
-  // ```
-  //  slot_name | restart_lsn | confirmed_flush_lsn
-  //  -----------+-------------+---------------------
-  //  zero_slot | 8F/38ACB2F8 | 0/1
-  // ```
-  //
-  // Using the greatest of three values should always yield a correct result:
-  // * `clientWatermark`    : ahead of `confirmed_flush_lsn` if an ACK was lost,
-  //                          or if the `confirmed_flush_lsn` was wiped.
-  // * `confirmed_flush_lsn`: ahead of the `clientWatermark` if the ChangeDB was wiped.
-  // * `restart_lsn`        : if both the `confirmed_flush_lsn` and ChangeDB were wiped.
-  async #getNextWatermark(
-    db: PostgresDB,
-    slot: string,
-    clientStart: string,
-  ): Promise<string> {
-    const result = await db<{restart: string; confirmed: string}[]>`
-      SELECT restart_lsn as restart, confirmed_flush_lsn as confirmed FROM pg_replication_slots 
-        WHERE slot_name = ${slot}`;
-    if (result.length === 0) {
-      throw new Error(`Upstream is missing replication slot ${slot}`);
-    }
-    const {restart, confirmed} = result[0];
-    const confirmedWatermark = toLexiVersion(confirmed);
-    const restartWatermark = toLexiVersion(restart);
-
-    // Postgres sometimes stores the `confirmed_flush_lsn` as is (making it an even number),
-    // and sometimes it stores the lsn + 1.
-    // Normalize this behavior to produce consistent starting points.
-    const confirmedWatermarkIsEven =
-      versionFromLexi(confirmedWatermark) % 2n === 0n;
-
-    this.#lc.info?.(
-      `confirmed_flush_lsn:${confirmed}, restart_lsn:${restart}, clientWatermark:${fromLexiVersion(
-        clientStart,
-      )}`,
-    );
-    return max(
-      confirmedWatermarkIsEven
-        ? oneAfter(confirmedWatermark)
-        : confirmedWatermark,
-      oneAfter(restartWatermark),
-      clientStart,
-    );
-  }
 }
 
 // Exported for testing.
 export class Acker {
   #service: LogicalReplicationService;
-  #lastAck: string;
-  #lastData: string = versionToLexi(0);
+  #keepaliveTimer: NodeJS.Timeout | undefined;
 
-  constructor(service: LogicalReplicationService, initialWatermark: string) {
+  constructor(service: LogicalReplicationService) {
     this.#service = service;
-    this.#lastAck = initialWatermark;
   }
 
-  onData(lsn: string) {
-    this.#lastData = max(this.#lastData, toLexiVersion(lsn));
+  keepalive() {
+    // Sets a timeout to send a standby status update in response to
+    // a primary keepalive message.
+    //
+    // https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-PRIMARY-KEEPALIVE-MESSAGE
+    //
+    // A primary keepalive message is streamed to the change-streamer as a
+    // 'status' message, which in turn responds with an ack. However, in the
+    // event that the change-streamer is backed up processing preceding
+    // changes, this timeout will fire to send a status update that does not
+    // change the confirmed flush position. This timeout must be shorter than
+    // the `wal_sender_timeout`, which defaults to 60 seconds.
+    //
+    // https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-WAL-SENDER-TIMEOUT
+    this.#keepaliveTimer ??= setTimeout(() => this.#sendAck(), 1000);
   }
 
-  onHeartbeat(lsn: string, respond: boolean) {
-    // Heartbeats bump the last ack unless we are behind received data.
-    if (this.#lastAck >= this.#lastData) {
-      this.#lastAck = max(this.#lastAck, toLexiVersion(lsn));
-    }
-    if (respond) {
-      this.#sendAck();
-    }
+  ack(watermark: LexiVersion) {
+    this.#sendAck(watermark);
   }
 
-  onAck(lexiVersion: string) {
-    this.#lastAck = max(this.#lastAck, lexiVersion);
-    this.#sendAck();
-  }
+  #sendAck(watermark?: LexiVersion) {
+    clearTimeout(this.#keepaliveTimer);
+    this.#keepaliveTimer = undefined;
 
-  #sendAck() {
-    const lsn = fromLexiVersion(this.#lastAck);
+    // Note: Sending '0/0' means "keep alive but do not update confirmed_flush_lsn"
+    // https://github.com/postgres/postgres/blob/3edc67d337c2e498dad1cd200e460f7c63e512e6/src/backend/replication/walsender.c#L2457
+    const lsn = watermark ? fromLexiVersion(watermark) : '0/0';
     void this.#service.acknowledge(lsn);
   }
 }
@@ -482,7 +438,7 @@ class ChangeMaker {
       return [];
     }
     try {
-      return await this.#makeChanges(lsn, msg);
+      return await this.#makeChanges(msg);
     } catch (err) {
       this.#error = {lsn, msg, err, lastLogTime: 0};
       this.#logError(this.#error);
@@ -512,13 +468,12 @@ class ChangeMaker {
   }
 
   // eslint-disable-next-line require-await
-  async #makeChanges(
-    lsn: string,
-    msg: Pgoutput.Message,
-  ): Promise<ChangeStreamData[]> {
+  async #makeChanges(msg: Pgoutput.Message): Promise<ChangeStreamData[]> {
     switch (msg.tag) {
       case 'begin':
-        return [['begin', msg]];
+        return [
+          ['begin', msg, {commitWatermark: toLexiVersion(must(msg.commitLsn))}],
+        ];
 
       case 'delete':
         assert(msg.key);
@@ -536,10 +491,10 @@ class ChangeMaker {
         }
         return this.#handleCustomMessage(msg);
 
-      case 'commit': {
-        const watermark = toLexiVersion(lsn);
-        return [['commit', msg, {watermark}]];
-      }
+      case 'commit':
+        return [
+          ['commit', msg, {watermark: toLexiVersion(must(msg.commitLsn))}],
+        ];
 
       case 'relation':
         return this.#handleRelation(msg);

@@ -1,13 +1,11 @@
 import {LogContext} from '@rocicorp/logger';
 import {describe, expect, test} from 'vitest';
+import {assert} from '../../../shared/src/asserts.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import type {JSONValue} from '../../../shared/src/json.js';
 import {TestStore} from '../dag/test-store.js';
 import {ChainBuilder} from '../db/test-helpers.js';
-import {
-  newWriteSnapshotDD31,
-  newWriteSnapshotSDD,
-  readIndexesForWrite,
-} from '../db/write.js';
+import {newWriteSnapshotDD31} from '../db/write.js';
 import * as FormatVersion from '../format-version-enum.js';
 import {deepFreeze} from '../frozen-json.js';
 import {
@@ -17,8 +15,10 @@ import {
 import {withWriteNoImplicitCommit} from '../with-transactions.js';
 import {apply} from './patch.js';
 
+type FormatVersion = Enum<typeof FormatVersion>;
+
 describe('patch', () => {
-  const t = (formatVersion: FormatVersion.Type) => {
+  const t = (formatVersion: FormatVersion) => {
     const clientID = 'client-id';
     const store = new TestStore();
     const lc = new LogContext();
@@ -304,27 +304,16 @@ describe('patch', () => {
         const b = new ChainBuilder(store, undefined, formatVersion);
         await b.addGenesis(clientID);
         await withWriteNoImplicitCommit(store, async dagWrite => {
-          let dbWrite;
-          if (formatVersion >= FormatVersion.DD31) {
-            dbWrite = await newWriteSnapshotDD31(
-              b.chain[0].chunk.hash,
-              {[clientID]: 1},
-              'cookie',
-              dagWrite,
-              clientID,
-              formatVersion,
-            );
-          } else {
-            dbWrite = await newWriteSnapshotSDD(
-              b.chain[0].chunk.hash,
-              1,
-              'cookie',
-              dagWrite,
-              readIndexesForWrite(b.chain[0], dagWrite, formatVersion),
-              clientID,
-              formatVersion,
-            );
-          }
+          assert(formatVersion >= FormatVersion.DD31);
+          const dbWrite = await newWriteSnapshotDD31(
+            b.chain[0].chunk.hash,
+            {[clientID]: 1},
+            'cookie',
+            dagWrite,
+            clientID,
+            formatVersion,
+          );
+
           for (const [key, value] of c.existing ??
             new Map([['key', 'value']])) {
             await dbWrite.put(lc, key, deepFreeze(value));
@@ -361,5 +350,4 @@ describe('patch', () => {
   };
 
   describe('dd31', () => t(FormatVersion.Latest));
-  describe('sdd', () => t(FormatVersion.SDD));
 });

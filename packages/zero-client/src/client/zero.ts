@@ -9,12 +9,10 @@ import {
   type ClientID,
   type ExperimentalNoIndexDiff,
   type MutatorDefs,
-  type PullRequestV0,
-  type PullRequestV1,
+  type PullRequest,
   type Puller,
-  type PullerResultV1,
-  type PushRequestV0,
-  type PushRequestV1,
+  type PullerResult,
+  type PushRequest,
   type Pusher,
   type PusherResult,
   type ReplicacheOptions,
@@ -27,11 +25,13 @@ import {
   mustGetBrowserGlobal,
 } from '../../../shared/src/browser-env.js';
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import {must} from '../../../shared/src/must.js';
 import {navigator} from '../../../shared/src/navigator.js';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.js';
 import * as valita from '../../../shared/src/valita.js';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.js';
+import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.js';
 import {
   type CRUDMutation,
   type CRUDMutationArg,
@@ -39,9 +39,7 @@ import {
   type ConnectedMessage,
   type CustomMutation,
   type Downstream,
-  ErrorKind,
   type ErrorMessage,
-  MutationType,
   type NullableVersion,
   type PingMessage,
   type PokeEndMessage,
@@ -53,6 +51,7 @@ import {
   encodeSecProtocols,
   nullableVersionSchema,
 } from '../../../zero-protocol/src/mod.js';
+import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.js';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.js';
 import type {
   PullRequestMessage,
@@ -69,6 +68,7 @@ import {newQuery} from '../../../zql/src/query/query-impl.js';
 import type {Query} from '../../../zql/src/query/query.js';
 import {nanoid} from '../util/nanoid.js';
 import {send} from '../util/socket.js';
+import * as ConnectionState from './connection-state-enum.js';
 import {ZeroContext} from './context.js';
 import {
   type BatchMutator,
@@ -99,6 +99,7 @@ import type {
   ZeroAdvancedOptions,
   ZeroOptions,
 } from './options.js';
+import * as PingResult from './ping-result-enum.js';
 import {QueryManager} from './query-manager.js';
 import {
   reloadScheduled,
@@ -115,6 +116,9 @@ import {
 import {getServer} from './server-option.js';
 import {version} from './version.js';
 import {PokeHandler} from './zero-poke-handler.js';
+
+type ConnectionState = Enum<typeof ConnectionState>;
+type PingResult = Enum<typeof PingResult>;
 
 export type NoRelations = Record<string, never>;
 
@@ -149,12 +153,6 @@ interface TestZero {
 
 function asTestZero<S extends Schema>(z: Zero<S>): TestZero {
   return z as TestZero;
-}
-
-export const enum ConnectionState {
-  Disconnected,
-  Connecting,
-  Connected,
 }
 
 export const RUN_LOOP_INTERVAL_MS = 5_000;
@@ -230,11 +228,6 @@ function onClientStateNotFoundServerReason(serverErrMsg: string) {
 const ON_CLIENT_STATE_NOT_FOUND_REASON_CLIENT =
   'The local persistent state needed to synchronize this client has been garbage collected.';
 
-const enum PingResult {
-  TimedOut = 0,
-  Success = 1,
-}
-
 // Keep in sync with packages/replicache/src/replicache-options.ts
 export interface ReplicacheInternalAPI {
   lastMutationID(): number;
@@ -255,6 +248,7 @@ export class Zero<const S extends Schema> {
   readonly #rep: ReplicacheImpl<WithCRUD<MutatorDefs>>;
   readonly #server: HTTPString | null;
   readonly userID: string;
+  readonly storageKey: string;
 
   readonly #lc: LogContext;
   readonly #logOptions: LogOptions;
@@ -334,7 +328,7 @@ export class Zero<const S extends Schema> {
 
     this.#connectionState = state;
     this.#connectionStateChangeResolver.resolve(state);
-    this.#connectionStateChangeResolver = resolver();
+    this.#connectionStateChangeResolver = resolver<ConnectionState>();
 
     if (TESTING) {
       asTestZero(this)[onSetConnectionStateSymbol]?.(state);
@@ -368,6 +362,7 @@ export class Zero<const S extends Schema> {
   constructor(options: ZeroOptions<S>) {
     const {
       userID,
+      storageKey,
       onOnlineChange,
       onUpdateNeeded,
       onClientStateNotFound,
@@ -408,6 +403,8 @@ export class Zero<const S extends Schema> {
       ['_zero_crud']: makeCRUDMutator(normalizedSchema),
     };
 
+    this.storageKey = storageKey ?? '';
+
     const replicacheOptions: ReplicacheOptions<WithCRUD<MutatorDefs>> = {
       // The schema stored in IDB is dependent upon both the application schema
       // and the AST schema (i.e. PROTOCOL_VERSION).
@@ -415,7 +412,7 @@ export class Zero<const S extends Schema> {
       logLevel: logOptions.logLevel,
       logSinks: [logOptions.logSink],
       mutators: replicacheMutators,
-      name: `zero-${userID}`,
+      name: `zero-${userID}-${this.storageKey}`,
       pusher: (req, reqID) => this.#pusher(req, reqID),
       puller: (req, reqID) => this.#puller(req, reqID),
       pushDelay: 0,
@@ -1109,10 +1106,7 @@ export class Zero<const S extends Schema> {
     resolver.resolve(pullResponseMessage[1]);
   }
 
-  async #pusher(
-    req: PushRequestV0 | PushRequestV1,
-    requestID: string,
-  ): Promise<PusherResult> {
+  async #pusher(req: PushRequest, requestID: string): Promise<PusherResult> {
     // The deprecation of pushVersion 0 predates zero-client
     assert(req.pushVersion === 1);
     // If we are connecting we wait until we are connected.
@@ -1290,10 +1284,8 @@ export class Zero<const S extends Schema> {
 
             this.#rejectMessageError = resolver();
 
-            const enum RaceCases {
-              Ping = 0,
-              Hidden = 2,
-            }
+            const PING = 0;
+            const HIDDEN = 2;
 
             const raceResult = await promiseRace([
               pingTimeoutPromise,
@@ -1309,7 +1301,7 @@ export class Zero<const S extends Schema> {
             }
 
             switch (raceResult) {
-              case RaceCases.Ping: {
+              case PING: {
                 const pingResult = await this.#ping(
                   lc,
                   this.#rejectMessageError.promise,
@@ -1319,7 +1311,7 @@ export class Zero<const S extends Schema> {
                 }
                 break;
               }
-              case RaceCases.Hidden:
+              case HIDDEN:
                 this.#disconnect(lc, {
                   client: 'Hidden',
                 });
@@ -1407,10 +1399,7 @@ export class Zero<const S extends Schema> {
     }
   }
 
-  async #puller(
-    req: PullRequestV0 | PullRequestV1,
-    requestID: string,
-  ): Promise<PullerResultV1> {
+  async #puller(req: PullRequest, requestID: string): Promise<PullerResult> {
     // The deprecation of pushVersion 0 predates zero-client
     assert(req.pullVersion === 1);
     const lc = this.#lc.withContext('requestID', requestID);
@@ -1446,19 +1435,18 @@ export class Zero<const S extends Schema> {
     const pullResponseResolver: Resolver<PullResponseBody> = resolver();
     this.#pendingPullsByRequestID.set(requestID, pullResponseResolver);
     try {
-      const enum RaceCases {
-        Timeout = 0,
-        Response = 1,
-      }
+      const TIMEOUT = 0;
+      const RESPONSE = 1;
+
       const raceResult = await promiseRace([
         sleep(PULL_TIMEOUT_MS),
         pullResponseResolver.promise,
       ]);
       switch (raceResult) {
-        case RaceCases.Timeout:
+        case TIMEOUT:
           lc.debug?.('Mutation recovery pull timed out');
           throw new Error('Pull timed out');
-        case RaceCases.Response: {
+        case RESPONSE: {
           lc.debug?.('Returning mutation recovery pull response');
           const response = await pullResponseResolver.promise;
           return {

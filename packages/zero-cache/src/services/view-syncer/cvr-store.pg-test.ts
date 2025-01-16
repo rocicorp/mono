@@ -1,4 +1,12 @@
-import {beforeEach, describe, expect, test, vi, type Mock} from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+  type Mock,
+} from 'vitest';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.js';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
 import {sleep} from '../../../../shared/src/sleep.js';
@@ -81,6 +89,10 @@ describe('view-syncer/cvr-store', () => {
       DEFERRED_ROW_LIMIT,
       setTimeoutFn as unknown as typeof setTimeout,
     );
+  });
+
+  afterEach(async () => {
+    await testDBs.drop(db);
   });
 
   test('wait for row catchup', async () => {

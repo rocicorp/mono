@@ -1,22 +1,12 @@
 import {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.js';
-import {emptyDataNode} from '../btree/node.js';
-import {Chunk} from '../dag/chunk.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import type {Store} from '../dag/store.js';
-import {
-  type CommitData,
-  type SnapshotMetaSDD,
-  baseSnapshotFromHash,
-  getRefs,
-  newSnapshotCommitDataSDD,
-} from '../db/commit.js';
 import * as FormatVersion from '../format-version-enum.js';
-import {newRandomHash} from '../hash.js';
 import type {IndexDefinitions} from '../index-defs.js';
 import type {ClientID} from '../sync/ids.js';
 import {withWrite} from '../with-transactions.js';
 import {
-  type Client,
   type ClientMap,
   type ClientMapDD31,
   type ClientV4,
@@ -24,10 +14,10 @@ import {
   type ClientV6,
   getClients,
   initClientV6,
-  isClientV4,
   setClients,
 } from './clients.js';
-import {makeClientID} from './make-client-id.js';
+
+type FormatVersion = Enum<typeof FormatVersion>;
 
 export function setClientsForTesting(
   clients: ClientMap,
@@ -100,103 +90,16 @@ export async function initClientWithClientID(
   dagStore: Store,
   mutatorNames: string[],
   indexes: IndexDefinitions,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<void> {
-  if (formatVersion >= FormatVersion.DD31) {
-    await initClientV6(
-      clientID,
-      new LogContext(),
-      dagStore,
-      mutatorNames,
-      indexes,
-      formatVersion,
-      true,
-    );
-  } else {
-    const [generatedClientID, client, clientMap] = await initClientV4(dagStore);
-    const newMap = new Map(clientMap);
-    newMap.delete(generatedClientID);
-    newMap.set(clientID, client);
-    await setClientsForTesting(newMap, dagStore);
-  }
-}
-
-// We only keep this around for testing purposes.
-function initClientV4(
-  perdag: Store,
-): Promise<
-  [
-    clientID: ClientID,
-    client: Client,
-    clientMap: ClientMap,
-    newClientGroup: boolean,
-  ]
-> {
-  return withWrite(perdag, async dagWrite => {
-    const newClientID = makeClientID();
-    const clients = await getClients(dagWrite);
-
-    let bootstrapClient: Client | undefined;
-    for (const client of clients.values()) {
-      if (
-        !bootstrapClient ||
-        bootstrapClient.heartbeatTimestampMs < client.heartbeatTimestampMs
-      ) {
-        bootstrapClient = client;
-      }
-    }
-
-    let newClientCommitData: CommitData<SnapshotMetaSDD>;
-    const chunksToPut: Chunk[] = [];
-    if (bootstrapClient) {
-      const constBootstrapClient = bootstrapClient;
-      assert(isClientV4(constBootstrapClient));
-      const bootstrapCommit = await baseSnapshotFromHash(
-        constBootstrapClient.headHash,
-        dagWrite,
-      );
-      // Copy the snapshot with one change: set last mutation id to 0.  Replicache
-      // server implementations expect new client ids to start with last mutation id 0.
-      // If a server sees a new client id with a non-0 last mutation id, it may conclude
-      // this is a very old client whose state has been garbage collected on the server.
-      newClientCommitData = newSnapshotCommitDataSDD(
-        bootstrapCommit.meta.basisHash,
-        0 /* lastMutationID */,
-        bootstrapCommit.meta.cookieJSON,
-        bootstrapCommit.valueHash,
-        bootstrapCommit.indexes,
-      );
-    } else {
-      // No existing snapshot to bootstrap from. Create empty snapshot.
-      const emptyBTreeChunk = new Chunk(newRandomHash(), emptyDataNode, []);
-      chunksToPut.push(emptyBTreeChunk);
-      newClientCommitData = newSnapshotCommitDataSDD(
-        null /* basisHash */,
-        0 /* lastMutationID */,
-        null /* cookie */,
-        emptyBTreeChunk.hash,
-        [] /* indexes */,
-      );
-    }
-
-    const newClientCommitChunk = new Chunk(
-      newRandomHash(),
-      newClientCommitData,
-      getRefs(newClientCommitData),
-    );
-    chunksToPut.push(newClientCommitChunk);
-
-    const newClient: Client = {
-      heartbeatTimestampMs: Date.now(),
-      headHash: newClientCommitChunk.hash,
-      mutationID: 0,
-      lastServerAckdMutationID: 0,
-    };
-    const updatedClients = new Map(clients).set(newClientID, newClient);
-    await setClients(updatedClients, dagWrite);
-
-    await Promise.all(chunksToPut.map(c => dagWrite.putChunk(c)));
-
-    return [newClientID, newClient, updatedClients, false];
-  });
+  assert(formatVersion >= FormatVersion.DD31);
+  await initClientV6(
+    clientID,
+    new LogContext(),
+    dagStore,
+    mutatorNames,
+    indexes,
+    formatVersion,
+    true,
+  );
 }

@@ -6,8 +6,13 @@ import {
   dataChangeSchema,
   rollbackSchema,
 } from './data.js';
+import {statusMessageSchema} from './status.js';
 
-const begin = v.tuple([v.literal('begin'), beginSchema]);
+const begin = v.tuple([
+  v.literal('begin'),
+  beginSchema,
+  v.object({commitWatermark: v.string()}),
+]);
 const data = v.tuple([v.literal('data'), dataChangeSchema]);
 const commit = v.tuple([
   v.literal('commit'),
@@ -34,6 +39,7 @@ export type ChangeStreamControl = v.Infer<typeof changeStreamControlSchema>;
 export const changeStreamMessageSchema = v.union(
   changeStreamDataSchema,
   changeStreamControlSchema,
+  statusMessageSchema,
 );
 
 export type ChangeStreamMessage = v.Infer<typeof changeStreamMessageSchema>;

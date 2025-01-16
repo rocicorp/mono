@@ -1,10 +1,10 @@
 import * as sinon from 'sinon';
 import {afterEach, beforeEach, expect, test} from 'vitest';
-import type {PushRequestV1} from '../../../replicache/src/mod.js';
-import {ErrorKind} from '../../../zero-protocol/src/error.js';
+import type {PushRequest} from '../../../replicache/src/sync/push.js';
+import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.js';
 import type {Mutation} from '../../../zero-protocol/src/push.js';
+import * as ConnectionState from './connection-state-enum.js';
 import {MockSocket, tickAFewTimes, zeroForTest} from './test-utils.js';
-import {ConnectionState} from './zero.js';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
@@ -29,7 +29,7 @@ test('connection stays alive on rate limit error', async () => {
 
   const mockSocket = await z.socket;
 
-  const pushReq: PushRequestV1 = {
+  const pushReq: PushRequest = {
     profileID: 'p1',
     clientGroupID: await z.clientGroupID,
     pushVersion: 1,

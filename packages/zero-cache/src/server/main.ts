@@ -2,7 +2,13 @@ import {resolver} from '@rocicorp/resolver';
 import {availableParallelism} from 'node:os';
 import path from 'node:path';
 import {getZeroConfig} from '../config/zero-config.js';
+import {getSubscriberContext} from '../services/change-streamer/change-streamer-http.js';
 import {SyncDispatcher} from '../services/dispatcher/sync-dispatcher.js';
+import {installWebSocketHandoff} from '../services/dispatcher/websocket-handoff.js';
+import {
+  restoreReplica,
+  startReplicaBackupProcess,
+} from '../services/litestream/commands.js';
 import type {Service} from '../services/service.js';
 import {initViewSyncerSchema} from '../services/view-syncer/schema/init.js';
 import {pgClient} from '../types/pg.js';
@@ -75,13 +81,24 @@ export default async function runWorker(
     return processes.addWorker(worker, type, name);
   }
 
+  const {backupURL} = config.litestream;
+  const litestream = backupURL?.length;
+  const runChangeStreamer = !config.changeStreamerURI;
+
+  if (litestream) {
+    // For the replication-manager (i.e. authoritative replica), only attempt
+    // a restore once, allowing the backup to be absent.
+    // For view-syncers, attempt a restore for up to 10 times over 30 seconds.
+    await restoreReplica(lc, config, runChangeStreamer ? 1 : 10, 3000);
+  }
+
   const {promise: changeStreamerReady, resolve} = resolver();
-  const changeStreamer = config.changeStreamerURI
-    ? resolve()
-    : loadWorker('./server/change-streamer.ts', 'supporting').once(
+  const changeStreamer = runChangeStreamer
+    ? loadWorker('./server/change-streamer.ts', 'supporting').once(
         'message',
         resolve,
-      );
+      )
+    : resolve();
 
   if (numSyncers) {
     // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
@@ -92,29 +109,26 @@ export default async function runWorker(
     void cvrDB.end();
   }
 
-  // Start the replicator after the change-streamer is running to avoid
-  // connect error messages and exponential backoff.
+  // Wait for the change-streamer to be ready to guarantee that a replica
+  // file is present.
   await changeStreamerReady;
 
-  if (config.litestream) {
+  if (runChangeStreamer && litestream) {
+    // Start a backup replicator and corresponding litestream backup process.
     const mode: ReplicaFileMode = 'backup';
-    const replicator = loadWorker(
-      './server/replicator.ts',
+    loadWorker('./server/replicator.ts', 'supporting', mode, mode);
+
+    processes.addSubprocess(
+      startReplicaBackupProcess(config),
       'supporting',
-      mode,
-      mode,
-    ).once('message', () => subscribeTo(lc, replicator));
-    const notifier = createNotifierFrom(lc, replicator);
-    if (changeStreamer) {
-      handleSubscriptionsFrom(lc, changeStreamer, notifier);
-    }
+      'litestream',
+    );
   }
 
   const syncers: Worker[] = [];
   if (numSyncers) {
-    const mode: ReplicaFileMode = config.litestream
-      ? 'serving-copy'
-      : 'serving';
+    const mode: ReplicaFileMode =
+      runChangeStreamer && litestream ? 'serving-copy' : 'serving';
     const replicator = loadWorker(
       './server/replicator.ts',
       'supporting',
@@ -131,7 +145,7 @@ export default async function runWorker(
   }
 
   lc.info?.('waiting for workers to be ready ...');
-  if ((await orTimeout(processes.allWorkersReady(), 30_000)) === 'timed-out') {
+  if ((await orTimeout(processes.allWorkersReady(), 60_000)) === 'timed-out') {
     lc.info?.(`timed out waiting for readiness (${Date.now() - startMs} ms)`);
   } else {
     lc.info?.(`all workers ready (${Date.now() - startMs} ms)`);
@@ -142,6 +156,15 @@ export default async function runWorker(
 
   if (numSyncers) {
     mainServices.push(new SyncDispatcher(lc, parent, syncers, {port}));
+  } else if (changeStreamer && parent) {
+    // When running as the replication-manager, the dispatcher process
+    // hands off websockets from the main (tenant) dispatcher to the
+    // change-streamer process.
+    installWebSocketHandoff(
+      lc,
+      req => ({payload: getSubscriberContext(req), receiver: changeStreamer}),
+      parent,
+    );
   }
 
   parent?.send(['ready', {ready: true}]);
@@ -149,7 +172,7 @@ export default async function runWorker(
   try {
     await runUntilKilled(lc, parent ?? process, ...mainServices);
   } catch (err) {
-    processes.logErrorAndExit(err);
+    processes.logErrorAndExit(err, 'dispatcher');
   }
 
   await processes.done();

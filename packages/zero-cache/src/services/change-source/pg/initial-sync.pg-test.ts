@@ -8,7 +8,11 @@ import type {
   PublishedTableSpec,
 } from '../../../db/specs.js';
 import {getConnectionURI, initDB, testDBs} from '../../../test/db.js';
-import {expectTables, initDB as initLiteDB} from '../../../test/lite.js';
+import {
+  expectMatchingObjectsInTables,
+  expectTables,
+  initDB as initLiteDB,
+} from '../../../test/lite.js';
 import type {PostgresDB} from '../../../types/pg.js';
 import {initialSync, replicationSlot} from './initial-sync.js';
 import {fromLexiVersion} from './lsn.js';
@@ -157,6 +161,8 @@ const REPLICATED_ZERO_CLIENTS_SPEC: LiteTableSpec = {
   primaryKey: ['clientGroupID', 'clientID'],
 } as const;
 
+const WATERMARK_REGEX = /[0-9a-z]{4,}/;
+
 describe('replicator/initial-sync', () => {
   type Case = {
     name: string;
@@ -189,7 +195,7 @@ describe('replicator/initial-sync', () => {
             lock: 1n,
             minSupportedVersion: 1n,
             maxSupportedVersion: 1n,
-            ['_0_version']: '00',
+            ['_0_version']: WATERMARK_REGEX,
           },
         ],
       },
@@ -220,7 +226,7 @@ describe('replicator/initial-sync', () => {
             lock: 1n,
             minSupportedVersion: 1n,
             maxSupportedVersion: 1n,
-            ['_0_version']: '00',
+            ['_0_version']: WATERMARK_REGEX,
           },
         ],
       },
@@ -232,6 +238,7 @@ describe('replicator/initial-sync', () => {
     {
       name: 'existing table, default publication',
       setupUpstreamQuery: `
+        CREATE TYPE ENUMZ AS ENUM ('1', '2', '3');
         CREATE TABLE issues(
           "issueID" INTEGER,
           "orgID" INTEGER,
@@ -245,6 +252,7 @@ describe('replicator/initial-sync', () => {
           "date" DATE,
           "time" TIME,
           "serial" SERIAL,
+          "enumz" ENUMZ,
           PRIMARY KEY ("orgID", "issueID")
         );
       `,
@@ -445,8 +453,15 @@ describe('replicator/initial-sync', () => {
               notNull: false,
               dflt: null,
             },
-            ['_0_version']: {
+            enumz: {
               pos: 13,
+              characterMaximumLength: null,
+              dataType: 'TEXT_ENUM_enumz',
+              dflt: null,
+              notNull: false,
+            },
+            ['_0_version']: {
+              pos: 14,
               characterMaximumLength: null,
               dataType: 'TEXT',
               notNull: false,
@@ -516,7 +531,7 @@ describe('replicator/initial-sync', () => {
             date: null,
             time: null,
             serial: 1n,
-            ['_0_version']: '00',
+            ['_0_version']: WATERMARK_REGEX,
           },
           {
             issueID: 321n,
@@ -531,7 +546,7 @@ describe('replicator/initial-sync', () => {
             date: null,
             time: null,
             serial: 2n,
-            ['_0_version']: '00',
+            ['_0_version']: WATERMARK_REGEX,
           },
           {
             issueID: 456n,
@@ -546,7 +561,7 @@ describe('replicator/initial-sync', () => {
             date: BigInt(Date.UTC(2003, 3, 23)),
             time: '09:10:11.123457', // PG rounds to microseconds
             serial: 3n,
-            ['_0_version']: '00',
+            ['_0_version']: WATERMARK_REGEX,
           },
         ],
         ['zero.schemaVersions']: [
@@ -554,7 +569,7 @@ describe('replicator/initial-sync', () => {
             lock: 1n,
             minSupportedVersion: 1n,
             maxSupportedVersion: 1n,
-            ['_0_version']: '00',
+            ['_0_version']: WATERMARK_REGEX,
           },
         ],
       },
@@ -642,15 +657,23 @@ describe('replicator/initial-sync', () => {
       replicatedData: {
         [`zero_${SHARD_ID}.clients`]: [],
         users: [
-          {userID: 123n, handle: '@zoot', ['_0_version']: '00'},
-          {userID: 456n, handle: '@bonk', ['_0_version']: '00'},
+          {
+            userID: 123n,
+            handle: '@zoot',
+            ['_0_version']: WATERMARK_REGEX,
+          },
+          {
+            userID: 456n,
+            handle: '@bonk',
+            ['_0_version']: WATERMARK_REGEX,
+          },
         ],
         ['zero.schemaVersions']: [
           {
             lock: 1n,
             minSupportedVersion: 1n,
             maxSupportedVersion: 1n,
-            ['_0_version']: '00',
+            ['_0_version']: WATERMARK_REGEX,
           },
         ],
       },
@@ -740,15 +763,23 @@ describe('replicator/initial-sync', () => {
       replicatedData: {
         [`zero_${SHARD_ID}.clients`]: [],
         users: [
-          {userID: 456n, handle: '@bonk', ['_0_version']: '00'},
-          {userID: 1001n, handle: '@boom', ['_0_version']: '00'},
+          {
+            userID: 456n,
+            handle: '@bonk',
+            ['_0_version']: WATERMARK_REGEX,
+          },
+          {
+            userID: 1001n,
+            handle: '@boom',
+            ['_0_version']: WATERMARK_REGEX,
+          },
         ],
         ['zero.schemaVersions']: [
           {
             lock: 1n,
             minSupportedVersion: 1n,
             maxSupportedVersion: 1n,
-            ['_0_version']: '00',
+            ['_0_version']: WATERMARK_REGEX,
           },
         ],
       },
@@ -869,7 +900,7 @@ describe('replicator/initial-sync', () => {
             lock: 1n,
             minSupportedVersion: 1n,
             maxSupportedVersion: 1n,
-            ['_0_version']: '00',
+            ['_0_version']: WATERMARK_REGEX,
           },
         ],
       },
@@ -963,20 +994,12 @@ describe('replicator/initial-sync', () => {
       const syncedIndices = listIndexes(replica);
       expect(syncedIndices).toEqual(c.replicatedIndices ?? []);
 
-      expectTables(replica, c.replicatedData, 'bigint');
+      expectMatchingObjectsInTables(replica, c.replicatedData, 'bigint');
 
       const replicaState = replica
         .prepare('SELECT * FROM "_zero.replicationState"')
-        .get<{
-          watermark: string;
-          stateVersion: string;
-          nextStateVersion: string;
-          lock: number;
-        }>();
-      expect(replicaState).toMatchObject({
-        watermark: /[0-9a-f]{2,}/,
-        stateVersion: '00',
-      });
+        .get<{stateVersion: string}>();
+      expect(replicaState).toMatchObject({stateVersion: WATERMARK_REGEX});
       expectTables(replica, {['_zero.changeLog']: []});
 
       // Check replica state against the upstream slot.
@@ -987,7 +1010,7 @@ describe('replicator/initial-sync', () => {
           )}`;
       expect(slots[0]).toEqual({
         slotName: replicationSlot(SHARD_ID),
-        lsn: fromLexiVersion(replicaState.watermark),
+        lsn: fromLexiVersion(replicaState.stateVersion),
       });
     });
   }

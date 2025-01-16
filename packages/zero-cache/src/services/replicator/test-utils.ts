@@ -33,7 +33,11 @@ export function fakeReplicator(lc: LogContext, db: Database): FakeReplicator {
   const messageProcessor = createMessageProcessor(db);
   return {
     processTransaction: (watermark, ...msgs) => {
-      messageProcessor.processMessage(lc, ['begin', {tag: 'begin'}]);
+      messageProcessor.processMessage(lc, [
+        'begin',
+        {tag: 'begin'},
+        {commitWatermark: watermark},
+      ]);
       for (const msg of msgs) {
         messageProcessor.processMessage(lc, ['data', msg]);
       }

@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import type {Chunk} from '../dag/chunk.js';
 import type {LazyStore} from '../dag/lazy-store.js';
 import type {Read, Store, Write} from '../dag/store.js';
@@ -17,7 +18,7 @@ import {
   localMutationsGreaterThan,
 } from '../db/commit.js';
 import {rebaseMutationAndPutCommit} from '../db/rebase.js';
-import type {FormatVersion} from '../format-version-enum.js';
+import * as FormatVersion from '../format-version-enum.js';
 import type {Hash} from '../hash.js';
 import type {ClientGroupID, ClientID} from '../sync/ids.js';
 import type {MutatorDefs} from '../types.js';
@@ -35,6 +36,8 @@ import {
   setClient,
 } from './clients.js';
 import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
+
+type FormatVersion = Enum<typeof FormatVersion>;
 
 /**
  * Persists the client's memdag state to the client's perdag client group.

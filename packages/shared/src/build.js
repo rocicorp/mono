@@ -59,6 +59,7 @@ export function makeDefine(mode = 'unknown') {
       getVersion('replicache'),
     ),
     ['process.env.ZERO_VERSION']: JSON.stringify(getVersion('zero')),
+    ['process.env.DISABLE_MUTATION_RECOVERY']: 'false',
     ['TESTING']: 'false',
   };
   if (mode === 'unknown') {

@@ -94,12 +94,12 @@ describe('replicator/incremental-sync', () => {
       );
       `,
       downstream: [
-        ['begin', issues.begin()],
+        ['begin', issues.begin(), {commitWatermark: '06'}],
         ['data', issues.insert('issues', {issueID: 123, bool: true})],
         ['data', issues.insert('issues', {issueID: 456, bool: false})],
         ['commit', issues.commit(), {watermark: '06'}],
 
-        ['begin', issues.begin()],
+        ['begin', issues.begin(), {commitWatermark: '0b'}],
         [
           'data',
           issues.insert('issues', {
@@ -133,7 +133,7 @@ describe('replicator/incremental-sync', () => {
             time: null,
             bytes: null,
             intArray: null,
-            ['_0_version']: '02',
+            ['_0_version']: '06',
           },
           {
             issueID: 456n,
@@ -146,7 +146,7 @@ describe('replicator/incremental-sync', () => {
             time: null,
             bytes: null,
             intArray: null,
-            ['_0_version']: '02',
+            ['_0_version']: '06',
           },
           {
             issueID: 789n,
@@ -159,7 +159,7 @@ describe('replicator/incremental-sync', () => {
             time: 1728345600123456n,
             bytes: Buffer.from('world'),
             intArray: '[3,2,1]',
-            ['_0_version']: '06',
+            ['_0_version']: '0b',
           },
           {
             issueID: 987n,
@@ -172,7 +172,7 @@ describe('replicator/incremental-sync', () => {
             time: null,
             bytes: null,
             intArray: null,
-            ['_0_version']: '06',
+            ['_0_version']: '0b',
           },
           {
             issueID: 234n,
@@ -185,36 +185,36 @@ describe('replicator/incremental-sync', () => {
             time: null,
             bytes: null,
             intArray: null,
-            ['_0_version']: '06',
+            ['_0_version']: '0b',
           },
         ],
         ['_zero.changeLog']: [
           {
-            stateVersion: '02',
+            stateVersion: '06',
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":123}',
           },
           {
-            stateVersion: '02',
+            stateVersion: '06',
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":456}',
           },
           {
-            stateVersion: '06',
+            stateVersion: '0b',
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":789}',
           },
           {
-            stateVersion: '06',
+            stateVersion: '0b',
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":987}',
           },
           {
-            stateVersion: '06',
+            stateVersion: '0b',
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":234}',
@@ -235,7 +235,7 @@ describe('replicator/incremental-sync', () => {
       );
       `,
       downstream: [
-        ['begin', orgIssues.begin()],
+        ['begin', orgIssues.begin(), {commitWatermark: '06'}],
         [
           'data',
           orgIssues.insert('issues', {orgID: 1, issueID: 123, bool: true}),
@@ -250,7 +250,7 @@ describe('replicator/incremental-sync', () => {
         ],
         ['commit', orgIssues.commit(), {watermark: '06'}],
 
-        ['begin', orgIssues.begin()],
+        ['begin', orgIssues.begin(), {commitWatermark: '0a'}],
         [
           'data',
           orgIssues.update('issues', {
@@ -282,44 +282,44 @@ describe('replicator/incremental-sync', () => {
             issueID: 123n,
             description: 'bar',
             bool: 0n,
-            ['_0_version']: '06',
+            ['_0_version']: '0a',
           },
           {
             orgID: 1n,
             issueID: 456n,
             description: 'foo',
             bool: 1n,
-            ['_0_version']: '06',
+            ['_0_version']: '0a',
           },
           {
             orgID: 2n,
             issueID: 789n,
             description: null,
             bool: 1n,
-            ['_0_version']: '02',
+            ['_0_version']: '06',
           },
         ],
         ['_zero.changeLog']: [
           {
-            stateVersion: '02',
+            stateVersion: '06',
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":789,"orgID":2}',
           },
           {
-            stateVersion: '06',
+            stateVersion: '0a',
             table: 'issues',
             op: 's',
             rowKey: '{"bool":1,"issueID":456,"orgID":1}',
           },
           {
-            stateVersion: '06',
+            stateVersion: '0a',
             table: 'issues',
             op: 'd',
             rowKey: '{"bool":1,"issueID":123,"orgID":1}',
           },
           {
-            stateVersion: '06',
+            stateVersion: '0a',
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":123,"orgID":2}',
@@ -340,7 +340,7 @@ describe('replicator/incremental-sync', () => {
       );
       `,
       downstream: [
-        ['begin', orgIssues.begin()],
+        ['begin', orgIssues.begin(), {commitWatermark: '07'}],
         [
           'data',
           orgIssues.insert('issues', {orgID: 1, issueID: 123, bool: true}),
@@ -359,7 +359,7 @@ describe('replicator/incremental-sync', () => {
         ],
         ['commit', orgIssues.commit(), {watermark: '07'}],
 
-        ['begin', orgIssues.begin()],
+        ['begin', orgIssues.begin(), {commitWatermark: '0c'}],
         [
           'data',
           orgIssues.delete('issues', {orgID: 1, issueID: 123, bool: true}),
@@ -381,30 +381,30 @@ describe('replicator/incremental-sync', () => {
             issueID: 789n,
             bool: 0n,
             description: null,
-            ['_0_version']: '02',
+            ['_0_version']: '07',
           },
         ],
         ['_zero.changeLog']: [
           {
-            stateVersion: '02',
+            stateVersion: '07',
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":789,"orgID":2}',
           },
           {
-            stateVersion: '07',
+            stateVersion: '0c',
             table: 'issues',
             op: 'd',
             rowKey: '{"bool":1,"issueID":123,"orgID":1}',
           },
           {
-            stateVersion: '07',
+            stateVersion: '0c',
             table: 'issues',
             op: 'd',
             rowKey: '{"bool":0,"issueID":456,"orgID":1}',
           },
           {
-            stateVersion: '07',
+            stateVersion: '0c',
             table: 'issues',
             op: 'd',
             rowKey: '{"bool":1,"issueID":987,"orgID":2}',
@@ -420,7 +420,7 @@ describe('replicator/incremental-sync', () => {
       CREATE TABLE baz(id INTEGER PRIMARY KEY, _0_version TEXT);
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         ['data', fooBarBaz.insert('foo', {id: 1})],
         ['data', fooBarBaz.insert('foo', {id: 2})],
         ['data', fooBarBaz.insert('foo', {id: 3})],
@@ -434,52 +434,52 @@ describe('replicator/incremental-sync', () => {
         ['data', fooBarBaz.truncate('foo')], // Redundant. Shouldn't cause problems.
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
 
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0i'}],
         ['data', fooBarBaz.truncate('foo')],
         ['data', fooBarBaz.insert('foo', {id: 101})],
         ['commit', fooBarBaz.commit(), {watermark: '0i'}],
       ],
       data: {
-        foo: [{id: 101n, ['_0_version']: '0e'}],
+        foo: [{id: 101n, ['_0_version']: '0i'}],
         bar: [
-          {id: 4n, ['_0_version']: '02'},
-          {id: 5n, ['_0_version']: '02'},
-          {id: 6n, ['_0_version']: '02'},
+          {id: 4n, ['_0_version']: '0e'},
+          {id: 5n, ['_0_version']: '0e'},
+          {id: 6n, ['_0_version']: '0e'},
         ],
         baz: [],
         ['_zero.changeLog']: [
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'bar',
             op: 's',
             rowKey: '{"id":4}',
           },
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'bar',
             op: 's',
             rowKey: '{"id":5}',
           },
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'bar',
             op: 's',
             rowKey: '{"id":6}',
           },
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'baz',
             op: 't',
             rowKey: '',
           },
           {
-            stateVersion: '0e',
+            stateVersion: '0i',
             table: 'foo',
             op: 't',
             rowKey: '',
           },
           {
-            stateVersion: '0e',
+            stateVersion: '0i',
             table: 'foo',
             op: 's',
             rowKey: '{"id":101}',
@@ -498,7 +498,7 @@ describe('replicator/incremental-sync', () => {
       );
       `,
       downstream: [
-        ['begin', orgIssues.begin()],
+        ['begin', orgIssues.begin(), {commitWatermark: '07'}],
         ['data', tables.truncate('transaction')],
         [
           'data',
@@ -519,19 +519,19 @@ describe('replicator/incremental-sync', () => {
         transaction: [],
         ['_zero.changeLog']: [
           {
-            stateVersion: '02',
+            stateVersion: '07',
             table: 'transaction',
             op: 't',
             rowKey: '',
           },
           {
-            stateVersion: '02',
+            stateVersion: '07',
             table: 'transaction',
             op: 'd',
             rowKey: '{"column":1}',
           },
           {
-            stateVersion: '02',
+            stateVersion: '07',
             table: 'transaction',
             op: 'd',
             rowKey: '{"column":2}',
@@ -552,7 +552,7 @@ describe('replicator/incremental-sync', () => {
       );
       `,
       downstream: [
-        ['begin', orgIssues.begin()],
+        ['begin', orgIssues.begin(), {commitWatermark: '08'}],
         [
           'data',
           orgIssues.insert('issues', {orgID: 1, issueID: 123, bool: true}),
@@ -591,24 +591,24 @@ describe('replicator/incremental-sync', () => {
             issueID: 456n,
             bool: 0n,
             description: 'foo',
-            ['_0_version']: '02',
+            ['_0_version']: '08',
           },
         ],
         ['_zero.changeLog']: [
           {
-            stateVersion: '02',
+            stateVersion: '08',
             table: 'issues',
             op: 'd',
             rowKey: '{"bool":1,"issueID":123,"orgID":1}',
           },
           {
-            stateVersion: '02',
+            stateVersion: '08',
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":456,"orgID":1}',
           },
           {
-            stateVersion: '02',
+            stateVersion: '08',
             table: 'issues',
             op: 'd',
             rowKey: '{"bool":0,"issueID":789,"orgID":2}',
@@ -620,7 +620,7 @@ describe('replicator/incremental-sync', () => {
       name: 'create table',
       setup: ``,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         [
           'data',
           fooBarBaz.createTable({
@@ -657,24 +657,24 @@ describe('replicator/incremental-sync', () => {
       ],
       data: {
         foo: [
-          {id: 'bar', count: 2n, bool: 1n, serial: 1n, ['_0_version']: '02'},
-          {id: 'baz', count: 3n, bool: 0n, serial: 2n, ['_0_version']: '02'},
+          {id: 'bar', count: 2n, bool: 1n, serial: 1n, ['_0_version']: '0e'},
+          {id: 'baz', count: 3n, bool: 0n, serial: 2n, ['_0_version']: '0e'},
         ],
         ['_zero.changeLog']: [
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'foo',
             op: 'r',
             rowKey: null,
           },
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'foo',
             op: 's',
             rowKey: '{"id":"bar"}',
           },
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'foo',
             op: 's',
             rowKey: '{"id":"baz"}',
@@ -735,33 +735,33 @@ describe('replicator/incremental-sync', () => {
         INSERT INTO foo(id, _0_version) VALUES (3, '00');
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         ['data', fooBarBaz.renameTable('foo', 'bar')],
         ['data', fooBarBaz.insert('bar', {id: 4})],
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
       data: {
         bar: [
-          {id: 1n, ['_0_version']: '02'},
-          {id: 2n, ['_0_version']: '02'},
-          {id: 3n, ['_0_version']: '02'},
-          {id: 4n, ['_0_version']: '02'},
+          {id: 1n, ['_0_version']: '0e'},
+          {id: 2n, ['_0_version']: '0e'},
+          {id: 3n, ['_0_version']: '0e'},
+          {id: 4n, ['_0_version']: '0e'},
         ],
         ['_zero.changeLog']: [
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'bar',
             op: 'r',
             rowKey: null,
           },
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'foo',
             op: 'r',
             rowKey: null,
           },
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'bar',
             op: 's',
             rowKey: '{"id":4}',
@@ -801,7 +801,7 @@ describe('replicator/incremental-sync', () => {
         INSERT INTO foo(id, _0_version) VALUES (3, '00');
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         [
           'data',
           fooBarBaz.addColumn('foo', 'newInt', {
@@ -843,39 +843,39 @@ describe('replicator/incremental-sync', () => {
             newInt: 123n,
             newBool: 1n,
             newJSON: null,
-            ['_0_version']: '02',
+            ['_0_version']: '0e',
           },
           {
             id: 2n,
             newInt: 123n,
             newBool: 1n,
             newJSON: null,
-            ['_0_version']: '02',
+            ['_0_version']: '0e',
           },
           {
             id: 3n,
             newInt: 123n,
             newBool: 1n,
             newJSON: null,
-            ['_0_version']: '02',
+            ['_0_version']: '0e',
           },
           {
             id: 4n,
             newInt: 321n,
             newBool: 0n,
             newJSON: 'true',
-            ['_0_version']: '02',
+            ['_0_version']: '0e',
           },
         ],
         ['_zero.changeLog']: [
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'foo',
             op: 'r',
             rowKey: null,
           },
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
@@ -936,7 +936,7 @@ describe('replicator/incremental-sync', () => {
         INSERT INTO foo(id, dropMe, _0_version) VALUES (3, 'bye', '00');
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         ['data', fooBarBaz.update('foo', {id: 3, dropMe: 'stillDropped'})],
         ['data', fooBarBaz.dropColumn('foo', 'dropMe')],
         ['data', fooBarBaz.insert('foo', {id: 4})],
@@ -944,20 +944,20 @@ describe('replicator/incremental-sync', () => {
       ],
       data: {
         foo: [
-          {id: 1n, ['_0_version']: '02'},
-          {id: 2n, ['_0_version']: '02'},
-          {id: 3n, ['_0_version']: '02'},
-          {id: 4n, ['_0_version']: '02'},
+          {id: 1n, ['_0_version']: '0e'},
+          {id: 2n, ['_0_version']: '0e'},
+          {id: 3n, ['_0_version']: '0e'},
+          {id: 4n, ['_0_version']: '0e'},
         ],
         ['_zero.changeLog']: [
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'foo',
             op: 'r',
             rowKey: null,
           },
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
@@ -997,7 +997,7 @@ describe('replicator/incremental-sync', () => {
         INSERT INTO foo(id, renameMe, _0_version) VALUES (3, 'orl', '00');
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         ['data', fooBarBaz.update('foo', {id: 3, renameMe: 'olrd'})],
         [
           'data',
@@ -1012,20 +1012,20 @@ describe('replicator/incremental-sync', () => {
       ],
       data: {
         foo: [
-          {id: 1n, newName: 'hel', ['_0_version']: '02'},
-          {id: 2n, newName: 'low', ['_0_version']: '02'},
-          {id: 3n, newName: 'olrd', ['_0_version']: '02'},
-          {id: 4n, newName: 'yay', ['_0_version']: '02'},
+          {id: 1n, newName: 'hel', ['_0_version']: '0e'},
+          {id: 2n, newName: 'low', ['_0_version']: '0e'},
+          {id: 3n, newName: 'olrd', ['_0_version']: '0e'},
+          {id: 4n, newName: 'yay', ['_0_version']: '0e'},
         ],
         ['_zero.changeLog']: [
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'foo',
             op: 'r',
             rowKey: null,
           },
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
@@ -1073,7 +1073,7 @@ describe('replicator/incremental-sync', () => {
         INSERT INTO foo(id, renameMe, _0_version) VALUES (3, 'orl', '00');
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         ['data', fooBarBaz.update('foo', {id: 3, renameMe: 'olrd'})],
         [
           'data',
@@ -1088,20 +1088,20 @@ describe('replicator/incremental-sync', () => {
       ],
       data: {
         foo: [
-          {id: 1n, newName: 'hel', ['_0_version']: '02'},
-          {id: 2n, newName: 'low', ['_0_version']: '02'},
-          {id: 3n, newName: 'olrd', ['_0_version']: '02'},
-          {id: 4n, newName: 'yay', ['_0_version']: '02'},
+          {id: 1n, newName: 'hel', ['_0_version']: '0e'},
+          {id: 2n, newName: 'low', ['_0_version']: '0e'},
+          {id: 3n, newName: 'olrd', ['_0_version']: '0e'},
+          {id: 4n, newName: 'yay', ['_0_version']: '0e'},
         ],
         ['_zero.changeLog']: [
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'foo',
             op: 'r',
             rowKey: null,
           },
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
@@ -1155,7 +1155,7 @@ describe('replicator/incremental-sync', () => {
         INSERT INTO foo(id, num, _0_version) VALUES (3, '3', '00');
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         ['data', fooBarBaz.update('foo', {id: 3, num: '1'})],
         [
           'data',
@@ -1170,20 +1170,20 @@ describe('replicator/incremental-sync', () => {
       ],
       data: {
         foo: [
-          {id: 1n, num: 3n, ['_0_version']: '02'},
-          {id: 2n, num: 2n, ['_0_version']: '02'},
-          {id: 3n, num: 1n, ['_0_version']: '02'},
-          {id: 4n, num: 23n, ['_0_version']: '02'},
+          {id: 1n, num: 3n, ['_0_version']: '0e'},
+          {id: 2n, num: 2n, ['_0_version']: '0e'},
+          {id: 3n, num: 1n, ['_0_version']: '0e'},
+          {id: 4n, num: 23n, ['_0_version']: '0e'},
         ],
         ['_zero.changeLog']: [
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'foo',
             op: 'r',
             rowKey: null,
           },
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
@@ -1232,7 +1232,7 @@ describe('replicator/incremental-sync', () => {
         INSERT INTO foo(id, num, _0_version) VALUES (3, '0', '00');
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         ['data', fooBarBaz.update('foo', {id: 3, num: '1'})],
         [
           'data',
@@ -1247,20 +1247,20 @@ describe('replicator/incremental-sync', () => {
       ],
       data: {
         foo: [
-          {id: 1n, num: 3n, ['_0_version']: '02'},
-          {id: 2n, num: 2n, ['_0_version']: '02'},
-          {id: 3n, num: 1n, ['_0_version']: '02'},
-          {id: 4n, num: 23n, ['_0_version']: '02'},
+          {id: 1n, num: 3n, ['_0_version']: '0e'},
+          {id: 2n, num: 2n, ['_0_version']: '0e'},
+          {id: 3n, num: 1n, ['_0_version']: '0e'},
+          {id: 4n, num: 23n, ['_0_version']: '0e'},
         ],
         ['_zero.changeLog']: [
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'foo',
             op: 'r',
             rowKey: null,
           },
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
@@ -1320,7 +1320,7 @@ describe('replicator/incremental-sync', () => {
         INSERT INTO foo(id, numburr, _0_version) VALUES (3, '3', '00');
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         ['data', fooBarBaz.update('foo', {id: 3, numburr: '1'})],
         [
           'data',
@@ -1335,20 +1335,20 @@ describe('replicator/incremental-sync', () => {
       ],
       data: {
         foo: [
-          {id: 1n, number: 3n, ['_0_version']: '02'},
-          {id: 2n, number: 2n, ['_0_version']: '02'},
-          {id: 3n, number: 1n, ['_0_version']: '02'},
-          {id: 4n, number: 23n, ['_0_version']: '02'},
+          {id: 1n, number: 3n, ['_0_version']: '0e'},
+          {id: 2n, number: 2n, ['_0_version']: '0e'},
+          {id: 3n, number: 1n, ['_0_version']: '0e'},
+          {id: 4n, number: 23n, ['_0_version']: '0e'},
         ],
         ['_zero.changeLog']: [
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'foo',
             op: 'r',
             rowKey: null,
           },
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'foo',
             op: 's',
             rowKey: '{"id":4}',
@@ -1395,7 +1395,7 @@ describe('replicator/incremental-sync', () => {
         INSERT INTO foo(id, _0_version) VALUES (3, '00');
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         ['data', fooBarBaz.insert('foo', {id: 4})],
         ['data', fooBarBaz.dropTable('foo')],
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
@@ -1403,7 +1403,7 @@ describe('replicator/incremental-sync', () => {
       data: {
         ['_zero.changeLog']: [
           {
-            stateVersion: '02',
+            stateVersion: '0e',
             table: 'foo',
             op: 'r',
             rowKey: null,
@@ -1419,7 +1419,7 @@ describe('replicator/incremental-sync', () => {
         CREATE TABLE foo(id INT8 PRIMARY KEY, handle TEXT, _0_version TEXT);
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         [
           'data',
           fooBarBaz.createIndex({
@@ -1454,7 +1454,7 @@ describe('replicator/incremental-sync', () => {
         CREATE INDEX drop_me ON foo (handle DESC);
       `,
       downstream: [
-        ['begin', fooBarBaz.begin()],
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
         ['data', fooBarBaz.dropIndex('drop_me')],
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
@@ -1477,7 +1477,7 @@ describe('replicator/incremental-sync', () => {
       name: 'reserved words in DDL',
       setup: ``,
       downstream: [
-        ['begin', tables.begin()],
+        ['begin', tables.begin(), {commitWatermark: '07'}],
         [
           'data',
           tables.createTable({
@@ -1532,7 +1532,7 @@ describe('replicator/incremental-sync', () => {
         transaction: [],
         ['_zero.changeLog']: [
           {
-            stateVersion: '02',
+            stateVersion: '07',
             table: 'transaction',
             op: 'r',
             rowKey: null,

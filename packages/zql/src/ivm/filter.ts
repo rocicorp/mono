@@ -1,9 +1,15 @@
-import {assert, unreachable} from '../../../shared/src/asserts.js';
+import {unreachable} from '../../../shared/src/asserts.js';
 import type {Row} from '../../../zero-protocol/src/data.js';
 import type {Change} from './change.js';
 import type {Node} from './data.js';
 import {maybeSplitAndPushEditChange} from './maybe-split-and-push-edit-change.js';
-import type {FetchRequest, Input, Operator, Output} from './operator.js';
+import {
+  throwOutput,
+  type FetchRequest,
+  type Input,
+  type Operator,
+  type Output,
+} from './operator.js';
 import type {SourceSchema} from './schema.js';
 import type {Stream} from './stream.js';
 
@@ -24,7 +30,7 @@ export class Filter implements Operator {
   readonly #mode: Mode;
   readonly #predicate: (row: Row) => boolean;
 
-  #output: Output | undefined;
+  #output: Output = throwOutput;
 
   constructor(input: Input, mode: Mode, predicate: (row: Row) => boolean) {
     this.#input = input;
@@ -62,8 +68,6 @@ export class Filter implements Operator {
   }
 
   push(change: Change) {
-    assert(this.#output, 'Output not set');
-
     switch (change.type) {
       case 'add':
       case 'remove':

@@ -1,9 +1,12 @@
 import websocket from '@fastify/websocket';
 import {LogContext} from '@rocicorp/logger';
-import {type FastifyReply, type FastifyRequest} from 'fastify';
+import {IncomingMessage} from 'node:http';
 import WebSocket from 'ws';
+import {type Worker} from '../../types/processes.js';
 import {streamIn, streamOut, type Source} from '../../types/streams.js';
 import {URLParams} from '../../types/url-params.js';
+import {closeWithProtocolError} from '../../types/ws.js';
+import {installWebSocketReceiver} from '../dispatcher/websocket-handoff.js';
 import {HttpService, type Options} from '../http-service.js';
 import {
   downstreamSchema,
@@ -12,37 +15,55 @@ import {
   type SubscriberContext,
 } from './change-streamer.js';
 
-export const CHANGES_URL_PATTERN = '/api/replication/:version/changes';
+const DIRECT_PATH_PATTERN = '/replication/:version/changes';
+const TENANT_PATH_PATTERN = '/:tenant' + DIRECT_PATH_PATTERN;
+
+const V0_CHANGES_PATH = '/replication/v0/changes';
 
 export class ChangeStreamerHttpServer extends HttpService {
   readonly id = 'change-streamer-http-server';
   readonly #delegate: ChangeStreamer;
 
-  constructor(lc: LogContext, delegate: ChangeStreamer, opts: Options) {
+  constructor(
+    lc: LogContext,
+    delegate: ChangeStreamer,
+    opts: Options,
+    parent: Worker,
+  ) {
     super('change-streamer-http-server', lc, opts, async fastify => {
       await fastify.register(websocket);
       fastify.get('/', (_req, res) => res.send('OK'));
-      fastify.addHook('preValidation', this.#checkParams);
-      fastify.get(CHANGES_URL_PATTERN, {websocket: true}, this.#subscribe);
+
+      // fastify does not support optional path components, so we just
+      // register both patterns.
+      fastify.get(DIRECT_PATH_PATTERN, {websocket: true}, this.#subscribe);
+      fastify.get(TENANT_PATH_PATTERN, {websocket: true}, this.#subscribe);
+
+      installWebSocketReceiver<SubscriberContext>(
+        fastify.websocketServer,
+        this.#handleSubscription,
+        parent,
+      );
     });
+
     this.#delegate = delegate;
   }
 
-  // Avoid upgrading to a websocket if the params are bad.
-  readonly #checkParams = async (req: FastifyRequest, reply: FastifyReply) => {
-    if (req.url === '/' || req.url.startsWith('/?')) {
-      return; // Health check
-    }
+  readonly #subscribe = async (ws: WebSocket, req: RequestHeaders) => {
+    let ctx: SubscriberContext;
     try {
-      getSubscriberContext(req);
-    } catch (e) {
-      this._lc.error?.('bad request', String(e));
-      await reply.code(400).send(e instanceof Error ? e.message : String(e));
+      ctx = getSubscriberContext(req);
+    } catch (err) {
+      closeWithProtocolError(this._lc, ws, err);
+      return;
     }
+    await this.#handleSubscription(ws, ctx);
   };
 
-  readonly #subscribe = async (ws: WebSocket, req: FastifyRequest) => {
-    const ctx = getSubscriberContext(req); // #checkSubscribe guarantees this.
+  readonly #handleSubscription = async (
+    ws: WebSocket,
+    ctx: SubscriberContext,
+  ) => {
     const downstream = await this.#delegate.subscribe(ctx);
     await streamOut(this._lc, downstream, ws);
   };
@@ -52,13 +73,14 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
   readonly #lc: LogContext;
   readonly #uri: string;
 
-  constructor(lc: LogContext, uriOrPort: string | number) {
+  constructor(lc: LogContext, uri: string) {
+    const url = new URL(uri);
+    url.pathname += url.pathname.endsWith('/')
+      ? V0_CHANGES_PATH.substring(1)
+      : V0_CHANGES_PATH;
+    uri = url.toString();
     this.#lc = lc;
-    this.#uri =
-      (typeof uriOrPort === 'string'
-        ? uriOrPort
-        : `ws://localhost:${uriOrPort}`) +
-      CHANGES_URL_PATTERN.replace(':version', 'v0');
+    this.#uri = uri;
   }
 
   subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
@@ -70,8 +92,10 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
   }
 }
 
-function getSubscriberContext(req: FastifyRequest): SubscriberContext {
-  const url = new URL(req.url, req.headers.origin ?? 'http://localhost');
+type RequestHeaders = Pick<IncomingMessage, 'url' | 'headers'>;
+
+export function getSubscriberContext(req: RequestHeaders): SubscriberContext {
+  const url = new URL(req.url ?? '', req.headers.origin ?? 'http://localhost');
   const params = new URLParams(url);
 
   return {

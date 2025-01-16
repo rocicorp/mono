@@ -1,6 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'vitest';
 import {assert, assertNotUndefined} from '../../../shared/src/asserts.js';
+import type {Enum} from '../../../shared/src/enum.js';
 import type {JSONValue} from '../../../shared/src/json.js';
 import {emptyDataNode} from '../btree/node.js';
 import {BTreeWrite} from '../btree/write.js';
@@ -30,22 +31,16 @@ import {
   type LocalMeta,
   type Meta,
   type SnapshotMetaDD31,
-  type SnapshotMetaSDD,
   assertLocalCommitDD31,
   assertSnapshotCommitDD31,
-  assertSnapshotCommitSDD,
   commitFromHead,
   toChunkIndexDefinition,
 } from './commit.js';
 import {IndexWrite} from './index.js';
 import * as MetaType from './meta-type-enum.js';
-import {
-  Write,
-  newWriteLocal,
-  newWriteSnapshotDD31,
-  newWriteSnapshotSDD,
-  readIndexesForWrite,
-} from './write.js';
+import {Write, newWriteLocal, newWriteSnapshotDD31} from './write.js';
+
+type FormatVersion = Enum<typeof FormatVersion>;
 
 export type Chain = Commit<Meta>[];
 
@@ -55,7 +50,7 @@ async function addGenesis(
   clientID: ClientID,
   headName = DEFAULT_HEAD_NAME,
   indexDefinitions: IndexDefinitions,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<Chain> {
   expect(chain).to.have.length(0);
   const commit = await createGenesis(
@@ -74,7 +69,7 @@ async function createGenesis(
   clientID: ClientID,
   headName: string,
   indexDefinitions: IndexDefinitions,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<Commit<Meta>> {
   await withWriteNoImplicitCommit(store, async w => {
     await initDB(w, headName, clientID, indexDefinitions, formatVersion);
@@ -90,7 +85,7 @@ async function addLocal(
   clientID: ClientID,
   entries: [string, JSONValue][] | undefined,
   headName: string,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<Chain> {
   expect(chain).to.have.length.greaterThan(0);
   const i = chain.length;
@@ -113,7 +108,7 @@ async function createLocal(
   i: number,
   clientID: ClientID,
   headName: string,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<Commit<Meta>> {
   const lc = new LogContext();
   await withWriteNoImplicitCommit(store, async dagWrite => {
@@ -151,37 +146,25 @@ async function addSnapshot(
   cookie: Cookie = `cookie_${chain.length}`,
   lastMutationIDs: Record<ClientID, number> | undefined,
   headName: string,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<Chain> {
   expect(chain).to.have.length.greaterThan(0);
   const lc = new LogContext();
   await withWriteNoImplicitCommit(store, async dagWrite => {
-    let w;
-    if (formatVersion >= FormatVersion.DD31) {
-      w = await newWriteSnapshotDD31(
-        await mustGetHeadHash(headName, dagWrite),
-        lastMutationIDs ?? {
-          [clientID]: await chain[chain.length - 1].getNextMutationID(
-            clientID,
-            dagWrite,
-          ),
-        },
-        deepFreeze(cookie),
-        dagWrite,
-        clientID,
-        formatVersion,
-      );
-    } else {
-      w = await newWriteSnapshotSDD(
-        await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite),
-        await chain[chain.length - 1].getNextMutationID(clientID, dagWrite),
-        deepFreeze(cookie),
-        dagWrite,
-        readIndexesForWrite(chain[chain.length - 1], dagWrite, formatVersion),
-        clientID,
-        formatVersion,
-      );
-    }
+    assert(formatVersion >= FormatVersion.DD31);
+    const w = await newWriteSnapshotDD31(
+      await mustGetHeadHash(headName, dagWrite),
+      lastMutationIDs ?? {
+        [clientID]: await chain[chain.length - 1].getNextMutationID(
+          clientID,
+          dagWrite,
+        ),
+      },
+      deepFreeze(cookie),
+      dagWrite,
+      clientID,
+      formatVersion,
+    );
 
     if (map) {
       for (const [k, v] of map) {
@@ -201,12 +184,12 @@ export class ChainBuilder {
   readonly store: Store;
   readonly headName: string;
   chain: Chain;
-  readonly formatVersion: FormatVersion.Type;
+  readonly formatVersion: FormatVersion;
 
   constructor(
     store: Store,
     headName = DEFAULT_HEAD_NAME,
-    formatVersion: FormatVersion.Type = FormatVersion.Latest,
+    formatVersion: FormatVersion = FormatVersion.Latest,
   ) {
     this.store = store;
     this.headName = headName;
@@ -217,7 +200,7 @@ export class ChainBuilder {
   async addGenesis(
     clientID: ClientID,
     indexDefinitions: IndexDefinitions = {},
-  ): Promise<Commit<SnapshotMetaSDD | SnapshotMetaDD31>> {
+  ): Promise<Commit<SnapshotMetaDD31>> {
     await addGenesis(
       this.chain,
       this.store,
@@ -228,11 +211,8 @@ export class ChainBuilder {
     );
     const commit = this.chain.at(-1);
     assertNotUndefined(commit);
-    if (this.formatVersion >= FormatVersion.DD31) {
-      assertSnapshotCommitDD31(commit);
-    } else {
-      assertSnapshotCommitSDD(commit);
-    }
+    assert(this.formatVersion >= FormatVersion.DD31);
+    assertSnapshotCommitDD31(commit);
     return commit;
   }
 
@@ -261,7 +241,7 @@ export class ChainBuilder {
     clientID: ClientID,
     cookie: Cookie = `cookie_${this.chain.length}`,
     lastMutationIDs?: Record<ClientID, number>,
-  ): Promise<Commit<SnapshotMetaSDD | SnapshotMetaDD31>> {
+  ): Promise<Commit<SnapshotMetaDD31>> {
     await addSnapshot(
       this.chain,
       this.store,
@@ -274,11 +254,8 @@ export class ChainBuilder {
     );
     const commit = this.chain.at(-1);
     assertNotUndefined(commit);
-    if (this.formatVersion >= FormatVersion.DD31) {
-      assertSnapshotCommitDD31(commit);
-    } else {
-      assertSnapshotCommitSDD(commit);
-    }
+    assert(this.formatVersion >= FormatVersion.DD31);
+    assertSnapshotCommitDD31(commit);
     return commit;
   }
 
@@ -310,7 +287,7 @@ export async function initDB(
   headName: string,
   clientID: ClientID,
   indexDefinitions: IndexDefinitions,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<Hash> {
   const basisHash = emptyHash;
   const indexes = await createEmptyIndexMaps(
@@ -318,20 +295,13 @@ export async function initDB(
     dagWrite,
     formatVersion,
   );
-  const meta =
-    formatVersion >= FormatVersion.DD31
-      ? ({
-          basisHash,
-          type: MetaType.SnapshotDD31,
-          lastMutationIDs: {},
-          cookieJSON: null,
-        } as const)
-      : ({
-          basisHash,
-          type: MetaType.SnapshotSDD,
-          lastMutationID: 0,
-          cookieJSON: null,
-        } as const);
+  assert(formatVersion >= FormatVersion.DD31);
+  const meta = {
+    basisHash,
+    type: MetaType.SnapshotDD31,
+    lastMutationIDs: {},
+    cookieJSON: null,
+  } as const;
 
   const w = new Write(
     dagWrite,
@@ -349,7 +319,7 @@ export async function initDB(
 async function createEmptyIndexMaps(
   indexDefinitions: IndexDefinitions,
   dagWrite: DagWrite,
-  formatVersion: FormatVersion.Type,
+  formatVersion: FormatVersion,
 ): Promise<Map<string, IndexWrite>> {
   const indexes = new Map();
 

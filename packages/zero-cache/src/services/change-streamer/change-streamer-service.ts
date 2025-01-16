@@ -3,7 +3,6 @@ import {resolver} from '@rocicorp/resolver';
 import {unreachable} from '../../../../shared/src/asserts.js';
 import {
   min,
-  oneAfter,
   type AtLeastOne,
   type LexiVersion,
 } from '../../types/lexi-version.js';
@@ -15,15 +14,19 @@ import {
   type ChangeStreamControl,
   type ChangeStreamData,
   type ChangeStreamMessage,
-  type Commit,
 } from '../change-source/protocol/current/downstream.js';
-import {DEFAULT_MAX_RETRY_DELAY_MS, RunningState} from '../running-state.js';
+import type {ChangeSourceUpstream} from '../change-source/protocol/current/upstream.js';
 import {
-  ErrorType,
+  DEFAULT_MAX_RETRY_DELAY_MS,
+  RunningState,
+  UnrecoverableError,
+} from '../running-state.js';
+import {
   type ChangeStreamerService,
   type Downstream,
   type SubscriberContext,
 } from './change-streamer.js';
+import * as ErrorType from './error-type-enum.js';
 import {Forwarder} from './forwarder.js';
 import {initChangeStreamerSchema} from './schema/init.js';
 import {
@@ -74,16 +77,14 @@ export async function initializeStreamer(
 export type WatermarkedChange = [watermark: string, ChangeStreamData];
 
 export type ChangeStream = {
-  /** The watermark at which the ChangeStream begins (i.e. inclusive). */
-  initialWatermark: string;
-
   changes: Source<ChangeStreamMessage>;
 
   /**
-   * A Sink to push the {@link Commit} messages that have been successfully
-   * stored by the {@link Storer}.
+   * A Sink to push the {@link StatusMessage}s that reflect Commits
+   * that have been successfully stored by the {@link Storer}, or
+   * downstream {@link StatusMessage}s henceforth.
    */
-  acks: Sink<Commit>;
+  acks: Sink<ChangeSourceUpstream>;
 };
 
 /** Encapsulates an upstream-specific implementation of a stream of Changes. */
@@ -281,7 +282,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       lc,
       changeDB,
       replicaVersion,
-      commit => this.#stream?.acks.push(commit),
+      consumed => this.#stream?.acks.push(['status', consumed[1], consumed[2]]),
     );
     this.#forwarder = new Forwarder();
     this.#autoReset = autoReset;
@@ -310,7 +311,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         this.#stream = stream;
         this.#state.resetBackoff();
 
-        let preCommitWatermark = stream.initialWatermark;
+        let watermark: string | null = null;
 
         // Once this change-streamer "owns" the replication stream,
         // it is safe to start the storer, given the guarantee that this
@@ -321,22 +322,39 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         }
 
         for await (const change of stream.changes) {
-          let watermark: string;
-          switch (change[0]) {
+          const [type, msg] = change;
+          switch (type) {
+            case 'status':
+              this.#storer.status(change); // storer acks once it gets through its queue
+              continue;
             case 'control':
-              await this.#handleControlMessage(change[1]);
+              await this.#handleControlMessage(msg);
               continue; // control messages are not stored/forwarded
+            case 'begin':
+              watermark = change[2].commitWatermark;
+              break;
             case 'commit':
-              watermark = change[2].watermark;
-              preCommitWatermark = oneAfter(watermark); // For the next transaction.
+              if (watermark !== change[2].watermark) {
+                throw new UnrecoverableError(
+                  `commit watermark ${change[2].watermark} does not match 'begin' watermark ${watermark}`,
+                );
+              }
               break;
             default:
-              watermark = preCommitWatermark;
+              if (watermark === null) {
+                throw new UnrecoverableError(
+                  `${type} change (${msg.tag}) received before 'begin' message`,
+                );
+              }
               break;
           }
 
           this.#storer.store([watermark, change]);
           this.#forwarder.forward([watermark, change]);
+
+          if (type === 'commit') {
+            watermark = null;
+          }
         }
       } catch (e) {
         err = e;

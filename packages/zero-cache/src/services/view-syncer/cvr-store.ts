@@ -14,9 +14,9 @@ import {must} from '../../../../shared/src/must.js';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.js';
 import {sleep} from '../../../../shared/src/sleep.js';
 import {astSchema} from '../../../../zero-protocol/src/ast.js';
-import {ErrorKind} from '../../../../zero-protocol/src/error.js';
-import {multiInsertParams, multiInsertStatement} from '../../db/queries.js';
-import {Mode, TransactionPool} from '../../db/transaction-pool.js';
+import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.js';
+import * as Mode from '../../db/mode-enum.js';
+import {TransactionPool} from '../../db/transaction-pool.js';
 import type {JSONValue} from '../../types/bigint-json.js';
 import {ErrorForClient, ErrorWithLevel} from '../../types/error-for-client.js';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
@@ -363,85 +363,32 @@ class RowRecordCache {
            ON CONFLICT ("clientGroupID") 
            DO UPDATE SET ${tx(rowsVersion)}`.execute(),
     ];
-    let i = 0;
-    let batchSize = ROW_RECORD_UPSERT_BATCH_MAX_SIZE;
-    let prepare = true;
 
-    while (i < rowRecordRows.length) {
-      const remaining = rowRecordRows.length - i;
-
-      while (batchSize > remaining) {
-        batchSize /= 2;
-        if (batchSize < ROW_RECORD_UPSERT_BATCH_MIN_PREPARED_SIZE) {
-          batchSize = remaining;
-          prepare = false;
-          break;
-        }
-      }
-      const stmt = prepare
-        ? must(PREPARED_UPSERT_ROW_STATEMENTS.get(batchSize)) // optimization: pre-formatted
-        : upsertRowsStatement(batchSize);
+    if (rowRecordRows.length) {
       pending.push(
-        tx
-          .unsafe<Row[]>(
-            stmt,
-            multiInsertParams(
-              ROW_RECORD_COLUMNS,
-              rowRecordRows.slice(i, i + batchSize),
-            ),
-            {prepare},
-          )
-          .execute(),
+        tx`
+  INSERT INTO cvr.rows(
+      "clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts"
+  ) SELECT
+      "clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts"
+    FROM json_to_recordset(${rowRecordRows}) AS x(
+      "clientGroupID" TEXT,
+      "schema" TEXT,
+      "table" TEXT,
+      "rowKey" JSONB,
+      "rowVersion" TEXT,
+      "patchVersion" TEXT,
+      "refCounts" JSONB
+  ) ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
+    DO UPDATE SET "rowVersion" = excluded."rowVersion",
+      "patchVersion" = excluded."patchVersion",
+      "refCounts" = excluded."refCounts"
+    `.execute(),
       );
-      this.#lc.debug?.(
-        `flushing batch of ${batchSize} rows (prepared=${prepare})`,
-      );
-      i += batchSize;
+      this.#lc.debug?.(`flushing ${rowRecordRows.length} rows`);
     }
     return pending;
   }
-}
-
-// Max number of parameters for postgres is 65534.
-// Each row record has 7 parameters (1 per column),
-// making 65534 / 7 = 9362 the absolute max batch size.
-const ROW_RECORD_UPSERT_BATCH_MAX_SIZE = 8192;
-
-// For batchSizes smaller than 128, flush the rows in an unprepared statement
-// so as to not consume too much memory on PG.
-const ROW_RECORD_UPSERT_BATCH_MIN_PREPARED_SIZE = 128;
-
-const ROW_RECORD_COLUMNS: (keyof RowsRow)[] = [
-  'clientGroupID',
-  'schema',
-  'table',
-  'rowKey',
-  'rowVersion',
-  'patchVersion',
-  'refCounts',
-];
-
-function upsertRowsStatement(count: number) {
-  return multiInsertStatement(
-    'cvr',
-    'rows',
-    ROW_RECORD_COLUMNS,
-    count,
-    `ON CONFLICT ("clientGroupID", "schema", "table", "rowKey")
-        DO UPDATE SET "rowVersion" = excluded."rowVersion",
-          "patchVersion" = excluded."patchVersion",
-          "refCounts" = excluded."refCounts"`,
-  );
-}
-
-const PREPARED_UPSERT_ROW_STATEMENTS = new Map<number, string>();
-// Pre-format statements for batches of 8192, 4096, 2048, 1024, 512, 256, 128
-for (
-  let size = ROW_RECORD_UPSERT_BATCH_MAX_SIZE; // 8192
-  size >= ROW_RECORD_UPSERT_BATCH_MIN_PREPARED_SIZE; // 128
-  size /= 2
-) {
-  PREPARED_UPSERT_ROW_STATEMENTS.set(size, upsertRowsStatement(size));
 }
 
 type QueryRow = {

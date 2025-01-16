@@ -5,7 +5,11 @@ import type {EventEmitter} from 'stream';
 import {HttpService, type Options} from '../services/http-service.js';
 import {RunningState} from '../services/running-state.js';
 import type {SingletonService} from '../services/service.js';
-import type {Worker} from '../types/processes.js';
+import {
+  singleProcessMode,
+  type Subprocess,
+  type Worker,
+} from '../types/processes.js';
 
 /**
  * * `user-facing` workers serve external requests and are the first to
@@ -30,8 +34,8 @@ export const FORCEFUL_SHUTDOWN = ['SIGQUIT'] as const;
  */
 export class ProcessManager {
   readonly #lc: LogContext;
-  readonly #userFacing = new Set<Worker>();
-  readonly #all = new Set<Worker>();
+  readonly #userFacing = new Set<Subprocess>();
+  readonly #all = new Set<Subprocess>();
   readonly #exitImpl: (code: number) => never;
   readonly #start = Date.now();
   readonly #ready: Promise<void>[] = [];
@@ -39,11 +43,7 @@ export class ProcessManager {
   #runningState = new RunningState('process-manager');
   #drainStart = 0;
 
-  constructor(
-    lc: LogContext,
-    proc: EventEmitter = process,
-    exit = (code: number) => process.exit(code),
-  ) {
+  constructor(lc: LogContext, proc: EventEmitter = process) {
     this.#lc = lc.withContext('component', 'process-manager');
 
     // Propagate `SIGTERM` and `SIGINT` to all user-facing workers,
@@ -65,10 +65,15 @@ export class ProcessManager {
     // to send a `SIGQUIT` to all workers. For this signal, workers are
     // stopped immediately without draining. See `runUntilKilled()`.
     for (const signal of FORCEFUL_SHUTDOWN) {
-      proc.on(signal, () => exit(-1));
+      proc.on(signal, () => this.#exit(-1));
     }
 
-    this.#exitImpl = exit;
+    this.#exitImpl = (code: number) => {
+      if (singleProcessMode()) {
+        return proc.emit('exit', code) as never; // For unit / integration tests.
+      }
+      process.exit(code);
+    };
   }
 
   done() {
@@ -91,19 +96,23 @@ export class ProcessManager {
     }
   }
 
-  addWorker(worker: Worker, type: WorkerType, name: string): Worker {
+  addSubprocess(proc: Subprocess, type: WorkerType, name: string) {
     if (type === 'user-facing') {
-      this.#userFacing.add(worker);
+      this.#userFacing.add(proc);
     }
-    this.#all.add(worker);
+    this.#all.add(proc);
 
-    worker.on(
+    proc.on(
       'error',
-      err => this.#lc.error?.(`error from worker ${worker.pid}`, err),
+      err => this.#lc.error?.(`error from ${name} ${proc.pid}`, err),
     );
-    worker.on('close', (code, signal) =>
-      this.#onExit(code, signal, null, type, worker),
+    proc.on('close', (code, signal) =>
+      this.#onExit(code, signal, null, type, name, proc),
     );
+  }
+
+  addWorker(worker: Worker, type: WorkerType, name: string): Worker {
+    this.addSubprocess(worker, type, name);
 
     const {promise, resolve} = resolver();
     this.#ready.push(promise);
@@ -119,9 +128,9 @@ export class ProcessManager {
     await Promise.all(this.#ready);
   }
 
-  logErrorAndExit(err: unknown) {
+  logErrorAndExit(err: unknown, name: string) {
     // only accessible by the main (i.e. user-facing) process.
-    this.#onExit(-1, null, err, 'user-facing', undefined);
+    this.#onExit(-1, null, err, 'user-facing', name, undefined);
   }
 
   #onExit(
@@ -129,7 +138,8 @@ export class ProcessManager {
     sig: NodeJS.Signals | null,
     err: unknown | null,
     type: WorkerType,
-    worker: Worker | undefined,
+    name: string,
+    worker: Subprocess | undefined,
   ) {
     // Remove the worker from maps to avoid attempting to send more signals to it.
     if (worker) {
@@ -143,23 +153,17 @@ export class ProcessManager {
       // The replication-manager has no user-facing workers.
       // In this case, code === 0 shutdowns are not errors.
       const log = code === 0 && this.#userFacing.size === 0 ? 'info' : 'error';
-      this.#lc[log]?.(
-        `${type} worker ${pid} exited with code (${code})`,
-        err ?? '',
-      );
+      this.#lc[log]?.(`${name} (${pid}) exited with code (${code})`, err ?? '');
       return this.#exit(log === 'error' ? -1 : code);
     }
 
     const log = this.#drainStart === 0 ? 'error' : 'warn';
     if (sig) {
-      this.#lc[log]?.(`${type} worker ${pid} killed with (${sig})`, err ?? '');
+      this.#lc[log]?.(`${name} (${pid}) killed with (${sig})`, err ?? '');
     } else if (code !== 0) {
-      this.#lc[log]?.(
-        `${type} worker ${pid} exited with code (${code})`,
-        err ?? '',
-      );
+      this.#lc[log]?.(`${name} (${pid}) exited with code (${code})`, err ?? '');
     } else {
-      this.#lc.info?.(`${type} worker ${pid} exited with code (${code})`);
+      this.#lc.info?.(`${name} (${pid}) exited with code (${code})`);
     }
 
     // user-facing workers exited or finished draining.
@@ -183,7 +187,7 @@ export class ProcessManager {
     return undefined;
   }
 
-  #kill(workers: Iterable<Worker>, signal: NodeJS.Signals) {
+  #kill(workers: Iterable<Subprocess>, signal: NodeJS.Signals) {
     for (const worker of workers) {
       try {
         worker.kill(signal);
@@ -207,6 +211,9 @@ export async function runUntilKilled(
   parent: Worker | NodeJS.Process,
   ...services: SingletonService[]
 ): Promise<void> {
+  if (services.length === 0) {
+    return;
+  }
   for (const signal of [...GRACEFUL_SHUTDOWN, ...FORCEFUL_SHUTDOWN]) {
     parent.once(signal, () => {
       const GRACEFUL_SIGNALS = GRACEFUL_SHUTDOWN as readonly NodeJS.Signals[];
