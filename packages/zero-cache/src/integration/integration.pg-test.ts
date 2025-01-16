@@ -26,7 +26,7 @@ import {childWorker, type Worker} from '../types/processes.js';
 // Adjust to debug.
 const LOG_LEVEL: LogLevel = 'error';
 
-describe('integration', () => {
+describe('integration', {timeout: 10000}, () => {
   let upDB: PostgresDB;
   let cvrDB: PostgresDB;
   let changeDB: PostgresDB;
@@ -400,4 +400,4 @@ describe('integration', () => {
       {pokeID: WATERMARK_REGEX},
     ]);
   });
-}, 10000);
+});
