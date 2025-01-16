@@ -10,7 +10,9 @@
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "bench": "vitest bench --run --project chromium",
+    "bench:watch": "vitest bench --project chromium"
   },
   "dependencies": {
     "@badrap/valita": "0.3.11",
@@ -31,6 +33,7 @@
     "@types/semver": "^7.5.1",
     "@types/strip-ansi": "^3.0.0",
     "@vitest/browser": "^2.1.5",
+    "compare-utf8": "^0.1.1",
     "fast-check": "^3.18.0",
     "package-up": "^5.0.0",
     "type-fest": "^4.30.0",

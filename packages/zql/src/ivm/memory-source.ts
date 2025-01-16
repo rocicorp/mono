@@ -1,5 +1,5 @@
-import {BTree} from '../../../btree/src/mod.js';
 import {assert, unreachable} from '../../../shared/src/asserts.js';
+import {BTreeSet} from '../../../shared/src/btree-set.js';
 import {hasOwn} from '../../../shared/src/has-own.js';
 import type {
   Condition,
@@ -49,7 +49,7 @@ export type Overlays = {
 
 type Index = {
   comparator: Comparator;
-  data: BTree<Row, undefined>;
+  data: BTreeSet<Row>;
   usedBy: Set<Connection>;
 };
 
@@ -95,7 +95,7 @@ export class MemorySource implements Source {
     const comparator = makeBoundComparator(this.#primaryIndexSort);
     this.#indexes.set(JSON.stringify(this.#primaryIndexSort), {
       comparator,
-      data: new BTree<Row, undefined>([], comparator),
+      data: new BTreeSet<Row>(comparator),
       usedBy: new Set(),
     });
     assertOrderingIncludesPK(this.#primaryIndexSort, this.#primaryKey);
@@ -204,12 +204,12 @@ export class MemorySource implements Source {
     // a different library.)
     // 3. We could even theoretically do (2) on multiple threads and then merge the
     // results!
-    const data = new BTree<Row, undefined>([], comparator);
+    const data = new BTreeSet<Row>(comparator);
 
     // I checked, there's no special path for adding data in bulk faster.
     // The constructor takes an array, but it just calls add/set over and over.
-    for (const row of this.#getPrimaryIndex().data.keys()) {
-      data.add(row, undefined);
+    for (const row of this.#getPrimaryIndex().data) {
+      data.add(row);
     }
 
     const newIndex = {comparator, data, usedBy: new Set([usedBy])};
@@ -380,7 +380,7 @@ export class MemorySource implements Source {
     for (const {data} of this.#indexes.values()) {
       switch (change.type) {
         case 'add': {
-          const added = data.add(change.row, undefined);
+          const added = data.add(change.row);
           // must succeed since we checked has() above.
           assert(added);
           break;
@@ -400,7 +400,7 @@ export class MemorySource implements Source {
           const removed = data.delete(change.oldRow);
           // must succeed since we checked has() above.
           assert(removed);
-          data.add(change.row, undefined);
+          data.add(change.row);
           break;
         }
         default:
@@ -657,14 +657,11 @@ function compareBounds(a: Bound, b: Bound): number {
 }
 
 function* generateRows(
-  data: BTree<Row, undefined>,
+  data: BTreeSet<Row>,
   scanStart: RowBound | undefined,
   reverse: boolean | undefined,
 ) {
-  for (const entry of data[reverse ? 'entriesReversed' : 'entries'](
-    scanStart as Row,
-    [],
-  )) {
-    yield entry[0];
-  }
+  yield* data[reverse ? 'valuesFromReversed' : 'valuesFrom'](
+    scanStart as Row | undefined,
+  );
 }
