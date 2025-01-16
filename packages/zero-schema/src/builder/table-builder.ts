@@ -102,6 +102,12 @@ export class TableBuilderWithColumns<TShape extends TableSchema> {
   }
 
   build() {
+    // We can probably get the type system to throw an error if primaryKey is not called
+    // before passing the schema to createSchema
+    // Till then --
+    if (this.#schema.primaryKey.length === 0) {
+      throw new Error(`Table "${this.#schema.name}" is missing a primary key`);
+    }
     return this.#schema;
   }
 }

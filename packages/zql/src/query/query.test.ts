@@ -626,6 +626,7 @@ describe('schema structure', () => {
       .columns({
         id: string(),
         title: string(),
+        parentId: string(),
       })
       .primaryKey('id');
 

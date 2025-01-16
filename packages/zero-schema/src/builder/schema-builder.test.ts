@@ -8,6 +8,37 @@ import {relationships} from './relationship-builder.js';
 import type {Query} from '../../../zql/src/query/query.js';
 import {createSchema} from './schema-builder.js';
 
+const mockQuery = {
+  select() {
+    return this;
+  },
+  materialize() {
+    return {
+      get() {
+        return this;
+      },
+    };
+  },
+  sub() {
+    return this;
+  },
+  related() {
+    return this;
+  },
+  where() {
+    return this;
+  },
+  start() {
+    return this;
+  },
+  one() {
+    return this;
+  },
+  run() {
+    return this;
+  },
+};
+
 test('building a schema', () => {
   const user = table('user')
     .columns({
@@ -92,8 +123,8 @@ test('building a schema', () => {
     },
   );
 
-  const q = {} as Query<typeof schema, 'user'>;
-  const iq = {} as Query<typeof schema, 'issue'>;
+  const q = mockQuery as unknown as Query<typeof schema, 'user'>;
+  const iq = mockQuery as unknown as Query<typeof schema, 'issue'>;
   const r = q
     .related('recruiter', q => q.related('recruiter', q => q.one()).one())
     .one()
@@ -135,7 +166,7 @@ test('building a schema', () => {
     }[]
   >();
 
-  const lq = {} as Query<typeof schema, 'label'>;
+  const lq = mockQuery as unknown as Query<typeof schema, 'label'>;
   const ld = lq.related('issues').run();
   expectTypeOf(ld).toEqualTypeOf<
     {

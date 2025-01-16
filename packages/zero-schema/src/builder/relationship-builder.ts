@@ -22,8 +22,8 @@ export type PreviousSchema<
 > = K extends 0 ? TSource : TDests[Prev[K]];
 
 export type Relationships = {
-  name: string;
-  relationships: Record<string, Relationship>;
+  name: string; // table name
+  relationships: Record<string, Relationship>; // relationships for that table
 };
 
 export function relationships<
@@ -62,9 +62,11 @@ export function relationships<
     },
   ) => TRelationships,
 ): {name: TSource['name']; relationships: TRelationships} {
+  const relationships = cb(many as any);
+
   return {
-    name: table.build().name,
-    relationships: cb(many as any),
+    name: table.schema.name,
+    relationships,
   };
 }
 

@@ -1,7 +1,31 @@
-import {expect, test} from 'vitest';
+import {expect, expectTypeOf, test} from 'vitest';
 import {createSchema} from './mod.js';
-import {number, table} from './builder/table-builder.js';
+import {number, string, table} from './builder/table-builder.js';
 import {relationships} from './builder/relationship-builder.js';
+
+test('Key name does not matter', () => {
+  const schema = createSchema(
+    1,
+    {foo: table('bar').columns({id: string()}).primaryKey('id')},
+    {},
+  );
+
+  expectTypeOf(schema.tables.bar).toEqualTypeOf<{
+    name: 'bar';
+    columns: {id: {type: 'string'; optional: false; customType: string}};
+    primaryKey: ['id'];
+  }>({} as never);
+  // @ts-expect-error - no foo table
+  schema.tables.foo;
+});
+
+test('Missing primary key is an error', () => {
+  expect(() =>
+    createSchema(1, {foo: table('foo').columns({id: string()})}, {}),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `[Error: Table "foo" is missing a primary key]`,
+  );
+});
 
 test('Missing table in direct relationship should throw', () => {
   const bar = table('bar')
@@ -28,7 +52,7 @@ test('Missing table in direct relationship should throw', () => {
   expect(() =>
     createSchema(1, {foo}, {fooRelationships}),
   ).toThrowErrorMatchingInlineSnapshot(
-    `[Error: Relationship "foo"."barRelation" destination "bar" is missing in schema]`,
+    `[Error: For relationship "foo"."barRelation", destination table "bar" is missing in the schema]`,
   );
 });
 
@@ -50,6 +74,7 @@ test('Missing table in junction relationship should throw', () => {
     .columns({
       id: number(),
       bID: number(),
+      aID: number(),
     })
     .primaryKey('id');
 
@@ -83,7 +108,7 @@ test('Missing table in junction relationship should throw', () => {
       {tableBRelationships, tableCRelationships},
     ),
   ).toThrowErrorMatchingInlineSnapshot(
-    `[Error: Relationship "tableB"."relationBToA" destination "tableA" is missing in schema]`,
+    `[Error: For relationship "tableB"."relationBToA", destination table "tableA" is missing in the schema]`,
   );
 });
 
@@ -134,9 +159,9 @@ test('Missing column in direct relationship source should throw', () => {
   }));
 
   expect(() =>
-    createSchema(1, {foo, bar}, {fooRelationships}),
+    createSchema(1, {bar, foo}, {fooRelationships}),
   ).toThrowErrorMatchingInlineSnapshot(
-    `[Error: Column "missing" is missing in table "foo"]`,
+    `[Error: For relationship "foo"."barRelation", the source field "missing" is missing in the table schema "foo"]`,
   );
 });
 
@@ -217,6 +242,6 @@ test('Missing column in junction relationship source should throw', () => {
   expect(() =>
     createSchema(1, {tableA, tableB, junctionTable}, {tableARelationships}),
   ).toThrowErrorMatchingInlineSnapshot(
-    `[Error: Column "missing" is missing in table "junctionTable"]`,
+    `[Error: For relationship "tableA"."relationAToB", the source field "missing" is missing in the table schema "junctionTable"]`,
   );
 });
