@@ -293,6 +293,7 @@ describe('no primary key', () => {
         CREATE TABLE foo (id TEXT, a INT, b INT, c INT);
         CREATE UNIQUE INDEX foo_id_key ON foo (id);
         CREATE UNIQUE INDEX foo_ab_key ON foo (a, b);
+        CREATE INDEX foo_c_not_unique ON foo (c);
         `);
   const stmt = db.prepare(
     /* sql */ `INSERT INTO foo (id, a, b, c) VALUES (?, ?, ?, ?);`,
@@ -309,6 +310,8 @@ describe('no primary key', () => {
     [['a', 'b'], true],
     [['b', 'a'], true],
     [['a'], false],
+    [['b'], false],
+    [['c'], false],
     [['b', 'c'], false],
     [['a', 'c'], false],
   ] satisfies [PrimaryKey, boolean][])(
@@ -327,6 +330,7 @@ describe('no primary key', () => {
   test.each([
     [[['a', 'asc']]],
     [[['b', 'asc']]],
+    [[['c', 'asc']]],
     [
       [
         ['b', 'asc'],
