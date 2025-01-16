@@ -1,10 +1,7 @@
 import {compareUTF8} from 'compare-utf8';
-import {ident as id} from 'pg-format';
 import type postgres from 'postgres';
-import {assert} from '../../../shared/src/asserts.js';
-import type {JSONValue} from '../types/bigint-json.js';
 import {type PostgresDB, typeNameByOID} from '../types/pg.js';
-import type {RowKey, RowKeyType, RowValue} from '../types/row-key.js';
+import type {RowKey, RowKeyType} from '../types/row-key.js';
 
 /**
  * Efficient lookup of multiple rows from a table from row keys.
@@ -47,39 +44,4 @@ export function lookupRowsWithKeys(
     WITH keys (${cols}) AS (VALUES (${values}))
     SELECT * FROM ${db(schema)}.${db(table)} JOIN keys USING (${cols});
   `;
-}
-
-export function multiInsertStatement<Row extends RowValue>(
-  schema: string,
-  table: string,
-  columnNames: readonly (string & keyof Row)[],
-  numRows: number,
-  postamble: string = '',
-): string {
-  assert(numRows > 0, 'numRows must be > 0');
-
-  const parts = [
-    `INSERT INTO ${id(schema)}.${id(table)} `,
-    `(${columnNames.map(col => id(col)).join(',')}) VALUES `,
-  ];
-  let p = 1;
-  for (let i = 0; i < numRows; i++) {
-    parts.push(i === 0 ? '(' : ',(');
-    for (let col = 0; col < columnNames.length; col++) {
-      parts.push(col === 0 ? `$${p}` : `,$${p}`);
-      p++;
-    }
-    parts.push(')');
-  }
-  if (postamble.length) {
-    parts.push(` ${postamble}`);
-  }
-  return parts.join('');
-}
-
-export function multiInsertParams<Row extends RowValue>(
-  columnNames: readonly (keyof Row)[],
-  rows: readonly Row[],
-): JSONValue[] {
-  return rows.map(row => columnNames.map(col => row[col])).flat();
 }
