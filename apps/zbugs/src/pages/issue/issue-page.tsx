@@ -75,21 +75,17 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const listContext = zbugsHistoryState?.zbugsListContext;
   const q = z.query.issue
     .where(idField, id)
-    .related('emoji', emoji =>
-      emoji.related('creator', creator => creator.one()),
-    )
-    .related('creator', creator => creator.one())
-    .related('assignee', assignee => assignee.one())
+    .related('emoji', emoji => emoji.related('creator'))
+    .related('creator')
+    .related('assignee')
     .related('labels')
     .related('viewState', viewState =>
       viewState.where('userID', z.userID).one(),
     )
     .related('comments', comments =>
       comments
-        .related('creator', creator => creator.one())
-        .related('emoji', emoji =>
-          emoji.related('creator', creator => creator.one()),
-        )
+        .related('creator')
+        .related('emoji', emoji => emoji.related('creator'))
         .limit(INITIAL_COMMENT_LIMIT)
         .orderBy('created', 'desc')
         .orderBy('id', 'desc'),

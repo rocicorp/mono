@@ -60,7 +60,7 @@ export function preload(z: Zero<Schema>) {
 
   const baseIssueQuery = z.query.issue
     .related('labels')
-    .related('viewState', q => q.where('userID', z.userID).one());
+    .related('viewState', q => q.where('userID', z.userID));
 
   const {cleanup, complete} = baseIssueQuery.preload();
   complete.then(() => {
@@ -69,15 +69,11 @@ export function preload(z: Zero<Schema>) {
     baseIssueQuery
       .related('creator')
       .related('assignee')
-      .related('emoji', emoji =>
-        emoji.related('creator', creator => creator.one()),
-      )
+      .related('emoji', emoji => emoji.related('creator'))
       .related('comments', comments =>
         comments
-          .related('creator', creator => creator.one())
-          .related('emoji', emoji =>
-            emoji.related('creator', creator => creator.one()),
-          )
+          .related('creator')
+          .related('emoji', emoji => emoji.related('creator'))
           .limit(INITIAL_COMMENT_LIMIT)
           .orderBy('created', 'desc'),
       )
