@@ -508,168 +508,160 @@ describe('kitchen sink query', () => {
         })),
       }));
     });
-    expect(rows).toEqual([
-      {
-        closed: false,
-        comments: [
-          {
-            authorId: '003',
-            createdAt: 6,
-            id: '206',
-            issueId: '102',
-            revisions: [],
-            text: 'Comment 6',
+    expect(rows).toMatchInlineSnapshot(`
+      [
+        {
+          "closed": false,
+          "comments": [
+            {
+              "authorId": "003",
+              "createdAt": 6,
+              "id": "206",
+              "issueId": "102",
+              "revisions": [],
+              "text": "Comment 6",
+            },
+            {
+              "authorId": "002",
+              "createdAt": 5,
+              "id": "205",
+              "issueId": "102",
+              "revisions": [],
+              "text": "Comment 5",
+            },
+          ],
+          "description": "Description 2",
+          "id": "102",
+          "labels": [
+            {
+              "id": "401",
+              "name": "bug",
+            },
+            {
+              "id": "402",
+              "name": "feature",
+            },
+          ],
+          "owner": {
+            "id": "001",
+            "name": "Alice",
           },
-          {
-            authorId: '002',
-            createdAt: 5,
-            id: '205',
-            issueId: '102',
-            revisions: [],
-            text: 'Comment 5',
+          "ownerId": "001",
+          "title": "Issue 2",
+        },
+        {
+          "closed": false,
+          "comments": [
+            {
+              "authorId": "003",
+              "createdAt": 9,
+              "id": "209",
+              "issueId": "103",
+              "revisions": [
+                {
+                  "authorId": "001",
+                  "commentId": "209",
+                  "id": "303",
+                  "text": "Revision 3",
+                },
+              ],
+              "text": "Comment 9",
+            },
+            {
+              "authorId": "002",
+              "createdAt": 8,
+              "id": "208",
+              "issueId": "103",
+              "revisions": [
+                {
+                  "authorId": "002",
+                  "commentId": "208",
+                  "id": "306",
+                  "text": "Revision 3",
+                },
+              ],
+              "text": "Comment 8",
+            },
+          ],
+          "description": "Description 3",
+          "id": "103",
+          "labels": [
+            {
+              "id": "401",
+              "name": "bug",
+            },
+          ],
+          "owner": {
+            "id": "001",
+            "name": "Alice",
           },
-        ],
-        description: 'Description 2',
-        id: '102',
-        labels: [
-          {
-            id: '401',
-            name: 'bug',
+          "ownerId": "001",
+          "title": "Issue 3",
+        },
+        {
+          "closed": false,
+          "comments": [],
+          "description": "Description 4",
+          "id": "104",
+          "labels": [],
+          "owner": {
+            "id": "002",
+            "name": "Bob",
           },
-          {
-            id: '402',
-            name: 'feature',
+          "ownerId": "002",
+          "title": "Issue 4",
+        },
+        {
+          "closed": false,
+          "comments": [
+            {
+              "authorId": "003",
+              "createdAt": 12,
+              "id": "212",
+              "issueId": "105",
+              "revisions": [],
+              "text": "Comment 12",
+            },
+            {
+              "authorId": "002",
+              "createdAt": 11,
+              "id": "211",
+              "issueId": "105",
+              "revisions": [
+                {
+                  "authorId": "003",
+                  "commentId": "211",
+                  "id": "309",
+                  "text": "Revision 3",
+                },
+              ],
+              "text": "Comment 11",
+            },
+          ],
+          "description": "Description 5",
+          "id": "105",
+          "labels": [],
+          "owner": {
+            "id": "002",
+            "name": "Bob",
           },
-        ],
-        owner: [
-          {
-            id: '001',
-            name: 'Alice',
+          "ownerId": "002",
+          "title": "Issue 5",
+        },
+        {
+          "closed": false,
+          "comments": [],
+          "description": "Description 9",
+          "id": "109",
+          "labels": [],
+          "owner": {
+            "id": "003",
+            "name": "Charlie",
           },
-        ],
-        ownerId: '001',
-        title: 'Issue 2',
-      },
-      {
-        closed: false,
-        comments: [
-          {
-            authorId: '003',
-            createdAt: 9,
-            id: '209',
-            issueId: '103',
-            revisions: [
-              {
-                authorId: '001',
-                commentId: '209',
-                id: '303',
-                text: 'Revision 3',
-              },
-            ],
-            text: 'Comment 9',
-          },
-          {
-            authorId: '002',
-            createdAt: 8,
-            id: '208',
-            issueId: '103',
-            revisions: [
-              {
-                authorId: '002',
-                commentId: '208',
-                id: '306',
-                text: 'Revision 3',
-              },
-            ],
-            text: 'Comment 8',
-          },
-        ],
-        description: 'Description 3',
-        id: '103',
-        labels: [
-          {
-            id: '401',
-            name: 'bug',
-          },
-        ],
-        owner: [
-          {
-            id: '001',
-            name: 'Alice',
-          },
-        ],
-        ownerId: '001',
-        title: 'Issue 3',
-      },
-      {
-        closed: false,
-        comments: [],
-        description: 'Description 4',
-        id: '104',
-        labels: [],
-        owner: [
-          {
-            id: '002',
-            name: 'Bob',
-          },
-        ],
-        ownerId: '002',
-        title: 'Issue 4',
-      },
-      {
-        closed: false,
-        comments: [
-          {
-            authorId: '003',
-            createdAt: 12,
-            id: '212',
-            issueId: '105',
-            revisions: [],
-            text: 'Comment 12',
-          },
-          {
-            authorId: '002',
-            createdAt: 11,
-            id: '211',
-            issueId: '105',
-            revisions: [
-              {
-                authorId: '003',
-                commentId: '211',
-                id: '309',
-                text: 'Revision 3',
-              },
-            ],
-            text: 'Comment 11',
-          },
-        ],
-        description: 'Description 5',
-        id: '105',
-        labels: [],
-        owner: [
-          {
-            id: '002',
-            name: 'Bob',
-          },
-        ],
-        ownerId: '002',
-        title: 'Issue 5',
-      },
-      {
-        closed: false,
-        comments: [],
-        description: 'Description 9',
-        id: '109',
-        labels: [],
-        owner: [
-          {
-            id: '003',
-            name: 'Charlie',
-          },
-        ],
-        ownerId: '003',
-        title: 'Issue 9',
-      },
-    ]);
+          "ownerId": "003",
+          "title": "Issue 9",
+        },
+      ]
+    `);
   });
 });

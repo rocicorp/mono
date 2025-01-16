@@ -443,75 +443,76 @@ describe('joins and filters', () => {
       rows = deepClone(data) as unknown[];
     });
 
-    expect(rows).toEqual([
-      {
-        closed: false,
-        comments: [
-          {
-            authorId: '0001',
-            body: 'comment 1',
-            id: '0001',
-            issueId: '0001',
-          },
-          {
-            authorId: '0002',
-            body: 'comment 2',
-            id: '0002',
-            issueId: '0001',
-          },
-        ],
-        description: 'description 1',
-        id: '0001',
-        labels: [
-          {
-            id: '0001',
-            name: 'label 1',
-          },
-        ],
-        owner: [
-          {
-            id: '0001',
-            name: 'Alice',
-            metadata: {
-              login: 'alicegh',
-              registrar: 'github',
+    expect(rows).toMatchInlineSnapshot(`
+      [
+        {
+          "closed": false,
+          "comments": [
+            {
+              "authorId": "0001",
+              "body": "comment 1",
+              "id": "0001",
+              "issueId": "0001",
             },
-          },
-        ],
-        ownerId: '0001',
-        title: 'issue 1',
-      },
-      {
-        closed: false,
-        comments: [],
-        description: 'description 2',
-        id: '0002',
-        labels: [],
-        owner: [
-          {
-            id: '0002',
-            name: 'Bob',
-            metadata: {
-              altContacts: ['bobwave', 'bobyt', 'bobplus'],
-              login: 'bob@gmail.com',
-              registar: 'google',
+            {
+              "authorId": "0002",
+              "body": "comment 2",
+              "id": "0002",
+              "issueId": "0001",
             },
+          ],
+          "description": "description 1",
+          "id": "0001",
+          "labels": [
+            {
+              "id": "0001",
+              "name": "label 1",
+            },
+          ],
+          "owner": {
+            "id": "0001",
+            "metadata": {
+              "login": "alicegh",
+              "registrar": "github",
+            },
+            "name": "Alice",
           },
-        ],
-        ownerId: '0002',
-        title: 'issue 2',
-      },
-      {
-        closed: false,
-        comments: [],
-        description: 'description 3',
-        id: '0003',
-        labels: [],
-        owner: [],
-        ownerId: null,
-        title: 'issue 3',
-      },
-    ]);
+          "ownerId": "0001",
+          "title": "issue 1",
+        },
+        {
+          "closed": false,
+          "comments": [],
+          "description": "description 2",
+          "id": "0002",
+          "labels": [],
+          "owner": {
+            "id": "0002",
+            "metadata": {
+              "altContacts": [
+                "bobwave",
+                "bobyt",
+                "bobplus",
+              ],
+              "login": "bob@gmail.com",
+              "registar": "google",
+            },
+            "name": "Bob",
+          },
+          "ownerId": "0002",
+          "title": "issue 2",
+        },
+        {
+          "closed": false,
+          "comments": [],
+          "description": "description 3",
+          "id": "0003",
+          "labels": [],
+          "ownerId": null,
+          "title": "issue 3",
+        },
+      ]
+    `);
 
     queryDelegate.getSource('issue').push({
       type: 'remove',
@@ -602,6 +603,80 @@ describe('joins and filters', () => {
       },
     });
   });
+
+  test('schema applied one', () => {
+    const queryDelegate = new QueryDelegateImpl();
+    addData(queryDelegate);
+
+    const query = newQuery(queryDelegate, schema, 'issue')
+      .related('owner')
+      .related('comments', q => q.related('author').related('revisions'))
+      .where('id', '=', '0001');
+    const data = query.run();
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "closed": false,
+          "comments": [
+            {
+              "author": {
+                "id": "0001",
+                "metadata": {
+                  "login": "alicegh",
+                  "registrar": "github",
+                },
+                "name": "Alice",
+              },
+              "authorId": "0001",
+              "body": "comment 1",
+              "id": "0001",
+              "issueId": "0001",
+              "revisions": [
+                {
+                  "authorId": "0001",
+                  "commentId": "0001",
+                  "id": "0001",
+                  "text": "revision 1",
+                },
+              ],
+            },
+            {
+              "author": {
+                "id": "0002",
+                "metadata": {
+                  "altContacts": [
+                    "bobwave",
+                    "bobyt",
+                    "bobplus",
+                  ],
+                  "login": "bob@gmail.com",
+                  "registar": "google",
+                },
+                "name": "Bob",
+              },
+              "authorId": "0002",
+              "body": "comment 2",
+              "id": "0002",
+              "issueId": "0001",
+              "revisions": [],
+            },
+          ],
+          "description": "description 1",
+          "id": "0001",
+          "owner": {
+            "id": "0001",
+            "metadata": {
+              "login": "alicegh",
+              "registrar": "github",
+            },
+            "name": "Alice",
+          },
+          "ownerId": "0001",
+          "title": "issue 1",
+        },
+      ]
+    `);
+  });
 });
 
 test('limit -1', () => {
@@ -643,75 +718,77 @@ test('run', () => {
     .related('owner')
     .related('comments');
   const rows = issueQuery2.run();
-  expect(rows).toEqual([
-    {
-      closed: false,
-      comments: [
-        {
-          authorId: '0001',
-          body: 'comment 1',
-          id: '0001',
-          issueId: '0001',
-        },
-        {
-          authorId: '0002',
-          body: 'comment 2',
-          id: '0002',
-          issueId: '0001',
-        },
-      ],
-      description: 'description 1',
-      id: '0001',
-      labels: [
-        {
-          id: '0001',
-          name: 'label 1',
-        },
-      ],
-      owner: [
-        {
-          id: '0001',
-          name: 'Alice',
-          metadata: {
-            login: 'alicegh',
-            registrar: 'github',
+  expect(rows).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "comments": [
+          {
+            "authorId": "0001",
+            "body": "comment 1",
+            "id": "0001",
+            "issueId": "0001",
           },
-        },
-      ],
-      ownerId: '0001',
-      title: 'issue 1',
-    },
-    {
-      closed: false,
-      comments: [],
-      description: 'description 2',
-      id: '0002',
-      labels: [],
-      owner: [
-        {
-          id: '0002',
-          name: 'Bob',
-          metadata: {
-            altContacts: ['bobwave', 'bobyt', 'bobplus'],
-            login: 'bob@gmail.com',
-            registar: 'google',
+          {
+            "authorId": "0002",
+            "body": "comment 2",
+            "id": "0002",
+            "issueId": "0001",
           },
+        ],
+        "description": "description 1",
+        "id": "0001",
+        "labels": [
+          {
+            "id": "0001",
+            "name": "label 1",
+          },
+        ],
+        "owner": {
+          "id": "0001",
+          "metadata": {
+            "login": "alicegh",
+            "registrar": "github",
+          },
+          "name": "Alice",
         },
-      ],
-      ownerId: '0002',
-      title: 'issue 2',
-    },
-    {
-      closed: false,
-      comments: [],
-      description: 'description 3',
-      id: '0003',
-      labels: [],
-      owner: [],
-      ownerId: null,
-      title: 'issue 3',
-    },
-  ]);
+        "ownerId": "0001",
+        "title": "issue 1",
+      },
+      {
+        "closed": false,
+        "comments": [],
+        "description": "description 2",
+        "id": "0002",
+        "labels": [],
+        "owner": {
+          "id": "0002",
+          "metadata": {
+            "altContacts": [
+              "bobwave",
+              "bobyt",
+              "bobplus",
+            ],
+            "login": "bob@gmail.com",
+            "registar": "google",
+          },
+          "name": "Bob",
+        },
+        "ownerId": "0002",
+        "title": "issue 2",
+      },
+      {
+        "closed": false,
+        "comments": [],
+        "description": "description 3",
+        "id": "0003",
+        "labels": [],
+        "owner": undefined,
+        "ownerId": null,
+        "title": "issue 3",
+      },
+    ]
+  `);
 });
 
 test('view creation is wrapped in context.batchViewUpdates call', () => {

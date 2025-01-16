@@ -297,3 +297,94 @@ test('where exists retracts when an edit causes a row to no longer match', () =>
 
   expect(view.data).toMatchInlineSnapshot(`[]`);
 });
+
+test('schema applied `one`', () => {
+  // test only one item is returned when `one` is applied to a relationship in the schema
+  const commentSource = must(queryDelegate.getSource('comment'));
+  const revisionSource = must(queryDelegate.getSource('revision'));
+  commentSource.push({
+    type: 'add',
+    row: {
+      id: '0001',
+      authorId: '0001',
+      issueId: '0001',
+      text: 'comment 1',
+      createdAt: 1,
+    },
+  });
+  commentSource.push({
+    type: 'add',
+    row: {
+      id: '0002',
+      authorId: '0002',
+      issueId: '0001',
+      text: 'comment 2',
+      createdAt: 2,
+    },
+  });
+  revisionSource.push({
+    type: 'add',
+    row: {
+      id: '0001',
+      authorId: '0001',
+      commentId: '0001',
+      text: 'revision 1',
+    },
+  });
+  const query = newQuery(queryDelegate, schema, 'issue')
+    .related('owner')
+    .related('comments', q => q.related('author').related('revisions'))
+    .where('id', '=', '0001');
+  const data = query.run();
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "comments": [
+          {
+            "author": {
+              "id": "0001",
+              "metadata": "{"registrar":"github","login":"alicegh"}",
+              "name": "Alice",
+            },
+            "authorId": "0001",
+            "createdAt": 1,
+            "id": "0001",
+            "issueId": "0001",
+            "revisions": [
+              {
+                "authorId": "0001",
+                "commentId": "0001",
+                "id": "0001",
+                "text": "revision 1",
+              },
+            ],
+            "text": "comment 1",
+          },
+          {
+            "author": {
+              "id": "0002",
+              "metadata": "{"registar":"google","login":"bob@gmail.com","altContacts":["bobwave","bobyt","bobplus"]}",
+              "name": "Bob",
+            },
+            "authorId": "0002",
+            "createdAt": 2,
+            "id": "0002",
+            "issueId": "0001",
+            "revisions": [],
+            "text": "comment 2",
+          },
+        ],
+        "description": "description 1",
+        "id": "0001",
+        "owner": {
+          "id": "0001",
+          "metadata": "{"registrar":"github","login":"alicegh"}",
+          "name": "Alice",
+        },
+        "ownerId": "0001",
+        "title": "issue 1",
+      },
+    ]
+  `);
+});
