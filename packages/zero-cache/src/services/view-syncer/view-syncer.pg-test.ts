@@ -242,7 +242,7 @@ const schema = createSchema(
   },
   {
     commentRelationships: relationships(comments, connect => ({
-      issue: connect({
+      issue: connect.many({
         sourceField: ['issueID'],
         destField: ['id'],
         destSchema: issues,

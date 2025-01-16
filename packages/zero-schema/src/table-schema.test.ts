@@ -40,12 +40,12 @@ test('relationship schema types', () => {
     .primaryKey('id');
 
   const issueRelationships = relationships(issue, connect => ({
-    comments: connect({
+    comments: connect.many({
       sourceField: ['id'],
       destField: ['issueID'],
       destSchema: comment,
     }),
-    labels: connect(
+    labels: connect.many(
       {
         sourceField: ['id'],
         destField: ['issueID'],

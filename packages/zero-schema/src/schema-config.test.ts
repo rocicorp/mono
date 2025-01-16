@@ -13,7 +13,7 @@ test('round trip', async () => {
     .primaryKey('id');
 
   const circularRelationships = relationships(circular, connect => ({
-    self: connect({
+    self: connect.many({
       sourceField: ['id'],
       destField: ['id'],
       destSchema: circular,

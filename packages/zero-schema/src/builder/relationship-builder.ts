@@ -3,15 +3,23 @@ import type {Relationship, TableSchema} from '../table-schema.js';
 import type {TableBuilderWithColumns} from './table-builder.js';
 
 type ConnectArg<TSourceField, TDestField, TDest extends TableSchema> = {
-  sourceField: TSourceField;
-  destField: TDestField;
-  destSchema: TableBuilderWithColumns<TDest>;
+  readonly sourceField: TSourceField;
+  readonly destField: TDestField;
+  readonly destSchema: TableBuilderWithColumns<TDest>;
 };
 
-type ConnectResult<TSourceField, TDestField, TDest extends TableSchema> = {
-  sourceField: TSourceField;
-  destField: TDestField;
-  destSchema: TDest['name'];
+type ManyConnection<TSourceField, TDestField, TDest extends TableSchema> = {
+  readonly sourceField: TSourceField;
+  readonly destField: TDestField;
+  readonly destSchema: TDest['name'];
+  readonly cardinality: 'many';
+};
+
+type OneConnection<TSourceField, TDestField, TDest extends TableSchema> = {
+  readonly sourceField: TSourceField;
+  readonly destField: TDestField;
+  readonly destSchema: TDest['name'];
+  readonly cardinality: 'one';
 };
 
 type Prev = [-1, 0, 1, 2, 3, 4, 5, 6];
@@ -31,7 +39,7 @@ export function relationships<
   TRelationships extends Record<string, Relationship>,
 >(
   table: TableBuilderWithColumns<TSource>,
-  cb: (
+  cb: (connects: {
     many: <
       TDests extends TableSchema[],
       TSourceFields extends {
@@ -54,15 +62,43 @@ export function relationships<
         >;
       }
     ) => {
-      [K in keyof TDests]: ConnectResult<
+      [K in keyof TDests]: ManyConnection<
         TSourceFields[K],
         TDestFields[K],
         TDests[K]
       >;
-    },
-  ) => TRelationships,
+    };
+    one: <
+      TDests extends TableSchema[],
+      TSourceFields extends {
+        [K in keyof TDests]: (keyof PreviousSchema<
+          TSource,
+          K & number,
+          TDests
+        >['columns'] &
+          string)[];
+      },
+      TDestFields extends {
+        [K in keyof TDests]: (keyof TDests[K]['columns'] & string)[];
+      },
+    >(
+      ...args: {
+        [K in keyof TDests]: ConnectArg<
+          TSourceFields[K],
+          TDestFields[K],
+          TDests[K]
+        >;
+      }
+    ) => {
+      [K in keyof TDests]: OneConnection<
+        TSourceFields[K],
+        TDestFields[K],
+        TDests[K]
+      >;
+    };
+  }) => TRelationships,
 ): {name: TSource['name']; relationships: TRelationships} {
-  const relationships = cb(many as any);
+  const relationships = cb({many, one} as any);
 
   return {
     name: table.schema.name,
@@ -72,10 +108,22 @@ export function relationships<
 
 function many(
   ...args: readonly ConnectArg<any, any, TableSchema>[]
-): ConnectResult<any, any, any>[] {
+): ManyConnection<any, any, any>[] {
   return args.map(arg => ({
     sourceField: arg.sourceField,
     destField: arg.destField,
     destSchema: arg.destSchema.schema.name,
+    cardinality: 'many',
+  }));
+}
+
+function one(
+  ...args: readonly ConnectArg<any, any, TableSchema>[]
+): OneConnection<any, any, any>[] {
+  return args.map(arg => ({
+    sourceField: arg.sourceField,
+    destField: arg.destField,
+    destSchema: arg.destSchema.schema.name,
+    cardinality: 'one',
   }));
 }

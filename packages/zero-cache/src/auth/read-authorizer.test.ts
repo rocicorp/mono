@@ -51,7 +51,7 @@ const adminReadable = table('adminReadable')
 const readableThruUnreadableRelationships = relationships(
   readableThruUnreadable,
   connect => ({
-    unreadable: connect({
+    unreadable: connect.many({
       sourceField: ['unreadableId'],
       destField: ['id'],
       destSchema: unreadable,
@@ -60,17 +60,17 @@ const readableThruUnreadableRelationships = relationships(
 );
 
 const readableRelationships = relationships(readable, connect => ({
-  readable: connect({
+  readable: connect.many({
     sourceField: ['readableId'],
     destField: ['id'],
     destSchema: readable,
   }),
-  unreadable: connect({
+  unreadable: connect.many({
     sourceField: ['unreadableId'],
     destField: ['id'],
     destSchema: unreadable,
   }),
-  readableThruUnreadable: connect({
+  readableThruUnreadable: connect.many({
     sourceField: ['id'],
     destField: ['id'],
     destSchema: readableThruUnreadable,
@@ -78,12 +78,12 @@ const readableRelationships = relationships(readable, connect => ({
 }));
 
 const adminReadableRelationships = relationships(adminReadable, connect => ({
-  self1: connect({
+  self1: connect.many({
     sourceField: ['id'],
     destField: ['id'],
     destSchema: adminReadable,
   }),
-  self2: connect({
+  self2: connect.many({
     sourceField: ['id'],
     destField: ['id'],
     destSchema: adminReadable,

@@ -498,7 +498,7 @@ describe('kitchen sink query', () => {
     view.addListener(data => {
       rows = [...data].map(row => ({
         ...row,
-        owner: [...row.owner],
+        owner: row.owner,
         comments: [...row.comments].map(comment => ({
           ...comment,
           revisions: [...comment.revisions],

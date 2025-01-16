@@ -110,17 +110,17 @@ const projectMember = table('projectMember')
 
 // Relationships
 const userRelationships = relationships(user, connect => ({
-  ownedIssues: connect({
+  ownedIssues: connect.many({
     sourceField: ['id'],
     destField: ['ownerId'],
     destSchema: issue,
   }),
-  createdIssues: connect({
+  createdIssues: connect.many({
     sourceField: ['id'],
     destField: ['creatorId'],
     destSchema: issue,
   }),
-  viewedIssues: connect(
+  viewedIssues: connect.many(
     {
       sourceField: ['id'],
       destField: ['userId'],
@@ -132,7 +132,7 @@ const userRelationships = relationships(user, connect => ({
       destSchema: issue,
     },
   ),
-  projects: connect(
+  projects: connect.many(
     {
       sourceField: ['id'],
       destField: ['userId'],
@@ -147,22 +147,22 @@ const userRelationships = relationships(user, connect => ({
 }));
 
 const issueRelationships = relationships(issue, connect => ({
-  owner: connect({
+  owner: connect.many({
     sourceField: ['ownerId'],
     destField: ['id'],
     destSchema: user,
   }),
-  creator: connect({
+  creator: connect.many({
     sourceField: ['creatorId'],
     destField: ['id'],
     destSchema: user,
   }),
-  comments: connect({
+  comments: connect.many({
     sourceField: ['id'],
     destField: ['issueId'],
     destSchema: comment,
   }),
-  labels: connect(
+  labels: connect.many(
     {
       sourceField: ['id'],
       destField: ['issueId'],
@@ -174,12 +174,12 @@ const issueRelationships = relationships(issue, connect => ({
       destSchema: label,
     },
   ),
-  project: connect({
+  project: connect.many({
     sourceField: ['projectId'],
     destField: ['id'],
     destSchema: project,
   }),
-  viewState: connect({
+  viewState: connect.many({
     sourceField: ['id'],
     destField: ['issueId'],
     destSchema: viewState,
@@ -187,12 +187,12 @@ const issueRelationships = relationships(issue, connect => ({
 }));
 
 const commentRelationships = relationships(comment, connect => ({
-  issue: connect({
+  issue: connect.many({
     sourceField: ['issueId'],
     destField: ['id'],
     destSchema: issue,
   }),
-  user: connect({
+  user: connect.many({
     sourceField: ['authorId'],
     destField: ['id'],
     destSchema: user,
@@ -200,12 +200,12 @@ const commentRelationships = relationships(comment, connect => ({
 }));
 
 const issueLabelRelationships = relationships(issueLabel, connect => ({
-  issue: connect({
+  issue: connect.many({
     sourceField: ['issueId'],
     destField: ['id'],
     destSchema: issue,
   }),
-  label: connect({
+  label: connect.many({
     sourceField: ['labelId'],
     destField: ['id'],
     destSchema: label,
@@ -213,12 +213,12 @@ const issueLabelRelationships = relationships(issueLabel, connect => ({
 }));
 
 const viewStateRelationships = relationships(viewState, connect => ({
-  user: connect({
+  user: connect.many({
     sourceField: ['userId'],
     destField: ['id'],
     destSchema: user,
   }),
-  issue: connect({
+  issue: connect.many({
     sourceField: ['issueId'],
     destField: ['id'],
     destSchema: issue,
@@ -226,12 +226,12 @@ const viewStateRelationships = relationships(viewState, connect => ({
 }));
 
 const projectRelationships = relationships(project, connect => ({
-  issues: connect({
+  issues: connect.many({
     sourceField: ['id'],
     destField: ['projectId'],
     destSchema: issue,
   }),
-  members: connect(
+  members: connect.many(
     {
       sourceField: ['id'],
       destField: ['projectId'],
@@ -246,12 +246,12 @@ const projectRelationships = relationships(project, connect => ({
 }));
 
 const projectMemberRelationships = relationships(projectMember, connect => ({
-  project: connect({
+  project: connect.many({
     sourceField: ['projectId'],
     destField: ['id'],
     destSchema: project,
   }),
-  user: connect({
+  user: connect.many({
     sourceField: ['userId'],
     destField: ['id'],
     destSchema: user,

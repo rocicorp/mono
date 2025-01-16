@@ -6,7 +6,7 @@ import type {
 import type {SchemaValueToTSType} from '../../../zero-schema/src/table-schema.js';
 import type {ExpressionFactory, ParameterReference} from './expression.js';
 import type {TypedView} from './typed-view.js';
-import type {Expand} from '../../../shared/src/expand.js';
+import type {Expand, ExpandRecursive} from '../../../shared/src/expand.js';
 import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.js';
 
 type Selector<E extends TableSchema> = keyof E['columns'];
@@ -60,7 +60,9 @@ type DestRow<
   TTable extends string,
   TSchema extends ZeroSchema,
   TRelationship extends string,
-> = PullRow<DestTableName<TTable, TSchema, TRelationship>, TSchema>;
+> = TSchema['relationships'][TTable][TRelationship][0]['cardinality'] extends 'many'
+  ? PullRow<DestTableName<TTable, TSchema, TRelationship>, TSchema>
+  : PullRow<DestTableName<TTable, TSchema, TRelationship>, TSchema> | undefined;
 
 type AddSubreturn<
   TExistingReturn,
@@ -127,7 +129,11 @@ export interface Query<
   >(
     relationship: TRelationship,
     cb: (
-      q: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
+      q: Query<
+        TSchema,
+        DestTableName<TTable, TSchema, TRelationship>,
+        DestRow<TTable, TSchema, TRelationship>
+      >,
     ) => TSub,
   ): Query<
     TSchema,
@@ -203,5 +209,8 @@ export interface Query<
   };
 }
 
-// Note: opaque types expand incorrectly.
 export type HumanReadable<T> = undefined extends T ? Expand<T> : Expand<T>[];
+// Note: opaque types expand incorrectly.
+export type HumanReadableRecursive<T> = undefined extends T
+  ? ExpandRecursive<T>
+  : ExpandRecursive<T>[];

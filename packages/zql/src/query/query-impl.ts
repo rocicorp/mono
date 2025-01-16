@@ -171,7 +171,7 @@ export abstract class AbstractQuery<
     const related = this.#schema.relationships[this.#tableName][relationship];
     assert(related, 'Invalid relationship');
     if (isOneHop(related)) {
-      const {destSchema, destField, sourceField} = related[0];
+      const {destSchema, destField, sourceField, cardinality} = related[0];
       const sq = cb(
         this._newQuery(
           this.#schema,
@@ -180,7 +180,10 @@ export abstract class AbstractQuery<
             table: destSchema,
             alias: relationship,
           },
-          undefined,
+          {
+            relationships: {},
+            singular: cardinality === 'one',
+          },
         ),
       ) as unknown as QueryImpl<any, any>;
 
@@ -240,7 +243,10 @@ export abstract class AbstractQuery<
             table: destSchema,
             alias: relationship,
           },
-          undefined,
+          {
+            relationships: {},
+            singular: secondRelation.cardinality === 'one',
+          },
         ),
       ) as unknown as QueryImpl<Schema, string>;
 

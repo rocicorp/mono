@@ -42,7 +42,7 @@ test('Missing table in direct relationship should throw', () => {
     .primaryKey('id');
 
   const fooRelationships = relationships(foo, connect => ({
-    barRelation: connect({
+    barRelation: connect.many({
       sourceField: ['barID'],
       destField: ['id'],
       destSchema: bar,
@@ -79,7 +79,7 @@ test('Missing table in junction relationship should throw', () => {
     .primaryKey('id');
 
   const tableBRelationships = relationships(tableB, connect => ({
-    relationBToA: connect({
+    relationBToA: connect.many({
       sourceField: ['aID'],
       destField: ['id'],
       destSchema: tableA,
@@ -87,7 +87,7 @@ test('Missing table in junction relationship should throw', () => {
   }));
 
   const tableCRelationships = relationships(tableC, connect => ({
-    relationCToB: connect(
+    relationCToB: connect.many(
       {
         sourceField: ['bID'],
         destField: ['id'],
@@ -127,7 +127,7 @@ test('Missing column in direct relationship destination should throw', () => {
     .primaryKey('id');
 
   relationships(foo, connect => ({
-    barRelation: connect({
+    barRelation: connect.many({
       sourceField: ['barID'],
       // @ts-expect-error - missing column
       destField: ['missing'],
@@ -151,7 +151,7 @@ test('Missing column in direct relationship source should throw', () => {
     .primaryKey('id');
 
   const fooRelationships = relationships(foo, connect => ({
-    barRelation: connect({
+    barRelation: connect.many({
       sourceField: ['missing'],
       destField: ['id'],
       destSchema: bar,
@@ -187,7 +187,7 @@ test('Missing column in junction relationship destination should throw', () => {
     .primaryKey('id');
 
   relationships(tableA, connect => ({
-    relationAToB: connect(
+    relationAToB: connect.many(
       {
         sourceField: ['id'],
         destField: ['aID'],
@@ -225,7 +225,7 @@ test('Missing column in junction relationship source should throw', () => {
     .primaryKey('id');
 
   const tableARelationships = relationships(tableA, connect => ({
-    relationAToB: connect(
+    relationAToB: connect.many(
       {
         sourceField: ['id'],
         destField: ['aID'],

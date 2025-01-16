@@ -54,7 +54,7 @@ const issueLabel = table('issueLabel')
 
 // Relationships
 const issueRelationships = relationships(issue, connect => ({
-  labels: connect(
+  labels: connect.many(
     {
       sourceField: ['id'],
       destField: ['issueID'],
@@ -66,12 +66,12 @@ const issueRelationships = relationships(issue, connect => ({
       destSchema: label,
     },
   ),
-  comments: connect({
+  comments: connect.many({
     sourceField: ['id'],
     destField: ['issueID'],
     destSchema: comment,
   }),
-  creator: connect({
+  creator: connect.many({
     sourceField: ['creatorID'],
     destField: ['id'],
     destSchema: member,
@@ -79,7 +79,7 @@ const issueRelationships = relationships(issue, connect => ({
 }));
 
 const commentRelationships = relationships(comment, connect => ({
-  creator: connect({
+  creator: connect.many({
     sourceField: ['creatorID'],
     destField: ['id'],
     destSchema: member,

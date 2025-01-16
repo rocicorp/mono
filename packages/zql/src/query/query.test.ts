@@ -77,8 +77,8 @@ const schemaWithEnums = table('testWithEnums')
 
 const schemaWithEnumsRelationships = relationships(
   schemaWithEnums,
-  connect => ({
-    self: connect({
+  ({many}) => ({
+    self: many({
       sourceField: ['s'],
       destField: ['s'],
       destSchema: schemaWithEnums,
@@ -100,7 +100,7 @@ const schemaWithAdvancedTypes = table('schemaWithAdvancedTypes')
 const withAdvancedTypesRelationships = relationships(
   schemaWithAdvancedTypes,
   connect => ({
-    self: connect({
+    self: connect.many({
       sourceField: ['s'],
       destField: ['s'],
       destSchema: schemaWithAdvancedTypes,
@@ -127,7 +127,7 @@ const testWithRelationships = table('testWithRelationships')
 const testWithRelationshipsRelationships = relationships(
   testWithRelationships,
   connect => ({
-    test: connect({
+    test: connect.many({
       sourceField: ['s'],
       destField: ['s'],
       destSchema: testSchema,
@@ -146,17 +146,17 @@ const testWithMoreRelationships = table('testWithMoreRelationships')
 const testWithMoreRelationshipsRelationships = relationships(
   testWithMoreRelationships,
   connect => ({
-    testWithRelationships: connect({
+    testWithRelationships: connect.many({
       sourceField: ['a'],
       destField: ['a'],
       destSchema: testWithRelationships,
     }),
-    test: connect({
+    test: connect.many({
       sourceField: ['s'],
       destField: ['s'],
       destSchema: testSchema,
     }),
-    self: connect({
+    self: connect.many({
       sourceField: ['s'],
       destField: ['s'],
       destSchema: testWithMoreRelationships,
@@ -592,7 +592,7 @@ describe('schema structure', () => {
       .primaryKey('id');
 
     const issueRelationships = relationships(issue, connect => ({
-      comments: connect({
+      comments: connect.many({
         sourceField: ['id'],
         destField: ['issueId'],
         destSchema: comment,
@@ -631,7 +631,7 @@ describe('schema structure', () => {
       .primaryKey('id');
 
     const commentRelationships = relationships(comment, connect => ({
-      issue: connect({
+      issue: connect.many({
         sourceField: ['issueId'],
         destField: ['id'],
         destSchema: issue,
@@ -639,12 +639,12 @@ describe('schema structure', () => {
     }));
 
     const issueRelationships = relationships(issue, connect => ({
-      comments: connect({
+      comments: connect.many({
         sourceField: ['id'],
         destField: ['issueId'],
         destSchema: comment,
       }),
-      parent: connect({
+      parent: connect.many({
         sourceField: ['parentId'],
         destField: ['id'],
         destSchema: issue,

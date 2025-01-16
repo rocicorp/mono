@@ -70,8 +70,8 @@ test('building a schema', () => {
     })
     .primaryKey('id');
 
-  const issueRelationships = relationships(issue, many => ({
-    owner: many({
+  const issueRelationships = relationships(issue, ({many, one}) => ({
+    owner: one({
       sourceField: ['ownerId'],
       destField: ['id'],
       destSchema: user,
@@ -90,15 +90,20 @@ test('building a schema', () => {
     ),
   }));
 
-  const userRelationships = relationships(user, many => ({
-    recruiter: many({
+  const userRelationships = relationships(user, ({one, many}) => ({
+    recruiter: one({
       sourceField: ['id'],
       destField: ['recruiterId'],
       destSchema: user,
     }),
+    ownedIssues: many({
+      sourceField: ['id'],
+      destField: ['ownerId'],
+      destSchema: issue,
+    }),
   }));
 
-  const labelRelationships = relationships(label, many => ({
+  const labelRelationships = relationships(label, ({many}) => ({
     issues: many(
       {
         sourceField: ['id'],
@@ -152,6 +157,61 @@ test('building a schema', () => {
     | undefined
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   >({} as any);
+
+  // recruiter is a singular relationship
+  expectTypeOf(q.related('recruiter').run()).toEqualTypeOf<
+    {
+      readonly id: string;
+      readonly name: string;
+      readonly recruiterId: number;
+      readonly recruiter:
+        | {
+            readonly id: string;
+            readonly name: string;
+            readonly recruiterId: number;
+          }
+        | undefined;
+    }[]
+  >();
+
+  // recruiter is a singular relationship
+  expectTypeOf(q.related('recruiter', q => q).run()).toEqualTypeOf<
+    {
+      readonly id: string;
+      readonly name: string;
+      readonly recruiterId: number;
+      readonly recruiter:
+        | {
+            readonly id: string;
+            readonly name: string;
+            readonly recruiterId: number;
+          }
+        | undefined;
+    }[]
+  >();
+
+  const id1 = iq
+    .related('owner', q => q.related('ownedIssues', q => q.where('id', '1')))
+    .run();
+  expectTypeOf(id1).toEqualTypeOf<
+    {
+      readonly id: string;
+      readonly title: string;
+      readonly ownerId: number;
+      readonly owner:
+        | {
+            readonly id: string;
+            readonly name: string;
+            readonly recruiterId: number;
+            readonly ownedIssues: readonly {
+              readonly id: string;
+              readonly title: string;
+              readonly ownerId: number;
+            }[];
+          }
+        | undefined;
+    }[]
+  >({} as never);
 
   const id = iq.related('labels').run();
   expectTypeOf(id).toEqualTypeOf<

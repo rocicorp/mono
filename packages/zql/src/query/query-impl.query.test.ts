@@ -928,7 +928,7 @@ test('join with compound keys', () => {
     .primaryKey('id');
 
   const aRelationships = relationships(a, connect => ({
-    b: connect({
+    b: connect.many({
       sourceField: ['a1', 'a2'],
       destField: ['b1', 'b2'],
       destSchema: b,

@@ -90,16 +90,16 @@ const userPref = table('userPref')
   .primaryKey('userID', 'key');
 
 // Relationships
-const userRelationships = relationships(user, connect => ({
-  createdIssues: connect({
+const userRelationships = relationships(user, ({many}) => ({
+  createdIssues: many({
     sourceField: ['id'],
     destField: ['creatorID'],
     destSchema: issue,
   }),
 }));
 
-const issueRelationships = relationships(issue, connect => ({
-  labels: connect(
+const issueRelationships = relationships(issue, ({many, one}) => ({
+  labels: many(
     {
       sourceField: ['id'],
       destField: ['issueID'],
@@ -111,71 +111,71 @@ const issueRelationships = relationships(issue, connect => ({
       destSchema: label,
     },
   ),
-  comments: connect({
+  comments: many({
     sourceField: ['id'],
     destField: ['issueID'],
     destSchema: comment,
   }),
-  creator: connect({
+  creator: one({
     sourceField: ['creatorID'],
     destField: ['id'],
     destSchema: user,
   }),
-  assignee: connect({
+  assignee: one({
     sourceField: ['assigneeID'],
     destField: ['id'],
     destSchema: user,
   }),
-  viewState: connect({
+  viewState: many({
     sourceField: ['id'],
     destField: ['issueID'],
     destSchema: viewState,
   }),
-  emoji: connect({
+  emoji: many({
     sourceField: ['id'],
     destField: ['subjectID'],
     destSchema: emoji,
   }),
 }));
 
-const commentRelationships = relationships(comment, connect => ({
-  creator: connect({
+const commentRelationships = relationships(comment, ({one, many}) => ({
+  creator: one({
     sourceField: ['creatorID'],
     destField: ['id'],
     destSchema: user,
   }),
-  emoji: connect({
+  emoji: many({
     sourceField: ['id'],
     destField: ['subjectID'],
     destSchema: emoji,
   }),
-  issue: connect({
+  issue: one({
     sourceField: ['issueID'],
     destField: ['id'],
     destSchema: issue,
   }),
 }));
 
-const issueLabelRelationships = relationships(issueLabel, connect => ({
-  issue: connect({
+const issueLabelRelationships = relationships(issueLabel, ({one}) => ({
+  issue: one({
     sourceField: ['issueID'],
     destField: ['id'],
     destSchema: issue,
   }),
 }));
 
-const emojiRelationships = relationships(emoji, connect => ({
-  creator: connect({
+const emojiRelationships = relationships(emoji, ({one}) => ({
+  creator: one({
     sourceField: ['creatorID'],
     destField: ['id'],
     destSchema: user,
   }),
-  issue: connect({
+  issue: one({
     sourceField: ['subjectID'],
     destField: ['id'],
     destSchema: issue,
   }),
-  comment: connect({
+  comment: one({
     sourceField: ['subjectID'],
     destField: ['id'],
     destSchema: comment,
