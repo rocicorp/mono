@@ -14,7 +14,6 @@
         "patterns": [
           {
             "group": [
-              "btree/*",
               "datadog/*",
               "replicache/*",
               "replicache-perf/*",
@@ -32,7 +31,6 @@
           }
         ],
         "paths": [
-          {"name": "btree", "message": "Use relative imports instead"},
           {"name": "datadog", "message": "Use relative imports instead"},
           {"name": "replicache", "message": "Use relative imports instead"},
           {
