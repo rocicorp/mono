@@ -63,7 +63,7 @@ async function tryRestore(config: ZeroLitestreamConfig) {
   const proc = spawn(
     litestream,
     ['restore', '-if-db-not-exists', '-if-replica-exists', config.replicaFile],
-    {env, stdio: 'inherit'},
+    {env, stdio: 'inherit', windowsHide: true},
   );
   const {promise, resolve, reject} = resolver();
   proc.on('error', reject);
@@ -84,5 +84,9 @@ export function startReplicaBackupProcess(
   config: ZeroLitestreamConfig,
 ): ChildProcess {
   const {litestream, env} = getLitestream(config);
-  return spawn(litestream, ['replicate'], {env, stdio: 'inherit'});
+  return spawn(litestream, ['replicate'], {
+    env,
+    stdio: 'inherit',
+    windowsHide: true,
+  });
 }
