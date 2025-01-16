@@ -1,6 +1,7 @@
 import type {SQLQuery} from '@databases/sql';
 import {assert, unreachable} from '../../shared/src/asserts.js';
 import {must} from '../../shared/src/must.js';
+import {difference} from '../../shared/src/set-utils.js';
 import type {Writable} from '../../shared/src/writable.js';
 import type {
   Condition,
@@ -14,7 +15,6 @@ import type {
   SchemaValue,
   ValueType,
 } from '../../zero-schema/src/table-schema.js';
-import {assertOrderingIncludesPK} from '../../zql/src/builder/builder.js';
 import {
   createPredicate,
   transformFilters,
@@ -90,6 +90,8 @@ export class TableSource implements Source {
   readonly #connections: Connection[] = [];
   readonly #table: string;
   readonly #columns: Record<string, SchemaValue>;
+  // Maps sorted columns JSON string (e.g. '["a","b"]) to Set of columns.
+  readonly #uniqueIndexes: Map<string, Set<string>>;
   readonly #primaryKey: PrimaryKey;
   readonly #clientGroupID: string;
   #stmts: Statements;
@@ -105,8 +107,14 @@ export class TableSource implements Source {
     this.#clientGroupID = clientGroupID;
     this.#table = tableName;
     this.#columns = columns;
+    this.#uniqueIndexes = getUniqueIndexes(db, tableName);
     this.#primaryKey = primaryKey;
     this.#stmts = this.#getStatementsFor(db);
+
+    assert(
+      this.#uniqueIndexes.has(JSON.stringify([...primaryKey].sort())),
+      `primary key ${primaryKey} does not have a UNIQUE index`,
+    );
   }
 
   get table() {
@@ -126,7 +134,6 @@ export class TableSource implements Source {
     if (cached) {
       return cached;
     }
-    assertPrimaryKeyMatch(db, this.#table, this.#primaryKey);
 
     const stmts = {
       cache: new StatementCache(db),
@@ -242,7 +249,7 @@ export class TableSource implements Source {
       compareRows: makeComparator(sort),
     };
     const schema = this.#getSchema(connection);
-    assertOrderingIncludesPK(sort, this.#primaryKey);
+    this.#assertUniqueIndexFieldsIncluded(sort);
 
     this.#connections.push(connection);
     return input;
@@ -506,6 +513,20 @@ export class TableSource implements Source {
 
     return query;
   }
+
+  #assertUniqueIndexFieldsIncluded(sort: Ordering) {
+    const columns = new Set(sort.map(([col]) => col));
+    for (const uniqueColumns of this.#uniqueIndexes.values()) {
+      if (difference(uniqueColumns, columns).size === 0) {
+        return;
+      }
+    }
+    throw new Error(
+      `sort ordering ${JSON.stringify(
+        sort,
+      )} does not include uniquely indexed columns`,
+    );
+  }
 }
 
 /**
@@ -685,24 +706,31 @@ function gatherStartConstraints(
   return sql`(${sql.join(constraints, sql` OR `)})`;
 }
 
-function assertPrimaryKeyMatch(
+function getUniqueIndexes(
   db: Database,
   tableName: string,
-  primaryKey: PrimaryKey,
-) {
+): Map<string, Set<string>> {
   const sqlAndBindings = format(
-    sql`SELECT name FROM pragma_table_info(${tableName}) WHERE pk > 0`,
+    sql`
+    SELECT idx.name, json_group_array(col.name) as columnsJSON
+      FROM sqlite_master as idx
+      JOIN pragma_index_list(idx.tbl_name) AS info ON info.name = idx.name
+      JOIN pragma_index_info(idx.name) as col
+      WHERE idx.tbl_name = ${tableName} AND
+            idx.type = 'index' AND 
+            info."unique" != 0
+      GROUP BY idx.name
+      ORDER BY idx.name`,
   );
   const stmt = db.prepare(sqlAndBindings.text);
-  const pkColumns = new Set(
-    stmt.all<Row>(...sqlAndBindings.values).map(row => row.name),
+  const indexes = stmt.all<{columnsJSON: string}>(...sqlAndBindings.values);
+  return new Map(
+    indexes.map(({columnsJSON}) => {
+      const columns = JSON.parse(columnsJSON);
+      const set = new Set<string>(columns);
+      return [JSON.stringify(columns.sort()), set];
+    }),
   );
-
-  assert(pkColumns.size === primaryKey.length);
-
-  for (const key of primaryKey) {
-    assert(pkColumns.has(key));
-  }
 }
 
 function toSQLiteTypes(
