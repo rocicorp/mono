@@ -6,10 +6,12 @@ import {newQuery, type QueryDelegate, QueryImpl} from './query-impl.js';
 import type {AdvancedQuery} from './query-internal.js';
 import {QueryDelegateImpl} from './test/query-delegate.js';
 import {schema} from './test/test-schemas.js';
-import type {FullSchema} from '../../../zero-schema/src/table-schema.js';
 import {number, table} from '../../../zero-schema/src/builder/table-builder.js';
 import {relationships} from '../../../zero-schema/src/builder/relationship-builder.js';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.js';
+import {
+  createSchema,
+  type Schema,
+} from '../../../zero-schema/src/builder/schema-builder.js';
 
 /**
  * Some basic manual tests to get us started.
@@ -551,7 +553,7 @@ describe('joins and filters', () => {
     addData(queryDelegate);
 
     const q1 = newQuery(queryDelegate, schema, 'issue').one();
-    expect((q1 as unknown as QueryImpl<FullSchema, string>).format).toEqual({
+    expect((q1 as unknown as QueryImpl<Schema, string>).format).toEqual({
       singular: true,
       relationships: {},
     });

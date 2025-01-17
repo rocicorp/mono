@@ -1,5 +1,5 @@
 import type {AST} from '../../../zero-protocol/src/ast.js';
-import type {FullSchema} from '../../../zero-schema/src/table-schema.js';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.js';
 import type {Format} from '../ivm/view.js';
 import {ExpressionBuilder} from './expression.js';
 import {AbstractQuery} from './query-impl.js';
@@ -7,14 +7,14 @@ import type {HumanReadable, PullRow, Query} from './query.js';
 import type {TypedView} from './typed-view.js';
 
 export function authQuery<
-  TSchema extends FullSchema,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
 >(schema: TSchema, tableName: TTable): Query<TSchema, TTable> {
   return new AuthQuery<TSchema, TTable>(schema, tableName);
 }
 
 export class AuthQuery<
-  TSchema extends FullSchema,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
 > extends AbstractQuery<TSchema, TTable, TReturn> {
@@ -34,7 +34,7 @@ export class AuthQuery<
   protected readonly _system = 'permissions';
 
   protected _newQuery<
-    TSchema extends FullSchema,
+    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
   >(

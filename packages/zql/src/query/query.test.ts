@@ -2,7 +2,6 @@
 import {describe, expectTypeOf, test} from 'vitest';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
 import {
-  type FullSchema,
   type Opaque,
   type TableSchema,
 } from '../../../zero-schema/src/table-schema.js';
@@ -21,6 +20,7 @@ import {
 } from '../../../zero-schema/src/builder/table-builder.js';
 import {relationships} from '../../../zero-schema/src/builder/relationship-builder.js';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.js';
+import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.js';
 
 const mockQuery = {
   select() {
@@ -714,7 +714,7 @@ test('custom materialize factory', () => {
 
   // This is a pretend factory that unlike ArrayView, which has a `data` property that is an array,
   // has a `dataAsSet` property that is a Set.
-  function factory<TSchema extends FullSchema, TTable extends string, TReturn>(
+  function factory<TSchema extends ZeroSchema, TTable extends string, TReturn>(
     _query: Query<TSchema, TTable, TReturn>,
   ): {
     dataAsSet: Set<TReturn>;

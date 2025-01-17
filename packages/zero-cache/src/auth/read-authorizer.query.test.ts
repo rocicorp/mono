@@ -10,10 +10,7 @@ import type {
   UpdateOp,
 } from '../../../zero-protocol/src/push.js';
 import {definePermissions} from '../../../zero-schema/src/permissions.js';
-import type {
-  FullSchema,
-  ValueType,
-} from '../../../zero-schema/src/table-schema.js';
+import type {ValueType} from '../../../zero-schema/src/table-schema.js';
 import {
   bindStaticParameters,
   buildPipeline,
@@ -41,7 +38,10 @@ import {
   table,
 } from '../../../zero-schema/src/builder/table-builder.js';
 import {relationships} from '../../../zero-schema/src/builder/relationship-builder.js';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.js';
+import {
+  createSchema,
+  type Schema as ZeroSchema,
+} from '../../../zero-schema/src/builder/schema-builder.js';
 
 const user = table('user')
   .columns({
@@ -340,13 +340,13 @@ const permissions = must(
 
     const isAdmin = (
       authData: AuthData,
-      {cmpLit}: ExpressionBuilder<FullSchema, string>,
+      {cmpLit}: ExpressionBuilder<ZeroSchema, string>,
     ) => cmpLit(authData.role, '=', 'admin');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     type TODO = any;
     const isAdminThroughNestedData = (
       authData: AuthData,
-      {cmpLit}: ExpressionBuilder<FullSchema, string>,
+      {cmpLit}: ExpressionBuilder<ZeroSchema, string>,
       // TODO: proxy should return parameter references instead....
     ) => cmpLit(authData.properties?.role as TODO, 'IS', 'admin');
 
@@ -890,13 +890,13 @@ describe('issue permissions', () => {
   });
 });
 
-function ast(q: Query<FullSchema, string>) {
-  return (q as QueryImpl<FullSchema, string>)[completedAstSymbol];
+function ast(q: Query<ZeroSchema, string>) {
+  return (q as QueryImpl<ZeroSchema, string>)[completedAstSymbol];
 }
 
 function runReadQueryWithPermissions(
   authData: AuthData,
-  query: Query<FullSchema, string>,
+  query: Query<ZeroSchema, string>,
 ) {
   const updatedAst = bindStaticParameters(
     must(transformQuery(ast(query), permissions, authData)),

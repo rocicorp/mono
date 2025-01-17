@@ -1,6 +1,5 @@
 import {describe, expect, test} from 'vitest';
 import {definePermissions} from '../../../zero-schema/src/permissions.js';
-import {type FullSchema} from '../../../zero-schema/src/table-schema.js';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.js';
 import {
   astForTestingSymbol,
@@ -14,11 +13,12 @@ import {must} from '../../../shared/src/must.js';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.js';
 import {relationships} from '../../../zero-schema/src/builder/relationship-builder.js';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.js';
+import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.js';
 
 const mockDelegate = {} as QueryDelegate;
 
-function ast(q: Query<FullSchema, string>) {
-  return (q as QueryImpl<FullSchema, string>)[astForTestingSymbol];
+function ast(q: Query<ZeroSchema, string>) {
+  return (q as QueryImpl<ZeroSchema, string>)[astForTestingSymbol];
 }
 
 const unreadable = table('unreadable')

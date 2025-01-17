@@ -6,7 +6,6 @@ import {
   definePermissions,
   NOBODY_CAN,
 } from '../../../../zero-schema/src/permissions.js';
-import type {FullSchema} from '../../../../zero-schema/src/table-schema.js';
 import {ExpressionBuilder} from '../../../../zql/src/query/expression.js';
 import type {Row} from '../../../../zql/src/query/query.js';
 import {Database} from '../../../../zqlite/src/db.js';
@@ -15,7 +14,10 @@ import {testDBs} from '../../test/db.js';
 import type {PostgresDB} from '../../types/pg.js';
 import {zeroSchema} from './mutagen-test-shared.js';
 import {processMutation} from './mutagen.js';
-import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.js';
+import {
+  createSchema,
+  type Schema as ZeroSchema,
+} from '../../../../zero-schema/src/builder/schema-builder.js';
 import {
   boolean,
   json,
@@ -201,7 +203,7 @@ const permissionsConfig = await definePermissions<AuthData, typeof schema>(
   () => {
     const allowIfAdmin = (
       authData: AuthData,
-      {cmpLit}: ExpressionBuilder<FullSchema, string>,
+      {cmpLit}: ExpressionBuilder<ZeroSchema, string>,
     ) => cmpLit(authData.role, '=', 'admin');
 
     const allowIfNotAdminLockedRow = (
@@ -214,7 +216,7 @@ const permissionsConfig = await definePermissions<AuthData, typeof schema>(
     ) => cmp('adminLocked', false);
     const allowIfLoggedIn = (
       authData: AuthData,
-      {cmpLit}: ExpressionBuilder<FullSchema, string>,
+      {cmpLit}: ExpressionBuilder<ZeroSchema, string>,
     ) => cmpLit(authData.sub, 'IS NOT', null);
     const allowIfPostMutationIDMatchesLoggedInUser = (
       authData: AuthData,

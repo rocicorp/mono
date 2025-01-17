@@ -6,7 +6,7 @@ import {
   type LiteralValue,
   type Parameter,
 } from '../../../zero-protocol/src/ast.js';
-import type {FullSchema} from '../../../zero-schema/src/table-schema.js';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.js';
 import type {Operator} from './query.js';
 import type {
   AvailableRelationships,
@@ -38,14 +38,14 @@ export type ParameterReference = {
  * ```
  */
 export interface ExpressionFactory<
-  TSchema extends FullSchema,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
 > {
   (eb: ExpressionBuilder<TSchema, TTable>): Condition;
 }
 
 export class ExpressionBuilder<
-  TSchema extends FullSchema,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
 > {
   readonly #exists: (

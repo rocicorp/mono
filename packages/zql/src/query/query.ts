@@ -3,13 +3,11 @@ import type {
   LastInTuple,
   TableSchema,
 } from '../../../zero-schema/src/table-schema.js';
-import type {
-  FullSchema,
-  SchemaValueToTSType,
-} from '../../../zero-schema/src/table-schema.js';
+import type {SchemaValueToTSType} from '../../../zero-schema/src/table-schema.js';
 import type {ExpressionFactory, ParameterReference} from './expression.js';
 import type {TypedView} from './typed-view.js';
 import type {Expand} from '../../../shared/src/expand.js';
+import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.js';
 
 type Selector<E extends TableSchema> = keyof E['columns'];
 export type NoJsonSelector<T extends TableSchema> = Exclude<
@@ -49,18 +47,18 @@ export type GetFieldTypeNoUndefined<
 
 export type AvailableRelationships<
   TTable extends string,
-  TSchema extends FullSchema,
+  TSchema extends ZeroSchema,
 > = keyof TSchema['relationships'][TTable] & string;
 
 export type DestTableName<
   TTable extends string,
-  TSchema extends FullSchema,
+  TSchema extends ZeroSchema,
   TRelationship extends string,
 > = LastInTuple<TSchema['relationships'][TTable][TRelationship]>['destSchema'];
 
 type DestRow<
   TTable extends string,
-  TSchema extends FullSchema,
+  TSchema extends ZeroSchema,
   TRelationship extends string,
 > = PullRow<DestTableName<TTable, TSchema, TRelationship>, TSchema>;
 
@@ -84,10 +82,10 @@ type AddSubreturn<
 
 export type PullTableSchema<
   TTable extends string,
-  TSchemas extends FullSchema,
+  TSchemas extends ZeroSchema,
 > = TSchemas['tables'][TTable];
 
-export type PullRow<TTable extends string, TSchema extends FullSchema> = {
+export type PullRow<TTable extends string, TSchema extends ZeroSchema> = {
   readonly [K in keyof PullTableSchema<
     TTable,
     TSchema
@@ -96,19 +94,19 @@ export type PullRow<TTable extends string, TSchema extends FullSchema> = {
   >;
 };
 
-export type Row<T extends TableSchema | Query<FullSchema, string>> =
+export type Row<T extends TableSchema | Query<ZeroSchema, string>> =
   T extends TableSchema
     ? {
         readonly [K in keyof T['columns']]: SchemaValueToTSType<
           T['columns'][K]
         >;
       }
-    : T extends Query<FullSchema, string, infer TReturn>
+    : T extends Query<ZeroSchema, string, infer TReturn>
     ? TReturn
     : never;
 
 export interface Query<
-  TSchema extends FullSchema,
+  TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
 > {

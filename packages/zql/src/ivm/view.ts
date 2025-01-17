@@ -1,5 +1,5 @@
 import type {Value} from '../../../zero-protocol/src/data.js';
-import type {FullSchema} from '../../../zero-schema/src/table-schema.js';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.js';
 import type {Query} from '../query/query.js';
 import type {Input} from './operator.js';
 
@@ -13,7 +13,7 @@ export type Format = {
 };
 
 export type ViewFactory<
-  TSchema extends FullSchema,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
   T,

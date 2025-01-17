@@ -1,9 +1,9 @@
 import {expect, test} from 'vitest';
 import {createSchema} from './builder/schema-builder.js';
-import {type FullSchema} from './table-schema.js';
 import {definePermissions} from './permissions.js';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.js';
 import {table, column} from './builder/table-builder.js';
+import type {Schema as ZeroSchema} from './builder/schema-builder.js';
 
 const {string} = column;
 
@@ -30,7 +30,7 @@ test('permission rules create query ASTs', async () => {
     () => {
       const allowIfAdmin = (
         authData: AuthData,
-        {cmpLit}: ExpressionBuilder<FullSchema, string>,
+        {cmpLit}: ExpressionBuilder<ZeroSchema, string>,
       ) => cmpLit(authData.role, '=', 'admin');
 
       return {
@@ -126,7 +126,7 @@ test('nested parameters', async () => {
     () => {
       const allowIfAdmin = (
         authData: AuthData,
-        {cmpLit}: ExpressionBuilder<FullSchema, string>,
+        {cmpLit}: ExpressionBuilder<ZeroSchema, string>,
       ) => cmpLit(authData.attributes.role, '=', 'admin');
 
       return {

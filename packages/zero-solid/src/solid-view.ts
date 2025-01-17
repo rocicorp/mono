@@ -16,7 +16,7 @@ import {
   type ViewFactory,
 } from '../../zero-advanced/src/mod.js';
 import type {ResultType} from '../../zql/src/query/typed-view.js';
-import type {FullSchema} from '../../zero-schema/src/table-schema.js';
+import type {Schema} from '../../zero-schema/src/mod.js';
 
 export type QueryResultDetails = {
   readonly type: ResultType;
@@ -98,7 +98,7 @@ export class SolidView<V> implements Output {
 }
 
 export function solidViewFactory<
-  TSchema extends FullSchema,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 >(
@@ -117,4 +117,4 @@ export function solidViewFactory<
   );
 }
 
-solidViewFactory satisfies ViewFactory<FullSchema, string, unknown, unknown>;
+solidViewFactory satisfies ViewFactory<Schema, string, unknown, unknown>;
