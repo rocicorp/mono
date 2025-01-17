@@ -52,9 +52,9 @@ test('fan-out,fan-in pairing does not duplicate pushes', () => {
   ]);
   const connector = s.connect([['a', 'asc']]);
   const fanOut = new FanOut(connector);
-  const filter1 = new Filter(fanOut, 'all', () => true);
-  const filter2 = new Filter(fanOut, 'all', () => true);
-  const filter3 = new Filter(fanOut, 'all', () => true);
+  const filter1 = new Filter(fanOut, () => true);
+  const filter2 = new Filter(fanOut, () => true);
+  const filter3 = new Filter(fanOut, () => true);
 
   const fanIn = new FanIn(fanOut, [filter1, filter2, filter3]);
   const out = new Catch(fanIn);
@@ -115,18 +115,10 @@ test('fan-in fetch', () => {
   ]);
   const fanOut = new FanOut(connector);
 
-  const filter1 = new Filter(fanOut, 'all', row => row.a === true);
-  const filter2 = new Filter(fanOut, 'all', row => row.b === true);
-  const filter3 = new Filter(
-    fanOut,
-    'all',
-    row => row.a === true && row.b === false,
-  ); // duplicates a row of filter1
-  const filter4 = new Filter(
-    fanOut,
-    'all',
-    row => row.a === true && row.b === true,
-  ); // duplicates a row of filter1 and filter2
+  const filter1 = new Filter(fanOut, row => row.a === true);
+  const filter2 = new Filter(fanOut, row => row.b === true);
+  const filter3 = new Filter(fanOut, row => row.a === true && row.b === false); // duplicates a row of filter1
+  const filter4 = new Filter(fanOut, row => row.a === true && row.b === true); // duplicates a row of filter1 and filter2
 
   const fanIn = new FanIn(fanOut, [filter1, filter2, filter3, filter4]);
   const out = new Catch(fanIn);
@@ -162,9 +154,9 @@ test('cleanup called once per branch', () => {
   ]);
   const connector = s.connect([['a', 'asc']]);
   const fanOut = new FanOut(connector);
-  const filter1 = new Filter(fanOut, 'all', () => true);
-  const filter2 = new Filter(fanOut, 'all', () => true);
-  const filter3 = new Filter(fanOut, 'all', () => true);
+  const filter1 = new Filter(fanOut, () => true);
+  const filter2 = new Filter(fanOut, () => true);
+  const filter3 = new Filter(fanOut, () => true);
 
   const fanIn = new FanIn(fanOut, [filter1, filter2, filter3]);
   const out = new Catch(fanIn);

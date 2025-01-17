@@ -65,6 +65,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const open =
     status === 'open' ? true : status === 'closed' ? false : undefined;
 
+  q = q.whereExists('creator');
   if (open !== undefined) {
     q = q.where('open', open);
   }

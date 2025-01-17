@@ -92,6 +92,7 @@ export class Exists implements Operator {
   }
 
   push(change: Change) {
+    console.log(change);
     switch (change.type) {
       // add, remove and edit cannot change the size of the
       // this.#relationshipName relationship, so simply #pushWithFilter

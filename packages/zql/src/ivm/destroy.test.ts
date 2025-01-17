@@ -61,9 +61,9 @@ test('destroy a pipeline that has forking', () => {
   ]);
   const connector = ms.connect([['a', 'asc']]);
   const fanOut = new FanOut(connector);
-  const filter1 = new Filter(fanOut, 'all', () => true);
-  const filter2 = new Filter(fanOut, 'all', () => true);
-  const filter3 = new Filter(fanOut, 'all', () => true);
+  const filter1 = new Filter(fanOut, () => true);
+  const filter2 = new Filter(fanOut, () => true);
+  const filter3 = new Filter(fanOut, () => true);
   const fanIn = new FanIn(fanOut, [filter1, filter2, filter3]);
   const out = new Catch(fanIn);
 

@@ -48,6 +48,7 @@ import {Database, Statement} from './db.js';
 import {compile, format, sql} from './internal/sql.js';
 import {StatementCache} from './internal/statement-cache.js';
 import {runtimeDebugFlags, runtimeDebugStats} from './runtime-debug.js';
+import {filterPush} from '../../zql/src/ivm/filter-push.js';
 
 type Connection = {
   input: Input;
@@ -320,6 +321,7 @@ export class TableSource implements Source {
   }
 
   *genPush(change: SourceChange) {
+    console.log(change);
     const exists = (row: Row) =>
       this.#stmts.checkExists.get<{exists: number}>(
         ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
@@ -366,10 +368,13 @@ export class TableSource implements Source {
             },
           };
 
-    for (const [outputIndex, {output}] of this.#connections.entries()) {
-      this.#overlay = {outputIndex, change};
+    for (const [
+      outputIndex,
+      {output, filters},
+    ] of this.#connections.entries()) {
       if (output) {
-        output.push(outputChange);
+        this.#overlay = {outputIndex, change};
+        filterPush(outputChange, output, filters?.predicate);
         yield;
       }
     }

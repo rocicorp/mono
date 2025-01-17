@@ -15,7 +15,6 @@ import {
   transformFilters,
   type NoSubqueryCondition,
 } from '../builder/filter.js';
-import type {Change} from './change.js';
 import {
   constraintMatchesPrimaryKey,
   constraintMatchesRow,
@@ -27,6 +26,7 @@ import {
   type Comparator,
   type Node,
 } from './data.js';
+import {filterPush} from './filter-push.js';
 import {
   type FetchRequest,
   type Input,
@@ -349,7 +349,7 @@ export class MemorySource implements Source {
         unreachable(change);
     }
 
-    const outputChange: Change =
+    const outputChange =
       change.type === 'edit'
         ? {
             type: change.type,
@@ -369,10 +369,13 @@ export class MemorySource implements Source {
               relationships: {},
             },
           };
-    for (const [outputIndex, {output}] of this.#connections.entries()) {
+    for (const [
+      outputIndex,
+      {output, filters},
+    ] of this.#connections.entries()) {
       if (output) {
         this.#overlay = {outputIndex, change};
-        output.push(outputChange);
+        filterPush(outputChange, output, filters?.predicate);
         yield;
       }
     }

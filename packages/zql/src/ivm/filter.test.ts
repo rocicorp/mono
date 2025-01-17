@@ -12,7 +12,7 @@ test('basics', () => {
   ms.push({type: 'add', row: {a: 1, b: 'foo'}});
 
   const connector = ms.connect([['a', 'asc']]);
-  const filter = new Filter(connector, 'all', row => row.b === 'foo');
+  const filter = new Filter(connector, row => row.b === 'foo');
   const out = new Catch(filter);
 
   expect(out.fetch()).toEqual([
@@ -61,11 +61,7 @@ test('edit', () => {
   }
 
   const connector = ms.connect([['a', 'asc']]);
-  const filter = new Filter(
-    connector,
-    'all',
-    row => (row.x as number) % 2 === 0,
-  );
+  const filter = new Filter(connector, row => (row.x as number) % 2 === 0);
   const out = new Catch(filter);
 
   expect(out.fetch()).toEqual([{row: {a: 2, x: 2}, relationships: {}}]);

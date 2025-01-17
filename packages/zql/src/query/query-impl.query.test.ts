@@ -1,7 +1,6 @@
 import {describe, expect, test} from 'vitest';
 import {deepClone} from '../../../shared/src/deep-clone.js';
 import {must} from '../../../shared/src/must.js';
-import {MemorySource} from '../ivm/memory-source.js';
 import {newQuery, type QueryDelegate, QueryImpl} from './query-impl.js';
 import type {AdvancedQuery} from './query-internal.js';
 import {QueryDelegateImpl} from './test/query-delegate.js';
@@ -12,6 +11,7 @@ import {
   createSchema,
   type Schema,
 } from '../../../zero-schema/src/builder/schema-builder.js';
+import {createSource} from '../ivm/test/source-factory.js';
 
 /**
  * Some basic manual tests to get us started.
@@ -1022,16 +1022,8 @@ test('join with compound keys', () => {
   );
 
   const sources = {
-    a: new MemorySource(
-      'a',
-      schema.tables.a.columns,
-      schema.tables.a.primaryKey,
-    ),
-    b: new MemorySource(
-      'b',
-      schema.tables.b.columns,
-      schema.tables.b.primaryKey,
-    ),
+    a: createSource('a', schema.tables.a.columns, schema.tables.a.primaryKey),
+    b: createSource('b', schema.tables.b.columns, schema.tables.b.primaryKey),
   };
 
   const queryDelegate = new QueryDelegateImpl(sources);
@@ -1192,6 +1184,29 @@ test('where exists', () => {
   });
 
   expect(materialized.data).toEqual([]);
+});
+
+test('where exists 2', () => {
+  const queryDelegate = new QueryDelegateImpl();
+  const issueSource = must(queryDelegate.getSource('issue'));
+  // const labelSource = must(queryDelegate.getSource('label'));
+  // const issueLabelSource = must(queryDelegate.getSource('issueLabel'));
+
+  newQuery(queryDelegate, schema, 'issue')
+    .whereExists('labels')
+    .where('closed', true)
+    .materialize();
+
+  issueSource.push({
+    type: 'add',
+    row: {
+      id: '0001',
+      title: 'issue 1',
+      description: 'description 1',
+      closed: false,
+      ownerId: '0001',
+    },
+  });
 });
 
 test('result type unknown then complete', async () => {
