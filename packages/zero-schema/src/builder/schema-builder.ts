@@ -13,13 +13,31 @@ export type Schema = {
   readonly relationships: {readonly [table: string]: RelationshipsSchema};
 };
 
+/**
+ * Note: the keys of the `tables` and `relationships` parameters do not matter.
+ * You can assign them to any value you like. E.g.,
+ *
+ * ```ts
+ * createSchema(1, {rsdfgafg: table('users')...}, {sdfd: relationships(users, ...)})
+ * ```
+ *
+ * @param version The version of the schema. Only needs to be incremented
+ * when the backend Postgres schema moves forward in a way that is not
+ * compatible with the frontend. As in, if:
+ * 1. Columns are removed
+ * 2. Optional columns are made required
+ *
+ * Adding columns, adding tables, adding relationships, making
+ * required columns optional are all backwards compatible changes and
+ * do not require bumping the schema version.
+ */
 export function createSchema<
   TTables extends Record<string, TableBuilderWithColumns<TableSchema>>,
   TRelationships extends Record<string, Relationships>,
 >(
   version: number,
   tables: TTables,
-  relationships: TRelationships,
+  relationships?: TRelationships | undefined,
 ): {
   version: number;
   tables: {
@@ -35,7 +53,7 @@ export function createSchema<
   Object.values(tables).forEach(table => {
     retTables[table.schema.name] = table.build();
   });
-  Object.values(relationships).forEach(relationship => {
+  Object.values(relationships ?? {}).forEach(relationship => {
     retRelationships[relationship.name] = relationship.relationships;
     checkRelationship(relationship.relationships, relationship.name, retTables);
   });
