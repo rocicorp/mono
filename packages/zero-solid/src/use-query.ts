@@ -5,7 +5,7 @@ import type {
   Query,
 } from '../../zero-advanced/src/mod.js';
 import {solidViewFactory, type QueryResultDetails} from './solid-view.js';
-import type {FullSchema} from '../../zero-schema/src/table-schema.js';
+import type {Schema} from '../../zero-schema/src/mod.js';
 
 export type QueryResult<TReturn> = readonly [
   Accessor<HumanReadable<TReturn>>,
@@ -13,7 +13,7 @@ export type QueryResult<TReturn> = readonly [
 ];
 
 export function useQuery<
-  TSchema extends FullSchema,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 >(querySignal: () => Query<TSchema, TTable, TReturn>): QueryResult<TReturn> {

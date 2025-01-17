@@ -1,5 +1,4 @@
 import type {Query} from '../../zql/src/query/query.js';
-import type {FullSchema} from './table-schema.js';
 import type {
   AssetPermissions as CompiledAssetPermissions,
   PermissionsConfig as CompiledPermissionsConfig,
@@ -13,18 +12,19 @@ import {
 import {staticParam} from '../../zql/src/query/query-impl.js';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.js';
 import {assert} from '../../shared/src/asserts.js';
+import type {Schema} from './mod.js';
 
 export const ANYONE_CAN = undefined;
 export const NOBODY_CAN = [];
 export type Anchor = 'authData' | 'preMutationRow';
 
-export type Queries<TSchema extends FullSchema> = {
-  [K in keyof TSchema['tables']]: Query<FullSchema, K & string>;
+export type Queries<TSchema extends Schema> = {
+  [K in keyof TSchema['tables']]: Query<Schema, K & string>;
 };
 
 type PermissionRule<
   TAuthDataShape,
-  TSchema extends FullSchema,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
 > = (
   authData: TAuthDataShape,
@@ -33,7 +33,7 @@ type PermissionRule<
 
 type AssetPermissions<
   TAuthDataShape,
-  TSchema extends FullSchema,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
 > = {
   // Why an array of rules?: https://github.com/rocicorp/mono/pull/3184/files#r1869680716
@@ -48,7 +48,7 @@ type AssetPermissions<
   delete?: PermissionRule<TAuthDataShape, TSchema, TTable>[] | undefined;
 };
 
-export type PermissionsConfig<TAuthDataShape, TSchema extends FullSchema> = {
+export type PermissionsConfig<TAuthDataShape, TSchema extends Schema> = {
   [K in keyof TSchema['tables']]?: {
     row?: AssetPermissions<TAuthDataShape, TSchema, K & string> | undefined;
     cell?:
@@ -62,10 +62,7 @@ export type PermissionsConfig<TAuthDataShape, TSchema extends FullSchema> = {
   };
 };
 
-export async function definePermissions<
-  TAuthDataShape,
-  TSchema extends FullSchema,
->(
+export async function definePermissions<TAuthDataShape, TSchema extends Schema>(
   schema: TSchema,
   definer: () =>
     | Promise<PermissionsConfig<TAuthDataShape, TSchema>>
@@ -73,7 +70,7 @@ export async function definePermissions<
 ): Promise<CompiledPermissionsConfig | undefined> {
   const expressionBuilders = {} as Record<
     string,
-    ExpressionBuilder<FullSchema, string>
+    ExpressionBuilder<Schema, string>
   >;
   for (const name of Object.keys(schema.tables)) {
     expressionBuilders[name] = new AuthQuery(schema, name).expressionBuilder();
@@ -83,9 +80,9 @@ export async function definePermissions<
   return compilePermissions(config, expressionBuilders);
 }
 
-function compilePermissions<TAuthDataShape, TSchema extends FullSchema>(
+function compilePermissions<TAuthDataShape, TSchema extends Schema>(
   authz: PermissionsConfig<TAuthDataShape, TSchema> | undefined,
-  expressionBuilders: Record<string, ExpressionBuilder<FullSchema, string>>,
+  expressionBuilders: Record<string, ExpressionBuilder<Schema, string>>,
 ): CompiledPermissionsConfig | undefined {
   if (!authz) {
     return undefined;
@@ -103,7 +100,7 @@ function compilePermissions<TAuthDataShape, TSchema extends FullSchema>(
 
 function compileRowConfig<
   TAuthDataShape,
-  TSchema extends FullSchema,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
 >(
   rowRules: AssetPermissions<TAuthDataShape, TSchema, TTable> | undefined,
@@ -136,7 +133,7 @@ function compileRowConfig<
  */
 function compileRules<
   TAuthDataShape,
-  TSchema extends FullSchema,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
 >(
   rules: PermissionRule<TAuthDataShape, TSchema, TTable>[] | undefined,
@@ -157,7 +154,7 @@ function compileRules<
 
 function compileCellConfig<
   TAuthDataShape,
-  TSchema extends FullSchema,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
 >(
   cellRules:

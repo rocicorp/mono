@@ -6,11 +6,11 @@ import type {
   ReadonlyJSONValue,
   TypedView,
 } from '../../zero-client/src/mod.js';
-import type {FullSchema} from '../../zero-schema/src/table-schema.js';
 import type {AdvancedQuery} from '../../zql/src/query/query-internal.js';
 import type {ResultType} from '../../zql/src/query/typed-view.js';
 import {useZero} from './use-zero.js';
 import type {HumanReadable} from '../../zql/src/query/query.js';
+import type {Schema} from '../../zero-client/src/mod.js';
 
 export type QueryResultDetails = Readonly<{
   type: ResultType;
@@ -22,7 +22,7 @@ export type QueryResult<TReturn> = readonly [
 ];
 
 export function useQuery<
-  TSchema extends FullSchema,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 >(
@@ -110,7 +110,7 @@ class ViewStore {
   #views = new Map<string, ViewWrapper<any, any, any>>();
 
   getView<
-    TSchema extends FullSchema,
+    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
   >(
@@ -181,7 +181,7 @@ const viewStore = new ViewStore();
  * 2. If a different subscribe function is passed during a re-render, React will re-subscribe to the store using the newly passed subscribe function. You can prevent this by declaring subscribe outside the component.
  */
 class ViewWrapper<
-  TSchema extends FullSchema,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 > {

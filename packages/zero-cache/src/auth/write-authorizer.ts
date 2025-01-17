@@ -25,7 +25,6 @@ import type {
   Policy,
 } from '../../../zero-schema/src/compiled-permissions.js';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.js';
-import type {FullSchema} from '../../../zero-schema/src/table-schema.js';
 import type {BuilderDelegate} from '../../../zql/src/builder/builder.js';
 import {
   bindStaticParameters,
@@ -410,7 +409,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     applicableRowPolicy: Policy | undefined,
     applicableCellPolicies: Policy[],
     authData: JWTPayload | undefined,
-    rowQuery: Query<FullSchema, string>,
+    rowQuery: Query<Schema, string>,
   ) {
     if (
       applicableRowPolicy === undefined &&
@@ -435,7 +434,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   #passesPolicy(
     policy: Policy | undefined,
     authData: JWTPayload | undefined,
-    rowQuery: Query<FullSchema, string>,
+    rowQuery: Query<Schema, string>,
   ) {
     if (policy === undefined) {
       return true;
@@ -443,7 +442,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     if (policy.length === 0) {
       return false;
     }
-    let rowQueryAst = (rowQuery as AuthQuery<FullSchema, string>).ast;
+    let rowQueryAst = (rowQuery as AuthQuery<Schema, string>).ast;
     rowQueryAst = bindStaticParameters(
       {
         ...rowQueryAst,

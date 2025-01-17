@@ -16,7 +16,6 @@ import type {Row as IVMRow} from '../../../zero-protocol/src/data.js';
 import {
   isOneHop,
   isTwoHop,
-  type FullSchema,
   type TableSchema,
 } from '../../../zero-schema/src/table-schema.js';
 import {buildPipeline, type BuilderDelegate} from '../builder/builder.js';
@@ -39,11 +38,12 @@ import type {
   Query,
 } from './query.js';
 import type {TypedView} from './typed-view.js';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.js';
 
-type AnyQuery = Query<FullSchema, string, any>;
+type AnyQuery = Query<Schema, string, any>;
 
 export function newQuery<
-  TSchema extends FullSchema,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
 >(
   delegate: QueryDelegate,
@@ -54,7 +54,7 @@ export function newQuery<
 }
 
 function newQueryWithDetails<
-  TSchema extends FullSchema,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 >(
@@ -90,7 +90,7 @@ export function staticParam(
 export const SUBQ_PREFIX = 'zsubq_';
 
 export abstract class AbstractQuery<
-  TSchema extends FullSchema,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
 > implements AdvancedQuery<TSchema, TTable, TReturn>
@@ -129,7 +129,7 @@ export abstract class AbstractQuery<
   protected abstract _system: System;
 
   protected abstract _newQuery<
-    TSchema extends FullSchema,
+    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
   >(
@@ -242,7 +242,7 @@ export abstract class AbstractQuery<
           },
           undefined,
         ),
-      ) as unknown as QueryImpl<FullSchema, string>;
+      ) as unknown as QueryImpl<Schema, string>;
 
       assert(isCompoundKey(firstRelation.sourceField), 'Invalid relationship');
       assert(isCompoundKey(firstRelation.destField), 'Invalid relationship');
@@ -531,7 +531,7 @@ export const astForTestingSymbol = Symbol();
 export const completedAstSymbol = Symbol();
 
 export class QueryImpl<
-  TSchema extends FullSchema,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
 > extends AbstractQuery<TSchema, TTable, TReturn> {
@@ -561,11 +561,7 @@ export class QueryImpl<
     return this._completeAst();
   }
 
-  protected _newQuery<
-    TSchema extends FullSchema,
-    TTable extends string,
-    TReturn,
-  >(
+  protected _newQuery<TSchema extends Schema, TTable extends string, TReturn>(
     schema: TSchema,
     tableName: TTable,
     ast: AST,
@@ -665,7 +661,7 @@ function addPrimaryKeysToAst(schema: TableSchema, ast: AST): AST {
 }
 
 function arrayViewFactory<
-  TSchema extends FullSchema,
+  TSchema extends Schema,
   TTable extends string,
   TReturn,
 >(

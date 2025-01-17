@@ -37,11 +37,6 @@ export type RelationshipsSchema = {
   readonly [name: string]: Relationship;
 };
 
-export type FullSchema = {
-  readonly tables: {readonly [table: string]: TableSchema};
-  readonly relationships: {readonly [table: string]: RelationshipsSchema};
-};
-
 type TypeNameToTypeMap = {
   string: string;
   number: number;
