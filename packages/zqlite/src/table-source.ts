@@ -210,7 +210,7 @@ export class TableSource implements Source {
     return {
       tableName: this.#table,
       columns: this.#columns,
-      primaryKey: this.#primaryKey,
+      primaryKey: this.#selectPrimaryKeyFor(connection.sort),
       sort: connection.sort,
       relationships: {},
       isHidden: false,
@@ -249,7 +249,6 @@ export class TableSource implements Source {
       compareRows: makeComparator(sort),
     };
     const schema = this.#getSchema(connection);
-    this.#assertUniqueIndexFieldsIncluded(sort);
 
     this.#connections.push(connection);
     return input;
@@ -514,11 +513,12 @@ export class TableSource implements Source {
     return query;
   }
 
-  #assertUniqueIndexFieldsIncluded(sort: Ordering) {
+  #selectPrimaryKeyFor(sort: Ordering) {
     const columns = new Set(sort.map(([col]) => col));
     for (const uniqueColumns of this.#uniqueIndexes.values()) {
       if (difference(uniqueColumns, columns).size === 0) {
-        return;
+        assert(uniqueColumns.size > 0);
+        return [...uniqueColumns] as unknown as PrimaryKey;
       }
     }
     throw new Error(

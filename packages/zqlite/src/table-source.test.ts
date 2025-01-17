@@ -315,7 +315,7 @@ describe('no primary key', () => {
     [['b', 'c'], false],
     [['a', 'c'], false],
   ] satisfies [PrimaryKey, boolean][])(
-    'requires primary  key to be uniquely indexed: %o',
+    'requires primary key to be uniquely indexed: %o',
     (key, valid) => {
       const createSource = () =>
         new TableSource('table-source.test.ts', db, 'foo', columns, key);
@@ -390,6 +390,10 @@ describe('no primary key', () => {
     'allows orderings with unique indexes: %o',
     (sort, output) => {
       const input = source.connect(sort);
+      const schema = input.getSchema();
+      expect(schema.sort.map(([col]) => col)).toEqual(
+        expect.arrayContaining([...schema.primaryKey]),
+      );
       expect([...input.fetch({})].map(node => node.row)).toEqual(output);
     },
   );
