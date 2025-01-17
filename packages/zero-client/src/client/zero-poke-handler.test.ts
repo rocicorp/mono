@@ -29,24 +29,20 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const schema = createSchema(
-  1,
-  {
-    issues: table('issues')
-      .columns({
-        id: string(),
-        title: string(),
-      })
-      .primaryKey('id'),
-    labels: table('labels')
-      .columns({
-        id: string(),
-        name: string(),
-      })
-      .primaryKey('id'),
-  },
-  {},
-);
+const schema = createSchema(1, {
+  issues: table('issues')
+    .columns({
+      id: string(),
+      title: string(),
+    })
+    .primaryKey('id'),
+  labels: table('labels')
+    .columns({
+      id: string(),
+      name: string(),
+    })
+    .primaryKey('id'),
+});
 
 test('completed poke plays on first raf', async () => {
   const onPokeErrorStub = vi.fn();

@@ -43,18 +43,14 @@ async function testBasics(userID: string) {
 
   const r = zeroForTest({
     userID,
-    schema: createSchema(
-      1,
-      {
-        e: table('e')
-          .columns({
-            id: string(),
-            value: number(),
-          })
-          .primaryKey('id'),
-      },
-      {},
-    ),
+    schema: createSchema(1, {
+      e: table('e')
+        .columns({
+          id: string(),
+          value: number(),
+        })
+        .primaryKey('id'),
+    }),
   });
 
   const q = r.query.e.limit(1);

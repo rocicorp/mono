@@ -73,7 +73,6 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
   const listContext = zbugsHistoryState?.zbugsListContext;
-
   const q = z.query.issue
     .where(idField, id)
     .related('emoji', emoji =>

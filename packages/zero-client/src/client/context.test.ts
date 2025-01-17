@@ -14,24 +14,20 @@ const testBatchViewUpdates = (applyViewUpdates: () => void) =>
   applyViewUpdates();
 
 test('getSource', () => {
-  const schema = createSchema(
-    1,
-    {
-      users: table('users')
-        .columns({
-          id: string(),
-          name: string(),
-        })
-        .primaryKey('id'),
-      userStates: table('userStates')
-        .columns({
-          userID: string(),
-          stateCode: string(),
-        })
-        .primaryKey('userID', 'stateCode'),
-    },
-    {},
-  );
+  const schema = createSchema(1, {
+    users: table('users')
+      .columns({
+        id: string(),
+        name: string(),
+      })
+      .primaryKey('id'),
+    userStates: table('userStates')
+      .columns({
+        userID: string(),
+        stateCode: string(),
+      })
+      .primaryKey('userID', 'stateCode'),
+  });
 
   const context = new ZeroContext(
     schema.tables,
@@ -91,18 +87,14 @@ test('getSource', () => {
     }
   `);
 });
-const schema = createSchema(
-  1,
-  {
-    t1: table('t1')
-      .columns({
-        id: string(),
-        name: string(),
-      })
-      .primaryKey('id'),
-  },
-  {},
-);
+const schema = createSchema(1, {
+  t1: table('t1')
+    .columns({
+      id: string(),
+      name: string(),
+    })
+    .primaryKey('id'),
+});
 
 test('processChanges', () => {
   const context = new ZeroContext(
@@ -203,24 +195,20 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
 });
 
 test('transactions', () => {
-  const schema = createSchema(
-    1,
-    {
-      server: table('server')
-        .columns({
-          id: string(),
-        })
-        .primaryKey('id'),
-      flair: table('flair')
-        .columns({
-          id: string(),
-          serverID: string(),
-          description: string(),
-        })
-        .primaryKey('id'),
-    },
-    {},
-  );
+  const schema = createSchema(1, {
+    server: table('server')
+      .columns({
+        id: string(),
+      })
+      .primaryKey('id'),
+    flair: table('flair')
+      .columns({
+        id: string(),
+        serverID: string(),
+        description: string(),
+      })
+      .primaryKey('id'),
+  });
 
   const context = new ZeroContext(
     schema.tables,

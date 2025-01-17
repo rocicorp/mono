@@ -4,19 +4,15 @@ import {createSchema, json, string, table} from '../mod.js';
 
 test('we can create rows with json columns and query those rows', async () => {
   const z = zeroForTest({
-    schema: createSchema(
-      1,
-      {
-        track: table('track')
-          .columns({
-            id: string(),
-            title: string(),
-            artists: json<string[]>(),
-          })
-          .primaryKey('id'),
-      },
-      {},
-    ),
+    schema: createSchema(1, {
+      track: table('track')
+        .columns({
+          id: string(),
+          title: string(),
+          artists: json<string[]>(),
+        })
+        .primaryKey('id'),
+    }),
   });
 
   await z.mutate.track.insert({

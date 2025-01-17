@@ -120,76 +120,70 @@ function createReplicaTables(db: Database) {
   db.exec(sqlSchema);
 }
 
-const schema = createSchema(
-  TEST_SCHEMA_VERSION,
-  {
-    user: table('user')
-      .columns({
-        id: string(),
-        role: string(),
-      })
-      .primaryKey('id'),
+const schema = createSchema(TEST_SCHEMA_VERSION, {
+  user: table('user')
+    .columns({
+      id: string(),
+      role: string(),
+    })
+    .primaryKey('id'),
 
-    roCell: table('roCell')
-      .columns({
-        id: string(),
-        a: string(),
-        b: string(),
-      })
-      .primaryKey('id'),
+  roCell: table('roCell')
+    .columns({
+      id: string(),
+      a: string(),
+      b: string(),
+    })
+    .primaryKey('id'),
 
-    roRow: table('roRow')
-      .columns({
-        id: string(),
-        a: string(),
-        b: string(),
-      })
-      .primaryKey('id'),
+  roRow: table('roRow')
+    .columns({
+      id: string(),
+      a: string(),
+      b: string(),
+    })
+    .primaryKey('id'),
 
-    adminOnlyCell: table('adminOnlyCell')
-      .columns({
-        id: string(),
-        a: string(),
-        adminLocked: boolean(),
-      })
-      .primaryKey('id'),
+  adminOnlyCell: table('adminOnlyCell')
+    .columns({
+      id: string(),
+      a: string(),
+      adminLocked: boolean(),
+    })
+    .primaryKey('id'),
 
-    adminOnlyRow: table('adminOnlyRow')
-      .columns({
-        id: string(),
-        a: string(),
-        adminLocked: boolean(),
-      })
-      .primaryKey('id'),
+  adminOnlyRow: table('adminOnlyRow')
+    .columns({
+      id: string(),
+      a: string(),
+      adminLocked: boolean(),
+    })
+    .primaryKey('id'),
 
-    loggedInRow: table('loggedInRow')
-      .columns({
-        id: string(),
-        a: string(),
-      })
-      .primaryKey('id'),
+  loggedInRow: table('loggedInRow')
+    .columns({
+      id: string(),
+      a: string(),
+    })
+    .primaryKey('id'),
 
-    userMatch: table('userMatch')
-      .columns({
-        id: string(),
-        a: string(),
-      })
-      .primaryKey('id'),
+  userMatch: table('userMatch')
+    .columns({
+      id: string(),
+      a: string(),
+    })
+    .primaryKey('id'),
 
-    dataTypeTest: table('dataTypeTest')
-      .columns({
-        id: string(),
-        j: json().optional(),
-        b: boolean().optional(),
-        r: number().optional(),
-        i: number().optional(),
-      })
-      .primaryKey('id'),
-  },
-  {
-    // No relationships were defined in the original schema
-  },
-);
+  dataTypeTest: table('dataTypeTest')
+    .columns({
+      id: string(),
+      j: json().optional(),
+      b: boolean().optional(),
+      r: number().optional(),
+      i: number().optional(),
+    })
+    .primaryKey('id'),
+});
 
 type Schema = typeof schema;
 

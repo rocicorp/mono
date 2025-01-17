@@ -83,18 +83,14 @@ test('onOnlineChange callback', async () => {
 
   const z = zeroForTest({
     logLevel: 'debug',
-    schema: createSchema(
-      1,
-      {
-        foo: table('foo')
-          .columns({
-            id: string(),
-            val: string(),
-          })
-          .primaryKey('id'),
-      },
-      {},
-    ),
+    schema: createSchema(1, {
+      foo: table('foo')
+        .columns({
+          id: string(),
+          val: string(),
+        })
+        .primaryKey('id'),
+    }),
     onOnlineChange: online => {
       if (online) {
         onlineCount++;
@@ -512,18 +508,14 @@ suite('initConnection', () => {
 
   test('sends desired queries patch in sec-protocol header', async () => {
     const r = zeroForTest({
-      schema: createSchema(
-        1,
-        {
-          e: table('e')
-            .columns({
-              id: string(),
-              value: string(),
-            })
-            .primaryKey('id'),
-        },
-        {},
-      ),
+      schema: createSchema(1, {
+        e: table('e')
+          .columns({
+            id: string(),
+            value: string(),
+          })
+          .primaryKey('id'),
+      }),
     });
 
     const view = r.query.e.materialize();
@@ -560,18 +552,14 @@ suite('initConnection', () => {
   test('sends desired queries patch in `initConnectionMessage` when the patch is over maxHeaderLength', async () => {
     const r = zeroForTest({
       maxHeaderLength: 0,
-      schema: createSchema(
-        1,
-        {
-          e: table('e')
-            .columns({
-              id: string(),
-              value: string(),
-            })
-            .primaryKey('id'),
-        },
-        {},
-      ),
+      schema: createSchema(1, {
+        e: table('e')
+          .columns({
+            id: string(),
+            value: string(),
+          })
+          .primaryKey('id'),
+      }),
     });
     const mockSocket = await r.socket;
 
@@ -605,18 +593,14 @@ suite('initConnection', () => {
 
   test('sends changeDesiredQueries if new queries are added after initConnection but before connected', async () => {
     const r = zeroForTest({
-      schema: createSchema(
-        1,
-        {
-          e: table('e')
-            .columns({
-              id: string(),
-              value: string(),
-            })
-            .primaryKey('id'),
-        },
-        {},
-      ),
+      schema: createSchema(1, {
+        e: table('e')
+          .columns({
+            id: string(),
+            value: string(),
+          })
+          .primaryKey('id'),
+      }),
     });
 
     const mockSocket = await r.socket;
@@ -664,18 +648,14 @@ suite('initConnection', () => {
 
   test('changeDesiredQueries does not include queries sent with initConnection', async () => {
     const r = zeroForTest({
-      schema: createSchema(
-        1,
-        {
-          e: table('e')
-            .columns({
-              id: string(),
-              value: string(),
-            })
-            .primaryKey('id'),
-        },
-        {},
-      ),
+      schema: createSchema(1, {
+        e: table('e')
+          .columns({
+            id: string(),
+            value: string(),
+          })
+          .primaryKey('id'),
+      }),
     });
 
     const view1 = r.query.e.materialize();
@@ -693,18 +673,14 @@ suite('initConnection', () => {
 
   test('changeDesiredQueries does include removal of a query sent with initConnection if it was removed before `connected`', async () => {
     const r = zeroForTest({
-      schema: createSchema(
-        1,
-        {
-          e: table('e')
-            .columns({
-              id: string(),
-              value: string(),
-            })
-            .primaryKey('id'),
-        },
-        {},
-      ),
+      schema: createSchema(1, {
+        e: table('e')
+          .columns({
+            id: string(),
+            value: string(),
+          })
+          .primaryKey('id'),
+      }),
     });
 
     const view1 = r.query.e.materialize();
@@ -1128,18 +1104,14 @@ test('smokeTest', async () => {
     const serverOptions = c.enableServer ? {} : {server: null};
     const r = zeroForTest({
       ...serverOptions,
-      schema: createSchema(
-        1,
-        {
-          issues: table('issues')
-            .columns({
-              id: string(),
-              value: number(),
-            })
-            .primaryKey('id'),
-        },
-        {},
-      ),
+      schema: createSchema(1, {
+        issues: table('issues')
+          .columns({
+            id: string(),
+            value: number(),
+          })
+          .primaryKey('id'),
+      }),
     });
 
     const calls: Array<Array<unknown>> = [];
@@ -2055,18 +2027,14 @@ test('kvStore option', async () => {
       server: null,
       userID,
       kvStore,
-      schema: createSchema(
-        1,
-        {
-          e: table('e')
-            .columns({
-              id: string(),
-              value: number(),
-            })
-            .primaryKey('id'),
-        },
-        {},
-      ),
+      schema: createSchema(1, {
+        e: table('e')
+          .columns({
+            id: string(),
+            value: number(),
+          })
+          .primaryKey('id'),
+      }),
     });
     const idIsAView = r.query.e.where('id', '=', 'a').materialize();
     const allDataView = r.query.e.materialize();
@@ -2156,25 +2124,21 @@ test('Zero close should stop timeout, close delayed', async () => {
 
 test('ensure we get the same query object back', () => {
   const z = zeroForTest({
-    schema: createSchema(
-      1,
-      {
-        issue: table('issue')
-          .columns({
-            id: string(),
-            title: string(),
-          })
-          .primaryKey('id'),
-        comment: table('comment')
-          .columns({
-            id: string(),
-            issueID: string(),
-            text: string(),
-          })
-          .primaryKey('id'),
-      },
-      {},
-    ),
+    schema: createSchema(1, {
+      issue: table('issue')
+        .columns({
+          id: string(),
+          title: string(),
+        })
+        .primaryKey('id'),
+      comment: table('comment')
+        .columns({
+          id: string(),
+          issueID: string(),
+          text: string(),
+        })
+        .primaryKey('id'),
+    }),
   });
   const issueQuery1 = z.query.issue;
   const issueQuery2 = z.query.issue;
@@ -2189,25 +2153,21 @@ test('ensure we get the same query object back', () => {
 
 test('the type of collection should be inferred from options with parse', () => {
   const r = zeroForTest({
-    schema: createSchema(
-      1,
-      {
-        issue: table('issue')
-          .columns({
-            id: string(),
-            title: string(),
-          })
-          .primaryKey('id'),
-        comment: table('comment')
-          .columns({
-            id: string(),
-            issueID: string(),
-            text: string(),
-          })
-          .primaryKey('id'),
-      },
-      {},
-    ),
+    schema: createSchema(1, {
+      issue: table('issue')
+        .columns({
+          id: string(),
+          title: string(),
+        })
+        .primaryKey('id'),
+      comment: table('comment')
+        .columns({
+          id: string(),
+          issueID: string(),
+          text: string(),
+        })
+        .primaryKey('id'),
+    }),
   });
 
   const c = r.query;
@@ -2222,32 +2182,28 @@ test('the type of collection should be inferred from options with parse', () => 
 suite('CRUD', () => {
   const makeZero = () =>
     zeroForTest({
-      schema: createSchema(
-        1,
-        {
-          issue: table('issue')
-            .columns({
-              id: string(),
-              title: string().optional(),
-            })
-            .primaryKey('id'),
-          comment: table('comment')
-            .columns({
-              id: string(),
-              issueID: string(),
-              text: string().optional(),
-            })
-            .primaryKey('id'),
-          compoundPKTest: table('compoundPKTest')
-            .columns({
-              id1: string(),
-              id2: string(),
-              text: string(),
-            })
-            .primaryKey('id1', 'id2'),
-        },
-        {},
-      ),
+      schema: createSchema(1, {
+        issue: table('issue')
+          .columns({
+            id: string(),
+            title: string().optional(),
+          })
+          .primaryKey('id'),
+        comment: table('comment')
+          .columns({
+            id: string(),
+            issueID: string(),
+            text: string().optional(),
+          })
+          .primaryKey('id'),
+        compoundPKTest: table('compoundPKTest')
+          .columns({
+            id1: string(),
+            id2: string(),
+            text: string(),
+          })
+          .primaryKey('id1', 'id2'),
+      }),
     });
 
   test('create', async () => {
@@ -2390,18 +2346,14 @@ suite('CRUD', () => {
 
   test('do not expose _zero_crud', () => {
     const z = zeroForTest({
-      schema: createSchema(
-        1,
-        {
-          issue: table('issue')
-            .columns({
-              id: string(),
-              title: string(),
-            })
-            .primaryKey('id'),
-        },
-        {},
-      ),
+      schema: createSchema(1, {
+        issue: table('issue')
+          .columns({
+            id: string(),
+            title: string(),
+          })
+          .primaryKey('id'),
+      }),
     });
 
     expect(
@@ -2425,28 +2377,24 @@ suite('CRUD with compound primary key', () => {
   };
   const makeZero = () =>
     zeroForTest({
-      schema: createSchema(
-        1,
-        {
-          issue: table('issue')
-            .columns({
-              ids: string(),
-              idn: number(),
-              title: string(),
-            })
-            .primaryKey('idn', 'ids'),
-          comment: table('comment')
-            .columns({
-              ids: string(),
-              idn: number(),
-              issueIDs: string(),
-              issueIDn: number(),
-              text: string(),
-            })
-            .primaryKey('idn', 'ids'),
-        },
-        {},
-      ),
+      schema: createSchema(1, {
+        issue: table('issue')
+          .columns({
+            ids: string(),
+            idn: number(),
+            title: string(),
+          })
+          .primaryKey('idn', 'ids'),
+        comment: table('comment')
+          .columns({
+            ids: string(),
+            idn: number(),
+            issueIDs: string(),
+            issueIDn: number(),
+            text: string(),
+          })
+          .primaryKey('idn', 'ids'),
+      }),
     });
 
   test('create', async () => {
@@ -2552,25 +2500,21 @@ suite('CRUD with compound primary key', () => {
 
 test('mutate is a function for batching', async () => {
   const z = zeroForTest({
-    schema: createSchema(
-      1,
-      {
-        issue: table('issue')
-          .columns({
-            id: string(),
-            title: string(),
-          })
-          .primaryKey('id'),
-        comment: table('comment')
-          .columns({
-            id: string(),
-            issueID: string(),
-            text: string(),
-          })
-          .primaryKey('id'),
-      },
-      {},
-    ),
+    schema: createSchema(1, {
+      issue: table('issue')
+        .columns({
+          id: string(),
+          title: string(),
+        })
+        .primaryKey('id'),
+      comment: table('comment')
+        .columns({
+          id: string(),
+          issueID: string(),
+          text: string(),
+        })
+        .primaryKey('id'),
+    }),
   });
   const issueView = z.query.issue.materialize();
   const commentView = z.query.comment.materialize();
@@ -2606,25 +2550,21 @@ test('mutate is a function for batching', async () => {
 
 test('calling mutate on the non batch version should throw inside a batch', async () => {
   const z = zeroForTest({
-    schema: createSchema(
-      1,
-      {
-        issue: table('issue')
-          .columns({
-            id: string(),
-            title: string(),
-          })
-          .primaryKey('id'),
-        comment: table('comment')
-          .columns({
-            id: string(),
-            issueID: string(),
-            text: string(),
-          })
-          .primaryKey('id'),
-      },
-      {},
-    ),
+    schema: createSchema(1, {
+      issue: table('issue')
+        .columns({
+          id: string(),
+          title: string(),
+        })
+        .primaryKey('id'),
+      comment: table('comment')
+        .columns({
+          id: string(),
+          issueID: string(),
+          text: string(),
+        })
+        .primaryKey('id'),
+    }),
   });
   const commentView = z.query.comment.materialize();
   const issueView = z.query.issue.materialize();

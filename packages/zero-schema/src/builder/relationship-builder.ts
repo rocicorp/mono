@@ -79,18 +79,3 @@ function many(
     destSchema: arg.destSchema.schema.name,
   }));
 }
-
-// class RelationshipBuilder<TShape extends Relationship> {
-//   readonly #shape: TShape;
-//   constructor(shape: TShape) {
-//     this.#shape = shape;
-//   }
-
-//   many() {}
-
-//   one() {}
-
-//   build() {
-//     return this.#shape;
-//   }
-// }
