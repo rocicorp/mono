@@ -46,15 +46,15 @@ jobs:
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
-          --threshold-measure file-size \
-          --threshold-test percentage \
-          --threshold-upper-boundary 0.05 \
-          --err \
           --branch "$GITHUB_HEAD_REF" \
           --start-point "$GITHUB_BASE_REF" \
           --start-point-hash '${{ github.event.pull_request.base.sha }}' \
           --start-point-clone-thresholds \
           --start-point-reset \
+          --threshold-measure file-size \
+          --threshold-test percentage \
+          --threshold-upper-boundary 0.02 \
+          --err \
           --file-size out/zero-package.tgz \
           --file-size out/zero.js.br \
           --file-size out/zero.js

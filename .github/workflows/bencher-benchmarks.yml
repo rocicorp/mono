@@ -46,7 +46,7 @@ jobs:
           --start-point main \
           --threshold-measure file-size \
           --threshold-test percentage \
-          --threshold-upper-boundary 0.05 \
+          --threshold-upper-boundary 0.02 \
           --err \
           --file-size out/zero-package.tgz \
           --file-size out/zero.js.br \
