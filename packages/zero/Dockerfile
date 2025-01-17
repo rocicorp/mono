@@ -7,6 +7,7 @@ ARG NPM_TOKEN
 RUN test -n "$ZERO_VERSION"
 RUN test -n "$NPM_TOKEN"
 
+RUN apk add --update curl
 RUN mkdir -p /root/.npm && echo "${NPM_TOKEN}" > /root/.npmrc
 
 RUN mkdir -p /opt/app
