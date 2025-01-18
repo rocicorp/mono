@@ -210,7 +210,11 @@ export class PipelineDriver {
     }
 
     const res = input.fetch({});
-    const streamer = new Streamer().accumulate(hash, schema, toAdds(res));
+    const streamer = new Streamer(must(this.#tableSpecs)).accumulate(
+      hash,
+      schema,
+      toAdds(res),
+    );
     yield* streamer.stream();
 
     const hydrationTimeMs = Date.now() - start;
@@ -367,7 +371,7 @@ export class PipelineDriver {
 
   #startAccumulating() {
     assert(this.#streamer === null);
-    this.#streamer = new Streamer();
+    this.#streamer = new Streamer(must(this.#tableSpecs));
   }
 
   #stopAccumulating(): Streamer {
@@ -379,6 +383,12 @@ export class PipelineDriver {
 }
 
 class Streamer {
+  #tableSpecs: Map<string, LiteAndZqlSpec>;
+
+  constructor(tableSpecs: Map<string, LiteAndZqlSpec>) {
+    this.#tableSpecs = tableSpecs;
+  }
+
   readonly #changes: [
     hash: string,
     schema: SourceSchema,
@@ -446,7 +456,14 @@ class Streamer {
     op: 'add' | 'remove' | 'edit',
     nodes: Iterable<Node>,
   ): Iterable<RowChange> {
-    const {tableName: table, primaryKey, system} = schema;
+    const {tableName: table, system} = schema;
+
+    // The primaryKey here is used for referencing rows in CVR and del-row
+    // patches sent in pokes. This is the "unionKey", i.e. the union of all
+    // columns in unique indexes. This allows clients to migrate from, e.g.
+    // pk1 to pk2, as del-patches will be keyed by [...pk1, ...pk2].
+    const primaryKey = must(this.#tableSpecs.get(table)).tableSpec.unionKey;
+
     // We do not sync rows gathered by the permissions
     // system to the client.
     if (system === 'permissions') {

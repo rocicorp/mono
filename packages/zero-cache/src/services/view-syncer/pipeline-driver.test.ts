@@ -710,6 +710,7 @@ describe('view-syncer/pipeline-driver', () => {
           "rowKey": {
             "issueID": "1",
             "labelID": "1",
+            "legacyID": "1-1",
           },
           "table": "issueLabels",
           "type": "remove",
@@ -789,6 +790,7 @@ describe('view-syncer/pipeline-driver', () => {
           "rowKey": {
             "issueID": "1",
             "labelID": "1",
+            "legacyID": "1-1",
           },
           "table": "issueLabels",
           "type": "add",
@@ -937,6 +939,7 @@ describe('view-syncer/pipeline-driver', () => {
           "rowKey": {
             "issueID": "2",
             "labelID": "1",
+            "legacyID": "2-1",
           },
           "table": "issueLabels",
           "type": "add",
@@ -965,6 +968,7 @@ describe('view-syncer/pipeline-driver', () => {
           "rowKey": {
             "issueID": "2",
             "labelID": "1",
+            "legacyID": "2-1",
           },
           "table": "issueLabels",
           "type": "add",
@@ -1002,6 +1006,7 @@ describe('view-syncer/pipeline-driver', () => {
           "rowKey": {
             "issueID": "2",
             "labelID": "1",
+            "legacyID": "2-1",
           },
           "table": "issueLabels",
           "type": "remove",
@@ -1030,6 +1035,7 @@ describe('view-syncer/pipeline-driver', () => {
           "rowKey": {
             "issueID": "2",
             "labelID": "1",
+            "legacyID": "2-1",
           },
           "table": "issueLabels",
           "type": "remove",
