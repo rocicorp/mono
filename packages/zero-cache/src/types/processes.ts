@@ -5,6 +5,7 @@ import {
   type Serializable,
 } from 'node:child_process';
 import EventEmitter from 'node:events';
+import {platform} from 'node:os';
 import path from 'node:path';
 import {pid} from 'node:process';
 
@@ -182,7 +183,11 @@ export function childWorker(
     return child;
   }
   const child = fork(moduleUrl, args, {
-    detached: true, // do not automatically propagate SIGINT
+    // For production / non-windows, set `detached` to `true` so that SIGINT is
+    // not automatically propagated and graceful shutdown happens as intended.
+    // For Win32, detached: true causes all subprocesses to open in separate
+    // terminals and breaks inter-process kill signals, so set it to false.
+    detached: platform() !== 'win32',
     serialization: 'advanced', // use structured clone for IPC
     env,
     // silent: true,
