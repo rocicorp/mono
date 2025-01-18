@@ -4,11 +4,13 @@ import {literal} from 'pg-format';
 import postgres from 'postgres';
 import {assert} from '../../../../../../shared/src/asserts.js';
 import * as v from '../../../../../../shared/src/valita.js';
+import {Default} from '../../../../db/postgres-replica-identity-enum.js';
 import type {PostgresDB, PostgresTransaction} from '../../../../types/pg.js';
 import {id} from '../../../../types/sql.js';
 import type {ShardConfig} from '../shard-config.js';
 import {createEventTriggerStatements} from './ddl.js';
 import {
+  getPublicationInfo,
   publishedSchema,
   type PublicationInfo,
   type PublishedSchema,
@@ -201,6 +203,8 @@ export async function setupTablesAndReplication(
   // Setup the global tables and shard tables / publications.
   await tx.unsafe(GLOBAL_SETUP + shardSetup(id, allPublications));
 
+  await setReplicaIdentityForTablesWithoutPrimaryKeys(lc, tx, allPublications);
+
   try {
     await tx.savepoint(sub => sub.unsafe(triggerSetup(id, allPublications)));
   } catch (e) {
@@ -243,4 +247,42 @@ export function validatePublications(
   });
 
   published.tables.forEach(table => validate(lc, shardID, table));
+}
+
+async function setReplicaIdentityForTablesWithoutPrimaryKeys(
+  lc: LogContext,
+  db: PostgresDB,
+  publications: string[],
+) {
+  const pubs = await getPublicationInfo(db, publications);
+  for (const table of pubs.tables) {
+    if (!table.primaryKey?.length && table.replicaIdentity === Default) {
+      // Look for an index that can serve as the REPLICA IDENTITY USING INDEX. It must be:
+      // - UNIQUE
+      // - NOT NULL columns
+      // - not deferrable (i.e. isImmediate)
+      // - not partial (are already filtered out)
+      //
+      // https://www.postgresql.org/docs/current/sql-altertable.html#SQL-ALTERTABLE-REPLICA-IDENTITY
+      const {schema, name: tableName} = table;
+      for (const {columns, name: indexName} of pubs.indexes.filter(
+        idx =>
+          idx.schema === schema &&
+          idx.tableName === tableName &&
+          idx.unique &&
+          idx.isImmediate,
+      )) {
+        if (Object.keys(columns).some(col => !table.columns[col].notNull)) {
+          continue; // Only indexes with all NOT NULL columns are suitable.
+        }
+        lc.info?.(
+          `setting "${indexName}" as the REPLICA IDENTITY for "${tableName}"`,
+        );
+        await db`ALTER TABLE ${db(schema)}.${db(
+          tableName,
+        )} REPLICA IDENTITY USING INDEX ${db(indexName)}`;
+        break;
+      }
+    }
+  }
 }
