@@ -39,6 +39,7 @@ describe('tables/published', () => {
             oid: expect.any(Number),
             schema: 'zero',
             name: 'clients',
+            replicaIdentity: 'd',
             columns: {
               clientID: {
                 pos: 1,
@@ -112,6 +113,7 @@ describe('tables/published', () => {
             oid: expect.any(Number),
             schema: 'test',
             name: 'users',
+            replicaIdentity: 'd',
             columns: {
               ['user_id']: {
                 pos: 1,
@@ -282,6 +284,7 @@ describe('tables/published', () => {
             oid: expect.any(Number),
             schema: 'test',
             name: 'users',
+            replicaIdentity: 'd',
             columns: {
               ['user_id']: {
                 pos: 1,
@@ -361,6 +364,7 @@ describe('tables/published', () => {
             oid: expect.any(Number),
             schema: 'test',
             name: 'users',
+            replicaIdentity: 'd',
             columns: {
               ['user_id']: {
                 pos: 1,
@@ -443,6 +447,7 @@ describe('tables/published', () => {
             oid: expect.any(Number),
             schema: 'test',
             name: 'users',
+            replicaIdentity: 'd',
             columns: {
               ['user_id']: {
                 pos: 1,
@@ -537,6 +542,7 @@ describe('tables/published', () => {
             oid: expect.any(Number),
             schema: 'test',
             name: 'users',
+            replicaIdentity: 'd',
             columns: {
               ['user_id']: {
                 pos: 1,
@@ -619,6 +625,7 @@ describe('tables/published', () => {
             oid: expect.any(Number),
             schema: 'test',
             name: 'issues',
+            replicaIdentity: 'd',
             columns: {
               ['issue_id']: {
                 pos: 1,
@@ -721,6 +728,7 @@ describe('tables/published', () => {
             oid: expect.any(Number),
             schema: 'test',
             name: 'issues',
+            replicaIdentity: 'd',
             columns: {
               ['issue_id']: {
                 pos: 1,
@@ -793,6 +801,7 @@ describe('tables/published', () => {
             oid: expect.any(Number),
             schema: 'zero',
             name: 'clients',
+            replicaIdentity: 'd',
             columns: {
               clientID: {
                 pos: 1,
@@ -885,6 +894,7 @@ describe('tables/published', () => {
             oid: expect.any(Number),
             schema: 'test',
             name: 'issues',
+            replicaIdentity: 'd',
             columns: {
               ['issue_id']: {
                 pos: 1,
@@ -976,6 +986,7 @@ describe('tables/published', () => {
             oid: expect.any(Number),
             schema: 'test',
             name: 'issues',
+            replicaIdentity: 'd',
             columns: {
               ['issue_id']: {
                 pos: 1,
@@ -1065,6 +1076,7 @@ describe('tables/published', () => {
             oid: expect.any(Number),
             schema: 'test',
             name: 'issues',
+            replicaIdentity: 'i',
             columns: {
               ['issue_id']: {
                 pos: 1,
@@ -1149,6 +1161,7 @@ describe('tables/published', () => {
             oid: expect.any(Number),
             schema: 'test',
             name: 'foo',
+            replicaIdentity: 'd',
             columns: {
               ['id']: {
                 pos: 1,
@@ -1247,6 +1260,7 @@ describe('tables/published', () => {
             oid: expect.any(Number),
             schema: 'test',
             name: 'issues',
+            replicaIdentity: 'd',
             columns: {
               ['issue_id']: {
                 pos: 1,
@@ -1323,6 +1337,7 @@ describe('tables/published', () => {
             oid: expect.any(Number),
             schema: 'test',
             name: 'foo',
+            replicaIdentity: 'd',
             columns: {
               ['id']: {
                 pos: 1,
