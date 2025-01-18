@@ -10,6 +10,7 @@ WITH published_columns AS (SELECT
   pc.oid::int8 AS "oid",
   nspname AS "schema", 
   pc.relname AS "name", 
+  pc.relreplident AS "replicaIdentity",
   attnum AS "pos", 
   attname AS "col", 
   pt.typname AS "type", 
@@ -39,6 +40,7 @@ tables AS (SELECT json_build_object(
   'oid', "oid",
   'schema', "schema", 
   'name', "name", 
+  'replicaIdentity', "replicaIdentity",
   'columns', json_object_agg(
     DISTINCT
     col,
@@ -69,7 +71,7 @@ tables AS (SELECT json_build_object(
     "publication", 
     jsonb_build_object('rowFilter', "rowFilter")
   )
-) AS "table" FROM published_columns GROUP BY "schema", "name", "oid")
+) AS "table" FROM published_columns GROUP BY "schema", "name", "oid", "replicaIdentity")
 
 SELECT COALESCE(json_agg("table"), '[]'::json) as "tables" FROM tables
   `;

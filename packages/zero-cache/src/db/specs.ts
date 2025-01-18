@@ -2,6 +2,7 @@ import type {DeepReadonly} from '../../../shared/src/json.js';
 import * as v from '../../../shared/src/valita.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
+import * as PostgresReplicaIdentity from './postgres-replica-identity-enum.js';
 import * as PostgresTypeClass from './postgres-type-class-enum.js';
 
 export const pgTypeClassSchema = v.union(
@@ -12,6 +13,13 @@ export const pgTypeClassSchema = v.union(
   v.literal(PostgresTypeClass.Pseudo),
   v.literal(PostgresTypeClass.Range),
   v.literal(PostgresTypeClass.Multirange),
+);
+
+export const pgReplicaIdentitySchema = v.union(
+  v.literal(PostgresReplicaIdentity.Default),
+  v.literal(PostgresReplicaIdentity.Nothing),
+  v.literal(PostgresReplicaIdentity.Full),
+  v.literal(PostgresReplicaIdentity.Index),
 );
 
 export const columnSpec = v.object({
@@ -42,6 +50,7 @@ export const tableSpec = liteTableSpec.extend({
 export const publishedTableSpec = tableSpec.extend({
   oid: v.number(),
   columns: v.record(publishedColumnSpec),
+  replicaIdentity: pgReplicaIdentitySchema.optional(),
   publications: v.record(v.object({rowFilter: v.string().nullable()})),
 });
 
