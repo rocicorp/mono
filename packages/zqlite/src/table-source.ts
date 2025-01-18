@@ -458,7 +458,7 @@ export class TableSource implements Source {
   getRow(rowKey: Row): Row | undefined {
     const stmt = this.#getRowStmt(rowKey);
     const row = this.#stmts.cache.use(stmt, cached =>
-      cached.statement.safeIntegers(true).get<Row>(...Object.values(rowKey)),
+      cached.statement.safeIntegers(true).get<Row>(Object.values(rowKey)),
     );
     if (row) {
       return fromSQLiteTypes(this.#columns, row);
