@@ -181,18 +181,6 @@ export class TableSource implements Source {
           )} LIMIT 1`,
         ),
       ),
-      getRow: db
-        .prepare(
-          compile(
-            sql`SELECT ${this.#allColumns} FROM ${sql.ident(
-              this.#table,
-            )} WHERE ${sql.join(
-              this.#primaryKey.map(k => sql`${sql.ident(k)}=?`),
-              sql` AND`,
-            )}`,
-          ),
-        )
-        .safeIntegers(true),
     };
     this.#dbCache.set(db, stmts);
     return stmts;
