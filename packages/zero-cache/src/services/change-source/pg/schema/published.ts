@@ -98,7 +98,8 @@ export function indexDefinitionsQuery(publications: string[]) {
       index_column.name as "col",
       CASE WHEN pg_index.indoption[index_column.pos-1] & 1 = 1 THEN 'DESC' ELSE 'ASC' END as "dir",
       pg_index.indisunique as "unique",
-      pg_index.indisreplident as "isReplicaIdentity"
+      pg_index.indisreplident as "isReplicaIdentity",
+      pg_index.indimmediate as "isImmediate"
     FROM pg_indexes
     JOIN pg_namespace ON pg_indexes.schemaname = pg_namespace.nspname
     JOIN pg_class pc ON
@@ -130,9 +131,10 @@ export function indexDefinitionsQuery(publications: string[]) {
       'name', "name",
       'unique', "unique",
       'isReplicaIdentity', "isReplicaIdentity",
+      'isImmediate', "isImmediate",
       'columns', json_object_agg(DISTINCT "col", "dir")
     ) AS index FROM indexed_columns 
-      GROUP BY "schema", "tableName", "name", "unique", "isReplicaIdentity")
+      GROUP BY "schema", "tableName", "name", "unique", "isReplicaIdentity", "isImmediate")
 
     SELECT COALESCE(json_agg("index"), '[]'::json) as "indexes" FROM indexes
   `;

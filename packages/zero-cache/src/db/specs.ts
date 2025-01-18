@@ -102,6 +102,7 @@ export type IndexSpec = DeepReadonly<v.Infer<typeof indexSpec>>;
 
 export const publishedIndexSpec = indexSpec.extend({
   isReplicaIdentity: v.boolean().optional(),
+  isImmediate: v.boolean().optional(),
 });
 
 export type PublishedIndexSpec = DeepReadonly<
