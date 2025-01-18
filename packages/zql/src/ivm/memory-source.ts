@@ -136,7 +136,7 @@ export class MemorySource implements Source {
       destroy: () => {
         this.#disconnect(input);
       },
-      appliedFilters: !transformedFilters.conditionsRemoved,
+      fullyAppliedFilters: !transformedFilters.conditionsRemoved,
     };
 
     const connection: Connection = {
