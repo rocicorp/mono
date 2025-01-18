@@ -1406,7 +1406,7 @@ test('bind static parameters', () => {
   `);
 });
 
-test('empty or - nothing goes through', () => {
+test.only('empty or - nothing goes through', () => {
   const {sources, getSource} = testSources();
   const sink = new Catch(
     buildPipeline(

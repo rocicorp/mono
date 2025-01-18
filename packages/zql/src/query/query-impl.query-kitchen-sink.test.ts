@@ -12,10 +12,19 @@ function addData(queryDelegate: QueryDelegate) {
   const labelSource = must(queryDelegate.getSource('label'));
   const issueLabelSource = must(queryDelegate.getSource('issueLabel'));
 
-  userSource.push({type: 'add', row: {id: '001', name: 'Alice'}});
-  userSource.push({type: 'add', row: {id: '002', name: 'Bob'}});
-  userSource.push({type: 'add', row: {id: '003', name: 'Charlie'}});
-  userSource.push({type: 'add', row: {id: '004', name: 'Daniel'}});
+  userSource.push({
+    type: 'add',
+    row: {id: '001', name: 'Alice', metadata: null},
+  });
+  userSource.push({type: 'add', row: {id: '002', name: 'Bob', metadata: null}});
+  userSource.push({
+    type: 'add',
+    row: {id: '003', name: 'Charlie', metadata: {foo: 1}},
+  });
+  userSource.push({
+    type: 'add',
+    row: {id: '004', name: 'Daniel', metadata: null},
+  });
 
   issueSource.push({
     type: 'add',

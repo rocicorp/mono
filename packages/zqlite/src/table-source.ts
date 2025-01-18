@@ -498,10 +498,12 @@ export class TableSource implements Source {
         gatherStartConstraints(start, reverse, order, this.#columns),
       );
     }
+    console.log(constraints.length);
 
     if (filters) {
       constraints.push(optionalFiltersToSQL(filters));
     }
+    console.log(constraints.length);
 
     if (constraints.length > 0) {
       query = sql`${query} WHERE ${sql.join(constraints, sql` AND `)}`;

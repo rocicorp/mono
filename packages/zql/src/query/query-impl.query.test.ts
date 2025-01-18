@@ -88,14 +88,14 @@ function addData(queryDelegate: QueryDelegate) {
       ownerId: null,
     },
   });
-
   commentSource.push({
     type: 'add',
     row: {
       id: '0001',
       authorId: '0001',
       issueId: '0001',
-      body: 'comment 1',
+      text: 'comment 1',
+      createdAt: 1,
     },
   });
   commentSource.push({
@@ -104,7 +104,8 @@ function addData(queryDelegate: QueryDelegate) {
       id: '0002',
       authorId: '0002',
       issueId: '0001',
-      body: 'comment 2',
+      text: 'comment 2',
+      createdAt: 2,
     },
   });
   revisionSource.push({
@@ -450,15 +451,17 @@ describe('joins and filters', () => {
           "comments": [
             {
               "authorId": "0001",
-              "body": "comment 1",
+              "text": "comment 1",
               "id": "0001",
               "issueId": "0001",
+              "createdAt": 1
             },
             {
               "authorId": "0002",
-              "body": "comment 2",
+              "text": "comment 2",
               "id": "0002",
               "issueId": "0001",
+              "createdAt": 2
             },
           ],
           "description": "description 1",
@@ -725,15 +728,17 @@ test('run', () => {
         "comments": [
           {
             "authorId": "0001",
-            "body": "comment 1",
+            "text": "comment 1",
             "id": "0001",
             "issueId": "0001",
+            "createdAt": 1
           },
           {
             "authorId": "0002",
-            "body": "comment 2",
+            "text": "comment 2",
             "id": "0002",
             "issueId": "0001",
+            "createdAt": 2
           },
         ],
         "description": "description 1",
