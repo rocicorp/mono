@@ -1,6 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {TestLogSink} from '../../../../../../shared/src/logging-test-utils.js';
+import {Index} from '../../../../db/postgres-replica-identity-enum.js';
 import {expectTables, initDB, testDBs} from '../../../../test/db.js';
 import type {PostgresDB} from '../../../../types/pg.js';
 import {getPublicationInfo} from './published.js';
@@ -66,6 +67,47 @@ describe('change-source/pg', () => {
       'zero_drop_index_0',
       'zero_alter_publication_0',
     ]);
+  });
+
+  test('default publication, join table', async () => {
+    await db.unsafe(`
+    CREATE TABLE join_table(id1 TEXT NOT NULL, id2 TEXT NOT NULL);
+    CREATE UNIQUE INDEX join_key ON join_table (id1, id2);
+    INSERT INTO join_table (id1, id2) VALUES ('foo', 'bar');
+    `);
+
+    await db.begin(tx =>
+      setupTablesAndReplication(lc, tx, {id: '0', publications: []}),
+    );
+
+    expect(await publications()).toEqual([
+      [`_zero_metadata_0`, 'zero', 'schemaVersions', null],
+      [`_zero_metadata_0`, `zero_0`, 'clients', null],
+      ['_zero_public_0', 'public', 'join_table', null],
+    ]);
+
+    await expectTables(db, {
+      ['zero.schemaVersions']: [
+        {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
+      ],
+      ['zero_0.shardConfig']: [
+        {
+          lock: true,
+          publications: ['_zero_metadata_0', '_zero_public_0'],
+          ddlDetection: true,
+          initialSchema: null,
+        },
+      ],
+      ['zero_0.clients']: [],
+      ['join_table']: [{id1: 'foo', id2: 'bar'}],
+    });
+
+    const pubs = await getPublicationInfo(db, ['_zero_public_0']);
+    const table = pubs.tables.find(t => t.name === 'join_table');
+    expect(table?.replicaIdentity).toBe(Index);
+
+    const index = pubs.indexes.find(idx => idx.name === 'join_key');
+    expect(index?.isReplicaIdentity).toBe(true);
   });
 
   test('weird shard IDs', async () => {

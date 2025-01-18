@@ -45,7 +45,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
     await upstream.unsafe(`
     CREATE TYPE ENUMZ AS ENUM ('1', '2', '3');
     CREATE TABLE foo(
-      id TEXT PRIMARY KEY,
+      id TEXT NOT NULL,
       int INT4,
       big BIGINT,
       flt FLOAT8,
@@ -64,6 +64,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
     -- since the set of allowed schemas is restricted.
     CREATE SCHEMA IF NOT EXISTS zero;
 
+    CREATE UNIQUE INDEX foo_key ON foo (id);
     CREATE PUBLICATION zero_some_public FOR TABLE foo (id, int);
     CREATE PUBLICATION zero_all_test FOR TABLES IN SCHEMA zero;
     `);
