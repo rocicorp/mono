@@ -4,7 +4,7 @@ import {must} from '../../../../shared/src/must.js';
 import * as v from '../../../../shared/src/valita.js';
 import {Database} from '../../../../zqlite/src/db.js';
 import {fromSQLiteTypes} from '../../../../zqlite/src/table-source.js';
-import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.js';
+import type {LiteAndZqlSpec, LiteTableSpecWithKeys} from '../../db/specs.js';
 import {StatementRunner} from '../../db/statements.js';
 import {type JSONValue} from '../../types/bigint-json.js';
 import {
@@ -294,7 +294,7 @@ class Snapshot {
     };
   }
 
-  getRow(table: LiteTableSpec, rowKey: JSONValue) {
+  getRow(table: LiteTableSpecWithKeys, rowKey: JSONValue) {
     const key = normalizedKeyOrder(rowKey as RowKey);
     const conds = Object.keys(key).map(c => `${id(c)}=?`);
     const cols = Object.keys(table.columns);
@@ -312,7 +312,7 @@ class Snapshot {
     }
   }
 
-  getRows(table: LiteTableSpec) {
+  getRows(table: LiteTableSpecWithKeys) {
     const cols = Object.keys(table.columns);
     const cached = this.db.statementCache.get(
       `SELECT ${cols.map(c => id(c)).join(',')} FROM ${id(table.name)}`,

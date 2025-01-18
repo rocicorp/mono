@@ -29,6 +29,7 @@ export async function initSyncSchema(
       migrateSchema: () => {
         throw new AutoResetSignal('resetting replica at obsolete v1');
       },
+      minSafeVersion: 2,
     },
   };
 
