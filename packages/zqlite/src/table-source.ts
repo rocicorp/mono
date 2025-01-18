@@ -207,8 +207,8 @@ export class TableSource implements Source {
     };
   }
 
-  connect(sort: Ordering, optionalFilters?: Condition | undefined) {
-    const transformedFilters = transformFilters(optionalFilters);
+  connect(sort: Ordering, filters?: Condition | undefined) {
+    const transformedFilters = transformFilters(filters);
     const input: SourceInput = {
       getSchema: () => schema,
       fetch: req => this.#fetch(req, connection),
@@ -221,7 +221,7 @@ export class TableSource implements Source {
         assert(idx !== -1, 'Connection not found');
         this.#connections.splice(idx, 1);
       },
-      appliedFilters: !transformedFilters.conditionsRemoved,
+      fullyAppliedFilters: !transformedFilters.conditionsRemoved,
     };
 
     const connection: Connection = {
@@ -501,7 +501,7 @@ export class TableSource implements Source {
     console.log(constraints.length);
 
     if (filters) {
-      constraints.push(optionalFiltersToSQL(filters));
+      constraints.push(filtersToSQL(filters));
     }
     console.log(constraints.length);
 
@@ -551,31 +551,27 @@ export class TableSource implements Source {
  * This applies all filters present in the AST for a query to the source.
  * This will work until subquery filters are added
  * at which point either:
- * a. we move optional filters to connect
- * b. we do the transform of removing subquery filters from optionalFilters while
+ * a. we move filters to connect
+ * b. we do the transform of removing subquery filters from filters while
  *    preserving the meaning of the filters.
  *
  * https://www.notion.so/replicache/Optional-Filters-OR-1303bed895458013a26ee5aafd5725d2
  */
-export function optionalFiltersToSQL(filters: NoSubqueryCondition): SQLQuery {
+export function filtersToSQL(filters: NoSubqueryCondition): SQLQuery {
   switch (filters.type) {
     case 'simple':
       return simpleConditionToSQL(filters);
     case 'and':
       return filters.conditions.length > 0
         ? sql`(${sql.join(
-            filters.conditions.map(condition =>
-              optionalFiltersToSQL(condition),
-            ),
+            filters.conditions.map(condition => filtersToSQL(condition)),
             sql` AND `,
           )})`
         : sql`TRUE`;
     case 'or':
       return filters.conditions.length > 0
         ? sql`(${sql.join(
-            filters.conditions.map(condition =>
-              optionalFiltersToSQL(condition),
-            ),
+            filters.conditions.map(condition => filtersToSQL(condition)),
             sql` OR `,
           )})`
         : sql`FALSE`;

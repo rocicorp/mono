@@ -123,11 +123,8 @@ export class MemorySource implements Source {
     };
   }
 
-  connect(
-    sort: Ordering,
-    optionalFilters?: Condition | undefined,
-  ): SourceInput {
-    const transformedFilters = transformFilters(optionalFilters);
+  connect(sort: Ordering, filters?: Condition | undefined): SourceInput {
+    const transformedFilters = transformFilters(filters);
 
     const input: SourceInput = {
       getSchema: () => schema,

@@ -10,7 +10,7 @@ import {makeComparator} from '../../zql/src/ivm/data.js';
 import {Database} from './db.js';
 import {format} from './internal/sql.js';
 import {
-  optionalFiltersToSQL,
+  filtersToSQL,
   TableSource,
   UnsupportedValueError,
 } from './table-source.js';
@@ -735,7 +735,7 @@ describe('optional filters to sql', () => {
   test('simple condition', () => {
     expect(
       format(
-        optionalFiltersToSQL({
+        filtersToSQL({
           type: 'simple',
           left: {type: 'column', name: 'a'},
           op: '=',
@@ -747,7 +747,7 @@ describe('optional filters to sql', () => {
   test('anded conditions', () => {
     expect(
       format(
-        optionalFiltersToSQL({
+        filtersToSQL({
           type: 'and',
           conditions: [
             {
@@ -770,7 +770,7 @@ describe('optional filters to sql', () => {
   test('ored conditions', () => {
     expect(
       format(
-        optionalFiltersToSQL({
+        filtersToSQL({
           type: 'or',
           conditions: [
             {
@@ -793,7 +793,7 @@ describe('optional filters to sql', () => {
   test('dnf conditions', () => {
     expect(
       format(
-        optionalFiltersToSQL({
+        filtersToSQL({
           type: 'or',
           conditions: [
             {
@@ -838,7 +838,7 @@ describe('optional filters to sql', () => {
   test('literal conditions', () => {
     expect(
       format(
-        optionalFiltersToSQL({
+        filtersToSQL({
           type: 'simple',
           left: {
             type: 'literal',
@@ -862,7 +862,7 @@ describe('optional filters to sql', () => {
     `);
     expect(
       format(
-        optionalFiltersToSQL({
+        filtersToSQL({
           type: 'simple',
           left: {
             type: 'literal',
@@ -886,7 +886,7 @@ describe('optional filters to sql', () => {
     `);
     expect(
       format(
-        optionalFiltersToSQL({
+        filtersToSQL({
           type: 'simple',
           left: {
             type: 'literal',
@@ -910,7 +910,7 @@ describe('optional filters to sql', () => {
     `);
     expect(
       format(
-        optionalFiltersToSQL({
+        filtersToSQL({
           type: 'simple',
           left: {type: 'literal', value: 1},
           op: '=',

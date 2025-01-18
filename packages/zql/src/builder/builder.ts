@@ -169,7 +169,7 @@ function buildPipelineInternal(
   }
   const conn = source.connect(must(ast.orderBy), ast.where);
   let end: Input = conn;
-  const {appliedFilters} = conn;
+  const {fullyAppliedfilters} = conn;
   ast = uniquifyCorrelatedSubqueryConditionAliases(ast);
 
   if (ast.start) {
@@ -180,7 +180,7 @@ function buildPipelineInternal(
     end = applyCorrelatedSubQuery(csq, delegate, end);
   }
 
-  if (ast.where && !appliedFilters) {
+  if (ast.where && !fullyAppliedfilters) {
     end = applyWhere(end, ast.where, delegate);
   }
 

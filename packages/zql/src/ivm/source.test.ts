@@ -1529,12 +1529,12 @@ suite('overlay-vs-filter', () => {
     } catch (e) {
       return {
         e: (e as Error).message,
-        appliedFilters: sourceInput.appliedFilters,
+        appliedFilters: sourceInput.fullyAppliedFilters,
       };
     }
     return {
       fetches: out.fetches,
-      appliedFilters: sourceInput.appliedFilters,
+      fullyAppliedFilters: sourceInput.fullyAppliedFilters,
     };
   }
 
@@ -1555,7 +1555,6 @@ suite('overlay-vs-filter', () => {
       }),
     ).toMatchInlineSnapshot(`
       {
-        "appliedFilters": true,
         "fetches": [
           [
             {
@@ -1574,6 +1573,7 @@ suite('overlay-vs-filter', () => {
             },
           ],
         ],
+        "fullyAppliedFilters": undefined,
       }
     `);
   });
@@ -1595,8 +1595,8 @@ suite('overlay-vs-filter', () => {
       }),
     ).toMatchInlineSnapshot(`
       {
-        "appliedFilters": true,
         "fetches": [],
+        "fullyAppliedFilters": undefined,
       }
     `);
   });
@@ -1619,7 +1619,6 @@ suite('overlay-vs-filter', () => {
       }),
     ).toMatchInlineSnapshot(`
       {
-        "appliedFilters": true,
         "fetches": [
           [
             {
@@ -1631,6 +1630,7 @@ suite('overlay-vs-filter', () => {
             },
           ],
         ],
+        "fullyAppliedFilters": undefined,
       }
     `);
   });
@@ -1653,7 +1653,6 @@ suite('overlay-vs-filter', () => {
       }),
     ).toMatchInlineSnapshot(`
       {
-        "appliedFilters": true,
         "fetches": [
           [
             {
@@ -1672,6 +1671,7 @@ suite('overlay-vs-filter', () => {
             },
           ],
         ],
+        "fullyAppliedFilters": undefined,
       }
     `);
   });
@@ -1704,7 +1704,6 @@ suite('overlay-vs-filter', () => {
       }),
     ).toMatchInlineSnapshot(`
       {
-        "appliedFilters": true,
         "fetches": [
           [
             {
@@ -1730,6 +1729,7 @@ suite('overlay-vs-filter', () => {
             },
           ],
         ],
+        "fullyAppliedFilters": undefined,
       }
     `);
   });
@@ -1762,7 +1762,6 @@ suite('overlay-vs-filter', () => {
       }),
     ).toMatchInlineSnapshot(`
       {
-        "appliedFilters": true,
         "fetches": [
           [
             {
@@ -1788,6 +1787,7 @@ suite('overlay-vs-filter', () => {
             },
           ],
         ],
+        "fullyAppliedFilters": undefined,
       }
     `);
   });
@@ -1829,7 +1829,6 @@ suite('overlay-vs-filter', () => {
       }),
     ).toMatchInlineSnapshot(`
       {
-        "appliedFilters": false,
         "fetches": [
           [
             {
@@ -1855,6 +1854,7 @@ suite('overlay-vs-filter', () => {
             },
           ],
         ],
+        "fullyAppliedFilters": undefined,
       }
     `);
   });
@@ -1897,7 +1897,6 @@ suite('overlay-vs-filter', () => {
       }),
     ).toMatchInlineSnapshot(`
       {
-        "appliedFilters": false,
         "fetches": [
           [
             {
@@ -1916,6 +1915,7 @@ suite('overlay-vs-filter', () => {
             },
           ],
         ],
+        "fullyAppliedFilters": undefined,
       }
     `);
   });
