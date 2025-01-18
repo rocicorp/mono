@@ -1,6 +1,6 @@
 import type {AST} from '../../../../zero-protocol/src/ast.js';
-import {MemorySource} from '../../ivm/memory-source.js';
 import {MemoryStorage} from '../../ivm/memory-storage.js';
+import {createSource} from '../../ivm/test/source-factory.js';
 import type {Source} from '../../ivm/source.js';
 import type {
   CommitListener,
@@ -72,16 +72,12 @@ function makeSources() {
   };
 
   return {
-    user: new MemorySource('user', user.columns, user.primaryKey),
-    issue: new MemorySource('issue', issue.columns, issue.primaryKey),
-    comment: new MemorySource('comment', comment.columns, comment.primaryKey),
-    revision: new MemorySource(
-      'revision',
-      revision.columns,
-      revision.primaryKey,
-    ),
-    label: new MemorySource('label', label.columns, label.primaryKey),
-    issueLabel: new MemorySource(
+    user: createSource('user', user.columns, user.primaryKey),
+    issue: createSource('issue', issue.columns, issue.primaryKey),
+    comment: createSource('comment', comment.columns, comment.primaryKey),
+    revision: createSource('revision', revision.columns, revision.primaryKey),
+    label: createSource('label', label.columns, label.primaryKey),
+    issueLabel: createSource(
       'issueLabel',
       issueLabel.columns,
       issueLabel.primaryKey,

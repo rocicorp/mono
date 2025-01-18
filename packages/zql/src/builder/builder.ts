@@ -169,7 +169,7 @@ function buildPipelineInternal(
   }
   const conn = source.connect(must(ast.orderBy), ast.where);
   let end: Input = conn;
-  const {appliedFilters} = conn;
+  const {fullyAppliedFilters} = conn;
   ast = uniquifyCorrelatedSubqueryConditionAliases(ast);
 
   if (ast.start) {
@@ -180,8 +180,8 @@ function buildPipelineInternal(
     end = applyCorrelatedSubQuery(csq, delegate, end);
   }
 
-  if (ast.where) {
-    end = applyWhere(end, ast.where, appliedFilters, delegate);
+  if (ast.where && !fullyAppliedFilters) {
+    end = applyWhere(end, ast.where, delegate);
   }
 
   if (ast.limit) {
@@ -200,33 +200,27 @@ function buildPipelineInternal(
 function applyWhere(
   input: Input,
   condition: Condition,
-  // Remove `appliedFilter`
-  // Each branch can `fetch` with different filters from the same source.
-  // Or we do the union of queries approach and retain this `appliedFilters` and `sourceConnect` behavior.
-  // Downside of that being unbounded memory usage.
-  appliedFilters: boolean,
   delegate: BuilderDelegate,
 ): Input {
   switch (condition.type) {
     case 'and':
-      return applyAnd(input, condition, appliedFilters, delegate);
+      return applyAnd(input, condition, delegate);
     case 'or':
-      return applyOr(input, condition, appliedFilters, delegate);
+      return applyOr(input, condition, delegate);
     case 'correlatedSubquery':
       return applyCorrelatedSubqueryCondition(input, condition, delegate);
     case 'simple':
-      return applySimpleCondition(input, condition, appliedFilters);
+      return applySimpleCondition(input, condition);
   }
 }
 
 function applyAnd(
   input: Input,
   condition: Conjunction,
-  appliedFilters: boolean,
   delegate: BuilderDelegate,
 ) {
   for (const subCondition of condition.conditions) {
-    input = applyWhere(input, subCondition, appliedFilters, delegate);
+    input = applyWhere(input, subCondition, delegate);
   }
   return input;
 }
@@ -234,34 +228,29 @@ function applyAnd(
 export function applyOr(
   input: Input,
   condition: Disjunction,
-  appliedFilters: boolean,
   delegate: BuilderDelegate,
 ): Input {
   const [subqueryConditions, otherConditions] =
     groupSubqueryConditions(condition);
   // if there are no subquery conditions, no fan-in / fan-out is needed
   if (subqueryConditions.length === 0) {
-    return otherConditions.length > 0
-      ? new Filter(
-          input,
-          appliedFilters ? 'push-only' : 'all',
-          createPredicate({
-            type: 'or',
-            conditions: otherConditions,
-          }),
-        )
-      : new FanIn(new FanOut(input), []);
+    return new Filter(
+      input,
+      createPredicate({
+        type: 'or',
+        conditions: otherConditions,
+      }),
+    );
   }
 
   const fanOut = new FanOut(input);
   const branches = subqueryConditions.map(subCondition =>
-    applyWhere(fanOut, subCondition, appliedFilters, delegate),
+    applyWhere(fanOut, subCondition, delegate),
   );
   if (otherConditions.length > 0) {
     branches.push(
       new Filter(
         fanOut,
-        appliedFilters ? 'push-only' : 'all',
         createPredicate({
           type: 'or',
           conditions: otherConditions,
@@ -300,16 +289,8 @@ export function isNotAndDoesNotContainSubquery(
   return true;
 }
 
-function applySimpleCondition(
-  input: Input,
-  condition: SimpleCondition,
-  appliedFilters: boolean,
-): Input {
-  return new Filter(
-    input,
-    appliedFilters ? 'push-only' : 'all',
-    createPredicate(condition),
-  );
+function applySimpleCondition(input: Input, condition: SimpleCondition): Input {
+  return new Filter(input, createPredicate(condition));
 }
 
 function applyCorrelatedSubQuery(

@@ -51,9 +51,9 @@ export interface Source {
    *
    * @param sort The ordering of the rows. Source must return rows in this
    * order.
-   * @param optionalFilters Optional filters to apply to the source.
+   * @param filters Filters to apply to the source.
    */
-  connect(sort: Ordering, optionalFilters?: Condition | undefined): SourceInput;
+  connect(sort: Ordering, filters?: Condition | undefined): SourceInput;
 
   /**
    * Pushes a change into the source and into all connected outputs.
@@ -73,5 +73,5 @@ export interface Source {
 }
 
 export interface SourceInput extends Input {
-  readonly appliedFilters: boolean;
+  readonly fullyAppliedFilters: boolean;
 }
