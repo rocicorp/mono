@@ -1529,7 +1529,7 @@ suite('overlay-vs-filter', () => {
     } catch (e) {
       return {
         e: (e as Error).message,
-        appliedFilters: sourceInput.fullyAppliedFilters,
+        fullyAppliedFilters: sourceInput.fullyAppliedFilters,
       };
     }
     return {
