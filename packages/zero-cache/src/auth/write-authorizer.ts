@@ -20,11 +20,11 @@ import {
   primaryKeyValueSchema,
   type PrimaryKeyValue,
 } from '../../../zero-protocol/src/primary-key.js';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.js';
 import type {
   PermissionsConfig,
   Policy,
 } from '../../../zero-schema/src/compiled-permissions.js';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.js';
 import type {BuilderDelegate} from '../../../zql/src/builder/builder.js';
 import {
   bindStaticParameters,
@@ -40,11 +40,10 @@ import {
   TableSource,
 } from '../../../zqlite/src/table-source.js';
 import type {ZeroConfig} from '../config/zero-config.js';
-import {listTables} from '../db/lite-tables.js';
+import {computeZqlSpecs} from '../db/lite-tables.js';
 import type {LiteAndZqlSpec} from '../db/specs.js';
 import {StatementRunner} from '../db/statements.js';
 import {DatabaseStorage} from '../services/view-syncer/database-storage.js';
-import {setSpecs} from '../services/view-syncer/pipeline-driver.js';
 import {mapLiteDataTypeToZqlSchemaValue} from '../types/lite.js';
 
 type Phase = 'preMutation' | 'postMutation';
@@ -95,8 +94,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       getSource: name => this.#getSource(name),
       createStorage: () => cgStorage.createStorage(),
     };
-    this.#tableSpecs = new Map();
-    setSpecs(listTables(replica), this.#tableSpecs);
+    this.#tableSpecs = computeZqlSpecs(this.#lc, replica);
     this.#statementRunner = new StatementRunner(replica);
   }
 

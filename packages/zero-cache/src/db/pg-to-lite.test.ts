@@ -67,7 +67,6 @@ test('postgres to lite table spec', () => {
           dflt: 'false',
         },
       },
-      primaryKey: ['b', 'a'],
     }),
   ).toEqual({
     name: 'issue',
@@ -136,7 +135,6 @@ test('postgres to lite table spec', () => {
         pos: 5,
       },
     },
-    primaryKey: ['b', 'a'],
   });
 
   // Non-public schema
@@ -173,7 +171,6 @@ test('postgres to lite table spec', () => {
         pos: 1,
       },
     },
-    primaryKey: ['a'],
   });
 });
 

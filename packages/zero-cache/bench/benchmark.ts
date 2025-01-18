@@ -7,7 +7,7 @@ import type {Source} from '../../zql/src/ivm/source.js';
 import {newQuery, type QueryDelegate} from '../../zql/src/query/query-impl.js';
 import {Database} from '../../zqlite/src/db.js';
 import {TableSource} from '../../zqlite/src/table-source.js';
-import {listTables} from '../src/db/lite-tables.js';
+import {computeZqlSpecs} from '../src/db/lite-tables.js';
 import {mapLiteDataTypeToZqlSchemaValue} from '../src/types/lite.js';
 import {schema} from './schema.js';
 
@@ -18,18 +18,19 @@ type Options = {
 // load up some data!
 export function bench(opts: Options) {
   const {dbFile} = opts;
-  const db = new Database(createSilentLogContext(), dbFile);
+  const lc = createSilentLogContext();
+  const db = new Database(lc, dbFile);
   const sources = new Map<string, Source>();
-  const tableSpecs = new Map(listTables(db).map(spec => [spec.name, spec]));
+  const tableSpecs = computeZqlSpecs(lc, db);
   const host: QueryDelegate = {
     getSource: (name: string) => {
       let source = sources.get(name);
       if (source) {
         return source;
       }
-      const tableSpec = tableSpecs.get(name);
-      assert(tableSpec, `Missing tableSpec for ${name}`);
-      const {columns, primaryKey} = tableSpec;
+      const spec = tableSpecs.get(name);
+      assert(spec?.tableSpec, `Missing tableSpec for ${name}`);
+      const {columns, primaryKey} = spec.tableSpec;
 
       source = new TableSource(
         'benchmark',

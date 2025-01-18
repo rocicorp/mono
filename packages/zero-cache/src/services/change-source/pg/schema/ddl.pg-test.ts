@@ -217,6 +217,13 @@ describe('change-source/tables/ddl', () => {
           unique: true,
         },
         {
+          name: 'boo_pkey',
+          schema: 'pub',
+          tableName: 'boo',
+          columns: {id: 'ASC'},
+          unique: true,
+        },
+        {
           name: 'foo_custom_index',
           schema: 'pub',
           tableName: 'foo',
@@ -234,6 +241,13 @@ describe('change-source/tables/ddl', () => {
           unique: true,
         },
         {
+          name: 'foo_pkey',
+          schema: 'pub',
+          tableName: 'foo',
+          columns: {id: 'ASC'},
+          unique: true,
+        },
+        {
           name: 'yoo_custom_index',
           schema: 'pub',
           tableName: 'yoo',
@@ -248,6 +262,13 @@ describe('change-source/tables/ddl', () => {
           schema: 'pub',
           tableName: 'yoo',
           columns: {name: 'ASC'},
+          unique: true,
+        },
+        {
+          name: 'yoo_pkey',
+          schema: 'pub',
+          tableName: 'yoo',
+          columns: {id: 'ASC'},
           unique: true,
         },
       ],
@@ -353,6 +374,13 @@ describe('change-source/tables/ddl', () => {
               tableName: 'bar',
               unique: true,
             },
+            {
+              columns: {id: 'ASC'},
+              name: 'bar_pkey',
+              schema: 'pub',
+              tableName: 'bar',
+              unique: true,
+            },
           ),
         },
       },
@@ -372,7 +400,7 @@ describe('change-source/tables/ddl', () => {
         },
         schema: {
           tables: DDL_START.schema.tables,
-          indexes: inserted(DDL_START.schema.indexes, 2, {
+          indexes: inserted(DDL_START.schema.indexes, 3, {
             columns: {
               name: 'DESC',
               id: 'ASC',
@@ -437,8 +465,8 @@ describe('change-source/tables/ddl', () => {
           }),
           indexes: replaced(
             DDL_START.schema.indexes,
-            1,
             2,
+            3,
             {
               columns: {
                 description: 'ASC',
@@ -452,6 +480,13 @@ describe('change-source/tables/ddl', () => {
             {
               columns: {name: 'ASC'},
               name: 'foo_name_key',
+              schema: 'pub',
+              tableName: 'food',
+              unique: true,
+            },
+            {
+              columns: {id: 'ASC'},
+              name: 'foo_pkey',
               schema: 'pub',
               tableName: 'food',
               unique: true,
@@ -518,7 +553,7 @@ describe('change-source/tables/ddl', () => {
               ['zero_sum']: {rowFilter: null},
             },
           }),
-          indexes: replaced(DDL_START.schema.indexes, 3, 0, {
+          indexes: replaced(DDL_START.schema.indexes, 5, 0, {
             columns: {username: 'ASC'},
             name: 'foo_username_key',
             schema: 'pub',
@@ -696,7 +731,7 @@ describe('change-source/tables/ddl', () => {
           }),
           indexes: replaced(
             DDL_START.schema.indexes,
-            1,
+            2,
             2,
             {
               columns: {
@@ -760,7 +795,7 @@ describe('change-source/tables/ddl', () => {
             },
           }),
           // "foo_custom_index" depended on the "description column"
-          indexes: dropped(DDL_START.schema.indexes, 1, 1),
+          indexes: dropped(DDL_START.schema.indexes, 2, 1),
         },
       },
     ],
@@ -819,6 +854,13 @@ describe('change-source/tables/ddl', () => {
               tableName: 'boo',
               unique: true,
             },
+            {
+              columns: {id: 'ASC'},
+              name: 'boo_pkey',
+              schema: 'pub',
+              tableName: 'boo',
+              unique: true,
+            },
           ],
         },
       },
@@ -843,6 +885,13 @@ describe('change-source/tables/ddl', () => {
               unique: true,
             },
             {
+              columns: {id: 'ASC'},
+              name: 'boo_pkey',
+              schema: 'pub',
+              tableName: 'boo',
+              unique: true,
+            },
+            {
               columns: {name: 'ASC'},
               name: 'foo_name_key',
               schema: 'pub',
@@ -850,8 +899,22 @@ describe('change-source/tables/ddl', () => {
               unique: true,
             },
             {
+              columns: {id: 'ASC'},
+              name: 'foo_pkey',
+              schema: 'pub',
+              tableName: 'foo',
+              unique: true,
+            },
+            {
               columns: {name: 'ASC'},
               name: 'yoo_name_key',
+              schema: 'pub',
+              tableName: 'yoo',
+              unique: true,
+            },
+            {
+              columns: {id: 'ASC'},
+              name: 'yoo_pkey',
               schema: 'pub',
               tableName: 'yoo',
               unique: true,
@@ -970,7 +1033,16 @@ describe('change-source/tables/ddl', () => {
         version: 1,
         event: {tag: 'ALTER PUBLICATION'},
         schema: {
-          indexes: DDL_START.schema.indexes,
+          indexes: [
+            ...DDL_START.schema.indexes,
+            {
+              name: 'foo_pkey',
+              schema: 'zero',
+              tableName: 'foo',
+              columns: {id: 'ASC'},
+              unique: true,
+            },
+          ],
           tables: [
             ...DDL_START.schema.tables,
             {

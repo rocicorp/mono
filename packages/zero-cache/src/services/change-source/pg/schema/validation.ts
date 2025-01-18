@@ -22,9 +22,12 @@ export function validate(lc: LogContext, shardID: string, table: TableSpec) {
       `Table "${table.name}" uses reserved column name "${ZERO_VERSION_COLUMN_NAME}"`,
     );
   }
-  if (table.primaryKey.length === 0) {
-    throw new UnsupportedTableSchemaError(
-      `Table "${table.name}" does not have a PRIMARY KEY`,
+  if (!table.primaryKey?.length) {
+    lc.warn?.(
+      `\n\n\n` +
+        `Table "${table.name}" needs a primary key in order to be synced to clients. ` +
+        `Add one with 'ALTER TABLE "${table.name}" ADD PRIMARY KEY (...)'.` +
+        `\n\n\n`,
     );
   }
   if (!ALLOWED_IDENTIFIER_CHARS.test(table.name)) {

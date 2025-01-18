@@ -721,7 +721,6 @@ describe('replicator/incremental-sync', () => {
               pos: 5,
             },
           },
-          primaryKey: ['id'],
         },
       ],
       indexSpecs: [],
@@ -729,7 +728,7 @@ describe('replicator/incremental-sync', () => {
     {
       name: 'rename table',
       setup: `
-        CREATE TABLE foo(id INT8 PRIMARY KEY, _0_version TEXT);
+        CREATE TABLE foo(id INT8, _0_version TEXT);
         INSERT INTO foo(id, _0_version) VALUES (1, '00');
         INSERT INTO foo(id, _0_version) VALUES (2, '00');
         INSERT INTO foo(id, _0_version) VALUES (3, '00');
@@ -787,7 +786,6 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
-          primaryKey: ['id'],
         },
       ],
       indexSpecs: [],
@@ -795,7 +793,7 @@ describe('replicator/incremental-sync', () => {
     {
       name: 'add column',
       setup: `
-        CREATE TABLE foo(id INT8 PRIMARY KEY, _0_version TEXT);
+        CREATE TABLE foo(id INT8, _0_version TEXT);
         INSERT INTO foo(id, _0_version) VALUES (1, '00');
         INSERT INTO foo(id, _0_version) VALUES (2, '00');
         INSERT INTO foo(id, _0_version) VALUES (3, '00');
@@ -922,7 +920,6 @@ describe('replicator/incremental-sync', () => {
               pos: 5,
             },
           },
-          primaryKey: ['id'],
         },
       ],
       indexSpecs: [],
@@ -930,7 +927,7 @@ describe('replicator/incremental-sync', () => {
     {
       name: 'drop column',
       setup: `
-        CREATE TABLE foo(id INT8 PRIMARY KEY, dropMe TEXT, _0_version TEXT);
+        CREATE TABLE foo(id INT8, dropMe TEXT, _0_version TEXT);
         INSERT INTO foo(id, dropMe, _0_version) VALUES (1, 'bye', '00');
         INSERT INTO foo(id, dropMe, _0_version) VALUES (2, 'bye', '00');
         INSERT INTO foo(id, dropMe, _0_version) VALUES (3, 'bye', '00');
@@ -983,7 +980,6 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
-          primaryKey: ['id'],
         },
       ],
       indexSpecs: [],
@@ -991,7 +987,7 @@ describe('replicator/incremental-sync', () => {
     {
       name: 'rename column',
       setup: `
-        CREATE TABLE foo(id INT8 PRIMARY KEY, renameMe TEXT, _0_version TEXT);
+        CREATE TABLE foo(id INT8, renameMe TEXT, _0_version TEXT);
         INSERT INTO foo(id, renameMe, _0_version) VALUES (1, 'hel', '00');
         INSERT INTO foo(id, renameMe, _0_version) VALUES (2, 'low', '00');
         INSERT INTO foo(id, renameMe, _0_version) VALUES (3, 'orl', '00');
@@ -1058,7 +1054,6 @@ describe('replicator/incremental-sync', () => {
               pos: 3,
             },
           },
-          primaryKey: ['id'],
         },
       ],
       indexSpecs: [],
@@ -1066,7 +1061,7 @@ describe('replicator/incremental-sync', () => {
     {
       name: 'rename indexed column',
       setup: `
-        CREATE TABLE foo(id INT8 PRIMARY KEY, renameMe TEXT, _0_version TEXT);
+        CREATE TABLE foo(id INT8, renameMe TEXT, _0_version TEXT);
         CREATE UNIQUE INDEX foo_rename_me ON foo (renameMe);
         INSERT INTO foo(id, renameMe, _0_version) VALUES (1, 'hel', '00');
         INSERT INTO foo(id, renameMe, _0_version) VALUES (2, 'low', '00');
@@ -1134,7 +1129,6 @@ describe('replicator/incremental-sync', () => {
               pos: 3,
             },
           },
-          primaryKey: ['id'],
         },
       ],
       indexSpecs: [
@@ -1149,7 +1143,7 @@ describe('replicator/incremental-sync', () => {
     {
       name: 'retype column',
       setup: `
-        CREATE TABLE foo(id INT8 PRIMARY KEY, num TEXT, _0_version TEXT);
+        CREATE TABLE foo(id INT8, num TEXT, _0_version TEXT);
         INSERT INTO foo(id, num, _0_version) VALUES (1, '3', '00');
         INSERT INTO foo(id, num, _0_version) VALUES (2, '2', '00');
         INSERT INTO foo(id, num, _0_version) VALUES (3, '3', '00');
@@ -1216,7 +1210,6 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
-          primaryKey: ['id'],
         },
       ],
       indexSpecs: [],
@@ -1224,7 +1217,7 @@ describe('replicator/incremental-sync', () => {
     {
       name: 'retype column with indexes',
       setup: `
-        CREATE TABLE foo(id INT8 PRIMARY KEY, num TEXT, _0_version TEXT);
+        CREATE TABLE foo(id INT8, num TEXT, _0_version TEXT);
         CREATE UNIQUE INDEX foo_num ON foo (num);
         CREATE UNIQUE INDEX foo_id_num ON foo (id, num);
         INSERT INTO foo(id, num, _0_version) VALUES (1, '3', '00');
@@ -1293,7 +1286,6 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
-          primaryKey: ['id'],
         },
       ],
       indexSpecs: [
@@ -1314,7 +1306,7 @@ describe('replicator/incremental-sync', () => {
     {
       name: 'rename and retype column',
       setup: `
-        CREATE TABLE foo(id INT8 PRIMARY KEY, numburr TEXT, _0_version TEXT);
+        CREATE TABLE foo(id INT8, numburr TEXT, _0_version TEXT);
         INSERT INTO foo(id, numburr, _0_version) VALUES (1, '3', '00');
         INSERT INTO foo(id, numburr, _0_version) VALUES (2, '2', '00');
         INSERT INTO foo(id, numburr, _0_version) VALUES (3, '3', '00');
@@ -1381,7 +1373,6 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
-          primaryKey: ['id'],
         },
       ],
       indexSpecs: [],
@@ -1389,7 +1380,7 @@ describe('replicator/incremental-sync', () => {
     {
       name: 'drop table',
       setup: `
-        CREATE TABLE foo(id INT8 PRIMARY KEY, _0_version TEXT);
+        CREATE TABLE foo(id INT8, _0_version TEXT);
         INSERT INTO foo(id, _0_version) VALUES (1, '00');
         INSERT INTO foo(id, _0_version) VALUES (2, '00');
         INSERT INTO foo(id, _0_version) VALUES (3, '00');
@@ -1416,7 +1407,7 @@ describe('replicator/incremental-sync', () => {
     {
       name: 'create index',
       setup: `
-        CREATE TABLE foo(id INT8 PRIMARY KEY, handle TEXT, _0_version TEXT);
+        CREATE TABLE foo(id INT8, handle TEXT, _0_version TEXT);
       `,
       downstream: [
         ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
@@ -1435,7 +1426,14 @@ describe('replicator/incremental-sync', () => {
         ['commit', fooBarBaz.commit(), {watermark: '0e'}],
       ],
       data: {
-        ['_zero.changeLog']: [],
+        ['_zero.changeLog']: [
+          {
+            stateVersion: '0e',
+            table: 'foo',
+            op: 'r',
+            rowKey: null,
+          },
+        ],
       },
       indexSpecs: [
         {
@@ -1449,7 +1447,7 @@ describe('replicator/incremental-sync', () => {
     {
       name: 'drop index',
       setup: `
-        CREATE TABLE foo(id INT8 PRIMARY KEY, handle TEXT, _0_version TEXT);
+        CREATE TABLE foo(id INT8, handle TEXT, _0_version TEXT);
         CREATE INDEX keep_me ON foo (id DESC, handle ASC);
         CREATE INDEX drop_me ON foo (handle DESC);
       `,
@@ -1565,7 +1563,6 @@ describe('replicator/incremental-sync', () => {
               pos: 2,
             },
           },
-          primaryKey: ['column'],
         },
       ],
     },

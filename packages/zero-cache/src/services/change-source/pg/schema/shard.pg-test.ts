@@ -260,12 +260,6 @@ describe('change-source/pg', () => {
 
   const invalidUpstreamCases: InvalidUpstreamCase[] = [
     {
-      error: 'does not have a PRIMARY KEY',
-      setupUpstreamQuery: `
-        CREATE TABLE issues("issueID" INTEGER, "orgID" INTEGER);
-      `,
-    },
-    {
       error: 'uses reserved column name "_0_version"',
       setupUpstreamQuery: `
         CREATE TABLE issues(

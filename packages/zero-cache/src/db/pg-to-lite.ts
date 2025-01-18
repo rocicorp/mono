@@ -99,7 +99,9 @@ export function mapPostgresToLiteColumn(
 }
 
 export function mapPostgresToLite(t: TableSpec): LiteTableSpec {
-  const {schema: _, ...liteSpec} = t;
+  // PRIMARY KEYS are not written to the replica. Instead, we rely
+  // UNIQUE indexes, including those created for upstream PRIMARY KEYs.
+  const {schema: _, primaryKey: _dropped, ...liteSpec} = t;
   const name = liteTableName(t);
   return {
     ...liteSpec,

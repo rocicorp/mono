@@ -1,7 +1,16 @@
+import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.js';
 import {must} from '../../../shared/src/must.js';
+import {difference} from '../../../shared/src/set-utils.js';
+import * as v from '../../../shared/src/valita.js';
+import {primaryKeySchema} from '../../../zero-protocol/src/primary-key.js';
 import type {Database} from '../../../zqlite/src/db.js';
+import {
+  dataTypeToZqlValueType,
+  mapLiteDataTypeToZqlSchemaValue,
+} from '../types/lite.js';
 import type {
+  LiteAndZqlSpec,
   LiteIndexSpec,
   LiteTableSpec,
   MutableLiteIndexSpec,
@@ -31,6 +40,7 @@ export function listTables(db: Database): LiteTableSpec[] {
       LEFT JOIN pragma_table_info(m.name) as p 
       WHERE m.type = 'table'
       AND m.name NOT LIKE 'sqlite_%'
+      AND m.name NOT LIKE '_zero.%'
       `,
     )
     .all() as ColumnInfo[];
@@ -44,7 +54,6 @@ export function listTables(db: Database): LiteTableSpec[] {
       table = {
         name: col.table,
         columns: {},
-        primaryKey: [],
       };
       tables.push(table);
     }
@@ -57,19 +66,15 @@ export function listTables(db: Database): LiteTableSpec[] {
       dflt: col.dflt,
     };
     if (col.keyPos) {
+      if (!table.primaryKey) {
+        table = {...table, primaryKey: []};
+      }
+      assert(table.primaryKey);
       while (table.primaryKey.length < col.keyPos) {
         table.primaryKey.push('');
       }
       table.primaryKey[col.keyPos - 1] = col.name;
     }
-  });
-
-  // Sanity check that the primary keys are filled in.
-  Object.values(tables).forEach(table => {
-    assert(
-      table.primaryKey.indexOf('') < 0,
-      `Invalid primary key for ${JSON.stringify(table)}`,
-    );
   });
 
   return tables;
@@ -88,7 +93,6 @@ export function listIndexes(db: Database): LiteIndexSpec[] {
        JOIN pragma_index_list(idx.tbl_name) AS info ON info.name = idx.name
        JOIN pragma_index_xinfo(idx.name) as col
        WHERE idx.type = 'index' AND 
-             info.origin != 'pk' AND
              col.key = 1 AND
              idx.tbl_name NOT LIKE '_zero.%'
        ORDER BY idx.name, col.seqno ASC`,
@@ -117,4 +121,106 @@ export function listIndexes(db: Database): LiteIndexSpec[] {
   }
 
   return ret;
+}
+
+/**
+ * Computes a TableSpec "view" of the replicated data that is
+ * suitable for processing / consumption for the client. This
+ * includes:
+ * * excluding tables without a PRIMARY KEY or UNIQUE INDEX
+ * * excluding columns with types that are not supported by ZQL
+ * * choosing columns to use as the primary key amongst those
+ *   in unique indexes
+ *
+ * @param tableSpecs an optional map to reset and populate
+ */
+export function computeZqlSpecs(
+  lc: LogContext,
+  replica: Database,
+  tableSpecs: Map<string, LiteAndZqlSpec> = new Map(),
+): Map<string, LiteAndZqlSpec> {
+  tableSpecs.clear();
+
+  const uniqueColumns = new Map<string, string[][]>();
+  for (const {tableName, columns} of listIndexes(replica).filter(
+    idx => idx.unique,
+  )) {
+    if (!uniqueColumns.has(tableName)) {
+      uniqueColumns.set(tableName, []);
+    }
+    uniqueColumns.get(tableName)?.push(Object.keys(columns));
+  }
+
+  listTables(replica).forEach(fullTable => {
+    // Only include columns for which the mapped ZQL Value is defined.
+    const columns = Object.fromEntries(
+      Object.entries(fullTable.columns).filter(([_, spec]) =>
+        dataTypeToZqlValueType(spec.dataType),
+      ),
+    );
+    const visibleColumns = new Set(Object.keys(columns));
+
+    // Collect all columns that are part of a unique index.
+    const allKeyColumns = new Set<string>();
+
+    // Examine all column combinations that can serve as a primary key.
+    const keys = (uniqueColumns.get(fullTable.name) ?? []).filter(key => {
+      if (difference(new Set(key), visibleColumns).size > 0) {
+        return false; // Exclude indexes over non-visible columns.
+      }
+      for (const col of key) {
+        allKeyColumns.add(col);
+      }
+      return true;
+    });
+    if (keys.length === 0) {
+      // Only include tables with a row key.
+      lc.debug?.(
+        `not syncing table ${fullTable.name} because it has no primary key`,
+      );
+      return;
+    }
+    // Pick the "best" (i.e. shortest) key for default IVM operations.
+    const primaryKey = keys.sort(keyCmp)[0];
+    // The unionKey is used to reference rows in the CVR (and del-patches),
+    // which facilitates clients migrating from one PK to another.
+    // TODO: Update CVR to use this.
+    const unionKey = [...allKeyColumns];
+
+    const tableSpec = {
+      ...fullTable,
+      columns,
+      // normalize (sort) keys to minimize creating new objects.
+      // See row-key.ts: normalizedKeyOrder()
+      primaryKey: v.parse(primaryKey.sort(), primaryKeySchema),
+      unionKey: v.parse(unionKey.sort(), primaryKeySchema),
+    };
+
+    tableSpecs.set(tableSpec.name, {
+      tableSpec,
+      zqlSpec: Object.fromEntries(
+        Object.entries(tableSpec.columns).map(([name, {dataType}]) => [
+          name,
+          mapLiteDataTypeToZqlSchemaValue(dataType),
+        ]),
+      ),
+    });
+  });
+  return tableSpecs;
+}
+
+// Deterministic comparator for favoring shorter row keys.
+function keyCmp(a: string[], b: string[]) {
+  if (a.length !== b.length) {
+    return a.length - b.length; // Fewer columns are better.
+  }
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] < b[i]) {
+      return -1;
+    }
+    if (a[i] > b[i]) {
+      return 1;
+    }
+  }
+  return 0;
 }

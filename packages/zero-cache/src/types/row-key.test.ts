@@ -121,5 +121,7 @@ describe('types/row-key', () => {
     for (const str of notSorted) {
       expect(Object.keys(normalizedKeyOrder(str))).toEqual(['a', 'b', 'c']);
     }
+
+    expect(() => normalizedKeyOrder({})).toThrowError('empty row key');
   });
 });

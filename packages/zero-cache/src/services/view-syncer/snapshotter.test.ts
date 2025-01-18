@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import {listTables} from '../../db/lite-tables.js';
+import {computeZqlSpecs} from '../../db/lite-tables.js';
 import type {LiteAndZqlSpec} from '../../db/specs.js';
 import {DbFile, expectTables} from '../../test/lite.js';
 import {initChangeLog} from '../replicator/schema/change-log.js';
@@ -11,7 +11,6 @@ import {
   ReplicationMessages,
   type FakeReplicator,
 } from '../replicator/test-utils.js';
-import {setSpecs} from './pipeline-driver.js';
 import {
   InvalidDiffError,
   ResetPipelinesSignal,
@@ -33,16 +32,16 @@ describe('view-syncer/snapshotter', () => {
     db.exec(
       `
         CREATE TABLE "zero.schemaVersions" (
-          "lock"                INTEGER PRIMARY KEY,
+          "lock"                INT PRIMARY KEY,
           "minSupportedVersion" INTEGER,
           "maxSupportedVersion" INTEGER,
           _0_version            TEXT NOT NULL
         );
         INSERT INTO "zero.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
           VALUES (1, 1, 1, '01');  
-        CREATE TABLE issues(id INTEGER PRIMARY KEY, owner INTEGER, desc TEXT, ignore TEXT, _0_version TEXT NOT NULL);
-        CREATE TABLE users(id INTEGER PRIMARY KEY, handle TEXT, ignore TEXT, _0_version TEXT NOT NULL);
-        CREATE TABLE comments(id INTEGER PRIMARY KEY, desc TEXT, ignore TEXT, _0_version TEXT NOT NULL);
+        CREATE TABLE issues(id INT PRIMARY KEY, owner INTEGER, desc TEXT, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
+        CREATE TABLE users(id INT PRIMARY KEY, handle TEXT, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
+        CREATE TABLE comments(id INT PRIMARY KEY, desc TEXT, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
 
         INSERT INTO issues(id, owner, desc, ignore, _0_version) VALUES(1, 10, 'foo', 'zzz', '01');
         INSERT INTO issues(id, owner, desc, ignore, _0_version) VALUES(2, 10, 'bar', 'xyz', '01');
@@ -55,11 +54,7 @@ describe('view-syncer/snapshotter', () => {
     initReplicationState(db, ['zero_data'], '01');
     initChangeLog(db);
 
-    // The 'ignore' column should not show up in the diffs.
-    const tables = listTables(db);
-    tables.forEach(t => delete (t.columns as Record<string, unknown>).ignore);
-    tableSpecs = new Map();
-    setSpecs(tables, tableSpecs);
+    tableSpecs = computeZqlSpecs(lc, db);
 
     replicator = fakeReplicator(lc, db);
     s = new Snapshotter(lc, dbFile.path).init();

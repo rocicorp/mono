@@ -304,9 +304,9 @@ async function setup(permissions: PermissionsConfig = {}) {
     PRIMARY KEY ("clientGroupID", "clientID")
   );
   CREATE TABLE "zero.schemaVersions" (
-    "lock"                INTEGER PRIMARY KEY,
-    "minSupportedVersion" INTEGER,
-    "maxSupportedVersion" INTEGER,
+    "lock"                INT PRIMARY KEY,
+    "minSupportedVersion" INT,
+    "maxSupportedVersion" INT,
     _0_version            TEXT NOT NULL
   );
   CREATE TABLE issues (

@@ -1,3 +1,4 @@
+import {assert} from '../../../shared/src/asserts.js';
 import {h128} from '../../../shared/src/hash.js';
 import {stringify, type JSONValue} from './bigint-json.js';
 
@@ -23,14 +24,19 @@ export function normalizedKeyOrder<V>(
   rowKey: Readonly<Record<string, V>>,
 ): Readonly<Record<string, V>> {
   let last = '';
+  let empty = true;
   for (const col in rowKey) {
+    empty = false;
     if (last > col) {
-      return Object.fromEntries(
-        Object.entries(rowKey).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+      const entries = Object.entries(rowKey).sort(([a], [b]) =>
+        a < b ? -1 : a > b ? 1 : 0,
       );
+      assert(entries.length > 0, 'empty row key');
+      return Object.fromEntries(entries);
     }
     last = col;
   }
+  assert(!empty, 'empty row key');
   // This case iterates over columns and avoids object allocations, which is
   // expected to be the common case (e.g. single column key).
   return rowKey;

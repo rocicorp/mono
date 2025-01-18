@@ -1,7 +1,7 @@
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {Database} from '../../../zqlite/src/db.js';
-import {listIndexes, listTables} from './lite-tables.js';
+import {computeZqlSpecs, listIndexes, listTables} from './lite-tables.js';
 import type {LiteIndexSpec, LiteTableSpec} from './specs.js';
 
 describe('lite/tables', () => {
@@ -44,7 +44,6 @@ describe('lite/tables', () => {
               dflt: null,
             },
           },
-          primaryKey: ['clientID'],
         },
       ],
     },
@@ -123,12 +122,11 @@ describe('lite/tables', () => {
               dflt: null,
             },
           },
-          primaryKey: ['user_id'],
         },
       ],
     },
     {
-      name: 'primary key columns',
+      name: 'primary key columns (ignored)',
       setupQuery: `
       CREATE TABLE issues (
         issue_id INTEGER,
@@ -171,7 +169,6 @@ describe('lite/tables', () => {
               dflt: null,
             },
           },
-          primaryKey: ['org_id', 'component_id', 'issue_id'],
         },
       ],
     },
@@ -197,14 +194,21 @@ describe('lite/indexes', () => {
 
   const cases: Case[] = [
     {
-      name: 'no indexes',
+      name: 'primary key',
       setupQuery: `
     CREATE TABLE "zero.clients" (
       "clientID" VARCHAR (180) PRIMARY KEY,
       "lastMutationID" BIGINT
     );
     `,
-      expectedResult: [],
+      expectedResult: [
+        {
+          name: 'sqlite_autoindex_zero.clients_1',
+          tableName: 'zero.clients',
+          unique: true,
+          columns: {clientID: 'ASC'},
+        },
+      ],
     },
     {
       name: 'unique',
@@ -215,6 +219,12 @@ describe('lite/indexes', () => {
     );
     `,
       expectedResult: [
+        {
+          name: 'sqlite_autoindex_users_1',
+          tableName: 'users',
+          unique: true,
+          columns: {userID: 'ASC'},
+        },
         {
           name: 'sqlite_autoindex_users_2',
           tableName: 'users',
@@ -245,6 +255,12 @@ describe('lite/indexes', () => {
           },
         },
         {
+          name: 'sqlite_autoindex_users_1',
+          tableName: 'users',
+          unique: true,
+          columns: {userID: 'ASC'},
+        },
+        {
           name: 'sqlite_autoindex_users_2',
           tableName: 'users',
           unique: true,
@@ -263,4 +279,400 @@ describe('lite/indexes', () => {
       expect(tables).toEqual(c.expectedResult);
     });
   }
+});
+
+describe('computeZqlSpec', () => {
+  function t(setup: string) {
+    const db = new Database(createSilentLogContext(), ':memory:');
+    db.exec(setup);
+    return [...computeZqlSpecs(createSilentLogContext(), db).values()];
+  }
+
+  test('plain primary key', () => {
+    expect(
+      t(`
+    CREATE TABLE nopk(a INT, b INT, c INT, d INT);
+    CREATE TABLE foo(a INT, b INT, c INT, d INT);
+    CREATE UNIQUE INDEX foo_pkey ON foo(b ASC);
+    `),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "tableSpec": {
+            "columns": {
+              "a": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 1,
+              },
+              "b": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 2,
+              },
+              "c": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 3,
+              },
+              "d": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 4,
+              },
+            },
+            "name": "foo",
+            "primaryKey": [
+              "b",
+            ],
+            "unionKey": [
+              "b",
+            ],
+          },
+          "zqlSpec": {
+            "a": {
+              "type": "number",
+            },
+            "b": {
+              "type": "number",
+            },
+            "c": {
+              "type": "number",
+            },
+            "d": {
+              "type": "number",
+            },
+          },
+        },
+      ]
+    `);
+  });
+
+  test('unsupported columns are excluded', () => {
+    expect(
+      t(`
+    CREATE TABLE foo(a INT, b TEXT, c TIME, d BYTEA);
+    CREATE UNIQUE INDEX foo_pkey ON foo(b ASC);
+    `),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "tableSpec": {
+            "columns": {
+              "a": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 1,
+              },
+              "b": {
+                "characterMaximumLength": null,
+                "dataType": "TEXT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 2,
+              },
+            },
+            "name": "foo",
+            "primaryKey": [
+              "b",
+            ],
+            "unionKey": [
+              "b",
+            ],
+          },
+          "zqlSpec": {
+            "a": {
+              "type": "number",
+            },
+            "b": {
+              "type": "string",
+            },
+          },
+        },
+      ]
+    `);
+  });
+
+  test('indexes with unsupported columns are excluded', () => {
+    expect(
+      t(`
+    CREATE TABLE foo(a INT, b TEXT, c TIME, d TEXT);
+    CREATE UNIQUE INDEX foo_pkey ON foo(a ASC, c DESC);
+    CREATE UNIQUE INDEX foo_other_key ON foo(b ASC, d ASC, a DESC);
+    `),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "tableSpec": {
+            "columns": {
+              "a": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 1,
+              },
+              "b": {
+                "characterMaximumLength": null,
+                "dataType": "TEXT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 2,
+              },
+              "d": {
+                "characterMaximumLength": null,
+                "dataType": "TEXT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 4,
+              },
+            },
+            "name": "foo",
+            "primaryKey": [
+              "a",
+              "b",
+              "d",
+            ],
+            "unionKey": [
+              "a",
+              "b",
+              "d",
+            ],
+          },
+          "zqlSpec": {
+            "a": {
+              "type": "number",
+            },
+            "b": {
+              "type": "string",
+            },
+            "d": {
+              "type": "string",
+            },
+          },
+        },
+      ]
+    `);
+  });
+
+  test('compound key is sorted', () => {
+    expect(
+      t(`
+    CREATE TABLE foo(a INT, b INT, c INT, d INT);
+    CREATE UNIQUE INDEX foo_pkey ON foo(d ASC, a ASC, c ASC);
+    `),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "tableSpec": {
+            "columns": {
+              "a": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 1,
+              },
+              "b": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 2,
+              },
+              "c": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 3,
+              },
+              "d": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 4,
+              },
+            },
+            "name": "foo",
+            "primaryKey": [
+              "a",
+              "c",
+              "d",
+            ],
+            "unionKey": [
+              "a",
+              "c",
+              "d",
+            ],
+          },
+          "zqlSpec": {
+            "a": {
+              "type": "number",
+            },
+            "b": {
+              "type": "number",
+            },
+            "c": {
+              "type": "number",
+            },
+            "d": {
+              "type": "number",
+            },
+          },
+        },
+      ]
+    `);
+  });
+
+  test('additional unique key', () => {
+    expect(
+      t(`
+    CREATE TABLE foo(a INT, b INT, c INT, d INT);
+    CREATE UNIQUE INDEX foo_pkey ON foo(b ASC);
+    CREATE UNIQUE INDEX foo_unique_key ON foo(c ASC, a DESC);
+    `),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "tableSpec": {
+            "columns": {
+              "a": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 1,
+              },
+              "b": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 2,
+              },
+              "c": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 3,
+              },
+              "d": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 4,
+              },
+            },
+            "name": "foo",
+            "primaryKey": [
+              "b",
+            ],
+            "unionKey": [
+              "a",
+              "b",
+              "c",
+            ],
+          },
+          "zqlSpec": {
+            "a": {
+              "type": "number",
+            },
+            "b": {
+              "type": "number",
+            },
+            "c": {
+              "type": "number",
+            },
+            "d": {
+              "type": "number",
+            },
+          },
+        },
+      ]
+    `);
+  });
+
+  test('shorter key is chosen over primary key', () => {
+    expect(
+      t(`
+    CREATE TABLE foo(a INT, b INT, c INT, d INT);
+    CREATE UNIQUE INDEX foo_pkey ON foo(b ASC, d DESC);
+    CREATE UNIQUE INDEX foo_z_key ON foo(c ASC);
+    `),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "tableSpec": {
+            "columns": {
+              "a": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 1,
+              },
+              "b": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 2,
+              },
+              "c": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 3,
+              },
+              "d": {
+                "characterMaximumLength": null,
+                "dataType": "INT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 4,
+              },
+            },
+            "name": "foo",
+            "primaryKey": [
+              "c",
+            ],
+            "unionKey": [
+              "b",
+              "c",
+              "d",
+            ],
+          },
+          "zqlSpec": {
+            "a": {
+              "type": "number",
+            },
+            "b": {
+              "type": "number",
+            },
+            "c": {
+              "type": "number",
+            },
+            "d": {
+              "type": "number",
+            },
+          },
+        },
+      ]
+    `);
+  });
 });

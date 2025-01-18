@@ -96,7 +96,6 @@ describe('tables/create', () => {
             notNull: false,
           },
         },
-        primaryKey: ['clientID'],
       },
     },
     {
@@ -174,7 +173,6 @@ describe('tables/create', () => {
             pos: 3,
           },
         },
-        primaryKey: ['clientID'],
       },
     },
     {
@@ -342,7 +340,6 @@ describe('tables/create', () => {
             pos: 7,
           },
         },
-        primaryKey: ['user_id'],
       },
     },
   ];

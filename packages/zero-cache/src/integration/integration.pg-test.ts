@@ -15,6 +15,7 @@ import {assert} from '../../../shared/src/asserts.js';
 import {Queue} from '../../../shared/src/queue.js';
 import {randInt} from '../../../shared/src/rand.js';
 import type {AST} from '../../../zero-protocol/src/ast.js';
+import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.js';
 import type {InitConnectionMessage} from '../../../zero-protocol/src/connect.js';
 import type {PokeStartMessage} from '../../../zero-protocol/src/poke.js';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.js';
@@ -82,6 +83,9 @@ describe('integration', {timeout: 10000}, () => {
           'true',
           '123',
           '"string"');
+
+      CREATE TABLE nopk(id TEXT NOT NULL, val TEXT);
+      INSERT INTO nopk(id, val) VALUES ('foo', 'bar');
     `.simple();
 
     port = randInt(5000, 16000);
@@ -105,6 +109,11 @@ describe('integration', {timeout: 10000}, () => {
 
   const FOO_QUERY: AST = {
     table: 'foo',
+    orderBy: [['id', 'asc']],
+  };
+
+  const NOPK_QUERY: AST = {
+    table: 'nopk',
     orderBy: [['id', 'asc']],
   };
 
@@ -391,6 +400,85 @@ describe('integration', {timeout: 10000}, () => {
             op: 'del',
             tableName: 'foo',
             id: {id: 'voo'},
+          },
+        ],
+      },
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokeEnd',
+      {pokeID: WATERMARK_REGEX},
+    ]);
+
+    // Test that INSERTs into tables without primary keys are replicated.
+    await upDB.unsafe(`
+      INSERT INTO nopk(id, val) VALUES ('bar', 'baz');
+      CREATE UNIQUE INDEX nopk_key ON nopk (id);
+    `);
+
+    // For now, these no-op pokes indicate that the schema change was
+    // processed but not patches resulted.
+    // TODO: Get rid of empty pokes.
+    for (let i = 0; i < 2; i++) {
+      expect(await downstream.dequeue()).toMatchObject([
+        'pokeStart',
+        {pokeID: WATERMARK_REGEX},
+      ]);
+      expect(await downstream.dequeue()).toMatchObject([
+        'pokeEnd',
+        {pokeID: WATERMARK_REGEX},
+      ]);
+    }
+
+    // Now that nopk has a unique index, add a query to retrieve the data.
+    ws.send(
+      JSON.stringify([
+        'changeDesiredQueries',
+        {
+          desiredQueriesPatch: [
+            {op: 'put', hash: 'query-hash2', ast: NOPK_QUERY},
+          ],
+        },
+      ] satisfies ChangeDesiredQueriesMessage),
+    );
+
+    // poke confirming the query registration.
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokeStart',
+      {pokeID: WATERMARK_REGEX},
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokePart',
+      {
+        pokeID: WATERMARK_REGEX,
+        desiredQueriesPatches: {
+          def: [{op: 'put', hash: 'query-hash2', ast: NOPK_QUERY}],
+        },
+      },
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokeEnd',
+      {pokeID: WATERMARK_REGEX},
+    ]);
+
+    // poke containing the row data.
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokeStart',
+      {pokeID: WATERMARK_REGEX},
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokePart',
+      {
+        pokeID: WATERMARK_REGEX,
+        rowsPatch: [
+          {
+            op: 'put',
+            tableName: 'nopk',
+            value: {id: 'bar', val: 'baz'},
+          },
+          {
+            op: 'put',
+            tableName: 'nopk',
+            value: {id: 'foo', val: 'bar'},
           },
         ],
       },

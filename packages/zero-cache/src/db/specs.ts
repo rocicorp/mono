@@ -1,5 +1,6 @@
 import type {DeepReadonly} from '../../../shared/src/json.js';
 import * as v from '../../../shared/src/valita.js';
+import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
 import * as PostgresTypeClass from './postgres-type-class-enum.js';
 
@@ -31,7 +32,7 @@ const publishedColumnSpec = columnSpec.extend({
 export const liteTableSpec = v.object({
   name: v.string(),
   columns: v.record(columnSpec),
-  primaryKey: v.array(v.string()),
+  primaryKey: v.array(v.string()).optional(),
 });
 
 export const tableSpec = liteTableSpec.extend({
@@ -46,8 +47,24 @@ export const publishedTableSpec = tableSpec.extend({
 
 export type LiteTableSpec = Readonly<v.Infer<typeof liteTableSpec>>;
 
+export type LiteTableSpecWithKeys = Omit<LiteTableSpec, 'primaryKey'> & {
+  /**
+   * The key selected to act as the "primary key". Primary keys
+   * are not explicitly set on the replica, but an appropriate
+   * unique index is required.
+   */
+  primaryKey: PrimaryKey; // note: required
+
+  /**
+   * The union of all columns that are part of any unique index.
+   * This is guaranteed to include any combination of columns that
+   * can serve as a key.
+   */
+  unionKey: PrimaryKey;
+};
+
 export type LiteAndZqlSpec = {
-  tableSpec: LiteTableSpec;
+  tableSpec: LiteTableSpecWithKeys;
   zqlSpec: Record<string, SchemaValue>;
 };
 
@@ -73,3 +90,11 @@ export const indexSpec = liteIndexSpec.extend({
 });
 
 export type IndexSpec = DeepReadonly<v.Infer<typeof indexSpec>>;
+
+export const publishedIndexSpec = indexSpec.extend({
+  isReplicaIdentity: v.boolean().optional(),
+});
+
+export type PublishedIndexSpec = DeepReadonly<
+  v.Infer<typeof publishedIndexSpec>
+>;

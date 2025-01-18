@@ -436,9 +436,6 @@ class TransactionProcessor {
       ...newRow,
       [ZERO_VERSION_COLUMN_NAME]: this.#version,
     };
-    const key = Object.fromEntries(
-      insert.relation.keyColumns.map(col => [col, newRow[col]]),
-    );
     const columns = Object.keys(row).map(c => id(c));
     this.#db.run(
       `
@@ -448,6 +445,19 @@ class TransactionProcessor {
       Object.values(row),
     );
 
+    if (insert.relation.keyColumns.length === 0) {
+      // INSERTs can be replicated for rows without a PRIMARY KEY or a
+      // UNIQUE INDEX. These are written to the replica but not recorded
+      // in the changeLog, because these rows cannot participate in IVM.
+      //
+      // (Once the table schema has been corrected to include a key, the
+      //  associated schema change will reset pipelines and data can be
+      //  loaded via hydration.)
+      return;
+    }
+    const key = Object.fromEntries(
+      insert.relation.keyColumns.map(col => [col, newRow[col]]),
+    );
     logSetOp(this.#db, this.#version, table, key);
   }
 
@@ -605,6 +615,10 @@ class TransactionProcessor {
   processCreateIndex(create: IndexCreate) {
     const index = mapPostgresToLiteIndex(create.spec);
     this.#db.db.exec(createIndexStatement(index));
+
+    // indexes affect tables visibility (e.g. sync-ability is gated on
+    // having a unique index), so reset pipelines to refresh table schemas.
+    this.#logResetOp(index.tableName);
     this.#lc.info?.(create.tag, index.name);
   }
 

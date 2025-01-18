@@ -2,8 +2,9 @@ import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
 import {Database} from '../../../../../zqlite/src/db.js';
 import {listIndexes, listTables} from '../../../db/lite-tables.js';
+import {mapPostgresToLiteIndex} from '../../../db/pg-to-lite.js';
 import type {
-  LiteIndexSpec,
+  IndexSpec,
   LiteTableSpec,
   PublishedTableSpec,
 } from '../../../db/specs.js';
@@ -123,7 +124,6 @@ const REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC: LiteTableSpec = {
     },
   },
   name: 'zero.schemaVersions',
-  primaryKey: ['lock'],
 } as const;
 
 const REPLICATED_ZERO_CLIENTS_SPEC: LiteTableSpec = {
@@ -158,7 +158,6 @@ const REPLICATED_ZERO_CLIENTS_SPEC: LiteTableSpec = {
     },
   },
   name: `zero_${SHARD_ID}.clients`,
-  primaryKey: ['clientGroupID', 'clientID'],
 } as const;
 
 const WATERMARK_REGEX = /[0-9a-z]{4,}/;
@@ -172,7 +171,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     published: Record<string, PublishedTableSpec>;
     upstream?: Record<string, object[]>;
     replicatedSchema: Record<string, LiteTableSpec>;
-    replicatedIndices?: LiteIndexSpec[];
+    replicatedIndexes: IndexSpec[];
     replicatedData: Record<string, object[]>;
     resultingPublications: string[];
   };
@@ -188,6 +187,25 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         [`zero_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         ['zero.schemaVersions']: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
       },
+      replicatedIndexes: [
+        {
+          columns: {lock: 'ASC'},
+          name: 'schemaVersions_pkey',
+          schema: 'zero',
+          tableName: 'schemaVersions',
+          unique: true,
+        },
+        {
+          columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+          },
+          name: 'clients_pkey',
+          schema: 'zero_initial_sync_test_id',
+          tableName: 'clients',
+          unique: true,
+        },
+      ],
       replicatedData: {
         [`zero_${SHARD_ID}.clients`]: [],
         ['zero.schemaVersions']: [
@@ -219,6 +237,25 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         [`zero_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         ['zero.schemaVersions']: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
       },
+      replicatedIndexes: [
+        {
+          columns: {lock: 'ASC'},
+          name: 'schemaVersions_pkey',
+          schema: 'zero',
+          tableName: 'schemaVersions',
+          unique: true,
+        },
+        {
+          columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+          },
+          name: 'clients_pkey',
+          schema: 'zero_initial_sync_test_id',
+          tableName: 'clients',
+          unique: true,
+        },
+      ],
       replicatedData: {
         [`zero_${SHARD_ID}.clients`]: [],
         ['zero.schemaVersions']: [
@@ -469,9 +506,37 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             },
           },
           name: 'issues',
-          primaryKey: ['orgID', 'issueID'],
         },
       },
+      replicatedIndexes: [
+        {
+          columns: {
+            issueID: 'ASC',
+            orgID: 'ASC',
+          },
+          name: 'issues_pkey',
+          schema: 'public',
+          tableName: 'issues',
+          unique: true,
+        },
+        {
+          columns: {lock: 'ASC'},
+          name: 'schemaVersions_pkey',
+          schema: 'zero',
+          tableName: 'schemaVersions',
+          unique: true,
+        },
+        {
+          columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+          },
+          name: 'clients_pkey',
+          schema: 'zero_initial_sync_test_id',
+          tableName: 'clients',
+          unique: true,
+        },
+      ],
       upstream: {
         issues: [
           {
@@ -645,9 +710,34 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             },
           },
           name: 'users',
-          primaryKey: ['userID'],
         },
       },
+      replicatedIndexes: [
+        {
+          columns: {userID: 'ASC'},
+          name: 'users_pkey',
+          schema: 'public',
+          tableName: 'users',
+          unique: true,
+        },
+        {
+          columns: {lock: 'ASC'},
+          name: 'schemaVersions_pkey',
+          schema: 'zero',
+          tableName: 'schemaVersions',
+          unique: true,
+        },
+        {
+          columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+          },
+          name: 'clients_pkey',
+          schema: 'zero_initial_sync_test_id',
+          tableName: 'clients',
+          unique: true,
+        },
+      ],
       upstream: {
         users: [
           {userID: 123, password: 'not-replicated', handle: '@zoot'},
@@ -750,9 +840,34 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             },
           },
           name: 'users',
-          primaryKey: ['userID'],
         },
       },
+      replicatedIndexes: [
+        {
+          columns: {userID: 'ASC'},
+          name: 'users_pkey',
+          schema: 'public',
+          tableName: 'users',
+          unique: true,
+        },
+        {
+          columns: {lock: 'ASC'},
+          name: 'schemaVersions_pkey',
+          schema: 'zero',
+          tableName: 'schemaVersions',
+          unique: true,
+        },
+        {
+          columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+          },
+          name: 'clients_pkey',
+          schema: 'zero_initial_sync_test_id',
+          tableName: 'clients',
+          unique: true,
+        },
+      ],
       upstream: {
         users: [
           {userID: 123, password: 'not-replicated', handle: '@zoot'},
@@ -888,7 +1003,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             },
           },
           name: 'issues',
-          primaryKey: ['orgID', 'issueID'],
         },
       },
       upstream: {},
@@ -904,15 +1018,43 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           },
         ],
       },
-      replicatedIndices: [
+      replicatedIndexes: [
         {
           columns: {
             orgID: 'DESC',
             other: 'ASC',
           },
           name: 'issues_orgID_other_idx',
+          schema: 'public',
           tableName: 'issues',
           unique: false,
+        },
+        {
+          columns: {
+            issueID: 'ASC',
+            orgID: 'ASC',
+          },
+          name: 'issues_pkey',
+          schema: 'public',
+          tableName: 'issues',
+          unique: true,
+        },
+        {
+          columns: {lock: 'ASC'},
+          name: 'schemaVersions_pkey',
+          schema: 'zero',
+          tableName: 'schemaVersions',
+          unique: true,
+        },
+        {
+          columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+          },
+          name: 'clients_pkey',
+          schema: 'zero_initial_sync_test_id',
+          tableName: 'clients',
+          unique: true,
         },
       ],
       resultingPublications: [
@@ -960,10 +1102,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         // Importantly, the initialSchema column is populated during initial sync.
         initialSchema: {
           tables: tableSpecs,
-          indexes: (c.replicatedIndices ?? []).map(spec => ({
-            schema: 'public',
-            ...spec,
-          })),
+          indexes: c.replicatedIndexes,
         },
       });
 
@@ -992,7 +1131,9 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       );
 
       const syncedIndices = listIndexes(replica);
-      expect(syncedIndices).toEqual(c.replicatedIndices ?? []);
+      expect(syncedIndices).toEqual(
+        c.replicatedIndexes.map(idx => mapPostgresToLiteIndex(idx)),
+      );
 
       expectMatchingObjectsInTables(replica, c.replicatedData, 'bigint');
 
@@ -1024,7 +1165,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     // Shard should be setup to publish all "public" tables.
     // Now add an invalid table that becomes part of that publication.
 
-    await upstream`CREATE TABLE no_primary_key(id int4)`;
+    await upstream`CREATE TABLE "has/inval!d/ch@aracter$"(id int4)`;
 
     let result;
     try {
