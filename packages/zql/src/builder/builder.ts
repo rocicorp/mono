@@ -234,15 +234,13 @@ export function applyOr(
     groupSubqueryConditions(condition);
   // if there are no subquery conditions, no fan-in / fan-out is needed
   if (subqueryConditions.length === 0) {
-    return otherConditions.length > 0
-      ? new Filter(
-          input,
-          createPredicate({
-            type: 'or',
-            conditions: otherConditions,
-          }),
-        )
-      : new FanIn(new FanOut(input), []);
+    return new Filter(
+      input,
+      createPredicate({
+        type: 'or',
+        conditions: otherConditions,
+      }),
+    );
   }
 
   const fanOut = new FanOut(input);

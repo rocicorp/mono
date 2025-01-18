@@ -562,15 +562,23 @@ export function optionalFiltersToSQL(filters: NoSubqueryCondition): SQLQuery {
     case 'simple':
       return simpleConditionToSQL(filters);
     case 'and':
-      return sql`(${sql.join(
-        filters.conditions.map(condition => optionalFiltersToSQL(condition)),
-        sql` AND `,
-      )})`;
+      return filters.conditions.length > 0
+        ? sql`(${sql.join(
+            filters.conditions.map(condition =>
+              optionalFiltersToSQL(condition),
+            ),
+            sql` AND `,
+          )})`
+        : sql`TRUE`;
     case 'or':
-      return sql`(${sql.join(
-        filters.conditions.map(condition => optionalFiltersToSQL(condition)),
-        sql` OR `,
-      )})`;
+      return filters.conditions.length > 0
+        ? sql`(${sql.join(
+            filters.conditions.map(condition =>
+              optionalFiltersToSQL(condition),
+            ),
+            sql` OR `,
+          )})`
+        : sql`FALSE`;
   }
 }
 

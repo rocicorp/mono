@@ -1191,17 +1191,16 @@ test('where exists', () => {
   expect(materialized.data).toEqual([]);
 });
 
-test('where exists 2', () => {
+test('where exists before where, see https://bugs.rocicorp.dev/issue/3417', () => {
   const queryDelegate = new QueryDelegateImpl();
   const issueSource = must(queryDelegate.getSource('issue'));
-  // const labelSource = must(queryDelegate.getSource('label'));
-  // const issueLabelSource = must(queryDelegate.getSource('issueLabel'));
 
-  newQuery(queryDelegate, schema, 'issue')
+  const materialized = newQuery(queryDelegate, schema, 'issue')
     .whereExists('labels')
     .where('closed', true)
     .materialize();
 
+  // push a row that does not match the where filter
   issueSource.push({
     type: 'add',
     row: {
@@ -1212,6 +1211,8 @@ test('where exists 2', () => {
       ownerId: '0001',
     },
   });
+
+  expect(materialized.data).toEqual([]);
 });
 
 test('result type unknown then complete', async () => {

@@ -1406,7 +1406,7 @@ test('bind static parameters', () => {
   `);
 });
 
-test.only('empty or - nothing goes through', () => {
+test('empty or - nothing goes through', () => {
   const {sources, getSource} = testSources();
   const sink = new Catch(
     buildPipeline(
@@ -1429,6 +1429,42 @@ test.only('empty or - nothing goes through', () => {
 
   sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
   expect(sink.pushes).toEqual([]);
+});
+
+test('empty and - everything goes through', () => {
+  const {sources, getSource} = testSources();
+  const sink = new Catch(
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        where: {
+          type: 'and',
+          conditions: [],
+        },
+      },
+      {
+        getSource,
+        createStorage: () => new MemoryStorage(),
+      },
+    ),
+  );
+
+  expect(sink.fetch().length).toEqual(7);
+
+  sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
+  expect(sink.pushes).toEqual([
+    {
+      node: {
+        relationships: {},
+        row: {
+          id: 8,
+          name: 'sam',
+        },
+      },
+      type: 'add',
+    },
+  ]);
 });
 
 test('always false literal comparison - nothing goes through', () => {
