@@ -73,5 +73,5 @@ export interface Source {
 }
 
 export interface SourceInput extends Input {
-  readonly appliedFilters: boolean;
+  readonly fullyAppliedFilters: boolean;
 }
