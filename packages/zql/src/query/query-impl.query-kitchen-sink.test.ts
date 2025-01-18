@@ -553,6 +553,7 @@ describe('kitchen sink query', () => {
           ],
           "owner": {
             "id": "001",
+            "metadata": null,
             "name": "Alice",
           },
           "ownerId": "001",
@@ -602,6 +603,7 @@ describe('kitchen sink query', () => {
           ],
           "owner": {
             "id": "001",
+            "metadata": null,
             "name": "Alice",
           },
           "ownerId": "001",
@@ -615,6 +617,7 @@ describe('kitchen sink query', () => {
           "labels": [],
           "owner": {
             "id": "002",
+            "metadata": null,
             "name": "Bob",
           },
           "ownerId": "002",
@@ -652,6 +655,7 @@ describe('kitchen sink query', () => {
           "labels": [],
           "owner": {
             "id": "002",
+            "metadata": null,
             "name": "Bob",
           },
           "ownerId": "002",
@@ -665,6 +669,9 @@ describe('kitchen sink query', () => {
           "labels": [],
           "owner": {
             "id": "003",
+            "metadata": {
+              "foo": 1,
+            },
             "name": "Charlie",
           },
           "ownerId": "003",

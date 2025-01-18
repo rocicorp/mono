@@ -451,17 +451,17 @@ describe('joins and filters', () => {
           "comments": [
             {
               "authorId": "0001",
-              "text": "comment 1",
+              "createdAt": 1,
               "id": "0001",
               "issueId": "0001",
-              "createdAt": 1
+              "text": "comment 1",
             },
             {
               "authorId": "0002",
-              "text": "comment 2",
+              "createdAt": 2,
               "id": "0002",
               "issueId": "0001",
-              "createdAt": 2
+              "text": "comment 2",
             },
           ],
           "description": "description 1",
@@ -631,7 +631,7 @@ describe('joins and filters', () => {
                 "name": "Alice",
               },
               "authorId": "0001",
-              "body": "comment 1",
+              "createdAt": 1,
               "id": "0001",
               "issueId": "0001",
               "revisions": [
@@ -642,6 +642,7 @@ describe('joins and filters', () => {
                   "text": "revision 1",
                 },
               ],
+              "text": "comment 1",
             },
             {
               "author": {
@@ -658,10 +659,11 @@ describe('joins and filters', () => {
                 "name": "Bob",
               },
               "authorId": "0002",
-              "body": "comment 2",
+              "createdAt": 2,
               "id": "0002",
               "issueId": "0001",
               "revisions": [],
+              "text": "comment 2",
             },
           ],
           "description": "description 1",
@@ -728,17 +730,17 @@ test('run', () => {
         "comments": [
           {
             "authorId": "0001",
-            "text": "comment 1",
+            "createdAt": 1,
             "id": "0001",
             "issueId": "0001",
-            "createdAt": 1
+            "text": "comment 1",
           },
           {
             "authorId": "0002",
-            "text": "comment 2",
+            "createdAt": 2,
             "id": "0002",
             "issueId": "0001",
-            "createdAt": 2
+            "text": "comment 2",
           },
         ],
         "description": "description 1",

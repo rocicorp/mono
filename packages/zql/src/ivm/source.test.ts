@@ -1573,7 +1573,7 @@ suite('overlay-vs-filter', () => {
             },
           ],
         ],
-        "fullyAppliedFilters": undefined,
+        "fullyAppliedFilters": true,
       }
     `);
   });
@@ -1596,7 +1596,7 @@ suite('overlay-vs-filter', () => {
     ).toMatchInlineSnapshot(`
       {
         "fetches": [],
-        "fullyAppliedFilters": undefined,
+        "fullyAppliedFilters": true,
       }
     `);
   });
@@ -1630,7 +1630,7 @@ suite('overlay-vs-filter', () => {
             },
           ],
         ],
-        "fullyAppliedFilters": undefined,
+        "fullyAppliedFilters": true,
       }
     `);
   });
@@ -1671,7 +1671,7 @@ suite('overlay-vs-filter', () => {
             },
           ],
         ],
-        "fullyAppliedFilters": undefined,
+        "fullyAppliedFilters": true,
       }
     `);
   });
@@ -1729,7 +1729,7 @@ suite('overlay-vs-filter', () => {
             },
           ],
         ],
-        "fullyAppliedFilters": undefined,
+        "fullyAppliedFilters": true,
       }
     `);
   });
@@ -1787,7 +1787,7 @@ suite('overlay-vs-filter', () => {
             },
           ],
         ],
-        "fullyAppliedFilters": undefined,
+        "fullyAppliedFilters": true,
       }
     `);
   });
@@ -1854,7 +1854,7 @@ suite('overlay-vs-filter', () => {
             },
           ],
         ],
-        "fullyAppliedFilters": undefined,
+        "fullyAppliedFilters": false,
       }
     `);
   });
@@ -1915,7 +1915,7 @@ suite('overlay-vs-filter', () => {
             },
           ],
         ],
-        "fullyAppliedFilters": undefined,
+        "fullyAppliedFilters": false,
       }
     `);
   });
