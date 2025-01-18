@@ -430,8 +430,7 @@ export class TableSource implements Source {
 
   #getRowStmtCache = new Map<string, string>();
 
-  #getRowStmt(rowKey: Row): string {
-    const keyCols = Object.keys(rowKey);
+  #getRowStmt(keyCols: string[]): string {
     const keyString = JSON.stringify(keyCols);
     let stmt = this.#getRowStmtCache.get(keyString);
     if (!stmt) {
@@ -456,9 +455,12 @@ export class TableSource implements Source {
    * to the `primaryKey` with which this TableSource.
    */
   getRow(rowKey: Row): Row | undefined {
-    const stmt = this.#getRowStmt(rowKey);
+    const keyCols = Object.keys(rowKey);
+    const keyVals = Object.values(rowKey);
+
+    const stmt = this.#getRowStmt(keyCols);
     const row = this.#stmts.cache.use(stmt, cached =>
-      cached.statement.safeIntegers(true).get<Row>(Object.values(rowKey)),
+      cached.statement.safeIntegers(true).get<Row>(keyVals),
     );
     if (row) {
       return fromSQLiteTypes(this.#columns, row);
