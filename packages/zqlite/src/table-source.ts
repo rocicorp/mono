@@ -68,7 +68,6 @@ type Statements = {
   readonly delete: Statement;
   readonly update: Statement | undefined;
   readonly checkExists: Statement;
-  readonly getRow: Statement;
 };
 
 /**
@@ -441,15 +440,37 @@ export class TableSource implements Source {
     }
   }
 
+  #getRowStmtCache = new Map<string, string>();
+
+  #getRowStmt(rowKey: Row): string {
+    const keyCols = Object.keys(rowKey);
+    const keyString = JSON.stringify(keyCols);
+    let stmt = this.#getRowStmtCache.get(keyString);
+    if (!stmt) {
+      stmt = compile(
+        sql`SELECT ${this.#allColumns} FROM ${sql.ident(
+          this.#table,
+        )} WHERE ${sql.join(
+          keyCols.map(k => sql`${sql.ident(k)}=?`),
+          sql` AND`,
+        )}`,
+      );
+      this.#getRowStmtCache.set(keyString, stmt);
+    }
+    return stmt;
+  }
+
   /**
-   * Retrieves a row from the backing DB by its primary key, or `undefined` if such a
+   * Retrieves a row from the backing DB by a unique key, or `undefined` if such a
    * row does not exist. This is not used in the IVM pipeline but is useful
    * for retrieving data that is consistent with the state (and type
-   * semantics) of the pipeline.
+   * semantics) of the pipeline. Note that this key may not necessarily correspond
+   * to the `primaryKey` with which this TableSource.
    */
-  getRow(pk: Row): Row | undefined {
-    const row = this.#stmts.getRow.get<Row>(
-      this.#primaryKey.map(key => pk[key]),
+  getRow(rowKey: Row): Row | undefined {
+    const stmt = this.#getRowStmt(rowKey);
+    const row = this.#stmts.cache.use(stmt, cached =>
+      cached.statement.safeIntegers(true).get<Row>(...Object.values(rowKey)),
     );
     if (row) {
       return fromSQLiteTypes(this.#columns, row);

@@ -706,6 +706,14 @@ test('getByKey', () => {
     c: true,
   });
 
+  // Ensure that it works with any unique key
+  expect(source.getRow({id: '3'})).toEqual({
+    id: '3',
+    a: Number.MAX_SAFE_INTEGER,
+    b: Number.MIN_SAFE_INTEGER,
+    c: true,
+  });
+
   // Exists but contains an out-of-bounds value.
   expect(() =>
     source.getRow({

@@ -1085,6 +1085,25 @@ describe('view-syncer/pipeline-driver', () => {
       upvotes: 20000,
       ['_0_version']: '134',
     });
+
+    [...pipelines.addQuery('hash2', ISSUES_QUERY_WITH_EXISTS)];
+
+    // getRow should work with any row key
+    expect(
+      pipelines.getRow('issueLabels', {issueID: '1', labelID: '1'}),
+    ).toEqual({
+      issueID: '1',
+      labelID: '1',
+      legacyID: '1-1',
+      ['_0_version']: '123',
+    });
+
+    expect(pipelines.getRow('issueLabels', {legacyID: '1-1'})).toEqual({
+      issueID: '1',
+      labelID: '1',
+      legacyID: '1-1',
+      ['_0_version']: '123',
+    });
   });
 
   test('schemaVersions change and insert', () => {
