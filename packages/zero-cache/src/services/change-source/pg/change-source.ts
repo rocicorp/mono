@@ -68,6 +68,7 @@ import {getPublicationInfo, type PublishedSchema} from './schema/published.js';
 import {
   getInternalShardConfig,
   INTERNAL_PUBLICATION_PREFIX,
+  replicaIdentitiesForTablesWithoutPrimaryKeys,
   type InternalShardConfig,
 } from './schema/shard.js';
 import {validate} from './schema/validation.js';
@@ -402,6 +403,8 @@ type ReplicationError = {
   lastLogTime: number;
 };
 
+const SET_REPLICA_IDENTITY_DELAY_MS = 500;
+
 class ChangeMaker {
   readonly #lc: LogContext;
   readonly #shardID: string;
@@ -409,6 +412,7 @@ class ChangeMaker {
   readonly #shardConfig: InternalShardConfig;
   readonly #upstream: ShortLivedClient;
 
+  #replicaIdentityTimer: NodeJS.Timeout | undefined;
   #error: ReplicationError | undefined;
 
   constructor(
@@ -514,6 +518,10 @@ class ChangeMaker {
 
   #handleCustomMessage(msg: MessageMessage) {
     const event = this.#parseReplicationEvent(msg.content);
+    // Cancel manual schema adjustment timeouts when an upstream schema change
+    // is about to happen, so as to avoid interfering / redundant work.
+    clearTimeout(this.#replicaIdentityTimer);
+
     if (event.type === 'ddlStart') {
       // Store the schema in order to diff it with a potential ddlUpdate.
       this.#preSchema = event.schema;
@@ -528,6 +536,19 @@ class ChangeMaker {
     this.#lc
       .withContext('query', event.context.query)
       .info?.(`${changes.length} schema change(s)`, changes);
+
+    const replicaIdentities = replicaIdentitiesForTablesWithoutPrimaryKeys(
+      event.schema,
+    );
+    if (replicaIdentities) {
+      this.#replicaIdentityTimer = setTimeout(async () => {
+        try {
+          await replicaIdentities.apply(this.#lc, this.#upstream.db);
+        } catch (err) {
+          this.#lc.warn?.(`error setting replica identities`, err);
+        }
+      }, SET_REPLICA_IDENTITY_DELAY_MS);
+    }
 
     return changes;
   }

@@ -7,6 +7,7 @@ import {TestLogSink} from '../../../../../shared/src/logging-test-utils.js';
 import {Queue} from '../../../../../shared/src/queue.js';
 import {promiseVoid} from '../../../../../shared/src/resolved-promises.js';
 import {sleep} from '../../../../../shared/src/sleep.js';
+import {Default, Index} from '../../../db/postgres-replica-identity-enum.js';
 import {StatementRunner} from '../../../db/statements.js';
 import {
   dropReplicationSlots,
@@ -394,6 +395,61 @@ describe('change-source/pg', {timeout: 10000}, () => {
       stream3.changes.cancel();
     },
   );
+
+  test('set replica identity using index', async () => {
+    const stream = await startStream('00');
+    const changes = drainToQueue(stream.changes);
+
+    const getReplicaIdentityStatement = `
+      SELECT relname as name, relreplident as "replicaIdentity" FROM pg_class 
+        WHERE relname = 'join_table';
+      SELECT relname as name, indisreplident as "isReplicaIdentity" FROM pg_index
+        JOIN pg_class ON indexrelid = oid
+        WHERE pg_class.relname = 'join_key';
+    `;
+
+    // Create a table without a primary key but suitable index.
+    const beforeState = await upstream.unsafe(`
+      CREATE TABLE zero.join_table(id1 TEXT NOT NULL, id2 TEXT NOT NULL);
+      CREATE UNIQUE INDEX join_key ON zero.join_table(id1, id2);
+      ${getReplicaIdentityStatement}
+    `);
+    expect(beforeState).toEqual([
+      [],
+      [{name: 'join_table', replicaIdentity: Default}],
+      [{name: 'join_key', isReplicaIdentity: false}],
+    ]);
+
+    expect(await changes.dequeue()).toMatchObject([
+      'begin',
+      {tag: 'begin'},
+      {commitWatermark: WATERMARK_REGEX},
+    ]);
+    expect(await changes.dequeue()).toMatchObject([
+      'data',
+      {tag: 'create-table'},
+    ]);
+    expect(await changes.dequeue()).toMatchObject([
+      'data',
+      {tag: 'create-index'},
+    ]);
+    expect(await changes.dequeue()).toMatchObject([
+      'commit',
+      {tag: 'commit'},
+      {watermark: WATERMARK_REGEX},
+    ]);
+
+    // Let the 500ms timeout fire.
+    await sleep(600);
+
+    const afterState = await upstream.unsafe(getReplicaIdentityStatement);
+    expect(afterState).toEqual([
+      [{name: 'join_table', replicaIdentity: Index}],
+      [{name: 'join_key', isReplicaIdentity: true}],
+    ]);
+
+    stream.changes.cancel();
+  });
 
   test('bad schema change error', async () => {
     const {changes} = await startStream('00');
