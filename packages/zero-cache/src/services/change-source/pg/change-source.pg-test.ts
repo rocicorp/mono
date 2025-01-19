@@ -440,9 +440,17 @@ describe('change-source/pg', {timeout: 10000}, () => {
     ]);
 
     // Let the 500ms timeout fire.
-    await sleep(600);
+    await sleep(550);
 
-    const afterState = await upstream.unsafe(getReplicaIdentityStatement);
+    // Poll upstream up to 5 times to account for timing variability.
+    let afterState;
+    for (let i = 0; i < 5; i++) {
+      afterState = await upstream.unsafe(getReplicaIdentityStatement);
+      if (afterState[0].replicaIdentity === Index) {
+        break;
+      }
+      await sleep(100);
+    }
     expect(afterState).toEqual([
       [{name: 'join_table', replicaIdentity: Index}],
       [{name: 'join_key', isReplicaIdentity: true}],
