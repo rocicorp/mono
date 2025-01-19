@@ -26,6 +26,7 @@ import {
   type Comparator,
   type Node,
 } from '../../zql/src/ivm/data.js';
+import {filterPush} from '../../zql/src/ivm/filter-push.js';
 import {
   generateWithOverlay,
   generateWithStart,
@@ -48,7 +49,6 @@ import {Database, Statement} from './db.js';
 import {compile, format, sql} from './internal/sql.js';
 import {StatementCache} from './internal/statement-cache.js';
 import {runtimeDebugFlags, runtimeDebugStats} from './runtime-debug.js';
-import {filterPush} from '../../zql/src/ivm/filter-push.js';
 
 type Connection = {
   input: Input;
@@ -321,7 +321,6 @@ export class TableSource implements Source {
   }
 
   *genPush(change: SourceChange) {
-    console.log(change);
     const exists = (row: Row) =>
       this.#stmts.checkExists.get<{exists: number}>(
         ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
@@ -498,12 +497,10 @@ export class TableSource implements Source {
         gatherStartConstraints(start, reverse, order, this.#columns),
       );
     }
-    console.log(constraints.length);
 
     if (filters) {
       constraints.push(filtersToSQL(filters));
     }
-    console.log(constraints.length);
 
     if (constraints.length > 0) {
       query = sql`${query} WHERE ${sql.join(constraints, sql` AND `)}`;
