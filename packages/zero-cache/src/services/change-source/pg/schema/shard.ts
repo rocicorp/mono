@@ -203,7 +203,8 @@ export async function setupTablesAndReplication(
   // Setup the global tables and shard tables / publications.
   await tx.unsafe(GLOBAL_SETUP + shardSetup(id, allPublications));
 
-  await setReplicaIdentityForTablesWithoutPrimaryKeys(lc, tx, allPublications);
+  const pubs = await getPublicationInfo(tx, allPublications);
+  await replicaIdentitiesForTablesWithoutPrimaryKeys(pubs)?.apply(lc, tx);
 
   try {
     await tx.savepoint(sub => sub.unsafe(triggerSetup(id, allPublications)));
@@ -249,12 +250,18 @@ export function validatePublications(
   published.tables.forEach(table => validate(lc, shardID, table));
 }
 
-async function setReplicaIdentityForTablesWithoutPrimaryKeys(
-  lc: LogContext,
-  db: PostgresDB,
-  publications: string[],
-) {
-  const pubs = await getPublicationInfo(db, publications);
+type ReplicaIdentities = {
+  apply(lc: LogContext, db: PostgresDB): Promise<void>;
+};
+
+export function replicaIdentitiesForTablesWithoutPrimaryKeys(
+  pubs: PublishedSchema,
+): ReplicaIdentities | undefined {
+  const replicaIdentities: {
+    schema: string;
+    tableName: string;
+    indexName: string;
+  }[] = [];
   for (const table of pubs.tables) {
     if (!table.primaryKey?.length && table.replicaIdentity === Default) {
       // Look for an index that can serve as the REPLICA IDENTITY USING INDEX. It must be:
@@ -275,14 +282,25 @@ async function setReplicaIdentityForTablesWithoutPrimaryKeys(
         if (Object.keys(columns).some(col => !table.columns[col].notNull)) {
           continue; // Only indexes with all NOT NULL columns are suitable.
         }
+        replicaIdentities.push({schema, tableName, indexName});
+        break;
+      }
+    }
+  }
+
+  if (replicaIdentities.length === 0) {
+    return undefined;
+  }
+  return {
+    apply: async (lc: LogContext, db: PostgresDB) => {
+      for (const {schema, tableName, indexName} of replicaIdentities) {
         lc.info?.(
           `setting "${indexName}" as the REPLICA IDENTITY for "${tableName}"`,
         );
         await db`ALTER TABLE ${db(schema)}.${db(
           tableName,
         )} REPLICA IDENTITY USING INDEX ${db(indexName)}`;
-        break;
       }
-    }
-  }
+    },
+  };
 }
