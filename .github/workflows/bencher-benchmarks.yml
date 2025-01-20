@@ -44,10 +44,10 @@ jobs:
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           --start-point main \
-          --start-point-max-versions 1 \
           --threshold-measure file-size \
           --threshold-test percentage \
           --threshold-upper-boundary 0.02 \
+          --threshold-max-sample-size 2 \
           --err \
           --file-size out/zero-package.tgz \
           --file-size out/zero.js.br \
