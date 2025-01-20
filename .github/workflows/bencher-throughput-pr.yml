@@ -1,0 +1,52 @@
+name: Bencher Perf PR
+
+on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+
+jobs:
+  file_sizes:
+    name: Bencher Throughput
+    # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+      - uses: bencherdev/bencher@main
+
+      - run: npm ci
+
+      - name: Install Playwright Deps
+        run: npx playwright install --with-deps
+
+      - name: Run benchmarks
+        working-directory: packages/zero-client
+        run: npm run bench -- --outputJson output.json
+
+      - name: Track PR benchmarks with Bencher
+        working-directory: packages/zero-client
+        run: |
+          cat output.json |\
+          npx tsx ../shared/src/tool/vitest-perf-json-to-bmf.ts |\
+          bencher run \
+          --project zero-perf \
+          --token '${{ secrets.BENCHER_API_TOKEN }}' \
+          --adapter json \
+          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+          --branch "$GITHUB_HEAD_REF" \
+          --start-point "$GITHUB_BASE_REF" \
+          --start-point-hash '${{ github.event.pull_request.base.sha }}' \
+          --start-point-clone-thresholds \
+          --start-point-reset \
+          --threshold-measure throughput \
+          --threshold-test percentage \
+          --threshold-upper-boundary 0.02 \
+          --threshold-max-sample-size 2 \
+          --err
