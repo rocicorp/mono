@@ -14,7 +14,7 @@
     "test:watch": "vitest watch"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.5.1",
+    "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/logger": "^5.3.0",
     "@rocicorp/prettier-config": "^0.2.0",
     "typescript": "^5.6.3",
