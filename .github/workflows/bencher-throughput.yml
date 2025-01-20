@@ -27,7 +27,7 @@ jobs:
         working-directory: packages/zero-client
         run: npm run bench -- --outputJson output.json
 
-      - name: Track benchmarks with Bencher
+      - name: Upload benchmarks results to bencher.dev
         working-directory: packages/zero-client
         run: |
           cat output.json |\

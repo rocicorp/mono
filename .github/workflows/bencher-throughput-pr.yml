@@ -30,7 +30,7 @@ jobs:
         working-directory: packages/zero-client
         run: npm run bench -- --outputJson output.json
 
-      - name: Track PR benchmarks with Bencher
+      - name: Upload PR benchmarks results to bencher.dev
         working-directory: packages/zero-client
         run: |
           cat output.json |\
