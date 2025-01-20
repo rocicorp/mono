@@ -1,17 +1,14 @@
-name: Bencher Perf PR
+name: Bencher Perf
 
 on:
-  pull_request:
-    types: [opened, reopened, edited, synchronize]
+  push:
+    branches: main
 
 jobs:
   throughput:
     name: Bencher Throughput
-    # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-
     permissions:
-      pull-requests: write
+      checks: write
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
@@ -30,7 +27,7 @@ jobs:
         working-directory: packages/zero-client
         run: npm run bench -- --outputJson output.json
 
-      - name: Track PR benchmarks with Bencher
+      - name: Track benchmarks with Bencher
         working-directory: packages/zero-client
         run: |
           cat output.json |\
@@ -41,10 +38,7 @@ jobs:
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           --branch "$GITHUB_HEAD_REF" \
-          --start-point "$GITHUB_BASE_REF" \
-          --start-point-hash '${{ github.event.pull_request.base.sha }}' \
-          --start-point-clone-thresholds \
-          --start-point-reset \
+          --start-point main \
           --threshold-measure throughput \
           --threshold-test percentage \
           --threshold-lower-boundary 0.05 \
