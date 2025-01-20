@@ -20,8 +20,8 @@ const SHARD_ID = 'sync_schema_test_id';
 
 // Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
-  dataVersion: 2,
-  schemaVersion: 2,
+  dataVersion: 3,
+  schemaVersion: 3,
   minSafeVersion: 1,
   lock: 1, // Internal column, always 1
 };
