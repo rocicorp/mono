@@ -37,7 +37,7 @@ jobs:
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
-          --start-point main \
+          # --start-point main \
           # --threshold-measure throughput \
           # --threshold-test t_test \
           # --threshold-lower-boundary 0.95 \

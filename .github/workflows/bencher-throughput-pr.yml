@@ -41,10 +41,10 @@ jobs:
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           --branch "$GITHUB_HEAD_REF" \
-          --start-point "$GITHUB_BASE_REF" \
-          --start-point-hash '${{ github.event.pull_request.base.sha }}' \
-          --start-point-clone-thresholds \
-          --start-point-reset \
+          # --start-point "$GITHUB_BASE_REF" \
+          # --start-point-hash '${{ github.event.pull_request.base.sha }}' \
+          # --start-point-clone-thresholds \
+          # --start-point-reset \
           # --threshold-measure throughput \
           # --threshold-test t_test \
           # --threshold-lower-boundary 0.95 \
