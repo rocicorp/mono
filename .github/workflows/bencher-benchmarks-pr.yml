@@ -48,7 +48,7 @@ jobs:
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           --branch "$GITHUB_HEAD_REF" \
           --start-point "$GITHUB_BASE_REF" \
-          --start-point-hash '${{ github.event.pull_request.base.sha }}' \\
+          --start-point-hash '${{ github.event.pull_request.base.sha }}' \
           --start-point-clone-thresholds \
           --start-point-reset \
           --threshold-measure file-size \
