@@ -103,12 +103,12 @@ function toLiteValue(val: JSONValue): Exclude<JSONValue, boolean> {
 }
 
 export function mapLiteDataTypeToZqlSchemaValue(
-  liteDataType: string,
+  liteDataType: LiteTypeString,
 ): SchemaValue {
   return {type: mapLiteDataTypeToZqlValueType(liteDataType)};
 }
 
-function mapLiteDataTypeToZqlValueType(dataType: string): ValueType {
+function mapLiteDataTypeToZqlValueType(dataType: LiteTypeString): ValueType {
   const type = dataTypeToZqlValueType(dataType);
   if (type === undefined) {
     throw new Error(`Unsupported data type ${dataType}`);
@@ -116,18 +116,58 @@ function mapLiteDataTypeToZqlValueType(dataType: string): ValueType {
   return type;
 }
 
+// Note: Includes the "TEXT" substring for SQLite type affinity
+const TEXT_ENUM_ATTRIBUTE = '|TEXT_ENUM';
+const NOT_NULL_ATTRIBUTE = '|NOT_NULL';
+
 /**
- * Creates an SQLite type name for encoding postgres enums.
- * The presence of the "TEXT" string in the type name results in
- * an SQLite textual type affinity.
+ * The `LiteTypeString` utilizes SQLite's loose type system to encode
+ * auxiliary information about the upstream column (e.g. type and
+ * constraints) that does not necessarily affect how SQLite handles the data,
+ * but nonetheless determines how higher level logic handles the data.
  *
- * https://www.sqlite.org/datatype3.html
- * */
-export function textEnumTypeName(name: string) {
-  return TEXT_ENUM_PREFIX + name;
+ * The format of the type string is the original upstream type, followed
+ * by any number of attributes, each of which begins with the `|` character.
+ * The current list of attributes are:
+ * * `|NOT_NULL` to indicate that the upstream column does not allow nulls
+ * * `|TEXT_ENUM` to indicate an enum that should be treated as a string
+ *
+ * Examples:
+ * * `int8`
+ * * `int8|NOT_NULL`
+ * * `timestamp with time zone`
+ * * `timestamp with time zone|NOT_NULL`
+ * * `nomz|TEXT_ENUM`
+ * * `nomz|NOT_NULL|TEXT_ENUM`
+ */
+export type LiteTypeString = string;
+
+/**
+ * Formats a {@link LiteTypeString}.
+ */
+export function liteTypeString(
+  upstreamDataType: string,
+  notNull: boolean | null | undefined,
+  textEnum: boolean,
+): LiteTypeString {
+  let typeString = upstreamDataType;
+  if (notNull) {
+    typeString += NOT_NULL_ATTRIBUTE;
+  }
+  if (textEnum) {
+    typeString += TEXT_ENUM_ATTRIBUTE;
+  }
+  return typeString;
 }
 
-const TEXT_ENUM_PREFIX = 'TEXT_ENUM_';
+export function upstreamDataType(liteTypeString: LiteTypeString) {
+  const delim = liteTypeString.indexOf('|');
+  return delim > 0 ? liteTypeString.substring(0, delim) : liteTypeString;
+}
+
+export function nullableUpstream(liteTypeString: LiteTypeString) {
+  return !liteTypeString.includes(NOT_NULL_ATTRIBUTE);
+}
 
 /**
  * Returns the value type for the `pgDataType` if it is supported by ZQL.
@@ -136,9 +176,9 @@ const TEXT_ENUM_PREFIX = 'TEXT_ENUM_';
  * For types not supported by ZQL, returns `undefined`.
  */
 export function dataTypeToZqlValueType(
-  pgDataType: string,
+  liteTypeString: LiteTypeString,
 ): ValueType | undefined {
-  switch (pgDataType.toLowerCase()) {
+  switch (upstreamDataType(liteTypeString).toLowerCase()) {
     case 'smallint':
     case 'integer':
     case 'int':
@@ -189,7 +229,7 @@ export function dataTypeToZqlValueType(
     // TODO: Add support for these.
     // case 'bytea':
     default:
-      if (pgDataType.startsWith(TEXT_ENUM_PREFIX)) {
+      if (liteTypeString.includes(TEXT_ENUM_ATTRIBUTE)) {
         return 'string';
       }
       return undefined;

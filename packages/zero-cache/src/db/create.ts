@@ -7,7 +7,7 @@ import type {
 } from './specs.js';
 
 export function columnDef(spec: ColumnSpec) {
-  const parts = [spec.dataType];
+  const parts = [id(spec.dataType)];
   if (spec.characterMaximumLength) {
     parts.push(`(${spec.characterMaximumLength})`);
   }
