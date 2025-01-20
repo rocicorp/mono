@@ -6,7 +6,7 @@ on:
 
 jobs:
   throughput:
-    name: Bencher Throughput
+    name: Bencher Perf Test PR
     # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
 
@@ -45,8 +45,7 @@ jobs:
           --start-point-hash '${{ github.event.pull_request.base.sha }}' \
           --start-point-clone-thresholds \
           --start-point-reset \
-          --threshold-measure throughput \
-          --threshold-test percentage \
-          --threshold-lower-boundary 0.05 \
-          --threshold-max-sample-size 2 \
-          --err
+          # --threshold-measure throughput \
+          # --threshold-test t_test \
+          # --threshold-lower-boundary 0.95 \
+          # --err

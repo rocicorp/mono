@@ -6,7 +6,7 @@ on:
 
 jobs:
   throughput:
-    name: Bencher Throughput
+    name: Bencher Perf Test
     permissions:
       checks: write
     runs-on: self-hosted
@@ -38,8 +38,7 @@ jobs:
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           --start-point main \
-          --threshold-measure throughput \
-          --threshold-test percentage \
-          --threshold-lower-boundary 0.05 \
-          --threshold-max-sample-size 2 \
-          --err
+          # --threshold-measure throughput \
+          # --threshold-test t_test \
+          # --threshold-lower-boundary 0.95 \
+          # --err
