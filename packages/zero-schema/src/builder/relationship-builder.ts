@@ -98,7 +98,10 @@ export function relationships<
     };
   }) => TRelationships,
 ): {name: TSource['name']; relationships: TRelationships} {
-  const relationships = cb({many, one} as any);
+  const relationships = cb({
+    many: (...args) => manyOrOne(args, 'many'),
+    one: (...args) => manyOrOne(args, 'one'),
+  } as Parameters<typeof cb>[0]);
 
   return {
     name: table.schema.name,
@@ -106,24 +109,22 @@ export function relationships<
   };
 }
 
-function many(
-  ...args: readonly ConnectArg<any, any, TableSchema>[]
-): ManyConnection<any, any, any>[] {
+function manyOrOne(
+  args: readonly ConnectArg<any, any, TableSchema>[],
+  cardinality: 'many',
+): ManyConnection<any, any, any>[];
+function manyOrOne(
+  args: readonly ConnectArg<any, any, TableSchema>[],
+  cardinality: 'one',
+): OneConnection<any, any, any>[];
+function manyOrOne(
+  args: readonly ConnectArg<any, any, TableSchema>[],
+  cardinality: 'many' | 'one',
+) {
   return args.map(arg => ({
     sourceField: arg.sourceField,
     destField: arg.destField,
     destSchema: arg.destSchema.schema.name,
-    cardinality: 'many',
-  }));
-}
-
-function one(
-  ...args: readonly ConnectArg<any, any, TableSchema>[]
-): OneConnection<any, any, any>[] {
-  return args.map(arg => ({
-    sourceField: arg.sourceField,
-    destField: arg.destField,
-    destSchema: arg.destSchema.schema.name,
-    cardinality: 'one',
+    cardinality,
   }));
 }
