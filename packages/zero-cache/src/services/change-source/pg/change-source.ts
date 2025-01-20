@@ -718,9 +718,12 @@ class ChangeMaker {
     // Not a rename, add, or drop. Find the column with a relevant update.
     for (const [name, oldSpec] of Object.entries(oldTable.columns)) {
       const newSpec = newTable.columns[name];
-      // Besides the name, we only care about the data type.
-      // Default values and constraints are not relevant.
-      if (oldSpec.dataType !== newSpec.dataType) {
+      // Besides the name, we only care about the data type and not null.
+      // Default values and other constraints are not relevant.
+      if (
+        oldSpec.dataType !== newSpec.dataType ||
+        oldSpec.notNull !== newSpec.notNull
+      ) {
         return [
           {
             tag: 'update-column',

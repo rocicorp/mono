@@ -44,6 +44,7 @@ describe('lite/tables', () => {
               dflt: null,
             },
           },
+          primaryKey: ['clientID'],
         },
       ],
     },
@@ -122,6 +123,7 @@ describe('lite/tables', () => {
               dflt: null,
             },
           },
+          primaryKey: ['user_id'],
         },
       ],
     },
@@ -169,6 +171,7 @@ describe('lite/tables', () => {
               dflt: null,
             },
           },
+          primaryKey: ['org_id', 'component_id', 'issue_id'],
         },
       ],
     },
@@ -292,7 +295,7 @@ describe('computeZqlSpec', () => {
     expect(
       t(`
     CREATE TABLE nopk(a INT, b INT, c INT, d INT);
-    CREATE TABLE foo(a INT, b INT, c INT, d INT);
+    CREATE TABLE foo(a INT, b "INT|NOT_NULL", c INT, d INT);
     CREATE UNIQUE INDEX foo_pkey ON foo(b ASC);
     `),
     ).toMatchInlineSnapshot(`
@@ -309,7 +312,7 @@ describe('computeZqlSpec', () => {
               },
               "b": {
                 "characterMaximumLength": null,
-                "dataType": "INT",
+                "dataType": "INT|NOT_NULL",
                 "dflt": null,
                 "notNull": false,
                 "pos": 2,
@@ -359,7 +362,7 @@ describe('computeZqlSpec', () => {
   test('unsupported columns are excluded', () => {
     expect(
       t(`
-    CREATE TABLE foo(a INT, b TEXT, c TIME, d BYTEA);
+    CREATE TABLE foo(a INT, b "TEXT|NOT_NULL", c TIME, d BYTEA);
     CREATE UNIQUE INDEX foo_pkey ON foo(b ASC);
     `),
     ).toMatchInlineSnapshot(`
@@ -376,7 +379,7 @@ describe('computeZqlSpec', () => {
               },
               "b": {
                 "characterMaximumLength": null,
-                "dataType": "TEXT",
+                "dataType": "TEXT|NOT_NULL",
                 "dflt": null,
                 "notNull": false,
                 "pos": 2,
@@ -406,7 +409,7 @@ describe('computeZqlSpec', () => {
   test('indexes with unsupported columns are excluded', () => {
     expect(
       t(`
-    CREATE TABLE foo(a INT, b TEXT, c TIME, d TEXT);
+    CREATE TABLE foo(a "INT|NOT_NULL", b "TEXT|NOT_NULL", c "TIME|NOT_NULL", d "TEXT|NOT_NULL");
     CREATE UNIQUE INDEX foo_pkey ON foo(a ASC, c DESC);
     CREATE UNIQUE INDEX foo_other_key ON foo(b ASC, d ASC, a DESC);
     `),
@@ -417,21 +420,21 @@ describe('computeZqlSpec', () => {
             "columns": {
               "a": {
                 "characterMaximumLength": null,
-                "dataType": "INT",
+                "dataType": "INT|NOT_NULL",
                 "dflt": null,
                 "notNull": false,
                 "pos": 1,
               },
               "b": {
                 "characterMaximumLength": null,
-                "dataType": "TEXT",
+                "dataType": "TEXT|NOT_NULL",
                 "dflt": null,
                 "notNull": false,
                 "pos": 2,
               },
               "d": {
                 "characterMaximumLength": null,
-                "dataType": "TEXT",
+                "dataType": "TEXT|NOT_NULL",
                 "dflt": null,
                 "notNull": false,
                 "pos": 4,
@@ -465,10 +468,82 @@ describe('computeZqlSpec', () => {
     `);
   });
 
+  test('indexes with nullable columns are excluded', () => {
+    expect(
+      t(`
+    CREATE TABLE foo(a "INT|NOT_NULL", b "TEXT|NOT_NULL", c TEXT, d "TEXT|NOT_NULL");
+    CREATE UNIQUE INDEX foo_pkey ON foo(a ASC, c DESC);
+    CREATE UNIQUE INDEX foo_other_key ON foo(b ASC, d ASC, a DESC);
+    `),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "tableSpec": {
+            "columns": {
+              "a": {
+                "characterMaximumLength": null,
+                "dataType": "INT|NOT_NULL",
+                "dflt": null,
+                "notNull": false,
+                "pos": 1,
+              },
+              "b": {
+                "characterMaximumLength": null,
+                "dataType": "TEXT|NOT_NULL",
+                "dflt": null,
+                "notNull": false,
+                "pos": 2,
+              },
+              "c": {
+                "characterMaximumLength": null,
+                "dataType": "TEXT",
+                "dflt": null,
+                "notNull": false,
+                "pos": 3,
+              },
+              "d": {
+                "characterMaximumLength": null,
+                "dataType": "TEXT|NOT_NULL",
+                "dflt": null,
+                "notNull": false,
+                "pos": 4,
+              },
+            },
+            "name": "foo",
+            "primaryKey": [
+              "a",
+              "b",
+              "d",
+            ],
+            "unionKey": [
+              "a",
+              "b",
+              "d",
+            ],
+          },
+          "zqlSpec": {
+            "a": {
+              "type": "number",
+            },
+            "b": {
+              "type": "string",
+            },
+            "c": {
+              "type": "string",
+            },
+            "d": {
+              "type": "string",
+            },
+          },
+        },
+      ]
+    `);
+  });
+
   test('compound key is sorted', () => {
     expect(
       t(`
-    CREATE TABLE foo(a INT, b INT, c INT, d INT);
+    CREATE TABLE foo(a "INT|NOT_NULL", b "INT|NOT_NULL", c "INT|NOT_NULL", d "INT|NOT_NULL");
     CREATE UNIQUE INDEX foo_pkey ON foo(d ASC, a ASC, c ASC);
     `),
     ).toMatchInlineSnapshot(`
@@ -478,28 +553,28 @@ describe('computeZqlSpec', () => {
             "columns": {
               "a": {
                 "characterMaximumLength": null,
-                "dataType": "INT",
+                "dataType": "INT|NOT_NULL",
                 "dflt": null,
                 "notNull": false,
                 "pos": 1,
               },
               "b": {
                 "characterMaximumLength": null,
-                "dataType": "INT",
+                "dataType": "INT|NOT_NULL",
                 "dflt": null,
                 "notNull": false,
                 "pos": 2,
               },
               "c": {
                 "characterMaximumLength": null,
-                "dataType": "INT",
+                "dataType": "INT|NOT_NULL",
                 "dflt": null,
                 "notNull": false,
                 "pos": 3,
               },
               "d": {
                 "characterMaximumLength": null,
-                "dataType": "INT",
+                "dataType": "INT|NOT_NULL",
                 "dflt": null,
                 "notNull": false,
                 "pos": 4,
@@ -539,7 +614,7 @@ describe('computeZqlSpec', () => {
   test('additional unique key', () => {
     expect(
       t(`
-    CREATE TABLE foo(a INT, b INT, c INT, d INT);
+    CREATE TABLE foo(a "INT|NOT_NULL", b "INT|NOT_NULL", c "INT|NOT_NULL", d INT);
     CREATE UNIQUE INDEX foo_pkey ON foo(b ASC);
     CREATE UNIQUE INDEX foo_unique_key ON foo(c ASC, a DESC);
     `),
@@ -550,21 +625,21 @@ describe('computeZqlSpec', () => {
             "columns": {
               "a": {
                 "characterMaximumLength": null,
-                "dataType": "INT",
+                "dataType": "INT|NOT_NULL",
                 "dflt": null,
                 "notNull": false,
                 "pos": 1,
               },
               "b": {
                 "characterMaximumLength": null,
-                "dataType": "INT",
+                "dataType": "INT|NOT_NULL",
                 "dflt": null,
                 "notNull": false,
                 "pos": 2,
               },
               "c": {
                 "characterMaximumLength": null,
-                "dataType": "INT",
+                "dataType": "INT|NOT_NULL",
                 "dflt": null,
                 "notNull": false,
                 "pos": 3,
@@ -609,7 +684,7 @@ describe('computeZqlSpec', () => {
   test('shorter key is chosen over primary key', () => {
     expect(
       t(`
-    CREATE TABLE foo(a INT, b INT, c INT, d INT);
+    CREATE TABLE foo(a INT, b "INT|NOT_NULL", c "INT|NOT_NULL", d "INT|NOT_NULL");
     CREATE UNIQUE INDEX foo_pkey ON foo(b ASC, d DESC);
     CREATE UNIQUE INDEX foo_z_key ON foo(c ASC);
     `),
@@ -627,21 +702,21 @@ describe('computeZqlSpec', () => {
               },
               "b": {
                 "characterMaximumLength": null,
-                "dataType": "INT",
+                "dataType": "INT|NOT_NULL",
                 "dflt": null,
                 "notNull": false,
                 "pos": 2,
               },
               "c": {
                 "characterMaximumLength": null,
-                "dataType": "INT",
+                "dataType": "INT|NOT_NULL",
                 "dflt": null,
                 "notNull": false,
                 "pos": 3,
               },
               "d": {
                 "characterMaximumLength": null,
-                "dataType": "INT",
+                "dataType": "INT|NOT_NULL",
                 "dflt": null,
                 "notNull": false,
                 "pos": 4,

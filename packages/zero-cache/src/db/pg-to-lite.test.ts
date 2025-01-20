@@ -87,7 +87,7 @@ test('postgres to lite table spec', () => {
       },
       b: {
         characterMaximumLength: null,
-        dataType: 'varchar',
+        dataType: 'varchar|NOT_NULL',
         dflt: null,
         notNull: false,
         pos: 2,
@@ -115,7 +115,7 @@ test('postgres to lite table spec', () => {
       },
       enomz: {
         characterMaximumLength: null,
-        dataType: 'TEXT_ENUM_my_type',
+        dataType: 'my_type|TEXT_ENUM',
         dflt: null,
         notNull: false,
         pos: 8,
@@ -165,7 +165,7 @@ test('postgres to lite table spec', () => {
       },
       a: {
         characterMaximumLength: null,
-        dataType: 'varchar',
+        dataType: 'varchar|NOT_NULL',
         dflt: null,
         notNull: false,
         pos: 1,
@@ -185,7 +185,7 @@ test.each([
     },
     {
       pos: 3,
-      dataType: 'int8',
+      dataType: 'int8|NOT_NULL',
       characterMaximumLength: null,
       notNull: false,
       dflt: '2147483648',

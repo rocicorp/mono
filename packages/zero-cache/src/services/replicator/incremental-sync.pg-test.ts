@@ -708,7 +708,7 @@ describe('replicator/incremental-sync', () => {
             },
             serial: {
               characterMaximumLength: null,
-              dataType: 'int4',
+              dataType: 'int4|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 4,
@@ -1052,6 +1052,80 @@ describe('replicator/incremental-sync', () => {
               dflt: null,
               notNull: false,
               pos: 3,
+            },
+          },
+        },
+      ],
+      indexSpecs: [],
+    },
+    {
+      name: 'change column nullability',
+      setup: `
+        CREATE TABLE foo(id INT8, nolz TEXT, _0_version TEXT);
+        INSERT INTO foo(id, nolz, _0_version) VALUES (1, 'hel', '00');
+        INSERT INTO foo(id, nolz, _0_version) VALUES (2, 'low', '00');
+        INSERT INTO foo(id, nolz, _0_version) VALUES (3, 'orl', '00');
+      `,
+      downstream: [
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
+        ['data', fooBarBaz.update('foo', {id: 3, nolz: 'olrd'})],
+        [
+          'data',
+          fooBarBaz.updateColumn(
+            'foo',
+            {name: 'nolz', spec: {pos: 1, dataType: 'TEXT'}},
+            {name: 'nolz', spec: {pos: 1, dataType: 'TEXT', notNull: true}},
+          ),
+        ],
+        ['data', fooBarBaz.insert('foo', {id: 4, nolz: 'yay'})],
+        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
+      ],
+      data: {
+        foo: [
+          {id: 1n, nolz: 'hel', ['_0_version']: '0e'},
+          {id: 2n, nolz: 'low', ['_0_version']: '0e'},
+          {id: 3n, nolz: 'olrd', ['_0_version']: '0e'},
+          {id: 4n, nolz: 'yay', ['_0_version']: '0e'},
+        ],
+        ['_zero.changeLog']: [
+          {
+            stateVersion: '0e',
+            table: 'foo',
+            op: 'r',
+            rowKey: null,
+          },
+          {
+            stateVersion: '0e',
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":4}',
+          },
+        ],
+      },
+      tableSpecs: [
+        {
+          name: 'foo',
+          columns: {
+            id: {
+              characterMaximumLength: null,
+              dataType: 'INT8',
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            nolz: {
+              characterMaximumLength: null,
+              dataType: 'TEXT|NOT_NULL',
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: false,
+              pos: 2,
             },
           },
         },

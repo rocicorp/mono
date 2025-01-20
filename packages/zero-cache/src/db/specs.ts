@@ -54,7 +54,9 @@ export const publishedTableSpec = tableSpec.extend({
   publications: v.record(v.object({rowFilter: v.string().nullable()})),
 });
 
-export type LiteTableSpec = Readonly<v.Infer<typeof liteTableSpec>>;
+export type MutableLiteTableSpec = v.Infer<typeof liteTableSpec>;
+
+export type LiteTableSpec = Readonly<MutableLiteTableSpec>;
 
 export type LiteTableSpecWithKeys = Omit<LiteTableSpec, 'primaryKey'> & {
   /**

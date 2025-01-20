@@ -66,7 +66,7 @@ describe('view-syncer/pipeline-driver', () => {
       CREATE TABLE "issueLabels" (
         issueID TEXT,
         labelID TEXT,
-        legacyID TEXT NOT NULL,
+        legacyID "TEXT|NOT_NULL",
         _0_version TEXT NOT NULL,
         PRIMARY KEY (issueID, labelID)
       );

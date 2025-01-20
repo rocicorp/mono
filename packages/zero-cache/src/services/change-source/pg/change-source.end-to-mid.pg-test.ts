@@ -141,7 +141,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
           columns: {
             id: {
               characterMaximumLength: null,
-              dataType: 'int8',
+              dataType: 'int8|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 1,
@@ -176,7 +176,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
           columns: {
             id: {
               characterMaximumLength: null,
-              dataType: 'int8',
+              dataType: 'int8|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 1,
@@ -217,7 +217,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
             },
             id: {
               characterMaximumLength: null,
-              dataType: 'int8',
+              dataType: 'int8|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 1,
@@ -252,7 +252,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
             },
             id: {
               characterMaximumLength: null,
-              dataType: 'int8',
+              dataType: 'int8|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 1,
@@ -287,7 +287,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
             },
             id: {
               characterMaximumLength: null,
-              dataType: 'int8',
+              dataType: 'int8|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 1,
@@ -311,7 +311,21 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
       ALTER TABLE zero.bar DROP CONSTRAINT baz_pkey;
       ALTER TABLE zero.bar ADD PRIMARY KEY (handle);
       `,
-      [{tag: 'drop-index'}, {tag: 'create-index'}],
+      [
+        {tag: 'drop-index'},
+        {
+          tag: 'update-column',
+          old: {
+            name: 'handle',
+            spec: {dataType: 'text', notNull: false, pos: expect.any(Number)},
+          },
+          new: {
+            name: 'handle',
+            spec: {dataType: 'text', notNull: true, pos: expect.any(Number)},
+          },
+        },
+        {tag: 'create-index'},
+      ],
       {['zero.bar']: []},
       [
         {
@@ -325,14 +339,14 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
             },
             id: {
               characterMaximumLength: null,
-              dataType: 'int8',
+              dataType: 'int8|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 1,
             },
             handle: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 3,
@@ -367,14 +381,14 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
             },
             id: {
               characterMaximumLength: null,
-              dataType: 'int8',
+              dataType: 'int8|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 1,
             },
             handle: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 3,
@@ -416,14 +430,14 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
             },
             id: {
               characterMaximumLength: null,
-              dataType: 'int8',
+              dataType: 'int8|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 1,
             },
             handle: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 3,
@@ -465,14 +479,14 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
             },
             id: {
               characterMaximumLength: null,
-              dataType: 'int8',
+              dataType: 'int8|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 1,
             },
             handle: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 3,
@@ -514,14 +528,14 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
             },
             id: {
               characterMaximumLength: null,
-              dataType: 'int8',
+              dataType: 'int8|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 1,
             },
             handle: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 3,
@@ -544,7 +558,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
           columns: {
             id: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 1,
@@ -591,7 +605,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
           columns: {
             id: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 1,
@@ -635,7 +649,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
           columns: {
             id: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 1,
@@ -698,7 +712,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
           columns: {
             id: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 1,
@@ -724,7 +738,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
           columns: {
             id: {
               characterMaximumLength: null,
-              dataType: 'int8',
+              dataType: 'int8|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 1,
@@ -881,7 +895,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
           columns: {
             id: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 1,
@@ -937,7 +951,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
             },
             numz: {
               characterMaximumLength: null,
-              dataType: 'TEXT_ENUM_enumz',
+              dataType: 'enumz|TEXT_ENUM',
               dflt: null,
               notNull: false,
               pos: 10,
@@ -996,7 +1010,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 10000}, () => {
           columns: {
             a: {
               characterMaximumLength: null,
-              dataType: 'TEXT',
+              dataType: 'text|NOT_NULL',
               dflt: null,
               notNull: false,
               pos: 1,

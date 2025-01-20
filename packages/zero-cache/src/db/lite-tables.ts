@@ -1,5 +1,4 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from '../../../shared/src/asserts.js';
 import {must} from '../../../shared/src/must.js';
 import {difference} from '../../../shared/src/set-utils.js';
 import * as v from '../../../shared/src/valita.js';
@@ -8,12 +7,14 @@ import type {Database} from '../../../zqlite/src/db.js';
 import {
   dataTypeToZqlValueType,
   mapLiteDataTypeToZqlSchemaValue,
+  nullableUpstream,
 } from '../types/lite.js';
 import type {
   LiteAndZqlSpec,
   LiteIndexSpec,
   LiteTableSpec,
   MutableLiteIndexSpec,
+  MutableLiteTableSpec,
 } from './specs.js';
 
 type ColumnInfo = {
@@ -46,7 +47,7 @@ export function listTables(db: Database): LiteTableSpec[] {
     .all() as ColumnInfo[];
 
   const tables: LiteTableSpec[] = [];
-  let table: LiteTableSpec | undefined;
+  let table: MutableLiteTableSpec | undefined;
 
   columns.forEach(col => {
     if (col.table !== table?.name) {
@@ -66,10 +67,7 @@ export function listTables(db: Database): LiteTableSpec[] {
       dflt: col.dflt,
     };
     if (col.keyPos) {
-      if (!table.primaryKey) {
-        table = {...table, primaryKey: []};
-      }
-      assert(table.primaryKey);
+      table.primaryKey ??= [];
       while (table.primaryKey.length < col.keyPos) {
         table.primaryKey.push('');
       }
@@ -153,19 +151,24 @@ export function computeZqlSpecs(
 
   listTables(replica).forEach(fullTable => {
     // Only include columns for which the mapped ZQL Value is defined.
-    const columns = Object.fromEntries(
-      Object.entries(fullTable.columns).filter(([_, spec]) =>
-        dataTypeToZqlValueType(spec.dataType),
-      ),
+    const visibleColumns = Object.entries(fullTable.columns).filter(
+      ([_, {dataType}]) => dataTypeToZqlValueType(dataType),
     );
-    const visibleColumns = new Set(Object.keys(columns));
+    const notNullColumns = new Set(
+      visibleColumns
+        .filter(
+          ([col, {dataType}]) =>
+            !nullableUpstream(dataType) || fullTable.primaryKey?.includes(col),
+        )
+        .map(([col]) => col),
+    );
 
     // Collect all columns that are part of a unique index.
     const allKeyColumns = new Set<string>();
 
     // Examine all column combinations that can serve as a primary key.
     const keys = (uniqueColumns.get(fullTable.name) ?? []).filter(key => {
-      if (difference(new Set(key), visibleColumns).size > 0) {
+      if (difference(new Set(key), notNullColumns).size > 0) {
         return false; // Exclude indexes over non-visible columns.
       }
       for (const col of key) {
@@ -189,7 +192,7 @@ export function computeZqlSpecs(
 
     const tableSpec = {
       ...fullTable,
-      columns,
+      columns: Object.fromEntries(visibleColumns),
       // normalize (sort) keys to minimize creating new objects.
       // See row-key.ts: normalizedKeyOrder()
       primaryKey: v.parse(primaryKey.sort(), primaryKeySchema),

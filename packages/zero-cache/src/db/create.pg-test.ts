@@ -46,8 +46,8 @@ describe('tables/create', () => {
       },
       createStatement: `
       CREATE TABLE "public"."clients" (
-        "clientID" varchar(180) NOT NULL,
-        "lastMutationID" int8 NOT NULL,
+        "clientID" "varchar"(180) NOT NULL,
+        "lastMutationID" "int8" NOT NULL,
         PRIMARY KEY ("clientID")
       );`,
       dstTableSpec: {
@@ -76,14 +76,14 @@ describe('tables/create', () => {
         columns: {
           clientID: {
             pos: 1,
-            dataType: 'varchar',
+            dataType: 'varchar|NOT_NULL',
             characterMaximumLength: null,
             notNull: false,
             dflt: null,
           },
           lastMutationID: {
             pos: 2,
-            dataType: 'int8',
+            dataType: 'int8|NOT_NULL',
             characterMaximumLength: null,
             notNull: false,
             dflt: null,
@@ -123,8 +123,8 @@ describe('tables/create', () => {
       },
       createStatement: `
       CREATE TABLE "public"."zero.clients" (
-        "clientID" varchar(180) NOT NULL,
-        "lastMutationID" int8 NOT NULL,
+        "clientID" "varchar"(180) NOT NULL,
+        "lastMutationID" "int8" NOT NULL,
         PRIMARY KEY ("clientID")
       );`,
       dstTableSpec: {
@@ -153,14 +153,14 @@ describe('tables/create', () => {
         columns: {
           clientID: {
             pos: 1,
-            dataType: 'varchar',
+            dataType: 'varchar|NOT_NULL',
             characterMaximumLength: null,
             notNull: false,
             dflt: null,
           },
           lastMutationID: {
             pos: 2,
-            dataType: 'int8',
+            dataType: 'int8|NOT_NULL',
             characterMaximumLength: null,
             notNull: false,
             dflt: null,
@@ -229,12 +229,12 @@ describe('tables/create', () => {
       },
       createStatement: `
       CREATE TABLE "public"."users" (
-         "user_id" int4 NOT NULL,
-         "handle" varchar(40),
-         "rank" int8 DEFAULT 1,
-         "admin" bool DEFAULT false,
-         "bigint" int8 DEFAULT '2147483648'::bigint,
-         "enumnum" my_type,
+         "user_id" "int4" NOT NULL,
+         "handle" "varchar"(40),
+         "rank" "int8" DEFAULT 1,
+         "admin" "bool" DEFAULT false,
+         "bigint" "int8" DEFAULT '2147483648'::bigint,
+         "enumnum" "my_type",
          PRIMARY KEY ("user_id")
       );`,
       dstTableSpec: {
@@ -292,7 +292,7 @@ describe('tables/create', () => {
         columns: {
           ['user_id']: {
             pos: 1,
-            dataType: 'int4',
+            dataType: 'int4|NOT_NULL',
             characterMaximumLength: null,
             notNull: false,
             dflt: null,
@@ -328,7 +328,7 @@ describe('tables/create', () => {
           enumnum: {
             pos: 6,
             characterMaximumLength: null,
-            dataType: 'TEXT_ENUM_my_type',
+            dataType: 'my_type|TEXT_ENUM',
             notNull: false,
             dflt: null,
           },

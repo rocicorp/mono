@@ -1,6 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
 import {ZERO_VERSION_COLUMN_NAME} from '../services/replicator/schema/replication-state.js';
-import {dataTypeToZqlValueType, textEnumTypeName} from '../types/lite.js';
+import {
+  dataTypeToZqlValueType,
+  liteTypeString,
+  upstreamDataType,
+  type LiteTypeString,
+} from '../types/lite.js';
 import {liteTableName} from '../types/names.js';
 import * as PostgresTypeClass from './postgres-type-class-enum.js';
 import {
@@ -21,13 +26,15 @@ export const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {
 
 export function warnIfDataTypeSupported(
   lc: LogContext,
-  pgDataType: string,
+  liteTypeString: LiteTypeString,
   table: string,
   column: string,
 ) {
-  if (dataTypeToZqlValueType(pgDataType) === undefined) {
+  if (dataTypeToZqlValueType(liteTypeString) === undefined) {
     lc.warn?.(
-      `\n\nWARNING: zero does not yet support the "${pgDataType}" data type.\n` +
+      `\n\nWARNING: zero does not yet support the "${upstreamDataType(
+        liteTypeString,
+      )}" data type.\n` +
         `The "${table}"."${column}" column will not be synced to clients.\n\n`,
     );
   }
@@ -73,13 +80,14 @@ export function mapPostgresToLiteColumn(
   column: {name: string; spec: ColumnSpec},
   ignoreDefault?: 'ignore-default',
 ): ColumnSpec {
-  const {pos, dataType, pgTypeClass, dflt} = column.spec;
+  const {pos, dataType, pgTypeClass, notNull, dflt} = column.spec;
   return {
     pos,
-    dataType:
-      pgTypeClass === PostgresTypeClass.Enum
-        ? textEnumTypeName(dataType)
-        : dataType,
+    dataType: liteTypeString(
+      dataType,
+      notNull,
+      pgTypeClass === PostgresTypeClass.Enum,
+    ),
     characterMaximumLength: null,
     // Note: NOT NULL constraints are always ignored for SQLite (replica) tables.
     // 1. They are enforced by the replication stream.
