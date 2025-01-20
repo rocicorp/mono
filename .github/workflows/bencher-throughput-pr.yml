@@ -5,14 +5,14 @@ on:
     types: [opened, reopened, edited, synchronize]
 
 jobs:
-  file_sizes:
+  throughput:
     name: Bencher Throughput
     # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
 
     permissions:
       pull-requests: write
-    runs-on: ubuntu-22.04
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
