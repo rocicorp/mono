@@ -41,6 +41,7 @@ const consoleJsonLogSink: LogSink = {
         }
       : undefined;
 
+    // eslint-disable-next-line no-console
     console[level](
       stringify({
         level: level.toUpperCase(),

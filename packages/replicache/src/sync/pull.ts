@@ -272,7 +272,6 @@ export function handlePullResponseV1(
         );
       }
       if (Object.keys(response.lastMutationIDChanges).length > 0) {
-        console.log(response.lastMutationIDChanges);
         lc.error?.(
           `handlePullResponse: cookie ${JSON.stringify(
             baseCookie,

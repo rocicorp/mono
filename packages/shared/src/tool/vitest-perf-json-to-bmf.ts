@@ -189,6 +189,7 @@ try {
     'utf-8',
   );
 } catch (error) {
+  // eslint-disable-next-line no-console
   console.error('Error converting Vitest output to BMF:', error);
   process.exit(1);
 }

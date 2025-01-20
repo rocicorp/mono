@@ -132,6 +132,7 @@ describe('change-source/pg', {timeout: 10000}, () => {
           // Sometimes Postgres still considers the replication slot active
           // from the previous test, e.g.
           // error: replication slot "zero_change_source_test_id" is active for PID 388
+          // eslint-disable-next-line no-console
           console.warn(e);
           err = e;
           await sleep(100);
