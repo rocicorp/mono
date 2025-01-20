@@ -13,7 +13,8 @@
     "test-webkit": "vitest run --browser.name=webkit",
     "test:watch": "vitest",
     "test:update": "vitest run -u",
-    "bench": "vitest bench",
+    "bench": "vitest bench --run",
+    "bench:watch": "vitest bench --watch",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch"
   },
