@@ -6,7 +6,8 @@
   "module": "true",
   "scripts": {
     "check-types": "tsc",
-    "check-types:watch": "tsc --watch"
+    "check-types:watch": "tsc --watch",
+    "test": "vitest run"
   },
   "peerDependencies": {
     "react": "^18.3.1"
