@@ -915,19 +915,25 @@ export class CVRStore {
       rowsDeferred: 0,
       statements: 0,
     };
-    const existingRowRecords = await this.getRowRecords();
-    const rowRecordsToFlush = [...this.#pendingRowRecordPuts.values()].filter(
-      row => {
-        const existing = existingRowRecords.get(row.id);
-        return (
-          (existing !== undefined || row.refCounts !== null) &&
-          !deepEqual(
-            row as ReadonlyJSONValue,
-            existing as ReadonlyJSONValue | undefined,
-          )
-        );
-      },
-    );
+    let rowRecordsToFlush: RowRecord[];
+    if (this.#pendingRowRecordPuts.size === 0) {
+      // Avoid fetching/awaiting this.getRowRecords() for config-only changes.
+      rowRecordsToFlush = [];
+    } else {
+      const existingRowRecords = await this.getRowRecords();
+      rowRecordsToFlush = [...this.#pendingRowRecordPuts.values()].filter(
+        row => {
+          const existing = existingRowRecords.get(row.id);
+          return (
+            (existing !== undefined || row.refCounts !== null) &&
+            !deepEqual(
+              row as ReadonlyJSONValue,
+              existing as ReadonlyJSONValue | undefined,
+            )
+          );
+        },
+      );
+    }
     const rowsFlushed = await this.#db.begin(async tx => {
       const pipelined: Promise<unknown>[] = [
         // #checkVersionAndOwnership() executes a `SELECT ... FOR UPDATE`
