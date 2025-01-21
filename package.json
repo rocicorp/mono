@@ -21,7 +21,7 @@
     "start-zero-cache": "cd packages/zero-cache && npm run start"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.5.1",
+    "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.2.0",
     "@vitest/coverage-v8": "^2.1.5",
     "prettier": "^3.0.3",

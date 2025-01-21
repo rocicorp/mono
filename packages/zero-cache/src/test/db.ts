@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import postgres from 'postgres';
 import {afterAll, expect, inject} from 'vitest';
 import {assert} from '../../../shared/src/asserts.js';

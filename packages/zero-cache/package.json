@@ -53,7 +53,7 @@
     "zqlite": "0.0.0"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.5.1",
+    "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.2.0",
     "@testcontainers/postgresql": "^10.9.0",
     "@types/node": "^20.8.4",

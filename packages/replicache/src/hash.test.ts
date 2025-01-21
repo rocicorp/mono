@@ -57,11 +57,11 @@ test.skip('type checking only', () => {
     const h = newRandomHash();
     // Should not be an error
     const s: string = h;
-    console.log(s);
 
     // @ts-expect-error Should be an error
     const h2: Hash = 'abc';
-    console.log(h2);
+
+    return s + h2;
   }
 });
 

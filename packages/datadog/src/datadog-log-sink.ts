@@ -152,6 +152,7 @@ export class DatadogLogSink implements LogSink {
           ok = response.ok;
           if (!ok) {
             // Log to console so that we might catch this in `wrangler tail`.
+            // eslint-disable-next-line no-console
             console.error(
               'response',
               response.status,
@@ -161,6 +162,7 @@ export class DatadogLogSink implements LogSink {
           }
         } catch (e) {
           // Log to console so that we might catch this in `wrangler tail`.
+          // eslint-disable-next-line no-console
           console.error('Log flush to datadog failed', e);
         }
 
@@ -177,6 +179,7 @@ export class DatadogLogSink implements LogSink {
             }
           }
           if (numWithTooManyRetries > 0) {
+            // eslint-disable-next-line no-console
             console.error(
               `Dropping ${numWithTooManyRetries} datadog log messages which failed to send ${
                 MAX_MESSAGE_RETRIES + 1

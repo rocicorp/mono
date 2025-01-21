@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import 'dotenv/config';
 
 import {getDebugConfig} from '../config/zero-config.js';

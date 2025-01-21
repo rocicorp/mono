@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable no-console */
 
 import {resolver} from '@rocicorp/resolver';
 import chalk from 'chalk';

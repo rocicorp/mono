@@ -18,7 +18,7 @@
     "test-types:watch": "vitest watch --typecheck.only --no-browser.enabled"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.5.1",
+    "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/logger": "^5.3.0",
     "@rocicorp/prettier-config": "^0.2.0",
     "fast-check": "^3.18.0",

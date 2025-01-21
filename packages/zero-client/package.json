@@ -24,7 +24,7 @@
     "@rocicorp/resolver": "^1.0.2"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.5.1",
+    "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.2.0",
     "@types/sinon": "^10.0.11",
     "datadog": "0.0.0",
