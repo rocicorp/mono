@@ -11,7 +11,7 @@ import type {Operator} from './query.js';
 import type {
   AvailableRelationships,
   DestTableName,
-  GetFieldTypeNoUndefined,
+  GetFilterType,
   NoJsonSelector,
   PullTableSchema,
   Query,
@@ -74,21 +74,13 @@ export class ExpressionBuilder<
     field: TSelector,
     op: TOperator,
     value:
-      | GetFieldTypeNoUndefined<
-          PullTableSchema<TTable, TSchema>,
-          TSelector,
-          TOperator
-        >
+      | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
       | ParameterReference,
   ): Condition;
   cmp<TSelector extends NoJsonSelector<PullTableSchema<TTable, TSchema>>>(
     field: TSelector,
     value:
-      | GetFieldTypeNoUndefined<
-          PullTableSchema<TTable, TSchema>,
-          TSelector,
-          '='
-        >
+      | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
       | ParameterReference,
   ): Condition;
   cmp(

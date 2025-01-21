@@ -68,6 +68,13 @@ const testSchema = table('test')
   })
   .primaryKey('s');
 
+const testSchemaWithNulls = table('testWithNulls')
+  .columns({
+    n: number(),
+    s: string().optional(),
+  })
+  .primaryKey('n');
+
 const schemaWithEnums = table('testWithEnums')
   .columns({
     s: string(),
@@ -167,6 +174,7 @@ const testWithMoreRelationshipsRelationships = relationships(
 const schema = createSchema(1, {
   tables: [
     testSchema,
+    testSchemaWithNulls,
     schemaWithEnums,
     schemaWithJson,
     schemaWithAdvancedTypes,
@@ -555,13 +563,54 @@ describe('types', () => {
     query.where('s', 'IN', 'foo');
 
     query.where('s', 'IN', ['foo', 'bar']);
-    // @ts-expect-error - cannot compare with null
-    query.where('s', '=', null);
-    // @ts-expect-error - cannot compare with undefined
-    query.where('s', '=', undefined);
+  });
 
-    // IS can compare to null
-    query.where('s', 'IS', null);
+  test('where-null', () => {
+    const q1 = mockQuery as unknown as Query<Schema, 'test'>;
+
+    // @ts-expect-error - cannot compare with null
+    q1.where('s', '=', null);
+    // @ts-expect-error - cannot compare with null
+    q1.where('s', null);
+
+    // @ts-expect-error - cannot compare with undefined
+    q1.where('s', '=', undefined);
+    // @ts-expect-error - cannot compare with undefined
+    q1.where('s', undefined);
+
+    // @ts-expect-error - IN cannot compare with null.
+    q1.where('s', 'IN', [null]);
+    // @ts-expect-error - IN cannot compare with undefined.
+    q1.where('s', 'IN', [undefined]);
+
+    // IS and IS NOT can always compare with null
+    q1.where('s', 'IS', null);
+    q1.where('s', 'IS NOT', null);
+
+    // @ts-expect-error - IS cannot compare with undefined
+    q1.where('s', 'IS', undefined);
+    // @ts-expect-error - same with IS NOT
+    q1.where('s', 'IS NOT', undefined);
+
+    const q2 = mockQuery as unknown as Query<Schema, 'testWithNulls'>;
+
+    // @ts-expect-error - = cannot be used with null, must use IS
+    q2.where('s', null);
+    // @ts-expect-error - = cannot be used with null, must use IS
+    q2.where('s', '=', null);
+    // @ts-expect-error - = cannot be used with undefined, must use IS
+    q2.where('s', undefined);
+    // @ts-expect-error - = cannot be used with undefined, must use IS
+    q2.where('s', '=', undefined);
+
+    q2.where('s', 'IS', null);
+    q2.where('s', 'IS NOT', null);
+
+    // @ts-expect-error - IS cannot compare with undefined, even when field is
+    // optional.
+    q2.where('s', 'IS', undefined);
+    // @ts-expect-error - Same with IS NOT
+    q2.where('s', 'IS NOT', undefined);
   });
 
   test('start', () => {
