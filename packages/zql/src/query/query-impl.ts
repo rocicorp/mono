@@ -31,7 +31,7 @@ import {
 } from './expression.js';
 import type {AdvancedQuery} from './query-internal.js';
 import type {
-  GetFieldTypeNoUndefined,
+  GetFilterType,
   HumanReadable,
   Operator,
   PullRow,
@@ -308,8 +308,8 @@ export abstract class AbstractQuery<
 
   where(
     fieldOrExpressionFactory: string | ExpressionFactory<TSchema, TTable>,
-    opOrValue?: Operator | GetFieldTypeNoUndefined<any, any, any> | Parameter,
-    value?: GetFieldTypeNoUndefined<any, any, any> | Parameter,
+    opOrValue?: Operator | GetFilterType<any, any, any> | Parameter,
+    value?: GetFilterType<any, any, any> | Parameter,
   ): Query<TSchema, TTable, TReturn> {
     let cond: Condition;
 

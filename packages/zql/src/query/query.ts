@@ -32,18 +32,21 @@ export type Operator =
   | 'IS'
   | 'IS NOT';
 
-export type GetFieldTypeNoUndefined<
+export type GetFilterType<
   TSchema extends TableSchema,
   TColumn extends keyof TSchema['columns'],
   TOperator extends Operator,
-> = TOperator extends 'IN' | 'NOT IN'
-  ? Exclude<
-      SchemaValueToTSType<TSchema['columns'][TColumn]>,
-      null | undefined
-    >[]
-  : TOperator extends 'IS' | 'IS NOT'
-  ? Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, undefined> | null
-  : Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, undefined>;
+> = TOperator extends 'IS' | 'IS NOT'
+  ? // SchemaValueToTSType adds null if the type is optional, but we add null
+    // no matter what for dx reasons. See:
+    // https://github.com/rocicorp/mono/pull/3576#discussion_r1925792608
+    SchemaValueToTSType<TSchema['columns'][TColumn]> | null
+  : TOperator extends 'IN' | 'NOT IN'
+  ? // We don't want to compare to null in where clauses because it causes
+    // confusing results:
+    // https://zero.rocicorp.dev/docs/reading-data#comparing-to-null
+    Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>[]
+  : Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>;
 
 export type AvailableRelationships<
   TTable extends string,
@@ -154,21 +157,13 @@ export interface Query<
     field: TSelector,
     op: TOperator,
     value:
-      | GetFieldTypeNoUndefined<
-          PullTableSchema<TTable, TSchema>,
-          TSelector,
-          TOperator
-        >
+      | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
       | ParameterReference,
   ): Query<TSchema, TTable, TReturn>;
   where<TSelector extends NoJsonSelector<PullTableSchema<TTable, TSchema>>>(
     field: TSelector,
     value:
-      | GetFieldTypeNoUndefined<
-          PullTableSchema<TTable, TSchema>,
-          TSelector,
-          '='
-        >
+      | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
       | ParameterReference,
   ): Query<TSchema, TTable, TReturn>;
   where(
