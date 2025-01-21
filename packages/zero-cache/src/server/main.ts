@@ -51,12 +51,14 @@ export default async function runWorker(
 
   if (config.upstream.maxConns < numSyncers) {
     throw new Error(
-      `insufficient upstream connections (${config.upstream.maxConns}) for ${numSyncers} syncers`,
+      `Insufficient upstream connections (${config.upstream.maxConns}) for ${numSyncers} syncers.` +
+        `Increase ZERO_UPSTREAM_MAX_CONNS or decrease ZERO_NUM_SYNC_WORKERS (which defaults to available cores).`,
     );
   }
   if (config.cvr.maxConns < numSyncers) {
     throw new Error(
-      `insufficient cvr connections (${config.cvr.maxConns}) for ${numSyncers} syncers`,
+      `Insufficient cvr connections (${config.cvr.maxConns}) for ${numSyncers} syncers.` +
+        `Increase ZERO_CVR_MAX_CONNS or decrease ZERO_NUM_SYNC_WORKERS (which defaults to available cores).`,
     );
   }
 
