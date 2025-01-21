@@ -41,12 +41,14 @@ async function testBasics(userID: string) {
   const r = zeroForTest({
     userID,
     schema: createSchema(1, {
-      e: table('e')
-        .columns({
-          id: string(),
-          value: number(),
-        })
-        .primaryKey('id'),
+      tables: [
+        table('e')
+          .columns({
+            id: string(),
+            value: number(),
+          })
+          .primaryKey('id'),
+      ],
     }),
   });
 

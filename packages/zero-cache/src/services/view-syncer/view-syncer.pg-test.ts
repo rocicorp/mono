@@ -234,22 +234,18 @@ const comments = table('comments')
   })
   .primaryKey('id');
 
-const schema = createSchema(
-  1,
-  {
-    issues,
-    comments,
-  },
-  {
-    commentRelationships: relationships(comments, connect => ({
+const schema = createSchema(1, {
+  tables: [issues, comments],
+  relationships: [
+    relationships(comments, connect => ({
       issue: connect.many({
         sourceField: ['issueID'],
         destField: ['id'],
         destSchema: issues,
       }),
     })),
-  },
-);
+  ],
+});
 type Schema = typeof schema;
 
 type AuthData = {

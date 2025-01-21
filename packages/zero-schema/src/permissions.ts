@@ -1,17 +1,17 @@
-import type {Query} from '../../zql/src/query/query.js';
-import type {
-  AssetPermissions as CompiledAssetPermissions,
-  PermissionsConfig as CompiledPermissionsConfig,
-} from './compiled-permissions.js';
-import {AuthQuery} from '../../zql/src/query/auth-query.js';
+import {assert} from '../../shared/src/asserts.js';
 import {
   toStaticParam,
   type Condition,
   type Parameter,
 } from '../../zero-protocol/src/ast.js';
-import {staticParam} from '../../zql/src/query/query-impl.js';
+import {AuthQuery} from '../../zql/src/query/auth-query.js';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.js';
-import {assert} from '../../shared/src/asserts.js';
+import {staticParam} from '../../zql/src/query/query-impl.js';
+import type {Query} from '../../zql/src/query/query.js';
+import type {
+  AssetPermissions as CompiledAssetPermissions,
+  PermissionsConfig as CompiledPermissionsConfig,
+} from './compiled-permissions.js';
 import type {Schema} from './mod.js';
 
 export const ANYONE_CAN = undefined;
@@ -22,7 +22,7 @@ export type Queries<TSchema extends Schema> = {
   [K in keyof TSchema['tables']]: Query<Schema, K & string>;
 };
 
-type PermissionRule<
+export type PermissionRule<
   TAuthDataShape,
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
@@ -31,7 +31,7 @@ type PermissionRule<
   eb: ExpressionBuilder<TSchema, TTable>,
 ) => Condition;
 
-type AssetPermissions<
+export type AssetPermissions<
   TAuthDataShape,
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,

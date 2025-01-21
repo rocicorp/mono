@@ -266,9 +266,8 @@ type AuthData = {
   };
 };
 
-const schema = createSchema(
-  1,
-  {
+const schema = createSchema(1, {
+  tables: [
     user,
     issue,
     comment,
@@ -277,8 +276,8 @@ const schema = createSchema(
     viewState,
     project,
     projectMember,
-  },
-  {
+  ],
+  relationships: [
     userRelationships,
     issueRelationships,
     commentRelationships,
@@ -286,8 +285,8 @@ const schema = createSchema(
     viewStateRelationships,
     projectRelationships,
     projectMemberRelationships,
-  },
-);
+  ],
+});
 
 type Schema = typeof schema;
 

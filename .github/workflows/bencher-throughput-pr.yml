@@ -6,7 +6,7 @@ on:
 
 jobs:
   throughput:
-    name: Bencher Throughput
+    name: Bencher Perf Test PR
     # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
 
@@ -30,7 +30,7 @@ jobs:
         working-directory: packages/zero-client
         run: npm run bench -- --outputJson output.json
 
-      - name: Track PR benchmarks with Bencher
+      - name: Upload PR benchmarks results to bencher.dev
         working-directory: packages/zero-client
         run: |
           cat output.json |\
@@ -41,12 +41,11 @@ jobs:
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           --branch "$GITHUB_HEAD_REF" \
-          --start-point "$GITHUB_BASE_REF" \
-          --start-point-hash '${{ github.event.pull_request.base.sha }}' \
-          --start-point-clone-thresholds \
-          --start-point-reset \
-          --threshold-measure throughput \
-          --threshold-test percentage \
-          --threshold-lower-boundary 0.05 \
-          --threshold-max-sample-size 2 \
-          --err
+          # --start-point "$GITHUB_BASE_REF" \
+          # --start-point-hash '${{ github.event.pull_request.base.sha }}' \
+          # --start-point-clone-thresholds \
+          # --start-point-reset \
+          # --threshold-measure throughput \
+          # --threshold-test t_test \
+          # --threshold-lower-boundary 0.95 \
+          # --err

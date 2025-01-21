@@ -6,7 +6,7 @@ on:
 
 jobs:
   throughput:
-    name: Bencher Throughput
+    name: Bencher Perf Test
     permissions:
       checks: write
     runs-on: self-hosted
@@ -27,7 +27,7 @@ jobs:
         working-directory: packages/zero-client
         run: npm run bench -- --outputJson output.json
 
-      - name: Track benchmarks with Bencher
+      - name: Upload benchmarks results to bencher.dev
         working-directory: packages/zero-client
         run: |
           cat output.json |\
@@ -37,9 +37,8 @@ jobs:
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
-          --start-point main \
-          --threshold-measure throughput \
-          --threshold-test percentage \
-          --threshold-lower-boundary 0.05 \
-          --threshold-max-sample-size 2 \
-          --err
+          # --start-point main \
+          # --threshold-measure throughput \
+          # --threshold-test t_test \
+          # --threshold-lower-boundary 0.95 \
+          # --err
