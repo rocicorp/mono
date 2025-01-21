@@ -1,3 +1,4 @@
+import {Lock} from '@rocicorp/lock';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {AbortError} from '../../shared/src/abort-error.js';
@@ -291,7 +292,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
   readonly #closeAbortController = new AbortController();
 
-  #persistIsRunning = false;
+  readonly #persistLock = new Lock();
   readonly #enableScheduledPersist: boolean;
   readonly #enableScheduledRefresh: boolean;
   readonly #enablePullAndPushInOpen: boolean;
@@ -1131,10 +1132,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     return {requestID, syncHead, ok: httpRequestInfo.httpStatusCode === 200};
   }
 
-  async persist(): Promise<void> {
-    assert(!this.#persistIsRunning);
-    this.#persistIsRunning = true;
-    try {
+  persist(): Promise<void> {
+    // Prevent multiple persist calls from running at the same time.
+    return this.#persistLock.withLock(async () => {
       const {clientID} = this;
       await this.#ready;
       if (this.#closed) {
@@ -1147,7 +1147,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           this.memdag,
           this.perdag,
           this.#mutatorRegistry,
-          () => this.closed,
+          () => this.#closed,
           FormatVersion.Latest,
         );
       } catch (e) {
@@ -1159,14 +1159,11 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           throw e;
         }
       }
-    } finally {
-      this.#persistIsRunning = false;
-    }
 
-    const {clientID} = this;
-    const clientGroupID = await this.#clientGroupIDPromise;
-    assert(clientGroupID);
-    this.#onPersist({clientID, clientGroupID});
+      const clientGroupID = await this.#clientGroupIDPromise;
+      assert(clientGroupID);
+      this.#onPersist({clientID, clientGroupID});
+    });
   }
 
   async refresh(): Promise<void> {
