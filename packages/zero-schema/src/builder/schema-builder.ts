@@ -32,30 +32,42 @@ export type Schema = {
  * do not require bumping the schema version.
  */
 export function createSchema<
-  TTables extends Record<string, TableBuilderWithColumns<TableSchema>>,
-  TRelationships extends Record<string, Relationships>,
+  const TTables extends readonly [...TableBuilderWithColumns<TableSchema>[]],
+  const TRelationships extends readonly [...Relationships[]],
 >(
   version: number,
-  tables: TTables,
-  relationships?: TRelationships | undefined,
+  options: {
+    readonly tables: TTables;
+    readonly relationships: TRelationships;
+  },
 ): {
   version: number;
   tables: {
-    [K in keyof TTables as TTables[K]['schema']['name']]: TTables[K]['schema'];
+    readonly [K in TTables[number]['schema']['name']]: Extract<
+      TTables[number]['schema'],
+      {name: K}
+    >;
   };
   relationships: {
-    [K in keyof TRelationships as TRelationships[K]['name']]: TRelationships[K]['relationships'];
+    readonly [K in TRelationships[number]['name']]: Extract<
+      TRelationships[number],
+      {name: K}
+    >['relationships'];
   };
 } {
   const retTables: Record<string, TableSchema> = {};
   const retRelationships: Record<string, Record<string, Relationship>> = {};
 
-  Object.values(tables).forEach(table => {
+  options.tables.forEach(table => {
     retTables[table.schema.name] = table.build();
   });
-  Object.values(relationships ?? {}).forEach(relationship => {
-    retRelationships[relationship.name] = relationship.relationships;
-    checkRelationship(relationship.relationships, relationship.name, retTables);
+  options.relationships.forEach(relationships => {
+    retRelationships[relationships.name] = relationships.relationships;
+    checkRelationship(
+      relationships.relationships,
+      relationships.name,
+      retTables,
+    );
   });
 
   return {
