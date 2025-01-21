@@ -1,6 +1,5 @@
 import {resolver} from '@rocicorp/resolver';
 import {bench, describe, expect} from 'vitest';
-import {sleep} from '../../../shared/src/sleep.js';
 import type {Row} from '../../../zql/src/query/query.js';
 import {getInternalReplicacheImplForTesting, Zero} from './zero.js';
 
@@ -44,7 +43,6 @@ async function withZero(
   });
   await f(z);
   if (persist) {
-    await sleep(500);
     await getInternalReplicacheImplForTesting(z).persist();
   }
   await z.close();
