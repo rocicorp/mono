@@ -15,18 +15,20 @@ const testBatchViewUpdates = (applyViewUpdates: () => void) =>
 
 test('getSource', () => {
   const schema = createSchema(1, {
-    users: table('users')
-      .columns({
-        id: string(),
-        name: string(),
-      })
-      .primaryKey('id'),
-    userStates: table('userStates')
-      .columns({
-        userID: string(),
-        stateCode: string(),
-      })
-      .primaryKey('userID', 'stateCode'),
+    tables: [
+      table('users')
+        .columns({
+          id: string(),
+          name: string(),
+        })
+        .primaryKey('id'),
+      table('userStates')
+        .columns({
+          userID: string(),
+          stateCode: string(),
+        })
+        .primaryKey('userID', 'stateCode'),
+    ],
   });
 
   const context = new ZeroContext(
@@ -88,12 +90,14 @@ test('getSource', () => {
   `);
 });
 const schema = createSchema(1, {
-  t1: table('t1')
-    .columns({
-      id: string(),
-      name: string(),
-    })
-    .primaryKey('id'),
+  tables: [
+    table('t1')
+      .columns({
+        id: string(),
+        name: string(),
+      })
+      .primaryKey('id'),
+  ],
 });
 
 test('processChanges', () => {
@@ -196,18 +200,20 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
 
 test('transactions', () => {
   const schema = createSchema(1, {
-    server: table('server')
-      .columns({
-        id: string(),
-      })
-      .primaryKey('id'),
-    flair: table('flair')
-      .columns({
-        id: string(),
-        serverID: string(),
-        description: string(),
-      })
-      .primaryKey('id'),
+    tables: [
+      table('server')
+        .columns({
+          id: string(),
+        })
+        .primaryKey('id'),
+      table('flair')
+        .columns({
+          id: string(),
+          serverID: string(),
+          description: string(),
+        })
+        .primaryKey('id'),
+    ],
   });
 
   const context = new ZeroContext(

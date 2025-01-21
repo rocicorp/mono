@@ -40,12 +40,14 @@ const allowIfAIsSubject = [
 ] satisfies Rule;
 
 const schema = createSchema(1, {
-  foo: table('foo')
-    .columns({
-      id: string(),
-      a: string(),
-    })
-    .primaryKey('id'),
+  tables: [
+    table('foo')
+      .columns({
+        id: string(),
+        a: string(),
+      })
+      .primaryKey('id'),
+  ],
 });
 
 let replica: Database;

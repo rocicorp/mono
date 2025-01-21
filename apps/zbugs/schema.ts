@@ -189,26 +189,16 @@ type AuthData = {
   role: 'crew' | 'user';
 };
 
-export const schema = createSchema(
-  5,
-  {
-    user,
-    issue,
-    comment,
-    label,
-    issueLabel,
-    viewState,
-    emoji,
-    userPref,
-  },
-  {
+export const schema = createSchema(5, {
+  tables: [user, issue, comment, label, issueLabel, viewState, emoji, userPref],
+  relationships: [
     userRelationships,
     issueRelationships,
     commentRelationships,
     issueLabelRelationships,
     emojiRelationships,
-  },
-);
+  ],
+});
 
 export type Schema = typeof schema;
 type TableName = keyof Schema['tables'];

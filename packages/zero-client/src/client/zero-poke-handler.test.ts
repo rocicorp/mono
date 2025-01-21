@@ -30,18 +30,20 @@ afterEach(() => {
 });
 
 const schema = createSchema(1, {
-  issues: table('issues')
-    .columns({
-      id: string(),
-      title: string(),
-    })
-    .primaryKey('id'),
-  labels: table('labels')
-    .columns({
-      id: string(),
-      name: string(),
-    })
-    .primaryKey('id'),
+  tables: [
+    table('issues')
+      .columns({
+        id: string(),
+        title: string(),
+      })
+      .primaryKey('id'),
+    table('labels')
+      .columns({
+        id: string(),
+        name: string(),
+      })
+      .primaryKey('id'),
+  ],
 });
 
 test('completed poke plays on first raf', async () => {

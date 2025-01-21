@@ -314,7 +314,12 @@ export abstract class AbstractQuery<
     let cond: Condition;
 
     if (typeof fieldOrExpressionFactory === 'function') {
-      cond = fieldOrExpressionFactory(new ExpressionBuilder(this._exists));
+      cond = fieldOrExpressionFactory(
+        new ExpressionBuilder(this._exists) as ExpressionBuilder<
+          TSchema,
+          TTable
+        >,
+      );
     } else {
       assert(opOrValue !== undefined, 'Invalid condition');
       cond = cmp(fieldOrExpressionFactory, opOrValue, value);

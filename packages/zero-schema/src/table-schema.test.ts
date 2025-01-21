@@ -59,18 +59,10 @@ test('relationship schema types', () => {
     ),
   }));
 
-  const schema = createSchema(
-    1,
-    {
-      issueLabel,
-      comment,
-      label,
-      issue,
-    },
-    {
-      issueRelationships,
-    },
-  );
+  const schema = createSchema(1, {
+    tables: [issueLabel, comment, label, issue],
+    relationships: [issueRelationships],
+  });
 
   expectTypeOf(schema.tables.issueLabel).toMatchTypeOf<TableSchema>();
 

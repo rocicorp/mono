@@ -57,12 +57,14 @@ test('connection stays alive on rate limit error', async () => {
 test('a mutation after a rate limit error causes limited mutations to be resent', async () => {
   const z = zeroForTest({
     schema: createSchema(1, {
-      issue: table('issue')
-        .columns({
-          id: string(),
-          value: number(),
-        })
-        .primaryKey('id'),
+      tables: [
+        table('issue')
+          .columns({
+            id: string(),
+            value: number(),
+          })
+          .primaryKey('id'),
+      ],
     }),
   });
   await z.triggerConnected();
@@ -97,12 +99,14 @@ test('a mutation after a rate limit error causes limited mutations to be resent'
 test('previously confirmed mutations are not resent after a rate limit error', async () => {
   const z = zeroForTest({
     schema: createSchema(1, {
-      issue: table('issue')
-        .columns({
-          id: string(),
-          value: number(),
-        })
-        .primaryKey('id'),
+      tables: [
+        table('issue')
+          .columns({
+            id: string(),
+            value: number(),
+          })
+          .primaryKey('id'),
+      ],
     }),
   });
   await z.triggerConnected();

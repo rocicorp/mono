@@ -11,12 +11,14 @@ import {number, string, table} from '../../zero-client/src/mod.js';
 
 function setupTestEnvironment() {
   const schema = createSchema(1, {
-    table: table('table')
-      .columns({
-        a: number(),
-        b: string(),
-      })
-      .primaryKey('a'),
+    tables: [
+      table('table')
+        .columns({
+          a: number(),
+          b: string(),
+        })
+        .primaryKey('a'),
+    ],
   });
   const ms = new MemorySource(
     schema.tables.table.name,

@@ -90,20 +90,14 @@ const adminReadableRelationships = relationships(adminReadable, connect => ({
   }),
 }));
 
-const schema = createSchema(
-  1,
-  {
-    unreadable,
-    readable,
-    adminReadable,
-    readableThruUnreadable,
-  },
-  {
-    readableThruUnreadable: readableThruUnreadableRelationships,
-    readable: readableRelationships,
-    adminReadable: adminReadableRelationships,
-  },
-);
+const schema = createSchema(1, {
+  tables: [unreadable, readable, adminReadable, readableThruUnreadable],
+  relationships: [
+    readableThruUnreadableRelationships,
+    readableRelationships,
+    adminReadableRelationships,
+  ],
+});
 
 type Schema = typeof schema;
 

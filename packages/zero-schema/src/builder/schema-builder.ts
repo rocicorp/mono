@@ -32,13 +32,13 @@ export type Schema = {
  * do not require bumping the schema version.
  */
 export function createSchema<
-  const TTables extends readonly [...TableBuilderWithColumns<TableSchema>[]],
-  const TRelationships extends readonly [...Relationships[]],
+  const TTables extends readonly TableBuilderWithColumns<TableSchema>[],
+  const TRelationships extends readonly Relationships[],
 >(
   version: number,
   options: {
     readonly tables: TTables;
-    readonly relationships: TRelationships;
+    readonly relationships?: TRelationships | undefined;
   },
 ): {
   version: number;
@@ -59,9 +59,19 @@ export function createSchema<
   const retRelationships: Record<string, Record<string, Relationship>> = {};
 
   options.tables.forEach(table => {
+    if (retTables[table.schema.name]) {
+      throw new Error(
+        `Table "${table.schema.name}" is defined more than once in the schema`,
+      );
+    }
     retTables[table.schema.name] = table.build();
   });
-  options.relationships.forEach(relationships => {
+  options.relationships?.forEach(relationships => {
+    if (retRelationships[relationships.name]) {
+      throw new Error(
+        `Relationships for table "${relationships.name}" are defined more than once in the schema`,
+      );
+    }
     retRelationships[relationships.name] = relationships.relationships;
     checkRelationship(
       relationships.relationships,
