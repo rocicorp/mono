@@ -797,7 +797,9 @@ export function fromSQLiteTypes(
     const valueType = valueTypes[key];
     if (valueType === undefined) {
       throw new Error(
-        `Postgres is missing the column "${key}" but that column was part of a row.`,
+        `Invalid column "${key}". Synced columns include ${Object.keys(
+          valueTypes,
+        ).sort()}`,
       );
     }
     newRow[key] = fromSQLiteType(valueType.type, row[key]);
