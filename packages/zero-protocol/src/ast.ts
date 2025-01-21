@@ -241,7 +241,7 @@ export type ColumnReference = {
   readonly name: string;
 };
 
-type LiteralReference = {
+export type LiteralReference = {
   readonly type: 'literal';
   readonly value: LiteralValue;
 };
@@ -298,11 +298,11 @@ export type CorrelatedSubqueryConditionOperator = 'EXISTS' | 'NOT EXISTS';
  * A parameter is a value that is not known at the time the query is written
  * and is resolved at runtime.
  *
- * StaticParameters refer to something provided by the caller.
- * StaticParameters are injected when the query pipeline is built from the AST
+ * Static parameters refer to something provided by the caller.
+ * Static parameters are injected when the query pipeline is built from the AST
  * and do not change for the life of that pipeline.
  *
- * An example StaticParameter is the current authentication data.
+ * An example static parameter is the current authentication data.
  * When a user is authenticated, queries on the server have access
  * to the user's authentication data in order to evaluate authorization rules.
  * Authentication data doesn't change over the life of a query as a change
@@ -311,9 +311,7 @@ export type CorrelatedSubqueryConditionOperator = 'EXISTS' | 'NOT EXISTS';
  * AncestorParameters refer to rows encountered while running the query.
  * They are used by subqueries to refer to rows emitted by parent queries.
  */
-export type Parameter = StaticParameter;
-
-type StaticParameter = {
+export type Parameter = {
   readonly type: 'static';
   // The "namespace" of the injected parameter.
   // Write authorization will send the value of a row
