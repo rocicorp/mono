@@ -57,6 +57,8 @@ function getDefaultSnapshot<TReturn>(singular: boolean): QueryResult<TReturn> {
   ) as QueryResult<TReturn>;
 }
 
+export const getAllViews = Symbol();
+
 /**
  * A global store of all active views.
  *
@@ -105,7 +107,7 @@ function getDefaultSnapshot<TReturn>(singular: boolean): QueryResult<TReturn> {
  *
  * Swapping `useState` to `useRef` has similar problems.
  */
-class ViewStore {
+export class ViewStore {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   #views = new Map<string, ViewWrapper<any, any, any>>();
 
@@ -150,6 +152,10 @@ class ViewStore {
       this.#views.set(hash, existing);
     }
     return existing as ViewWrapper<TSchema, TTable, TReturn>;
+  }
+
+  [getAllViews]() {
+    return this.#views;
   }
 }
 
@@ -236,10 +242,24 @@ class ViewWrapper<
     this.#materializeIfNeeded();
     return () => {
       this.#reactInternals.delete(internals);
+
+      // only schedule a cleanup task if we have no listeners left
       if (this.#reactInternals.size === 0) {
-        this.#view?.destroy();
-        this.#view = undefined;
-        this.#onDematerialized();
+        setTimeout(() => {
+          // Someone re-registered a listener on this view before the timeout elapsed.
+          // This happens often in strict-mode which forces a component
+          // to mount, unmount, remount.
+          if (this.#reactInternals.size > 0) {
+            return;
+          }
+          // We already destroyed the view
+          if (this.#view === undefined) {
+            return;
+          }
+          this.#view?.destroy();
+          this.#view = undefined;
+          this.#onDematerialized();
+        }, 10);
       }
     };
   };
