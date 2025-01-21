@@ -110,12 +110,14 @@ test('queryComplete promise', async () => {
 });
 
 const schema = createSchema(1, {
-  test: table('test')
-    .columns({
-      a: number(),
-      b: string(),
-    })
-    .primaryKey('a'),
+  tables: [
+    table('test')
+      .columns({
+        a: number(),
+        b: string(),
+      })
+      .primaryKey('a'),
+  ],
 });
 
 type TestReturn = {
