@@ -635,6 +635,28 @@ export class CVRStore {
     this.#pendingRowRecordPuts.set(row.id, row);
   }
 
+  /**
+   * Note: Removing a row from the CVR should be represented by a
+   *       {@link putRowRecord()} with `refCounts: null` in order to properly
+   *       produce the appropriate delete patch when catching up old clients.
+   *
+   * This `delRowRecord()` method, on the other hand, is only used when a
+   * row record is being *replaced* by another RowRecord, which currently
+   * only happens when the columns of the row key change.
+   */
+  delRowRecord(id: RowID): void {
+    this.#writes.add({
+      stats: {rows: 1},
+      write: tx => tx`
+      DELETE FROM cvr.rows
+        WHERE "clientGroupID" = ${this.#id} 
+          AND "schema" = ${id.schema}
+          AND "table" = ${id.table}
+          AND "rowKey" = ${id.rowKey}
+      `,
+    });
+  }
+
   putInstance({
     version,
     replicaVersion,
@@ -955,6 +977,7 @@ export class CVRStore {
         stats.queries += write.stats.queries ?? 0;
         stats.desires += write.stats.desires ?? 0;
         stats.clients += write.stats.clients ?? 0;
+        stats.rows += write.stats.rows ?? 0;
 
         pipelined.push(write.write(tx, lastConnectTime).execute());
         stats.statements++;
@@ -977,7 +1000,7 @@ export class CVRStore {
         stats.rowsDeferred = rowRecordsToFlush.length;
         return false;
       }
-      stats.rows = rowRecordsToFlush.length;
+      stats.rows += rowRecordsToFlush.length;
       return true;
     });
     await this.#rowCache.apply(rowRecordsToFlush, newVersion, rowsFlushed);
