@@ -8,12 +8,13 @@ import {
   union,
 } from '../../../../shared/src/set-utils.js';
 import type {AST} from '../../../../zero-protocol/src/ast.js';
-import type {JSONObject} from '../../types/bigint-json.js';
+import {stringify, type JSONObject} from '../../types/bigint-json.js';
 import type {LexiVersion} from '../../types/lexi-version.js';
 import {rowIDString} from '../../types/row-key.js';
 import {unescapedSchema as schema} from '../change-source/pg/schema/shard.js';
 import type {Patch, PatchToVersion} from './client-handler.js';
 import type {CVRFlushStats, CVRStore} from './cvr-store.js';
+import {KeyColumns} from './key-columns.js';
 import {
   cmpVersions,
   oneAfter,
@@ -311,6 +312,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   readonly #receivedRows = new CustomKeyMap<RowID, RefCounts | null>(
     rowIDString,
   );
+  readonly #replacedRows = new CustomKeyMap<RowID, boolean>(rowIDString);
+
   #existingRows: Promise<RowRecord[]> | undefined = undefined;
 
   /**
@@ -481,6 +484,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     return this._cvr.version;
   }
 
+  #keyColumns: KeyColumns | undefined;
+
   /**
    * Tracks rows received from executing queries. This will update row records
    * and row patches if the received rows have a new version. The method also
@@ -488,17 +493,30 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
    * patchVersion so that only the patches new to the clients are sent.
    */
   async received(
-    _: LogContext,
+    lc: LogContext,
     rows: Map<RowID, RowUpdate>,
   ): Promise<PatchToVersion[]> {
     const patches: PatchToVersion[] = [];
 
     const existingRows = await this._cvrStore.getRowRecords();
+    this.#keyColumns ??= new KeyColumns(existingRows.values());
 
     for (const [id, update] of rows.entries()) {
       const {contents, version, refCounts} = update;
 
-      const existing = existingRows.get(id);
+      let existing = existingRows.get(id);
+      if (!existing && contents) {
+        // See if the row being put is referenced in the CVR using a different ID.
+        const oldID = this.#keyColumns.getOldRowID(id, contents);
+        if (oldID) {
+          existing = existingRows.get(oldID);
+          if (existing && !this.#replacedRows.get(oldID)) {
+            lc.debug?.(`replacing ${stringify(oldID)} with ${stringify(id)}`);
+            this.#replacedRows.set(oldID, true);
+            this._cvrStore.delRowRecord(oldID);
+          }
+        }
+      }
 
       // Accumulate all received refCounts to determine which rows to prune.
       const previouslyReceived = this.#receivedRows.get(id);
@@ -598,8 +616,10 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   }
 
   #deleteUnreferencedRow(existing: RowRecord): RowID | null {
-    const received = this.#receivedRows.get(existing.id);
-    if (received !== undefined) {
+    if (
+      this.#receivedRows.get(existing.id) ||
+      this.#replacedRows.get(existing.id)
+    ) {
       return null;
     }
 
