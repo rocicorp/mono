@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import {beforeEach, describe, expect, test, vi} from 'vitest';
+import type {Schema} from '../../zero-schema/src/mod.js';
 import type {AdvancedQuery} from '../../zql/src/query/query-internal.js';
 import type {ResultType} from '../../zql/src/query/typed-view.js';
 import {getAllViewsSizeForTesting, ViewStore} from './use-query.js';
@@ -7,7 +7,7 @@ import {getAllViewsSizeForTesting, ViewStore} from './use-query.js';
 function newMockQuery(
   query: string,
   singular = false,
-): AdvancedQuery<any, any> {
+): AdvancedQuery<Schema, string> {
   const view = newView();
   return {
     hash() {
@@ -17,7 +17,7 @@ function newMockQuery(
       return view;
     },
     format: {singular},
-  } as unknown as AdvancedQuery<any, any>;
+  } as unknown as AdvancedQuery<Schema, string>;
 }
 
 function newView() {
