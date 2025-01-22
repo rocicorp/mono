@@ -3471,8 +3471,8 @@ describe('view-syncer/cvr', () => {
     expect(newVersion).toEqual({stateVersion: '1bb'});
     expect(queryPatches).toHaveLength(0);
 
-    const NEW_ROW_KEY1 = {...ROW_KEY1, newID: '1foo'};
-    const NEW_ROW_KEY3 = {...ROW_KEY3, newID: '3baz'};
+    const NEW_ROW_KEY1 = {newID: '1foo'};
+    const NEW_ROW_KEY3 = {newID: '3baz'};
 
     // NEW_ROW_KEY1 should replace ROW_KEY1
     expect(
@@ -3484,7 +3484,7 @@ describe('view-syncer/cvr', () => {
             {
               version: '03',
               refCounts: {oneHash: 1},
-              contents: {...NEW_ROW_KEY1, value: 'foobar'},
+              contents: {...ROW_KEY1, ...NEW_ROW_KEY1, value: 'foobar'},
             },
           ],
         ]),
@@ -3496,7 +3496,7 @@ describe('view-syncer/cvr', () => {
           type: 'row',
           op: 'put',
           id: {...ROW_ID1, rowKey: NEW_ROW_KEY1},
-          contents: {...NEW_ROW_KEY1, value: 'foobar'},
+          contents: {...ROW_KEY1, ...NEW_ROW_KEY1, value: 'foobar'},
         },
       },
     ] satisfies PatchToVersion[]);
@@ -3511,7 +3511,7 @@ describe('view-syncer/cvr', () => {
             {
               version: '09',
               refCounts: {oneHash: 1},
-              contents: {...NEW_ROW_KEY3, value: 'barfoo'},
+              contents: {...ROW_KEY3, ...NEW_ROW_KEY3, value: 'barfoo'},
             },
           ],
         ]),
@@ -3523,7 +3523,7 @@ describe('view-syncer/cvr', () => {
           type: 'row',
           op: 'put',
           id: {...ROW_ID3, rowKey: NEW_ROW_KEY3},
-          contents: {...NEW_ROW_KEY3, value: 'barfoo'},
+          contents: {...ROW_KEY3, ...NEW_ROW_KEY3, value: 'barfoo'},
         },
       },
     ] satisfies PatchToVersion[]);
