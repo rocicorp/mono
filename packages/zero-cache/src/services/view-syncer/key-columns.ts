@@ -17,7 +17,7 @@ import type {RowID, RowRecord} from './schema/types.js';
  * This invariant is maintained by the fact that a full hydration
  * (and thus full CVR scan) always follows any schema change:
  * (1) initial hydration when the client connects
- * (2) re-hydration after upon a receiving ResetPipelinesSignal during an
+ * (2) re-hydration upon a receiving ResetPipelinesSignal during an
  *     advancement (i.e. schema change)
  *
  * The ensuing CVR update is then responsible for replacing or deleting
