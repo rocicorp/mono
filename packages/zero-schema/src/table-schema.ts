@@ -14,13 +14,13 @@ export type SchemaValue<T = unknown> =
   | EnumSchemaValue<T>
   | SchemaValueWithCustomType<T>;
 
-type SchemaValueWithCustomType<T> = {
+export type SchemaValueWithCustomType<T> = {
   type: ValueType;
   optional?: boolean;
   customType: T;
 };
 
-type EnumSchemaValue<T> = {
+export type EnumSchemaValue<T> = {
   kind: 'enum';
   type: 'string';
   optional?: boolean;
