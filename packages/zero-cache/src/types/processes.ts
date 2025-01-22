@@ -190,11 +190,7 @@ export function childWorker(
     detached: platform() !== 'win32',
     serialization: 'advanced', // use structured clone for IPC
     env,
-    // silent: true,
-    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
   });
-  child.stdout?.pipe(process.stdout);
-  child.stderr?.pipe(process.stderr);
   return wrap(child);
 }
 
