@@ -5,7 +5,6 @@ import {assert} from '../../../shared/src/asserts.js';
 import {deepEqual} from '../../../shared/src/json.js';
 import {sleep} from '../../../shared/src/sleep.js';
 import {MockSocket, zeroForTest} from './test-utils.js';
-import {version} from './version.js';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.js';
 import {
   string,
@@ -34,8 +33,6 @@ onmessage = async (e: MessageEvent) => {
 postMessage('ready');
 
 async function testBasics(userID: string) {
-  console.log('testBasics', WebSocket, version);
-
   type E = {
     id: string;
     value: number;
@@ -44,12 +41,14 @@ async function testBasics(userID: string) {
   const r = zeroForTest({
     userID,
     schema: createSchema(1, {
-      e: table('e')
-        .columns({
-          id: string(),
-          value: number(),
-        })
-        .primaryKey('id'),
+      tables: [
+        table('e')
+          .columns({
+            id: string(),
+            value: number(),
+          })
+          .primaryKey('id'),
+      ],
     }),
   });
 

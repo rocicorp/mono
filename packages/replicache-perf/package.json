@@ -11,7 +11,7 @@
   },
   "type": "module",
   "dependencies": {
-    "@rocicorp/eslint-config": "^0.5.1",
+    "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.2.0",
     "@types/command-line-args": "^5.2.3",
     "@types/command-line-usage": "^5.0.2",

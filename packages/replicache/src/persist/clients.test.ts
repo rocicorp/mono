@@ -701,7 +701,7 @@ describe('initClientV6', () => {
 
         await withRead(perdag, async read => {
           const clientGroup = await getClientGroup(client.clientGroupID, read);
-          console.error(clientGroup);
+          return clientGroup;
         });
       });
 

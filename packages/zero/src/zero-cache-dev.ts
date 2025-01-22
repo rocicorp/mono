@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable no-console */
 
 import {resolver} from '@rocicorp/resolver';
 import chalk from 'chalk';
@@ -96,6 +97,15 @@ async function main() {
           `Running ${zeroCacheScript} at\n\n\thttp://localhost:${config.port}\n`,
         );
         zeroCacheProcess = spawn(zeroCacheScript, zeroCacheArgs || [], {
+          env: {
+            // Set some low defaults so as to use fewer resources and not trip up,
+            // e.g. developers sharing a database.
+            ['ZERO_NUM_SYNC_WORKERS']: '3',
+            ['ZERO_CVR_MAX_CONNS']: '6',
+            ['ZERO_UPSTREAM_MAX_CONNS']: '6',
+            // But let the developer override any of these dev defaults.
+            ...process.env,
+          },
           stdio: 'inherit',
           shell: true,
         });

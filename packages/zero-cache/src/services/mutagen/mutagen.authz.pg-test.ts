@@ -121,68 +121,70 @@ function createReplicaTables(db: Database) {
 }
 
 const schema = createSchema(TEST_SCHEMA_VERSION, {
-  user: table('user')
-    .columns({
-      id: string(),
-      role: string(),
-    })
-    .primaryKey('id'),
+  tables: [
+    table('user')
+      .columns({
+        id: string(),
+        role: string(),
+      })
+      .primaryKey('id'),
 
-  roCell: table('roCell')
-    .columns({
-      id: string(),
-      a: string(),
-      b: string(),
-    })
-    .primaryKey('id'),
+    table('roCell')
+      .columns({
+        id: string(),
+        a: string(),
+        b: string(),
+      })
+      .primaryKey('id'),
 
-  roRow: table('roRow')
-    .columns({
-      id: string(),
-      a: string(),
-      b: string(),
-    })
-    .primaryKey('id'),
+    table('roRow')
+      .columns({
+        id: string(),
+        a: string(),
+        b: string(),
+      })
+      .primaryKey('id'),
 
-  adminOnlyCell: table('adminOnlyCell')
-    .columns({
-      id: string(),
-      a: string(),
-      adminLocked: boolean(),
-    })
-    .primaryKey('id'),
+    table('adminOnlyCell')
+      .columns({
+        id: string(),
+        a: string(),
+        adminLocked: boolean(),
+      })
+      .primaryKey('id'),
 
-  adminOnlyRow: table('adminOnlyRow')
-    .columns({
-      id: string(),
-      a: string(),
-      adminLocked: boolean(),
-    })
-    .primaryKey('id'),
+    table('adminOnlyRow')
+      .columns({
+        id: string(),
+        a: string(),
+        adminLocked: boolean(),
+      })
+      .primaryKey('id'),
 
-  loggedInRow: table('loggedInRow')
-    .columns({
-      id: string(),
-      a: string(),
-    })
-    .primaryKey('id'),
+    table('loggedInRow')
+      .columns({
+        id: string(),
+        a: string(),
+      })
+      .primaryKey('id'),
 
-  userMatch: table('userMatch')
-    .columns({
-      id: string(),
-      a: string(),
-    })
-    .primaryKey('id'),
+    table('userMatch')
+      .columns({
+        id: string(),
+        a: string(),
+      })
+      .primaryKey('id'),
 
-  dataTypeTest: table('dataTypeTest')
-    .columns({
-      id: string(),
-      j: json().optional(),
-      b: boolean().optional(),
-      r: number().optional(),
-      i: number().optional(),
-    })
-    .primaryKey('id'),
+    table('dataTypeTest')
+      .columns({
+        id: string(),
+        j: json().optional(),
+        b: boolean().optional(),
+        r: number().optional(),
+        i: number().optional(),
+      })
+      .primaryKey('id'),
+  ],
 });
 
 type Schema = typeof schema;

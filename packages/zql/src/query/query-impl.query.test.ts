@@ -1019,14 +1019,10 @@ test('join with compound keys', () => {
     }),
   }));
 
-  const schema = createSchema(
-    1,
-    {
-      a,
-      b,
-    },
-    {aRelationships},
-  );
+  const schema = createSchema(1, {
+    tables: [a, b],
+    relationships: [aRelationships],
+  });
 
   const sources = {
     a: createSource('a', schema.tables.a.columns, schema.tables.a.primaryKey),

@@ -32,30 +32,52 @@ export type Schema = {
  * do not require bumping the schema version.
  */
 export function createSchema<
-  TTables extends Record<string, TableBuilderWithColumns<TableSchema>>,
-  TRelationships extends Record<string, Relationships>,
+  const TTables extends readonly TableBuilderWithColumns<TableSchema>[],
+  const TRelationships extends readonly Relationships[],
 >(
   version: number,
-  tables: TTables,
-  relationships?: TRelationships | undefined,
+  options: {
+    readonly tables: TTables;
+    readonly relationships?: TRelationships | undefined;
+  },
 ): {
   version: number;
   tables: {
-    [K in keyof TTables as TTables[K]['schema']['name']]: TTables[K]['schema'];
+    readonly [K in TTables[number]['schema']['name']]: Extract<
+      TTables[number]['schema'],
+      {name: K}
+    >;
   };
   relationships: {
-    [K in keyof TRelationships as TRelationships[K]['name']]: TRelationships[K]['relationships'];
+    readonly [K in TRelationships[number]['name']]: Extract<
+      TRelationships[number],
+      {name: K}
+    >['relationships'];
   };
 } {
   const retTables: Record<string, TableSchema> = {};
   const retRelationships: Record<string, Record<string, Relationship>> = {};
 
-  Object.values(tables).forEach(table => {
+  options.tables.forEach(table => {
+    if (retTables[table.schema.name]) {
+      throw new Error(
+        `Table "${table.schema.name}" is defined more than once in the schema`,
+      );
+    }
     retTables[table.schema.name] = table.build();
   });
-  Object.values(relationships ?? {}).forEach(relationship => {
-    retRelationships[relationship.name] = relationship.relationships;
-    checkRelationship(relationship.relationships, relationship.name, retTables);
+  options.relationships?.forEach(relationships => {
+    if (retRelationships[relationships.name]) {
+      throw new Error(
+        `Relationships for table "${relationships.name}" are defined more than once in the schema`,
+      );
+    }
+    retRelationships[relationships.name] = relationships.relationships;
+    checkRelationship(
+      relationships.relationships,
+      relationships.name,
+      retTables,
+    );
   });
 
   return {
