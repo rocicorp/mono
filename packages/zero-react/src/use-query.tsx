@@ -4,13 +4,13 @@ import type {Immutable} from '../../shared/src/immutable.js';
 import type {
   Query,
   ReadonlyJSONValue,
+  Schema,
   TypedView,
 } from '../../zero-client/src/mod.js';
 import type {AdvancedQuery} from '../../zql/src/query/query-internal.js';
+import type {HumanReadable} from '../../zql/src/query/query.js';
 import type {ResultType} from '../../zql/src/query/typed-view.js';
 import {useZero} from './use-zero.js';
-import type {HumanReadable} from '../../zql/src/query/query.js';
-import type {Schema} from '../../zero-client/src/mod.js';
 
 export type QueryResultDetails = Readonly<{
   type: ResultType;
@@ -164,8 +164,8 @@ const viewStore = new ViewStore();
  * In non-strict-mode we can clean up the view as soon
  * as the listener count goes to 0.
  *
- * In strict-mode, the listener cound will go to 0 then a
- * new listener for the same view is immeidatiely added back.
+ * In strict-mode, the listener count will go to 0 then a
+ * new listener for the same view is immediately added back.
  *
  * This is why the `onMaterialized` and `onDematerialized` callbacks exist --
  * they allow a view which React is still referencing to be added
