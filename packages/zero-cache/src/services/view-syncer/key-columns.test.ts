@@ -66,6 +66,20 @@ describe('key columns', () => {
     ).toBeNull();
   });
 
+  test('no rows for table', () => {
+    const keyColumns = new KeyColumns(cvrRows);
+    expect(
+      keyColumns.getOldRowID(
+        {
+          schema: 'public',
+          table: 'emoji',
+          rowKey: {id: 'roo'},
+        },
+        {id: 'roo', value: 'woo'},
+      ),
+    ).toBeNull();
+  });
+
   test('expanded key', () => {
     const keyColumns = new KeyColumns(cvrRows);
     expect(
