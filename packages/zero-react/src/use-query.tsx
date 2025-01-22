@@ -46,18 +46,62 @@ export function useQuery<
 const emptyArray: unknown[] = [];
 const disabledSubscriber = () => () => {};
 
-const defaultSnapshots = {
-  singular: [undefined, {type: 'unknown'}] as const,
-  plural: [emptyArray, {type: 'unknown'}] as const,
-};
+const resultTypeUnknown = {type: 'unknown'} as const;
+const resultTypeComplete = {type: 'complete'} as const;
+
+const emptySnapshotSingularUnknown = [undefined, resultTypeUnknown] as const;
+const emptySnapshotSingularComplete = [undefined, resultTypeComplete] as const;
+const emptySnapshotPluralUnknown = [emptyArray, resultTypeUnknown] as const;
+const emptySnapshotPluralComplete = [emptyArray, resultTypeComplete] as const;
 
 function getDefaultSnapshot<TReturn>(singular: boolean): QueryResult<TReturn> {
   return (
-    singular ? defaultSnapshots.singular : defaultSnapshots.plural
+    singular ? emptySnapshotSingularUnknown : emptySnapshotPluralUnknown
   ) as QueryResult<TReturn>;
 }
 
-export const getAllViews = Symbol();
+/**
+ * Returns a new snapshot or one of the empty predefined ones. Returning the
+ * predefined ones is important to prevent unnecessary re-renders in React.
+ */
+function getSnapshot<TReturn>(
+  singular: boolean,
+  data: HumanReadable<TReturn>,
+  resultType: string,
+): QueryResult<TReturn> {
+  if (singular && data === undefined) {
+    return (resultType === 'complete'
+      ? emptySnapshotSingularComplete
+      : emptySnapshotSingularUnknown) as unknown as QueryResult<TReturn>;
+  }
+
+  if (!singular && (data as unknown[]).length === 0) {
+    return (
+      resultType === 'complete'
+        ? emptySnapshotPluralComplete
+        : emptySnapshotPluralUnknown
+    ) as QueryResult<TReturn>;
+  }
+
+  return [
+    data,
+    resultType === 'complete' ? resultTypeComplete : resultTypeUnknown,
+  ];
+}
+
+declare const TESTING: boolean;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ViewWrapperAny = ViewWrapper<any, any, any>;
+
+const allViews = new WeakMap<ViewStore, Map<string, ViewWrapperAny>>();
+
+export function getAllViewsSizeForTesting(store: ViewStore): number {
+  if (TESTING) {
+    return allViews.get(store)?.size ?? 0;
+  }
+  return 0;
+}
 
 /**
  * A global store of all active views.
@@ -108,8 +152,13 @@ export const getAllViews = Symbol();
  * Swapping `useState` to `useRef` has similar problems.
  */
 export class ViewStore {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  #views = new Map<string, ViewWrapper<any, any, any>>();
+  #views = new Map<string, ViewWrapperAny>();
+
+  constructor() {
+    if (TESTING) {
+      allViews.set(this, this.#views);
+    }
+  }
 
   getView<
     TSchema extends Schema,
@@ -152,10 +201,6 @@ export class ViewStore {
       this.#views.set(hash, existing);
     }
     return existing as ViewWrapper<TSchema, TTable, TReturn>;
-  }
-
-  [getAllViews]() {
-    return this.#views;
   }
 }
 
@@ -218,7 +263,7 @@ class ViewWrapper<
       snap === undefined
         ? snap
         : (deepClone(snap as ReadonlyJSONValue) as HumanReadable<TReturn>);
-    this.#snapshot = [data, {type: resultType}] as QueryResult<TReturn>;
+    this.#snapshot = getSnapshot(this.#query.format.singular, data, resultType);
     for (const internals of this.#reactInternals) {
       internals();
     }
