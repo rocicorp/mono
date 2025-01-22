@@ -253,6 +253,7 @@ class ViewWrapper<
     this.#onDematerialized = onDematerialized;
     this.#reactInternals = new Set();
     this.#query = query;
+    this.#materializeIfNeeded();
   }
 
   #onData = (
