@@ -25,6 +25,7 @@ import {
 } from '../../../zero-protocol/src/push.js';
 import type {NullableVersion} from '../../../zero-protocol/src/version.js';
 import {createSchema, type Schema} from '../../../zero-schema/src/mod.js';
+import {number, string, table} from '../mod.js';
 import * as ConnectionState from './connection-state-enum.js';
 import type {WSString} from './http-string.js';
 import type {UpdateNeededReason, ZeroOptions} from './options.js';
@@ -48,7 +49,6 @@ import {
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
 } from './zero.js';
-import {number, string, table} from '../mod.js';
 
 let realSetTimeout: typeof setTimeout;
 let clock: sinon.SinonFakeTimers;
@@ -163,6 +163,29 @@ test('onOnlineChange callback', async () => {
     onlineCount = offlineCount = 0;
     await z.triggerError(ErrorKind.ServerOverloaded, 'slow down', {
       minBackoffMs: BACKOFF_MS,
+    });
+    await z.waitForConnectionState(ConnectionState.Disconnected);
+    await clock.tickAsync(0);
+    expect(z.online).false;
+    expect(onlineCount).to.equal(0);
+    expect(offlineCount).to.equal(1);
+
+    // And followed by a reconnect with the longer BACKOFF_MS.
+    expect(z.online).false;
+    await tickAFewTimes(clock, BACKOFF_MS);
+    await z.triggerConnected();
+    await clock.tickAsync(0);
+    expect(z.online).true;
+    expect(onlineCount).to.equal(1);
+    expect(offlineCount).to.equal(1);
+  }
+
+  {
+    // Now test a short backoff directive.
+    const BACKOFF_MS = 10;
+    onlineCount = offlineCount = 0;
+    await z.triggerError(ErrorKind.Rehome, 'rehomed', {
+      maxBackoffMs: BACKOFF_MS,
     });
     await z.waitForConnectionState(ConnectionState.Disconnected);
     await clock.tickAsync(0);

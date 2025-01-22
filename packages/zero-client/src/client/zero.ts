@@ -105,8 +105,8 @@ import {
 import {
   ServerError,
   isAuthError,
+  isBackoffError,
   isServerError,
-  isServerOverloadedError,
 } from './server-error.js';
 import {getServer} from './server-option.js';
 import {version} from './version.js';
@@ -1345,9 +1345,14 @@ export class Zero<const S extends Schema> {
           gotError = true;
         }
 
-        const overloaded = isServerOverloadedError(ex);
-        if (overloaded && overloaded.minBackoffMs) {
-          backoffMs = Math.max(backoffMs, overloaded.minBackoffMs);
+        const backoffError = isBackoffError(ex);
+        if (backoffError) {
+          if (backoffError.minBackoffMs !== undefined) {
+            backoffMs = Math.max(backoffMs, backoffError.minBackoffMs);
+          }
+          if (backoffError.maxBackoffMs !== undefined) {
+            backoffMs = Math.min(backoffMs, backoffError.maxBackoffMs);
+          }
         }
       }
 
