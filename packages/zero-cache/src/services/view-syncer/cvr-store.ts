@@ -6,6 +6,7 @@ import {startAsyncSpan} from '../../../../otel/src/span.js';
 import {version} from '../../../../otel/src/version.js';
 import {assert} from '../../../../shared/src/asserts.js';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.js';
+import {CustomKeySet} from '../../../../shared/src/custom-key-set.js';
 import {
   deepEqual,
   type ReadonlyJSONValue,
@@ -459,6 +460,7 @@ export class CVRStore {
   readonly #pendingRowRecordUpdates = new CustomKeyMap<RowID, RowRecord | null>(
     rowIDString,
   );
+  readonly #forceUpdates = new CustomKeySet<RowID>(rowIDString);
   readonly #rowCache: RowRecordCache;
   readonly #loadAttemptIntervalMs: number;
   readonly #maxLoadAttempts: number;
@@ -654,6 +656,17 @@ export class CVRStore {
    */
   delRowRecord(id: RowID): void {
     this.#pendingRowRecordUpdates.set(id, null);
+  }
+
+  /**
+   * Overrides the default logic that removes no-op writes and forces
+   * the updates for the given row `ids`. This has no effect if there
+   * are no corresponding puts or dels for the associated row records.
+   */
+  forceUpdates(...ids: RowID[]) {
+    for (const id of ids) {
+      this.#forceUpdates.add(id);
+    }
   }
 
   putInstance({
@@ -939,16 +952,16 @@ export class CVRStore {
     if (this.#pendingRowRecordUpdates.size) {
       const existingRowRecords = await this.getRowRecords();
       for (const [id, row] of this.#pendingRowRecordUpdates.entries()) {
-        if (row === null) {
-          continue; // Keep all deletes. Those come from existing rows.
+        if (this.#forceUpdates.has(id)) {
+          continue;
         }
         const existing = existingRowRecords.get(id);
         if (
-          // Don't add an unreferenced row if it doesn't exist in the CVR.
-          (existing === undefined && row.refCounts === null) ||
+          // Don't delete or add an unreferenced row if it's not in the CVR.
+          (existing === undefined && !row?.refCounts) ||
           // Don't write a row record that exactly matches what's in the CVR.
           deepEqual(
-            row as ReadonlyJSONValue,
+            (row ?? undefined) as ReadonlyJSONValue | undefined,
             existing as ReadonlyJSONValue | undefined,
           )
         ) {
@@ -1029,6 +1042,7 @@ export class CVRStore {
     } finally {
       this.#writes.clear();
       this.#pendingRowRecordUpdates.clear();
+      this.#forceUpdates.clear();
     }
   }
 

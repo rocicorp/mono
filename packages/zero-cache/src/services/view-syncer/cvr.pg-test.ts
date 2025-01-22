@@ -1088,26 +1088,19 @@ describe('view-syncer/cvr', () => {
     });
   });
 
-  const ROW_KEY1 = {id: '123'};
-  const ROW_ID1: RowID = {
+  const ROW_TABLE = {
     schema: 'public',
     table: 'issues',
-    rowKey: ROW_KEY1,
   };
+
+  const ROW_KEY1 = {id: '123'};
+  const ROW_ID1: RowID = {...ROW_TABLE, rowKey: ROW_KEY1};
 
   const ROW_KEY2 = {id: '321'};
-  const ROW_ID2: RowID = {
-    schema: 'public',
-    table: 'issues',
-    rowKey: ROW_KEY2,
-  };
+  const ROW_ID2: RowID = {...ROW_TABLE, rowKey: ROW_KEY2};
 
   const ROW_KEY3 = {id: '888'};
-  const ROW_ID3: RowID = {
-    schema: 'public',
-    table: 'issues',
-    rowKey: ROW_KEY3,
-  };
+  const ROW_ID3: RowID = {...ROW_TABLE, rowKey: ROW_KEY3};
 
   const DELETE_ROW_KEY = {id: '456'};
 
@@ -3397,6 +3390,11 @@ describe('view-syncer/cvr', () => {
   });
 
   test('row key changed', async () => {
+    const ROW_KEY4 = {id: 999};
+    const NEW_ROW_KEY1 = {newID: '1foo'};
+    const NEW_ROW_KEY3 = {newID: '3baz'};
+    const NEW_ROW_KEY4 = {newID: 'voo'};
+
     const initialState: DBState = {
       instances: [
         {
@@ -3454,6 +3452,15 @@ describe('view-syncer/cvr', () => {
           schema: 'public',
           table: 'issues',
         },
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY4,
+          rowVersion: '03',
+          refCounts: {oneHash: 1},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
       ],
     };
 
@@ -3471,16 +3478,13 @@ describe('view-syncer/cvr', () => {
     expect(newVersion).toEqual({stateVersion: '1bb'});
     expect(queryPatches).toHaveLength(0);
 
-    const NEW_ROW_KEY1 = {newID: '1foo'};
-    const NEW_ROW_KEY3 = {newID: '3baz'};
-
     // NEW_ROW_KEY1 should replace ROW_KEY1
     expect(
       await updater.received(
         lc,
         new Map([
           [
-            {...ROW_ID1, rowKey: NEW_ROW_KEY1},
+            {...ROW_TABLE, rowKey: NEW_ROW_KEY1},
             {
               version: '03',
               refCounts: {oneHash: 1},
@@ -3495,7 +3499,7 @@ describe('view-syncer/cvr', () => {
         patch: {
           type: 'row',
           op: 'put',
-          id: {...ROW_ID1, rowKey: NEW_ROW_KEY1},
+          id: {...ROW_TABLE, rowKey: NEW_ROW_KEY1},
           contents: {...ROW_KEY1, ...NEW_ROW_KEY1, value: 'foobar'},
         },
       },
@@ -3507,7 +3511,7 @@ describe('view-syncer/cvr', () => {
         lc,
         new Map([
           [
-            {...ROW_ID3, rowKey: NEW_ROW_KEY3},
+            {...ROW_TABLE, rowKey: NEW_ROW_KEY3},
             {
               version: '09',
               refCounts: {oneHash: 1},
@@ -3522,8 +3526,50 @@ describe('view-syncer/cvr', () => {
         patch: {
           type: 'row',
           op: 'put',
-          id: {...ROW_ID3, rowKey: NEW_ROW_KEY3},
+          id: {...ROW_TABLE, rowKey: NEW_ROW_KEY3},
           contents: {...ROW_KEY3, ...NEW_ROW_KEY3, value: 'barfoo'},
+        },
+      },
+    ] satisfies PatchToVersion[]);
+
+    // NEW_ROW_KEY4 gets added and removed, and should replace ROW_KEY4
+    expect(
+      await updater.received(
+        lc,
+        new Map([
+          [
+            {...ROW_TABLE, rowKey: NEW_ROW_KEY4},
+            {
+              version: '03',
+              refCounts: {oneHash: 1},
+              contents: {...ROW_KEY4, ...NEW_ROW_KEY4, value: 'voodoo'},
+            },
+          ],
+          [
+            {...ROW_TABLE, rowKey: NEW_ROW_KEY4},
+            {
+              version: '03',
+              refCounts: {oneHash: -1},
+            },
+          ],
+        ]),
+      ),
+    ).toEqual([
+      {
+        toVersion: {stateVersion: '1a0'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {...ROW_TABLE, rowKey: NEW_ROW_KEY4},
+          contents: {...ROW_KEY4, ...NEW_ROW_KEY4, value: 'voodoo'},
+        },
+      },
+      {
+        toVersion: {stateVersion: '1bb'},
+        patch: {
+          type: 'row',
+          op: 'del',
+          id: {...ROW_TABLE, rowKey: NEW_ROW_KEY4},
         },
       },
     ] satisfies PatchToVersion[]);
@@ -3549,9 +3595,9 @@ describe('view-syncer/cvr', () => {
         "desires": 0,
         "instances": 2,
         "queries": 0,
-        "rows": 4,
+        "rows": 6,
         "rowsDeferred": 0,
-        "statements": 5,
+        "statements": 6,
       }
     `);
 
@@ -3621,6 +3667,17 @@ describe('view-syncer/cvr', () => {
           refCounts: {oneHash: 1},
           rowKey: NEW_ROW_KEY3,
           rowVersion: '09',
+          schema: 'public',
+          table: 'issues',
+        },
+        // NEW_ROW_KEY4 should added as deleted row, ensuring that
+        // the delete is computed when catching up old clients.
+        {
+          clientGroupID: 'abc123',
+          patchVersion: '1bb',
+          refCounts: null,
+          rowKey: NEW_ROW_KEY4,
+          rowVersion: '03',
           schema: 'public',
           table: 'issues',
         },
