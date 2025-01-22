@@ -85,22 +85,6 @@ export class Storer implements Service {
   }
 
   async purgeRecordsBefore(watermark: string): Promise<number> {
-    // This is a sanity check to guarantee the invariant of the "changeLog"
-    // that it always contains at least one entry (from which catchup can proceed),
-    // unless no replication changes have flowed through the system
-    // (i.e. watermark === replicaVersion).
-    const exists = await this.#db`
-      SELECT watermark FROM cdc."changeLog" WHERE watermark = ${watermark}`;
-    // Watermark boundaries should always be "commit" entries, which are the sole
-    // entry with that watermark (i.e. exists.length === 1). It follows that
-    // catchup, which proceeds from the next entry, always starts with a
-    // "begin" entry.
-    if (exists.length !== 1 && watermark !== this.#replicaVersion) {
-      this.#lc.warn?.(
-        `rejecting attempted to purge up to watermark ${watermark} with ${exists.length} entries`,
-      );
-      return 0;
-    }
     const result = await this.#db<{deleted: bigint}[]>`
       WITH purged AS (
         DELETE FROM cdc."changeLog" WHERE watermark < ${watermark} 
