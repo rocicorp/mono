@@ -45,19 +45,19 @@ export class KeyColumns {
   getOldRowID(id: RowID, row: JSONObject): RowID | null {
     const {schema, table, rowKey} = id;
     const fullTableName = `${schema}.${table}`;
-    if (this.#sameKey.get(fullTableName)) {
-      return null;
-    }
     const cvrKey = this.#cvrKeyColumns.get(fullTableName);
     if (!cvrKey) {
       return null; // No rows in the CVR for the given table.
     }
-    const newKey = Object.keys(rowKey).sort();
-    if (deepEqual(cvrKey, newKey)) {
-      this.#sameKey.set(fullTableName, true);
+    let sameKey = this.#sameKey.get(fullTableName);
+    if (sameKey === undefined) {
+      const newKey = Object.keys(rowKey).sort();
+      sameKey = deepEqual(cvrKey, newKey);
+      this.#sameKey.set(fullTableName, sameKey);
+    }
+    if (sameKey) {
       return null;
     }
-
     const cvrRowKey = Object.fromEntries(
       cvrKey.map(col => {
         const val = row[col];
