@@ -53,8 +53,8 @@ const schema = createSchema(1, {
 let replica: Database;
 beforeEach(() => {
   replica = new Database(lc, ':memory:');
-  replica.exec(/*sql*/ `CREATE TABLE foo (id TEXT PRIMARY KEY, a TEXT);
-      INSERT INTO foo VALUES ('1', 'a');`);
+  replica.exec(/*sql*/ `CREATE TABLE foo (id TEXT PRIMARY KEY, a TEXT, b TEXT_NOT_SUPPORTED);
+      INSERT INTO foo (id, a) VALUES ('1', 'a');`);
 });
 
 describe('normalize ops', () => {
