@@ -381,7 +381,10 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
 
     const ret = this.#statementRunner.get(
       compile(
-        sql`SELECT * FROM ${sql.ident(op.tableName)} WHERE ${sql.join(
+        sql`SELECT ${sql.join(
+          Object.keys(spec.zqlSpec).map(c => sql.ident(c)),
+          sql`,`,
+        )} FROM ${sql.ident(op.tableName)} WHERE ${sql.join(
           conditions,
           sql` AND `,
         )}`,
