@@ -186,6 +186,10 @@ test('onOnlineChange callback', async () => {
     onlineCount = offlineCount = 0;
     await z.triggerError(ErrorKind.Rehome, 'rehomed', {
       maxBackoffMs: BACKOFF_MS,
+      reconnectParams: {
+        reason: 'rehomed',
+        fromServer: 'foo/bar/baz',
+      },
     });
     await z.waitForConnectionState(ConnectionState.Disconnected);
     await clock.tickAsync(0);
@@ -197,6 +201,13 @@ test('onOnlineChange callback', async () => {
     expect(z.online).false;
     await tickAFewTimes(clock, BACKOFF_MS);
     await z.triggerConnected();
+    const connectMsg = z.testLogSink.messages.findLast(
+      ([level, _context, args]) =>
+        level === 'info' && args.find(arg => /Connecting to/.test(String(arg))),
+    );
+    expect(connectMsg?.[2][1]).matches(
+      /&reason=rehomed&fromServer=foo%2Fbar%2Fbaz/,
+    );
     await clock.tickAsync(0);
     expect(z.online).true;
     expect(onlineCount).to.equal(1);
@@ -323,6 +334,7 @@ suite('createSocket', () => {
     debugPerf: boolean,
     now: number,
     expectedURL: string,
+    additionalConnectParams?: Record<string, string>,
   ) => {
     const schemaVersion = 3;
     test(expectedURL, async () => {
@@ -341,6 +353,8 @@ suite('createSocket', () => {
         'wsidx',
         debugPerf,
         new LogContext('error', undefined, new TestLogSink()),
+        1048 * 8,
+        additionalConnectParams,
       )) as unknown as [MockSocket, Map<string, QueriesPatchOp>];
       expect(`${mockSocket.url}`).equal(expectedURL);
       expect(mockSocket.protocol).equal(
@@ -363,6 +377,7 @@ suite('createSocket', () => {
         debugPerf,
         new LogContext('error', undefined, new TestLogSink()),
         0, // do not put any extra information into headers
+        additionalConnectParams,
       )) as unknown as [MockSocket, Map<string, QueriesPatchOp>];
       expect(`${mockSocket.url}`).equal(expectedURL);
       expect(mockSocket2.protocol).equal(encodeSecProtocols(undefined, auth));
@@ -499,6 +514,24 @@ suite('createSocket', () => {
     false,
     456,
     `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx`,
+  );
+
+  t(
+    'ws://example.com/',
+    null,
+    'clientID',
+    'userID',
+    '',
+    0,
+    false,
+    456,
+    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx&reason=rehome&backoff=100&lastTask=foo%2Fbar%26baz`,
+    {
+      reason: 'rehome',
+      backoff: '100',
+      lastTask: 'foo/bar&baz',
+      clientID: 'conflicting-parameter-ignored',
+    },
   );
 });
 

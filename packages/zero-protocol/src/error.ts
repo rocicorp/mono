@@ -34,6 +34,14 @@ const backoffBodySchema = v.object({
   message: v.string(),
   minBackoffMs: v.number().optional(),
   maxBackoffMs: v.number().optional(),
+  // Query parameters to send in the next reconnect. In the event of
+  // a conflict, these will be overridden by the parameters used by
+  // the client; it is the responsibility of the server to avoid
+  // parameter name conflicts.
+  //
+  // The parameters will only be added to the immediately following
+  // reconnect, and not after that.
+  reconnectParams: v.record(v.string()).optional(),
 });
 
 export const errorBodySchema = v.union(basicErrorBodySchema, backoffBodySchema);
