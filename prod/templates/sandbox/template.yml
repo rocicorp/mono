@@ -112,6 +112,30 @@ Resources:
       ServiceConnectConfiguration:
         Enabled: true
         Namespace: "zero-cache-sandbox"
+
+  ViewSyncerScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: 10
+      MinCapacity: 1
+      RoleARN: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService
+      ServiceNamespace: ecs
+      ScalableDimension: "ecs:service:DesiredCount"
+      ResourceId: !Ref ServiceViewSyncer
+
+  ServiceScalingPolicyCPU:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub ${AWS::StackName}-target-tracking-cpu50
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref ViewSyncerScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 50.0
+        ScaleInCooldown: 180
+        ScaleOutCooldown: 60
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+
   # First, create the secure parameters
   ViewSyncerSecrets:
     Type: AWS::SecretsManager::Secret
