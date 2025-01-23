@@ -1,4 +1,4 @@
-name: Bencher File Sizes PR
+name: Bencher PR
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
 
 jobs:
   file_sizes:
-    name: Continuous Monitoring of file sizes
+    name: File Sizes PR
     # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
 
@@ -38,11 +38,11 @@ jobs:
         working-directory: packages/zero
         run: brotli out/zero.js
 
-      - name: Track PR benchmarks with Bencher
+      - name: Upload PR benchmarks results to bencher.dev
         working-directory: packages/zero
         run: |
           bencher run \
-          --project zero-file-sizes \
+          --project 6c126c62-7964-45e1-a6b2-aae5f764bb97 \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
@@ -59,3 +59,48 @@ jobs:
           --file-size out/zero-package.tgz \
           --file-size out/zero.js.br \
           --file-size out/zero.js
+
+  perf:
+    name: Perf PR
+    # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+
+    permissions:
+      pull-requests: write
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+      - uses: bencherdev/bencher@main
+
+      - run: npm ci
+
+      - name: Install Playwright Deps
+        run: npx playwright install --with-deps
+
+      - name: Run benchmarks
+        working-directory: packages/zero-client
+        run: npm run bench -- --outputJson output.json
+
+      - name: Upload PR benchmarks results to bencher.dev
+        working-directory: packages/zero-client
+        run: |
+          cat output.json |\
+          npx tsx ../shared/src/tool/vitest-perf-json-to-bmf.ts |\
+          bencher run \
+          --project 6c126c62-7964-45e1-a6b2-aae5f764bb97 \
+          --token '${{ secrets.BENCHER_API_TOKEN }}' \
+          --adapter json \
+          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+          --branch "$GITHUB_HEAD_REF" \
+          --start-point "$GITHUB_BASE_REF" \
+          --start-point-hash '${{ github.event.pull_request.base.sha }}' \
+          --start-point-clone-thresholds \
+          --start-point-reset \
+          --threshold-measure throughput \
+          --threshold-test t_test \
+          --threshold-lower-boundary 0.95 \
+          --err

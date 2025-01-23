@@ -1,4 +1,4 @@
-name: Bencher File Sizes
+name: Bencher
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
 
 jobs:
   file_sizes:
-    name: Continuous Monitoring of file sizes
+    name: File Sizes
     permissions:
       checks: write
     runs-on: ubuntu-latest
@@ -35,11 +35,11 @@ jobs:
         working-directory: packages/zero
         run: brotli out/zero.js
 
-      - name: Track benchmarks with Bencher
+      - name: Upload benchmarks results to bencher.dev
         working-directory: packages/zero
         run: |
           bencher run \
-          --project zero-file-sizes \
+          --project 6c126c62-7964-45e1-a6b2-aae5f764bb97 \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
@@ -52,3 +52,41 @@ jobs:
           --file-size out/zero-package.tgz \
           --file-size out/zero.js.br \
           --file-size out/zero.js
+
+  perf:
+    name: Perf
+    permissions:
+      checks: write
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+      - uses: bencherdev/bencher@main
+
+      - run: npm ci
+
+      - name: Install Playwright Deps
+        run: npx playwright install --with-deps
+
+      - name: Run benchmarks
+        working-directory: packages/zero-client
+        run: npm run bench -- --outputJson output.json
+
+      - name: Upload benchmarks results to bencher.dev
+        working-directory: packages/zero-client
+        run: |
+          cat output.json |\
+          npx tsx ../shared/src/tool/vitest-perf-json-to-bmf.ts |\
+          bencher run \
+          --project 6c126c62-7964-45e1-a6b2-aae5f764bb97 \
+          --token '${{ secrets.BENCHER_API_TOKEN }}' \
+          --adapter json \
+          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+          --start-point main \
+          --threshold-measure throughput \
+          --threshold-test t_test \
+          --threshold-lower-boundary 0.95 \
+          --err
