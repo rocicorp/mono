@@ -111,6 +111,12 @@ export type {
   PermissionsConfig,
 } from '../../zero-schema/src/permissions.js';
 export {type TableSchema} from '../../zero-schema/src/table-schema.js';
+export type {
+  EnumSchemaValue,
+  SchemaValue,
+  SchemaValueWithCustomType,
+  ValueType,
+} from '../../zero-schema/src/table-schema.js';
 export {escapeLike} from '../../zql/src/query/escape-like.js';
 export type {
   ExpressionBuilder,
