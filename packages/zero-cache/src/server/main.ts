@@ -1,6 +1,7 @@
 import {resolver} from '@rocicorp/resolver';
 import {availableParallelism} from 'node:os';
 import path from 'node:path';
+import {must} from '../../../shared/src/must.js';
 import {getZeroConfig} from '../config/zero-config.js';
 import {getSubscriberContext} from '../services/change-streamer/change-streamer-http.js';
 import {SyncDispatcher} from '../services/dispatcher/sync-dispatcher.js';
@@ -40,6 +41,7 @@ export default async function runWorker(
   const startMs = Date.now();
   const config = getZeroConfig(env);
   const lc = createLogContext(config, {worker: 'dispatcher'});
+  const taskID = must(config.taskID, `main must set --task-id`);
 
   const processes = new ProcessManager(lc, parent ?? process);
 
@@ -157,7 +159,7 @@ export default async function runWorker(
   const {port} = config;
 
   if (numSyncers) {
-    mainServices.push(new SyncDispatcher(lc, parent, syncers, {port}));
+    mainServices.push(new SyncDispatcher(lc, taskID, parent, syncers, {port}));
   } else if (changeStreamer && parent) {
     // When running as the replication-manager, the dispatcher process
     // hands off websockets from the main (tenant) dispatcher to the

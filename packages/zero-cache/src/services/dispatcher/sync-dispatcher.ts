@@ -13,10 +13,12 @@ const CONNECT_URL_PATTERN = new UrlPattern('(/:base)/sync/v:version/connect');
 
 export class SyncDispatcher extends HttpService {
   readonly id = 'dispatcher';
+  readonly #taskID: string;
   readonly #syncers: Worker[];
 
   constructor(
     lc: LogContext,
+    taskID: string,
     parent: Worker | null,
     syncers: Worker[],
     opts: Options,
@@ -26,6 +28,7 @@ export class SyncDispatcher extends HttpService {
       installWebSocketHandoff(lc, req => this.#handoff(req), fastify.server);
     });
 
+    this.#taskID = taskID;
     this.#syncers = syncers;
     if (parent) {
       installWebSocketHandoff(lc, req => this.#handoff(req), parent);
@@ -48,7 +51,13 @@ export class SyncDispatcher extends HttpService {
       throw new Error(error);
     }
     const {clientGroupID} = params;
-    const syncer = h32(clientGroupID) % this.#syncers.length;
+    // Include the TaskID when hash-bucketting the client group to the sync
+    // worker. This diversifies the distribution of client groups (across
+    // workers) for different tasks, so that if one task sheds connections
+    // from its most heavily loaded sync worker(s), those client groups will
+    // be distributed uniformly across workers on the receiving task(s).
+    const syncer =
+      h32(this.#taskID + '/' + clientGroupID) % this.#syncers.length;
 
     this._lc.debug?.(`connecting ${clientGroupID} to syncer ${syncer}`);
     return {payload: params, receiver: this.#syncers[syncer]};
