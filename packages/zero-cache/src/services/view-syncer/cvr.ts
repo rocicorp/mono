@@ -514,6 +514,9 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
             lc.debug?.(`replacing ${stringify(oldID)} with ${stringify(id)}`);
             this.#replacedRows.set(oldID, true);
             this._cvrStore.delRowRecord(oldID);
+            // Force the updates for these rows to happen, even if they look like
+            // no-ops on their own.
+            this._cvrStore.forceUpdates(oldID, id);
           }
         }
       }

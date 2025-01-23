@@ -29,11 +29,11 @@ describe('change-streamer/storer', () => {
       await setupCDCTables(lc, tx);
       await Promise.all(
         [
-          {watermark: '02', pos: 0, change: {tag: 'begin', foo: 'bar'}},
-          {watermark: '02', pos: 1, change: {tag: 'insert'}},
+          {watermark: '03', pos: 0, change: {tag: 'begin', foo: 'bar'}},
+          {watermark: '03', pos: 1, change: {tag: 'insert'}},
           {watermark: '03', pos: 2, change: {tag: 'commit', bar: 'baz'}},
-          {watermark: '04', pos: 0, change: {tag: 'begin', boo: 'dar'}},
-          {watermark: '04', pos: 1, change: {tag: 'update'}},
+          {watermark: '06', pos: 0, change: {tag: 'begin', boo: 'dar'}},
+          {watermark: '06', pos: 1, change: {tag: 'update'}},
           {watermark: '06', pos: 2, change: {tag: 'commit', boo: 'far'}},
         ].map(row => tx`INSERT INTO cdc."changeLog" ${tx(row)}`),
       );
@@ -71,33 +71,36 @@ describe('change-streamer/storer', () => {
   test('purge', async () => {
     expect(await storer.purgeRecordsBefore('02')).toBe(0);
     expect(await db`SELECT watermark, pos FROM cdc."changeLog"`).toEqual([
-      {watermark: '02', pos: 0n},
-      {watermark: '02', pos: 1n},
+      {watermark: '03', pos: 0n},
+      {watermark: '03', pos: 1n},
       {watermark: '03', pos: 2n},
-      {watermark: '04', pos: 0n},
-      {watermark: '04', pos: 1n},
+      {watermark: '06', pos: 0n},
+      {watermark: '06', pos: 1n},
       {watermark: '06', pos: 2n},
     ]);
 
-    expect(await storer.purgeRecordsBefore('03')).toBe(2);
+    expect(await storer.purgeRecordsBefore('03')).toBe(0);
     expect(await db`SELECT watermark, pos FROM cdc."changeLog"`).toEqual([
+      {watermark: '03', pos: 0n},
+      {watermark: '03', pos: 1n},
       {watermark: '03', pos: 2n},
-      {watermark: '04', pos: 0n},
-      {watermark: '04', pos: 1n},
+      {watermark: '06', pos: 0n},
+      {watermark: '06', pos: 1n},
       {watermark: '06', pos: 2n},
     ]);
 
     // Should be rejected as an invalid watermark.
-    expect(await storer.purgeRecordsBefore('04')).toBe(0);
+    expect(await storer.purgeRecordsBefore('04')).toBe(3);
     expect(await db`SELECT watermark, pos FROM cdc."changeLog"`).toEqual([
-      {watermark: '03', pos: 2n},
-      {watermark: '04', pos: 0n},
-      {watermark: '04', pos: 1n},
+      {watermark: '06', pos: 0n},
+      {watermark: '06', pos: 1n},
       {watermark: '06', pos: 2n},
     ]);
 
-    expect(await storer.purgeRecordsBefore('06')).toBe(3);
+    expect(await storer.purgeRecordsBefore('06')).toBe(0);
     expect(await db`SELECT watermark, pos FROM cdc."changeLog"`).toEqual([
+      {watermark: '06', pos: 0n},
+      {watermark: '06', pos: 1n},
       {watermark: '06', pos: 2n},
     ]);
   });
@@ -129,7 +132,7 @@ describe('change-streamer/storer', () => {
             "tag": "begin",
           },
           {
-            "commitWatermark": "02",
+            "commitWatermark": "03",
           },
         ],
         [
@@ -155,7 +158,7 @@ describe('change-streamer/storer', () => {
             "tag": "begin",
           },
           {
-            "commitWatermark": "04",
+            "commitWatermark": "06",
           },
         ],
         [
@@ -206,7 +209,7 @@ describe('change-streamer/storer', () => {
         'error',
         {
           type: ErrorType.WatermarkTooOld,
-          message: 'earliest supported watermark is 02 (requested 01)',
+          message: 'earliest supported watermark is 03 (requested 01)',
         },
       ],
     ]);
@@ -269,7 +272,7 @@ describe('change-streamer/storer', () => {
             "tag": "begin",
           },
           {
-            "commitWatermark": "04",
+            "commitWatermark": "06",
           },
         ],
         [
@@ -376,78 +379,78 @@ describe('change-streamer/storer', () => {
 
     expect(await db`SELECT * FROM cdc."changeLog" ORDER BY watermark, pos`)
       .toMatchInlineSnapshot(`
-      Result [
-        {
-          "change": {
-            "foo": "bar",
-            "tag": "begin",
+        Result [
+          {
+            "change": {
+              "foo": "bar",
+              "tag": "begin",
+            },
+            "pos": 0n,
+            "precommit": null,
+            "watermark": "03",
           },
-          "pos": 0n,
-          "precommit": null,
-          "watermark": "02",
-        },
-        {
-          "change": {
-            "tag": "insert",
+          {
+            "change": {
+              "tag": "insert",
+            },
+            "pos": 1n,
+            "precommit": null,
+            "watermark": "03",
           },
-          "pos": 1n,
-          "precommit": null,
-          "watermark": "02",
-        },
-        {
-          "change": {
-            "bar": "baz",
-            "tag": "commit",
+          {
+            "change": {
+              "bar": "baz",
+              "tag": "commit",
+            },
+            "pos": 2n,
+            "precommit": null,
+            "watermark": "03",
           },
-          "pos": 2n,
-          "precommit": null,
-          "watermark": "03",
-        },
-        {
-          "change": {
-            "boo": "dar",
-            "tag": "begin",
+          {
+            "change": {
+              "boo": "dar",
+              "tag": "begin",
+            },
+            "pos": 0n,
+            "precommit": null,
+            "watermark": "06",
           },
-          "pos": 0n,
-          "precommit": null,
-          "watermark": "04",
-        },
-        {
-          "change": {
-            "tag": "update",
+          {
+            "change": {
+              "tag": "update",
+            },
+            "pos": 1n,
+            "precommit": null,
+            "watermark": "06",
           },
-          "pos": 1n,
-          "precommit": null,
-          "watermark": "04",
-        },
-        {
-          "change": {
-            "boo": "far",
-            "tag": "commit",
+          {
+            "change": {
+              "boo": "far",
+              "tag": "commit",
+            },
+            "pos": 2n,
+            "precommit": null,
+            "watermark": "06",
           },
-          "pos": 2n,
-          "precommit": null,
-          "watermark": "06",
-        },
-        {
-          "change": {
-            "tag": "begin",
+          {
+            "change": {
+              "tag": "begin",
+            },
+            "pos": 0n,
+            "precommit": null,
+            "watermark": "07",
           },
-          "pos": 0n,
-          "precommit": null,
-          "watermark": "07",
-        },
-        {
-          "change": {
-            "extra": "stuff",
-            "tag": "commit",
+          {
+            "change": {
+              "extra": "stuff",
+              "tag": "commit",
+            },
+            "pos": 1n,
+            "precommit": "07",
+            "watermark": "08",
           },
-          "pos": 1n,
-          "precommit": "07",
-          "watermark": "08",
-        },
-      ]
-    `);
+        ]
+      `);
 
     await expectConsumed('08', '0e', '0f');
   });
@@ -491,7 +494,7 @@ describe('change-streamer/storer', () => {
             "tag": "begin",
           },
           {
-            "commitWatermark": "04",
+            "commitWatermark": "06",
           },
         ],
         [
@@ -560,61 +563,61 @@ describe('change-streamer/storer', () => {
 
     expect(await db`SELECT * FROM cdc."changeLog" ORDER BY watermark, pos`)
       .toMatchInlineSnapshot(`
-      Result [
-        {
-          "change": {
-            "foo": "bar",
-            "tag": "begin",
+        Result [
+          {
+            "change": {
+              "foo": "bar",
+              "tag": "begin",
+            },
+            "pos": 0n,
+            "precommit": null,
+            "watermark": "03",
           },
-          "pos": 0n,
-          "precommit": null,
-          "watermark": "02",
-        },
-        {
-          "change": {
-            "tag": "insert",
+          {
+            "change": {
+              "tag": "insert",
+            },
+            "pos": 1n,
+            "precommit": null,
+            "watermark": "03",
           },
-          "pos": 1n,
-          "precommit": null,
-          "watermark": "02",
-        },
-        {
-          "change": {
-            "bar": "baz",
-            "tag": "commit",
+          {
+            "change": {
+              "bar": "baz",
+              "tag": "commit",
+            },
+            "pos": 2n,
+            "precommit": null,
+            "watermark": "03",
           },
-          "pos": 2n,
-          "precommit": null,
-          "watermark": "03",
-        },
-        {
-          "change": {
-            "boo": "dar",
-            "tag": "begin",
+          {
+            "change": {
+              "boo": "dar",
+              "tag": "begin",
+            },
+            "pos": 0n,
+            "precommit": null,
+            "watermark": "06",
           },
-          "pos": 0n,
-          "precommit": null,
-          "watermark": "04",
-        },
-        {
-          "change": {
-            "tag": "update",
+          {
+            "change": {
+              "tag": "update",
+            },
+            "pos": 1n,
+            "precommit": null,
+            "watermark": "06",
           },
-          "pos": 1n,
-          "precommit": null,
-          "watermark": "04",
-        },
-        {
-          "change": {
-            "boo": "far",
-            "tag": "commit",
+          {
+            "change": {
+              "boo": "far",
+              "tag": "commit",
+            },
+            "pos": 2n,
+            "precommit": null,
+            "watermark": "06",
           },
-          "pos": 2n,
-          "precommit": null,
-          "watermark": "06",
-        },
-      ]
-    `);
+        ]
+      `);
 
     await expectConsumed('0a', '0c');
   });
@@ -671,7 +674,7 @@ describe('change-streamer/storer', () => {
             "tag": "begin",
           },
           {
-            "commitWatermark": "04",
+            "commitWatermark": "06",
           },
         ],
         [

@@ -105,8 +105,8 @@ import {
 import {
   ServerError,
   isAuthError,
+  isBackoffError,
   isServerError,
-  isServerOverloadedError,
 } from './server-error.js';
 import {getServer} from './server-option.js';
 import {version} from './version.js';
@@ -882,7 +882,10 @@ export class Zero<const S extends Schema> {
    * is received before the connected message is received or if the connection
    * attempt times out.
    */
-  async #connect(l: LogContext): Promise<void> {
+  async #connect(
+    l: LogContext,
+    additionalConnectParams: Record<string, string> | undefined,
+  ): Promise<void> {
     assert(this.#server);
 
     // All the callers check this state already.
@@ -944,6 +947,7 @@ export class Zero<const S extends Schema> {
       this.#options.logLevel === 'debug',
       l,
       this.#options.maxHeaderLength,
+      additionalConnectParams,
     );
 
     if (this.closed) {
@@ -1206,6 +1210,7 @@ export class Zero<const S extends Schema> {
     let needsReauth = false;
     let gotError = false;
     let backoffMs = RUN_LOOP_INTERVAL_MS;
+    let additionalConnectParams: Record<string, string> | undefined;
 
     while (!this.closed) {
       runLoopCounter++;
@@ -1234,7 +1239,8 @@ export class Zero<const S extends Schema> {
               break;
             }
 
-            await this.#connect(lc);
+            await this.#connect(lc, additionalConnectParams);
+            additionalConnectParams = undefined;
             if (this.closed) {
               break;
             }
@@ -1345,9 +1351,15 @@ export class Zero<const S extends Schema> {
           gotError = true;
         }
 
-        const overloaded = isServerOverloadedError(ex);
-        if (overloaded && overloaded.minBackoffMs) {
-          backoffMs = Math.max(backoffMs, overloaded.minBackoffMs);
+        const backoffError = isBackoffError(ex);
+        if (backoffError) {
+          if (backoffError.minBackoffMs !== undefined) {
+            backoffMs = Math.max(backoffMs, backoffError.minBackoffMs);
+          }
+          if (backoffError.maxBackoffMs !== undefined) {
+            backoffMs = Math.min(backoffMs, backoffError.maxBackoffMs);
+          }
+          additionalConnectParams = backoffError.reconnectParams;
         }
       }
 
@@ -1593,6 +1605,7 @@ export async function createSocket(
   debugPerf: boolean,
   lc: LogContext,
   maxHeaderLength = 1024 * 8,
+  additionalConnectParams?: Record<string, string> | undefined,
 ): Promise<[WebSocket, Map<string, QueriesPatchOp> | undefined]> {
   const url = new URL(
     appendPath(socketOrigin, `/sync/v${PROTOCOL_VERSION}/connect`),
@@ -1608,6 +1621,15 @@ export async function createSocket(
   searchParams.set('wsid', wsid);
   if (debugPerf) {
     searchParams.set('debugPerf', true.toString());
+  }
+  if (additionalConnectParams) {
+    for (const k in additionalConnectParams) {
+      if (searchParams.has(k)) {
+        lc.warn?.(`skipping conflicting parameter ${k}`);
+      } else {
+        searchParams.set(k, additionalConnectParams[k]);
+      }
+    }
   }
 
   lc.info?.('Connecting to', url.toString());

@@ -1,12 +1,12 @@
 import {useLayoutEffect, useState} from 'react';
 
-export function useElementSize(elm: HTMLElement | null) {
+export function useElementSize(elm: React.RefObject<HTMLElement>) {
   const [size, setSize] = useState<{width: number; height: number} | null>(
     null,
   );
 
   useLayoutEffect(() => {
-    if (!elm) {
+    if (!elm.current) {
       return;
     }
 
@@ -20,7 +20,7 @@ export function useElementSize(elm: HTMLElement | null) {
       }
     });
 
-    observer.observe(elm);
+    observer.observe(elm.current);
 
     return () => {
       observer.disconnect();
