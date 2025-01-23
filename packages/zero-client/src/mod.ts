@@ -94,6 +94,7 @@ export {
   string,
   table,
   type TableBuilderWithColumns,
+  type ColumnBuilder,
 } from '../../zero-schema/src/builder/table-builder.js';
 export type {
   AssetPermissions as CompiledAssetPermissions,
