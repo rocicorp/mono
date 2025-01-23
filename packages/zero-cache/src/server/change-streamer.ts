@@ -68,7 +68,7 @@ export default async function runWorker(
       }
       if (e instanceof DatabaseInitError) {
         throw new Error(
-          `Cannot open ZERO_REPLICA_FILE at: "${config.replicaFile}". Please check that the path is valid.`,
+          `Cannot open ZERO_REPLICA_FILE at "${config.replicaFile}". Please check that the path is valid.`,
           {cause: e},
         );
       }
