@@ -51,11 +51,11 @@ export class SyncDispatcher extends HttpService {
       throw new Error(error);
     }
     const {clientGroupID} = params;
-    // Include the TaskID when hashing the clientGroupID to the sync worker.
-    // This diverges the distribution of client groups across workers for
-    // different tasks, so that if one task sheds connections from its most
-    // heavily loaded sync worker, those client groups will be distributed to
-    // different sync workers on the receiving task(s).
+    // Include the TaskID when hash-bucketting the client group to the sync
+    // worker. This diversifies the distribution of client groups (across
+    // workers) for different tasks, so that if one task sheds connections
+    // from its most heavily loaded sync worker(s), those client groups will
+    // be distributed uniformly across workers on the receiving task(s).
     const syncer =
       h32(this.#taskID + '/' + clientGroupID) % this.#syncers.length;
 
