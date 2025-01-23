@@ -1,12 +1,12 @@
+import {trace, type Attributes} from '@opentelemetry/api';
+import type {LogContext} from '@rocicorp/logger';
 import SQLite3Database, {
+  SqliteError,
   type RunResult,
   type Statement as SQLite3Statement,
-  SqliteError,
 } from '@rocicorp/zero-sqlite3';
-import {trace, type Attributes} from '@opentelemetry/api';
-import {version} from '../../otel/src/version.js';
 import {manualSpan} from '../../otel/src/span.js';
-import type {LogContext} from '@rocicorp/logger';
+import {version} from '../../otel/src/version.js';
 
 const tracer = trace.getTracer('view-syncer', version);
 
@@ -21,9 +21,13 @@ export class Database {
     options?: SQLite3Database.Options,
     slowQueryThreshold = 100,
   ) {
-    this.#lc = lc.withContext('class', 'Database').withContext('path', path);
-    this.#db = new SQLite3Database(path, options);
-    this.#threshold = slowQueryThreshold;
+    try {
+      this.#lc = lc.withContext('class', 'Database').withContext('path', path);
+      this.#db = new SQLite3Database(path, options);
+      this.#threshold = slowQueryThreshold;
+    } catch (cause) {
+      throw new DatabaseInitError(String(cause), {cause});
+    }
   }
 
   prepare(sql: string): Statement {
@@ -231,5 +235,16 @@ function logIfSlow(
     }
     lc.warn?.('Slow query', elapsed);
     manualSpan(tracer, 'db.slow-query', elapsed, attrs);
+  }
+}
+
+/**
+ * An error indicating that the Database failed to open. This essentially
+ * wraps the TypeError thrown by the better-sqlite3 package with something
+ * more specific.
+ */
+export class DatabaseInitError extends Error {
+  constructor(msg: string, options?: ErrorOptions) {
+    super(msg, options);
   }
 }
