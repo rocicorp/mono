@@ -21,13 +21,7 @@ const REQUEST_COUNTERS: Map<string, number> = new Map();
  * enough).
  */
 export function newRequestID(clientID: ClientID): string {
-  let counter = REQUEST_COUNTERS.get(clientID);
-  if (!counter) {
-    REQUEST_COUNTERS.set(clientID, 0);
-    counter = 0;
-  } else {
-    counter++;
-    REQUEST_COUNTERS.set(clientID, counter);
-  }
+  const counter = REQUEST_COUNTERS.get(clientID) ?? 0;
+  REQUEST_COUNTERS.set(clientID, counter + 1);
   return `${clientID}-${getSessionID()}-${counter}`;
 }
