@@ -120,8 +120,8 @@ Resources:
       MinCapacity: 1
       RoleARN: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService
       ServiceNamespace: ecs
-      ScalableDimension: "ecs:service:DesiredCount"
-      ResourceId: !Ref ServiceViewSyncer
+      ScalableDimension: ecs:service:DesiredCount
+      ResourceId: !Sub service/${Cluster}/view-syncer
 
   ServiceScalingPolicyCPU:
     Type: AWS::ApplicationAutoScaling::ScalingPolicy
