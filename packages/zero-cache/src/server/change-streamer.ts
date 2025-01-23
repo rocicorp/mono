@@ -1,5 +1,6 @@
 import {assert} from '../../../shared/src/asserts.js';
 import {must} from '../../../shared/src/must.js';
+import {DatabaseInitError} from '../../../zqlite/src/db.js';
 import {getZeroConfig} from '../config/zero-config.js';
 import {deleteLiteDB} from '../db/delete-lite-db.js';
 import {initializeChangeSource} from '../services/change-source/pg/change-source.js';
@@ -64,6 +65,12 @@ export default async function runWorker(
         //       a semantic wipe instead of a file delete.
         deleteLiteDB(config.replicaFile);
         continue; // execute again with a fresh initial-sync
+      }
+      if (e instanceof DatabaseInitError) {
+        throw new Error(
+          `Cannot open ZERO_REPLICA_FILE at: "${config.replicaFile}". Please check that the path is valid.`,
+          {cause: e},
+        );
       }
       throw e;
     }
