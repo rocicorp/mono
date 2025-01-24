@@ -103,7 +103,6 @@ function bumpCanaryVersion(version, hash) {
 const buildBranch = process.argv[2] ?? 'main';
 console.log(`Releasing from branch: ${buildBranch}`);
 
-
 try {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zero-build-'));
   // In order to merge the tag on the release branch back into main, we have to
