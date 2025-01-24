@@ -112,7 +112,7 @@ export class TableBuilderWithColumns<TShape extends TableSchema> {
   }
 }
 
-export class ColumnBuilder<TShape extends SchemaValue<any>> {
+class ColumnBuilder<TShape extends SchemaValue<any>> {
   readonly #schema: TShape;
   constructor(schema: TShape) {
     this.#schema = schema;
@@ -129,3 +129,5 @@ export class ColumnBuilder<TShape extends SchemaValue<any>> {
     return this.#schema;
   }
 }
+
+export type {ColumnBuilder};
