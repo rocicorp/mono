@@ -15,8 +15,8 @@ import {
   type Query,
   type ViewFactory,
 } from '../../zero-advanced/src/mod.js';
-import type {ResultType} from '../../zql/src/query/typed-view.js';
 import type {Schema} from '../../zero-schema/src/mod.js';
+import type {ResultType} from '../../zql/src/query/typed-view.js';
 
 export type QueryResultDetails = {
   readonly type: ResultType;
@@ -35,13 +35,17 @@ export class SolidView<V> implements Output {
   #state: Store<State>;
   #setState: SetStoreFunction<State>;
 
+  #pendingChanges: Change[] = [];
+
   constructor(
     input: Input,
-    format: Format = {singular: false, relationships: {}},
-    onDestroy: () => void = () => {},
-    queryComplete: true | Promise<true> = true,
+    onTransactionCommit: (cb: () => void) => void,
+    format: Format,
+    onDestroy: () => void,
+    queryComplete: true | Promise<true>,
   ) {
     this.#input = input;
+    onTransactionCommit(this.#onTransactionCommit);
     this.#format = format;
     this.#onDestroy = onDestroy;
     [this.#state, this.#setState] = createStore<State>([
@@ -50,19 +54,8 @@ export class SolidView<V> implements Output {
     ]);
     input.setOutput(this);
 
-    this.#setState(
-      produce(draftState => {
-        for (const node of input.fetch({})) {
-          applyChange(
-            draftState[0],
-            {type: 'add', node},
-            input.getSchema(),
-            '',
-            this.#format,
-          );
-        }
-      }),
-    );
+    this.#applyChanges(input.fetch({}), node => ({type: 'add', node}));
+
     if (queryComplete !== true) {
       void queryComplete.then(() => {
         this.#setState(oldState => [oldState[0], complete]);
@@ -82,18 +75,44 @@ export class SolidView<V> implements Output {
     this.#onDestroy();
   }
 
+  readonly #onTransactionCommit: () => void = () => {
+    this.#applyChanges(this.#pendingChanges, c => c);
+  };
+
+  #applyChanges<T>(changes: Iterable<T>, mapper: (v: T) => Change): void {
+    try {
+      this.#setState(
+        produce((draftState: State) => {
+          for (const change of changes) {
+            applyChange(
+              draftState[0],
+              mapper(change),
+              this.#input.getSchema(),
+              '',
+              this.#format,
+            );
+          }
+        }),
+      );
+    } finally {
+      this.#pendingChanges = [];
+    }
+  }
+
   push(change: Change): void {
-    this.#setState(
-      produce((draftState: State) => {
-        applyChange(
-          draftState[0],
-          change,
-          this.#input.getSchema(),
-          '',
-          this.#format,
-        );
-      }),
-    );
+    this.#pendingChanges.push(change);
+    // We should not use setState here. We should call #setState when the "batch" is done.
+    // this.#setState(
+    //   produce((draftState: State) => {
+    //     applyChange(
+    //       draftState[0],
+    //       change,
+    //       this.#input.getSchema(),
+    //       '',
+    //       this.#format,
+    //     );
+    //   }),
+    // );
   }
 }
 
@@ -106,11 +125,12 @@ export function solidViewFactory<
   input: Input,
   format: Format,
   onDestroy: () => void,
-  _onTransactionCommit: (cb: () => void) => void,
+  onTransactionCommit: (cb: () => void) => void,
   queryComplete: true | Promise<true>,
 ) {
   return new SolidView<HumanReadable<TReturn>>(
     input,
+    onTransactionCommit,
     format,
     onDestroy,
     queryComplete,

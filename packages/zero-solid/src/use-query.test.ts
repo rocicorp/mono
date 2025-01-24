@@ -2,12 +2,12 @@ import {testEffect} from '@solidjs/testing-library';
 import {createEffect, createSignal} from 'solid-js';
 import {expect, test} from 'vitest';
 import {must} from '../../shared/src/must.js';
+import {number, string, table} from '../../zero-client/src/mod.js';
+import {createSchema} from '../../zero-schema/src/mod.js';
 import {MemorySource} from '../../zql/src/ivm/memory-source.js';
 import {newQuery} from '../../zql/src/query/query-impl.js';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.js';
 import {useQuery} from './use-query.js';
-import {createSchema} from '../../zero-schema/src/mod.js';
-import {number, string, table} from '../../zero-client/src/mod.js';
 
 function setupTestEnvironment() {
   const schema = createSchema(1, {
@@ -34,7 +34,7 @@ function setupTestEnvironment() {
   return {ms, tableQuery, queryDelegate};
 }
 
-test('useQuery', async () => {
+test.only('useQuery', async () => {
   const {ms, tableQuery, queryDelegate} = setupTestEnvironment();
 
   const [rows, resultType] = useQuery(() => tableQuery);
