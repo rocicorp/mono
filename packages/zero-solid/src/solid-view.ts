@@ -75,7 +75,7 @@ export class SolidView<V> implements Output {
     this.#onDestroy();
   }
 
-  readonly #onTransactionCommit: () => void = () => {
+  #onTransactionCommit = () => {
     this.#applyChanges(this.#pendingChanges, c => c);
   };
 
@@ -100,19 +100,8 @@ export class SolidView<V> implements Output {
   }
 
   push(change: Change): void {
+    // Delay setting the state until the transaction commit.
     this.#pendingChanges.push(change);
-    // We should not use setState here. We should call #setState when the "batch" is done.
-    // this.#setState(
-    //   produce((draftState: State) => {
-    //     applyChange(
-    //       draftState[0],
-    //       change,
-    //       this.#input.getSchema(),
-    //       '',
-    //       this.#format,
-    //     );
-    //   }),
-    // );
   }
 }
 
