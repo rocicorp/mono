@@ -1,3 +1,4 @@
+import {PG_INSUFFICIENT_PRIVILEGE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {Database} from '../../../../../zqlite/src/db.js';
@@ -81,13 +82,35 @@ export async function initialSync(
 
     const {database, host} = upstreamDB.options;
     lc.info?.(`opening replication session to ${database}@${host}`);
-    const {snapshot_name: snapshot, consistent_point: lsn} =
-      await createReplicationSlot(
-        lc,
-        replicationSession,
-        slotName,
-        slots.length > 0,
-      );
+
+    let slot: ReplicationSlot;
+    for (let first = true; ; first = false) {
+      try {
+        slot = await createReplicationSlot(
+          lc,
+          replicationSession,
+          slotName,
+          slots.length > 0,
+        );
+        break;
+      } catch (e) {
+        if (
+          first &&
+          e instanceof postgres.PostgresError &&
+          e.code === PG_INSUFFICIENT_PRIVILEGE
+        ) {
+          // Some Postgres variants (e.g. Google Cloud SQL) require that
+          // the user have the REPLICATION role in order to create a slot.
+          // Note that this must be done by the upstreamDB connection, and
+          // does not work in the replicationSession itself.
+          await upstreamDB`ALTER ROLE current_user WITH REPLICATION`;
+          lc.info?.(`Added the REPLICATION role to database user`);
+          continue;
+        }
+        throw e;
+      }
+    }
+    const {snapshot_name: snapshot, consistent_point: lsn} = slot;
     const initialVersion = toLexiVersion(lsn);
 
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
