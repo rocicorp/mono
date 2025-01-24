@@ -103,14 +103,6 @@ function bumpCanaryVersion(version, hash) {
 const buildBranch = process.argv[2] ?? 'main';
 console.log(`Releasing from branch: ${buildBranch}`);
 
-const npmAuthToken = execute("cat $HOME/.npmrc | grep '_authToken'", {
-  stdio: 'pipe',
-});
-if (!npmAuthToken) {
-  console.error('No npm auth token found in ~/.npmrc');
-  process.exit(1);
-}
-
 try {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zero-build-'));
   // In order to merge the tag on the release branch back into main, we have to
@@ -203,7 +195,6 @@ try {
         `docker buildx build \
     --platform linux/amd64,linux/arm64 \
     --build-arg=ZERO_VERSION=${nextCanaryVersion} \
-    --build-arg=NPM_TOKEN=${npmAuthToken} \
     -t rocicorp/zero:${dockerCanaryVersion} \
     -t rocicorp/zero:canary \
     --push .`,
