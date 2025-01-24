@@ -249,13 +249,18 @@ Resources:
         HttpCode: "200"
       TargetGroupAttributes:
         - Key: deregistration_delay.timeout_seconds
-          Value: "0"
+          # Allow 3 minutes to drain connections on update
+          Value: 180
         - Key: stickiness.enabled
           Value: true
         - Key: stickiness.type
           Value: lb_cookie
         - Key: stickiness.lb_cookie.duration_seconds
-          Value: 300
+          # Note: stickiness duration is the lower-bound on
+          #       connection lifetime when shedding load
+          Value: 180
+        - Key: load_balancing.algorithm.type
+          Value: least_outstanding_requests
   PublicLBListener:
     Type: "AWS::ElasticLoadBalancingV2::Listener"
     Properties:

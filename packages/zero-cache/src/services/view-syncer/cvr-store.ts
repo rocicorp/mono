@@ -6,6 +6,7 @@ import {startAsyncSpan} from '../../../../otel/src/span.js';
 import {version} from '../../../../otel/src/version.js';
 import {assert} from '../../../../shared/src/asserts.js';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.js';
+import {CustomKeySet} from '../../../../shared/src/custom-key-set.js';
 import {
   deepEqual,
   type ReadonlyJSONValue,
@@ -126,7 +127,7 @@ class RowRecordCache {
   readonly #setTimeout: typeof setTimeout;
 
   // Write-back cache state.
-  readonly #pending = new CustomKeyMap<RowID, RowRecord>(rowIDString);
+  readonly #pending = new CustomKeyMap<RowID, RowRecord | null>(rowIDString);
   #pendingRowsVersion: CVRVersion | null = null;
   #flushedRowsVersion: CVRVersion | null = null;
   #flushing: Resolver<void> | null = null;
@@ -193,19 +194,19 @@ class RowRecordCache {
    * columns of the `cvr.instances` row.
    */
   async apply(
-    rowRecords: Iterable<RowRecord>,
+    rowRecords: Map<RowID, RowRecord | null>,
     rowsVersion: CVRVersion,
     flushed: boolean,
   ) {
     const cache = await this.#ensureLoaded();
-    for (const row of rowRecords) {
-      if (row.refCounts === null) {
-        cache.delete(row.id);
+    for (const [id, row] of rowRecords.entries()) {
+      if (row === null || row.refCounts === null) {
+        cache.delete(id);
       } else {
-        cache.set(row.id, row);
+        cache.set(id, row);
       }
       if (!flushed) {
-        this.#pending.set(row.id, row);
+        this.#pending.set(id, row);
       }
     }
     this.#pendingRowsVersion = rowsVersion;
@@ -227,12 +228,7 @@ class RowRecordCache {
           // #pendingRowsVersion is consistent with the #pending rows.
           const rows = this.#pending.size;
           const rowsVersion = must(this.#pendingRowsVersion);
-          this.executeRowUpdates(
-            tx,
-            rowsVersion,
-            [...this.#pending.values()],
-            'force',
-          );
+          this.executeRowUpdates(tx, rowsVersion, this.#pending, 'force');
           this.#pending.clear();
           return {rows, rowsVersion};
         });
@@ -339,7 +335,7 @@ class RowRecordCache {
   executeRowUpdates(
     tx: PostgresTransaction,
     version: CVRVersion,
-    rowRecordsToFlush: RowRecord[],
+    rowUpdates: Map<RowID, RowRecord | null>,
     mode: 'allow-defer' | 'force',
   ): PendingQuery<Row[]>[] {
     if (
@@ -347,13 +343,10 @@ class RowRecordCache {
       // defer if pending rows are being flushed
       (this.#flushing !== null ||
         // or if the new batch is above the limit.
-        rowRecordsToFlush.length > this.#deferredRowFlushThreshold)
+        rowUpdates.size > this.#deferredRowFlushThreshold)
     ) {
       return [];
     }
-    const rowRecordRows = rowRecordsToFlush.map(r =>
-      rowRecordToRowsRow(this.#cvrID, r),
-    );
     const rowsVersion = {
       clientGroupID: this.#cvrID,
       version: versionString(version),
@@ -364,6 +357,22 @@ class RowRecordCache {
            DO UPDATE SET ${tx(rowsVersion)}`.execute(),
     ];
 
+    const rowRecordRows: RowsRow[] = [];
+    for (const [id, row] of rowUpdates.entries()) {
+      if (row === null) {
+        pending.push(
+          tx`
+          DELETE FROM cvr.rows
+            WHERE "clientGroupID" = ${this.#cvrID}
+              AND "schema" = ${id.schema}
+              AND "table" = ${id.table}
+              AND "rowKey" = ${id.rowKey}
+       `.execute(),
+        );
+      } else {
+        rowRecordRows.push(rowRecordToRowsRow(this.#cvrID, row));
+      }
+    }
     if (rowRecordRows.length) {
       pending.push(
         tx`
@@ -385,7 +394,11 @@ class RowRecordCache {
       "refCounts" = excluded."refCounts"
     `.execute(),
       );
-      this.#lc.debug?.(`flushing ${rowRecordRows.length} rows`);
+      this.#lc.debug?.(
+        `flushing ${rowUpdates.size} rows (${rowRecordRows.length} inserts, ${
+          rowUpdates.size - rowRecordRows.length
+        } deletes)`,
+      );
     }
     return pending;
   }
@@ -444,9 +457,10 @@ export class CVRStore {
       lastConnectTime: number,
     ) => PendingQuery<MaybeRow[]>;
   }> = new Set();
-  readonly #pendingRowRecordPuts = new CustomKeyMap<RowID, RowRecord>(
+  readonly #pendingRowRecordUpdates = new CustomKeyMap<RowID, RowRecord | null>(
     rowIDString,
   );
+  readonly #forceUpdates = new CustomKeySet<RowID>(rowIDString);
   readonly #rowCache: RowRecordCache;
   readonly #loadAttemptIntervalMs: number;
   readonly #maxLoadAttempts: number;
@@ -627,12 +641,32 @@ export class CVRStore {
     return this.#rowCache.getRowRecords();
   }
 
-  getPendingRowRecord(id: RowID): RowRecord | undefined {
-    return this.#pendingRowRecordPuts.get(id);
+  putRowRecord(row: RowRecord): void {
+    this.#pendingRowRecordUpdates.set(row.id, row);
   }
 
-  putRowRecord(row: RowRecord): void {
-    this.#pendingRowRecordPuts.set(row.id, row);
+  /**
+   * Note: Removing a row from the CVR should be represented by a
+   *       {@link putRowRecord()} with `refCounts: null` in order to properly
+   *       produce the appropriate delete patch when catching up old clients.
+   *
+   * This `delRowRecord()` method, on the other hand, is only used when a
+   * row record is being *replaced* by another RowRecord, which currently
+   * only happens when the columns of the row key change.
+   */
+  delRowRecord(id: RowID): void {
+    this.#pendingRowRecordUpdates.set(id, null);
+  }
+
+  /**
+   * Overrides the default logic that removes no-op writes and forces
+   * the updates for the given row `ids`. This has no effect if there
+   * are no corresponding puts or dels for the associated row records.
+   */
+  forceUpdates(...ids: RowID[]) {
+    for (const id of ids) {
+      this.#forceUpdates.add(id);
+    }
   }
 
   putInstance({
@@ -915,24 +949,25 @@ export class CVRStore {
       rowsDeferred: 0,
       statements: 0,
     };
-    let rowRecordsToFlush: RowRecord[];
-    if (this.#pendingRowRecordPuts.size === 0) {
-      // Avoid fetching/awaiting this.getRowRecords() for config-only changes.
-      rowRecordsToFlush = [];
-    } else {
+    if (this.#pendingRowRecordUpdates.size) {
       const existingRowRecords = await this.getRowRecords();
-      rowRecordsToFlush = [...this.#pendingRowRecordPuts.values()].filter(
-        row => {
-          const existing = existingRowRecords.get(row.id);
-          return (
-            (existing !== undefined || row.refCounts !== null) &&
-            !deepEqual(
-              row as ReadonlyJSONValue,
-              existing as ReadonlyJSONValue | undefined,
-            )
-          );
-        },
-      );
+      for (const [id, row] of this.#pendingRowRecordUpdates.entries()) {
+        if (this.#forceUpdates.has(id)) {
+          continue;
+        }
+        const existing = existingRowRecords.get(id);
+        if (
+          // Don't delete or add an unreferenced row if it's not in the CVR.
+          (existing === undefined && !row?.refCounts) ||
+          // Don't write a row record that exactly matches what's in the CVR.
+          deepEqual(
+            (row ?? undefined) as ReadonlyJSONValue | undefined,
+            existing as ReadonlyJSONValue | undefined,
+          )
+        ) {
+          this.#pendingRowRecordUpdates.delete(id);
+        }
+      }
     }
     const rowsFlushed = await this.#db.begin(async tx => {
       const pipelined: Promise<unknown>[] = [
@@ -955,6 +990,7 @@ export class CVRStore {
         stats.queries += write.stats.queries ?? 0;
         stats.desires += write.stats.desires ?? 0;
         stats.clients += write.stats.clients ?? 0;
+        stats.rows += write.stats.rows ?? 0;
 
         pipelined.push(write.write(tx, lastConnectTime).execute());
         stats.statements++;
@@ -963,7 +999,7 @@ export class CVRStore {
       const rowUpdates = this.#rowCache.executeRowUpdates(
         tx,
         newVersion,
-        rowRecordsToFlush,
+        this.#pendingRowRecordUpdates,
         'allow-defer',
       );
       pipelined.push(...rowUpdates);
@@ -974,13 +1010,17 @@ export class CVRStore {
       await Promise.all(pipelined);
 
       if (rowUpdates.length === 0) {
-        stats.rowsDeferred = rowRecordsToFlush.length;
+        stats.rowsDeferred = this.#pendingRowRecordUpdates.size;
         return false;
       }
-      stats.rows = rowRecordsToFlush.length;
+      stats.rows += this.#pendingRowRecordUpdates.size;
       return true;
     });
-    await this.#rowCache.apply(rowRecordsToFlush, newVersion, rowsFlushed);
+    await this.#rowCache.apply(
+      this.#pendingRowRecordUpdates,
+      newVersion,
+      rowsFlushed,
+    );
     return stats;
   }
 
@@ -1001,7 +1041,8 @@ export class CVRStore {
       throw e;
     } finally {
       this.#writes.clear();
-      this.#pendingRowRecordPuts.clear();
+      this.#pendingRowRecordUpdates.clear();
+      this.#forceUpdates.clear();
     }
   }
 

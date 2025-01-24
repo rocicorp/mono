@@ -1,7 +1,7 @@
 import * as v from '../../shared/src/valita.js';
 import * as ErrorKind from './error-kind-enum.js';
 
-export const errorKindSchema = v.union(
+const basicErrorKindSchema = v.union(
   v.literal(ErrorKind.AuthInvalidated),
   v.literal(ErrorKind.ClientNotFound),
   v.literal(ErrorKind.InvalidConnectionRequest),
@@ -19,22 +19,34 @@ export const errorKindSchema = v.union(
 );
 
 const basicErrorBodySchema = v.object({
-  kind: errorKindSchema,
+  kind: basicErrorKindSchema,
   message: v.string(),
 });
 
-const serverOverloadedBodySchema = v.object({
-  kind: v.literal(ErrorKind.ServerOverloaded),
-  message: v.string(),
-  minBackoffMs: v.number().optional(),
-});
-
-export const errorBodySchema = v.union(
-  basicErrorBodySchema,
-  serverOverloadedBodySchema,
+const backoffErrorKindSchema = v.union(
+  v.literal(ErrorKind.Rebalance),
+  v.literal(ErrorKind.Rehome),
+  v.literal(ErrorKind.ServerOverloaded),
 );
 
-export type ServerOverloadedBody = v.Infer<typeof serverOverloadedBodySchema>;
+const backoffBodySchema = v.object({
+  kind: backoffErrorKindSchema,
+  message: v.string(),
+  minBackoffMs: v.number().optional(),
+  maxBackoffMs: v.number().optional(),
+  // Query parameters to send in the next reconnect. In the event of
+  // a conflict, these will be overridden by the parameters used by
+  // the client; it is the responsibility of the server to avoid
+  // parameter name conflicts.
+  //
+  // The parameters will only be added to the immediately following
+  // reconnect, and not after that.
+  reconnectParams: v.record(v.string()).optional(),
+});
+
+export const errorBodySchema = v.union(basicErrorBodySchema, backoffBodySchema);
+
+export type BackoffBody = v.Infer<typeof backoffBodySchema>;
 
 export type ErrorBody = v.Infer<typeof errorBodySchema>;
 

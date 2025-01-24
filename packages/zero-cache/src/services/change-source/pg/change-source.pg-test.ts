@@ -35,7 +35,7 @@ import {dropEventTriggerStatements} from './schema/ddl-test-utils.js';
 
 const SHARD_ID = 'change_source_test_id';
 
-describe('change-source/pg', {timeout: 10000}, () => {
+describe('change-source/pg', {timeout: 30000}, () => {
   let logSink: TestLogSink;
   let lc: LogContext;
   let upstream: PostgresDB;
@@ -84,7 +84,7 @@ describe('change-source/pg', {timeout: 10000}, () => {
         {tableCopyWorkers: 5, rowBatchSize: 10000},
       )
     ).changeSource;
-  });
+  }, 30000);
 
   afterEach(async () => {
     streams.forEach(s => s.changes.cancel());

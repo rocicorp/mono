@@ -239,7 +239,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const listRef = useRef<HTMLDivElement>(null);
   const tableWrapperRef = useRef<HTMLDivElement>(null);
-  const size = useElementSize(tableWrapperRef.current);
+  const size = useElementSize(tableWrapperRef);
 
   const virtualizer = useVirtualizer({
     count: issues.length,

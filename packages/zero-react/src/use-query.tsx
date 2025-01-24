@@ -4,13 +4,13 @@ import type {Immutable} from '../../shared/src/immutable.js';
 import type {
   Query,
   ReadonlyJSONValue,
+  Schema,
   TypedView,
 } from '../../zero-client/src/mod.js';
 import type {AdvancedQuery} from '../../zql/src/query/query-internal.js';
+import type {HumanReadable} from '../../zql/src/query/query.js';
 import type {ResultType} from '../../zql/src/query/typed-view.js';
 import {useZero} from './use-zero.js';
-import type {HumanReadable} from '../../zql/src/query/query.js';
-import type {Schema} from '../../zero-client/src/mod.js';
 
 export type QueryResultDetails = Readonly<{
   type: ResultType;
@@ -46,15 +46,61 @@ export function useQuery<
 const emptyArray: unknown[] = [];
 const disabledSubscriber = () => () => {};
 
-const defaultSnapshots = {
-  singular: [undefined, {type: 'unknown'}] as const,
-  plural: [emptyArray, {type: 'unknown'}] as const,
-};
+const resultTypeUnknown = {type: 'unknown'} as const;
+const resultTypeComplete = {type: 'complete'} as const;
+
+const emptySnapshotSingularUnknown = [undefined, resultTypeUnknown] as const;
+const emptySnapshotSingularComplete = [undefined, resultTypeComplete] as const;
+const emptySnapshotPluralUnknown = [emptyArray, resultTypeUnknown] as const;
+const emptySnapshotPluralComplete = [emptyArray, resultTypeComplete] as const;
 
 function getDefaultSnapshot<TReturn>(singular: boolean): QueryResult<TReturn> {
   return (
-    singular ? defaultSnapshots.singular : defaultSnapshots.plural
+    singular ? emptySnapshotSingularUnknown : emptySnapshotPluralUnknown
   ) as QueryResult<TReturn>;
+}
+
+/**
+ * Returns a new snapshot or one of the empty predefined ones. Returning the
+ * predefined ones is important to prevent unnecessary re-renders in React.
+ */
+function getSnapshot<TReturn>(
+  singular: boolean,
+  data: HumanReadable<TReturn>,
+  resultType: string,
+): QueryResult<TReturn> {
+  if (singular && data === undefined) {
+    return (resultType === 'complete'
+      ? emptySnapshotSingularComplete
+      : emptySnapshotSingularUnknown) as unknown as QueryResult<TReturn>;
+  }
+
+  if (!singular && (data as unknown[]).length === 0) {
+    return (
+      resultType === 'complete'
+        ? emptySnapshotPluralComplete
+        : emptySnapshotPluralUnknown
+    ) as QueryResult<TReturn>;
+  }
+
+  return [
+    data,
+    resultType === 'complete' ? resultTypeComplete : resultTypeUnknown,
+  ];
+}
+
+declare const TESTING: boolean;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ViewWrapperAny = ViewWrapper<any, any, any>;
+
+const allViews = new WeakMap<ViewStore, Map<string, ViewWrapperAny>>();
+
+export function getAllViewsSizeForTesting(store: ViewStore): number {
+  if (TESTING) {
+    return allViews.get(store)?.size ?? 0;
+  }
+  return 0;
 }
 
 /**
@@ -105,9 +151,14 @@ function getDefaultSnapshot<TReturn>(singular: boolean): QueryResult<TReturn> {
  *
  * Swapping `useState` to `useRef` has similar problems.
  */
-class ViewStore {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  #views = new Map<string, ViewWrapper<any, any, any>>();
+export class ViewStore {
+  #views = new Map<string, ViewWrapperAny>();
+
+  constructor() {
+    if (TESTING) {
+      allViews.set(this, this.#views);
+    }
+  }
 
   getView<
     TSchema extends Schema,
@@ -164,8 +215,8 @@ const viewStore = new ViewStore();
  * In non-strict-mode we can clean up the view as soon
  * as the listener count goes to 0.
  *
- * In strict-mode, the listener cound will go to 0 then a
- * new listener for the same view is immeidatiely added back.
+ * In strict-mode, the listener count will go to 0 then a
+ * new listener for the same view is immediately added back.
  *
  * This is why the `onMaterialized` and `onDematerialized` callbacks exist --
  * they allow a view which React is still referencing to be added
@@ -202,6 +253,7 @@ class ViewWrapper<
     this.#onDematerialized = onDematerialized;
     this.#reactInternals = new Set();
     this.#query = query;
+    this.#materializeIfNeeded();
   }
 
   #onData = (
@@ -212,7 +264,7 @@ class ViewWrapper<
       snap === undefined
         ? snap
         : (deepClone(snap as ReadonlyJSONValue) as HumanReadable<TReturn>);
-    this.#snapshot = [data, {type: resultType}] as QueryResult<TReturn>;
+    this.#snapshot = getSnapshot(this.#query.format.singular, data, resultType);
     for (const internals of this.#reactInternals) {
       internals();
     }
@@ -236,10 +288,24 @@ class ViewWrapper<
     this.#materializeIfNeeded();
     return () => {
       this.#reactInternals.delete(internals);
+
+      // only schedule a cleanup task if we have no listeners left
       if (this.#reactInternals.size === 0) {
-        this.#view?.destroy();
-        this.#view = undefined;
-        this.#onDematerialized();
+        setTimeout(() => {
+          // Someone re-registered a listener on this view before the timeout elapsed.
+          // This happens often in strict-mode which forces a component
+          // to mount, unmount, remount.
+          if (this.#reactInternals.size > 0) {
+            return;
+          }
+          // We already destroyed the view
+          if (this.#view === undefined) {
+            return;
+          }
+          this.#view?.destroy();
+          this.#view = undefined;
+          this.#onDematerialized();
+        }, 10);
       }
     };
   };

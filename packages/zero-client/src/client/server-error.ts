@@ -1,7 +1,7 @@
 import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.js';
 import {
+  type BackoffBody,
   type ErrorBody,
-  type ServerOverloadedBody,
 } from '../../../zero-protocol/src/error.js';
 
 type ErrorKind = (typeof ErrorKind)[keyof typeof ErrorKind];
@@ -40,10 +40,14 @@ function isAuthErrorKind(
   return kind === ErrorKind.AuthInvalidated || kind === ErrorKind.Unauthorized;
 }
 
-export function isServerOverloadedError(
-  ex: unknown,
-): ServerOverloadedBody | undefined {
-  return isServerError(ex) && ex.errorBody.kind === ErrorKind.ServerOverloaded
-    ? ex.errorBody
-    : undefined;
+export function isBackoffError(ex: unknown): BackoffBody | undefined {
+  if (isServerError(ex)) {
+    switch (ex.errorBody.kind) {
+      case ErrorKind.Rebalance:
+      case ErrorKind.Rehome:
+      case ErrorKind.ServerOverloaded:
+        return ex.errorBody;
+    }
+  }
+  return undefined;
 }
