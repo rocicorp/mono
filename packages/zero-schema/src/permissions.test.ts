@@ -119,7 +119,7 @@ test('permission rules create query ASTs', async () => {
 test('nested parameters', async () => {
   type AuthData = {
     sub: string;
-    attributes: {role: 'admin' | 'user'};
+    attributes: {role: 'admin' | 'user'; id: string};
   };
   const config = await definePermissions<AuthData, typeof schema>(
     schema,
@@ -129,12 +129,17 @@ test('nested parameters', async () => {
         {cmpLit}: ExpressionBuilder<ZeroSchema, string>,
       ) => cmpLit(authData.attributes.role, '=', 'admin');
 
+      const allowIfSelf = (
+        authData: AuthData,
+        {cmp}: ExpressionBuilder<typeof schema, 'user'>,
+      ) => cmp('id', authData.attributes.id);
+
       return {
         user: {
           row: {
             insert: [allowIfAdmin],
             update: {
-              preMutation: [allowIfAdmin],
+              preMutation: [allowIfSelf],
             },
             delete: [allowIfAdmin],
             select: [allowIfAdmin],
@@ -219,17 +224,17 @@ test('nested parameters', async () => {
                 "allow",
                 {
                   "left": {
-                    "anchor": "authData",
-                    "field": [
-                      "attributes",
-                      "role",
-                    ],
-                    "type": "static",
+                    "name": "id",
+                    "type": "column",
                   },
                   "op": "=",
                   "right": {
-                    "type": "literal",
-                    "value": "admin",
+                    "anchor": "authData",
+                    "field": [
+                      "attributes",
+                      "id",
+                    ],
+                    "type": "static",
                   },
                   "type": "simple",
                 },

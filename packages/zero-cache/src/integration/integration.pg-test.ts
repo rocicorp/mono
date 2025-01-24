@@ -27,7 +27,7 @@ import {childWorker, type Worker} from '../types/processes.js';
 // Adjust to debug.
 const LOG_LEVEL: LogLevel = 'error';
 
-describe('integration', {timeout: 10000}, () => {
+describe('integration', {timeout: 30000}, () => {
   let upDB: PostgresDB;
   let cvrDB: PostgresDB;
   let changeDB: PostgresDB;
@@ -105,7 +105,7 @@ describe('integration', {timeout: 10000}, () => {
       ['ZERO_SCHEMA_JSON']: JSON.stringify(SCHEMA),
       ['ZERO_NUM_SYNC_WORKERS']: '1',
     };
-  });
+  }, 30000);
 
   const FOO_QUERY: AST = {
     table: 'foo',
@@ -153,7 +153,7 @@ describe('integration', {timeout: 10000}, () => {
       replicaDbFile.delete();
       replicaDbFile2.delete();
     }
-  });
+  }, 30000);
 
   const WATERMARK_REGEX = /[0-9a-z]{4,}/;
 

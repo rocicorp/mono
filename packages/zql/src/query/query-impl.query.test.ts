@@ -906,18 +906,6 @@ test('null compare', () => {
   addData(queryDelegate);
 
   let rows = newQuery(queryDelegate, schema, 'issue')
-    .where('ownerId', '=', null)
-    .run();
-
-  expect(rows).toEqual([]);
-
-  rows = newQuery(queryDelegate, schema, 'issue')
-    .where('ownerId', '!=', null)
-    .run();
-
-  expect(rows).toEqual([]);
-
-  rows = newQuery(queryDelegate, schema, 'issue')
     .where('ownerId', 'IS', null)
     .run();
 

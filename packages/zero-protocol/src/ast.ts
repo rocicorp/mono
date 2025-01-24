@@ -74,16 +74,42 @@ const columnReferenceSchema: v.Type<ColumnReference> = v.readonlyObject({
   type: v.literal('column'),
   name: v.string(),
 });
-const parameterReferenceSchema: v.Type<Parameter> = v.readonlyObject({
+
+/**
+ * A parameter is a value that is not known at the time the query is written
+ * and is resolved at runtime.
+ *
+ * Static parameters refer to something provided by the caller.
+ * Static parameters are injected when the query pipeline is built from the AST
+ * and do not change for the life of that pipeline.
+ *
+ * An example static parameter is the current authentication data.
+ * When a user is authenticated, queries on the server have access
+ * to the user's authentication data in order to evaluate authorization rules.
+ * Authentication data doesn't change over the life of a query as a change
+ * in auth data would represent a log-in / log-out of the user.
+ *
+ * AncestorParameters refer to rows encountered while running the query.
+ * They are used by subqueries to refer to rows emitted by parent queries.
+ */
+const parameterReferenceSchema = v.readonlyObject({
   type: v.literal('static'),
+  // The "namespace" of the injected parameter.
+  // Write authorization will send the value of a row
+  // prior to the mutation being run (preMutationRow).
+  // Read and write authorization will both send the
+  // current authentication data (authData).
   anchor: v.union(v.literal('authData'), v.literal('preMutationRow')),
-  field: v.string(),
+  field: v.union(v.string(), v.array(v.string())),
 });
+
 const conditionValueSchema = v.union(
   literalReferenceSchema,
   columnReferenceSchema,
   parameterReferenceSchema,
 );
+
+export type Parameter = v.Infer<typeof parameterReferenceSchema>;
 
 export const simpleConditionSchema: v.Type<SimpleCondition> = v.readonlyObject({
   type: v.literal('simple'),
@@ -293,34 +319,6 @@ export type CorrelatedSubqueryCondition = {
 };
 
 export type CorrelatedSubqueryConditionOperator = 'EXISTS' | 'NOT EXISTS';
-
-/**
- * A parameter is a value that is not known at the time the query is written
- * and is resolved at runtime.
- *
- * Static parameters refer to something provided by the caller.
- * Static parameters are injected when the query pipeline is built from the AST
- * and do not change for the life of that pipeline.
- *
- * An example static parameter is the current authentication data.
- * When a user is authenticated, queries on the server have access
- * to the user's authentication data in order to evaluate authorization rules.
- * Authentication data doesn't change over the life of a query as a change
- * in auth data would represent a log-in / log-out of the user.
- *
- * AncestorParameters refer to rows encountered while running the query.
- * They are used by subqueries to refer to rows emitted by parent queries.
- */
-export type Parameter = {
-  readonly type: 'static';
-  // The "namespace" of the injected parameter.
-  // Write authorization will send the value of a row
-  // prior to the mutation being run (preMutationRow).
-  // Read and write authorization will both send the
-  // current authentication data (authData).
-  readonly anchor: 'authData' | 'preMutationRow';
-  readonly field: string | string[];
-};
 
 const normalizeCache = new WeakMap<AST, Required<AST>>();
 

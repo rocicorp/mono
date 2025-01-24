@@ -15,7 +15,11 @@ export async function getTaskID(lc: LogContext) {
         containerMetadataSchema,
         'passthrough',
       );
-      return taskID;
+      // Task ARN's are long, e.g.
+      // "arn:aws:ecs:us-east-1:712907626835:task/zbugs-prod-Cluster-vvNFcPUVpGHr/0042ea25bf534dc19975e26f61441737"
+      // We only care about the unique ID, i.e. the last path component.
+      const lastSlash = taskID.lastIndexOf('/');
+      return taskID.substring(lastSlash + 1); // works for lastSlash === -1 too
     } catch (e) {
       lc.warn?.('unable to determine task ID. falling back to random ID', e);
     }
