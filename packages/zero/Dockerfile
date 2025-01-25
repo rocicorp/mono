@@ -2,13 +2,10 @@ FROM litestream/litestream:0.3.13 as litestream
 FROM node:22.11.0-alpine3.20
 
 ARG ZERO_VERSION
-ARG NPM_TOKEN
 
 RUN test -n "$ZERO_VERSION"
-RUN test -n "$NPM_TOKEN"
 
 RUN apk add --update curl
-RUN mkdir -p /root/.npm && echo "${NPM_TOKEN}" > /root/.npmrc
 
 RUN mkdir -p /opt/app
 WORKDIR /opt/app
