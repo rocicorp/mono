@@ -1,6 +1,6 @@
 # Welcome
 
-This is the source code for [zbugs](bugs.rocicorp.dev).
+This is the source code for [zbugs](https://bugs.rocicorp.dev/).
 
 We deploy this continuously (on trunk) to aws and is our dogfood of Zero.
 
