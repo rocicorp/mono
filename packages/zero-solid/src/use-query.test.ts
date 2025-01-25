@@ -2,12 +2,12 @@ import {testEffect} from '@solidjs/testing-library';
 import {createEffect, createSignal} from 'solid-js';
 import {expect, test} from 'vitest';
 import {must} from '../../shared/src/must.js';
+import {number, string, table} from '../../zero-client/src/mod.js';
+import {createSchema} from '../../zero-schema/src/mod.js';
 import {MemorySource} from '../../zql/src/ivm/memory-source.js';
 import {newQuery} from '../../zql/src/query/query-impl.js';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.js';
 import {useQuery} from './use-query.js';
-import {createSchema} from '../../zero-schema/src/mod.js';
-import {number, string, table} from '../../zero-client/src/mod.js';
 
 function setupTestEnvironment() {
   const schema = createSchema(1, {
@@ -48,6 +48,7 @@ test('useQuery', async () => {
   await 1;
 
   ms.push({row: {a: 3, b: 'c'}, type: 'add'});
+  queryDelegate.commit();
 
   expect(rows()).toEqual([
     {a: 1, b: 'a'},
@@ -103,7 +104,7 @@ test('useQuery deps change', async () => {
 });
 
 test('useQuery deps change testEffect', () => {
-  const {ms, tableQuery} = setupTestEnvironment();
+  const {ms, tableQuery, queryDelegate} = setupTestEnvironment();
   const [a, setA] = createSignal(1);
   const [rows] = useQuery(() => tableQuery.where('a', a()));
   return testEffect(done =>
@@ -111,6 +112,7 @@ test('useQuery deps change testEffect', () => {
       if (run === 0) {
         expect(rows()).toEqual([{a: 1, b: 'a'}]);
         ms.push({type: 'edit', oldRow: {a: 1, b: 'a'}, row: {a: 1, b: 'a2'}});
+        queryDelegate.commit();
       } else if (run === 1) {
         expect(rows()).toEqual([{a: 1, b: 'a2'}]);
         setA(2);
