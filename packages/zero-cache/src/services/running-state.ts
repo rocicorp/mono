@@ -133,18 +133,15 @@ export class RunningState {
    *
    * If the supplied `err` is an `AbortError`, the service will shut down.
    */
-  async backoff(lc: LogContext, err?: unknown): Promise<void> {
+  async backoff(lc: LogContext, err: unknown): Promise<void> {
     const delay = this.#retryDelay;
     this.#retryDelay = Math.min(delay * 2, this.#maxRetryDelay);
 
     if (err instanceof AbortError || err instanceof UnrecoverableError) {
       this.stop(lc, err);
     } else if (this.shouldRun()) {
-      if (err) {
-        lc.error?.(`retrying ${this.#serviceName} in ${delay} ms`, err);
-      } else {
-        lc.info?.(`retrying ${this.#serviceName} in ${delay} ms`);
-      }
+      const log = delay < 1000 ? 'info' : delay < 5000 ? 'warn' : 'error';
+      lc[log]?.(`retrying ${this.#serviceName} in ${delay} ms`, err);
       await Promise.race(this.#sleep(delay, this.#controller.signal));
     }
   }
