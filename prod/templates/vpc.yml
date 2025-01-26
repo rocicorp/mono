@@ -295,11 +295,6 @@ Resources:
           IpProtocol: tcp
           ToPort: 4848
         - CidrIp: 0.0.0.0/0
-          Description: Allow traffic to ZeroCache Heartbeat
-          FromPort: 4850
-          IpProtocol: tcp
-          ToPort: 4850
-        - CidrIp: 0.0.0.0/0
           Description: Allow HTTPS traffic
           FromPort: 443
           IpProtocol: tcp
