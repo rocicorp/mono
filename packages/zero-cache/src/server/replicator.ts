@@ -4,6 +4,7 @@ import {must} from '../../../shared/src/must.js';
 import * as v from '../../../shared/src/valita.js';
 import {getZeroConfig} from '../config/zero-config.js';
 import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.js';
+import {exitAfter, runUntilKilled} from '../services/life-cycle.js';
 import {
   ReplicatorService,
   type ReplicatorMode,
@@ -18,7 +19,6 @@ import {
   setUpMessageHandlers,
   setupReplica,
 } from '../workers/replicator.js';
-import {exitAfter, runUntilKilled} from './life-cycle.js';
 import {createLogContext} from './logging.js';
 
 export default async function runWorker(

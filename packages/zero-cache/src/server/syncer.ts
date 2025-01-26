@@ -16,6 +16,7 @@ import {randInt} from '../../../shared/src/rand.js';
 import * as v from '../../../shared/src/valita.js';
 import {getSchema} from '../auth/load-schema.js';
 import {getZeroConfig} from '../config/zero-config.js';
+import {exitAfter, runUntilKilled} from '../services/life-cycle.js';
 import {MutagenService} from '../services/mutagen/mutagen.js';
 import type {ReplicaState} from '../services/replicator/replicator.js';
 import {DatabaseStorage} from '../services/view-syncer/database-storage.js';
@@ -32,7 +33,6 @@ import {
 import {Subscription} from '../types/subscription.js';
 import {replicaFileModeSchema, replicaFileName} from '../workers/replicator.js';
 import {Syncer} from '../workers/syncer.js';
-import {exitAfter, runUntilKilled} from './life-cycle.js';
 import {createLogContext} from './logging.js';
 
 function randomID() {

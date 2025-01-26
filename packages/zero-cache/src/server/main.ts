@@ -7,6 +7,12 @@ import {getSubscriberContext} from '../services/change-streamer/change-streamer-
 import {SyncDispatcher} from '../services/dispatcher/sync-dispatcher.js';
 import {installWebSocketHandoff} from '../services/dispatcher/websocket-handoff.js';
 import {
+  exitAfter,
+  ProcessManager,
+  runUntilKilled,
+  type WorkerType,
+} from '../services/life-cycle.js';
+import {
   restoreReplica,
   startReplicaBackupProcess,
 } from '../services/litestream/commands.js';
@@ -26,12 +32,6 @@ import {
   type ReplicaFileMode,
   subscribeTo,
 } from '../workers/replicator.js';
-import {
-  exitAfter,
-  ProcessManager,
-  runUntilKilled,
-  type WorkerType,
-} from './life-cycle.js';
 import {createLogContext} from './logging.js';
 
 export default async function runWorker(

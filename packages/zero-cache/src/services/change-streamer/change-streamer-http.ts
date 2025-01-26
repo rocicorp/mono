@@ -32,7 +32,6 @@ export class ChangeStreamerHttpServer extends HttpService {
   ) {
     super('change-streamer-http-server', lc, opts, async fastify => {
       await fastify.register(websocket);
-      fastify.get('/', (_req, res) => res.send('OK'));
 
       // fastify does not support optional path components, so we just
       // register both patterns.
