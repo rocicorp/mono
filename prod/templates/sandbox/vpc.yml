@@ -239,8 +239,8 @@ Resources:
       IpAddressType: ipv4
       HealthCheckEnabled: true
       HealthCheckProtocol: HTTP
-      HealthCheckPort: "4850"
-      HealthCheckPath: "/"
+      HealthCheckPort: "4848"
+      HealthCheckPath: "/keepalive"
       HealthCheckIntervalSeconds: 5
       HealthCheckTimeoutSeconds: 3
       HealthyThresholdCount: 3
