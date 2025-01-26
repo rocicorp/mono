@@ -1,6 +1,5 @@
 import 'dotenv/config'; // Imports ENV variables from .env
 import {assert} from '../../../../shared/src/asserts.js';
-import {HttpService} from '../../services/http-service.js';
 import {
   exitAfter,
   ProcessManager,
@@ -28,11 +27,7 @@ export default async function runWorker(
   const lc = createLogContext(config, {worker: 'main'});
   const processes = new ProcessManager(lc, parent ?? process);
 
-  const {
-    port,
-    changeStreamerPort = port + 1,
-    heartbeatMonitorPort = port + 2,
-  } = config;
+  const {port, changeStreamerPort = port + 1} = config;
   let {taskID} = config;
   if (!taskID) {
     taskID = await getTaskID(lc);
@@ -59,9 +54,9 @@ export default async function runWorker(
   // or change-streamer requests (i.e. by tenant `id`).
   const runAsReplicationManager = config.numSyncWorkers === 0;
 
-  // Start the first tenant at (port + 1 + 2) unless explicitly
+  // Start the first tenant at (port + 2) unless explicitly
   // overridden by its own ZERO_PORT ...
-  let tenantPort = port + 1;
+  let tenantPort = port;
   const tenants = config.tenants.map(tenant => {
     const mergedEnv: NodeJS.ProcessEnv = {
       ...process.env, // propagate all ENV variables from this process
@@ -103,15 +98,7 @@ export default async function runWorker(
     lc.info?.(`zero-cache${s} ready (${Date.now() - startMs} ms)`);
   }
 
-  const mainServices: Service[] = [
-    // TODO: Remove this when health checks are moved to the traffic port.
-    new HttpService(
-      'heartbeat-monitor',
-      lc,
-      {port: heartbeatMonitorPort},
-      () => {},
-    ),
-  ];
+  const mainServices: Service[] = [];
   if (multiMode) {
     mainServices.push(
       new TenantDispatcher(lc, runAsReplicationManager, tenants, {
