@@ -8,13 +8,13 @@ import {ChangeStreamerHttpServer} from '../services/change-streamer/change-strea
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.js';
 import type {ChangeStreamerService} from '../services/change-streamer/change-streamer.js';
 import {AutoResetSignal} from '../services/change-streamer/schema/tables.js';
+import {exitAfter, runUntilKilled} from '../services/life-cycle.js';
 import {pgClient} from '../types/pg.js';
 import {
   parentWorker,
   singleProcessMode,
   type Worker,
 } from '../types/processes.js';
-import {exitAfter, runUntilKilled} from './life-cycle.js';
 import {createLogContext} from './logging.js';
 
 export default async function runWorker(

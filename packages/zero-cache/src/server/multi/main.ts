@@ -1,5 +1,11 @@
 import 'dotenv/config'; // Imports ENV variables from .env
 import {assert} from '../../../../shared/src/asserts.js';
+import {HttpService} from '../../services/http-service.js';
+import {
+  exitAfter,
+  ProcessManager,
+  runUntilKilled,
+} from '../../services/life-cycle.js';
 import type {Service} from '../../services/service.js';
 import {
   childWorker,
@@ -8,12 +14,6 @@ import {
   type Worker,
 } from '../../types/processes.js';
 import {orTimeout} from '../../types/timeout.js';
-import {
-  exitAfter,
-  HeartbeatMonitor,
-  ProcessManager,
-  runUntilKilled,
-} from '../life-cycle.js';
 import {createLogContext} from '../logging.js';
 import {getMultiZeroConfig} from './config.js';
 import {getTaskID} from './runtime.js';
@@ -104,7 +104,13 @@ export default async function runWorker(
   }
 
   const mainServices: Service[] = [
-    new HeartbeatMonitor(lc, {port: heartbeatMonitorPort}),
+    // TODO: Remove this when health checks are moved to the traffic port.
+    new HttpService(
+      'heartbeat-monitor',
+      lc,
+      {port: heartbeatMonitorPort},
+      () => {},
+    ),
   ];
   if (multiMode) {
     mainServices.push(
