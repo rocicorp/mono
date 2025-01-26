@@ -28,7 +28,7 @@ export type RemoveChange = {
  */
 export type ChildChange = {
   type: 'child';
-  row: Row;
+  rows: Row[];
   child: {
     relationshipName: string;
     change: Change;
@@ -62,8 +62,3 @@ export type EditChange = {
   node: Node;
   oldNode: Node;
 };
-
-export function rowForChange(change: Change): Row {
-  const {type} = change;
-  return type === 'child' ? change.row : change.node.row;
-}

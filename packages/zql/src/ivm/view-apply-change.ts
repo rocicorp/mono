@@ -126,15 +126,18 @@ export function applyChange(
       break;
     }
     case 'child': {
-      let existing: Entry;
+      let existing: Entry[];
       if (singular) {
+        assert(change.rows.length === 1);
         assertObject(parentEntry[relationship]);
-        existing = parentEntry[relationship];
+        existing = [parentEntry[relationship]];
       } else {
         const view = getChildEntryList(parentEntry, relationship);
-        const {pos, found} = binarySearch(view, change.row, schema.compareRows);
-        assert(found, 'node does not exist');
-        existing = view[pos];
+        existing = change.rows.map(r => {
+          const {pos, found} = binarySearch(view, r, schema.compareRows);
+          assert(found, 'node does not exist');
+          return view[pos];
+        });
       }
 
       const childSchema = must(
@@ -142,13 +145,15 @@ export function applyChange(
       );
       const childFormat = format.relationships[change.child.relationshipName];
       if (childFormat !== undefined) {
-        applyChange(
-          existing,
-          change.child.change,
-          childSchema,
-          change.child.relationshipName,
-          childFormat,
-        );
+        for (const entry of existing) {
+          applyChange(
+            entry,
+            change.child.change,
+            childSchema,
+            change.child.relationshipName,
+            childFormat,
+          );
+        }
       }
       break;
     }

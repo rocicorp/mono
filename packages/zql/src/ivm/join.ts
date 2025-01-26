@@ -197,17 +197,26 @@ export class Join implements Input {
   }
 
   #pushChild(change: Change): void {
-    const pushChildChange = (childRow: Row, change: Change) => {
-      const parentNodes = this.#parent.fetch({
-        constraint: Object.fromEntries(
-          this.#parentKey.map((key, i) => [key, childRow[this.#childKey[i]]]),
-        ),
-      });
+    const pushChildChange = (childRows: Row[], change: Change) => {
+      const parentNodes = [];
+      for (const childRow of childRows) {
+        parentNodes.push(
+          ...this.#parent.fetch({
+            constraint: Object.fromEntries(
+              this.#parentKey.map((key, i) => [
+                key,
+                childRow[this.#childKey[i]],
+              ]),
+            ),
+          }),
+        );
+      }
 
-      for (const parentNode of parentNodes) {
+      const rows = [...parentNodes].map(n => n.row);
+      if (rows.length > 0) {
         const childChange: ChildChange = {
           type: 'child',
-          row: parentNode.row,
+          rows,
           child: {
             relationshipName: this.#relationshipName,
             change,
@@ -220,10 +229,10 @@ export class Join implements Input {
     switch (change.type) {
       case 'add':
       case 'remove':
-        pushChildChange(change.node.row, change);
+        pushChildChange([change.node.row], change);
         break;
       case 'child':
-        pushChildChange(change.row, change);
+        pushChildChange(change.rows, change);
         break;
       case 'edit': {
         const childRow = change.node.row;
@@ -231,16 +240,16 @@ export class Join implements Input {
         if (rowEqualsForCompoundKey(oldChildRow, childRow, this.#childKey)) {
           // The child row was edited in a way that does not change the relationship.
           // We can therefore just push the change down (wrapped in a child change).
-          pushChildChange(childRow, change);
+          pushChildChange([childRow], change);
         } else {
           // The child row was edited in a way that changes the relationship. We
           // therefore treat this as a remove from the old row followed by an
           // add to the new row.
-          pushChildChange(oldChildRow, {
+          pushChildChange([oldChildRow], {
             type: 'remove',
             node: change.oldNode,
           });
-          pushChildChange(childRow, {
+          pushChildChange([childRow], {
             type: 'add',
             node: change.node,
           });

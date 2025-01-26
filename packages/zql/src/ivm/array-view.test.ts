@@ -629,10 +629,12 @@ test('collapse', () => {
 
   view.push({
     type: 'child',
-    row: {
-      id: 1,
-      name: 'issue',
-    },
+    rows: [
+      {
+        id: 1,
+        name: 'issue',
+      },
+    ],
     child: {
       relationshipName: 'labels',
       change: {
@@ -681,10 +683,12 @@ test('collapse', () => {
   // edit the hidden row
   view.push({
     type: 'child',
-    row: {
-      id: 1,
-      name: 'issue',
-    },
+    rows: [
+      {
+        id: 1,
+        name: 'issue',
+      },
+    ],
     child: {
       relationshipName: 'labels',
       change: {
@@ -732,20 +736,24 @@ test('collapse', () => {
   // edit the leaf
   view.push({
     type: 'child',
-    row: {
-      id: 1,
-      name: 'issue',
-    },
+    rows: [
+      {
+        id: 1,
+        name: 'issue',
+      },
+    ],
     child: {
       relationshipName: 'labels',
       change: {
         type: 'child',
-        row: {
-          id: 2,
-          issueId: 1,
-          labelId: 2,
-          extra: 'b2',
-        },
+        rows: [
+          {
+            id: 2,
+            issueId: 1,
+            labelId: 2,
+            extra: 'b2',
+          },
+        ],
         child: {
           relationshipName: 'labels',
           change: {

@@ -4,12 +4,7 @@ import {must} from '../../../shared/src/must.js';
 import type {Row, Value} from '../../../zero-protocol/src/data.js';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
 import {assertOrderingIncludesPK} from '../builder/builder.js';
-import {
-  rowForChange,
-  type Change,
-  type EditChange,
-  type RemoveChange,
-} from './change.js';
+import {type Change, type EditChange, type RemoveChange} from './change.js';
 import type {Constraint} from './constraint.js';
 import {compareValues, type Comparator, type Node} from './data.js';
 import {
@@ -232,15 +227,14 @@ export class Take implements Operator {
       return;
     }
 
-    const {takeState, takeStateKey, maxBound, constraint} =
-      this.#getStateAndConstraint(rowForChange(change));
-    if (!takeState) {
-      return;
-    }
-
     const {compareRows} = this.getSchema();
 
     if (change.type === 'add') {
+      const {takeState, takeStateKey, maxBound, constraint} =
+        this.#getStateAndConstraint(change.node.row);
+      if (!takeState) {
+        return;
+      }
       if (takeState.size < this.#limit) {
         this.#setTakeState(
           takeStateKey,
@@ -305,6 +299,11 @@ export class Take implements Operator {
       this.#output.push(removeChange);
       this.#output.push(change);
     } else if (change.type === 'remove') {
+      const {takeState, takeStateKey, maxBound, constraint} =
+        this.#getStateAndConstraint(change.node.row);
+      if (!takeState) {
+        return;
+      }
       if (takeState.bound === undefined) {
         // change is after bound
         return;
@@ -375,10 +374,19 @@ export class Take implements Operator {
       );
       this.#output.push(change);
     } else if (change.type === 'child') {
-      // A 'child' change should be pushed to output if its row
-      // is <= bound.
-      if (takeState.bound && compareRows(change.row, takeState.bound) <= 0) {
-        this.#output.push(change);
+      if (change.type === 'child') {
+        const filteredRows = change.rows.filter(r => {
+          const {takeState} = this.#getStateAndConstraint(r);
+          return (
+            takeState && takeState.bound && compareRows(r, takeState.bound) <= 0
+          );
+        });
+        if (filteredRows.length > 0) {
+          this.#output.push({
+            ...change,
+            rows: filteredRows,
+          });
+        }
       }
     }
   }

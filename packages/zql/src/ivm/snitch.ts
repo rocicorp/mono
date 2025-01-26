@@ -97,7 +97,7 @@ function toChangeRecord(change: Change): ChangeRecord {
     case 'child':
       return {
         type: 'child',
-        row: change.row,
+        rows: change.rows,
         child: toChangeRecord(change.child.change),
       };
     default:
@@ -136,7 +136,7 @@ export type RemoveChangeRecord = {
 
 export type ChildChangeRecord = {
   type: 'child';
-  row: Row;
+  rows: Row[];
   child: ChangeRecord;
 };
 

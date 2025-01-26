@@ -20,14 +20,19 @@ export function filterPush(
         output.push(change);
       }
       break;
-    case 'child':
-      if (predicate(change.row)) {
-        output.push(change);
-      }
-      break;
     case 'edit':
       maybeSplitAndPushEditChange(change, predicate, output);
       break;
+    case 'child': {
+      const filteredRows = change.rows.filter(predicate);
+      if (filteredRows.length > 0) {
+        output.push({
+          ...change,
+          rows: filteredRows,
+        });
+      }
+      break;
+    }
     default:
       unreachable(change);
   }

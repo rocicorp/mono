@@ -6,7 +6,7 @@ import type {FetchRequest, Input, Output} from './operator.js';
 
 export type CaughtChildChange = {
   type: 'child';
-  row: Row;
+  rows: Row[];
   child: {
     relationshipName: string;
     change: CaughtChange;
