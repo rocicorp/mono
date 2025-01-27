@@ -1,17 +1,17 @@
-import {assert, unreachable} from '../../../shared/src/asserts.js';
-import {hasOwn} from '../../../shared/src/has-own.js';
-import {must} from '../../../shared/src/must.js';
-import type {Row, Value} from '../../../zero-protocol/src/data.js';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
-import {assertOrderingIncludesPK} from '../builder/builder.js';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import {hasOwn} from '../../../shared/src/has-own.ts';
+import {must} from '../../../shared/src/must.ts';
+import type {Row, Value} from '../../../zero-protocol/src/data.ts';
+import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import {assertOrderingIncludesPK} from '../builder/builder.ts';
 import {
   rowForChange,
   type Change,
   type EditChange,
   type RemoveChange,
-} from './change.js';
-import type {Constraint} from './constraint.js';
-import {compareValues, type Comparator, type Node} from './data.js';
+} from './change.ts';
+import type {Constraint} from './constraint.ts';
+import {compareValues, type Comparator, type Node} from './data.ts';
 import {
   throwOutput,
   type FetchRequest,
@@ -19,9 +19,9 @@ import {
   type Operator,
   type Output,
   type Storage,
-} from './operator.js';
-import type {SourceSchema} from './schema.js';
-import {first, take, type Stream} from './stream.js';
+} from './operator.ts';
+import type {SourceSchema} from './schema.ts';
+import {first, take, type Stream} from './stream.ts';
 
 const MAX_BOUND_KEY = 'maxBound';
 

@@ -1,4 +1,4 @@
-import * as v from '../valita.js';
+import * as v from '../valita.ts';
 
 // Increment when making non-backwards compatible changes to the schema.
 const SCHEMA_VERSION = 2;

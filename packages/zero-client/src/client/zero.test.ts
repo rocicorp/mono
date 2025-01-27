@@ -2,36 +2,36 @@ import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import * as sinon from 'sinon';
 import {afterEach, beforeEach, expect, suite, test} from 'vitest';
-import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.js';
-import type {PullRequest} from '../../../replicache/src/sync/pull.js';
-import type {PushRequest} from '../../../replicache/src/sync/push.js';
-import {assert} from '../../../shared/src/asserts.js';
-import {TestLogSink} from '../../../shared/src/logging-test-utils.js';
-import * as valita from '../../../shared/src/valita.js';
-import type {AST} from '../../../zero-protocol/src/ast.js';
-import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.js';
+import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
+import type {PullRequest} from '../../../replicache/src/sync/pull.ts';
+import type {PushRequest} from '../../../replicache/src/sync/push.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
+import * as valita from '../../../shared/src/valita.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
 import {
   changeDesiredQueriesMessageSchema,
   decodeSecProtocols,
   encodeSecProtocols,
   initConnectionMessageSchema,
   type QueriesPatchOp,
-} from '../../../zero-protocol/src/mod.js';
-import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.js';
-import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.js';
+} from '../../../zero-protocol/src/mod.ts';
+import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
+import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import {
   type Mutation,
   pushMessageSchema,
-} from '../../../zero-protocol/src/push.js';
-import type {NullableVersion} from '../../../zero-protocol/src/version.js';
-import {createSchema, type Schema} from '../../../zero-schema/src/mod.js';
-import {number, string, table} from '../mod.js';
-import * as ConnectionState from './connection-state-enum.js';
-import type {WSString} from './http-string.js';
-import type {UpdateNeededReason, ZeroOptions} from './options.js';
-import type {QueryManager} from './query-manager.js';
-import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.js';
-import {ServerError} from './server-error.js';
+} from '../../../zero-protocol/src/push.ts';
+import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
+import {createSchema, type Schema} from '../../../zero-schema/src/mod.ts';
+import {number, string, table} from '../mod.ts';
+import * as ConnectionState from './connection-state-enum.ts';
+import type {WSString} from './http-string.ts';
+import type {UpdateNeededReason, ZeroOptions} from './options.ts';
+import type {QueryManager} from './query-manager.ts';
+import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.ts';
+import {ServerError} from './server-error.ts';
 import {
   MockSocket,
   storageMock,
@@ -39,7 +39,7 @@ import {
   tickAFewTimes,
   waitForUpstreamMessage,
   zeroForTest,
-} from './test-utils.js'; // Why use fakes when we can use the real thing!
+} from './test-utils.ts'; // Why use fakes when we can use the real thing!
 import {
   CONNECT_TIMEOUT_MS,
   createSocket,
@@ -48,7 +48,7 @@ import {
   PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
-} from './zero.js';
+} from './zero.ts';
 
 let realSetTimeout: typeof setTimeout;
 let clock: sinon.SinonFakeTimers;

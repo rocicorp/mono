@@ -1,11 +1,11 @@
-import {assert, assertObject} from '../../../shared/src/asserts.js';
-import * as valita from '../../../shared/src/valita.js';
-import {toRefs} from '../dag/chunk.js';
-import type {Read, Write} from '../dag/store.js';
-import {deepFreeze, type FrozenJSONValue} from '../frozen-json.js';
-import {type Hash, hashSchema} from '../hash.js';
-import {indexDefinitionsEqual, indexDefinitionsSchema} from '../index-defs.js';
-import type {ClientGroupID} from '../sync/ids.js';
+import {assert, assertObject} from '../../../shared/src/asserts.ts';
+import * as valita from '../../../shared/src/valita.ts';
+import {toRefs} from '../dag/chunk.ts';
+import type {Read, Write} from '../dag/store.ts';
+import {deepFreeze, type FrozenJSONValue} from '../frozen-json.ts';
+import {type Hash, hashSchema} from '../hash.ts';
+import {indexDefinitionsEqual, indexDefinitionsSchema} from '../index-defs.ts';
+import type {ClientGroupID} from '../sync/ids.ts';
 
 export type ClientGroupMap = ReadonlyMap<ClientGroupID, ClientGroup>;
 

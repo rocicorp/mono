@@ -1,11 +1,11 @@
-import {assert, unreachable} from '../../../shared/src/asserts.js';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {
   Condition,
   SimpleCondition,
   SimpleOperator,
-} from '../../../zero-protocol/src/ast.js';
-import type {Row, Value} from '../../../zero-protocol/src/data.js';
-import {getLikePredicate} from './like.js';
+} from '../../../zero-protocol/src/ast.ts';
+import type {Row, Value} from '../../../zero-protocol/src/data.ts';
+import {getLikePredicate} from './like.ts';
 
 export type NonNullValue = Exclude<Value, null | undefined>;
 export type SimplePredicate = (rhs: Value) => boolean;

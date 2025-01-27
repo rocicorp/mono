@@ -1,20 +1,20 @@
 import type {LogContext} from '@rocicorp/logger';
-import {ZERO_VERSION_COLUMN_NAME} from '../services/replicator/schema/replication-state.js';
+import {ZERO_VERSION_COLUMN_NAME} from '../services/replicator/schema/replication-state.ts';
 import {
   dataTypeToZqlValueType,
   liteTypeString,
   upstreamDataType,
   type LiteTypeString,
-} from '../types/lite.js';
-import {liteTableName} from '../types/names.js';
-import * as PostgresTypeClass from './postgres-type-class-enum.js';
+} from '../types/lite.ts';
+import {liteTableName} from '../types/names.ts';
+import * as PostgresTypeClass from './postgres-type-class-enum.ts';
 import {
   type ColumnSpec,
   type IndexSpec,
   type LiteIndexSpec,
   type LiteTableSpec,
   type TableSpec,
-} from './specs.js';
+} from './specs.ts';
 
 export const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {
   pos: Number.MAX_SAFE_INTEGER, // i.e. last

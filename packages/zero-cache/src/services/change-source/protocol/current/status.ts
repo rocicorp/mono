@@ -1,4 +1,4 @@
-import * as v from '../../../../../../shared/src/valita.js';
+import * as v from '../../../../../../shared/src/valita.ts';
 
 /**
  * The StatusMessage payload itself is unspecified. The `zero-cache` will

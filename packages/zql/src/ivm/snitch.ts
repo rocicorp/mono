@@ -1,15 +1,15 @@
-import {unreachable} from '../../../shared/src/asserts.js';
-import type {Row} from '../../../zero-protocol/src/data.js';
-import type {Change} from './change.js';
-import type {Node} from './data.js';
+import {unreachable} from '../../../shared/src/asserts.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Change} from './change.ts';
+import type {Node} from './data.ts';
 import {
   type FetchRequest,
   type Input,
   type Operator,
   type Output,
-} from './operator.js';
-import type {SourceSchema} from './schema.js';
-import type {Stream} from './stream.js';
+} from './operator.ts';
+import type {SourceSchema} from './schema.ts';
+import type {Stream} from './stream.ts';
 
 /**
  * Snitch is an Operator that records all messages it receives. Useful for

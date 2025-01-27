@@ -1,12 +1,12 @@
-import type {AST} from '../../../../zero-protocol/src/ast.js';
-import {MemoryStorage} from '../../ivm/memory-storage.js';
-import {createSource} from '../../ivm/test/source-factory.js';
-import type {Source} from '../../ivm/source.js';
+import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import {MemoryStorage} from '../../ivm/memory-storage.ts';
+import type {Source} from '../../ivm/source.ts';
+import {createSource} from '../../ivm/test/source-factory.ts';
 import type {
   CommitListener,
   GotCallback,
   QueryDelegate,
-} from '../query-impl.js';
+} from '../query-impl.ts';
 import {
   commentSchema,
   issueLabelSchema,
@@ -14,7 +14,7 @@ import {
   labelSchema,
   revisionSchema,
   userSchema,
-} from './test-schemas.js';
+} from './test-schemas.ts';
 
 export class QueryDelegateImpl implements QueryDelegate {
   readonly #sources: Record<string, Source> = makeSources();

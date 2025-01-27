@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {version} from './version.js';
+import {version} from './version.ts';
 
 test('version', async () => {
   expect(version).is.string;

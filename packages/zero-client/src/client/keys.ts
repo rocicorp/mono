@@ -1,8 +1,8 @@
-import {h128} from '../../../shared/src/hash.js';
-import * as v from '../../../shared/src/valita.js';
-import type {CompoundKey} from '../../../zero-protocol/src/ast.js';
-import type {Row} from '../../../zero-protocol/src/data.js';
-import {primaryKeyValueSchema} from '../../../zero-protocol/src/primary-key.js';
+import {h128} from '../../../shared/src/hash.ts';
+import * as v from '../../../shared/src/valita.ts';
+import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import {primaryKeyValueSchema} from '../../../zero-protocol/src/primary-key.ts';
 
 export const CLIENTS_KEY_PREFIX = 'c/';
 export const DESIRED_QUERIES_KEY_PREFIX = 'd/';

@@ -1,10 +1,10 @@
-import type {AST} from '../../../zero-protocol/src/ast.js';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.js';
-import type {Format} from '../ivm/view.js';
-import {ExpressionBuilder} from './expression.js';
-import {AbstractQuery} from './query-impl.js';
-import type {HumanReadable, PullRow, Query} from './query.js';
-import type {TypedView} from './typed-view.js';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Format} from '../ivm/view.ts';
+import {ExpressionBuilder} from './expression.ts';
+import {AbstractQuery} from './query-impl.ts';
+import type {HumanReadable, PullRow, Query} from './query.ts';
+import type {TypedView} from './typed-view.ts';
 
 export function authQuery<
   TSchema extends Schema,

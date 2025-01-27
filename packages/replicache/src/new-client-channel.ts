@@ -1,7 +1,7 @@
-import {BroadcastChannel} from './broadcast-channel.js';
-import type {Read, Store} from './dag/store.js';
-import {getClientGroup} from './persist/client-groups.js';
-import {withRead} from './with-transactions.js';
+import {BroadcastChannel} from './broadcast-channel.ts';
+import type {Read, Store} from './dag/store.ts';
+import {getClientGroup} from './persist/client-groups.ts';
+import {withRead} from './with-transactions.ts';
 
 // Older clients (<= replicache@13.0.1), listened on this channel name
 // and *asserted* that the messages received were an array containing exactly

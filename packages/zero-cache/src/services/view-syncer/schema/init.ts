@@ -4,13 +4,13 @@ import {
   runSchemaMigrations,
   type IncrementalMigrationMap,
   type Migration,
-} from '../../../db/migration.js';
-import type {PostgresDB} from '../../../types/pg.js';
+} from '../../../db/migration.ts';
+import type {PostgresDB} from '../../../types/pg.ts';
 import {
   CREATE_CVR_ROWS_VERSION_TABLE,
   PG_SCHEMA,
   setupCVRTables,
-} from './cvr.js';
+} from './cvr.ts';
 
 const setupMigration: Migration = {
   migrateSchema: setupCVRTables,

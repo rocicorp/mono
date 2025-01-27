@@ -1,10 +1,10 @@
 import type {LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type {SinonFakeTimers} from 'sinon';
-import {assert} from '../../../shared/src/asserts.js';
-import type {Enum} from '../../../shared/src/enum.js';
-import {TestLogSink} from '../../../shared/src/logging-test-utils.js';
-import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
+import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
 import {
   type ConnectedMessage,
   type Downstream,
@@ -19,18 +19,18 @@ import {
   type PullResponseBody,
   type PullResponseMessage,
   upstreamSchema,
-} from '../../../zero-protocol/src/mod.js';
-import type {Schema} from '../../../zero-schema/src/mod.js';
-import * as ConnectionState from './connection-state-enum.js';
-import type {LogOptions} from './log-options.js';
-import type {ZeroOptions} from './options.js';
+} from '../../../zero-protocol/src/mod.ts';
+import type {Schema} from '../../../zero-schema/src/mod.ts';
+import * as ConnectionState from './connection-state-enum.ts';
+import type {LogOptions} from './log-options.ts';
+import type {ZeroOptions} from './options.ts';
 import {
   type TestingContext,
   Zero,
   createLogOptionsSymbol,
   exposedToTestingSymbol,
   onSetConnectionStateSymbol,
-} from './zero.js';
+} from './zero.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type ErrorKind = Enum<typeof ErrorKind>;

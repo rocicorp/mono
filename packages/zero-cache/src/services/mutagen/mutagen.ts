@@ -3,14 +3,14 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type {JWTPayload} from 'jose';
 import postgres from 'postgres';
-import {assert, unreachable} from '../../../../shared/src/asserts.js';
-import * as v from '../../../../shared/src/valita.js';
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.js';
-import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.js';
+import {assert, unreachable} from '../../../../shared/src/asserts.ts';
+import * as v from '../../../../shared/src/valita.ts';
+import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
 import {
   primaryKeyValueSchema,
   type PrimaryKeyValue,
-} from '../../../../zero-protocol/src/primary-key.js';
+} from '../../../../zero-protocol/src/primary-key.ts';
 import {
   type CRUDMutation,
   type DeleteOp,
@@ -18,22 +18,22 @@ import {
   type Mutation,
   type UpdateOp,
   type UpsertOp,
-} from '../../../../zero-protocol/src/push.js';
-import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.js';
-import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.js';
-import {Database} from '../../../../zqlite/src/db.js';
+} from '../../../../zero-protocol/src/push.ts';
+import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
 import {
   WriteAuthorizerImpl,
   type WriteAuthorizer,
-} from '../../auth/write-authorizer.js';
-import {type ZeroConfig} from '../../config/zero-config.js';
-import * as Mode from '../../db/mode-enum.js';
-import {ErrorForClient} from '../../types/error-for-client.js';
-import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
-import {throwErrorForClientIfSchemaVersionNotSupported} from '../../types/schema-versions.js';
-import {unescapedSchema as schema} from '../change-source/pg/schema/shard.js';
-import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.js';
-import type {Service} from '../service.js';
+} from '../../auth/write-authorizer.ts';
+import {type ZeroConfig} from '../../config/zero-config.ts';
+import * as Mode from '../../db/mode-enum.ts';
+import {ErrorForClient} from '../../types/error-for-client.ts';
+import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
+import {throwErrorForClientIfSchemaVersionNotSupported} from '../../types/schema-versions.ts';
+import {unescapedSchema as schema} from '../change-source/pg/schema/shard.ts';
+import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.ts';
+import type {Service} from '../service.ts';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.

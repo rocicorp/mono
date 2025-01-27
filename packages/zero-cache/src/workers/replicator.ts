@@ -1,14 +1,14 @@
 import {LogContext} from '@rocicorp/logger';
-import * as v from '../../../shared/src/valita.js';
-import {Database} from '../../../zqlite/src/db.js';
-import {deleteLiteDB} from '../db/delete-lite-db.js';
-import {Notifier} from '../services/replicator/notifier.js';
+import * as v from '../../../shared/src/valita.ts';
+import {Database} from '../../../zqlite/src/db.ts';
+import {deleteLiteDB} from '../db/delete-lite-db.ts';
+import {Notifier} from '../services/replicator/notifier.ts';
 import type {
   ReplicaState,
   ReplicaStateNotifier,
   Replicator,
-} from '../services/replicator/replicator.js';
-import type {Worker} from '../types/processes.js';
+} from '../services/replicator/replicator.ts';
+import type {Worker} from '../types/processes.ts';
 
 export const replicaFileModeSchema = v.union(
   v.literal('serving'),

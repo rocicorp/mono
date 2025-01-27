@@ -1,20 +1,20 @@
 import type {LogContext} from '@rocicorp/logger';
 import {compareUTF8} from 'compare-utf8';
-import {assert} from '../../../../shared/src/asserts.js';
-import {CustomKeyMap} from '../../../../shared/src/custom-key-map.js';
+import {assert} from '../../../../shared/src/asserts.ts';
+import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
 import {
   difference,
   intersection,
   union,
-} from '../../../../shared/src/set-utils.js';
-import type {AST} from '../../../../zero-protocol/src/ast.js';
-import {stringify, type JSONObject} from '../../types/bigint-json.js';
-import type {LexiVersion} from '../../types/lexi-version.js';
-import {rowIDString} from '../../types/row-key.js';
-import {unescapedSchema as schema} from '../change-source/pg/schema/shard.js';
-import type {Patch, PatchToVersion} from './client-handler.js';
-import type {CVRFlushStats, CVRStore} from './cvr-store.js';
-import {KeyColumns} from './key-columns.js';
+} from '../../../../shared/src/set-utils.ts';
+import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import {stringify, type JSONObject} from '../../types/bigint-json.ts';
+import type {LexiVersion} from '../../types/lexi-version.ts';
+import {rowIDString} from '../../types/row-key.ts';
+import {unescapedSchema as schema} from '../change-source/pg/schema/shard.ts';
+import type {Patch, PatchToVersion} from './client-handler.ts';
+import type {CVRFlushStats, CVRStore} from './cvr-store.ts';
+import {KeyColumns} from './key-columns.ts';
 import {
   cmpVersions,
   oneAfter,
@@ -26,7 +26,7 @@ import {
   type QueryRecord,
   type RowID,
   type RowRecord,
-} from './schema/types.js';
+} from './schema/types.ts';
 
 export type RowUpdate = {
   version?: string; // Undefined for an unref.

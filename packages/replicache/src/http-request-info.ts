@@ -2,7 +2,7 @@ import {
   assertNumber,
   assertObject,
   assertString,
-} from '../../shared/src/asserts.js';
+} from '../../shared/src/asserts.ts';
 
 export function assertHTTPRequestInfo(
   v: unknown,

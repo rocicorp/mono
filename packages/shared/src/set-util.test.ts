@@ -5,7 +5,7 @@ import {
   intersection,
   symmetricDifferences,
   union,
-} from './set-utils.js';
+} from './set-utils.ts';
 
 describe('Set', () => {
   test('equals', () => {

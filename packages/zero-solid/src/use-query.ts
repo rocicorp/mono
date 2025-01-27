@@ -3,9 +3,9 @@ import type {
   AdvancedQuery,
   HumanReadable,
   Query,
-} from '../../zero-advanced/src/mod.js';
-import {solidViewFactory, type QueryResultDetails} from './solid-view.js';
-import type {Schema} from '../../zero-schema/src/mod.js';
+} from '../../zero-advanced/src/mod.ts';
+import type {Schema} from '../../zero-schema/src/mod.ts';
+import {solidViewFactory, type QueryResultDetails} from './solid-view.ts';
 
 export type QueryResult<TReturn> = readonly [
   Accessor<HumanReadable<TReturn>>,

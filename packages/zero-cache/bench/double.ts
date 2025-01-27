@@ -1,6 +1,6 @@
 import 'dotenv/config';
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.js';
-import {Database} from '../../zqlite/src/db.js';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {Database} from '../../zqlite/src/db.ts';
 
 type Options = {
   dbFile: string;

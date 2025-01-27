@@ -8,9 +8,9 @@ import {
 import {
   DatadogLogSink,
   type DatadogLogSinkOptions,
-} from '../../../datadog/src/mod.js';
-import {version} from './version.js';
-import {appendPath, type HTTPString} from './http-string.js';
+} from '../../../datadog/src/mod.ts';
+import {appendPath, type HTTPString} from './http-string.ts';
+import {version} from './version.ts';
 
 class LevelFilterLogSink implements LogSink {
   readonly #wrappedLogSink: LogSink;

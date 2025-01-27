@@ -1,33 +1,33 @@
 import {LogContext} from '@rocicorp/logger';
 import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {assertNotUndefined} from '../../../shared/src/asserts.js';
-import type {Store} from '../dag/store.js';
-import {TestStore} from '../dag/test-store.js';
-import * as FormatVersion from '../format-version-enum.js';
-import {fakeHash} from '../hash.js';
-import {IDBStore} from '../kv/idb-store.js';
-import {hasMemStore} from '../kv/mem-store.js';
-import {TestMemStore} from '../kv/test-mem-store.js';
-import {getKVStoreProvider} from '../replicache.js';
-import {withWrite, withWriteNoImplicitCommit} from '../with-transactions.js';
-import {type ClientGroupMap, setClientGroups} from './client-groups.js';
-import {makeClientGroupMap} from './client-groups.test.js';
+import {assertNotUndefined} from '../../../shared/src/asserts.ts';
+import type {Store} from '../dag/store.ts';
+import {TestStore} from '../dag/test-store.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import {fakeHash} from '../hash.ts';
+import {IDBStore} from '../kv/idb-store.ts';
+import {hasMemStore} from '../kv/mem-store.ts';
+import {TestMemStore} from '../kv/test-mem-store.ts';
+import {getKVStoreProvider} from '../replicache.ts';
+import {withWrite, withWriteNoImplicitCommit} from '../with-transactions.ts';
+import {makeClientGroupMap} from './client-groups.test.ts';
+import {type ClientGroupMap, setClientGroups} from './client-groups.ts';
 import {
   makeClientMapDD31,
   setClientsForTesting,
-} from './clients-test-helpers.js';
-import type {ClientMap} from './clients.js';
+} from './clients-test-helpers.ts';
+import type {ClientMap} from './clients.ts';
 import {
   collectIDBDatabases,
   dropAllDatabases,
   dropDatabase,
-} from './collect-idb-databases.js';
+} from './collect-idb-databases.ts';
 import {
   IDBDatabasesStore,
   type IndexedDBDatabase,
   type IndexedDBName,
-} from './idb-databases-store.js';
+} from './idb-databases-store.ts';
 
 describe('collectIDBDatabases', () => {
   let clock: SinonFakeTimers;

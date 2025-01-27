@@ -1,5 +1,5 @@
-import {hasOwn} from '../../shared/src/has-own.js';
-import type {ReadonlyJSONObject} from '../../shared/src/json.js';
+import {hasOwn} from '../../shared/src/has-own.ts';
+import type {ReadonlyJSONObject} from '../../shared/src/json.ts';
 
 const SIZE_TAG = 1;
 const SIZE_INT32 = 4;

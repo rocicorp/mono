@@ -1,15 +1,15 @@
-import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {
   promiseFalse,
   promiseTrue,
   promiseVoid,
-} from '../../../shared/src/resolved-promises.js';
+} from '../../../shared/src/resolved-promises.ts';
 import {
   type FrozenJSONValue,
   deepFreeze,
   deepFreezeAllowUndefined,
-} from '../frozen-json.js';
-import type {Read} from './store.js';
+} from '../frozen-json.ts';
+import type {Read} from './store.ts';
 
 export const deleteSentinel = Symbol();
 type DeleteSentinel = typeof deleteSentinel;

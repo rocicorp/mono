@@ -1,12 +1,12 @@
-import {assert} from '../../../shared/src/asserts.js';
+import {assert} from '../../../shared/src/asserts.ts';
 import type {
   SchemaValue,
   ValueType,
-} from '../../../zero-schema/src/table-schema.js';
-import type {LiteTableSpec} from '../db/specs.js';
-import {stringify, type JSONValue} from './bigint-json.js';
-import type {PostgresValueType} from './pg.js';
-import type {RowValue} from './row-key.js';
+} from '../../../zero-schema/src/table-schema.ts';
+import type {LiteTableSpec} from '../db/specs.ts';
+import {stringify, type JSONValue} from './bigint-json.ts';
+import type {PostgresValueType} from './pg.ts';
+import type {RowValue} from './row-key.ts';
 
 /** Javascript value types supported by better-sqlite3. */
 export type LiteValueType = number | bigint | string | null | Uint8Array;

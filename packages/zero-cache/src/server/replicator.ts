@@ -1,25 +1,25 @@
 import {pid} from 'node:process';
-import {assert} from '../../../shared/src/asserts.js';
-import {must} from '../../../shared/src/must.js';
-import * as v from '../../../shared/src/valita.js';
-import {getZeroConfig} from '../config/zero-config.js';
-import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.js';
-import {exitAfter, runUntilKilled} from '../services/life-cycle.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import {must} from '../../../shared/src/must.ts';
+import * as v from '../../../shared/src/valita.ts';
+import {getZeroConfig} from '../config/zero-config.ts';
+import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.ts';
+import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {
   ReplicatorService,
   type ReplicatorMode,
-} from '../services/replicator/replicator.js';
+} from '../services/replicator/replicator.ts';
 import {
   parentWorker,
   singleProcessMode,
   type Worker,
-} from '../types/processes.js';
+} from '../types/processes.ts';
 import {
   replicaFileModeSchema,
   setUpMessageHandlers,
   setupReplica,
-} from '../workers/replicator.js';
-import {createLogContext} from './logging.js';
+} from '../workers/replicator.ts';
+import {createLogContext} from './logging.ts';
 
 export default async function runWorker(
   parent: Worker,

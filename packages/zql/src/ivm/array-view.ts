@@ -1,11 +1,11 @@
-import {assert} from '../../../shared/src/asserts.js';
-import type {Immutable} from '../../../shared/src/immutable.js';
-import type {Listener, TypedView} from '../query/typed-view.js';
-import type {Change} from './change.js';
-import type {Input, Output} from './operator.js';
-import type {SourceSchema} from './schema.js';
-import {applyChange} from './view-apply-change.js';
-import type {Entry, Format, View} from './view.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Immutable} from '../../../shared/src/immutable.ts';
+import type {Listener, TypedView} from '../query/typed-view.ts';
+import type {Change} from './change.ts';
+import type {Input, Output} from './operator.ts';
+import type {SourceSchema} from './schema.ts';
+import {applyChange} from './view-apply-change.ts';
+import type {Entry, Format, View} from './view.ts';
 
 /**
  * Implements a materialized view of the output of an operator.

@@ -1,31 +1,31 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {MaybePromise} from '../../shared/src/types.js';
-import * as FormatVersion from './format-version-enum.js';
+import type {MaybePromise} from '../../shared/src/types.ts';
+import * as FormatVersion from './format-version-enum.ts';
 import {
   dropIDBStoreWithMemFallback,
   newIDBStoreWithMemFallback,
-} from './kv/idb-store-with-mem-fallback.js';
-import {MemStore, dropMemStore} from './kv/mem-store.js';
-import type {StoreProvider} from './kv/store.js';
-import type {PendingMutation} from './pending-mutations.js';
-import type {Puller} from './puller.js';
-import type {Pusher} from './pusher.js';
-import {ReplicacheImpl} from './replicache-impl.js';
-import type {ReplicacheOptions} from './replicache-options.js';
+} from './kv/idb-store-with-mem-fallback.ts';
+import {MemStore, dropMemStore} from './kv/mem-store.ts';
+import type {StoreProvider} from './kv/store.ts';
+import type {PendingMutation} from './pending-mutations.ts';
+import type {Puller} from './puller.ts';
+import type {Pusher} from './pusher.ts';
+import {ReplicacheImpl} from './replicache-impl.ts';
+import type {ReplicacheOptions} from './replicache-options.ts';
 import type {
   SubscribeOptions,
   WatchCallbackForOptions,
   WatchNoIndexCallback,
   WatchOptions,
-} from './subscriptions.js';
-import type {ReadTransaction} from './transactions.js';
+} from './subscriptions.ts';
+import type {ReadTransaction} from './transactions.ts';
 import type {
   MakeMutators,
   MutatorDefs,
   Poke,
   RequestOptions,
   UpdateNeededReason,
-} from './types.js';
+} from './types.ts';
 
 type MakeImpl = <MD extends MutatorDefs>(
   options: ReplicacheOptions<MD>,

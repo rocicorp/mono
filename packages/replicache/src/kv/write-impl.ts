@@ -1,8 +1,8 @@
-import {promiseVoid} from '../../../shared/src/resolved-promises.js';
-import type {FrozenJSONValue} from '../frozen-json.js';
-import {ReadImpl} from './read-impl.js';
-import type {Write} from './store.js';
-import {deleteSentinel, WriteImplBase} from './write-impl-base.js';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import type {FrozenJSONValue} from '../frozen-json.ts';
+import {ReadImpl} from './read-impl.ts';
+import type {Write} from './store.ts';
+import {deleteSentinel, WriteImplBase} from './write-impl-base.ts';
 
 export class WriteImpl extends WriteImplBase implements Write {
   readonly #map: Map<string, FrozenJSONValue>;

@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import * as valita from '../../shared/src/valita.js';
+import * as valita from '../../shared/src/valita.ts';
 import {
   type Hash,
   STRING_LENGTH,
@@ -10,7 +10,7 @@ import {
   makeNewFakeHashFunction,
   newRandomHash,
   parse,
-} from './hash.js';
+} from './hash.ts';
 
 const emptyUUID = '00000000-0000-4000-8000-000000000000';
 

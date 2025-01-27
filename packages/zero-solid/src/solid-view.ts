@@ -14,9 +14,9 @@ import {
   type Output,
   type Query,
   type ViewFactory,
-} from '../../zero-advanced/src/mod.js';
-import type {Schema} from '../../zero-schema/src/mod.js';
-import type {ResultType} from '../../zql/src/query/typed-view.js';
+} from '../../zero-advanced/src/mod.ts';
+import type {Schema} from '../../zero-schema/src/mod.ts';
+import type {ResultType} from '../../zql/src/query/typed-view.ts';
 
 export type QueryResultDetails = {
   readonly type: ResultType;

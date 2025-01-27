@@ -1,9 +1,9 @@
 import * as sinon from 'sinon';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {withRead, withWrite} from '../with-transactions.js';
-import {dropIDBStoreWithMemFallback} from './idb-store-with-mem-fallback.js';
-import {IDBNotFoundError, IDBStore} from './idb-store.js';
-import {runAll} from './store-test-util.js';
+import {withRead, withWrite} from '../with-transactions.ts';
+import {dropIDBStoreWithMemFallback} from './idb-store-with-mem-fallback.ts';
+import {IDBNotFoundError, IDBStore} from './idb-store.ts';
+import {runAll} from './store-test-util.ts';
 
 async function newRandomIDBStore() {
   const name = `test-idbstore-${Math.random()}`;

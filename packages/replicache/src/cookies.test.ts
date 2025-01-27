@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {compareCookies, type Cookie} from './cookies.js';
+import {compareCookies, type Cookie} from './cookies.ts';
 
 test('compareCookies', () => {
   const t = (a: Cookie, b: Cookie, expected: number) => {

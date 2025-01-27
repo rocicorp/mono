@@ -1,6 +1,6 @@
-import {unreachable} from '../../../shared/src/asserts.js';
-import type {Condition, Disjunction} from '../../../zero-protocol/src/ast.js';
-import {flatten, TRUE} from './expression.js';
+import {unreachable} from '../../../shared/src/asserts.ts';
+import type {Condition, Disjunction} from '../../../zero-protocol/src/ast.ts';
+import {flatten, TRUE} from './expression.ts';
 
 /**
  * DNF (Disjunctive Normal Form) is a way to represent a boolean expression as a

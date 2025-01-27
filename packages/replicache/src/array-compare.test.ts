@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {arrayCompare} from './array-compare.js';
+import {arrayCompare} from './array-compare.ts';
 
 test('array compare', () => {
   const t = <T>(a: ArrayLike<T>, b: ArrayLike<T>, expected: number) => {

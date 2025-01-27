@@ -1,19 +1,19 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from '../../../shared/src/asserts.js';
-import type {Enum} from '../../../shared/src/enum.js';
-import {diff} from '../btree/diff.js';
-import type {InternalDiff} from '../btree/node.js';
-import {BTreeRead, allEntriesAsDiff} from '../btree/read.js';
-import {BTreeWrite} from '../btree/write.js';
-import type {FrozenCookie} from '../cookies.js';
-import type {Write as DagWrite} from '../dag/store.js';
-import * as FormatVersion from '../format-version-enum.js';
-import type {FrozenJSONValue} from '../frozen-json.js';
-import {type Hash, emptyHash} from '../hash.js';
-import {lazy} from '../lazy.js';
-import type {DiffComputationConfig} from '../sync/diff.js';
-import {DiffsMap} from '../sync/diff.js';
-import type {ClientID} from '../sync/ids.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import {diff} from '../btree/diff.ts';
+import type {InternalDiff} from '../btree/node.ts';
+import {BTreeRead, allEntriesAsDiff} from '../btree/read.ts';
+import {BTreeWrite} from '../btree/write.ts';
+import type {FrozenCookie} from '../cookies.ts';
+import type {Write as DagWrite} from '../dag/store.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import type {FrozenJSONValue} from '../frozen-json.ts';
+import {type Hash, emptyHash} from '../hash.ts';
+import {lazy} from '../lazy.ts';
+import type {DiffComputationConfig} from '../sync/diff.ts';
+import {DiffsMap} from '../sync/diff.ts';
+import type {ClientID} from '../sync/ids.ts';
 import {
   Commit,
   type Meta as CommitMeta,
@@ -24,11 +24,11 @@ import {
   newLocalDD31 as commitNewLocalDD31,
   newSnapshotDD31 as commitNewSnapshotDD31,
   getMutationID,
-} from './commit.js';
-import * as IndexOperation from './index-operation-enum.js';
-import {IndexRead, IndexWrite, indexValue} from './index.js';
-import * as MetaType from './meta-type-enum.js';
-import {Read, readIndexesForRead} from './read.js';
+} from './commit.ts';
+import * as IndexOperation from './index-operation-enum.ts';
+import {IndexRead, IndexWrite, indexValue} from './index.ts';
+import * as MetaType from './meta-type-enum.ts';
+import {Read, readIndexesForRead} from './read.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

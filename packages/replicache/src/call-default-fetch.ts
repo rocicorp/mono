@@ -1,4 +1,4 @@
-import type {HTTPRequestInfo} from './http-request-info.js';
+import type {HTTPRequestInfo} from './http-request-info.ts';
 
 /**
  * Helper function for {@link getDefaultPuller} and {@link getDefaultPusher}.

@@ -1,12 +1,12 @@
 import {describe, expect, test} from 'vitest';
-import {assert} from '../../../shared/src/asserts.js';
-import type {Enum} from '../../../shared/src/enum.js';
-import {Chunk, type Refs, toRefs} from '../dag/chunk.js';
-import {TestStore} from '../dag/test-store.js';
-import * as FormatVersion from '../format-version-enum.js';
-import {deepFreeze} from '../frozen-json.js';
-import {type Hash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
-import {withRead} from '../with-transactions.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import {Chunk, type Refs, toRefs} from '../dag/chunk.ts';
+import {TestStore} from '../dag/test-store.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import {deepFreeze} from '../frozen-json.ts';
+import {type Hash, fakeHash, makeNewFakeHashFunction} from '../hash.ts';
+import {withRead} from '../with-transactions.ts';
 import {
   type ChunkIndexDefinition,
   Commit,
@@ -22,9 +22,9 @@ import {
   localMutations,
   localMutationsGreaterThan,
   makeCommitData,
-} from './commit.js';
-import * as MetaType from './meta-type-enum.js';
-import {ChainBuilder} from './test-helpers.js';
+} from './commit.ts';
+import * as MetaType from './meta-type-enum.ts';
+import {ChainBuilder} from './test-helpers.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

@@ -1,4 +1,4 @@
-import * as v from '../../shared/src/valita.js';
+import * as v from '../../shared/src/valita.ts';
 
 export const ZERO_BUILD_SCHEMA_ENV_VAR_PREFIX = 'ZERO_';
 

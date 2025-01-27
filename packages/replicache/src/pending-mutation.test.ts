@@ -1,20 +1,20 @@
 import {expect, test} from 'vitest';
-import type {JSONValue} from '../../shared/src/json.js';
+import type {JSONValue} from '../../shared/src/json.ts';
 import {
   initReplicacheTesting,
   makePullResponseV1,
   replicacheForTesting,
   tickAFewTimes,
-} from './test-util.js';
-import type {WriteTransaction} from './transactions.js';
+} from './test-util.ts';
+import type {WriteTransaction} from './transactions.ts';
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import {TestStore} from './dag/test-store.js';
-import {ChainBuilder} from './db/test-helpers.js';
-import {pendingMutationsForAPI} from './pending-mutations.js';
-import {withRead} from './with-transactions.js';
+import {TestStore} from './dag/test-store.ts';
+import {ChainBuilder} from './db/test-helpers.ts';
+import {pendingMutationsForAPI} from './pending-mutations.ts';
+import {withRead} from './with-transactions.ts';
 
 initReplicacheTesting();
 

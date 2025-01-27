@@ -6,7 +6,7 @@ import {
   type JWTPayload,
   type KeyLike,
 } from 'jose';
-import type {AuthConfig} from '../config/zero-config.js';
+import type {AuthConfig} from '../config/zero-config.ts';
 
 export function authIsConfigured(config: AuthConfig) {
   return (

@@ -1,5 +1,5 @@
-import {links, type ListContext} from '../routes.js';
-import {Link, type Props as LinkProps} from './link.js';
+import {links, type ListContext} from '../routes.ts';
+import {Link, type Props as LinkProps} from './link.tsx';
 
 export function IssueLink({
   issue,

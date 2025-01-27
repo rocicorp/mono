@@ -1,9 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
-import {navigator} from '../../../shared/src/navigator.js';
-import {promiseVoid} from '../../../shared/src/resolved-promises.js';
-import {IDBStore} from './idb-store.js';
-import {MemStore, dropMemStore} from './mem-store.js';
-import type {Read, Store, Write} from './store.js';
+import {navigator} from '../../../shared/src/navigator.ts';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import {IDBStore} from './idb-store.ts';
+import {MemStore, dropMemStore} from './mem-store.ts';
+import type {Read, Store, Write} from './store.ts';
 
 /**
  * This store uses an {@link IDBStore} by default. If the {@link IDBStore} fails

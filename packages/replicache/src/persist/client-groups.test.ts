@@ -1,9 +1,9 @@
 import {expect, test} from 'vitest';
-import type {Read, Store, Write} from '../dag/store.js';
-import {TestStore} from '../dag/test-store.js';
-import {type Hash, assertHash, fakeHash} from '../hash.js';
-import type {ClientGroupID} from '../sync/ids.js';
-import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
+import type {Read, Store, Write} from '../dag/store.ts';
+import {TestStore} from '../dag/test-store.ts';
+import {type Hash, assertHash, fakeHash} from '../hash.ts';
+import type {ClientGroupID} from '../sync/ids.ts';
+import {withRead, withWriteNoImplicitCommit} from '../with-transactions.ts';
 import {
   type ClientGroup,
   type ClientGroupMap,
@@ -15,7 +15,7 @@ import {
   mutatorNamesEqual,
   setClientGroup,
   setClientGroups,
-} from './client-groups.js';
+} from './client-groups.ts';
 
 const headClientGroup1Hash = fakeHash('b1');
 const headClientGroup2Hash = fakeHash('b2');

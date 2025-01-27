@@ -1,18 +1,18 @@
-import {assert} from '../../shared/src/asserts.js';
+import {assert} from '../../shared/src/asserts.ts';
 import {
   toStaticParam,
   type Condition,
   type Parameter,
-} from '../../zero-protocol/src/ast.js';
-import {AuthQuery} from '../../zql/src/query/auth-query.js';
-import type {ExpressionBuilder} from '../../zql/src/query/expression.js';
-import {staticParam} from '../../zql/src/query/query-impl.js';
-import type {Query} from '../../zql/src/query/query.js';
+} from '../../zero-protocol/src/ast.ts';
+import {AuthQuery} from '../../zql/src/query/auth-query.ts';
+import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
+import {staticParam} from '../../zql/src/query/query-impl.ts';
+import type {Query} from '../../zql/src/query/query.ts';
 import type {
   AssetPermissions as CompiledAssetPermissions,
   PermissionsConfig as CompiledPermissionsConfig,
-} from './compiled-permissions.js';
-import type {Schema} from './mod.js';
+} from './compiled-permissions.ts';
+import type {Schema} from './mod.ts';
 
 export const ANYONE_CAN = undefined;
 export const NOBODY_CAN = [];

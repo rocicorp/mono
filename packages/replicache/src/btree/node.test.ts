@@ -1,21 +1,21 @@
 import {beforeEach, describe, expect, test} from 'vitest';
-import {assert} from '../../../shared/src/asserts.js';
-import type {Enum} from '../../../shared/src/enum.js';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
-import {toRefs} from '../dag/chunk.js';
-import type {Read, Store, Write} from '../dag/store.js';
-import {TestStore} from '../dag/test-store.js';
-import {ChainBuilder} from '../db/test-helpers.js';
-import * as FormatVersion from '../format-version-enum.js';
-import {type FrozenJSONValue, deepFreeze} from '../frozen-json.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {toRefs} from '../dag/chunk.ts';
+import type {Read, Store, Write} from '../dag/store.ts';
+import {TestStore} from '../dag/test-store.ts';
+import {ChainBuilder} from '../db/test-helpers.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import {type FrozenJSONValue, deepFreeze} from '../frozen-json.ts';
 import {
   type Hash,
   emptyHash,
   fakeHash,
   makeNewFakeHashFunction,
-} from '../hash.js';
-import {getSizeOfEntry, getSizeOfValue} from '../size-of-value.js';
-import {withRead, withWrite} from '../with-transactions.js';
+} from '../hash.ts';
+import {getSizeOfEntry, getSizeOfValue} from '../size-of-value.ts';
+import {withRead, withWrite} from '../with-transactions.ts';
 import {
   type DataNode,
   type Diff,
@@ -28,9 +28,9 @@ import {
   parseBTreeNode,
   partition,
   toChunkData,
-} from './node.js';
-import {BTreeRead, NODE_HEADER_SIZE} from './read.js';
-import {BTreeWrite} from './write.js';
+} from './node.ts';
+import {BTreeRead, NODE_HEADER_SIZE} from './read.ts';
+import {BTreeWrite} from './write.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

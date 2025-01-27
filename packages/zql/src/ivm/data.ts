@@ -3,10 +3,10 @@ import {
   assertBoolean,
   assertNumber,
   assertString,
-} from '../../../shared/src/asserts.js';
-import type {Ordering} from '../../../zero-protocol/src/ast.js';
-import type {Row, Value} from '../../../zero-protocol/src/data.js';
-import type {Stream} from './stream.js';
+} from '../../../shared/src/asserts.ts';
+import type {Ordering} from '../../../zero-protocol/src/ast.ts';
+import type {Row, Value} from '../../../zero-protocol/src/data.ts';
+import type {Stream} from './stream.ts';
 
 /**
  * A row flowing through the pipeline, plus its relationships.

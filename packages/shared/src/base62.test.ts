@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {encode} from './base62.js';
+import {encode} from './base62.ts';
 
 test('it should encode base62', () => {
   expect(encode(0n)).toBe('0');

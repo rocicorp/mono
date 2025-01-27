@@ -1,3 +1,3 @@
 #!/usr/bin/env node
 
-import './server/multi/main.js';
+import './server/multi/main.ts';

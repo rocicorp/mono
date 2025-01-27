@@ -1,10 +1,10 @@
-import {areEqual} from '../../../shared/src/arrays.js';
-import {assert, unreachable} from '../../../shared/src/asserts.js';
-import {must} from '../../../shared/src/must.js';
-import type {CompoundKey} from '../../../zero-protocol/src/ast.js';
-import type {Row} from '../../../zero-protocol/src/data.js';
-import {rowForChange, type Change} from './change.js';
-import {normalizeUndefined, type NormalizedValue} from './data.js';
+import {areEqual} from '../../../shared/src/arrays.ts';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import {must} from '../../../shared/src/must.ts';
+import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import {rowForChange, type Change} from './change.ts';
+import {normalizeUndefined, type NormalizedValue} from './data.ts';
 import {
   throwOutput,
   type FetchRequest,
@@ -12,9 +12,9 @@ import {
   type Operator,
   type Output,
   type Storage,
-} from './operator.js';
-import type {SourceSchema} from './schema.js';
-import {first} from './stream.js';
+} from './operator.ts';
+import type {SourceSchema} from './schema.ts';
+import {first} from './stream.ts';
 
 type SizeStorageKey = `row/${string}/${string}`;
 type CacheStorageKey = `row/${string}`;

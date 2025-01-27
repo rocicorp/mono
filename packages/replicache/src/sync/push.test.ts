@@ -1,21 +1,21 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect, test} from 'vitest';
-import {TestStore} from '../dag/test-store.js';
-import {DEFAULT_HEAD_NAME} from '../db/commit.js';
-import {readFromDefaultHead} from '../db/read.js';
-import {ChainBuilder} from '../db/test-helpers.js';
-import * as FormatVersion from '../format-version-enum.js';
-import {deepFreeze} from '../frozen-json.js';
-import type {Pusher, PusherResult} from '../pusher.js';
-import {withRead, withWrite} from '../with-transactions.js';
-import type {ClientGroupID} from './ids.js';
+import {TestStore} from '../dag/test-store.ts';
+import {DEFAULT_HEAD_NAME} from '../db/commit.ts';
+import {readFromDefaultHead} from '../db/read.ts';
+import {ChainBuilder} from '../db/test-helpers.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import {deepFreeze} from '../frozen-json.ts';
+import type {Pusher, PusherResult} from '../pusher.ts';
+import {withRead, withWrite} from '../with-transactions.ts';
+import type {ClientGroupID} from './ids.ts';
 import {
   PUSH_VERSION_DD31,
   type PushRequest,
   type PushRequestV1,
   push,
-} from './push.js';
-import {SYNC_HEAD_NAME} from './sync-head-name.js';
+} from './push.ts';
+import {SYNC_HEAD_NAME} from './sync-head-name.ts';
 
 type FakePusherArgs = {
   expPush: boolean;

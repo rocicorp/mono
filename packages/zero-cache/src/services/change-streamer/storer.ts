@@ -1,19 +1,19 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {assert} from '../../../../shared/src/asserts.js';
-import {Queue} from '../../../../shared/src/queue.js';
-import {promiseVoid} from '../../../../shared/src/resolved-promises.js';
-import * as Mode from '../../db/mode-enum.js';
-import {TransactionPool} from '../../db/transaction-pool.js';
-import type {JSONValue} from '../../types/bigint-json.js';
-import type {PostgresDB} from '../../types/pg.js';
-import {type Commit} from '../change-source/protocol/current/downstream.js';
-import type {StatusMessage} from '../change-source/protocol/current/status.js';
-import type {Service} from '../service.js';
-import type {WatermarkedChange} from './change-streamer-service.js';
-import {type ChangeEntry} from './change-streamer.js';
-import * as ErrorType from './error-type-enum.js';
-import {Subscriber} from './subscriber.js';
+import {assert} from '../../../../shared/src/asserts.ts';
+import {Queue} from '../../../../shared/src/queue.ts';
+import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import * as Mode from '../../db/mode-enum.ts';
+import {TransactionPool} from '../../db/transaction-pool.ts';
+import type {JSONValue} from '../../types/bigint-json.ts';
+import type {PostgresDB} from '../../types/pg.ts';
+import {type Commit} from '../change-source/protocol/current/downstream.ts';
+import type {StatusMessage} from '../change-source/protocol/current/status.ts';
+import type {Service} from '../service.ts';
+import type {WatermarkedChange} from './change-streamer-service.ts';
+import {type ChangeEntry} from './change-streamer.ts';
+import * as ErrorType from './error-type-enum.ts';
+import {Subscriber} from './subscriber.ts';
 
 type QueueEntry =
   | ['change', WatermarkedChange]

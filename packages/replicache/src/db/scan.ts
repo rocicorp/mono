@@ -1,4 +1,4 @@
-import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 
 // TODO(arv): Unify with src/scan-options.ts
 

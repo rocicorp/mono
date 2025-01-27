@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {resolver} from '@rocicorp/resolver';
-import {assert} from '../../../shared/src/asserts.js';
-import type {Writable} from '../../../shared/src/writable.js';
-import {hashOfAST} from '../../../zero-protocol/src/ast-hash.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Writable} from '../../../shared/src/writable.ts';
+import {hashOfAST} from '../../../zero-protocol/src/ast-hash.ts';
 import type {
   AST,
   CompoundKey,
@@ -11,34 +11,34 @@ import type {
   Ordering,
   Parameter,
   System,
-} from '../../../zero-protocol/src/ast.js';
-import type {Row as IVMRow} from '../../../zero-protocol/src/data.js';
+} from '../../../zero-protocol/src/ast.ts';
+import type {Row as IVMRow} from '../../../zero-protocol/src/data.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   isOneHop,
   isTwoHop,
   type TableSchema,
-} from '../../../zero-schema/src/table-schema.js';
-import {buildPipeline, type BuilderDelegate} from '../builder/builder.js';
-import {ArrayView} from '../ivm/array-view.js';
-import type {Input} from '../ivm/operator.js';
-import type {Format, ViewFactory} from '../ivm/view.js';
-import {dnf} from './dnf.js';
+} from '../../../zero-schema/src/table-schema.ts';
+import {buildPipeline, type BuilderDelegate} from '../builder/builder.ts';
+import {ArrayView} from '../ivm/array-view.ts';
+import type {Input} from '../ivm/operator.ts';
+import type {Format, ViewFactory} from '../ivm/view.ts';
+import {dnf} from './dnf.ts';
 import {
   and,
   cmp,
   ExpressionBuilder,
   type ExpressionFactory,
-} from './expression.js';
-import type {AdvancedQuery} from './query-internal.js';
+} from './expression.ts';
+import type {AdvancedQuery} from './query-internal.ts';
 import type {
   GetFilterType,
   HumanReadable,
   Operator,
   PullRow,
   Query,
-} from './query.js';
-import type {TypedView} from './typed-view.js';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.js';
+} from './query.ts';
+import type {TypedView} from './typed-view.ts';
 
 type AnyQuery = Query<Schema, string, any>;
 

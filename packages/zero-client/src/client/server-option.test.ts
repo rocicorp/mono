@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {getServer} from './server-option.js';
+import {getServer} from './server-option.ts';
 
 test('getServer', () => {
   expect(getServer(null)).equal(null);

@@ -1,22 +1,22 @@
 import type {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
-import {assert} from '../../../shared/src/asserts.js';
-import {initBgIntervalProcess} from '../bg-interval.js';
-import {StoreImpl} from '../dag/store-impl.js';
-import type {Store} from '../dag/store.js';
-import * as FormatVersion from '../format-version-enum.js';
-import {assertHash, newRandomHash} from '../hash.js';
-import {IDBStore} from '../kv/idb-store.js';
-import type {DropStore, StoreProvider} from '../kv/store.js';
-import {createLogContext} from '../log-options.js';
-import {getKVStoreProvider} from '../replicache.js';
-import {withRead} from '../with-transactions.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import {initBgIntervalProcess} from '../bg-interval.ts';
+import {StoreImpl} from '../dag/store-impl.ts';
+import type {Store} from '../dag/store.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import {assertHash, newRandomHash} from '../hash.ts';
+import {IDBStore} from '../kv/idb-store.ts';
+import type {DropStore, StoreProvider} from '../kv/store.ts';
+import {createLogContext} from '../log-options.ts';
+import {getKVStoreProvider} from '../replicache.ts';
+import {withRead} from '../with-transactions.ts';
 import {
   clientGroupHasPendingMutations,
   getClientGroups,
-} from './client-groups.js';
-import {type ClientMap, getClients} from './clients.js';
-import type {IndexedDBDatabase} from './idb-databases-store.js';
-import {IDBDatabasesStore} from './idb-databases-store.js';
+} from './client-groups.ts';
+import {type ClientMap, getClients} from './clients.ts';
+import type {IndexedDBDatabase} from './idb-databases-store.ts';
+import {IDBDatabasesStore} from './idb-databases-store.ts';
 
 /**
  * How frequently to try to collect

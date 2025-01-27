@@ -1,15 +1,15 @@
-import {assertObject} from '../../shared/src/asserts.js';
+import {assertObject} from '../../shared/src/asserts.ts';
 import {
   assertVersionNotSupportedResponse,
   type ClientStateNotFoundResponse,
   isClientStateNotFoundResponse,
   type VersionNotSupportedResponse,
-} from './error-responses.js';
+} from './error-responses.ts';
 import {
   assertHTTPRequestInfo,
   type HTTPRequestInfo,
-} from './http-request-info.js';
-import type {PushRequest} from './sync/push.js';
+} from './http-request-info.ts';
+import type {PushRequest} from './sync/push.ts';
 
 export type PusherResult = {
   response?: PushResponse | undefined;

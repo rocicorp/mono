@@ -1,15 +1,15 @@
 import * as sinon from 'sinon';
 import {expect, test} from 'vitest';
-import type {VersionNotSupportedResponse} from './error-responses.js';
+import type {VersionNotSupportedResponse} from './error-responses.ts';
 import {
   addData,
   disableAllBackgroundProcesses,
   initReplicacheTesting,
   makePullResponseV1,
   replicacheForTesting,
-} from './test-util.js';
-import type {WriteTransaction} from './transactions.js';
-import type {Poke, UpdateNeededReason} from './types.js';
+} from './test-util.ts';
+import type {WriteTransaction} from './transactions.ts';
+import type {Poke, UpdateNeededReason} from './types.ts';
 
 initReplicacheTesting();
 

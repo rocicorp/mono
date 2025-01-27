@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {pgClient, type PostgresDB} from '../types/pg.js';
+import {pgClient, type PostgresDB} from '../types/pg.ts';
 
 /**
  * Manages on-demand short-lived connections to a DB, shutting down after

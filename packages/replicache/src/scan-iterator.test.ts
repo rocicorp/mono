@@ -1,15 +1,15 @@
 import {expect, test} from 'vitest';
-import type {ReadonlyJSONValue} from '../../shared/src/json.js';
-import {asyncIterableToArray} from './async-iterable-to-array.js';
-import type {IndexKey} from './db/index.js';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {asyncIterableToArray} from './async-iterable-to-array.ts';
+import type {IndexKey} from './db/index.ts';
 import {
   type Entry,
   type GetIndexScanIterator,
   type GetScanIterator,
   fromKeyForIndexScan,
   makeScanResult,
-} from './scan-iterator.js';
-import type {ScanIndexOptions, ScanOptions} from './scan-options.js';
+} from './scan-iterator.ts';
+import type {ScanIndexOptions, ScanOptions} from './scan-options.ts';
 
 test('makeScanResult', async () => {
   function getTestScanAsyncIterator(

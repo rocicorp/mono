@@ -13,67 +13,67 @@ import {
 import type {
   MessageMessage,
   MessageRelation,
-} from 'pg-logical-replication/dist/output-plugins/pgoutput/pgoutput.types.js';
+} from 'pg-logical-replication/dist/output-plugins/pgoutput/pgoutput.types.ts';
 import {DatabaseError} from 'pg-protocol';
-import {AbortError} from '../../../../../shared/src/abort-error.js';
-import {assert} from '../../../../../shared/src/asserts.js';
-import {deepEqual} from '../../../../../shared/src/json.js';
-import {must} from '../../../../../shared/src/must.js';
+import {AbortError} from '../../../../../shared/src/abort-error.ts';
+import {assert} from '../../../../../shared/src/asserts.ts';
+import {deepEqual} from '../../../../../shared/src/json.ts';
+import {must} from '../../../../../shared/src/must.ts';
 import {
   intersection,
   symmetricDifferences,
-} from '../../../../../shared/src/set-utils.js';
-import {sleep} from '../../../../../shared/src/sleep.js';
-import * as v from '../../../../../shared/src/valita.js';
-import {Database} from '../../../../../zqlite/src/db.js';
-import {ShortLivedClient} from '../../../db/short-lived-client.js';
+} from '../../../../../shared/src/set-utils.ts';
+import {sleep} from '../../../../../shared/src/sleep.ts';
+import * as v from '../../../../../shared/src/valita.ts';
+import {Database} from '../../../../../zqlite/src/db.ts';
+import {ShortLivedClient} from '../../../db/short-lived-client.ts';
 import type {
   ColumnSpec,
   PublishedTableSpec,
   TableSpec,
-} from '../../../db/specs.js';
-import {StatementRunner} from '../../../db/statements.js';
-import {stringify} from '../../../types/bigint-json.js';
-import {oneAfter, type LexiVersion} from '../../../types/lexi-version.js';
+} from '../../../db/specs.ts';
+import {StatementRunner} from '../../../db/statements.ts';
+import {stringify} from '../../../types/bigint-json.ts';
+import {oneAfter, type LexiVersion} from '../../../types/lexi-version.ts';
 import {
   pgClient,
   registerPostgresTypeParsers,
   type PostgresDB,
-} from '../../../types/pg.js';
-import {Subscription} from '../../../types/subscription.js';
+} from '../../../types/pg.ts';
+import {Subscription} from '../../../types/subscription.ts';
 import type {
   ChangeSource,
   ChangeStream,
-} from '../../change-streamer/change-streamer-service.js';
+} from '../../change-streamer/change-streamer-service.ts';
 import {
   AutoResetSignal,
   type ReplicationConfig,
-} from '../../change-streamer/schema/tables.js';
-import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
+} from '../../change-streamer/schema/tables.ts';
+import {getSubscriptionState} from '../../replicator/schema/replication-state.ts';
 import type {
   DataChange,
   Identifier,
   MessageDelete,
-} from '../protocol/current/data.js';
+} from '../protocol/current/data.ts';
 import type {
   ChangeStreamData,
   ChangeStreamMessage,
   Data,
-} from '../protocol/current/downstream.js';
-import {replicationSlot, type InitialSyncOptions} from './initial-sync.js';
-import {fromLexiVersion, toLexiVersion, type LSN} from './lsn.js';
-import {replicationEventSchema, type DdlUpdateEvent} from './schema/ddl.js';
-import {updateShardSchema} from './schema/init.js';
-import {getPublicationInfo, type PublishedSchema} from './schema/published.js';
+} from '../protocol/current/downstream.ts';
+import {replicationSlot, type InitialSyncOptions} from './initial-sync.ts';
+import {fromLexiVersion, toLexiVersion, type LSN} from './lsn.ts';
+import {replicationEventSchema, type DdlUpdateEvent} from './schema/ddl.ts';
+import {updateShardSchema} from './schema/init.ts';
+import {getPublicationInfo, type PublishedSchema} from './schema/published.ts';
 import {
   getInternalShardConfig,
   INTERNAL_PUBLICATION_PREFIX,
   replicaIdentitiesForTablesWithoutPrimaryKeys,
   type InternalShardConfig,
-} from './schema/shard.js';
-import {validate} from './schema/validation.js';
-import type {ShardConfig} from './shard-config.js';
-import {initSyncSchema} from './sync-schema.js';
+} from './schema/shard.ts';
+import {validate} from './schema/validation.ts';
+import type {ShardConfig} from './shard-config.ts';
+import {initSyncSchema} from './sync-schema.ts';
 
 // BigInt support from LogicalReplicationService.
 registerPostgresTypeParsers();

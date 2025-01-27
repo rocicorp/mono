@@ -1,5 +1,5 @@
-import type {IndexKey} from './db/index.js';
-import type {ScanOptions as DbScanOptions} from './db/scan.js';
+import type {IndexKey} from './db/index.ts';
+import type {ScanOptions as DbScanOptions} from './db/scan.ts';
 
 /**
  * Options for {@link ReadTransaction.scan | scan}

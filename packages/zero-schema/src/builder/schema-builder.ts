@@ -3,9 +3,9 @@ import type {
   Relationship,
   RelationshipsSchema,
   TableSchema,
-} from '../table-schema.js';
-import type {Relationships} from './relationship-builder.js';
-import {type TableBuilderWithColumns} from './table-builder.js';
+} from '../table-schema.ts';
+import type {Relationships} from './relationship-builder.ts';
+import {type TableBuilderWithColumns} from './table-builder.ts';
 
 export type Schema = {
   readonly version: number;

@@ -1,5 +1,5 @@
-import * as v from '../../shared/src/valita.js';
-import {astSchema} from './ast.js';
+import * as v from '../../shared/src/valita.ts';
+import {astSchema} from './ast.ts';
 
 const putOpSchema = v.object({
   op: v.literal('put'),

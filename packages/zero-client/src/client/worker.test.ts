@@ -1,5 +1,5 @@
-import {sleep} from '../../../shared/src/sleep.js';
 import {expect, test} from 'vitest';
+import {sleep} from '../../../shared/src/sleep.ts';
 
 test('worker test', async () => {
   const url = new URL('./worker-test.ts', import.meta.url);

@@ -1,9 +1,9 @@
 import {Zero} from '@rocicorp/zero';
-import {Atom} from './atom.js';
-import {type Schema, schema} from '../schema.js';
-import {clearJwt, getJwt, getRawJwt} from './jwt.js';
-import {mark} from './perf-log.js';
-import {INITIAL_COMMENT_LIMIT} from './pages/issue/issue-page.js';
+import {type Schema, schema} from '../schema.ts';
+import {Atom} from './atom.ts';
+import {clearJwt, getJwt, getRawJwt} from './jwt.ts';
+import {INITIAL_COMMENT_LIMIT} from './pages/issue/issue-page.tsx';
+import {mark} from './perf-log.ts';
 
 export type LoginState = {
   encoded: string;

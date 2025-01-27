@@ -1,1 +1,1 @@
-export * from '../../zero-solid/src/mod.js';
+export * from '../../zero-solid/src/mod.ts';

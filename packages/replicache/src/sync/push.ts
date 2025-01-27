@@ -1,31 +1,31 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from '../../../shared/src/asserts.js';
-import {jsonSchema} from '../../../shared/src/json-schema.js';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
-import * as valita from '../../../shared/src/valita.js';
-import type {Store} from '../dag/store.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import {jsonSchema} from '../../../shared/src/json-schema.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import * as valita from '../../../shared/src/valita.ts';
+import type {Store} from '../dag/store.ts';
 import {
   DEFAULT_HEAD_NAME,
   type LocalMetaDD31,
   commitIsLocalDD31,
   localMutations,
-} from '../db/commit.js';
-import type {FrozenJSONValue} from '../frozen-json.js';
+} from '../db/commit.ts';
+import type {FrozenJSONValue} from '../frozen-json.ts';
 import {
   PushError,
   type Pusher,
   type PusherResult,
   assertPusherResult,
-} from '../pusher.js';
-import {ReportError} from '../replicache.js';
-import {toError} from '../to-error.js';
-import {withRead} from '../with-transactions.js';
+} from '../pusher.ts';
+import {ReportError} from '../replicache.ts';
+import {toError} from '../to-error.ts';
+import {withRead} from '../with-transactions.ts';
 import {
   type ClientGroupID,
   type ClientID,
   clientGroupIDSchema,
   clientIDSchema,
-} from './ids.js';
+} from './ids.ts';
 
 export const PUSH_VERSION_SDD = 0;
 export const PUSH_VERSION_DD31 = 1;

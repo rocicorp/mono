@@ -1,8 +1,8 @@
-import * as v from '../../shared/src/valita.js';
-import {clientsPatchSchema} from './clients-patch.js';
-import {queriesPatchSchema} from './queries-patch.js';
-import {rowsPatchSchema} from './row-patch.js';
-import {nullableVersionSchema, versionSchema} from './version.js';
+import * as v from '../../shared/src/valita.ts';
+import {clientsPatchSchema} from './clients-patch.ts';
+import {queriesPatchSchema} from './queries-patch.ts';
+import {rowsPatchSchema} from './row-patch.ts';
+import {nullableVersionSchema, versionSchema} from './version.ts';
 
 /**
  * Pokes use a multi-part format. Pokes send entity data to the client and can

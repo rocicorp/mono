@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from './asserts.js';
+import {assert} from './asserts.ts';
 
 export class BufferSizer {
   #bufferSizeMs: number;

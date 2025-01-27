@@ -9,10 +9,10 @@ import {
   useState,
 } from 'react';
 import DropdownArrow from '../assets/icons/dropdown-arrow.svg?react';
-import {useClickOutside} from '../hooks/use-click-outside.js';
-import {umami} from '../umami.js';
+import {useClickOutside} from '../hooks/use-click-outside.ts';
+import {umami} from '../umami.ts';
 import styles from './combobox.module.css';
-import {fuzzySearch} from './fuzzySearch.js';
+import {fuzzySearch} from './fuzzy-search.ts';
 
 type Item<T> = {
   text: string;

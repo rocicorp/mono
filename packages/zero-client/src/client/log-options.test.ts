@@ -1,10 +1,10 @@
 import {consoleLogSink, type LogSink} from '@rocicorp/logger';
-import type {DatadogLogSinkOptions} from '../../../datadog/src/mod.js';
-import {TestLogSink} from '../../../shared/src/logging-test-utils.js';
 import * as sinon from 'sinon';
 import {afterEach, beforeEach, expect, suite, test} from 'vitest';
-import {createLogOptions} from './log-options.js';
-import type {HTTPString} from './http-string.js';
+import type {DatadogLogSinkOptions} from '../../../datadog/src/mod.ts';
+import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
+import type {HTTPString} from './http-string.ts';
+import {createLogOptions} from './log-options.ts';
 
 let consoleLogSinkSpy: sinon.SinonSpiedInstance<LogSink>;
 let datadogLogSinkSpy: sinon.SinonSpiedInstance<LogSink>;

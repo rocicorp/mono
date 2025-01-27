@@ -1,13 +1,13 @@
+import {writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {tsImport} from 'tsx/esm/api';
-import {writeFile} from 'node:fs/promises';
-import {parseOptions} from '../../shared/src/options.js';
-import {stringifySchema} from './schema-config.js';
+import {parseOptions} from '../../shared/src/options.ts';
 import {
   buildSchemaOptions,
   ZERO_BUILD_SCHEMA_ENV_VAR_PREFIX,
-} from './build-schema-options.js';
+} from './build-schema-options.ts';
+import {stringifySchema} from './schema-config.ts';
 
 async function main() {
   const config = parseOptions(
@@ -25,7 +25,7 @@ async function main() {
 
   // tsImport doesn't expect to receive slashes in the Windows format when running
   // on Windows. They need to be converted to *nix format.
-  relativePath = relativePath.replace(/\\/g, "/");
+  relativePath = relativePath.replace(/\\/g, '/');
 
   try {
     const module = await tsImport(relativePath, import.meta.url);

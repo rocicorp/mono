@@ -1,2 +1,2 @@
-export {createZero} from './create-zero.js';
-export {useQuery} from './use-query.js';
+export {createZero} from './create-zero.ts';
+export {useQuery} from './use-query.ts';

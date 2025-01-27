@@ -1,18 +1,18 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
-import {stringCompare} from '../../../../../shared/src/string-compare.js';
+import {stringCompare} from '../../../../../shared/src/string-compare.ts';
 import {
   type JSONObject,
   type JSONValue,
   stringify,
-} from '../../../types/bigint-json.js';
-import {normalizedKeyOrder, type RowKey} from '../../../types/row-key.js';
+} from '../../../types/bigint-json.ts';
+import {normalizedKeyOrder, type RowKey} from '../../../types/row-key.ts';
 import {
   type RowID,
   type RowRecord,
   versionFromString,
   versionString,
-} from './types.js';
+} from './types.ts';
 
 export const PG_SCHEMA = 'cvr';
 

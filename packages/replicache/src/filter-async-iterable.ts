@@ -1,4 +1,4 @@
-import type {IterableUnion} from './iterable-union.js';
+import type {IterableUnion} from './iterable-union.ts';
 
 /**
  * Filters an async iterable.

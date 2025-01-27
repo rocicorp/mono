@@ -1,7 +1,7 @@
 import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import {afterEach, beforeEach, expect, test} from 'vitest';
-import {AbortError} from './abort-error.js';
-import {sleep, sleepWithAbort} from './sleep.js';
+import {AbortError} from './abort-error.ts';
+import {sleep, sleepWithAbort} from './sleep.ts';
 
 let clock: SinonFakeTimers;
 beforeEach(() => {

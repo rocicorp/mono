@@ -3,7 +3,7 @@
  * ChangeSource and ChangeStreamer. These are not forwarded to subscribers
  * of the ChangeStreamer.
  */
-import * as v from '../../../../../../shared/src/valita.js';
+import * as v from '../../../../../../shared/src/valita.ts';
 
 /**
  * Indicates that replication cannot continue and that the replica must be resynced

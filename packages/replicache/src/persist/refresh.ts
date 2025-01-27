@@ -1,8 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Enum} from '../../../shared/src/enum.js';
-import {sleep} from '../../../shared/src/sleep.js';
-import type {LazyStore} from '../dag/lazy-store.js';
-import type {Store} from '../dag/store.js';
+import type {Enum} from '../../../shared/src/enum.ts';
+import {sleep} from '../../../shared/src/sleep.ts';
+import type {LazyStore} from '../dag/lazy-store.ts';
+import type {Store} from '../dag/store.ts';
 import {
   Commit,
   DEFAULT_HEAD_NAME,
@@ -15,18 +15,18 @@ import {
   commitFromHead,
   compareCookiesForSnapshots,
   localMutationsGreaterThan,
-} from '../db/commit.js';
-import {rebaseMutationAndPutCommit} from '../db/rebase.js';
-import * as FormatVersion from '../format-version-enum.js';
-import type {Hash} from '../hash.js';
+} from '../db/commit.ts';
+import {rebaseMutationAndPutCommit} from '../db/rebase.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import type {Hash} from '../hash.ts';
 import {
   type DiffComputationConfig,
   DiffsMap,
   diffCommits,
-} from '../sync/diff.js';
-import type {ClientID} from '../sync/ids.js';
-import type {MutatorDefs} from '../types.js';
-import {withRead, withWrite} from '../with-transactions.js';
+} from '../sync/diff.ts';
+import type {ClientID} from '../sync/ids.ts';
+import type {MutatorDefs} from '../types.ts';
+import {withRead, withWrite} from '../with-transactions.ts';
 import {
   ClientStateNotFoundError,
   type ClientV6,
@@ -34,11 +34,11 @@ import {
   getClientGroupForClient,
   mustGetClient,
   setClient,
-} from './clients.js';
+} from './clients.ts';
 import {
   type ChunkWithSize,
   GatherNotCachedVisitor,
-} from './gather-not-cached-visitor.js';
+} from './gather-not-cached-visitor.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

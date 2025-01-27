@@ -1,18 +1,18 @@
-import {assert, unreachable} from '../../../shared/src/asserts.js';
-import type {CompoundKey, System} from '../../../zero-protocol/src/ast.js';
-import type {Row, Value} from '../../../zero-protocol/src/data.js';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
-import type {Change, ChildChange} from './change.js';
-import {valuesEqual, type Node} from './data.js';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
+import type {Row, Value} from '../../../zero-protocol/src/data.ts';
+import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import type {Change, ChildChange} from './change.ts';
+import {valuesEqual, type Node} from './data.ts';
 import {
   throwOutput,
   type FetchRequest,
   type Input,
   type Output,
   type Storage,
-} from './operator.js';
-import type {SourceSchema} from './schema.js';
-import {take, type Stream} from './stream.js';
+} from './operator.ts';
+import type {SourceSchema} from './schema.ts';
+import {take, type Stream} from './stream.ts';
 
 type Args = {
   parent: Input;

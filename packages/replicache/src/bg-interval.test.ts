@@ -2,8 +2,8 @@ import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import sinon, {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import {afterEach, beforeEach, expect, test} from 'vitest';
-import {TestLogSink} from '../../shared/src/logging-test-utils.js';
-import {initBgIntervalProcess} from './bg-interval.js';
+import {TestLogSink} from '../../shared/src/logging-test-utils.ts';
+import {initBgIntervalProcess} from './bg-interval.ts';
 
 let clock: SinonFakeTimers;
 beforeEach(() => {

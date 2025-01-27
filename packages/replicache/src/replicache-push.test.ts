@@ -1,21 +1,21 @@
 import * as sinon from 'sinon';
 import {expect, test} from 'vitest';
-import type {VersionNotSupportedResponse} from './error-responses.js';
-import type {Pusher} from './pusher.js';
+import type {VersionNotSupportedResponse} from './error-responses.ts';
+import type {Pusher} from './pusher.ts';
 import {
   disableAllBackgroundProcesses,
   initReplicacheTesting,
   replicacheForTesting,
   tickAFewTimes,
-} from './test-util.js';
-import type {WriteTransaction} from './transactions.js';
+} from './test-util.ts';
+import type {WriteTransaction} from './transactions.ts';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import {getDefaultPusher} from './get-default-pusher.js';
-import type {UpdateNeededReason} from './types.js';
+import {getDefaultPusher} from './get-default-pusher.ts';
+import type {UpdateNeededReason} from './types.ts';
 
 initReplicacheTesting();
 

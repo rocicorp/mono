@@ -1,9 +1,9 @@
 import {
   assertJSONObject,
   type ReadonlyJSONValue,
-} from '../../shared/src/json.js';
-import {stringCompare} from '../../shared/src/string-compare.js';
-import type {FrozenJSONValue} from './frozen-json.js';
+} from '../../shared/src/json.ts';
+import {stringCompare} from '../../shared/src/string-compare.ts';
+import type {FrozenJSONValue} from './frozen-json.ts';
 
 /**
  * A cookie is a value that is used to determine the order of snapshots. It

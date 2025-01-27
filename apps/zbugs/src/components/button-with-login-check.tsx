@@ -1,7 +1,7 @@
 import {forwardRef, useCallback, useState, type ForwardedRef} from 'react';
-import {useLogin} from '../hooks/use-login.js';
-import {Button, type ButtonProps} from './button.jsx';
-import {NotLoggedInModal} from './not-logged-in-modal.js';
+import {useLogin} from '../hooks/use-login.tsx';
+import {Button, type ButtonProps} from './button.tsx';
+import {NotLoggedInModal} from './not-logged-in-modal.tsx';
 
 interface Props extends ButtonProps {
   loginMessage: string;

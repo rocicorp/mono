@@ -1,5 +1,5 @@
-import * as v from '../../shared/src/valita.js';
-import {nullableVersionSchema, versionSchema} from './version.js';
+import * as v from '../../shared/src/valita.ts';
+import {nullableVersionSchema, versionSchema} from './version.ts';
 
 export const pullRequestBodySchema = v.object({
   clientGroupID: v.string(),

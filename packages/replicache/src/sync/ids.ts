@@ -1,4 +1,4 @@
-import * as valita from '../../../shared/src/valita.js';
+import * as valita from '../../../shared/src/valita.ts';
 
 /**
  * The ID describing a group of clients. All clients in the same group share a

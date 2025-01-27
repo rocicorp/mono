@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import {defined} from './arrays.js';
+import {defined} from './arrays.ts';
 
 describe('shared/arrays', () => {
   type Case = {

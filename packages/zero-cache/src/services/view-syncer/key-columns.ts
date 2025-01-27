@@ -1,8 +1,8 @@
-import {deepEqual} from '../../../../shared/src/json.js';
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.js';
-import type {JSONObject} from '../../types/bigint-json.js';
-import {ErrorForClient} from '../../types/error-for-client.js';
-import type {RowID, RowRecord} from './schema/types.js';
+import {deepEqual} from '../../../../shared/src/json.ts';
+import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import type {JSONObject} from '../../types/bigint-json.ts';
+import {ErrorForClient} from '../../types/error-for-client.ts';
+import type {RowID, RowRecord} from './schema/types.ts';
 
 /**
  * KeyColumns track the key columns used to reference rows in the CVR.

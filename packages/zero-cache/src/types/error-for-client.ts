@@ -1,5 +1,5 @@
 import type {LogLevel} from '@rocicorp/logger';
-import type {ErrorBody} from '../../../zero-protocol/src/error.js';
+import type {ErrorBody} from '../../../zero-protocol/src/error.ts';
 
 export class ErrorWithLevel extends Error {
   readonly logLevel: LogLevel;

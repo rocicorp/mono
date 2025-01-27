@@ -1,6 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
 import {describe, expect, test} from 'vitest';
-import {Queue} from './queue.js';
+import {Queue} from './queue.ts';
 
 describe('Queue', () => {
   test('dequeues enqueued value', async () => {

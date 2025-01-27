@@ -4,27 +4,27 @@ import {
   assertArray,
   assertNumber,
   assertString,
-} from '../../../shared/src/asserts.js';
-import type {Enum} from '../../../shared/src/enum.js';
-import {joinIterables} from '../../../shared/src/iterables.js';
+} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import {joinIterables} from '../../../shared/src/iterables.ts';
 import {
   type JSONValue,
   type ReadonlyJSONValue,
   assertJSONValue,
-} from '../../../shared/src/json.js';
-import {binarySearch as binarySearchWithFunc} from '../binary-search.js';
-import {skipBTreeNodeAsserts} from '../config.js';
-import type {IndexKey} from '../db/index.js';
-import * as FormatVersion from '../format-version-enum.js';
+} from '../../../shared/src/json.ts';
+import {binarySearch as binarySearchWithFunc} from '../binary-search.ts';
+import {skipBTreeNodeAsserts} from '../config.ts';
+import type {IndexKey} from '../db/index.ts';
+import * as FormatVersion from '../format-version-enum.ts';
 import {
   type FrozenJSONValue,
   type FrozenTag,
   assertDeepFrozen,
   deepFreeze,
-} from '../frozen-json.js';
-import {type Hash, emptyHash, newRandomHash} from '../hash.js';
-import type {BTreeRead} from './read.js';
-import type {BTreeWrite} from './write.js';
+} from '../frozen-json.ts';
+import {type Hash, emptyHash, newRandomHash} from '../hash.ts';
+import type {BTreeRead} from './read.ts';
+import type {BTreeWrite} from './write.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

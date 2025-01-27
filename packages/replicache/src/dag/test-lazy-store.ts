@@ -1,6 +1,6 @@
-import type {Hash} from '../hash.js';
-import type {Chunk} from './chunk.js';
-import {LazyStore} from './lazy-store.js';
+import type {Hash} from '../hash.ts';
+import type {Chunk} from './chunk.ts';
+import {LazyStore} from './lazy-store.ts';
 
 export class TestLazyStore extends LazyStore {
   getRefCountsSnapshot(): Record<Hash, number> {

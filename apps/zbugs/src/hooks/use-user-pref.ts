@@ -1,7 +1,7 @@
 import type {Zero} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
-import type {Schema} from '../../schema.js';
-import {useZero} from './use-zero.js';
+import type {Schema} from '../../schema.ts';
+import {useZero} from './use-zero.ts';
 
 export function useUserPref(key: string): string | undefined {
   const z = useZero();

@@ -1,9 +1,9 @@
 import {expect, test} from 'vitest';
-import {assert} from '../../../shared/src/asserts.js';
-import {type Hash, fakeHash} from '../hash.js';
-import {Chunk, toRefs} from './chunk.js';
-import type {MustGetChunk} from './store.js';
-import {Visitor} from './visitor.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import {type Hash, fakeHash} from '../hash.ts';
+import {Chunk, toRefs} from './chunk.ts';
+import type {MustGetChunk} from './store.ts';
+import {Visitor} from './visitor.ts';
 
 test('Ensure only visited once', async () => {
   const c1 = new Chunk(fakeHash('1'), 'data1', []);

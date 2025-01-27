@@ -1,10 +1,10 @@
-import type {Enum} from '../../../shared/src/enum.js';
-import {deepEqual} from '../../../shared/src/json.js';
-import type {Read} from '../dag/store.js';
-import * as FormatVersion from '../format-version-enum.js';
-import type {FrozenJSONValue} from '../frozen-json.js';
-import {type Hash, emptyHash} from '../hash.js';
-import {getSizeOfEntry} from '../size-of-value.js';
+import type {Enum} from '../../../shared/src/enum.ts';
+import {deepEqual} from '../../../shared/src/json.ts';
+import type {Read} from '../dag/store.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import type {FrozenJSONValue} from '../frozen-json.ts';
+import {type Hash, emptyHash} from '../hash.ts';
+import {getSizeOfEntry} from '../size-of-value.ts';
 import {
   DataNodeImpl,
   type Entry,
@@ -20,14 +20,14 @@ import {
   isDataNodeImpl,
   newNodeImpl,
   parseBTreeNode,
-} from './node.js';
+} from './node.ts';
 import {
   SPLICE_ADDED,
   SPLICE_AT,
   SPLICE_FROM,
   SPLICE_REMOVED,
   computeSplices,
-} from './splice.js';
+} from './splice.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

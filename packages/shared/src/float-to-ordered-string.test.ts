@@ -3,7 +3,7 @@ import {expect, test} from 'vitest';
 import {
   decodeFloat64AsString,
   encodeFloat64AsString,
-} from './float-to-ordered-string.js';
+} from './float-to-ordered-string.ts';
 
 const cases = [
   [-0, '1y2p0ij32e8e7'],

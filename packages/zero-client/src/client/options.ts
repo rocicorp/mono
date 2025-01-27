@@ -1,7 +1,7 @@
 import type {LogLevel} from '@rocicorp/logger';
-import type {KVStoreProvider} from '../../../replicache/src/mod.js';
-import type {MaybePromise} from '../../../shared/src/types.js';
-import type {Schema} from '../../../zero-schema/src/mod.js';
+import type {KVStoreProvider} from '../../../replicache/src/mod.ts';
+import type {MaybePromise} from '../../../shared/src/types.ts';
+import type {Schema} from '../../../zero-schema/src/mod.ts';
 
 /**
  * Configuration for [[Zero]].

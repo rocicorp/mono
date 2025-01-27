@@ -1,54 +1,54 @@
 import type {SQLQuery} from '@databases/sql';
-import {assert, unreachable} from '../../shared/src/asserts.js';
-import {must} from '../../shared/src/must.js';
-import {difference} from '../../shared/src/set-utils.js';
-import type {Writable} from '../../shared/src/writable.js';
+import {assert, unreachable} from '../../shared/src/asserts.ts';
+import {must} from '../../shared/src/must.ts';
+import {difference} from '../../shared/src/set-utils.ts';
+import type {Writable} from '../../shared/src/writable.ts';
 import type {
   Condition,
   Ordering,
   SimpleCondition,
   ValuePosition,
-} from '../../zero-protocol/src/ast.js';
-import type {Row, Value} from '../../zero-protocol/src/data.js';
-import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
+} from '../../zero-protocol/src/ast.ts';
+import type {Row, Value} from '../../zero-protocol/src/data.ts';
+import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
 import type {
   SchemaValue,
   ValueType,
-} from '../../zero-schema/src/table-schema.js';
+} from '../../zero-schema/src/table-schema.ts';
 import {
   createPredicate,
   transformFilters,
   type NoSubqueryCondition,
-} from '../../zql/src/builder/filter.js';
-import type {Change} from '../../zql/src/ivm/change.js';
+} from '../../zql/src/builder/filter.ts';
+import type {Change} from '../../zql/src/ivm/change.ts';
 import {
   makeComparator,
   type Comparator,
   type Node,
-} from '../../zql/src/ivm/data.js';
-import {filterPush} from '../../zql/src/ivm/filter-push.js';
+} from '../../zql/src/ivm/data.ts';
+import {filterPush} from '../../zql/src/ivm/filter-push.ts';
 import {
   generateWithOverlay,
   generateWithStart,
   type Overlay,
-} from '../../zql/src/ivm/memory-source.js';
+} from '../../zql/src/ivm/memory-source.ts';
 import type {
   FetchRequest,
   Input,
   Output,
   Start,
-} from '../../zql/src/ivm/operator.js';
-import type {SourceSchema} from '../../zql/src/ivm/schema.js';
+} from '../../zql/src/ivm/operator.ts';
+import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
 import type {
   Source,
   SourceChange,
   SourceInput,
-} from '../../zql/src/ivm/source.js';
-import type {Stream} from '../../zql/src/ivm/stream.js';
-import {Database, Statement} from './db.js';
-import {compile, format, sql} from './internal/sql.js';
-import {StatementCache} from './internal/statement-cache.js';
-import {runtimeDebugFlags, runtimeDebugStats} from './runtime-debug.js';
+} from '../../zql/src/ivm/source.ts';
+import type {Stream} from '../../zql/src/ivm/stream.ts';
+import {Database, Statement} from './db.ts';
+import {compile, format, sql} from './internal/sql.ts';
+import {StatementCache} from './internal/statement-cache.ts';
+import {runtimeDebugFlags, runtimeDebugStats} from './runtime-debug.ts';
 
 type Connection = {
   input: Input;

@@ -1,19 +1,19 @@
 import {LogContext} from '@rocicorp/logger';
 import {describe, expect, test} from 'vitest';
-import {assert} from '../../../shared/src/asserts.js';
-import type {Enum} from '../../../shared/src/enum.js';
-import type {JSONValue} from '../../../shared/src/json.js';
-import {TestStore} from '../dag/test-store.js';
-import {ChainBuilder} from '../db/test-helpers.js';
-import {newWriteSnapshotDD31} from '../db/write.js';
-import * as FormatVersion from '../format-version-enum.js';
-import {deepFreeze} from '../frozen-json.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
+import {TestStore} from '../dag/test-store.ts';
+import {ChainBuilder} from '../db/test-helpers.ts';
+import {newWriteSnapshotDD31} from '../db/write.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import {deepFreeze} from '../frozen-json.ts';
 import {
   type PatchOperationInternal,
   assertPatchOperations,
-} from '../patch-operation.js';
-import {withWriteNoImplicitCommit} from '../with-transactions.js';
-import {apply} from './patch.js';
+} from '../patch-operation.ts';
+import {withWriteNoImplicitCommit} from '../with-transactions.ts';
+import {apply} from './patch.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

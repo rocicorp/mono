@@ -1,13 +1,13 @@
-import {assert} from '../../../shared/src/asserts.js';
-import type {Enum} from '../../../shared/src/enum.js';
-import {diff as btreeDiff} from '../btree/diff.js';
-import type {InternalDiff} from '../btree/node.js';
-import {allEntriesAsDiff, BTreeRead} from '../btree/read.js';
-import type {Read} from '../dag/store.js';
-import {Commit, commitFromHash, type Meta} from '../db/commit.js';
-import {readIndexesForRead} from '../db/read.js';
-import * as FormatVersion from '../format-version-enum.js';
-import type {Hash} from '../hash.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import {diff as btreeDiff} from '../btree/diff.ts';
+import type {InternalDiff} from '../btree/node.ts';
+import {allEntriesAsDiff, BTreeRead} from '../btree/read.ts';
+import type {Read} from '../dag/store.ts';
+import {Commit, commitFromHash, type Meta} from '../db/commit.ts';
+import {readIndexesForRead} from '../db/read.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import type {Hash} from '../hash.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

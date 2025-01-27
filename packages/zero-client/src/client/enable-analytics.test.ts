@@ -1,5 +1,5 @@
 import {expect, suite, test} from 'vitest';
-import {shouldEnableAnalytics} from './enable-analytics.js';
+import {shouldEnableAnalytics} from './enable-analytics.ts';
 
 suite('when server indicates testing or local dev', () => {
   const cases: (string | null)[] = [

@@ -1,10 +1,10 @@
-import {id, idList} from '../types/sql.js';
+import {id, idList} from '../types/sql.ts';
 import type {
   ColumnSpec,
   LiteIndexSpec,
   LiteTableSpec,
   TableSpec,
-} from './specs.js';
+} from './specs.ts';
 
 export function columnDef(spec: ColumnSpec) {
   const parts = [id(spec.dataType)];

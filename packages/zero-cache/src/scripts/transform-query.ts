@@ -1,12 +1,12 @@
 /* eslint-disable no-console */
 import 'dotenv/config';
 
-import {getDebugConfig} from '../config/zero-config.js';
-import {getSchema} from '../auth/load-schema.js';
-import {transformAndHashQuery} from '../auth/read-authorizer.js';
-import {must} from '../../../shared/src/must.js';
-import {pgClient} from '../types/pg.js';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
+import {must} from '../../../shared/src/must.ts';
+import {getSchema} from '../auth/load-schema.ts';
+import {transformAndHashQuery} from '../auth/read-authorizer.ts';
+import {getDebugConfig} from '../config/zero-config.ts';
+import {pgClient} from '../types/pg.ts';
 
 const config = getDebugConfig();
 const schema = await getSchema(config);

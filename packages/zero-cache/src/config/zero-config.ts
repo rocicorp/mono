@@ -2,10 +2,10 @@
  * These types represent the _compiled_ config whereas `define-config` types represent the _source_ config.
  */
 
-import {parseOptions, type Config} from '../../../shared/src/options.js';
-import * as v from '../../../shared/src/valita.js';
-import {runtimeDebugFlags} from '../../../zqlite/src/runtime-debug.js';
-import {singleProcessMode} from '../types/processes.js';
+import {parseOptions, type Config} from '../../../shared/src/options.ts';
+import * as v from '../../../shared/src/valita.ts';
+import {runtimeDebugFlags} from '../../../zqlite/src/runtime-debug.ts';
+import {singleProcessMode} from '../types/processes.ts';
 
 /**
  * Configures the view of the upstream database replicated to this zero-cache.

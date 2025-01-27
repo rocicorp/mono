@@ -2,20 +2,20 @@ import type {Context, LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import * as sinon from 'sinon';
 import {describe, expect, test} from 'vitest';
-import {assert, unreachable} from '../../shared/src/asserts.js';
-import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.js';
-import {promiseVoid} from '../../shared/src/resolved-promises.js';
-import {sleep} from '../../shared/src/sleep.js';
-import {asyncIterableToArray} from './async-iterable-to-array.js';
-import {Write} from './db/write.js';
-import {TestMemStore} from './kv/test-mem-store.js';
-import type {PatchOperation} from './patch-operation.js';
-import {getClientGroup} from './persist/client-groups.js';
-import {deleteClientForTesting} from './persist/clients-test-helpers.js';
-import type {ReplicacheOptions} from './replicache-options.js';
-import {Replicache, httpStatusUnauthorized} from './replicache.js';
-import type {ScanOptions} from './scan-options.js';
-import type {ClientID} from './sync/ids.js';
+import {assert, unreachable} from '../../shared/src/asserts.ts';
+import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {promiseVoid} from '../../shared/src/resolved-promises.ts';
+import {sleep} from '../../shared/src/sleep.ts';
+import {asyncIterableToArray} from './async-iterable-to-array.ts';
+import {Write} from './db/write.ts';
+import {TestMemStore} from './kv/test-mem-store.ts';
+import type {PatchOperation} from './patch-operation.ts';
+import {getClientGroup} from './persist/client-groups.ts';
+import {deleteClientForTesting} from './persist/clients-test-helpers.ts';
+import type {ReplicacheOptions} from './replicache-options.ts';
+import {Replicache, httpStatusUnauthorized} from './replicache.ts';
+import type {ScanOptions} from './scan-options.ts';
+import type {ClientID} from './sync/ids.ts';
 import {
   MemStoreWithCounters,
   ReplicacheTest,
@@ -31,11 +31,11 @@ import {
   requestIDLogContextRegex,
   tickAFewTimes,
   tickUntil,
-} from './test-util.js';
-import {TransactionClosedError} from './transaction-closed-error.js';
-import type {ReadTransaction, WriteTransaction} from './transactions.js';
-import type {MutatorDefs, Poke} from './types.js';
-import {withRead} from './with-transactions.js';
+} from './test-util.ts';
+import {TransactionClosedError} from './transaction-closed-error.ts';
+import type {ReadTransaction, WriteTransaction} from './transactions.ts';
+import type {MutatorDefs, Poke} from './types.ts';
+import {withRead} from './with-transactions.ts';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment

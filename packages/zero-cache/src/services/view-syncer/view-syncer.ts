@@ -8,46 +8,46 @@ import {
   manualSpan,
   startAsyncSpan,
   startSpan,
-} from '../../../../otel/src/span.js';
-import {version} from '../../../../otel/src/version.js';
-import {assert, unreachable} from '../../../../shared/src/asserts.js';
-import {CustomKeyMap} from '../../../../shared/src/custom-key-map.js';
-import {must} from '../../../../shared/src/must.js';
-import {randInt} from '../../../../shared/src/rand.js';
-import type {AST} from '../../../../zero-protocol/src/ast.js';
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.js';
+} from '../../../../otel/src/span.ts';
+import {version} from '../../../../otel/src/version.ts';
+import {assert, unreachable} from '../../../../shared/src/asserts.ts';
+import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
+import {must} from '../../../../shared/src/must.ts';
+import {randInt} from '../../../../shared/src/rand.ts';
+import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import {
   type ChangeDesiredQueriesBody,
   type ChangeDesiredQueriesMessage,
   type Downstream,
   type InitConnectionMessage,
-} from '../../../../zero-protocol/src/mod.js';
-import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.js';
-import {transformAndHashQuery} from '../../auth/read-authorizer.js';
-import {stringify} from '../../types/bigint-json.js';
-import {ErrorForClient, getLogLevel} from '../../types/error-for-client.js';
-import type {PostgresDB} from '../../types/pg.js';
-import {rowIDString, type RowKey} from '../../types/row-key.js';
-import type {Source} from '../../types/streams.js';
-import {Subscription} from '../../types/subscription.js';
-import type {ReplicaState} from '../replicator/replicator.js';
-import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication-state.js';
-import type {ActivityBasedService} from '../service.js';
+} from '../../../../zero-protocol/src/mod.ts';
+import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.ts';
+import {transformAndHashQuery} from '../../auth/read-authorizer.ts';
+import {stringify} from '../../types/bigint-json.ts';
+import {ErrorForClient, getLogLevel} from '../../types/error-for-client.ts';
+import type {PostgresDB} from '../../types/pg.ts';
+import {rowIDString, type RowKey} from '../../types/row-key.ts';
+import type {Source} from '../../types/streams.ts';
+import {Subscription} from '../../types/subscription.ts';
+import type {ReplicaState} from '../replicator/replicator.ts';
+import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication-state.ts';
+import type {ActivityBasedService} from '../service.ts';
 import {
   ClientHandler,
   type PatchToVersion,
   type PokeHandler,
   type RowPatch,
-} from './client-handler.js';
-import {CVRStore} from './cvr-store.js';
+} from './client-handler.ts';
+import {CVRStore} from './cvr-store.ts';
 import {
   CVRConfigDrivenUpdater,
   CVRQueryDrivenUpdater,
   type CVRSnapshot,
   type RowUpdate,
-} from './cvr.js';
-import type {DrainCoordinator} from './drain-coordinator.js';
-import {PipelineDriver, type RowChange} from './pipeline-driver.js';
+} from './cvr.ts';
+import type {DrainCoordinator} from './drain-coordinator.ts';
+import {PipelineDriver, type RowChange} from './pipeline-driver.ts';
 import {
   cmpVersions,
   EMPTY_CVR_VERSION,
@@ -57,8 +57,8 @@ import {
   type CVRVersion,
   type NullableCVRVersion,
   type RowID,
-} from './schema/types.js';
-import {ResetPipelinesSignal} from './snapshotter.js';
+} from './schema/types.ts';
+import {ResetPipelinesSignal} from './snapshotter.ts';
 
 export type TokenData = {
   readonly raw: string;

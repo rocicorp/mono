@@ -1,12 +1,12 @@
 import {resolver} from '@rocicorp/resolver';
 import * as sinon from 'sinon';
-import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.js';
-import {TestLogSink} from '../../shared/src/logging-test-utils.js';
-import {sleep} from '../../shared/src/sleep.js';
-import type {IndexKey} from './db/index.js';
-import type {IndexDefinitions} from './index-defs.js';
-import type {PatchOperation} from './patch-operation.js';
-import type {ScanOptions} from './scan-options.js';
+import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {TestLogSink} from '../../shared/src/logging-test-utils.ts';
+import {sleep} from '../../shared/src/sleep.ts';
+import type {IndexKey} from './db/index.ts';
+import type {IndexDefinitions} from './index-defs.ts';
+import type {PatchOperation} from './patch-operation.ts';
+import type {ScanOptions} from './scan-options.ts';
 import {
   clock,
   disableAllBackgroundProcesses,
@@ -15,8 +15,8 @@ import {
   replicacheForTesting,
   tickAFewTimes,
   tickUntil,
-} from './test-util.js';
-import type {ReadTransaction, WriteTransaction} from './transactions.js';
+} from './test-util.ts';
+import type {ReadTransaction, WriteTransaction} from './transactions.ts';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment

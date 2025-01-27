@@ -1,24 +1,24 @@
-import {promiseVoid} from '../../../shared/src/resolved-promises.js';
-import type {MaybePromise} from '../../../shared/src/types.js';
-import type {Expand} from '../../../shared/src/expand.js';
+import type {Expand} from '../../../shared/src/expand.ts';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import type {MaybePromise} from '../../../shared/src/types.ts';
 import {
   CRUD_MUTATION_NAME,
-  type InsertOp,
   type CRUDMutationArg,
   type CRUDOp,
   type CRUDOpKind,
   type DeleteOp,
-  type UpsertOp,
+  type InsertOp,
   type UpdateOp,
-} from '../../../zero-protocol/src/push.js';
+  type UpsertOp,
+} from '../../../zero-protocol/src/push.ts';
+import type {Schema} from '../../../zero-schema/src/mod.ts';
 import type {
   SchemaValueToTSType,
   TableSchema,
-} from '../../../zero-schema/src/table-schema.js';
-import {toPrimaryKeyString} from './keys.js';
-import type {MutatorDefs, WriteTransaction} from './replicache-types.js';
-import type {Schema} from '../../../zero-schema/src/mod.js';
-import type {ReadonlyJSONObject} from '../mod.js';
+} from '../../../zero-schema/src/table-schema.ts';
+import type {ReadonlyJSONObject} from '../mod.ts';
+import {toPrimaryKeyString} from './keys.ts';
+import type {MutatorDefs, WriteTransaction} from './replicache-types.ts';
 
 export type InsertValue<S extends TableSchema> = Expand<
   PrimaryKeyFields<S> & {

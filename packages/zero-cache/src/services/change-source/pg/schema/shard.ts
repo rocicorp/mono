@@ -2,20 +2,20 @@ import {PG_INSUFFICIENT_PRIVILEGE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {literal} from 'pg-format';
 import postgres from 'postgres';
-import {assert} from '../../../../../../shared/src/asserts.js';
-import * as v from '../../../../../../shared/src/valita.js';
-import {Default} from '../../../../db/postgres-replica-identity-enum.js';
-import type {PostgresDB, PostgresTransaction} from '../../../../types/pg.js';
-import {id} from '../../../../types/sql.js';
-import type {ShardConfig} from '../shard-config.js';
-import {createEventTriggerStatements} from './ddl.js';
+import {assert} from '../../../../../../shared/src/asserts.ts';
+import * as v from '../../../../../../shared/src/valita.ts';
+import {Default} from '../../../../db/postgres-replica-identity-enum.ts';
+import type {PostgresDB, PostgresTransaction} from '../../../../types/pg.ts';
+import {id} from '../../../../types/sql.ts';
+import type {ShardConfig} from '../shard-config.ts';
+import {createEventTriggerStatements} from './ddl.ts';
 import {
   getPublicationInfo,
   publishedSchema,
   type PublicationInfo,
   type PublishedSchema,
-} from './published.js';
-import {validate} from './validation.js';
+} from './published.ts';
+import {validate} from './validation.ts';
 
 // Creates a function that appends `_SHARD_ID` to the input.
 export function append(shardID: string) {

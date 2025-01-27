@@ -1,11 +1,11 @@
 /* eslint-disable require-await */
 
 import {test} from 'vitest';
-import {assert} from '../../shared/src/asserts.js';
-import type {ReadonlyJSONObject} from '../../shared/src/json.js';
-import type {IndexKey} from './db/index.js';
-import {Replicache} from './replicache.js';
-import type {DeepReadonly, WriteTransaction} from './transactions.js';
+import {assert} from '../../shared/src/asserts.ts';
+import type {ReadonlyJSONObject} from '../../shared/src/json.ts';
+import type {IndexKey} from './db/index.ts';
+import {Replicache} from './replicache.ts';
+import type {DeepReadonly, WriteTransaction} from './transactions.ts';
 
 function use(..._args: unknown[]) {
   // do nothing

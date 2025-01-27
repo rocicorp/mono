@@ -3,7 +3,7 @@ import type {
   CorrelatedSubquery,
   SimpleOperator,
   ValuePosition,
-} from '../../../zero-protocol/src/ast.js';
+} from '../../../zero-protocol/src/ast.ts';
 
 // This was written by ChatGPT with some improvements. It is only used for tests
 

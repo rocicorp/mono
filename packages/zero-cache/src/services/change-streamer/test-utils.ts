@@ -1,6 +1,6 @@
-import {Subscription} from '../../types/subscription.js';
-import type {Downstream} from './change-streamer.js';
-import {Subscriber} from './subscriber.js';
+import {Subscription} from '../../types/subscription.ts';
+import type {Downstream} from './change-streamer.ts';
+import {Subscriber} from './subscriber.ts';
 
 let nextID = 1;
 

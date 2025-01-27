@@ -5,7 +5,7 @@ export {
   IDBNotFoundError,
   makeIDBName,
   TransactionClosedError,
-} from '../../replicache/src/mod.js';
+} from '../../replicache/src/mod.ts';
 export type {
   AsyncIterableIteratorToArray,
   ClientGroupID,
@@ -56,7 +56,7 @@ export type {
   UpdateNeededReason,
   VersionNotSupportedResponse,
   WriteTransaction,
-} from '../../replicache/src/mod.js';
+} from '../../replicache/src/mod.ts';
 export type {
   AST,
   Bound,
@@ -80,12 +80,12 @@ export type {
   SimpleCondition,
   SimpleOperator,
   ValuePosition,
-} from '../../zero-protocol/src/ast.js';
-export {relationships} from '../../zero-schema/src/builder/relationship-builder.js';
+} from '../../zero-protocol/src/ast.ts';
+export {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
 export {
   createSchema,
   type Schema,
-} from '../../zero-schema/src/builder/schema-builder.js';
+} from '../../zero-schema/src/builder/schema-builder.ts';
 export {
   boolean,
   enumeration,
@@ -93,38 +93,38 @@ export {
   number,
   string,
   table,
-  type TableBuilderWithColumns,
   type ColumnBuilder,
-} from '../../zero-schema/src/builder/table-builder.js';
+  type TableBuilderWithColumns,
+} from '../../zero-schema/src/builder/table-builder.ts';
 export type {
   AssetPermissions as CompiledAssetPermissions,
   PermissionsConfig as CompiledPermissionsConfig,
   Policy as CompiledPermissionsPolicy,
   Rule as CompiledPermissionsRule,
-} from '../../zero-schema/src/compiled-permissions.js';
+} from '../../zero-schema/src/compiled-permissions.ts';
 export {
   ANYONE_CAN,
   definePermissions,
   NOBODY_CAN,
-} from '../../zero-schema/src/permissions.js';
+} from '../../zero-schema/src/permissions.ts';
 export type {
   AssetPermissions,
   PermissionRule,
   PermissionsConfig,
-} from '../../zero-schema/src/permissions.js';
-export {type TableSchema} from '../../zero-schema/src/table-schema.js';
+} from '../../zero-schema/src/permissions.ts';
+export {type TableSchema} from '../../zero-schema/src/table-schema.ts';
 export type {
   EnumSchemaValue,
   SchemaValue,
   SchemaValueWithCustomType,
   ValueType,
-} from '../../zero-schema/src/table-schema.js';
-export {escapeLike} from '../../zql/src/query/escape-like.js';
+} from '../../zero-schema/src/table-schema.ts';
+export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {
   ExpressionBuilder,
   ExpressionFactory,
-} from '../../zql/src/query/expression.js';
-export type {Query, Row} from '../../zql/src/query/query.js';
-export type {TypedView, ResultType} from '../../zql/src/query/typed-view.js';
-export type {ZeroOptions} from './client/options.js';
-export {Zero} from './client/zero.js';
+} from '../../zql/src/query/expression.ts';
+export type {Query, Row} from '../../zql/src/query/query.ts';
+export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
+export type {ZeroOptions} from './client/options.ts';
+export {Zero} from './client/zero.ts';

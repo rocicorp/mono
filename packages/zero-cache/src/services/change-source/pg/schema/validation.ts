@@ -2,11 +2,11 @@ import type {LogContext} from '@rocicorp/logger';
 import {
   mapPostgresToLite,
   warnIfDataTypeSupported,
-} from '../../../../db/pg-to-lite.js';
-import {Default} from '../../../../db/postgres-replica-identity-enum.js';
-import type {PublishedTableSpec} from '../../../../db/specs.js';
-import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/replication-state.js';
-import {unescapedSchema} from './shard.js';
+} from '../../../../db/pg-to-lite.ts';
+import {Default} from '../../../../db/postgres-replica-identity-enum.ts';
+import type {PublishedTableSpec} from '../../../../db/specs.ts';
+import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/replication-state.ts';
+import {unescapedSchema} from './shard.ts';
 
 const ALLOWED_IDENTIFIER_CHARS = /^[A-Za-z_]+[A-Za-z0-9_-]*$/;
 

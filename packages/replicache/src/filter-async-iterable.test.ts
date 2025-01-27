@@ -1,7 +1,7 @@
 import {expect, test} from 'vitest';
-import {asyncIterableToArray} from './async-iterable-to-array.js';
-import {filterAsyncIterable} from './filter-async-iterable.js';
-import {makeAsyncIterable} from './merge-async-iterables.test.js';
+import {asyncIterableToArray} from './async-iterable-to-array.ts';
+import {filterAsyncIterable} from './filter-async-iterable.ts';
+import {makeAsyncIterable} from './merge-async-iterables.test.ts';
 
 test('filterAsyncIterable', async () => {
   const t = async <V>(

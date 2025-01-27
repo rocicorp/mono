@@ -8,32 +8,32 @@ import {
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pid} from 'node:process';
-import {NoopSpanExporter} from '../../../otel/src/noop-span-exporter.js';
-import {version} from '../../../otel/src/version.js';
-import {assert} from '../../../shared/src/asserts.js';
-import {must} from '../../../shared/src/must.js';
-import {randInt} from '../../../shared/src/rand.js';
-import * as v from '../../../shared/src/valita.js';
-import {getSchema} from '../auth/load-schema.js';
-import {getZeroConfig} from '../config/zero-config.js';
-import {exitAfter, runUntilKilled} from '../services/life-cycle.js';
-import {MutagenService} from '../services/mutagen/mutagen.js';
-import type {ReplicaState} from '../services/replicator/replicator.js';
-import {DatabaseStorage} from '../services/view-syncer/database-storage.js';
-import {DrainCoordinator} from '../services/view-syncer/drain-coordinator.js';
-import {PipelineDriver} from '../services/view-syncer/pipeline-driver.js';
-import {Snapshotter} from '../services/view-syncer/snapshotter.js';
-import {ViewSyncerService} from '../services/view-syncer/view-syncer.js';
-import {pgClient} from '../types/pg.js';
+import {NoopSpanExporter} from '../../../otel/src/noop-span-exporter.ts';
+import {version} from '../../../otel/src/version.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import {must} from '../../../shared/src/must.ts';
+import {randInt} from '../../../shared/src/rand.ts';
+import * as v from '../../../shared/src/valita.ts';
+import {getSchema} from '../auth/load-schema.ts';
+import {getZeroConfig} from '../config/zero-config.ts';
+import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
+import {MutagenService} from '../services/mutagen/mutagen.ts';
+import type {ReplicaState} from '../services/replicator/replicator.ts';
+import {DatabaseStorage} from '../services/view-syncer/database-storage.ts';
+import {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
+import {PipelineDriver} from '../services/view-syncer/pipeline-driver.ts';
+import {Snapshotter} from '../services/view-syncer/snapshotter.ts';
+import {ViewSyncerService} from '../services/view-syncer/view-syncer.ts';
+import {pgClient} from '../types/pg.ts';
 import {
   parentWorker,
   singleProcessMode,
   type Worker,
-} from '../types/processes.js';
-import {Subscription} from '../types/subscription.js';
-import {replicaFileModeSchema, replicaFileName} from '../workers/replicator.js';
-import {Syncer} from '../workers/syncer.js';
-import {createLogContext} from './logging.js';
+} from '../types/processes.ts';
+import {Subscription} from '../types/subscription.ts';
+import {replicaFileModeSchema, replicaFileName} from '../workers/replicator.ts';
+import {Syncer} from '../workers/syncer.ts';
+import {createLogContext} from './logging.ts';
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);

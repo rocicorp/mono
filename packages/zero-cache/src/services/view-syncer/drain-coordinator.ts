@@ -1,5 +1,5 @@
 import {resolver} from '@rocicorp/resolver';
-import {assert} from '../../../../shared/src/asserts.js';
+import {assert} from '../../../../shared/src/asserts.ts';
 
 // The target (additional) utilization to impose on the server
 // that receives the drained connections.

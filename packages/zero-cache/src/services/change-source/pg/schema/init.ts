@@ -4,15 +4,15 @@ import {
   runSchemaMigrations,
   type IncrementalMigrationMap,
   type Migration,
-} from '../../../../db/migration.js';
-import type {PostgresDB} from '../../../../types/pg.js';
-import {AutoResetSignal} from '../../../change-streamer/schema/tables.js';
-import type {ShardConfig} from '../shard-config.js';
+} from '../../../../db/migration.ts';
+import type {PostgresDB} from '../../../../types/pg.ts';
+import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
+import type {ShardConfig} from '../shard-config.ts';
 import {
   dropShard,
   setupTablesAndReplication,
   unescapedSchema,
-} from './shard.js';
+} from './shard.ts';
 
 /**
  * Initializes a shard for initial sync.

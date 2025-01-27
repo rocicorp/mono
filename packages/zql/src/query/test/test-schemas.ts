@@ -1,12 +1,12 @@
+import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.ts';
+import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
   json,
   number,
   string,
   table,
-} from '../../../../zero-schema/src/builder/table-builder.js';
-import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.js';
-import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.js';
+} from '../../../../zero-schema/src/builder/table-builder.ts';
 
 const issue = table('issue')
   .columns({

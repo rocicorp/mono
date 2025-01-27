@@ -1,7 +1,7 @@
-import type {ReadonlyJSONValue} from '../../shared/src/json.js';
-import {mustGetHeadHash, type Read} from './dag/store.js';
-import {DEFAULT_HEAD_NAME, localMutationsDD31} from './db/commit.js';
-import type {ClientID} from './sync/ids.js';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {mustGetHeadHash, type Read} from './dag/store.ts';
+import {DEFAULT_HEAD_NAME, localMutationsDD31} from './db/commit.ts';
+import type {ClientID} from './sync/ids.ts';
 
 export type PendingMutation = {
   readonly name: string;

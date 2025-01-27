@@ -1,5 +1,5 @@
-import {type Hash, parse as parseHash} from '../hash.js';
-import * as KeyType from './key-type-enum.js';
+import {type Hash, parse as parseHash} from '../hash.ts';
+import * as KeyType from './key-type-enum.ts';
 
 export function chunkDataKey(hash: Hash): string {
   return `c/${hash}/d`;

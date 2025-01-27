@@ -1,8 +1,8 @@
 import {expect, test} from 'vitest';
-import {assert} from './asserts.js';
-import {jsonObjectSchema, jsonSchema} from './json-schema.js';
-import * as v from './valita.js';
-import {parse} from './valita.js';
+import {assert} from './asserts.ts';
+import {jsonObjectSchema, jsonSchema} from './json-schema.ts';
+import * as v from './valita.ts';
+import {parse} from './valita.ts';
 
 test('json schema', () => {
   const t = <T>(s: v.Type<T>, v: unknown, message?: string) => {

@@ -6,19 +6,19 @@ import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {useQuery} from 'zero-react/src/use-query.js';
 import logoURL from '../assets/images/logo.svg';
 import markURL from '../assets/images/mark.svg';
-import {useLogin} from '../hooks/use-login.js';
-import {useZero} from '../hooks/use-zero.js';
-import {IssueComposer} from '../pages/issue/issue-composer.js';
+import {useLogin} from '../hooks/use-login.tsx';
+import {useZero} from '../hooks/use-zero.ts';
+import {IssueComposer} from '../pages/issue/issue-composer.tsx';
 import {
   links,
   routes,
   type ListContext,
   type ZbugsHistoryState,
-} from '../routes.js';
-import {AvatarImage} from './avatar-image.js';
-import {ButtonWithLoginCheck} from './button-with-login-check.js';
-import {Button} from './button.js';
-import {Link} from './link.js';
+} from '../routes.ts';
+import {AvatarImage} from './avatar-image.tsx';
+import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
+import {Button} from './button.tsx';
+import {Link} from './link.tsx';
 
 export const Nav = memo(() => {
   const search = useSearch();

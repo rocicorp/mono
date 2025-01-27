@@ -1,8 +1,8 @@
 import {compareUTF8} from 'compare-utf8';
-import {BTreeSet} from '../../../shared/src/btree-set.js';
-import type {JSONValue} from '../../../shared/src/json.js';
-import type {Storage} from './operator.js';
-import type {Stream} from './stream.js';
+import {BTreeSet} from '../../../shared/src/btree-set.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
+import type {Storage} from './operator.ts';
+import type {Stream} from './stream.ts';
 
 type Entry = [key: string, value: JSONValue];
 

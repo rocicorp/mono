@@ -9,10 +9,10 @@ import {
   test,
   vi,
 } from 'vitest';
-import type {AST} from '../../../zero-protocol/src/ast.js';
-import {PokeHandler, mergePokes} from './zero-poke-handler.js';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.js';
-import {string, table} from '../../../zero-schema/src/builder/table-builder.js';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import {PokeHandler, mergePokes} from './zero-poke-handler.ts';
 
 let rafStub: MockInstance<(cb: FrameRequestCallback) => number>;
 // The FrameRequestCallback in PokeHandler does not use

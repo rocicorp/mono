@@ -1,13 +1,13 @@
 import {nanoid} from 'nanoid';
 import {useCallback, useEffect, useState} from 'react';
-import {Button} from '../../components/button.js';
-import {Modal, ModalActions, ModalBody} from '../../components/modal.js';
-import {useZero} from '../../hooks/use-zero.js';
-import {isCtrlEnter} from './is-ctrl-enter.js';
+import {Button} from '../../components/button.tsx';
+import {Modal, ModalActions, ModalBody} from '../../components/modal.tsx';
+import {useZero} from '../../hooks/use-zero.ts';
 import {
   MAX_ISSUE_DESCRIPTION_LENGTH,
   MAX_ISSUE_TITLE_LENGTH,
-} from '../../limits.js';
+} from '../../limits.ts';
+import {isCtrlEnter} from './is-ctrl-enter.ts';
 
 interface Props {
   /** If id is defined the issue created by the composer. */

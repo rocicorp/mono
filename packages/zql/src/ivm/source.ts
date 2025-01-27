@@ -1,6 +1,6 @@
-import type {Condition, Ordering} from '../../../zero-protocol/src/ast.js';
-import type {Row} from '../../../zero-protocol/src/data.js';
-import type {Input} from './operator.js';
+import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Input} from './operator.ts';
 
 export type SourceChangeAdd = {
   type: 'add';

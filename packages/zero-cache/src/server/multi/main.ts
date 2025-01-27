@@ -1,22 +1,22 @@
 import 'dotenv/config'; // Imports ENV variables from .env
-import {assert} from '../../../../shared/src/asserts.js';
+import {assert} from '../../../../shared/src/asserts.ts';
 import {
   exitAfter,
   ProcessManager,
   runUntilKilled,
-} from '../../services/life-cycle.js';
-import type {Service} from '../../services/service.js';
+} from '../../services/life-cycle.ts';
+import type {Service} from '../../services/service.ts';
 import {
   childWorker,
   parentWorker,
   singleProcessMode,
   type Worker,
-} from '../../types/processes.js';
-import {orTimeout} from '../../types/timeout.js';
-import {createLogContext} from '../logging.js';
-import {getMultiZeroConfig} from './config.js';
-import {getTaskID} from './runtime.js';
-import {TenantDispatcher} from './tenant-dispatcher.js';
+} from '../../types/processes.ts';
+import {orTimeout} from '../../types/timeout.ts';
+import {createLogContext} from '../logging.ts';
+import {getMultiZeroConfig} from './config.ts';
+import {getTaskID} from './runtime.ts';
+import {TenantDispatcher} from './tenant-dispatcher.ts';
 
 export default async function runWorker(
   parent: Worker | null,

@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {describe, expect, test} from 'vitest';
-import {BufferSizer} from './buffer-sizer.js';
+import {BufferSizer} from './buffer-sizer.ts';
 
 type Case = {
   name: string;

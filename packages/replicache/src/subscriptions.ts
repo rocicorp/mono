@@ -1,9 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
 import {compareUTF8, greaterThan, lessThan, lessThanEq} from 'compare-utf8';
-import {assert} from '../../shared/src/asserts.js';
-import type {Enum} from '../../shared/src/enum.js';
-import {deepEqual} from '../../shared/src/json.js';
-import {binarySearch} from './binary-search.js';
+import {assert} from '../../shared/src/asserts.ts';
+import type {Enum} from '../../shared/src/enum.ts';
+import {deepEqual} from '../../shared/src/json.ts';
+import {binarySearch} from './binary-search.ts';
 import type {
   Diff,
   DiffOperation,
@@ -11,17 +11,17 @@ import type {
   InternalDiff,
   InternalDiffOperation,
   NoIndexDiff,
-} from './btree/node.js';
-import type {IndexKey} from './db/index.js';
-import {decodeIndexKey} from './db/index.js';
-import type {ScanOptions} from './db/scan.js';
-import * as InvokeKind from './invoke-kind-enum.js';
-import type {DiffComputationConfig, DiffsMap} from './sync/diff.js';
+} from './btree/node.ts';
+import type {IndexKey} from './db/index.ts';
+import {decodeIndexKey} from './db/index.ts';
+import type {ScanOptions} from './db/scan.ts';
+import * as InvokeKind from './invoke-kind-enum.ts';
+import type {DiffComputationConfig, DiffsMap} from './sync/diff.ts';
 import {
   type ReadTransaction,
   SubscriptionTransactionWrapper,
-} from './transactions.js';
-import type {QueryInternal} from './types.js';
+} from './transactions.ts';
+import type {QueryInternal} from './types.ts';
 
 type InvokeKind = Enum<typeof InvokeKind>;
 

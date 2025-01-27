@@ -1,7 +1,7 @@
 import {compareUTF8} from 'compare-utf8';
 import fc, {assert, property} from 'fast-check';
 import {expect, suite, test} from 'vitest';
-import {BTreeSet} from './btree-set.js';
+import {BTreeSet} from './btree-set.ts';
 
 test('delete', () => {
   const t = new BTreeSet<number>((a, b) => a - b);

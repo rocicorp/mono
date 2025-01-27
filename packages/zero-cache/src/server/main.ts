@@ -1,38 +1,38 @@
 import {resolver} from '@rocicorp/resolver';
 import {availableParallelism} from 'node:os';
 import path from 'node:path';
-import {must} from '../../../shared/src/must.js';
-import {getZeroConfig} from '../config/zero-config.js';
-import {getSubscriberContext} from '../services/change-streamer/change-streamer-http.js';
-import {SyncDispatcher} from '../services/dispatcher/sync-dispatcher.js';
-import {installWebSocketHandoff} from '../services/dispatcher/websocket-handoff.js';
+import {must} from '../../../shared/src/must.ts';
+import {getZeroConfig} from '../config/zero-config.ts';
+import {getSubscriberContext} from '../services/change-streamer/change-streamer-http.ts';
+import {SyncDispatcher} from '../services/dispatcher/sync-dispatcher.ts';
+import {installWebSocketHandoff} from '../services/dispatcher/websocket-handoff.ts';
 import {
   exitAfter,
   ProcessManager,
   runUntilKilled,
   type WorkerType,
-} from '../services/life-cycle.js';
+} from '../services/life-cycle.ts';
 import {
   restoreReplica,
   startReplicaBackupProcess,
-} from '../services/litestream/commands.js';
-import type {Service} from '../services/service.js';
-import {initViewSyncerSchema} from '../services/view-syncer/schema/init.js';
-import {pgClient} from '../types/pg.js';
+} from '../services/litestream/commands.ts';
+import type {Service} from '../services/service.ts';
+import {initViewSyncerSchema} from '../services/view-syncer/schema/init.ts';
+import {pgClient} from '../types/pg.ts';
 import {
   childWorker,
   parentWorker,
   singleProcessMode,
   type Worker,
-} from '../types/processes.js';
-import {orTimeout} from '../types/timeout.js';
+} from '../types/processes.ts';
+import {orTimeout} from '../types/timeout.ts';
 import {
   createNotifierFrom,
   handleSubscriptionsFrom,
   type ReplicaFileMode,
   subscribeTo,
-} from '../workers/replicator.js';
-import {createLogContext} from './logging.js';
+} from '../workers/replicator.ts';
+import {createLogContext} from './logging.ts';
 
 export default async function runWorker(
   parent: Worker | null,

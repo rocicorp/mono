@@ -2,18 +2,18 @@ import websocket from '@fastify/websocket';
 import {LogContext} from '@rocicorp/logger';
 import {IncomingMessage} from 'node:http';
 import WebSocket from 'ws';
-import {type Worker} from '../../types/processes.js';
-import {streamIn, streamOut, type Source} from '../../types/streams.js';
-import {URLParams} from '../../types/url-params.js';
-import {closeWithProtocolError} from '../../types/ws.js';
-import {installWebSocketReceiver} from '../dispatcher/websocket-handoff.js';
-import {HttpService, type Options} from '../http-service.js';
+import {type Worker} from '../../types/processes.ts';
+import {streamIn, streamOut, type Source} from '../../types/streams.ts';
+import {URLParams} from '../../types/url-params.ts';
+import {closeWithProtocolError} from '../../types/ws.ts';
+import {installWebSocketReceiver} from '../dispatcher/websocket-handoff.ts';
+import {HttpService, type Options} from '../http-service.ts';
 import {
   downstreamSchema,
   type ChangeStreamer,
   type Downstream,
   type SubscriberContext,
-} from './change-streamer.js';
+} from './change-streamer.ts';
 
 const DIRECT_PATH_PATTERN = '/replication/:version/changes';
 const TENANT_PATH_PATTERN = '/:tenant' + DIRECT_PATH_PATTERN;

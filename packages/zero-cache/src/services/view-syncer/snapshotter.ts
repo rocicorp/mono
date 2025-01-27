@@ -1,29 +1,29 @@
 import {LogContext} from '@rocicorp/logger';
-import {assert} from '../../../../shared/src/asserts.js';
-import {must} from '../../../../shared/src/must.js';
-import * as v from '../../../../shared/src/valita.js';
-import {Database} from '../../../../zqlite/src/db.js';
-import {fromSQLiteTypes} from '../../../../zqlite/src/table-source.js';
-import type {LiteAndZqlSpec, LiteTableSpecWithKeys} from '../../db/specs.js';
-import {StatementRunner} from '../../db/statements.js';
-import {type JSONValue} from '../../types/bigint-json.js';
+import {assert} from '../../../../shared/src/asserts.ts';
+import {must} from '../../../../shared/src/must.ts';
+import * as v from '../../../../shared/src/valita.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
+import {fromSQLiteTypes} from '../../../../zqlite/src/table-source.ts';
+import type {LiteAndZqlSpec, LiteTableSpecWithKeys} from '../../db/specs.ts';
+import {StatementRunner} from '../../db/statements.ts';
+import {type JSONValue} from '../../types/bigint-json.ts';
 import {
   normalizedKeyOrder,
   type RowKey,
   type RowValue,
-} from '../../types/row-key.js';
-import {type SchemaVersions} from '../../types/schema-versions.js';
-import {id} from '../../types/sql.js';
+} from '../../types/row-key.ts';
+import {type SchemaVersions} from '../../types/schema-versions.ts';
+import {id} from '../../types/sql.ts';
 import {
   RESET_OP,
   changeLogEntrySchema as schema,
   SET_OP,
   TRUNCATE_OP,
-} from '../replicator/schema/change-log.js';
+} from '../replicator/schema/change-log.ts';
 import {
   getReplicationState,
   ZERO_VERSION_COLUMN_NAME as ROW_VERSION,
-} from '../replicator/schema/replication-state.js';
+} from '../replicator/schema/replication-state.ts';
 
 /**
  * A `Snapshotter` manages the progression of database snapshots for a

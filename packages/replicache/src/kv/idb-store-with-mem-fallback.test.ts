@@ -1,17 +1,17 @@
 import {LogContext} from '@rocicorp/logger';
 import * as sinon from 'sinon';
 import {afterEach, expect, test} from 'vitest';
-import {assert} from '../../../shared/src/asserts.js';
+import {assert} from '../../../shared/src/asserts.ts';
 import {
   withRead,
   withWrite,
   withWriteNoImplicitCommit,
-} from '../with-transactions.js';
+} from '../with-transactions.ts';
 import {
   IDBStoreWithMemFallback,
   newIDBStoreWithMemFallback,
-} from './idb-store-with-mem-fallback.js';
-import {IDBStore} from './idb-store.js';
+} from './idb-store-with-mem-fallback.ts';
+import {IDBStore} from './idb-store.ts';
 
 afterEach(() => {
   sinon.restore();

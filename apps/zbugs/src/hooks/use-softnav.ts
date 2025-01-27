@@ -1,7 +1,7 @@
 import {useEffect} from 'react';
 import {navigate} from 'wouter/use-browser-location';
-import {isPrimaryMouseButton} from '../is-primary-mouse-button.js';
-import {umami} from '../umami.js';
+import {isPrimaryMouseButton} from '../is-primary-mouse-button.ts';
+import {umami} from '../umami.ts';
 
 // Implements softnav for all links.
 // We do it this way rather than in the Link component so that links inside

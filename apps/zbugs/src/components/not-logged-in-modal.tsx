@@ -1,5 +1,5 @@
-import {links} from '../routes.js';
-import {Modal, ModalActions, ModalText} from './modal.js';
+import {links} from '../routes.ts';
+import {Modal, ModalActions, ModalText} from './modal.tsx';
 
 export interface Props {
   onDismiss: () => void;

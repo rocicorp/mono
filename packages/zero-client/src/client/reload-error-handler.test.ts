@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import sinon from 'sinon';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
-import {TestLogSink} from '../../../shared/src/logging-test-utils.js';
+import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import {
   FALLBACK_RELOAD_INTERVAL_MS,
   MAX_RELOAD_INTERVAL_MS,
@@ -11,8 +11,8 @@ import {
   reportReloadReason,
   resetBackoff,
   type BackoffState,
-} from './reload-error-handler.js';
-import {storageMock} from './test-utils.js';
+} from './reload-error-handler.ts';
+import {storageMock} from './test-utils.ts';
 
 describe('reloadWithReason', () => {
   let sessionStorageDescriptor: PropertyDescriptor;

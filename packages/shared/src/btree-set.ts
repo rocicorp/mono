@@ -1,4 +1,4 @@
-import {assert} from './asserts.js';
+import {assert} from './asserts.ts';
 
 const MAX_NODE_SIZE = 32;
 

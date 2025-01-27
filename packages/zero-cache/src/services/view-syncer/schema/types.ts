@@ -1,7 +1,7 @@
-import * as v from '../../../../../shared/src/valita.js';
-import {astSchema} from '../../../../../zero-protocol/src/ast.js';
-import {jsonValueSchema} from '../../../types/bigint-json.js';
-import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.js';
+import * as v from '../../../../../shared/src/valita.ts';
+import {astSchema} from '../../../../../zero-protocol/src/ast.ts';
+import {jsonValueSchema} from '../../../types/bigint-json.ts';
+import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.ts';
 
 export const cvrVersionSchema = v.object({
   /**

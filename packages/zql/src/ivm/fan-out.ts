@@ -1,5 +1,5 @@
-import type {Change} from './change.js';
-import type {FetchRequest, Input, Operator, Output} from './operator.js';
+import type {Change} from './change.ts';
+import type {FetchRequest, Input, Operator, Output} from './operator.ts';
 
 /**
  * Forks a stream into multiple streams.

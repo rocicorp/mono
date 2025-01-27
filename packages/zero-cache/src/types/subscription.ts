@@ -1,5 +1,5 @@
 import {resolver, type Resolver} from '@rocicorp/resolver';
-import type {Sink, Source} from './streams.js';
+import type {Sink, Source} from './streams.ts';
 
 /**
  * A Subscription abstracts a continuous, logically infinite stream of messages intended

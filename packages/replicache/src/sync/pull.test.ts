@@ -4,14 +4,14 @@ import {
   assert,
   assertObject,
   assertString,
-} from '../../../shared/src/asserts.js';
-import type {Enum} from '../../../shared/src/enum.js';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
-import {stringCompare} from '../../../shared/src/string-compare.js';
-import {asyncIterableToArray} from '../async-iterable-to-array.js';
-import {BTreeRead} from '../btree/read.js';
-import type {Cookie, FrozenCookie} from '../cookies.js';
-import {TestStore} from '../dag/test-store.js';
+} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {stringCompare} from '../../../shared/src/string-compare.ts';
+import {asyncIterableToArray} from '../async-iterable-to-array.ts';
+import {BTreeRead} from '../btree/read.ts';
+import type {Cookie, FrozenCookie} from '../cookies.ts';
+import {TestStore} from '../dag/test-store.ts';
 import {
   DEFAULT_HEAD_NAME,
   assertSnapshotCommitDD31,
@@ -19,36 +19,36 @@ import {
   commitFromHead,
   commitIsLocal,
   snapshotMetaParts,
-} from '../db/commit.js';
-import {encodeIndexKey} from '../db/index.js';
-import {readFromDefaultHead, readFromHead} from '../db/read.js';
-import {ChainBuilder} from '../db/test-helpers.js';
-import {newWriteLocal, newWriteSnapshotDD31} from '../db/write.js';
+} from '../db/commit.ts';
+import {encodeIndexKey} from '../db/index.ts';
+import {readFromDefaultHead, readFromHead} from '../db/read.ts';
+import {ChainBuilder} from '../db/test-helpers.ts';
+import {newWriteLocal, newWriteSnapshotDD31} from '../db/write.ts';
 import {
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
-} from '../error-responses.js';
-import * as FormatVersion from '../format-version-enum.js';
-import {type FrozenJSONValue, deepFreeze} from '../frozen-json.js';
-import {assertPullResponseV1} from '../get-default-puller.js';
-import {assertHash, emptyHash, fakeHash} from '../hash.js';
-import type {HTTPRequestInfo} from '../http-request-info.js';
-import type {IndexDefinitions} from '../index-defs.js';
-import type {PatchOperation} from '../patch-operation.js';
+} from '../error-responses.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import {type FrozenJSONValue, deepFreeze} from '../frozen-json.ts';
+import {assertPullResponseV1} from '../get-default-puller.ts';
+import {assertHash, emptyHash, fakeHash} from '../hash.ts';
+import type {HTTPRequestInfo} from '../http-request-info.ts';
+import type {IndexDefinitions} from '../index-defs.ts';
+import type {PatchOperation} from '../patch-operation.ts';
 import type {
   PullResponseOKV1,
   PullResponseV1,
   Puller,
   PullerResultV1,
-} from '../puller.js';
-import {testSubscriptionsManagerOptions} from '../test-util.js';
+} from '../puller.ts';
+import {testSubscriptionsManagerOptions} from '../test-util.ts';
 import {
   withRead,
   withWrite,
   withWriteNoImplicitCommit,
-} from '../with-transactions.js';
-import type {DiffsMap} from './diff.js';
-import * as HandlePullResponseResultEnum from './handle-pull-response-result-type-enum.js';
+} from '../with-transactions.ts';
+import type {DiffsMap} from './diff.ts';
+import * as HandlePullResponseResultEnum from './handle-pull-response-result-type-enum.ts';
 import {
   type BeginPullResponseV1,
   PULL_VERSION_DD31,
@@ -57,8 +57,8 @@ import {
   handlePullResponseV1,
   isPullRequestV1,
   maybeEndPull,
-} from './pull.js';
-import {SYNC_HEAD_NAME} from './sync-head-name.js';
+} from './pull.ts';
+import {SYNC_HEAD_NAME} from './sync-head-name.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 type HandlePullResponseResultEnum = Enum<typeof HandlePullResponseResultEnum>;

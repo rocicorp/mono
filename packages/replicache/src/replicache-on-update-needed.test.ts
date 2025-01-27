@@ -3,7 +3,7 @@ import {
   initReplicacheTesting,
   replicacheForTesting,
   tickAFewTimes,
-} from './test-util.js';
+} from './test-util.ts';
 
 initReplicacheTesting();
 

@@ -1,9 +1,9 @@
 import {RWLock} from '@rocicorp/lock';
-import {promiseVoid} from '../../../shared/src/resolved-promises.js';
-import type {FrozenJSONValue} from '../frozen-json.js';
-import {ReadImpl} from './read-impl.js';
-import type {Read, Store, Write} from './store.js';
-import {WriteImpl} from './write-impl.js';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import type {FrozenJSONValue} from '../frozen-json.ts';
+import {ReadImpl} from './read-impl.ts';
+import type {Read, Store, Write} from './store.ts';
+import {WriteImpl} from './write-impl.ts';
 
 type StorageMap = Map<string, FrozenJSONValue>;
 

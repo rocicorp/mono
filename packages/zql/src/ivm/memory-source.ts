@@ -1,41 +1,41 @@
-import {assert, unreachable} from '../../../shared/src/asserts.js';
-import {BTreeSet} from '../../../shared/src/btree-set.js';
-import {hasOwn} from '../../../shared/src/has-own.js';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import {BTreeSet} from '../../../shared/src/btree-set.ts';
+import {hasOwn} from '../../../shared/src/has-own.ts';
 import type {
   Condition,
   Ordering,
   OrderPart,
-} from '../../../zero-protocol/src/ast.js';
-import type {Row, Value} from '../../../zero-protocol/src/data.js';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
-import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
-import {assertOrderingIncludesPK} from '../builder/builder.js';
+} from '../../../zero-protocol/src/ast.ts';
+import type {Row, Value} from '../../../zero-protocol/src/data.ts';
+import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
+import {assertOrderingIncludesPK} from '../builder/builder.ts';
 import {
   createPredicate,
   transformFilters,
   type NoSubqueryCondition,
-} from '../builder/filter.js';
+} from '../builder/filter.ts';
 import {
   constraintMatchesPrimaryKey,
   constraintMatchesRow,
   type Constraint,
-} from './constraint.js';
+} from './constraint.ts';
 import {
   compareValues,
   makeComparator,
   type Comparator,
   type Node,
-} from './data.js';
-import {filterPush} from './filter-push.js';
+} from './data.ts';
+import {filterPush} from './filter-push.ts';
 import {
   type FetchRequest,
   type Input,
   type Output,
   type Start,
-} from './operator.js';
-import type {SourceSchema} from './schema.js';
-import type {Source, SourceChange, SourceInput} from './source.js';
-import type {Stream} from './stream.js';
+} from './operator.ts';
+import type {SourceSchema} from './schema.ts';
+import type {Source, SourceChange, SourceInput} from './source.ts';
+import type {Stream} from './stream.ts';
 
 export type Overlay = {
   outputIndex: number;

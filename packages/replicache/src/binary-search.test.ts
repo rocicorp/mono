@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {binarySearch} from './binary-search.js';
+import {binarySearch} from './binary-search.ts';
 
 test('binarySearch', () => {
   // expect(binarySearch(0, () => -1)).to.equal(0);

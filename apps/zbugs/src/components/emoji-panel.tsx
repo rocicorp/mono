@@ -25,13 +25,13 @@ import {
   findEmojiForCreator,
   normalizeEmoji,
   type Emoji,
-} from '../emoji-utils.js';
-import {useLogin} from '../hooks/use-login.js';
-import {useZero} from '../hooks/use-zero.js';
-import {ButtonWithLoginCheck} from './button-with-login-check.js';
-import {type ButtonProps} from './button.js';
-import {EmojiPicker} from './emoji-picker.js';
-import {EmojiPill} from './emoji-pill.js';
+} from '../emoji-utils.ts';
+import {useLogin} from '../hooks/use-login.tsx';
+import {useZero} from '../hooks/use-zero.ts';
+import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
+import {type ButtonProps} from './button.tsx';
+import {EmojiPicker} from './emoji-picker.tsx';
+import {EmojiPill} from './emoji-pill.tsx';
 
 const loginMessage = 'You need to be logged in to modify emoji reactions.';
 

@@ -1,6 +1,6 @@
 import {expect, test} from 'vitest';
-import {fakeHash, type Hash} from '../hash.js';
-import {computeRefCountUpdates, type RefCountUpdatesDelegate} from './gc.js';
+import {fakeHash, type Hash} from '../hash.ts';
+import {computeRefCountUpdates, type RefCountUpdatesDelegate} from './gc.ts';
 
 function createGraph(args: {
   graph: Record<string, string[]>;

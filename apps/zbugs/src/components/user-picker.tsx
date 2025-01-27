@@ -1,11 +1,11 @@
 import {type Row} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {useEffect, useMemo, useState} from 'react';
-import {type Schema} from '../../schema.js';
+import {type Schema} from '../../schema.ts';
 import avatarIcon from '../assets/icons/avatar-default.svg';
-import {avatarURLWithSize} from '../avatar-url-with-size.js';
-import {useZero} from '../hooks/use-zero.js';
-import {Combobox} from './combobox.js';
+import {avatarURLWithSize} from '../avatar-url-with-size.ts';
+import {useZero} from '../hooks/use-zero.ts';
+import {Combobox} from './combobox.tsx';
 
 type Props = {
   onSelect?: ((user: User | undefined) => void) | undefined;

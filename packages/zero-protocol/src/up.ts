@@ -1,10 +1,10 @@
-import * as v from '../../shared/src/valita.js';
-import {pingMessageSchema} from './ping.js';
-import {deleteClientsMessageSchema} from './delete-clients.js';
-import {initConnectionMessageSchema} from './connect.js';
-import {pullRequestMessageSchema} from './pull.js';
-import {pushMessageSchema} from './push.js';
-import {changeDesiredQueriesMessageSchema} from './change-desired-queries.js';
+import * as v from '../../shared/src/valita.ts';
+import {changeDesiredQueriesMessageSchema} from './change-desired-queries.ts';
+import {initConnectionMessageSchema} from './connect.ts';
+import {deleteClientsMessageSchema} from './delete-clients.ts';
+import {pingMessageSchema} from './ping.ts';
+import {pullRequestMessageSchema} from './pull.ts';
+import {pushMessageSchema} from './push.ts';
 
 export const upstreamSchema = v.union(
   initConnectionMessageSchema,

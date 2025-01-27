@@ -1,5 +1,5 @@
-import {test, expect} from 'vitest';
-import {decodeHeaderValue, encodeHeaderValue} from './headers.js';
+import {expect, test} from 'vitest';
+import {decodeHeaderValue, encodeHeaderValue} from './headers.ts';
 
 function testEncodeDecodeHeaderValue(value: string, expected: string): void {
   const encoded = encodeHeaderValue(value);

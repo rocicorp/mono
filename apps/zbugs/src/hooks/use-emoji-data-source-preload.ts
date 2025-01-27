@@ -1,6 +1,6 @@
 import Database from 'emoji-picker-element/database.js';
 import {useEffect} from 'react';
-import {emojiDataSource} from '../components/emoji-data-source.js';
+import {emojiDataSource} from '../components/emoji-data-source.ts';
 
 export function useEmojiDataSourcePreload() {
   useEffect(() => {

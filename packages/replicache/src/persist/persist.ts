@@ -1,9 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from '../../../shared/src/asserts.js';
-import type {Enum} from '../../../shared/src/enum.js';
-import type {Chunk} from '../dag/chunk.js';
-import type {LazyStore} from '../dag/lazy-store.js';
-import type {Read, Store, Write} from '../dag/store.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import type {Chunk} from '../dag/chunk.ts';
+import type {LazyStore} from '../dag/lazy-store.ts';
+import type {Read, Store, Write} from '../dag/store.ts';
 import {
   Commit,
   DEFAULT_HEAD_NAME,
@@ -16,26 +16,26 @@ import {
   compareCookiesForSnapshots,
   localMutationsDD31,
   localMutationsGreaterThan,
-} from '../db/commit.js';
-import {rebaseMutationAndPutCommit} from '../db/rebase.js';
-import * as FormatVersion from '../format-version-enum.js';
-import type {Hash} from '../hash.js';
-import type {ClientGroupID, ClientID} from '../sync/ids.js';
-import type {MutatorDefs} from '../types.js';
-import {withRead, withWrite} from '../with-transactions.js';
+} from '../db/commit.ts';
+import {rebaseMutationAndPutCommit} from '../db/rebase.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import type {Hash} from '../hash.ts';
+import type {ClientGroupID, ClientID} from '../sync/ids.ts';
+import type {MutatorDefs} from '../types.ts';
+import {withRead, withWrite} from '../with-transactions.ts';
 import {
   type ClientGroup,
   getClientGroup,
   setClientGroup,
-} from './client-groups.js';
+} from './client-groups.ts';
 import {
   assertClientV6,
   assertHasClientState,
   getClientGroupIDForClient,
   mustGetClient,
   setClient,
-} from './clients.js';
-import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
+} from './clients.ts';
+import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

@@ -1,40 +1,40 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert, assertNotUndefined} from '../../shared/src/asserts.js';
-import type {Enum} from '../../shared/src/enum.js';
-import type {MaybePromise} from '../../shared/src/types.js';
-import {throwChunkHasher} from './dag/chunk.js';
-import {LazyStore} from './dag/lazy-store.js';
-import {StoreImpl} from './dag/store-impl.js';
-import type {Store} from './dag/store.js';
-import {DEFAULT_HEAD_NAME} from './db/commit.js';
+import {assert, assertNotUndefined} from '../../shared/src/asserts.ts';
+import type {Enum} from '../../shared/src/enum.ts';
+import type {MaybePromise} from '../../shared/src/types.ts';
+import {throwChunkHasher} from './dag/chunk.ts';
+import {LazyStore} from './dag/lazy-store.ts';
+import {StoreImpl} from './dag/store-impl.ts';
+import type {Store} from './dag/store.ts';
+import {DEFAULT_HEAD_NAME} from './db/commit.ts';
 import {
   type ClientStateNotFoundResponse,
   type VersionNotSupportedResponse,
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
-} from './error-responses.js';
-import * as FormatVersion from './format-version-enum.js';
-import {parseReplicacheFormatVersion as parseFormatVersion} from './format-version.js';
-import {assertHash, newRandomHash} from './hash.js';
-import type {HTTPRequestInfo} from './http-request-info.js';
-import type {CreateStore} from './kv/store.js';
+} from './error-responses.ts';
+import * as FormatVersion from './format-version-enum.ts';
+import {parseReplicacheFormatVersion as parseFormatVersion} from './format-version.ts';
+import {assertHash, newRandomHash} from './hash.ts';
+import type {HTTPRequestInfo} from './http-request-info.ts';
+import type {CreateStore} from './kv/store.ts';
 import {
   type ClientGroup,
   type ClientGroupMap,
   getClientGroups,
   disableClientGroup as persistDisableClientGroup,
   setClientGroups,
-} from './persist/client-groups.js';
+} from './persist/client-groups.ts';
 import type {
   IDBDatabasesStore,
   IndexedDBDatabase,
-} from './persist/idb-databases-store.js';
-import type {PullResponseOKV1, PullResponseV1, Puller} from './puller.js';
-import type {PushResponse, Pusher} from './pusher.js';
-import type {ClientGroupID, ClientID} from './sync/ids.js';
-import {beginPullV1} from './sync/pull.js';
-import {PUSH_VERSION_DD31, push} from './sync/push.js';
-import {withRead, withWrite} from './with-transactions.js';
+} from './persist/idb-databases-store.ts';
+import type {PullResponseOKV1, PullResponseV1, Puller} from './puller.ts';
+import type {PushResponse, Pusher} from './pusher.ts';
+import type {ClientGroupID, ClientID} from './sync/ids.ts';
+import {beginPullV1} from './sync/pull.ts';
+import {PUSH_VERSION_DD31, push} from './sync/push.ts';
+import {withRead, withWrite} from './with-transactions.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

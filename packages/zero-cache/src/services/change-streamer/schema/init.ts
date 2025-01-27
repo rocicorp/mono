@@ -3,9 +3,9 @@ import {
   runSchemaMigrations,
   type IncrementalMigrationMap,
   type Migration,
-} from '../../../db/migration.js';
-import type {PostgresDB, PostgresTransaction} from '../../../types/pg.js';
-import {PG_SCHEMA, setupCDCTables} from './tables.js';
+} from '../../../db/migration.ts';
+import type {PostgresDB, PostgresTransaction} from '../../../types/pg.ts';
+import {PG_SCHEMA, setupCDCTables} from './tables.ts';
 
 const setupMigration: Migration = {
   migrateSchema: setupCDCTables,
