@@ -1,10 +1,10 @@
 import {nanoid} from 'nanoid';
 import {useEffect, useState} from 'react';
-import {Button} from '../../components/button.js';
-import {useLogin} from '../../hooks/use-login.js';
-import {useZero} from '../../hooks/use-zero.js';
-import {isCtrlEnter} from './is-ctrl-enter.js';
-import {maxCommentLength} from '../../limits.js';
+import {Button} from '../../components/button.tsx';
+import {useLogin} from '../../hooks/use-login.tsx';
+import {useZero} from '../../hooks/use-zero.ts';
+import {maxCommentLength} from '../../limits.ts';
+import {isCtrlEnter} from './is-ctrl-enter.ts';
 
 export function CommentComposer({
   id,

@@ -1,5 +1,5 @@
 import type {Zero} from '@rocicorp/zero';
-import type {IssueRow, Schema} from '../schema.js';
+import type {IssueRow, Schema} from '../schema.ts';
 
 export function commentQuery(z: Zero<Schema>, displayed: IssueRow | undefined) {
   return z.query.comment

@@ -1,13 +1,13 @@
 import {ZeroProvider} from '@rocicorp/zero/react';
 import {useCallback, useState, useSyncExternalStore} from 'react';
 import {Route, Switch} from 'wouter';
-import {Nav} from './components/nav.js';
-import {ErrorPage} from './pages/error/error-page.js';
-import {IssuePage} from './pages/issue/issue-page.js';
-import {ListPage} from './pages/list/list-page.js';
-import {routes} from './routes.js';
-import {zeroRef} from './zero-setup.js';
-import {useSoftNav} from './hooks/use-softnav.js';
+import {Nav} from './components/nav.tsx';
+import {useSoftNav} from './hooks/use-softnav.ts';
+import {ErrorPage} from './pages/error/error-page.tsx';
+import {IssuePage} from './pages/issue/issue-page.tsx';
+import {ListPage} from './pages/list/list-page.tsx';
+import {routes} from './routes.ts';
+import {zeroRef} from './zero-setup.ts';
 
 export function Root() {
   const z = useSyncExternalStore(

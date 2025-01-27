@@ -1,7 +1,7 @@
 import {useCallback, useSyncExternalStore} from 'react';
-import {loginContext} from '../hooks/use-login.js';
-import {clearJwt} from '../jwt.js';
-import {authRef} from '../zero-setup.js';
+import {loginContext} from '../hooks/use-login.tsx';
+import {clearJwt} from '../jwt.ts';
+import {authRef} from '../zero-setup.ts';
 
 export function LoginProvider({children}: {children: React.ReactNode}) {
   const loginState = useSyncExternalStore(

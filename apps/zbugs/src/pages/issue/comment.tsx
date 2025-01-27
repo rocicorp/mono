@@ -1,20 +1,20 @@
 import type {Row} from '@rocicorp/zero';
 import classNames from 'classnames';
 import {memo, useState} from 'react';
-import {makePermalink} from '../../comment-permalink.js';
-import type {commentQuery} from '../../comment-query.js';
-import {AvatarImage} from '../../components/avatar-image.js';
-import {Button} from '../../components/button.js';
-import {CanEdit} from '../../components/can-edit.js';
-import {Confirm} from '../../components/confirm.js';
-import {EmojiPanel} from '../../components/emoji-panel.js';
-import {Link} from '../../components/link.js';
-import {Markdown} from '../../components/markdown.js';
-import {RelativeTime} from '../../components/relative-time.js';
-import {useHash} from '../../hooks/use-hash.js';
-import {useLogin} from '../../hooks/use-login.js';
-import {useZero} from '../../hooks/use-zero.js';
-import {CommentComposer} from './comment-composer.js';
+import {makePermalink} from '../../comment-permalink.ts';
+import type {commentQuery} from '../../comment-query.ts';
+import {AvatarImage} from '../../components/avatar-image.tsx';
+import {Button} from '../../components/button.tsx';
+import {CanEdit} from '../../components/can-edit.tsx';
+import {Confirm} from '../../components/confirm.tsx';
+import {EmojiPanel} from '../../components/emoji-panel.tsx';
+import {Link} from '../../components/link.tsx';
+import {Markdown} from '../../components/markdown.tsx';
+import {RelativeTime} from '../../components/relative-time.tsx';
+import {useHash} from '../../hooks/use-hash.ts';
+import {useLogin} from '../../hooks/use-login.tsx';
+import {useZero} from '../../hooks/use-zero.ts';
+import {CommentComposer} from './comment-composer.tsx';
 import style from './comment.module.css';
 
 type Props = {

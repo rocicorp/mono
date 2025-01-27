@@ -7,9 +7,9 @@ import type {
   SkinToneChangeEvent,
 } from 'emoji-picker-element/shared.js';
 import {createElement, memo, useRef, type RefCallback} from 'react';
-import {setUserPref, useUserPref} from '../hooks/use-user-pref.js';
-import {useZero} from '../hooks/use-zero.js';
-import {emojiDataSource} from './emoji-data-source.js';
+import {setUserPref, useUserPref} from '../hooks/use-user-pref.ts';
+import {useZero} from '../hooks/use-zero.ts';
+import {emojiDataSource} from './emoji-data-source.ts';
 
 export const SKIN_TONE_PREF = 'emojiSkinTone';
 

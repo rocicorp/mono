@@ -2,10 +2,10 @@ import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {memo, useMemo, useState} from 'react';
 import labelIcon from '../assets/icons/label.svg';
-import {useZero} from '../hooks/use-zero.js';
-import {Button} from './button.js';
-import {Combobox} from './combobox.js';
-import {UserPicker} from './user-picker.js';
+import {useZero} from '../hooks/use-zero.ts';
+import {Button} from './button.tsx';
+import {Combobox} from './combobox.tsx';
+import {UserPicker} from './user-picker.tsx';
 
 export type Selection =
   | {creator: string}

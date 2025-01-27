@@ -1,5 +1,5 @@
 import {memo} from 'react';
-import {useCanEdit} from '../hooks/use-can-edit.js';
+import {useCanEdit} from '../hooks/use-can-edit.ts';
 
 interface Props {
   children: React.ReactNode;

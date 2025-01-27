@@ -1,6 +1,6 @@
 import type {Row} from '@rocicorp/zero';
 import {assert} from 'shared/src/asserts.js';
-import type {Schema} from '../schema.js';
+import type {Schema} from '../schema.ts';
 
 export type Emoji = Row<Schema['tables']['emoji']> & {
   readonly creator: Row<Schema['tables']['user']> | undefined;

@@ -1,6 +1,6 @@
 import {useCallback} from 'react';
-import {Button} from './button.js';
-import {Modal, ModalActions, ModalText} from './modal.jsx';
+import {Button} from './button.tsx';
+import {Modal, ModalActions, ModalText} from './modal.tsx';
 
 interface Props {
   isOpen: boolean;

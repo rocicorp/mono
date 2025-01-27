@@ -1,4 +1,4 @@
-import {umami} from './umami.js';
+import {umami} from './umami.ts';
 
 function assignLatencyToBucket(latencyMs: number): string {
   const buckets = [

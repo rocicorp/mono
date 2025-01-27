@@ -9,9 +9,9 @@ import React, {
 } from 'react';
 import ReactDOM from 'react-dom';
 import CloseIcon from '../assets/icons/close.svg?react';
-import {useKeypress} from '../hooks/use-keypress.js';
-import useLockBodyScroll from '../hooks/use-lock-body-scroll.js';
-import {Confirm} from './confirm.js';
+import {useKeypress} from '../hooks/use-keypress.ts';
+import useLockBodyScroll from '../hooks/use-lock-body-scroll.ts';
+import {Confirm} from './confirm.tsx';
 
 interface Props {
   title?: string | undefined;

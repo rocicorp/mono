@@ -1,19 +1,19 @@
 import classNames from 'classnames';
 import {memo, useEffect, useState} from 'react';
 import {useIntersectionObserver} from 'usehooks-ts';
-import type {Emoji} from '../emoji-utils.js';
+import type {Emoji} from '../emoji-utils.ts';
 import {
   findEmojiForCreator,
   formatEmojiCreatorList,
   setSkinTone,
-} from '../emoji-utils.js';
-import {useDocumentHasFocus} from '../hooks/use-document-has-focus.js';
-import {useNumericPref} from '../hooks/use-user-pref.js';
-import {useZero} from '../hooks/use-zero.js';
-import {AvatarImage} from './avatar-image.js';
-import {ButtonWithLoginCheck} from './button-with-login-check.js';
-import {SKIN_TONE_PREF} from './emoji-picker.js';
-import {Tooltip, TooltipContent, TooltipTrigger} from './tooltip.jsx';
+} from '../emoji-utils.ts';
+import {useDocumentHasFocus} from '../hooks/use-document-has-focus.ts';
+import {useNumericPref} from '../hooks/use-user-pref.ts';
+import {useZero} from '../hooks/use-zero.ts';
+import {AvatarImage} from './avatar-image.tsx';
+import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
+import {SKIN_TONE_PREF} from './emoji-picker.tsx';
+import {Tooltip, TooltipContent, TooltipTrigger} from './tooltip.tsx';
 
 const loginMessage = 'You need to be logged in to modify emoji reactions.';
 

@@ -1,5 +1,5 @@
 import {memo, type ReactNode} from 'react';
-import type {ZbugsHistoryState} from '../routes.js';
+import type {ZbugsHistoryState} from '../routes.ts';
 
 export type Props = {
   children: ReactNode;

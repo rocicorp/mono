@@ -5,8 +5,8 @@ import {
   type ForwardedRef,
   type ReactNode,
 } from 'react';
-import {isPrimaryMouseButton} from '../is-primary-mouse-button.js';
-import {umami} from '../umami.js';
+import {isPrimaryMouseButton} from '../is-primary-mouse-button.ts';
+import {umami} from '../umami.ts';
 
 export interface ButtonProps {
   onAction?: (() => void) | undefined;

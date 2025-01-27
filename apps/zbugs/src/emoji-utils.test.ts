@@ -1,7 +1,7 @@
 import type {Writable} from 'shared/src/writable.js';
 import {expect, test} from 'vitest';
-import type {Emoji} from './emoji-utils.js';
-import {formatEmojiCreatorList, formatEmojiTooltipText} from './emoji-utils.js';
+import type {Emoji} from './emoji-utils.ts';
+import {formatEmojiCreatorList, formatEmojiTooltipText} from './emoji-utils.ts';
 
 function makeEmoji(userID: string, login: string): Emoji {
   return {
