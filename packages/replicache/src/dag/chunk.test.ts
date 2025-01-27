@@ -1,8 +1,8 @@
 import {expect, test} from 'vitest';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
-import {deepFreeze} from '../frozen-json.js';
-import {fakeHash, type Hash, makeNewFakeHashFunction} from '../hash.js';
-import {Chunk, createChunk, type Refs, toRefs} from './chunk.js';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {deepFreeze} from '../frozen-json.ts';
+import {fakeHash, type Hash, makeNewFakeHashFunction} from '../hash.ts';
+import {Chunk, createChunk, type Refs, toRefs} from './chunk.ts';
 
 test('round trip', () => {
   const chunkHasher = makeNewFakeHashFunction();

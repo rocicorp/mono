@@ -1,7 +1,7 @@
 import {describe, expect, test} from 'vitest';
-import {ReplicationMessages} from '../replicator/test-utils.js';
-import {Forwarder} from './forwarder.js';
-import {createSubscriber} from './test-utils.js';
+import {ReplicationMessages} from '../replicator/test-utils.ts';
+import {Forwarder} from './forwarder.ts';
+import {createSubscriber} from './test-utils.ts';
 
 describe('change-streamer/forwarder', () => {
   const messages = new ReplicationMessages({issues: 'id'});

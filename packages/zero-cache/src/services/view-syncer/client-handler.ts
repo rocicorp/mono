@@ -1,27 +1,27 @@
 import type {LogContext} from '@rocicorp/logger';
-import {unreachable} from '../../../../shared/src/asserts.js';
+import {unreachable} from '../../../../shared/src/asserts.ts';
 import {
   assertJSONValue,
   type JSONObject as SafeJSONObject,
-} from '../../../../shared/src/json.js';
-import * as v from '../../../../shared/src/valita.js';
-import type {AST} from '../../../../zero-protocol/src/ast.js';
-import {rowSchema} from '../../../../zero-protocol/src/data.js';
+} from '../../../../shared/src/json.ts';
+import * as v from '../../../../shared/src/valita.ts';
+import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import {rowSchema} from '../../../../zero-protocol/src/data.ts';
 import type {
   Downstream,
   PokePartBody,
   PokeStartBody,
   RowPatchOp,
-} from '../../../../zero-protocol/src/mod.js';
-import {primaryKeyValueRecordSchema} from '../../../../zero-protocol/src/primary-key.js';
-import type {JSONObject} from '../../types/bigint-json.js';
-import {getLogLevel} from '../../types/error-for-client.js';
+} from '../../../../zero-protocol/src/mod.ts';
+import {primaryKeyValueRecordSchema} from '../../../../zero-protocol/src/primary-key.ts';
+import type {JSONObject} from '../../types/bigint-json.ts';
+import {getLogLevel} from '../../types/error-for-client.ts';
 import {
   getErrorForClientIfSchemaVersionNotSupported,
   type SchemaVersions,
-} from '../../types/schema-versions.js';
-import type {Subscription} from '../../types/subscription.js';
-import {unescapedSchema as schema} from '../change-source/pg/schema/shard.js';
+} from '../../types/schema-versions.ts';
+import type {Subscription} from '../../types/subscription.ts';
+import {unescapedSchema as schema} from '../change-source/pg/schema/shard.ts';
 import {
   type ClientPatch,
   cmpVersions,
@@ -33,7 +33,7 @@ import {
   type RowID,
   versionToCookie,
   versionToNullableCookie,
-} from './schema/types.js';
+} from './schema/types.ts';
 
 export type PutRowPatch = {
   type: 'row';

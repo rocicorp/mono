@@ -1,16 +1,16 @@
 import {describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.js';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import {
   type Downstream,
   type PokeEndMessage,
   type PokePartMessage,
   type PokeStartMessage,
-} from '../../../../zero-protocol/src/mod.js';
-import type {JSONObject} from '../../types/bigint-json.js';
-import {ErrorForClient} from '../../types/error-for-client.js';
-import {Subscription} from '../../types/subscription.js';
-import {ClientHandler, ensureSafeJSON, type Patch} from './client-handler.js';
+} from '../../../../zero-protocol/src/mod.ts';
+import type {JSONObject} from '../../types/bigint-json.ts';
+import {ErrorForClient} from '../../types/error-for-client.ts';
+import {Subscription} from '../../types/subscription.ts';
+import {ClientHandler, ensureSafeJSON, type Patch} from './client-handler.ts';
 
 const SHARD_ID = 'xyz';
 

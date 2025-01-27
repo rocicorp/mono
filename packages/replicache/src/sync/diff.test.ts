@@ -1,12 +1,12 @@
 import {expect, test} from 'vitest';
-import type {InternalDiff} from '../btree/node.js';
-import {TestStore} from '../dag/test-store.js';
-import {ChainBuilder} from '../db/test-helpers.js';
-import * as FormatVersion from '../format-version-enum.js';
-import type {IndexDefinitions} from '../index-defs.js';
-import {testSubscriptionsManagerOptions} from '../test-util.js';
-import {withRead} from '../with-transactions.js';
-import {diff} from './diff.js';
+import type {InternalDiff} from '../btree/node.ts';
+import {TestStore} from '../dag/test-store.ts';
+import {ChainBuilder} from '../db/test-helpers.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import type {IndexDefinitions} from '../index-defs.ts';
+import {testSubscriptionsManagerOptions} from '../test-util.ts';
+import {withRead} from '../with-transactions.ts';
+import {diff} from './diff.ts';
 
 type DiffsRecord = Record<string, InternalDiff>;
 

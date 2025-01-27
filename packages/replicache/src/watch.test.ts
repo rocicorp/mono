@@ -1,14 +1,14 @@
 import * as sinon from 'sinon';
 import {describe, expect, test} from 'vitest';
-import type {JSONValue} from '../../shared/src/json.js';
-import {Queue} from '../../shared/src/queue.js';
+import type {JSONValue} from '../../shared/src/json.ts';
+import {Queue} from '../../shared/src/queue.ts';
 import {
   disableAllBackgroundProcesses,
   initReplicacheTesting,
   replicacheForTesting,
   tickAFewTimes,
-} from './test-util.js';
-import type {WriteTransaction} from './transactions.js';
+} from './test-util.ts';
+import type {WriteTransaction} from './transactions.ts';
 
 initReplicacheTesting();
 

@@ -2,8 +2,8 @@ import {describe, expect, test} from 'vitest';
 import {
   versionFromLexi,
   type LexiVersion,
-} from '../../../types/lexi-version.js';
-import {fromLexiVersion, toLexiVersion, type LSN} from './lsn.js';
+} from '../../../types/lexi-version.ts';
+import {fromLexiVersion, toLexiVersion, type LSN} from './lsn.ts';
 
 describe('lsn to/from LexiVersion', () => {
   type Case = [LSN, LexiVersion, bigint];

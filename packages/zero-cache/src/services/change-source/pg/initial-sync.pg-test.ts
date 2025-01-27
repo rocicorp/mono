@@ -1,25 +1,25 @@
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
-import {Database} from '../../../../../zqlite/src/db.js';
-import {listIndexes, listTables} from '../../../db/lite-tables.js';
-import {mapPostgresToLiteIndex} from '../../../db/pg-to-lite.js';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
+import {Database} from '../../../../../zqlite/src/db.ts';
+import {listIndexes, listTables} from '../../../db/lite-tables.ts';
+import {mapPostgresToLiteIndex} from '../../../db/pg-to-lite.ts';
 import type {
   IndexSpec,
   LiteTableSpec,
   PublishedTableSpec,
-} from '../../../db/specs.js';
-import {getConnectionURI, initDB, testDBs} from '../../../test/db.js';
+} from '../../../db/specs.ts';
+import {getConnectionURI, initDB, testDBs} from '../../../test/db.ts';
 import {
   expectMatchingObjectsInTables,
   expectTables,
   initDB as initLiteDB,
-} from '../../../test/lite.js';
-import type {PostgresDB} from '../../../types/pg.js';
-import {initialSync, replicationSlot} from './initial-sync.js';
-import {fromLexiVersion} from './lsn.js';
-import {initShardSchema} from './schema/init.js';
-import {getPublicationInfo} from './schema/published.js';
-import {UnsupportedTableSchemaError} from './schema/validation.js';
+} from '../../../test/lite.ts';
+import type {PostgresDB} from '../../../types/pg.ts';
+import {initialSync, replicationSlot} from './initial-sync.ts';
+import {fromLexiVersion} from './lsn.ts';
+import {initShardSchema} from './schema/init.ts';
+import {getPublicationInfo} from './schema/published.ts';
+import {UnsupportedTableSchemaError} from './schema/validation.ts';
 
 const SHARD_ID = 'initial_sync_test_id';
 

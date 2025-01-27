@@ -1,42 +1,42 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {unreachable} from '../../../../shared/src/asserts.js';
+import {unreachable} from '../../../../shared/src/asserts.ts';
 import {
   min,
   type AtLeastOne,
   type LexiVersion,
-} from '../../types/lexi-version.js';
-import type {PostgresDB} from '../../types/pg.js';
-import type {Sink, Source} from '../../types/streams.js';
-import {Subscription} from '../../types/subscription.js';
-import {orTimeout} from '../../types/timeout.js';
+} from '../../types/lexi-version.ts';
+import type {PostgresDB} from '../../types/pg.ts';
+import type {Sink, Source} from '../../types/streams.ts';
+import {Subscription} from '../../types/subscription.ts';
+import {orTimeout} from '../../types/timeout.ts';
 import {
   type ChangeStreamControl,
   type ChangeStreamData,
   type ChangeStreamMessage,
-} from '../change-source/protocol/current/downstream.js';
-import type {ChangeSourceUpstream} from '../change-source/protocol/current/upstream.js';
+} from '../change-source/protocol/current/downstream.ts';
+import type {ChangeSourceUpstream} from '../change-source/protocol/current/upstream.ts';
 import {
   DEFAULT_MAX_RETRY_DELAY_MS,
   RunningState,
   UnrecoverableError,
-} from '../running-state.js';
+} from '../running-state.ts';
 import {
   type ChangeStreamerService,
   type Downstream,
   type SubscriberContext,
-} from './change-streamer.js';
-import * as ErrorType from './error-type-enum.js';
-import {Forwarder} from './forwarder.js';
-import {initChangeStreamerSchema} from './schema/init.js';
+} from './change-streamer.ts';
+import * as ErrorType from './error-type-enum.ts';
+import {Forwarder} from './forwarder.ts';
+import {initChangeStreamerSchema} from './schema/init.ts';
 import {
   AutoResetSignal,
   ensureReplicationConfig,
   markResetRequired,
   type ReplicationConfig,
-} from './schema/tables.js';
-import {Storer} from './storer.js';
-import {Subscriber} from './subscriber.js';
+} from './schema/tables.ts';
+import {Storer} from './storer.ts';
+import {Subscriber} from './subscriber.ts';
 
 /**
  * Performs initialization and schema migrations to initialize a ChangeStreamerImpl.

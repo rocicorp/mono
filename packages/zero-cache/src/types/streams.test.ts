@@ -4,13 +4,13 @@ import {resolver} from '@rocicorp/resolver';
 import Fastify, {type FastifyInstance} from 'fastify';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import WebSocket from 'ws';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
-import {Queue} from '../../../shared/src/queue.js';
-import {randInt} from '../../../shared/src/rand.js';
-import {sleep} from '../../../shared/src/sleep.js';
-import * as v from '../../../shared/src/valita.js';
-import {type Source, streamIn, streamOut} from './streams.js';
-import {Subscription} from './subscription.js';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {Queue} from '../../../shared/src/queue.ts';
+import {randInt} from '../../../shared/src/rand.ts';
+import {sleep} from '../../../shared/src/sleep.ts';
+import * as v from '../../../shared/src/valita.ts';
+import {type Source, streamIn, streamOut} from './streams.ts';
+import {Subscription} from './subscription.ts';
 
 const messageSchema = v.object({
   from: v.number(),

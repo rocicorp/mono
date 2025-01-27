@@ -1,13 +1,13 @@
 import {resolver} from '@rocicorp/resolver';
-import {assertNotNull} from '../../../shared/src/asserts.js';
-import {promiseVoid} from '../../../shared/src/resolved-promises.js';
+import {assertNotNull} from '../../../shared/src/asserts.ts';
+import {mustGetBrowserGlobal} from '../../../shared/src/browser-env.ts';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {
   type FrozenJSONValue,
   deepFreezeAllowUndefined,
-} from '../frozen-json.js';
-import type {Read, Store, Write} from './store.js';
-import {WriteImplBase, deleteSentinel} from './write-impl-base.js';
-import {mustGetBrowserGlobal} from '../../../shared/src/browser-env.js';
+} from '../frozen-json.ts';
+import type {Read, Store, Write} from './store.ts';
+import {WriteImplBase, deleteSentinel} from './write-impl-base.ts';
 
 const RELAXED = {durability: 'relaxed'} as const;
 const OBJECT_STORE = 'chunks';

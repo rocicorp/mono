@@ -1,7 +1,7 @@
-import {assert, assertNumber} from '../../../shared/src/asserts.js';
-import type {MaybePromise} from '../../../shared/src/types.js';
-import {skipGCAsserts} from '../config.js';
-import {type Hash, emptyHash} from '../hash.js';
+import {assert, assertNumber} from '../../../shared/src/asserts.ts';
+import type {MaybePromise} from '../../../shared/src/types.ts';
+import {skipGCAsserts} from '../config.ts';
+import {type Hash, emptyHash} from '../hash.ts';
 
 export type HeadChange = {
   new: Hash | undefined;

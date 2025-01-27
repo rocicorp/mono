@@ -3,8 +3,8 @@ import {
   type PendingResult,
   type Result,
   Subscription,
-} from '../../types/subscription.js';
-import type {ReplicaState, ReplicaStateNotifier} from './replicator.js';
+} from '../../types/subscription.ts';
+import type {ReplicaState, ReplicaStateNotifier} from './replicator.ts';
 
 /**
  * Handles the semantics of {@link ReplicatorVersionNotifier.subscribe()}

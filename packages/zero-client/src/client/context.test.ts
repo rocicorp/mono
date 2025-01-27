@@ -1,14 +1,14 @@
 import {expect, test} from 'vitest';
-import type {ExperimentalNoIndexDiff} from '../../../replicache/src/mod.js';
-import {assert} from '../../../shared/src/asserts.js';
-import {Catch} from '../../../zql/src/ivm/catch.js';
-import {Join} from '../../../zql/src/ivm/join.js';
-import {MemorySource} from '../../../zql/src/ivm/memory-source.js';
-import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.js';
-import {type AddQuery, ZeroContext} from './context.js';
-import {ENTITIES_KEY_PREFIX} from './keys.js';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.js';
-import {string, table} from '../../../zero-schema/src/builder/table-builder.js';
+import type {ExperimentalNoIndexDiff} from '../../../replicache/src/mod.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import {Catch} from '../../../zql/src/ivm/catch.ts';
+import {Join} from '../../../zql/src/ivm/join.ts';
+import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
+import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
+import {type AddQuery, ZeroContext} from './context.ts';
+import {ENTITIES_KEY_PREFIX} from './keys.ts';
 
 const testBatchViewUpdates = (applyViewUpdates: () => void) =>
   applyViewUpdates();

@@ -4,26 +4,26 @@ import {type JWTPayload} from 'jose';
 import {pid} from 'process';
 import {MessagePort} from 'worker_threads';
 import {WebSocketServer, type WebSocket} from 'ws';
-import {promiseVoid} from '../../../shared/src/resolved-promises.js';
-import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.js';
-import {verifyToken} from '../auth/jwt.js';
-import {type AuthConfig, type ZeroConfig} from '../config/zero-config.js';
-import type {ConnectParams} from '../services/dispatcher/connect-params.js';
-import {installWebSocketReceiver} from '../services/dispatcher/websocket-handoff.js';
-import type {Mutagen} from '../services/mutagen/mutagen.js';
-import type {ReplicaState} from '../services/replicator/replicator.js';
-import {ServiceRunner} from '../services/runner.js';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
+import {verifyToken} from '../auth/jwt.ts';
+import {type AuthConfig, type ZeroConfig} from '../config/zero-config.ts';
+import type {ConnectParams} from '../services/dispatcher/connect-params.ts';
+import {installWebSocketReceiver} from '../services/dispatcher/websocket-handoff.ts';
+import type {Mutagen} from '../services/mutagen/mutagen.ts';
+import type {ReplicaState} from '../services/replicator/replicator.ts';
+import {ServiceRunner} from '../services/runner.ts';
 import type {
   ActivityBasedService,
   Service,
   SingletonService,
-} from '../services/service.js';
-import {DrainCoordinator} from '../services/view-syncer/drain-coordinator.js';
-import type {ViewSyncer} from '../services/view-syncer/view-syncer.js';
-import type {Worker} from '../types/processes.js';
-import {Subscription} from '../types/subscription.js';
-import {Connection, sendError} from './connection.js';
-import {createNotifierFrom, subscribeTo} from './replicator.js';
+} from '../services/service.ts';
+import {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
+import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
+import type {Worker} from '../types/processes.ts';
+import {Subscription} from '../types/subscription.ts';
+import {Connection, sendError} from './connection.ts';
+import {createNotifierFrom, subscribeTo} from './replicator.ts';
 
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;

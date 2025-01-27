@@ -7,11 +7,11 @@
  */
 
 import {compareUTF8} from 'compare-utf8';
-import {defined} from '../../shared/src/arrays.js';
-import {assert} from '../../shared/src/asserts.js';
-import {must} from '../../shared/src/must.js';
-import * as v from '../../shared/src/valita.js';
-import {rowSchema, type Row} from './data.js';
+import {defined} from '../../shared/src/arrays.ts';
+import {assert} from '../../shared/src/asserts.ts';
+import {must} from '../../shared/src/must.ts';
+import * as v from '../../shared/src/valita.ts';
+import {rowSchema, type Row} from './data.ts';
 
 export const selectorSchema = v.string();
 export const toStaticParam = Symbol();

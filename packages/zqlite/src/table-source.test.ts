@@ -1,19 +1,19 @@
 import {describe, expect, test} from 'vitest';
-import type {JSONValue} from '../../shared/src/json.js';
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.js';
-import type {Ordering} from '../../zero-protocol/src/ast.js';
-import type {Row, Value} from '../../zero-protocol/src/data.js';
-import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
-import {Catch} from '../../zql/src/ivm/catch.js';
-import type {Change} from '../../zql/src/ivm/change.js';
-import {makeComparator} from '../../zql/src/ivm/data.js';
-import {Database} from './db.js';
-import {format} from './internal/sql.js';
+import type {JSONValue} from '../../shared/src/json.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import type {Ordering} from '../../zero-protocol/src/ast.ts';
+import type {Row, Value} from '../../zero-protocol/src/data.ts';
+import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
+import {Catch} from '../../zql/src/ivm/catch.ts';
+import type {Change} from '../../zql/src/ivm/change.ts';
+import {makeComparator} from '../../zql/src/ivm/data.ts';
+import {Database} from './db.ts';
+import {format} from './internal/sql.ts';
 import {
   filtersToSQL,
   TableSource,
   UnsupportedValueError,
-} from './table-source.js';
+} from './table-source.ts';
 
 const columns = {
   id: {type: 'string'},

@@ -1,5 +1,5 @@
-import * as v from '../../shared/src/valita.js';
-import * as ErrorKind from './error-kind-enum.js';
+import * as v from '../../shared/src/valita.ts';
+import * as ErrorKind from './error-kind-enum.ts';
 
 const basicErrorKindSchema = v.union(
   v.literal(ErrorKind.AuthInvalidated),

@@ -1,10 +1,10 @@
 import {expect, test} from 'vitest';
-import {sleep} from '../../shared/src/sleep.js';
+import {sleep} from '../../shared/src/sleep.ts';
 import {
   clock,
   initReplicacheTesting,
   replicacheForTesting,
-} from './test-util.js';
+} from './test-util.ts';
 
 initReplicacheTesting();
 

@@ -1,9 +1,9 @@
 import {resolver} from '@rocicorp/resolver';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
-import {sleep} from '../../../shared/src/sleep.js';
 import {describe, expect, test} from 'vitest';
-import {ServiceRunner} from './runner.js';
-import type {Service} from './service.js';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {sleep} from '../../../shared/src/sleep.ts';
+import {ServiceRunner} from './runner.ts';
+import type {Service} from './service.ts';
 
 describe('services/runner', () => {
   class TestService implements Service {

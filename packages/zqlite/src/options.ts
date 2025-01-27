@@ -1,5 +1,5 @@
-import type {Schema} from '../../zero-schema/src/mod.js';
-import type {Database} from './db.js';
+import type {Schema} from '../../zero-schema/src/mod.ts';
+import type {Database} from './db.ts';
 
 /**
  * Configuration for [[ZqlLiteZero]].

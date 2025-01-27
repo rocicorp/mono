@@ -4,8 +4,8 @@ import * as esbuild from 'esbuild';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {makeDefine, sharedOptions} from '../../shared/src/build.js';
-import {getExternalFromPackageJSON} from '../../shared/src/tool/get-external-from-package-json.js';
+import {makeDefine, sharedOptions} from '../../shared/src/build.ts';
+import {getExternalFromPackageJSON} from '../../shared/src/tool/get-external-from-package-json.ts';
 
 /** @param {string[]} parts */
 function basePath(...parts) {

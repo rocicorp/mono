@@ -1,30 +1,30 @@
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.js';
-import {
-  ANYONE_CAN,
-  definePermissions,
-  NOBODY_CAN,
-} from '../../../../zero-schema/src/permissions.js';
-import {ExpressionBuilder} from '../../../../zql/src/query/expression.js';
-import type {Row} from '../../../../zql/src/query/query.js';
-import {Database} from '../../../../zqlite/src/db.js';
-import {WriteAuthorizerImpl} from '../../auth/write-authorizer.js';
-import {testDBs} from '../../test/db.js';
-import type {PostgresDB} from '../../types/pg.js';
-import {zeroSchema} from './mutagen-test-shared.js';
-import {processMutation} from './mutagen.js';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
 import {
   createSchema,
   type Schema as ZeroSchema,
-} from '../../../../zero-schema/src/builder/schema-builder.js';
+} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
   json,
   number,
   string,
   table,
-} from '../../../../zero-schema/src/builder/table-builder.js';
+} from '../../../../zero-schema/src/builder/table-builder.ts';
+import {
+  ANYONE_CAN,
+  definePermissions,
+  NOBODY_CAN,
+} from '../../../../zero-schema/src/permissions.ts';
+import {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
+import type {Row} from '../../../../zql/src/query/query.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
+import {WriteAuthorizerImpl} from '../../auth/write-authorizer.ts';
+import {testDBs} from '../../test/db.ts';
+import type {PostgresDB} from '../../types/pg.ts';
+import {zeroSchema} from './mutagen-test-shared.ts';
+import {processMutation} from './mutagen.ts';
 
 const SHARD_ID = '0';
 const CG_ID = 'abc';

@@ -1,11 +1,11 @@
 import {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {TestLogSink} from '../../../../../../shared/src/logging-test-utils.js';
-import {Index} from '../../../../db/postgres-replica-identity-enum.js';
-import {expectTables, initDB, testDBs} from '../../../../test/db.js';
-import type {PostgresDB} from '../../../../types/pg.js';
-import {getPublicationInfo} from './published.js';
-import {setupTablesAndReplication, validatePublications} from './shard.js';
+import {TestLogSink} from '../../../../../../shared/src/logging-test-utils.ts';
+import {Index} from '../../../../db/postgres-replica-identity-enum.ts';
+import {expectTables, initDB, testDBs} from '../../../../test/db.ts';
+import type {PostgresDB} from '../../../../types/pg.ts';
+import {getPublicationInfo} from './published.ts';
+import {setupTablesAndReplication, validatePublications} from './shard.ts';
 
 describe('change-source/pg', () => {
   let logSink: TestLogSink;

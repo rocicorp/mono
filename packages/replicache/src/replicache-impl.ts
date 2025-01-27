@@ -1,89 +1,89 @@
 import {Lock} from '@rocicorp/lock';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {AbortError} from '../../shared/src/abort-error.js';
-import {assert} from '../../shared/src/asserts.js';
-import {getBrowserGlobal} from '../../shared/src/browser-env.js';
-import {getDocumentVisibilityWatcher} from '../../shared/src/document-visible.js';
-import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.js';
-import type {MaybePromise} from '../../shared/src/types.js';
-import {PullDelegate, PushDelegate} from './connection-loop-delegates.js';
-import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.js';
-import {assertCookie, type Cookie} from './cookies.js';
-import {LazyStore} from './dag/lazy-store.js';
-import {StoreImpl} from './dag/store-impl.js';
-import {ChunkNotFoundError, mustGetHeadHash, type Store} from './dag/store.js';
+import {AbortError} from '../../shared/src/abort-error.ts';
+import {assert} from '../../shared/src/asserts.ts';
+import {getBrowserGlobal} from '../../shared/src/browser-env.ts';
+import {getDocumentVisibilityWatcher} from '../../shared/src/document-visible.ts';
+import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.ts';
+import type {MaybePromise} from '../../shared/src/types.ts';
+import {PullDelegate, PushDelegate} from './connection-loop-delegates.ts';
+import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.ts';
+import {assertCookie, type Cookie} from './cookies.ts';
+import {LazyStore} from './dag/lazy-store.ts';
+import {StoreImpl} from './dag/store-impl.ts';
+import {ChunkNotFoundError, mustGetHeadHash, type Store} from './dag/store.ts';
 import {
   baseSnapshotFromHash,
   DEFAULT_HEAD_NAME,
   isLocalMetaDD31,
   type LocalMeta,
-} from './db/commit.js';
-import {readFromDefaultHead} from './db/read.js';
-import {rebaseMutationAndCommit} from './db/rebase.js';
-import {newWriteLocal} from './db/write.js';
+} from './db/commit.ts';
+import {readFromDefaultHead} from './db/read.ts';
+import {rebaseMutationAndCommit} from './db/rebase.ts';
+import {newWriteLocal} from './db/write.ts';
 import {
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
   type VersionNotSupportedResponse,
-} from './error-responses.js';
-import * as FormatVersion from './format-version-enum.js';
-import {deepFreeze} from './frozen-json.js';
-import {getDefaultPuller, isDefaultPuller} from './get-default-puller.js';
-import {getDefaultPusher, isDefaultPusher} from './get-default-pusher.js';
-import {assertHash, emptyHash, type Hash, newRandomHash} from './hash.js';
-import type {HTTPRequestInfo} from './http-request-info.js';
-import type {IndexDefinitions} from './index-defs.js';
-import type {StoreProvider} from './kv/store.js';
-import {createLogContext} from './log-options.js';
-import {MutationRecovery} from './mutation-recovery.js';
-import {initNewClientChannel} from './new-client-channel.js';
+} from './error-responses.ts';
+import * as FormatVersion from './format-version-enum.ts';
+import {deepFreeze} from './frozen-json.ts';
+import {getDefaultPuller, isDefaultPuller} from './get-default-puller.ts';
+import {getDefaultPusher, isDefaultPusher} from './get-default-pusher.ts';
+import {assertHash, emptyHash, type Hash, newRandomHash} from './hash.ts';
+import type {HTTPRequestInfo} from './http-request-info.ts';
+import type {IndexDefinitions} from './index-defs.ts';
+import type {StoreProvider} from './kv/store.ts';
+import {createLogContext} from './log-options.ts';
+import {MutationRecovery} from './mutation-recovery.ts';
+import {initNewClientChannel} from './new-client-channel.ts';
 import {
   initOnPersistChannel,
   type OnPersist,
   type PersistInfo,
-} from './on-persist-channel.js';
+} from './on-persist-channel.ts';
 import {
   type PendingMutation,
   pendingMutationsForAPI,
-} from './pending-mutations.js';
+} from './pending-mutations.ts';
 import {
   CLIENT_MAX_INACTIVE_TIME,
   GC_INTERVAL,
   initClientGC,
-} from './persist/client-gc.js';
-import {initClientGroupGC} from './persist/client-group-gc.js';
-import {disableClientGroup} from './persist/client-groups.js';
+} from './persist/client-gc.ts';
+import {initClientGroupGC} from './persist/client-group-gc.ts';
+import {disableClientGroup} from './persist/client-groups.ts';
 import {
   ClientStateNotFoundError,
   initClientV6,
   hasClientState as persistHasClientState,
-} from './persist/clients.js';
+} from './persist/clients.ts';
 import {
   COLLECT_IDB_INTERVAL,
   initCollectIDBDatabases,
   INITIAL_COLLECT_IDB_DELAY,
   SDD_IDB_MAX_AGE,
-} from './persist/collect-idb-databases.js';
-import {HEARTBEAT_INTERVAL, startHeartbeats} from './persist/heartbeat.js';
+} from './persist/collect-idb-databases.ts';
+import {HEARTBEAT_INTERVAL, startHeartbeats} from './persist/heartbeat.ts';
 import {
   IDBDatabasesStore,
   type IndexedDBDatabase,
-} from './persist/idb-databases-store.js';
-import {makeClientID} from './persist/make-client-id.js';
-import {persistDD31} from './persist/persist.js';
-import {refresh} from './persist/refresh.js';
-import {ProcessScheduler} from './process-scheduler.js';
-import type {Puller} from './puller.js';
-import {type Pusher, PushError} from './pusher.js';
-import type {ReplicacheOptions} from './replicache-options.js';
+} from './persist/idb-databases-store.ts';
+import {makeClientID} from './persist/make-client-id.ts';
+import {persistDD31} from './persist/persist.ts';
+import {refresh} from './persist/refresh.ts';
+import {ProcessScheduler} from './process-scheduler.ts';
+import type {Puller} from './puller.ts';
+import {type Pusher, PushError} from './pusher.ts';
+import type {ReplicacheOptions} from './replicache-options.ts';
 import {
   getKVStoreProvider,
   httpStatusUnauthorized,
   makeIDBName,
   ReportError,
-} from './replicache.js';
-import {setIntervalWithSignal} from './set-interval-with-signal.js';
+} from './replicache.ts';
+import {setIntervalWithSignal} from './set-interval-with-signal.ts';
 import {
   type SubscribeOptions,
   SubscriptionImpl,
@@ -94,17 +94,17 @@ import {
   type WatchNoIndexCallback,
   type WatchOptions,
   WatchSubscription,
-} from './subscriptions.js';
-import * as HandlePullResponseResultEnum from './sync/handle-pull-response-result-type-enum.js';
-import type {ClientGroupID, ClientID} from './sync/ids.js';
-import {PullError} from './sync/pull-error.js';
-import {beginPullV1, handlePullResponseV1, maybeEndPull} from './sync/pull.js';
-import {push, PUSH_VERSION_DD31} from './sync/push.js';
-import {newRequestID} from './sync/request-id.js';
-import {SYNC_HEAD_NAME} from './sync/sync-head-name.js';
-import {throwIfClosed} from './transaction-closed-error.js';
-import type {ReadTransaction, WriteTransaction} from './transactions.js';
-import {ReadTransactionImpl, WriteTransactionImpl} from './transactions.js';
+} from './subscriptions.ts';
+import * as HandlePullResponseResultEnum from './sync/handle-pull-response-result-type-enum.ts';
+import type {ClientGroupID, ClientID} from './sync/ids.ts';
+import {PullError} from './sync/pull-error.ts';
+import {beginPullV1, handlePullResponseV1, maybeEndPull} from './sync/pull.ts';
+import {push, PUSH_VERSION_DD31} from './sync/push.ts';
+import {newRequestID} from './sync/request-id.ts';
+import {SYNC_HEAD_NAME} from './sync/sync-head-name.ts';
+import {throwIfClosed} from './transaction-closed-error.ts';
+import type {ReadTransaction, WriteTransaction} from './transactions.ts';
+import {ReadTransactionImpl, WriteTransactionImpl} from './transactions.ts';
 import type {
   BeginPullResult,
   MakeMutator,
@@ -115,13 +115,13 @@ import type {
   QueryInternal,
   RequestOptions,
   UpdateNeededReason,
-} from './types.js';
-import {version} from './version.js';
+} from './types.ts';
+import {version} from './version.ts';
 import {
   withRead,
   withWrite,
   withWriteNoImplicitCommit,
-} from './with-transactions.js';
+} from './with-transactions.ts';
 
 declare const TESTING: boolean;
 

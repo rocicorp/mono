@@ -2,9 +2,9 @@ import type {LogContext, LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {ChildProcess, spawn} from 'node:child_process';
 import {existsSync} from 'node:fs';
-import {must} from '../../../../shared/src/must.js';
-import {sleep} from '../../../../shared/src/sleep.js';
-import type {ZeroConfig} from '../../config/zero-config.js';
+import {must} from '../../../../shared/src/must.ts';
+import {sleep} from '../../../../shared/src/sleep.ts';
+import type {ZeroConfig} from '../../config/zero-config.ts';
 
 type ZeroLitestreamConfig = Pick<
   ZeroConfig,

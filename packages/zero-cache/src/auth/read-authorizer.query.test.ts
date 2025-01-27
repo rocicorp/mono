@@ -1,47 +1,47 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 /* eslint-disable arrow-body-style */
 import {beforeEach, describe, expect, test} from 'vitest';
-import {assert} from '../../../shared/src/asserts.js';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
-import {must} from '../../../shared/src/must.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../shared/src/must.ts';
 import type {
   DeleteOp,
   InsertOp,
   UpdateOp,
-} from '../../../zero-protocol/src/push.js';
-import {definePermissions} from '../../../zero-schema/src/permissions.js';
-import type {ValueType} from '../../../zero-schema/src/table-schema.js';
+} from '../../../zero-protocol/src/push.ts';
+import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
 import {
-  bindStaticParameters,
-  buildPipeline,
-} from '../../../zql/src/builder/builder.js';
-import {Catch} from '../../../zql/src/ivm/catch.js';
-import type {Node} from '../../../zql/src/ivm/data.js';
-import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.js';
-import type {Source} from '../../../zql/src/ivm/source.js';
-import type {ExpressionBuilder} from '../../../zql/src/query/expression.js';
-import {
-  completedAstSymbol,
-  newQuery,
-  QueryImpl,
-  type QueryDelegate,
-} from '../../../zql/src/query/query-impl.js';
-import type {Query, Row} from '../../../zql/src/query/query.js';
-import {Database} from '../../../zqlite/src/db.js';
-import {TableSource} from '../../../zqlite/src/table-source.js';
-import {transformQuery} from './read-authorizer.js';
-import {WriteAuthorizerImpl} from './write-authorizer.js';
+  createSchema,
+  type Schema as ZeroSchema,
+} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
   number,
   string,
   table,
-} from '../../../zero-schema/src/builder/table-builder.js';
-import {relationships} from '../../../zero-schema/src/builder/relationship-builder.js';
+} from '../../../zero-schema/src/builder/table-builder.ts';
+import {definePermissions} from '../../../zero-schema/src/permissions.ts';
+import type {ValueType} from '../../../zero-schema/src/table-schema.ts';
 import {
-  createSchema,
-  type Schema as ZeroSchema,
-} from '../../../zero-schema/src/builder/schema-builder.js';
+  bindStaticParameters,
+  buildPipeline,
+} from '../../../zql/src/builder/builder.ts';
+import {Catch} from '../../../zql/src/ivm/catch.ts';
+import type {Node} from '../../../zql/src/ivm/data.ts';
+import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
+import type {Source} from '../../../zql/src/ivm/source.ts';
+import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
+import {
+  completedAstSymbol,
+  newQuery,
+  QueryImpl,
+  type QueryDelegate,
+} from '../../../zql/src/query/query-impl.ts';
+import type {Query, Row} from '../../../zql/src/query/query.ts';
+import {Database} from '../../../zqlite/src/db.ts';
+import {TableSource} from '../../../zqlite/src/table-source.ts';
+import {transformQuery} from './read-authorizer.ts';
+import {WriteAuthorizerImpl} from './write-authorizer.ts';
 
 const user = table('user')
   .columns({

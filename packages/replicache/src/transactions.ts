@@ -1,13 +1,13 @@
 import type {LogContext} from '@rocicorp/logger';
 import {greaterThan} from 'compare-utf8';
-import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.js';
-import {type IndexKey, decodeIndexKey} from './db/index.js';
-import type {Read} from './db/read.js';
-import type {Write} from './db/write.js';
-import {deepFreeze} from './frozen-json.js';
-import type {IndexDefinition} from './index-defs.js';
-import type {ScanResult} from './scan-iterator.js';
-import {ScanResultImpl, fromKeyForIndexScanInternal} from './scan-iterator.js';
+import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {type IndexKey, decodeIndexKey} from './db/index.ts';
+import type {Read} from './db/read.ts';
+import type {Write} from './db/write.ts';
+import {deepFreeze} from './frozen-json.ts';
+import type {IndexDefinition} from './index-defs.ts';
+import type {ScanResult} from './scan-iterator.ts';
+import {ScanResultImpl, fromKeyForIndexScanInternal} from './scan-iterator.ts';
 import {
   type KeyTypeForScanOptions,
   type ScanIndexOptions,
@@ -15,10 +15,10 @@ import {
   type ScanOptions,
   isScanIndexOptions,
   toDbScanOptions,
-} from './scan-options.js';
-import type {ScanSubscriptionInfo} from './subscriptions.js';
-import type {ClientID} from './sync/ids.js';
-import {rejectIfClosed, throwIfClosed} from './transaction-closed-error.js';
+} from './scan-options.ts';
+import type {ScanSubscriptionInfo} from './subscriptions.ts';
+import type {ClientID} from './sync/ids.ts';
+import {rejectIfClosed, throwIfClosed} from './transaction-closed-error.ts';
 
 export type TransactionEnvironment = 'client' | 'server';
 export type TransactionLocation = TransactionEnvironment;

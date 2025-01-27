@@ -1,8 +1,8 @@
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {beforeEach, describe, expect, test} from 'vitest';
-import {Database} from '../../../zqlite/src/db.js';
-import {expectTables} from '../test/lite.js';
-import {StatementRunner} from './statements.js';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {Database} from '../../../zqlite/src/db.ts';
+import {expectTables} from '../test/lite.ts';
+import {StatementRunner} from './statements.ts';
 
 describe('db/statements', () => {
   let db: StatementRunner;

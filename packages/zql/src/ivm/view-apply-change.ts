@@ -4,13 +4,13 @@ import {
   assertObject,
   assertUndefined,
   unreachable,
-} from '../../../shared/src/asserts.js';
-import {must} from '../../../shared/src/must.js';
-import type {Row} from '../../../zero-protocol/src/data.js';
-import type {Change} from './change.js';
-import type {Comparator, Node} from './data.js';
-import type {SourceSchema} from './schema.js';
-import type {Entry, EntryList, Format} from './view.js';
+} from '../../../shared/src/asserts.ts';
+import {must} from '../../../shared/src/must.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Change} from './change.ts';
+import type {Comparator, Node} from './data.ts';
+import type {SourceSchema} from './schema.ts';
+import type {Entry, EntryList, Format} from './view.ts';
 
 export function applyChange(
   parentEntry: Entry,

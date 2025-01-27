@@ -1,9 +1,9 @@
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../../../shared/src/logging-test-utils.js';
-import {initDB, testDBs} from '../../../../test/db.js';
-import type {PostgresDB} from '../../../../types/pg.js';
-import {getPublicationInfo} from './published.js';
-import {UnsupportedTableSchemaError, validate} from './validation.js';
+import {createSilentLogContext} from '../../../../../../shared/src/logging-test-utils.ts';
+import {initDB, testDBs} from '../../../../test/db.ts';
+import type {PostgresDB} from '../../../../types/pg.ts';
+import {getPublicationInfo} from './published.ts';
+import {UnsupportedTableSchemaError, validate} from './validation.ts';
 
 describe('change-source/pg', () => {
   const lc = createSilentLogContext();

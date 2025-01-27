@@ -1,12 +1,12 @@
-import * as v from '../../../../../../shared/src/valita.js';
-import {resetRequiredSchema} from './control.js';
+import * as v from '../../../../../../shared/src/valita.ts';
+import {resetRequiredSchema} from './control.ts';
 import {
   beginSchema,
   commitSchema,
   dataChangeSchema,
   rollbackSchema,
-} from './data.js';
-import {statusMessageSchema} from './status.js';
+} from './data.ts';
+import {statusMessageSchema} from './status.ts';
 
 const begin = v.tuple([
   v.literal('begin'),

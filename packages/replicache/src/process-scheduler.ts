@@ -1,8 +1,8 @@
 import {type Resolver, resolver} from '@rocicorp/resolver';
-import {AbortError} from '../../shared/src/abort-error.js';
-import {assert} from '../../shared/src/asserts.js';
-import {sleep} from '../../shared/src/sleep.js';
-import {requestIdle as defaultRequestIdle} from './request-idle.js';
+import {AbortError} from '../../shared/src/abort-error.ts';
+import {assert} from '../../shared/src/asserts.ts';
+import {sleep} from '../../shared/src/sleep.ts';
+import {requestIdle as defaultRequestIdle} from './request-idle.ts';
 
 export class ProcessScheduler {
   readonly #process: () => Promise<void>;

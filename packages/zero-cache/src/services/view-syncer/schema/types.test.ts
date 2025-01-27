@@ -5,7 +5,7 @@ import {
   cookieToVersion,
   oneAfter,
   versionToNullableCookie,
-} from './types.js';
+} from './types.ts';
 
 describe('view-syncer/schema/types', () => {
   test('version comparison', () => {

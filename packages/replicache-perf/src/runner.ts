@@ -8,14 +8,14 @@ import process from 'node:process';
 import {fileURLToPath} from 'node:url';
 import * as playwright from 'playwright';
 import {createServer} from 'vite';
-import {assert} from '../../shared/src/asserts.js';
+import {assert} from '../../shared/src/asserts.ts';
 import {makeDefine} from '../../shared/src/build.js';
 import {
   type BencherMetricsFormat,
   toBencherMetricFormat,
-} from './bencher-metric-format.js';
-import {formatAsBenchmarkJS, formatAsReplicache} from './format.js';
-import {createGithubActionBenchmarkJSONEntries} from './github-action-benchmark.js';
+} from './bencher-metric-format.ts';
+import {formatAsBenchmarkJS, formatAsReplicache} from './format.ts';
+import {createGithubActionBenchmarkJSONEntries} from './github-action-benchmark.ts';
 
 type Format = 'benchmarkJS' | 'json' | 'replicache' | 'bmf';
 

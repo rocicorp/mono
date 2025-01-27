@@ -1,18 +1,18 @@
-import {assert} from '../../../shared/src/asserts.js';
-import {mergeIterables} from '../../../shared/src/iterables.js';
-import {must} from '../../../shared/src/must.js';
-import type {Change} from './change.js';
-import type {Node} from './data.js';
-import type {FanOut} from './fan-out.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import {mergeIterables} from '../../../shared/src/iterables.ts';
+import {must} from '../../../shared/src/must.ts';
+import type {Change} from './change.ts';
+import type {Node} from './data.ts';
+import type {FanOut} from './fan-out.ts';
 import {
   throwOutput,
   type FetchRequest,
   type Input,
   type Operator,
   type Output,
-} from './operator.js';
-import type {SourceSchema} from './schema.js';
-import type {Stream} from './stream.js';
+} from './operator.ts';
+import type {SourceSchema} from './schema.ts';
+import type {Stream} from './stream.ts';
 
 /**
  * The FanIn operator merges multiple streams into one.

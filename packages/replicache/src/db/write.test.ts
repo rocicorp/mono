@@ -1,17 +1,17 @@
 import {LogContext} from '@rocicorp/logger';
 import {describe, expect, test} from 'vitest';
-import {assertNotUndefined} from '../../../shared/src/asserts.js';
-import type {Enum} from '../../../shared/src/enum.js';
-import {asyncIterableToArray} from '../async-iterable-to-array.js';
-import {BTreeRead} from '../btree/read.js';
-import {mustGetHeadHash} from '../dag/store.js';
-import {TestStore} from '../dag/test-store.js';
-import * as FormatVersion from '../format-version-enum.js';
-import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
-import {DEFAULT_HEAD_NAME, commitFromHead} from './commit.js';
-import {readIndexesForRead} from './read.js';
-import {initDB} from './test-helpers.js';
-import {newWriteLocal} from './write.js';
+import {assertNotUndefined} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import {asyncIterableToArray} from '../async-iterable-to-array.ts';
+import {BTreeRead} from '../btree/read.ts';
+import {mustGetHeadHash} from '../dag/store.ts';
+import {TestStore} from '../dag/test-store.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import {withRead, withWriteNoImplicitCommit} from '../with-transactions.ts';
+import {DEFAULT_HEAD_NAME, commitFromHead} from './commit.ts';
+import {readIndexesForRead} from './read.ts';
+import {initDB} from './test-helpers.ts';
+import {newWriteLocal} from './write.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

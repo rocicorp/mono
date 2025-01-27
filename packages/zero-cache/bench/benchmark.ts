@@ -1,15 +1,15 @@
 // create a zql query
 
-import {assert} from '../../shared/src/asserts.js';
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.js';
-import {MemoryStorage} from '../../zql/src/ivm/memory-storage.js';
-import type {Source} from '../../zql/src/ivm/source.js';
-import {newQuery, type QueryDelegate} from '../../zql/src/query/query-impl.js';
-import {Database} from '../../zqlite/src/db.js';
-import {TableSource} from '../../zqlite/src/table-source.js';
-import {computeZqlSpecs} from '../src/db/lite-tables.js';
-import {mapLiteDataTypeToZqlSchemaValue} from '../src/types/lite.js';
-import {schema} from './schema.js';
+import {assert} from '../../shared/src/asserts.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
+import type {Source} from '../../zql/src/ivm/source.ts';
+import {newQuery, type QueryDelegate} from '../../zql/src/query/query-impl.ts';
+import {Database} from '../../zqlite/src/db.ts';
+import {TableSource} from '../../zqlite/src/table-source.ts';
+import {computeZqlSpecs} from '../src/db/lite-tables.ts';
+import {mapLiteDataTypeToZqlSchemaValue} from '../src/types/lite.ts';
+import {schema} from './schema.ts';
 
 type Options = {
   dbFile: string;

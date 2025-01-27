@@ -1,20 +1,20 @@
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {
   expectTables,
   getConnectionURI,
   initDB,
   testDBs,
-} from '../../../test/db.js';
+} from '../../../test/db.ts';
 import {
   DbFile,
   expectTables as expectLiteTables,
   expectMatchingObjectsInTables,
   initDB as initLiteDB,
-} from '../../../test/lite.js';
-import type {PostgresDB} from '../../../types/pg.js';
-import {replicationSlot} from './initial-sync.js';
-import {initSyncSchema} from './sync-schema.js';
+} from '../../../test/lite.ts';
+import type {PostgresDB} from '../../../types/pg.ts';
+import {replicationSlot} from './initial-sync.ts';
+import {initSyncSchema} from './sync-schema.ts';
 
 const SHARD_ID = 'sync_schema_test_id';
 

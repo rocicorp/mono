@@ -1,4 +1,4 @@
-import type {BenchmarkResult} from './benchmark.js';
+import type {BenchmarkResult} from './benchmark.ts';
 
 export type BencherMetricsFormat = {
   [k: string]: {

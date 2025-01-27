@@ -1,10 +1,10 @@
 import type {IncomingHttpHeaders} from 'node:http2';
-import {must} from '../../../../shared/src/must.js';
+import {must} from '../../../../shared/src/must.ts';
 import {
   decodeSecProtocols,
   type InitConnectionMessage,
-} from '../../../../zero-protocol/src/connect.js';
-import {URLParams} from '../../types/url-params.js';
+} from '../../../../zero-protocol/src/connect.ts';
+import {URLParams} from '../../types/url-params.ts';
 
 export type ConnectParams = {
   readonly protocolVersion: number;

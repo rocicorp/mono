@@ -1,17 +1,17 @@
 import {expect, suite, test} from 'vitest';
-import {assert} from '../../../shared/src/asserts.js';
-import type {JSONValue} from '../../../shared/src/json.js';
-import type {CompoundKey, Ordering} from '../../../zero-protocol/src/ast.js';
-import type {Row} from '../../../zero-protocol/src/data.js';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
-import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
-import {Catch, type CaughtChange} from './catch.js';
-import {Join} from './join.js';
-import {MemoryStorage} from './memory-storage.js';
-import type {Input} from './operator.js';
-import {Snitch, type SnitchMessage} from './snitch.js';
-import type {SourceChange} from './source.js';
-import {createSource} from './test/source-factory.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
+import type {CompoundKey, Ordering} from '../../../zero-protocol/src/ast.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
+import {Catch, type CaughtChange} from './catch.ts';
+import {Join} from './join.ts';
+import {MemoryStorage} from './memory-storage.ts';
+import type {Input} from './operator.ts';
+import {Snitch, type SnitchMessage} from './snitch.ts';
+import type {SourceChange} from './source.ts';
+import {createSource} from './test/source-factory.ts';
 
 suite('sibling relationships tests with issues, comments, and owners', () => {
   const base = {

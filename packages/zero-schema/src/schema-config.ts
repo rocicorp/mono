@@ -1,12 +1,12 @@
-import * as v from '../../shared/src/valita.js';
-import {compoundKeySchema} from '../../zero-protocol/src/ast.js';
-import {primaryKeySchema} from '../../zero-protocol/src/primary-key.js';
+import * as v from '../../shared/src/valita.ts';
+import {compoundKeySchema} from '../../zero-protocol/src/ast.ts';
+import {primaryKeySchema} from '../../zero-protocol/src/primary-key.ts';
+import type {Schema} from './builder/schema-builder.ts';
 import {
   permissionsConfigSchema,
   type PermissionsConfig,
-} from './compiled-permissions.js';
-import type {Schema} from './builder/schema-builder.js';
-import type {Relationship, TableSchema, ValueType} from './table-schema.js';
+} from './compiled-permissions.ts';
+import type {Relationship, TableSchema, ValueType} from './table-schema.ts';
 
 export type SchemaConfig = {
   schema: Schema;

@@ -3,8 +3,8 @@ import {expect, test} from 'vitest';
 import type {
   PrimaryKey,
   PrimaryKeyValueRecord,
-} from '../../../zero-protocol/src/primary-key.js';
-import {toPrimaryKeyString as toPrimaryKeyStringImpl} from './keys.js';
+} from '../../../zero-protocol/src/primary-key.ts';
+import {toPrimaryKeyString as toPrimaryKeyStringImpl} from './keys.ts';
 
 test('toPrimaryKeyString', () => {
   function toPrimaryKeyString(

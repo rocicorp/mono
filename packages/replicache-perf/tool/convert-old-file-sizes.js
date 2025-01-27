@@ -9,7 +9,7 @@
 const branch = 'main';
 const testbed = 'localhost';
 const projectSlug = 'replicache-bundle-size';
-const jsURL = 'https://rocicorp.github.io/mono/bundle-sizes/data.js';
+const jsURL = 'https://rocicorp.github.io/mono/bundle-sizes/data.ts';
 const header = 'window.BENCHMARK_DATA = ';
 
 function benchesToBencher(benches) {

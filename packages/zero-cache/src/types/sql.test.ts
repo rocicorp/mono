@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import {id, idList} from './sql.js';
+import {id, idList} from './sql.ts';
 
 describe('types/sql', () => {
   type Case = {

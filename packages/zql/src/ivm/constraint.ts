@@ -1,8 +1,8 @@
-import {assert} from '../../../shared/src/asserts.js';
-import {stringCompare} from '../../../shared/src/string-compare.js';
-import type {Row, Value} from '../../../zero-protocol/src/data.js';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
-import {valuesEqual} from './data.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import {stringCompare} from '../../../shared/src/string-compare.ts';
+import type {Row, Value} from '../../../zero-protocol/src/data.ts';
+import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import {valuesEqual} from './data.ts';
 
 export type Constraint = {
   readonly [key: string]: Value;

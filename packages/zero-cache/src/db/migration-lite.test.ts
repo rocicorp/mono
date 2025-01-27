@@ -1,15 +1,15 @@
 import type {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
-import type {Database as Db} from '../../../zqlite/src/db.js';
-import {DbFile} from '../test/lite.js';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {Database as Db} from '../../../zqlite/src/db.ts';
+import {DbFile} from '../test/lite.ts';
 import {
   type IncrementalMigrationMap,
   type Migration,
   type VersionHistory,
   getVersionHistory,
   runSchemaMigrations,
-} from './migration-lite.js';
+} from './migration-lite.ts';
 
 describe('db/migration-lite', () => {
   const debugName = 'debug-name';

@@ -1,6 +1,6 @@
-import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
-import type {SchemaValue, TableSchema} from '../table-schema.js';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import type {SchemaValue, TableSchema} from '../table-schema.ts';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export function table<TName extends string>(name: TName) {

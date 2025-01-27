@@ -1,14 +1,14 @@
 import {expect, test} from 'vitest';
-import {deepFreeze} from '../frozen-json.js';
-import {assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
+import {deepFreeze} from '../frozen-json.ts';
+import {assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.ts';
 import {
   withRead,
   withWrite,
   withWriteNoImplicitCommit,
-} from '../with-transactions.js';
-import {asRefs, toRefs, type Chunk} from './chunk.js';
-import {TestLazyStore} from './test-lazy-store.js';
-import {TestStore} from './test-store.js';
+} from '../with-transactions.ts';
+import {asRefs, toRefs, type Chunk} from './chunk.ts';
+import {TestLazyStore} from './test-lazy-store.ts';
+import {TestStore} from './test-store.ts';
 
 const DEFAULT_VALUE_SIZE = 100;
 function getSizeOfChunkForTest(chunk: Chunk): number {

@@ -1,8 +1,8 @@
-import {jsonSchema} from '../../shared/src/json-schema.js';
-import * as v from '../../shared/src/valita.js';
-import {rowSchema} from './data.js';
-import * as MutationType from './mutation-type-enum.js';
-import {primaryKeySchema, primaryKeyValueRecordSchema} from './primary-key.js';
+import {jsonSchema} from '../../shared/src/json-schema.ts';
+import * as v from '../../shared/src/valita.ts';
+import {rowSchema} from './data.ts';
+import * as MutationType from './mutation-type-enum.ts';
+import {primaryKeySchema, primaryKeyValueRecordSchema} from './primary-key.ts';
 
 export const CRUD_MUTATION_NAME = '_zero_crud';
 

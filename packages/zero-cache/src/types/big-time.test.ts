@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import {epochMicrosToTimestampTz} from './big-time.js';
+import {epochMicrosToTimestampTz} from './big-time.ts';
 
 describe('types/bigtime', () => {
   type Case = {

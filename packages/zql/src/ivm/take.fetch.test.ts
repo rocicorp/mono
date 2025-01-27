@@ -1,18 +1,18 @@
 import {expect, suite, test} from 'vitest';
-import {assert} from '../../../shared/src/asserts.js';
-import type {JSONValue} from '../../../shared/src/json.js';
-import type {Ordering} from '../../../zero-protocol/src/ast.js';
-import type {Row, Value} from '../../../zero-protocol/src/data.js';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
-import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
-import {Catch} from './catch.js';
-import type {Node} from './data.js';
-import {MemoryStorage} from './memory-storage.js';
-import {Snitch, type SnitchMessage} from './snitch.js';
-import {Take, type PartitionKey} from './take.js';
-import {createSource} from './test/source-factory.js';
-import type {FetchRequest} from './operator.js';
-import type {Stream} from './stream.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
+import type {Ordering} from '../../../zero-protocol/src/ast.ts';
+import type {Row, Value} from '../../../zero-protocol/src/data.ts';
+import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
+import {Catch} from './catch.ts';
+import type {Node} from './data.ts';
+import {MemoryStorage} from './memory-storage.ts';
+import type {FetchRequest} from './operator.ts';
+import {Snitch, type SnitchMessage} from './snitch.ts';
+import type {Stream} from './stream.ts';
+import {Take, type PartitionKey} from './take.ts';
+import {createSource} from './test/source-factory.ts';
 
 suite('take with no partition', () => {
   const base = {

@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {escapeLike} from './escape-like.js';
+import {escapeLike} from './escape-like.ts';
 
 test('basics', () => {
   const cases: {

@@ -1,10 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from '../../../shared/src/asserts.js';
-import {deepEqual} from '../../../shared/src/json.js';
-import {diff} from '../btree/diff.js';
-import {BTreeRead} from '../btree/read.js';
-import {compareCookies, type Cookie} from '../cookies.js';
-import type {Store} from '../dag/store.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import {deepEqual} from '../../../shared/src/json.ts';
+import {diff} from '../btree/diff.ts';
+import {BTreeRead} from '../btree/read.ts';
+import {compareCookies, type Cookie} from '../cookies.ts';
+import type {Store} from '../dag/store.ts';
 import {
   assertSnapshotMetaDD31,
   baseSnapshotFromHash,
@@ -15,34 +15,34 @@ import {
   type LocalMeta,
   localMutations as localMutations_1,
   snapshotMetaParts,
-} from '../db/commit.js';
-import {newWriteSnapshotDD31} from '../db/write.js';
-import {isErrorResponse} from '../error-responses.js';
-import * as FormatVersion from '../format-version-enum.js';
-import {deepFreeze, type FrozenJSONValue} from '../frozen-json.js';
-import {assertPullerResultV1} from '../get-default-puller.js';
-import {emptyHash, type Hash} from '../hash.js';
-import type {HTTPRequestInfo} from '../http-request-info.js';
+} from '../db/commit.ts';
+import {newWriteSnapshotDD31} from '../db/write.ts';
+import {isErrorResponse} from '../error-responses.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import {deepFreeze, type FrozenJSONValue} from '../frozen-json.ts';
+import {assertPullerResultV1} from '../get-default-puller.ts';
+import {emptyHash, type Hash} from '../hash.ts';
+import type {HTTPRequestInfo} from '../http-request-info.ts';
 import type {
   Puller,
   PullerResult,
   PullerResultV1,
   PullResponseOKV1Internal,
   PullResponseV1,
-} from '../puller.js';
-import {ReportError} from '../replicache.js';
-import {toError} from '../to-error.js';
-import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
+} from '../puller.ts';
+import {ReportError} from '../replicache.ts';
+import {toError} from '../to-error.ts';
+import {withRead, withWriteNoImplicitCommit} from '../with-transactions.ts';
 import {
   addDiffsForIndexes,
   type DiffComputationConfig,
   DiffsMap,
-} from './diff.js';
-import * as HandlePullResponseResultType from './handle-pull-response-result-type-enum.js';
-import type {ClientGroupID, ClientID} from './ids.js';
-import * as patch from './patch.js';
-import {PullError} from './pull-error.js';
-import {SYNC_HEAD_NAME} from './sync-head-name.js';
+} from './diff.ts';
+import * as HandlePullResponseResultType from './handle-pull-response-result-type-enum.ts';
+import type {ClientGroupID, ClientID} from './ids.ts';
+import * as patch from './patch.ts';
+import {PullError} from './pull-error.ts';
+import {SYNC_HEAD_NAME} from './sync-head-name.ts';
 
 type FormatVersion = (typeof FormatVersion)[keyof typeof FormatVersion];
 

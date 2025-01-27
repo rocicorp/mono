@@ -1,20 +1,20 @@
 import {LogContext} from '@rocicorp/logger';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
-import {Queue} from '../../../../../shared/src/queue.js';
-import type {Database} from '../../../../../zqlite/src/db.js';
-import {listIndexes, listTables} from '../../../db/lite-tables.js';
-import type {LiteIndexSpec, LiteTableSpec} from '../../../db/specs.js';
-import {getConnectionURI, testDBs} from '../../../test/db.js';
-import {DbFile, expectMatchingObjectsInTables} from '../../../test/lite.js';
-import type {JSONValue} from '../../../types/bigint-json.js';
-import type {PostgresDB} from '../../../types/pg.js';
-import type {Source} from '../../../types/streams.js';
-import type {MessageProcessor} from '../../replicator/incremental-sync.js';
-import {createMessageProcessor} from '../../replicator/test-utils.js';
-import type {DataChange} from '../protocol/current/data.js';
-import type {ChangeStreamMessage} from '../protocol/current/downstream.js';
-import {initializeChangeSource} from './change-source.js';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
+import {Queue} from '../../../../../shared/src/queue.ts';
+import type {Database} from '../../../../../zqlite/src/db.ts';
+import {listIndexes, listTables} from '../../../db/lite-tables.ts';
+import type {LiteIndexSpec, LiteTableSpec} from '../../../db/specs.ts';
+import {getConnectionURI, testDBs} from '../../../test/db.ts';
+import {DbFile, expectMatchingObjectsInTables} from '../../../test/lite.ts';
+import type {JSONValue} from '../../../types/bigint-json.ts';
+import type {PostgresDB} from '../../../types/pg.ts';
+import type {Source} from '../../../types/streams.ts';
+import type {MessageProcessor} from '../../replicator/incremental-sync.ts';
+import {createMessageProcessor} from '../../replicator/test-utils.ts';
+import type {DataChange} from '../protocol/current/data.ts';
+import type {ChangeStreamMessage} from '../protocol/current/downstream.ts';
+import {initializeChangeSource} from './change-source.ts';
 
 const SHARD_ID = 'change_source_end_to_mid_test_id';
 

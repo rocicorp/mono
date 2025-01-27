@@ -3,26 +3,26 @@ import {resolver} from '@rocicorp/resolver';
 import * as sinon from 'sinon';
 import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import {afterEach, beforeEach, expect, test} from 'vitest';
-import {assert, assertNotUndefined} from '../../../shared/src/asserts.js';
-import {StoreImpl} from '../dag/store-impl.js';
-import type {Read} from '../dag/store.js';
-import {TestStore} from '../dag/test-store.js';
-import {assertHash, fakeHash, newRandomHash} from '../hash.js';
-import {dropIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.js';
-import {IDBNotFoundError, IDBStore} from '../kv/idb-store.js';
-import {withRead} from '../with-transactions.js';
-import {makeClientV5, setClientsForTesting} from './clients-test-helpers.js';
+import {assert, assertNotUndefined} from '../../../shared/src/asserts.ts';
+import {StoreImpl} from '../dag/store-impl.ts';
+import type {Read} from '../dag/store.ts';
+import {TestStore} from '../dag/test-store.ts';
+import {assertHash, fakeHash, newRandomHash} from '../hash.ts';
+import {dropIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.ts';
+import {IDBNotFoundError, IDBStore} from '../kv/idb-store.ts';
+import {withRead} from '../with-transactions.ts';
+import {makeClientV5, setClientsForTesting} from './clients-test-helpers.ts';
 import {
   type ClientMap,
   ClientStateNotFoundError,
   getClients,
-} from './clients.js';
+} from './clients.ts';
 import {
   HEARTBEAT_INTERVAL,
   latestHeartbeatUpdate,
   startHeartbeats,
   writeHeartbeat,
-} from './heartbeat.js';
+} from './heartbeat.ts';
 
 let clock: SinonFakeTimers;
 const START_TIME = 100000;

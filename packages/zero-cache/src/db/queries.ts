@@ -1,7 +1,7 @@
 import {compareUTF8} from 'compare-utf8';
 import type postgres from 'postgres';
-import {type PostgresDB, typeNameByOID} from '../types/pg.js';
-import type {RowKey, RowKeyType} from '../types/row-key.js';
+import {type PostgresDB, typeNameByOID} from '../types/pg.ts';
+import type {RowKey, RowKeyType} from '../types/row-key.ts';
 
 /**
  * Efficient lookup of multiple rows from a table from row keys.

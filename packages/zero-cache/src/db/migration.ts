@@ -1,9 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
-import {assert} from '../../../shared/src/asserts.js';
-import {randInt} from '../../../shared/src/rand.js';
-import * as v from '../../../shared/src/valita.js';
-import type {PostgresDB, PostgresTransaction} from '../types/pg.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import {randInt} from '../../../shared/src/rand.ts';
+import * as v from '../../../shared/src/valita.ts';
+import type {PostgresDB, PostgresTransaction} from '../types/pg.ts';
 
 type Operations = (log: LogContext, tx: PostgresTransaction) => Promise<void>;
 

@@ -1,14 +1,14 @@
 import {compareUTF8} from 'compare-utf8';
 import fc from 'fast-check';
 import {expect, test} from 'vitest';
-import type {Ordering} from '../../../zero-protocol/src/ast.js';
-import type {Row} from '../../../zero-protocol/src/data.js';
+import type {Ordering} from '../../../zero-protocol/src/ast.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
 import {
   compareValues,
   makeComparator,
   normalizeUndefined,
   valuesEqual,
-} from './data.js';
+} from './data.ts';
 
 test('normalizeUndefined', () => {
   fc.assert(

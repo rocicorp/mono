@@ -1,4 +1,4 @@
-import * as v from '../../shared/src/valita.js';
+import * as v from '../../shared/src/valita.ts';
 
 export const primaryKeySchema = v.readonly(
   v.tuple([v.string()]).concat(v.array(v.string())),

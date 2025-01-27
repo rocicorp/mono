@@ -1,10 +1,10 @@
 import {expect, test} from 'vitest';
-import {Snitch} from './snitch.js';
-import {Filter} from './filter.js';
-import {FanOut} from './fan-out.js';
-import {FanIn} from './fan-in.js';
-import {Catch} from './catch.js';
-import {createSource} from './test/source-factory.js';
+import {Catch} from './catch.ts';
+import {FanIn} from './fan-in.ts';
+import {FanOut} from './fan-out.ts';
+import {Filter} from './filter.ts';
+import {Snitch} from './snitch.ts';
+import {createSource} from './test/source-factory.ts';
 
 test('destroy source connections', () => {
   const ms = createSource('table', {a: {type: 'string'}, b: {type: 'string'}}, [

@@ -1,21 +1,21 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import {must} from '../../../shared/src/must.js';
+import {must} from '../../../shared/src/must.ts';
 import {
   toStaticParam,
   type Condition,
   type LiteralValue,
   type Parameter,
-} from '../../../zero-protocol/src/ast.js';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.js';
-import type {Operator} from './query.js';
+} from '../../../zero-protocol/src/ast.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   AvailableRelationships,
   DestTableName,
   GetFilterType,
   NoJsonSelector,
+  Operator,
   PullTableSchema,
   Query,
-} from './query.js';
+} from './query.ts';
 
 export type ParameterReference = {
   [toStaticParam](): Parameter;

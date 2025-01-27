@@ -1,9 +1,9 @@
-import * as v from '../../../../shared/src/valita.js';
-import type {Source} from '../../types/streams.js';
-import {type Change} from '../change-source/protocol/current/data.js';
-import {changeStreamDataSchema} from '../change-source/protocol/current/downstream.js';
-import type {ReplicatorMode} from '../replicator/replicator.js';
-import type {Service} from '../service.js';
+import * as v from '../../../../shared/src/valita.ts';
+import type {Source} from '../../types/streams.ts';
+import {type Change} from '../change-source/protocol/current/data.ts';
+import {changeStreamDataSchema} from '../change-source/protocol/current/downstream.ts';
+import type {ReplicatorMode} from '../replicator/replicator.ts';
+import type {Service} from '../service.ts';
 
 /**
  * The ChangeStreamer is the component between replicators ("subscribers")

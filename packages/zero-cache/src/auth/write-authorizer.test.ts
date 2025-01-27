@@ -1,15 +1,15 @@
 import {beforeEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
-import {Database} from '../../../zqlite/src/db.js';
-import {WriteAuthorizerImpl} from './write-authorizer.js';
-import type {Rule} from '../../../zero-schema/src/compiled-permissions.js';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {
   DeleteOp,
   InsertOp,
   UpdateOp,
-} from '../../../zero-protocol/src/push.js';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.js';
-import {string, table} from '../../../zero-schema/src/builder/table-builder.js';
+} from '../../../zero-protocol/src/push.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import type {Rule} from '../../../zero-schema/src/compiled-permissions.ts';
+import {Database} from '../../../zqlite/src/db.ts';
+import {WriteAuthorizerImpl} from './write-authorizer.ts';
 
 const lc = createSilentLogContext();
 

@@ -1,17 +1,17 @@
 import {describe, expect, test} from 'vitest';
-import {deepClone} from '../../../shared/src/deep-clone.js';
-import {must} from '../../../shared/src/must.js';
-import {newQuery, type QueryDelegate, QueryImpl} from './query-impl.js';
-import type {AdvancedQuery} from './query-internal.js';
-import {QueryDelegateImpl} from './test/query-delegate.js';
-import {schema} from './test/test-schemas.js';
-import {number, table} from '../../../zero-schema/src/builder/table-builder.js';
-import {relationships} from '../../../zero-schema/src/builder/relationship-builder.js';
+import {deepClone} from '../../../shared/src/deep-clone.ts';
+import {must} from '../../../shared/src/must.ts';
+import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
 import {
   createSchema,
   type Schema,
-} from '../../../zero-schema/src/builder/schema-builder.js';
-import {createSource} from '../ivm/test/source-factory.js';
+} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {number, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import {createSource} from '../ivm/test/source-factory.ts';
+import {newQuery, type QueryDelegate, QueryImpl} from './query-impl.ts';
+import type {AdvancedQuery} from './query-internal.ts';
+import {QueryDelegateImpl} from './test/query-delegate.ts';
+import {schema} from './test/test-schemas.ts';
 
 /**
  * Some basic manual tests to get us started.

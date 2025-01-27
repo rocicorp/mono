@@ -1,11 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Enum} from '../../../shared/src/enum.js';
-import type {BTreeRead} from '../btree/read.js';
-import type {BTreeWrite} from '../btree/write.js';
-import type {FrozenJSONObject, FrozenJSONValue} from '../frozen-json.js';
-import type {Hash} from '../hash.js';
-import type {IndexRecord} from './commit.js';
-import * as IndexOperation from './index-operation-enum.js';
+import type {Enum} from '../../../shared/src/enum.ts';
+import type {BTreeRead} from '../btree/read.ts';
+import type {BTreeWrite} from '../btree/write.ts';
+import type {FrozenJSONObject, FrozenJSONValue} from '../frozen-json.ts';
+import type {Hash} from '../hash.ts';
+import type {IndexRecord} from './commit.ts';
+import * as IndexOperation from './index-operation-enum.ts';
 
 type IndexOperation = Enum<typeof IndexOperation>;
 

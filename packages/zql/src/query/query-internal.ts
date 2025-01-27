@@ -1,7 +1,7 @@
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.js';
-import type {Format, ViewFactory} from '../ivm/view.js';
-import type {HumanReadable, PullRow, Query} from './query.js';
-import type {TypedView} from './typed-view.js';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Format, ViewFactory} from '../ivm/view.ts';
+import type {HumanReadable, PullRow, Query} from './query.ts';
+import type {TypedView} from './typed-view.ts';
 
 export interface AdvancedQuery<
   TSchema extends Schema,

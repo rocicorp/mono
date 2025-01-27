@@ -1,12 +1,12 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from '../../../shared/src/asserts.js';
-import type {Enum} from '../../../shared/src/enum.js';
-import type {Write as DagWrite} from '../dag/store.js';
-import * as FormatVersion from '../format-version-enum.js';
-import type {Hash} from '../hash.js';
-import type {ClientID} from '../sync/ids.js';
-import {WriteTransactionImpl} from '../transactions.js';
-import type {MutatorDefs} from '../types.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import type {Write as DagWrite} from '../dag/store.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import type {Hash} from '../hash.ts';
+import type {ClientID} from '../sync/ids.ts';
+import {WriteTransactionImpl} from '../transactions.ts';
+import type {MutatorDefs} from '../types.ts';
 import {
   Commit,
   type LocalMeta,
@@ -15,8 +15,8 @@ import {
   assertLocalMetaDD31,
   commitFromHash,
   isLocalMetaDD31,
-} from './commit.js';
-import {Write, newWriteLocal} from './write.js';
+} from './commit.ts';
+import {Write, newWriteLocal} from './write.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

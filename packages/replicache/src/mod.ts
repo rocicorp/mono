@@ -5,8 +5,8 @@ export type {
   JSONValue,
   ReadonlyJSONObject,
   ReadonlyJSONValue,
-} from '../../shared/src/json.js';
-export type {MaybePromise} from '../../shared/src/types.js';
+} from '../../shared/src/json.ts';
+export type {MaybePromise} from '../../shared/src/types.ts';
 export type {
   Diff as ExperimentalDiff,
   DiffOperation as ExperimentalDiffOperation,
@@ -15,20 +15,20 @@ export type {
   DiffOperationDel as ExperimentalDiffOperationDel,
   IndexDiff as ExperimentalIndexDiff,
   NoIndexDiff as ExperimentalNoIndexDiff,
-} from './btree/node.js';
-export type {Cookie} from './cookies.js';
-export type {IndexKey} from './db/index.js';
+} from './btree/node.ts';
+export type {Cookie} from './cookies.ts';
+export type {IndexKey} from './db/index.ts';
 export type {
   ClientStateNotFoundResponse,
   VersionNotSupportedResponse,
-} from './error-responses.js';
-export {filterAsyncIterable} from './filter-async-iterable.js';
-export {getDefaultPuller} from './get-default-puller.js';
-export {getDefaultPusher} from './get-default-pusher.js';
-export type {HTTPRequestInfo} from './http-request-info.js';
-export type {IndexDefinition, IndexDefinitions} from './index-defs.js';
-export type {IterableUnion} from './iterable-union.js';
-export {IDBNotFoundError} from './kv/idb-store.js';
+} from './error-responses.ts';
+export {filterAsyncIterable} from './filter-async-iterable.ts';
+export {getDefaultPuller} from './get-default-puller.ts';
+export {getDefaultPusher} from './get-default-pusher.ts';
+export type {HTTPRequestInfo} from './http-request-info.ts';
+export type {IndexDefinition, IndexDefinitions} from './index-defs.ts';
+export type {IterableUnion} from './iterable-union.ts';
+export {IDBNotFoundError} from './kv/idb-store.ts';
 export type {
   CreateStore as CreateKVStore,
   DropStore as DropKVStore,
@@ -36,35 +36,35 @@ export type {
   Store as KVStore,
   StoreProvider as KVStoreProvider,
   Write as KVWrite,
-} from './kv/store.js';
-export {mergeAsyncIterables} from './merge-async-iterables.js';
-export type {PatchOperation} from './patch-operation.js';
-export type {PendingMutation} from './pending-mutations.js';
+} from './kv/store.ts';
+export {mergeAsyncIterables} from './merge-async-iterables.ts';
+export type {PatchOperation} from './patch-operation.ts';
+export type {PendingMutation} from './pending-mutations.ts';
 export {
   deleteAllReplicacheData,
   dropAllDatabases,
   dropDatabase,
   type DropDatabaseOptions,
-} from './persist/collect-idb-databases.js';
-export type {Puller, PullerResult, PullResponse} from './puller.js';
-export type {Pusher, PusherResult, PushError, PushResponse} from './pusher.js';
-export type {ReplicacheOptions} from './replicache-options.js';
-export {makeIDBName, Replicache} from './replicache.js';
-export {makeScanResult} from './scan-iterator.js';
+} from './persist/collect-idb-databases.ts';
+export type {Puller, PullerResult, PullResponse} from './puller.ts';
+export type {Pusher, PusherResult, PushError, PushResponse} from './pusher.ts';
+export type {ReplicacheOptions} from './replicache-options.ts';
+export {makeIDBName, Replicache} from './replicache.ts';
+export {makeScanResult} from './scan-iterator.ts';
 export type {
   AsyncIterableIteratorToArray,
   GetIndexScanIterator,
   GetScanIterator,
   ScanResult,
-} from './scan-iterator.js';
-export {isScanIndexOptions} from './scan-options.js';
+} from './scan-iterator.ts';
+export {isScanIndexOptions} from './scan-options.ts';
 export type {
   KeyTypeForScanOptions,
   ScanIndexOptions,
   ScanNoIndexOptions,
   ScanOptionIndexedStartKey,
   ScanOptions,
-} from './scan-options.js';
+} from './scan-options.ts';
 export type {
   WatchCallbackForOptions as ExperimentalWatchCallbackForOptions,
   WatchIndexCallback as ExperimentalWatchIndexCallback,
@@ -73,13 +73,13 @@ export type {
   WatchNoIndexOptions as ExperimentalWatchNoIndexOptions,
   WatchOptions as ExperimentalWatchOptions,
   SubscribeOptions,
-} from './subscriptions.js';
-export type {ClientGroupID, ClientID} from './sync/ids.js';
-export {PullError} from './sync/pull-error.js';
-export type {PullRequest} from './sync/pull.js';
-export type {Mutation, PushRequest} from './sync/push.js';
-export {TEST_LICENSE_KEY} from './test-license-key.js';
-export {TransactionClosedError} from './transaction-closed-error.js';
+} from './subscriptions.ts';
+export type {ClientGroupID, ClientID} from './sync/ids.ts';
+export {PullError} from './sync/pull-error.ts';
+export type {PullRequest} from './sync/pull.ts';
+export type {Mutation, PushRequest} from './sync/push.ts';
+export {TEST_LICENSE_KEY} from './test-license-key.ts';
+export {TransactionClosedError} from './transaction-closed-error.ts';
 export type {
   CreateIndexDefinition,
   DeepReadonly,
@@ -89,7 +89,7 @@ export type {
   TransactionLocation,
   TransactionReason,
   WriteTransaction,
-} from './transactions.js';
+} from './transactions.ts';
 export type {
   MakeMutator,
   MakeMutators,
@@ -98,5 +98,5 @@ export type {
   Poke,
   RequestOptions,
   UpdateNeededReason,
-} from './types.js';
-export {version} from './version.js';
+} from './types.ts';
+export {version} from './version.ts';

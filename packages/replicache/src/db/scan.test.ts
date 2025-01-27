@@ -1,13 +1,13 @@
 import {expect, test} from 'vitest';
-import type {Enum} from '../../../shared/src/enum.js';
-import {BTreeWrite} from '../btree/write.js';
-import type {Write} from '../dag/store.js';
-import {TestStore} from '../dag/test-store.js';
-import * as FormatVersion from '../format-version-enum.js';
-import {fromKeyForIndexScanInternal} from '../scan-iterator.js';
-import {withWrite} from '../with-transactions.js';
-import {decodeIndexKey} from './index.js';
-import type {ScanItem} from './scan.js';
+import type {Enum} from '../../../shared/src/enum.ts';
+import {BTreeWrite} from '../btree/write.ts';
+import type {Write} from '../dag/store.ts';
+import {TestStore} from '../dag/test-store.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import {fromKeyForIndexScanInternal} from '../scan-iterator.ts';
+import {withWrite} from '../with-transactions.ts';
+import {decodeIndexKey} from './index.ts';
+import type {ScanItem} from './scan.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

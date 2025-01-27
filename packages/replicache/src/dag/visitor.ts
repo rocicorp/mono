@@ -1,6 +1,6 @@
-import type {Hash} from '../hash.js';
-import type {Chunk} from './chunk.js';
-import type {MustGetChunk} from './store.js';
+import type {Hash} from '../hash.ts';
+import type {Chunk} from './chunk.ts';
+import type {MustGetChunk} from './store.ts';
 
 /**
  * A visitor walks the DAG starting at a given root and visits each chunk.

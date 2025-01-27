@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import {liteRow, liteValue, liteValues} from './lite.js';
+import {liteRow, liteValue, liteValues} from './lite.ts';
 
 describe('types/lite', () => {
   test.each([

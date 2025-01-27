@@ -1,21 +1,21 @@
 import {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import {computeZqlSpecs} from '../../db/lite-tables.js';
-import type {LiteAndZqlSpec} from '../../db/specs.js';
-import {DbFile, expectTables} from '../../test/lite.js';
-import {initChangeLog} from '../replicator/schema/change-log.js';
-import {initReplicationState} from '../replicator/schema/replication-state.js';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {computeZqlSpecs} from '../../db/lite-tables.ts';
+import type {LiteAndZqlSpec} from '../../db/specs.ts';
+import {DbFile, expectTables} from '../../test/lite.ts';
+import {initChangeLog} from '../replicator/schema/change-log.ts';
+import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {
   fakeReplicator,
   ReplicationMessages,
   type FakeReplicator,
-} from '../replicator/test-utils.js';
+} from '../replicator/test-utils.ts';
 import {
   InvalidDiffError,
   ResetPipelinesSignal,
   Snapshotter,
-} from './snapshotter.js';
+} from './snapshotter.ts';
 
 describe('view-syncer/snapshotter', () => {
   let lc: LogContext;

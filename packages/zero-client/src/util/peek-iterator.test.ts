@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {PeekIterator} from '../util/peek-iterator.js';
+import {PeekIterator} from '../util/peek-iterator.ts';
 
 test('PeekIterator', () => {
   const c = new PeekIterator('abc'[Symbol.iterator]());

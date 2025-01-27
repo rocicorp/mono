@@ -9,23 +9,23 @@ import {
   test,
   vi,
 } from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import {Database} from '../../../../zqlite/src/db.js';
-import {listIndexes, listTables} from '../../db/lite-tables.js';
-import type {LiteIndexSpec, LiteTableSpec} from '../../db/specs.js';
-import {testDBs} from '../../test/db.js';
-import {expectTables, initDB} from '../../test/lite.js';
-import type {JSONObject} from '../../types/bigint-json.js';
-import type {PostgresDB} from '../../types/pg.js';
-import {Subscription} from '../../types/subscription.js';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
+import {listIndexes, listTables} from '../../db/lite-tables.ts';
+import type {LiteIndexSpec, LiteTableSpec} from '../../db/specs.ts';
+import {testDBs} from '../../test/db.ts';
+import {expectTables, initDB} from '../../test/lite.ts';
+import type {JSONObject} from '../../types/bigint-json.ts';
+import type {PostgresDB} from '../../types/pg.ts';
+import {Subscription} from '../../types/subscription.ts';
 import type {
   Downstream,
   SubscriberContext,
-} from '../change-streamer/change-streamer.js';
-import {IncrementalSyncer} from './incremental-sync.js';
-import {initChangeLog} from './schema/change-log.js';
-import {initReplicationState} from './schema/replication-state.js';
-import {ReplicationMessages} from './test-utils.js';
+} from '../change-streamer/change-streamer.ts';
+import {IncrementalSyncer} from './incremental-sync.ts';
+import {initChangeLog} from './schema/change-log.ts';
+import {initReplicationState} from './schema/replication-state.ts';
+import {ReplicationMessages} from './test-utils.ts';
 
 const REPLICA_ID = 'incremental_sync_test_id';
 

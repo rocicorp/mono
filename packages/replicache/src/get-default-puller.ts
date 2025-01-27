@@ -2,22 +2,22 @@ import {
   assertNumber,
   assertObject,
   assertString,
-} from '../../shared/src/asserts.js';
-import {callDefaultFetch} from './call-default-fetch.js';
-import {assertCookie} from './cookies.js';
+} from '../../shared/src/asserts.ts';
+import {callDefaultFetch} from './call-default-fetch.ts';
+import {assertCookie} from './cookies.ts';
 import {
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
-} from './error-responses.js';
-import {assertHTTPRequestInfo} from './http-request-info.js';
-import {assertPatchOperations} from './patch-operation.js';
+} from './error-responses.ts';
+import {assertHTTPRequestInfo} from './http-request-info.ts';
+import {assertPatchOperations} from './patch-operation.ts';
 import type {
   PullResponseV1,
   Puller,
   PullerResult,
   PullerResultV1,
-} from './puller.js';
-import type {PullRequest} from './sync/pull.js';
+} from './puller.ts';
+import type {PullRequest} from './sync/pull.ts';
 
 /**
  * This creates a default puller which uses HTTP POST to send the pull request.

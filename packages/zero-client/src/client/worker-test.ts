@@ -1,16 +1,16 @@
 // This test file is loaded by worker.test.ts
 
 import sinon from 'sinon';
-import {assert} from '../../../shared/src/asserts.js';
-import {deepEqual} from '../../../shared/src/json.js';
-import {sleep} from '../../../shared/src/sleep.js';
-import {MockSocket, zeroForTest} from './test-utils.js';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import {deepEqual} from '../../../shared/src/json.ts';
+import {sleep} from '../../../shared/src/sleep.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
+  number,
   string,
   table,
-  number,
-} from '../../../zero-schema/src/builder/table-builder.js';
+} from '../../../zero-schema/src/builder/table-builder.ts';
+import {MockSocket, zeroForTest} from './test-utils.ts';
 
 onmessage = async (e: MessageEvent) => {
   const {userID} = e.data;

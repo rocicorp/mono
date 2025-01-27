@@ -6,9 +6,9 @@ import commandLineUsage from 'command-line-usage';
 import {createDefu} from 'defu';
 import {toKebabCase, toSnakeCase} from 'kasi';
 import {stripVTControlCharacters as stripAnsi} from 'node:util';
-import {assert} from './asserts.js';
-import {must} from './must.js';
-import * as v from './valita.js';
+import {assert} from './asserts.ts';
+import {must} from './must.ts';
+import * as v from './valita.ts';
 
 type Primitive = number | string | boolean;
 type Value = Primitive | Array<Primitive>;

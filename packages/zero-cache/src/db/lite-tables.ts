@@ -1,21 +1,21 @@
 import type {LogContext} from '@rocicorp/logger';
-import {must} from '../../../shared/src/must.js';
-import {difference} from '../../../shared/src/set-utils.js';
-import * as v from '../../../shared/src/valita.js';
-import {primaryKeySchema} from '../../../zero-protocol/src/primary-key.js';
-import type {Database} from '../../../zqlite/src/db.js';
+import {must} from '../../../shared/src/must.ts';
+import {difference} from '../../../shared/src/set-utils.ts';
+import * as v from '../../../shared/src/valita.ts';
+import {primaryKeySchema} from '../../../zero-protocol/src/primary-key.ts';
+import type {Database} from '../../../zqlite/src/db.ts';
 import {
   dataTypeToZqlValueType,
   mapLiteDataTypeToZqlSchemaValue,
   nullableUpstream,
-} from '../types/lite.js';
+} from '../types/lite.ts';
 import type {
   LiteAndZqlSpec,
   LiteIndexSpec,
   LiteTableSpec,
   MutableLiteIndexSpec,
   MutableLiteTableSpec,
-} from './specs.js';
+} from './specs.ts';
 
 type ColumnInfo = {
   table: string;

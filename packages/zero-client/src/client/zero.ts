@@ -3,7 +3,7 @@ import {type Resolver, resolver} from '@rocicorp/resolver';
 import {
   ReplicacheImpl,
   type ReplicacheImplOptions,
-} from '../../../replicache/src/impl.js';
+} from '../../../replicache/src/impl.ts';
 import {
   type ClientGroupID,
   type ClientID,
@@ -18,20 +18,20 @@ import {
   type ReplicacheOptions,
   type UpdateNeededReason as ReplicacheUpdateNeededReason,
   dropDatabase,
-} from '../../../replicache/src/mod.js';
-import {assert, unreachable} from '../../../shared/src/asserts.js';
+} from '../../../replicache/src/mod.ts';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {
   getBrowserGlobal,
   mustGetBrowserGlobal,
-} from '../../../shared/src/browser-env.js';
-import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.js';
-import type {Enum} from '../../../shared/src/enum.js';
-import {must} from '../../../shared/src/must.js';
-import {navigator} from '../../../shared/src/navigator.js';
-import {sleep, sleepWithAbort} from '../../../shared/src/sleep.js';
-import * as valita from '../../../shared/src/valita.js';
-import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.js';
-import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.js';
+} from '../../../shared/src/browser-env.ts';
+import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import {must} from '../../../shared/src/must.ts';
+import {navigator} from '../../../shared/src/navigator.ts';
+import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
+import * as valita from '../../../shared/src/valita.ts';
+import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
+import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
 import {
   type CRUDMutation,
   type CRUDMutationArg,
@@ -50,37 +50,37 @@ import {
   downstreamSchema,
   encodeSecProtocols,
   nullableVersionSchema,
-} from '../../../zero-protocol/src/mod.js';
-import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.js';
-import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.js';
+} from '../../../zero-protocol/src/mod.ts';
+import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
+import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import type {
   PullRequestMessage,
   PullResponseBody,
   PullResponseMessage,
-} from '../../../zero-protocol/src/pull.js';
-import type {Schema} from '../../../zero-schema/src/mod.js';
-import {newQuery} from '../../../zql/src/query/query-impl.js';
-import type {Query} from '../../../zql/src/query/query.js';
-import {nanoid} from '../util/nanoid.js';
-import {send} from '../util/socket.js';
-import * as ConnectionState from './connection-state-enum.js';
-import {ZeroContext} from './context.js';
+} from '../../../zero-protocol/src/pull.ts';
+import type {Schema} from '../../../zero-schema/src/mod.ts';
+import {newQuery} from '../../../zql/src/query/query-impl.ts';
+import type {Query} from '../../../zql/src/query/query.ts';
+import {nanoid} from '../util/nanoid.ts';
+import {send} from '../util/socket.ts';
+import * as ConnectionState from './connection-state-enum.ts';
+import {ZeroContext} from './context.ts';
 import {
   type BatchMutator,
   type DBMutator,
   type WithCRUD,
   makeCRUDMutate,
   makeCRUDMutator,
-} from './crud.js';
-import {shouldEnableAnalytics} from './enable-analytics.js';
+} from './crud.ts';
+import {shouldEnableAnalytics} from './enable-analytics.ts';
 import {
   type HTTPString,
   type WSString,
   appendPath,
   toWSString,
-} from './http-string.js';
-import {ENTITIES_KEY_PREFIX} from './keys.js';
-import {type LogOptions, createLogOptions} from './log-options.js';
+} from './http-string.ts';
+import {ENTITIES_KEY_PREFIX} from './keys.ts';
+import {type LogOptions, createLogOptions} from './log-options.ts';
 import {
   DID_NOT_CONNECT_VALUE,
   type DisconnectReason,
@@ -88,29 +88,29 @@ import {
   REPORT_INTERVAL_MS,
   type Series,
   getLastConnectErrorValue,
-} from './metrics.js';
+} from './metrics.ts';
 import type {
   UpdateNeededReason,
   ZeroAdvancedOptions,
   ZeroOptions,
-} from './options.js';
-import * as PingResult from './ping-result-enum.js';
-import {QueryManager} from './query-manager.js';
+} from './options.ts';
+import * as PingResult from './ping-result-enum.ts';
+import {QueryManager} from './query-manager.ts';
 import {
   reloadScheduled,
   reloadWithReason,
   reportReloadReason,
   resetBackoff,
-} from './reload-error-handler.js';
+} from './reload-error-handler.ts';
 import {
   ServerError,
   isAuthError,
   isBackoffError,
   isServerError,
-} from './server-error.js';
-import {getServer} from './server-option.js';
-import {version} from './version.js';
-import {PokeHandler} from './zero-poke-handler.js';
+} from './server-error.ts';
+import {getServer} from './server-option.ts';
+import {version} from './version.ts';
+import {PokeHandler} from './zero-poke-handler.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;

@@ -1,1 +1,1 @@
-export * from '../../zero-advanced/src/mod.js';
+export * from '../../zero-advanced/src/mod.ts';

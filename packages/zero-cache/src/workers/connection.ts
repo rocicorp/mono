@@ -4,31 +4,31 @@ import type {LogContext} from '@rocicorp/logger';
 import type {JWTPayload} from 'jose';
 import type {CloseEvent, Data, ErrorEvent} from 'ws';
 import WebSocket from 'ws';
-import {startAsyncSpan, startSpan} from '../../../otel/src/span.js';
-import {version} from '../../../otel/src/version.js';
-import {unreachable} from '../../../shared/src/asserts.js';
-import * as valita from '../../../shared/src/valita.js';
-import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.js';
-import {type ErrorBody} from '../../../zero-protocol/src/error.js';
+import {startAsyncSpan, startSpan} from '../../../otel/src/span.ts';
+import {version} from '../../../otel/src/version.ts';
+import {unreachable} from '../../../shared/src/asserts.ts';
+import * as valita from '../../../shared/src/valita.ts';
+import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
+import {type ErrorBody} from '../../../zero-protocol/src/error.ts';
 import {
   type ConnectedMessage,
   type Downstream,
   type PongMessage,
   upstreamSchema,
-} from '../../../zero-protocol/src/mod.js';
+} from '../../../zero-protocol/src/mod.ts';
 import {
   MIN_SERVER_SUPPORTED_PROTOCOL_VERSION,
   PROTOCOL_VERSION,
-} from '../../../zero-protocol/src/protocol-version.js';
-import type {ConnectParams} from '../services/dispatcher/connect-params.js';
-import type {Mutagen} from '../services/mutagen/mutagen.js';
+} from '../../../zero-protocol/src/protocol-version.ts';
+import type {ConnectParams} from '../services/dispatcher/connect-params.ts';
+import type {Mutagen} from '../services/mutagen/mutagen.ts';
 import type {
   SyncContext,
   TokenData,
   ViewSyncer,
-} from '../services/view-syncer/view-syncer.js';
-import {findErrorForClient, getLogLevel} from '../types/error-for-client.js';
-import type {Source} from '../types/streams.js';
+} from '../services/view-syncer/view-syncer.ts';
+import {findErrorForClient, getLogLevel} from '../types/error-for-client.ts';
+import type {Source} from '../types/streams.ts';
 
 const tracer = trace.getTracer('syncer-ws-server', version);
 

@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import {first, type Stream, take} from './stream.js';
+import {first, type Stream, take} from './stream.ts';
 
 describe('take', () => {
   test('take the first n elements from the stream', () => {

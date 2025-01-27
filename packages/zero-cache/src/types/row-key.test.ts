@@ -5,7 +5,7 @@ import {
   rowIDHash,
   rowIDString,
   rowKeyString,
-} from './row-key.js';
+} from './row-key.ts';
 
 describe('types/row-key', () => {
   type Case = {

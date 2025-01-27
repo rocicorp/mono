@@ -1,4 +1,4 @@
-import type * as v from '../../shared/src/valita.js';
+import type * as v from '../../shared/src/valita.ts';
 import type {
   AST,
   Condition,
@@ -21,7 +21,7 @@ import type {
   orderOpsSchema,
   orderingSchema,
   simpleOperatorSchema,
-} from './ast.js';
+} from './ast.ts';
 
 type MakeAllFieldsRequired<T> = {
   [K in keyof T]-?: MakeAllFieldsRequired<T[K]>;

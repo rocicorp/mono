@@ -1,9 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from '../../../shared/src/asserts.js';
-import {randInt} from '../../../shared/src/rand.js';
-import * as v from '../../../shared/src/valita.js';
-import type {Database as Db} from '../../../zqlite/src/db.js';
-import {Database} from '../../../zqlite/src/db.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import {randInt} from '../../../shared/src/rand.ts';
+import * as v from '../../../shared/src/valita.ts';
+import type {Database as Db} from '../../../zqlite/src/db.ts';
+import {Database} from '../../../zqlite/src/db.ts';
 
 type Operations = (log: LogContext, tx: Db) => Promise<void> | void;
 

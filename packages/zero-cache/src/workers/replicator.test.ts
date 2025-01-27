@@ -1,13 +1,13 @@
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {describe, expect, test, vi} from 'vitest';
-import type {ReplicaState} from '../services/replicator/replicator.js';
-import {Subscription} from '../types/subscription.js';
-import {inProcChannel} from '../types/processes.js';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {ReplicaState} from '../services/replicator/replicator.ts';
+import {inProcChannel} from '../types/processes.ts';
+import {Subscription} from '../types/subscription.ts';
 import {
   createNotifierFrom,
   setUpMessageHandlers,
   subscribeTo,
-} from './replicator.js';
+} from './replicator.ts';
 
 const lc = createSilentLogContext();
 

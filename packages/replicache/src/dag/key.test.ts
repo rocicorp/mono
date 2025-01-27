@@ -1,6 +1,6 @@
 import {expect, test} from 'vitest';
-import {fakeHash} from '../hash.js';
-import * as KeyType from './key-type-enum.js';
+import {fakeHash} from '../hash.ts';
+import * as KeyType from './key-type-enum.ts';
 import {
   chunkDataKey,
   chunkMetaKey,
@@ -8,7 +8,7 @@ import {
   headKey,
   type Key,
   parse,
-} from './key.js';
+} from './key.ts';
 
 test('toString', () => {
   const hashEmptyString = fakeHash('');

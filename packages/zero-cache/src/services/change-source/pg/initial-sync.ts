@@ -1,37 +1,37 @@
 import {PG_INSUFFICIENT_PRIVILEGE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
-import {Database} from '../../../../../zqlite/src/db.js';
+import {Database} from '../../../../../zqlite/src/db.ts';
 import {
   createIndexStatement,
   createTableStatement,
-} from '../../../db/create.js';
-import * as Mode from '../../../db/mode-enum.js';
+} from '../../../db/create.ts';
+import * as Mode from '../../../db/mode-enum.ts';
 import {
   mapPostgresToLite,
   mapPostgresToLiteIndex,
-} from '../../../db/pg-to-lite.js';
-import type {IndexSpec, PublishedTableSpec} from '../../../db/specs.js';
-import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.js';
-import type {LexiVersion} from '../../../types/lexi-version.js';
-import {liteValues} from '../../../types/lite.js';
-import {liteTableName} from '../../../types/names.js';
-import {pgClient, type PostgresDB} from '../../../types/pg.js';
-import {id} from '../../../types/sql.js';
-import {initChangeLog} from '../../replicator/schema/change-log.js';
+} from '../../../db/pg-to-lite.ts';
+import type {IndexSpec, PublishedTableSpec} from '../../../db/specs.ts';
+import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
+import type {LexiVersion} from '../../../types/lexi-version.ts';
+import {liteValues} from '../../../types/lite.ts';
+import {liteTableName} from '../../../types/names.ts';
+import {pgClient, type PostgresDB} from '../../../types/pg.ts';
+import {id} from '../../../types/sql.ts';
+import {initChangeLog} from '../../replicator/schema/change-log.ts';
 import {
   initReplicationState,
   ZERO_VERSION_COLUMN_NAME,
-} from '../../replicator/schema/replication-state.js';
-import {toLexiVersion} from './lsn.js';
-import {initShardSchema} from './schema/init.js';
-import {getPublicationInfo, type PublicationInfo} from './schema/published.js';
+} from '../../replicator/schema/replication-state.ts';
+import {toLexiVersion} from './lsn.ts';
+import {initShardSchema} from './schema/init.ts';
+import {getPublicationInfo, type PublicationInfo} from './schema/published.ts';
 import {
   getInternalShardConfig,
   setInitialSchema,
   validatePublications,
-} from './schema/shard.js';
-import type {ShardConfig} from './shard-config.js';
+} from './schema/shard.ts';
+import type {ShardConfig} from './shard-config.ts';
 
 export type InitialSyncOptions = {
   tableCopyWorkers: number;

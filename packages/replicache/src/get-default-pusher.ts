@@ -1,10 +1,10 @@
-import {callDefaultFetch} from './call-default-fetch.js';
+import {callDefaultFetch} from './call-default-fetch.ts';
 import {
   isClientStateNotFoundResponse,
   isVersionNotSupportedResponse,
-} from './error-responses.js';
-import type {Pusher, PusherResult} from './pusher.js';
-import type {PushRequest} from './sync/push.js';
+} from './error-responses.ts';
+import type {Pusher, PusherResult} from './pusher.ts';
+import type {PushRequest} from './sync/push.ts';
 
 /**
  * This creates a default pusher which uses HTTP POST to send the push request.

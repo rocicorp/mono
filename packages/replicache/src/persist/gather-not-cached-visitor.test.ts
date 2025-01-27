@@ -1,11 +1,11 @@
 import {describe, expect, test} from 'vitest';
-import {LazyStore} from '../dag/lazy-store.js';
-import {TestStore} from '../dag/test-store.js';
-import * as MetaType from '../db/meta-type-enum.js';
-import {ChainBuilder} from '../db/test-helpers.js';
-import {assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
-import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
-import {GatherNotCachedVisitor} from './gather-not-cached-visitor.js';
+import {LazyStore} from '../dag/lazy-store.ts';
+import {TestStore} from '../dag/test-store.ts';
+import * as MetaType from '../db/meta-type-enum.ts';
+import {ChainBuilder} from '../db/test-helpers.ts';
+import {assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.ts';
+import {withRead, withWriteNoImplicitCommit} from '../with-transactions.ts';
+import {GatherNotCachedVisitor} from './gather-not-cached-visitor.ts';
 
 describe('GatherNotCachedVisitor', () => {
   test('when gatherSizeLimit not exceeded, if none cached gathers all, if all cached gathers none', async () => {

@@ -1,7 +1,7 @@
 import {expect, test, vi} from 'vitest';
-import {AbortError} from '../../../shared/src/abort-error.js';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
-import {RunningState} from './running-state.js';
+import {AbortError} from '../../../shared/src/abort-error.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {RunningState} from './running-state.ts';
 
 const lc = createSilentLogContext();
 

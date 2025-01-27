@@ -1,11 +1,11 @@
 import {LogContext} from '@rocicorp/logger';
-import {assert} from '../../../shared/src/asserts.js';
-import type {Enum} from '../../../shared/src/enum.js';
-import type {Store} from '../dag/store.js';
-import * as FormatVersion from '../format-version-enum.js';
-import type {IndexDefinitions} from '../index-defs.js';
-import type {ClientID} from '../sync/ids.js';
-import {withWrite} from '../with-transactions.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import type {Store} from '../dag/store.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import type {IndexDefinitions} from '../index-defs.ts';
+import type {ClientID} from '../sync/ids.ts';
+import {withWrite} from '../with-transactions.ts';
 import {
   type ClientMap,
   type ClientMapDD31,
@@ -15,7 +15,7 @@ import {
   getClients,
   initClientV6,
   setClients,
-} from './clients.js';
+} from './clients.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

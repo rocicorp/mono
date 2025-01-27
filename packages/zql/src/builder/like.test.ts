@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {getLikePredicate} from './like.js';
+import {getLikePredicate} from './like.ts';
 
 export const cases: {
   pattern: string;

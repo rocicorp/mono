@@ -1,10 +1,10 @@
 import * as sinon from 'sinon';
 import {afterEach, expect, test} from 'vitest';
-import {TestMemStore} from '../kv/test-mem-store.js';
+import {TestMemStore} from '../kv/test-mem-store.ts';
 import {
   IDBDatabasesStore,
   type IndexedDBDatabase,
-} from './idb-databases-store.js';
+} from './idb-databases-store.ts';
 
 afterEach(() => {
   sinon.restore();

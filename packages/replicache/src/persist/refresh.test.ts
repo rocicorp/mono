@@ -1,13 +1,13 @@
 import {LogContext} from '@rocicorp/logger';
 import {describe, expect, test} from 'vitest';
-import {assert, assertNotUndefined} from '../../../shared/src/asserts.js';
-import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.js';
-import type {Entry} from '../btree/node.js';
-import {BTreeWrite} from '../btree/write.js';
-import type {Cookie} from '../cookies.js';
-import {LazyStore} from '../dag/lazy-store.js';
-import type {Store} from '../dag/store.js';
-import {TestStore} from '../dag/test-store.js';
+import {assert, assertNotUndefined} from '../../../shared/src/asserts.ts';
+import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import type {Entry} from '../btree/node.ts';
+import {BTreeWrite} from '../btree/write.ts';
+import type {Cookie} from '../cookies.ts';
+import {LazyStore} from '../dag/lazy-store.ts';
+import type {Store} from '../dag/store.ts';
+import {TestStore} from '../dag/test-store.ts';
 import {
   Commit,
   DEFAULT_HEAD_NAME,
@@ -17,33 +17,33 @@ import {
   baseSnapshotHashFromHash,
   newLocalDD31,
   newSnapshotDD31,
-} from '../db/commit.js';
-import {ChainBuilder} from '../db/test-helpers.js';
-import * as FormatVersion from '../format-version-enum.js';
-import {deepFreeze} from '../frozen-json.js';
+} from '../db/commit.ts';
+import {ChainBuilder} from '../db/test-helpers.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import {deepFreeze} from '../frozen-json.ts';
 import {
   type Hash,
   assertHash,
   fakeHash,
   makeNewFakeHashFunction,
-} from '../hash.js';
+} from '../hash.ts';
 import {
   type ClientGroupMap,
   setClientGroup,
   setClientGroups,
-} from '../persist/client-groups.js';
+} from '../persist/client-groups.ts';
 import {
   type ClientV6,
   assertClientV6,
   getClient,
   setClient,
-} from '../persist/clients.js';
-import type {ClientID} from '../sync/ids.js';
-import {addData, testSubscriptionsManagerOptions} from '../test-util.js';
-import type {WriteTransaction} from '../transactions.js';
-import type {MutatorDefs} from '../types.js';
-import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
-import {refresh} from './refresh.js';
+} from '../persist/clients.ts';
+import type {ClientID} from '../sync/ids.ts';
+import {addData, testSubscriptionsManagerOptions} from '../test-util.ts';
+import type {WriteTransaction} from '../transactions.ts';
+import type {MutatorDefs} from '../types.ts';
+import {withRead, withWriteNoImplicitCommit} from '../with-transactions.ts';
+import {refresh} from './refresh.ts';
 
 async function makeChain(
   store: Store,

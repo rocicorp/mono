@@ -1,10 +1,10 @@
-import {assert} from '../../../../shared/src/asserts.js';
-import type {Enum} from '../../../../shared/src/enum.js';
-import {max} from '../../types/lexi-version.js';
-import {Subscription} from '../../types/subscription.js';
-import type {WatermarkedChange} from './change-streamer-service.js';
-import {type Downstream} from './change-streamer.js';
-import * as ErrorType from './error-type-enum.js';
+import {assert} from '../../../../shared/src/asserts.ts';
+import type {Enum} from '../../../../shared/src/enum.ts';
+import {max} from '../../types/lexi-version.ts';
+import {Subscription} from '../../types/subscription.ts';
+import type {WatermarkedChange} from './change-streamer-service.ts';
+import {type Downstream} from './change-streamer.ts';
+import * as ErrorType from './error-type-enum.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
 

@@ -1,5 +1,5 @@
-import type {FrozenJSONValue} from '../frozen-json.js';
-import type {Read} from './store.js';
+import type {FrozenJSONValue} from '../frozen-json.ts';
+import type {Read} from './store.ts';
 
 export class ReadImpl implements Read {
   readonly #map: Map<string, FrozenJSONValue>;

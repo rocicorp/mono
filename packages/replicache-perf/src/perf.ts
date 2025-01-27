@@ -1,11 +1,11 @@
-import {type Benchmark, runBenchmark} from './benchmark.js';
-import {benchmarks as compareBenchmarks} from './benchmarks/compare-utf8.js';
-import {benchmarks as hashBenchmarks} from './benchmarks/hash.js';
-import {benchmarks as idbBenchmarks} from './benchmarks/idb.js';
-import {benchmarks as mapLoopBenchmarks} from './benchmarks/map-loop.js';
-import {benchmarks as replicacheBenchmarks} from './benchmarks/replicache.js';
-import {benchmarks as storageBenchmarks} from './benchmarks/storage.js';
-import {formatAsReplicache} from './format.js';
+import {type Benchmark, runBenchmark} from './benchmark.ts';
+import {benchmarks as compareBenchmarks} from './benchmarks/compare-utf8.ts';
+import {benchmarks as hashBenchmarks} from './benchmarks/hash.ts';
+import {benchmarks as idbBenchmarks} from './benchmarks/idb.ts';
+import {benchmarks as mapLoopBenchmarks} from './benchmarks/map-loop.ts';
+import {benchmarks as replicacheBenchmarks} from './benchmarks/replicache.ts';
+import {benchmarks as storageBenchmarks} from './benchmarks/storage.ts';
+import {formatAsReplicache} from './format.ts';
 
 export const benchmarks = [
   ...replicacheBenchmarks(),

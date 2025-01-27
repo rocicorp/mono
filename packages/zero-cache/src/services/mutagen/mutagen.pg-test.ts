@@ -1,20 +1,20 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.js';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import {
   type CRUDMutation,
   type CRUDOp,
   type UpsertOp,
-} from '../../../../zero-protocol/src/mod.js';
-import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.js';
-import type {WriteAuthorizer} from '../../auth/write-authorizer.js';
-import * as Mode from '../../db/mode-enum.js';
-import {expectTables, testDBs} from '../../test/db.js';
-import type {PostgresDB} from '../../types/pg.js';
-import {zeroSchema} from './mutagen-test-shared.js';
-import {processMutation} from './mutagen.js';
+} from '../../../../zero-protocol/src/mod.ts';
+import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
+import type {WriteAuthorizer} from '../../auth/write-authorizer.ts';
+import * as Mode from '../../db/mode-enum.ts';
+import {expectTables, testDBs} from '../../test/db.ts';
+import type {PostgresDB} from '../../types/pg.ts';
+import {zeroSchema} from './mutagen-test-shared.ts';
+import {processMutation} from './mutagen.ts';
 
 const SHARD_ID = '0';
 

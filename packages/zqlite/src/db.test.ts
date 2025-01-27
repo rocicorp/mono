@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect, test, vi} from 'vitest';
-import {TestLogSink} from '../../shared/src/logging-test-utils.js';
-import {Database} from './db.js';
+import {TestLogSink} from '../../shared/src/logging-test-utils.ts';
+import {Database} from './db.ts';
 
 test('slow queries are logged', () => {
   vi.useFakeTimers();

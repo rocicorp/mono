@@ -5,13 +5,13 @@ import {
   assert,
   assertNotNull,
   assertNotUndefined,
-} from '../../../shared/src/asserts.js';
-import type {Enum} from '../../../shared/src/enum.js';
-import type {JSONValue} from '../../../shared/src/json.js';
-import {promiseVoid} from '../../../shared/src/resolved-promises.js';
-import {BTreeRead} from '../btree/read.js';
-import {LazyStore, LazyWrite} from '../dag/lazy-store.js';
-import {TestStore} from '../dag/test-store.js';
+} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import {BTreeRead} from '../btree/read.ts';
+import {LazyStore, LazyWrite} from '../dag/lazy-store.ts';
+import {TestStore} from '../dag/test-store.ts';
 import {
   Commit,
   DEFAULT_HEAD_NAME,
@@ -20,24 +20,24 @@ import {
   assertSnapshotCommitDD31,
   baseSnapshotFromHash,
   commitFromHash,
-} from '../db/commit.js';
+} from '../db/commit.ts';
 import {
   ChainBuilder,
   createMutatorName,
   getChunkSnapshot,
-} from '../db/test-helpers.js';
-import * as FormatVersion from '../format-version-enum.js';
-import {type Hash, assertHash, makeNewFakeHashFunction} from '../hash.js';
-import type {ClientGroupID, ClientID} from '../sync/ids.js';
-import type {WriteTransaction} from '../transactions.js';
-import type {MutatorDefs} from '../types.js';
-import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
+} from '../db/test-helpers.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import {type Hash, assertHash, makeNewFakeHashFunction} from '../hash.ts';
+import type {ClientGroupID, ClientID} from '../sync/ids.ts';
+import type {WriteTransaction} from '../transactions.ts';
+import type {MutatorDefs} from '../types.ts';
+import {withRead, withWriteNoImplicitCommit} from '../with-transactions.ts';
 import {
   CLIENT_GROUPS_HEAD_NAME,
   type ClientGroup,
   getClientGroup,
   setClientGroup,
-} from './client-groups.js';
+} from './client-groups.ts';
 import {
   CLIENTS_HEAD_NAME,
   type Client,
@@ -48,10 +48,10 @@ import {
   getClients,
   initClientV6,
   setClients,
-} from './clients.js';
-import {makeClientID} from './make-client-id.js';
-import {persistDD31} from './persist.js';
-import * as PersistedExpectation from './persisted-expectation-enum.js';
+} from './clients.ts';
+import {makeClientID} from './make-client-id.ts';
+import {persistDD31} from './persist.ts';
+import * as PersistedExpectation from './persisted-expectation-enum.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 type PersistedExpectation = Enum<typeof PersistedExpectation>;

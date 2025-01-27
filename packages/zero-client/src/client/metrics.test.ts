@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import sinon from 'sinon';
 import {afterEach, expect, test} from 'vitest';
-import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.js';
+import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
 import {
   DID_NOT_CONNECT_VALUE,
   type DisconnectReason,
@@ -11,7 +11,7 @@ import {
   REPORT_INTERVAL_MS,
   type Series,
   State,
-} from './metrics.js';
+} from './metrics.ts';
 
 afterEach(() => {
   sinon.restore();

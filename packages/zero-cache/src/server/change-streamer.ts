@@ -1,21 +1,21 @@
-import {assert} from '../../../shared/src/asserts.js';
-import {must} from '../../../shared/src/must.js';
-import {DatabaseInitError} from '../../../zqlite/src/db.js';
-import {getZeroConfig} from '../config/zero-config.js';
-import {deleteLiteDB} from '../db/delete-lite-db.js';
-import {initializeChangeSource} from '../services/change-source/pg/change-source.js';
-import {ChangeStreamerHttpServer} from '../services/change-streamer/change-streamer-http.js';
-import {initializeStreamer} from '../services/change-streamer/change-streamer-service.js';
-import type {ChangeStreamerService} from '../services/change-streamer/change-streamer.js';
-import {AutoResetSignal} from '../services/change-streamer/schema/tables.js';
-import {exitAfter, runUntilKilled} from '../services/life-cycle.js';
-import {pgClient} from '../types/pg.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import {must} from '../../../shared/src/must.ts';
+import {DatabaseInitError} from '../../../zqlite/src/db.ts';
+import {getZeroConfig} from '../config/zero-config.ts';
+import {deleteLiteDB} from '../db/delete-lite-db.ts';
+import {initializeChangeSource} from '../services/change-source/pg/change-source.ts';
+import {ChangeStreamerHttpServer} from '../services/change-streamer/change-streamer-http.ts';
+import {initializeStreamer} from '../services/change-streamer/change-streamer-service.ts';
+import type {ChangeStreamerService} from '../services/change-streamer/change-streamer.ts';
+import {AutoResetSignal} from '../services/change-streamer/schema/tables.ts';
+import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
+import {pgClient} from '../types/pg.ts';
 import {
   parentWorker,
   singleProcessMode,
   type Worker,
-} from '../types/processes.js';
-import {createLogContext} from './logging.js';
+} from '../types/processes.ts';
+import {createLogContext} from './logging.ts';
 
 export default async function runWorker(
   parent: Worker,

@@ -1,7 +1,7 @@
-import type {Row} from '../../../zero-protocol/src/data.js';
-import type {AddChange, Change, ChildChange, RemoveChange} from './change.js';
-import type {Comparator, Node} from './data.js';
-import {maybeSplitAndPushEditChange} from './maybe-split-and-push-edit-change.js';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {AddChange, Change, ChildChange, RemoveChange} from './change.ts';
+import type {Comparator, Node} from './data.ts';
+import {maybeSplitAndPushEditChange} from './maybe-split-and-push-edit-change.ts';
 import {
   throwOutput,
   type FetchRequest,
@@ -9,9 +9,9 @@ import {
   type Operator,
   type Output,
   type Start,
-} from './operator.js';
-import type {SourceSchema} from './schema.js';
-import type {Stream} from './stream.js';
+} from './operator.ts';
+import type {SourceSchema} from './schema.ts';
+import type {Stream} from './stream.ts';
 
 export type Bound = {
   row: Row;

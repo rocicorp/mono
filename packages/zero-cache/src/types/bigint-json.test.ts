@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import {parse, stringify} from './bigint-json.js';
+import {parse, stringify} from './bigint-json.ts';
 
 describe('types/json', () => {
   type Case = {

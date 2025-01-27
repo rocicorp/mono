@@ -2,8 +2,8 @@ import {deleteDB, type IDBPDatabase, openDB} from 'idb/with-async-ittr';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore Invalid module when using node16 module resolution.
 import xbytes from 'xbytes';
-import type {Bencher, Benchmark} from '../benchmark.js';
-import {randomData, type RandomDataType} from '../data.js';
+import type {Bencher, Benchmark} from '../benchmark.ts';
+import {randomData, type RandomDataType} from '../data.ts';
 
 function benchmarkIDBReadGetAll(opts: {
   dataType: RandomDataType;

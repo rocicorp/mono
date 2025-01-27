@@ -1,11 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {ReadonlyJSONObject} from '../../../../shared/src/json.js';
-import {promiseVoid} from '../../../../shared/src/resolved-promises.js';
-import {Database} from '../../../../zqlite/src/db.js';
-import type {Source} from '../../types/streams.js';
-import type {ChangeStreamer} from '../change-streamer/change-streamer.js';
-import type {Service} from '../service.js';
-import {IncrementalSyncer} from './incremental-sync.js';
+import type {ReadonlyJSONObject} from '../../../../shared/src/json.ts';
+import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
+import type {Source} from '../../types/streams.ts';
+import type {ChangeStreamer} from '../change-streamer/change-streamer.ts';
+import type {Service} from '../service.ts';
+import {IncrementalSyncer} from './incremental-sync.ts';
 
 /** See {@link ReplicaStateNotifier.subscribe()}. */
 export type ReplicaState = {

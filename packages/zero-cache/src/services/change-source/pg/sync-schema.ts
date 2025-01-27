@@ -4,10 +4,10 @@ import {
   runSchemaMigrations,
   type IncrementalMigrationMap,
   type Migration,
-} from '../../../db/migration-lite.js';
-import {AutoResetSignal} from '../../change-streamer/schema/tables.js';
-import {initialSync, type InitialSyncOptions} from './initial-sync.js';
-import type {ShardConfig} from './shard-config.js';
+} from '../../../db/migration-lite.ts';
+import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
+import {initialSync, type InitialSyncOptions} from './initial-sync.ts';
+import type {ShardConfig} from './shard-config.ts';
 
 export async function initSyncSchema(
   log: LogContext,

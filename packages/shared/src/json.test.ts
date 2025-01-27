@@ -4,7 +4,7 @@ import {
   assertJSONValue,
   deepEqual,
   isJSONValue,
-} from './json.js';
+} from './json.ts';
 
 test('JSON deep equal', () => {
   const t = (

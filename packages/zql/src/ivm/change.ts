@@ -1,5 +1,5 @@
-import type {Row} from '../../../zero-protocol/src/data.js';
-import type {Node} from './data.js';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Node} from './data.ts';
 
 export type Change = AddChange | RemoveChange | ChildChange | EditChange;
 export type ChangeType = Change['type'];

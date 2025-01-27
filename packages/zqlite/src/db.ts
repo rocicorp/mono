@@ -5,8 +5,8 @@ import SQLite3Database, {
   type RunResult,
   type Statement as SQLite3Statement,
 } from '@rocicorp/zero-sqlite3';
-import {manualSpan} from '../../otel/src/span.js';
-import {version} from '../../otel/src/version.js';
+import {manualSpan} from '../../otel/src/span.ts';
+import {version} from '../../otel/src/version.ts';
 
 const tracer = trace.getTracer('view-syncer', version);
 

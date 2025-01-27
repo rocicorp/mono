@@ -1,12 +1,12 @@
 import {expect, test} from 'vitest';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
-import type {FrozenJSONValue} from '../frozen-json.js';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import type {FrozenJSONValue} from '../frozen-json.ts';
 import {
   withRead,
   withWrite,
   withWriteNoImplicitCommit,
-} from '../with-transactions.js';
-import type {Read, Store, Write} from './store.js';
+} from '../with-transactions.ts';
+import type {Read, Store, Write} from './store.ts';
 
 class TestStore implements Store {
   readonly #store: Store;

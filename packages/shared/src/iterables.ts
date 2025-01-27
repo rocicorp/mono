@@ -1,4 +1,4 @@
-import {assert} from './asserts.js';
+import {assert} from './asserts.ts';
 
 export function* joinIterables<T>(...iters: Iterable<T>[]) {
   for (const iter of iters) {

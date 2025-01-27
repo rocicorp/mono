@@ -2,15 +2,15 @@ import {expect, suite, test} from 'vitest';
 import type {
   Condition,
   SimpleOperator,
-} from '../../../zero-protocol/src/ast.js';
-import type {Row} from '../../../zero-protocol/src/data.js';
-import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
-import {Catch, expandNode} from './catch.js';
-import type {Constraint} from './constraint.js';
-import type {Node} from './data.js';
-import type {FetchRequest, Input, Output, Start} from './operator.js';
-import type {SourceChange} from './source.js';
-import {createSource} from './test/source-factory.js';
+} from '../../../zero-protocol/src/ast.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
+import {Catch, expandNode} from './catch.ts';
+import type {Constraint} from './constraint.ts';
+import type {Node} from './data.ts';
+import type {FetchRequest, Input, Output, Start} from './operator.ts';
+import type {SourceChange} from './source.ts';
+import {createSource} from './test/source-factory.ts';
 
 function asNodes(rows: Row[]) {
   return rows.map(row => ({

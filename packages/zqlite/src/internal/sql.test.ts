@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {compile, sql} from './sql.js';
+import {compile, sql} from './sql.ts';
 
 test('can do empty slots', () => {
   const str = compile(sql`INSERT INTO foo (id, name) VALUES (?, ?)`);

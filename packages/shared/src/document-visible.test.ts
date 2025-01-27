@@ -1,5 +1,5 @@
 import {afterEach, beforeEach, expect, test, vi} from 'vitest';
-import {getDocumentVisibilityWatcher} from './document-visible.js';
+import {getDocumentVisibilityWatcher} from './document-visible.ts';
 
 beforeEach(() => {
   vi.useFakeTimers();

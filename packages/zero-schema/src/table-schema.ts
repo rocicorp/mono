@@ -1,4 +1,4 @@
-import type {PrimaryKey} from '../../zero-protocol/src/primary-key.js';
+import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
 
 export type ValueType = 'string' | 'number' | 'boolean' | 'null' | 'json';
 

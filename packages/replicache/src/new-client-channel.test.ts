@@ -1,16 +1,16 @@
 import {resolver} from '@rocicorp/resolver';
 import {describe, expect, test} from 'vitest';
-import {sleep} from '../../shared/src/sleep.js';
-import {BroadcastChannel} from './broadcast-channel.js';
-import {TestStore} from './dag/test-store.js';
-import {fakeHash} from './hash.js';
+import {sleep} from '../../shared/src/sleep.ts';
+import {BroadcastChannel} from './broadcast-channel.ts';
+import {TestStore} from './dag/test-store.ts';
+import {fakeHash} from './hash.ts';
 import {
   initNewClientChannel,
   makeChannelNameV0ForTesting,
   makeChannelNameV1ForTesting,
-} from './new-client-channel.js';
-import {setClientGroup} from './persist/client-groups.js';
-import {withWriteNoImplicitCommit} from './with-transactions.js';
+} from './new-client-channel.ts';
+import {setClientGroup} from './persist/client-groups.ts';
+import {withWriteNoImplicitCommit} from './with-transactions.ts';
 
 function getChannelMessagePromise(
   replicacheName: string,

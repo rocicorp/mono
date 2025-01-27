@@ -1,19 +1,19 @@
 import {expect} from 'vitest';
-import type {JSONObject} from '../../../../shared/src/json.js';
-import {must} from '../../../../shared/src/must.js';
-import type {CompoundKey, Ordering} from '../../../../zero-protocol/src/ast.js';
-import type {Row} from '../../../../zero-protocol/src/data.js';
-import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.js';
-import type {SchemaValue} from '../../../../zero-schema/src/table-schema.js';
-import {ArrayView} from '../array-view.js';
-import {Catch} from '../catch.js';
-import {Join} from '../join.js';
-import {MemoryStorage} from '../memory-storage.js';
-import type {Input, Operator, Storage} from '../operator.js';
-import {Snitch, type SnitchMessage} from '../snitch.js';
-import type {Source, SourceChange} from '../source.js';
-import type {Format} from '../view.js';
-import {createSource} from './source-factory.js';
+import type {JSONObject} from '../../../../shared/src/json.ts';
+import {must} from '../../../../shared/src/must.ts';
+import type {CompoundKey, Ordering} from '../../../../zero-protocol/src/ast.ts';
+import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.ts';
+import type {SchemaValue} from '../../../../zero-schema/src/table-schema.ts';
+import {ArrayView} from '../array-view.ts';
+import {Catch} from '../catch.ts';
+import {Join} from '../join.ts';
+import {MemoryStorage} from '../memory-storage.ts';
+import type {Input, Operator, Storage} from '../operator.ts';
+import {Snitch, type SnitchMessage} from '../snitch.ts';
+import type {Source, SourceChange} from '../source.ts';
+import type {Format} from '../view.ts';
+import {createSource} from './source-factory.ts';
 
 function makeSource(
   rows: readonly Row[],

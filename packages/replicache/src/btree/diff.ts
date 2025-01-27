@@ -1,6 +1,6 @@
-import {asyncIterableToArray} from '../async-iterable-to-array.js';
-import type {InternalDiff} from './node.js';
-import type {BTreeRead} from './read.js';
+import {asyncIterableToArray} from '../async-iterable-to-array.ts';
+import type {InternalDiff} from './node.ts';
+import type {BTreeRead} from './read.ts';
 
 export function diff(
   oldMap: BTreeRead,

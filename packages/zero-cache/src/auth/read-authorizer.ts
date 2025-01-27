@@ -1,10 +1,10 @@
 import type {JWTPayload} from 'jose';
-import {hashOfAST} from '../../../zero-protocol/src/ast-hash.js';
-import type {AST, Condition} from '../../../zero-protocol/src/ast.js';
-import type {PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.js';
-import {bindStaticParameters} from '../../../zql/src/builder/builder.js';
-import {dnf} from '../../../zql/src/query/dnf.js';
-import type {JSONValue} from '../../../shared/src/json.js';
+import type {JSONValue} from '../../../shared/src/json.ts';
+import {hashOfAST} from '../../../zero-protocol/src/ast-hash.ts';
+import type {AST, Condition} from '../../../zero-protocol/src/ast.ts';
+import type {PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.ts';
+import {bindStaticParameters} from '../../../zql/src/builder/builder.ts';
+import {dnf} from '../../../zql/src/query/dnf.ts';
 
 export type TransformedAndHashed =
   | {

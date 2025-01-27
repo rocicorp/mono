@@ -9,35 +9,35 @@ import {
   vi,
   type Mock,
 } from 'vitest';
-import {AbortError} from '../../../../shared/src/abort-error.js';
-import {assert} from '../../../../shared/src/asserts.js';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import {Queue} from '../../../../shared/src/queue.js';
-import {Database} from '../../../../zqlite/src/db.js';
-import {StatementRunner} from '../../db/statements.js';
-import {testDBs} from '../../test/db.js';
-import type {PostgresDB} from '../../types/pg.js';
-import type {Source} from '../../types/streams.js';
-import {Subscription} from '../../types/subscription.js';
-import {type ChangeStreamMessage} from '../change-source/protocol/current/downstream.js';
-import type {StatusMessage} from '../change-source/protocol/current/status.js';
+import {AbortError} from '../../../../shared/src/abort-error.ts';
+import {assert} from '../../../../shared/src/asserts.ts';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {Queue} from '../../../../shared/src/queue.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
+import {StatementRunner} from '../../db/statements.ts';
+import {testDBs} from '../../test/db.ts';
+import type {PostgresDB} from '../../types/pg.ts';
+import type {Source} from '../../types/streams.ts';
+import {Subscription} from '../../types/subscription.ts';
+import {type ChangeStreamMessage} from '../change-source/protocol/current/downstream.ts';
+import type {StatusMessage} from '../change-source/protocol/current/status.ts';
 import {
   getSubscriptionState,
   initReplicationState,
-} from '../replicator/schema/replication-state.js';
-import {ReplicationMessages} from '../replicator/test-utils.js';
-import {initializeStreamer} from './change-streamer-service.js';
+} from '../replicator/schema/replication-state.ts';
+import {ReplicationMessages} from '../replicator/test-utils.ts';
+import {initializeStreamer} from './change-streamer-service.ts';
 import {
   type ChangeStreamerService,
   type Downstream,
-} from './change-streamer.js';
-import * as ErrorType from './error-type-enum.js';
+} from './change-streamer.ts';
+import * as ErrorType from './error-type-enum.ts';
 import {
   AutoResetSignal,
   ensureReplicationConfig,
   type ChangeLogEntry,
   type ReplicationConfig,
-} from './schema/tables.js';
+} from './schema/tables.ts';
 
 describe('change-streamer/service', () => {
   let lc: LogContext;

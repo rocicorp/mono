@@ -1,13 +1,13 @@
 import {Lock} from '@rocicorp/lock';
-import {assert} from '../../../shared/src/asserts.js';
-import type {Enum} from '../../../shared/src/enum.js';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
-import {type Chunk, type CreateChunk, toRefs} from '../dag/chunk.js';
-import type {Write} from '../dag/store.js';
-import * as FormatVersion from '../format-version-enum.js';
-import type {FrozenJSONValue} from '../frozen-json.js';
-import {type Hash, emptyHash, newRandomHash} from '../hash.js';
-import {getSizeOfEntry} from '../size-of-value.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {type Chunk, type CreateChunk, toRefs} from '../dag/chunk.ts';
+import type {Write} from '../dag/store.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import type {FrozenJSONValue} from '../frozen-json.ts';
+import {type Hash, emptyHash, newRandomHash} from '../hash.ts';
+import {getSizeOfEntry} from '../size-of-value.ts';
 import {
   DataNodeImpl,
   type Entry,
@@ -18,8 +18,8 @@ import {
   newNodeImpl,
   partition,
   toChunkData,
-} from './node.js';
-import {BTreeRead} from './read.js';
+} from './node.ts';
+import {BTreeRead} from './read.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

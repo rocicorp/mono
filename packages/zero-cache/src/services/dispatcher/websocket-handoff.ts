@@ -5,14 +5,14 @@ import {WebSocketServer, type WebSocket} from 'ws';
 import {
   serializableSubset,
   type IncomingMessageSubset,
-} from '../../types/http.js';
+} from '../../types/http.ts';
 import {
   MESSAGE_TYPES,
   type Receiver,
   type Sender,
   type Worker,
-} from '../../types/processes.js';
-import {closeWithProtocolError} from '../../types/ws.js';
+} from '../../types/processes.ts';
+import {closeWithProtocolError} from '../../types/ws.ts';
 
 export type WebSocketHandoff<P> = (message: IncomingMessageSubset) => {
   payload: P;

@@ -1,6 +1,6 @@
 import {expect, test} from 'vitest';
-import {deepClone} from './deep-clone.js';
-import type {JSONValue, ReadonlyJSONValue} from './json.js';
+import {deepClone} from './deep-clone.ts';
+import type {JSONValue, ReadonlyJSONValue} from './json.ts';
 
 test('deepClone', () => {
   const t = (v: ReadonlyJSONValue) => {

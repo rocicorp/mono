@@ -1,4 +1,4 @@
-import type {Benchmark} from '../benchmark.js';
+import type {Benchmark} from '../benchmark.ts';
 
 export function benchmarks(): Array<Benchmark> {
   return [forLoop(), forEach()];

@@ -1,7 +1,7 @@
 import {resolver} from '@rocicorp/resolver';
 import {bench, describe, expect} from 'vitest';
-import type {Row} from '../../../zql/src/query/query.js';
-import {getInternalReplicacheImplForTesting, Zero} from './zero.js';
+import type {Row} from '../../../zql/src/query/query.ts';
+import {getInternalReplicacheImplForTesting, Zero} from './zero.ts';
 
 const user = {
   name: 'user',

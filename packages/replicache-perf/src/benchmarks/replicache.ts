@@ -1,6 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
-import {ReplicacheImpl} from '../../../replicache/src/impl.js';
-import {dropIDBStoreWithMemFallback} from '../../../replicache/src/kv/idb-store-with-mem-fallback.js';
+import {ReplicacheImpl} from '../../../replicache/src/impl.ts';
+import {dropIDBStoreWithMemFallback} from '../../../replicache/src/kv/idb-store-with-mem-fallback.ts';
 import type {
   IndexDefinitions,
   JSONValue,
@@ -9,18 +9,18 @@ import type {
   ReadTransaction,
   ReplicacheOptions,
   WriteTransaction,
-} from '../../../replicache/src/mod.js';
-import {assert} from '../../../shared/src/asserts.js';
-import {deepEqual} from '../../../shared/src/json.js';
-import {randomUint64} from '../../../shared/src/random-uint64.js';
-import type {Writable} from '../../../shared/src/writable.js';
-import type {Bencher, Benchmark} from '../benchmark.js';
+} from '../../../replicache/src/mod.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import {deepEqual} from '../../../shared/src/json.ts';
+import {randomUint64} from '../../../shared/src/random-uint64.ts';
+import type {Writable} from '../../../shared/src/writable.ts';
+import type {Bencher, Benchmark} from '../benchmark.ts';
 import {
   type TestDataObject,
   getTmcwData,
   jsonArrayTestData,
   jsonObjectTestData,
-} from '../data.js';
+} from '../data.ts';
 
 const valSize = 1024;
 

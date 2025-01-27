@@ -1,5 +1,5 @@
-import {getNonCryptoRandomValues} from '../../../shared/src/random-values.js';
-import type {ClientID} from './ids.js';
+import {getNonCryptoRandomValues} from '../../../shared/src/random-values.ts';
+import type {ClientID} from './ids.ts';
 
 let sessionID = '';
 function getSessionID() {

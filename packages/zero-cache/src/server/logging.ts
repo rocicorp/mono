@@ -6,8 +6,8 @@ import {
   type LogSink,
 } from '@rocicorp/logger';
 import {pid} from 'node:process';
-import {type LogConfig, type ZeroConfig} from '../config/zero-config.js';
-import {stringify} from '../types/bigint-json.js';
+import {type LogConfig, type ZeroConfig} from '../config/zero-config.ts';
+import {stringify} from '../types/bigint-json.ts';
 
 function createLogSink(config: LogConfig) {
   return config.format === 'json' ? consoleJsonLogSink : consoleLogSink;

@@ -7,21 +7,21 @@ import {
   vi,
   type Mock,
 } from 'vitest';
-import {CustomKeyMap} from '../../../../shared/src/custom-key-map.js';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import {sleep} from '../../../../shared/src/sleep.js';
-import {testDBs} from '../../test/db.js';
-import {versionToLexi} from '../../types/lexi-version.js';
-import type {PostgresDB} from '../../types/pg.js';
-import {rowIDString, type RowID} from '../../types/row-key.js';
-import {CVRStore, OwnershipError} from './cvr-store.js';
+import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {sleep} from '../../../../shared/src/sleep.ts';
+import {testDBs} from '../../test/db.ts';
+import {versionToLexi} from '../../types/lexi-version.ts';
+import type {PostgresDB} from '../../types/pg.ts';
+import {rowIDString, type RowID} from '../../types/row-key.ts';
+import {CVRStore, OwnershipError} from './cvr-store.ts';
 import {
   CVRQueryDrivenUpdater,
   type CVRSnapshot,
   type RowUpdate,
-} from './cvr.js';
-import {setupCVRTables, type RowsRow} from './schema/cvr.js';
-import type {CVRVersion} from './schema/types.js';
+} from './cvr.ts';
+import {setupCVRTables, type RowsRow} from './schema/cvr.ts';
+import type {CVRVersion} from './schema/types.ts';
 
 describe('view-syncer/cvr-store', () => {
   const lc = createSilentLogContext();

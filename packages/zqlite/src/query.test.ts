@@ -1,12 +1,12 @@
 import {beforeEach, expect, expectTypeOf, test} from 'vitest';
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.js';
-import {must} from '../../shared/src/must.js';
-import {MemoryStorage} from '../../zql/src/ivm/memory-storage.js';
-import type {Source} from '../../zql/src/ivm/source.js';
-import {newQuery, type QueryDelegate} from '../../zql/src/query/query-impl.js';
-import {schema} from '../../zql/src/query/test/test-schemas.js';
-import {Database} from './db.js';
-import {TableSource, toSQLiteTypeName} from './table-source.js';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {must} from '../../shared/src/must.ts';
+import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
+import type {Source} from '../../zql/src/ivm/source.ts';
+import {newQuery, type QueryDelegate} from '../../zql/src/query/query-impl.ts';
+import {schema} from '../../zql/src/query/test/test-schemas.ts';
+import {Database} from './db.ts';
+import {TableSource, toSQLiteTypeName} from './table-source.ts';
 
 let queryDelegate: QueryDelegate;
 beforeEach(() => {

@@ -1,8 +1,8 @@
 import {LogContext} from '@rocicorp/logger';
 import Fastify, {type FastifyInstance} from 'fastify';
-import {HeartbeatMonitor} from './life-cycle.js';
-import {RunningState} from './running-state.js';
-import type {Service} from './service.js';
+import {HeartbeatMonitor} from './life-cycle.ts';
+import {RunningState} from './running-state.ts';
+import type {Service} from './service.ts';
 
 export type Options = {
   port: number;

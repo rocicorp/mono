@@ -1,21 +1,21 @@
 /* eslint-disable no-console */
 import 'dotenv/config';
 
-import {getDebugConfig} from '../config/zero-config.js';
-import {getSchema} from '../auth/load-schema.js';
-import {must} from '../../../shared/src/must.js';
-import {Database} from '../../../zqlite/src/db.js';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
-import {type QueryDelegate} from '../../../zql/src/query/query-impl.js';
-import {TableSource} from '../../../zqlite/src/table-source.js';
-import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.js';
-import type {AST} from '../../../zero-protocol/src/ast.js';
-import {buildPipeline} from '../../../zql/src/builder/builder.js';
-import {Catch} from '../../../zql/src/ivm/catch.js';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../shared/src/must.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {buildPipeline} from '../../../zql/src/builder/builder.ts';
+import {Catch} from '../../../zql/src/ivm/catch.ts';
+import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
+import {type QueryDelegate} from '../../../zql/src/query/query-impl.ts';
+import {Database} from '../../../zqlite/src/db.ts';
 import {
   runtimeDebugFlags,
   runtimeDebugStats,
-} from '../../../zqlite/src/runtime-debug.js';
+} from '../../../zqlite/src/runtime-debug.ts';
+import {TableSource} from '../../../zqlite/src/table-source.ts';
+import {getSchema} from '../auth/load-schema.ts';
+import {getDebugConfig} from '../config/zero-config.ts';
 
 const config = getDebugConfig();
 const schemaAndPermissions = await getSchema(config);

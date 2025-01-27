@@ -1,4 +1,4 @@
-import * as v from '../../shared/src/valita.js';
+import * as v from '../../shared/src/valita.ts';
 
 export const versionSchema = v.string();
 export const nullableVersionSchema = v.union(versionSchema, v.null());

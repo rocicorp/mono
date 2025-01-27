@@ -3,9 +3,9 @@ import {
   type Condition,
   type Conjunction,
   type Disjunction,
-} from '../../../zero-protocol/src/ast.js';
-import {dnf, unwrap} from './dnf.js';
-import {parse, stringify} from './expression-test-util.js';
+} from '../../../zero-protocol/src/ast.ts';
+import {dnf, unwrap} from './dnf.ts';
+import {parse, stringify} from './expression-test-util.ts';
 
 function simple(value: number | string): Condition {
   return {

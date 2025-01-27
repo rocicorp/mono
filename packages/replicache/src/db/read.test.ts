@@ -1,13 +1,13 @@
 import {LogContext} from '@rocicorp/logger';
 import {describe, expect, test} from 'vitest';
-import type {Enum} from '../../../shared/src/enum.js';
-import {mustGetHeadHash} from '../dag/store.js';
-import {TestStore} from '../dag/test-store.js';
-import * as FormatVersion from '../format-version-enum.js';
-import {DEFAULT_HEAD_NAME} from './commit.js';
-import {readFromDefaultHead} from './read.js';
-import {initDB} from './test-helpers.js';
-import {newWriteLocal} from './write.js';
+import type {Enum} from '../../../shared/src/enum.ts';
+import {mustGetHeadHash} from '../dag/store.ts';
+import {TestStore} from '../dag/test-store.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import {DEFAULT_HEAD_NAME} from './commit.ts';
+import {readFromDefaultHead} from './read.ts';
+import {initDB} from './test-helpers.ts';
+import {newWriteLocal} from './write.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

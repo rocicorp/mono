@@ -1,9 +1,9 @@
 import {expect, suite, test} from 'vitest';
-import {Catch} from './catch.js';
-import {type Bound, Skip} from './skip.js';
-import type {SourceChange} from './source.js';
-import {createSource} from './test/source-factory.js';
-import type {FetchRequest} from './operator.js';
+import {Catch} from './catch.ts';
+import type {FetchRequest} from './operator.ts';
+import {type Bound, Skip} from './skip.ts';
+import type {SourceChange} from './source.ts';
+import {createSource} from './test/source-factory.ts';
 
 suite('fetch', () => {
   function t(c: {skipBound: Bound; fetchRequest: FetchRequest}) {

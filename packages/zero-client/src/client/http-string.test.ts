@@ -5,7 +5,7 @@ import {
   assertWSString,
   toHTTPString,
   toWSString,
-} from './http-string.js';
+} from './http-string.ts';
 
 test('toWSString', () => {
   expect(toWSString('http://example.com')).equal('ws://example.com');

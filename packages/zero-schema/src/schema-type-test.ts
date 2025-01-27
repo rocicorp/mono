@@ -1,11 +1,11 @@
-import type * as v from '../../shared/src/valita.js';
+import type * as v from '../../shared/src/valita.ts';
+import type {Schema} from './builder/schema-builder.ts';
 import type {
   relationshipSchema,
   schemaSchema,
   schemaValueSchema,
-} from './schema-config.js';
-import type {Schema} from './builder/schema-builder.js';
-import type {Relationship, SchemaValue} from './table-schema.js';
+} from './schema-config.ts';
+import type {Relationship, SchemaValue} from './table-schema.ts';
 
 type MakeAllFieldsRequired<T> = {
   [K in keyof T]-?: MakeAllFieldsRequired<T[K]>;

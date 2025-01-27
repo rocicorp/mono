@@ -1,10 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
 import {tmpdir} from 'node:os';
 import {expect} from 'vitest';
-import {randInt} from '../../../shared/src/rand.js';
-import {Database} from '../../../zqlite/src/db.js';
-import {deleteLiteDB} from '../db/delete-lite-db.js';
-import {id} from '../types/sql.js';
+import {randInt} from '../../../shared/src/rand.ts';
+import {Database} from '../../../zqlite/src/db.ts';
+import {deleteLiteDB} from '../db/delete-lite-db.ts';
+import {id} from '../types/sql.ts';
 
 export class DbFile {
   readonly path;

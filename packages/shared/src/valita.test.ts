@@ -1,7 +1,7 @@
 import {expect, test} from 'vitest';
-import {assert} from './asserts.js';
-import * as v from './valita.js';
-import {parse} from './valita.js';
+import {assert} from './asserts.ts';
+import * as v from './valita.ts';
+import {parse} from './valita.ts';
 
 const t = <T>(s: v.Type<T>, val: unknown, message?: string) => {
   const r1 = v.test(val, s);

@@ -1,16 +1,16 @@
 import {describe, expect, test} from 'vitest';
-import type {Ordering} from '../../../zero-protocol/src/ast.js';
-import type {Row} from '../../../zero-protocol/src/data.js';
-import {Catch} from './catch.js';
-import type {Change} from './change.js';
-import {compareRowsTest} from './data.test.js';
+import type {Ordering} from '../../../zero-protocol/src/ast.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import {Catch} from './catch.ts';
+import type {Change} from './change.ts';
+import {compareRowsTest} from './data.test.ts';
 import {
   generateWithOverlayInner,
   MemorySource,
   overlaysForConstraintForTest,
   overlaysForStartAtForTest,
-} from './memory-source.js';
-import {createSource} from './test/source-factory.js';
+} from './memory-source.ts';
+import {createSource} from './test/source-factory.ts';
 
 test('schema', () => {
   compareRowsTest((order: Ordering) => {

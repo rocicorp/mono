@@ -1,7 +1,7 @@
 import {stripVTControlCharacters as stripAnsi} from 'node:util';
 import {expect, test, vi} from 'vitest';
-import {parseOptions} from '../../../../shared/src/options.js';
-import {getMultiZeroConfig, multiConfigSchema} from './config.js';
+import {parseOptions} from '../../../../shared/src/options.ts';
+import {getMultiZeroConfig, multiConfigSchema} from './config.ts';
 
 test('parse options', () => {
   expect(

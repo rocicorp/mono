@@ -1,8 +1,8 @@
 import {beforeEach, describe, expect, test, vi} from 'vitest';
-import type {Schema} from '../../zero-schema/src/mod.js';
-import type {AdvancedQuery} from '../../zql/src/query/query-internal.js';
-import type {ResultType} from '../../zql/src/query/typed-view.js';
-import {getAllViewsSizeForTesting, ViewStore} from './use-query.js';
+import type {Schema} from '../../zero-schema/src/mod.ts';
+import type {AdvancedQuery} from '../../zql/src/query/query-internal.ts';
+import type {ResultType} from '../../zql/src/query/typed-view.ts';
+import {getAllViewsSizeForTesting, ViewStore} from './use-query.tsx';
 
 function newMockQuery(
   query: string,

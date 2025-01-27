@@ -7,7 +7,7 @@ import {
   versionToLexi,
   type AtLeastOne,
   type LexiVersion,
-} from './lexi-version.js';
+} from './lexi-version.ts';
 
 test('LexiVersion encoding', () => {
   type Case = [number | bigint, string];

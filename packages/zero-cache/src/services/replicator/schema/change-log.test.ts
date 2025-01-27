@@ -1,15 +1,15 @@
 import {beforeEach, describe, test} from 'vitest';
-import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
-import {Database} from '../../../../../zqlite/src/db.js';
-import {StatementRunner} from '../../../db/statements.js';
-import {expectTables} from '../../../test/lite.js';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
+import {Database} from '../../../../../zqlite/src/db.ts';
+import {StatementRunner} from '../../../db/statements.ts';
+import {expectTables} from '../../../test/lite.ts';
 import {
   initChangeLog,
   logDeleteOp,
   logResetOp,
   logSetOp,
   logTruncateOp,
-} from './change-log.js';
+} from './change-log.ts';
 
 describe('replicator/schema/change-log', () => {
   let db: StatementRunner;

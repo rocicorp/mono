@@ -2,36 +2,36 @@ import {PG_OBJECT_IN_USE} from '@drdgvhbh/postgres-error-codes';
 import {LogContext} from '@rocicorp/logger';
 import {DatabaseError} from 'pg-protocol';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {AbortError} from '../../../../../shared/src/abort-error.js';
-import {TestLogSink} from '../../../../../shared/src/logging-test-utils.js';
-import {Queue} from '../../../../../shared/src/queue.js';
-import {promiseVoid} from '../../../../../shared/src/resolved-promises.js';
-import {sleep} from '../../../../../shared/src/sleep.js';
-import {Default, Index} from '../../../db/postgres-replica-identity-enum.js';
-import {StatementRunner} from '../../../db/statements.js';
+import {AbortError} from '../../../../../shared/src/abort-error.ts';
+import {TestLogSink} from '../../../../../shared/src/logging-test-utils.ts';
+import {Queue} from '../../../../../shared/src/queue.ts';
+import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
+import {sleep} from '../../../../../shared/src/sleep.ts';
+import {Default, Index} from '../../../db/postgres-replica-identity-enum.ts';
+import {StatementRunner} from '../../../db/statements.ts';
 import {
   dropReplicationSlots,
   getConnectionURI,
   testDBs,
-} from '../../../test/db.js';
-import {DbFile} from '../../../test/lite.js';
-import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.js';
-import type {PostgresDB} from '../../../types/pg.js';
-import type {Source} from '../../../types/streams.js';
+} from '../../../test/db.ts';
+import {DbFile} from '../../../test/lite.ts';
+import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.ts';
+import type {PostgresDB} from '../../../types/pg.ts';
+import type {Source} from '../../../types/streams.ts';
 import type {
   ChangeSource,
   ChangeStream,
-} from '../../change-streamer/change-streamer-service.js';
-import {getSubscriptionState} from '../../replicator/schema/replication-state.js';
+} from '../../change-streamer/change-streamer-service.ts';
+import {getSubscriptionState} from '../../replicator/schema/replication-state.ts';
 import type {
   Begin,
   ChangeStreamMessage,
   Commit,
-} from '../protocol/current/downstream.js';
-import {initializeChangeSource} from './change-source.js';
-import {replicationSlot} from './initial-sync.js';
-import {fromLexiVersion} from './lsn.js';
-import {dropEventTriggerStatements} from './schema/ddl-test-utils.js';
+} from '../protocol/current/downstream.ts';
+import {initializeChangeSource} from './change-source.ts';
+import {replicationSlot} from './initial-sync.ts';
+import {fromLexiVersion} from './lsn.ts';
+import {dropEventTriggerStatements} from './schema/ddl-test-utils.ts';
 
 const SHARD_ID = 'change_source_test_id';
 

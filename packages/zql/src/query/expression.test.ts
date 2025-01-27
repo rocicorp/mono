@@ -1,13 +1,13 @@
 import fc from 'fast-check';
 import {describe, expect, test} from 'vitest';
-import {assert} from '../../../shared/src/asserts.js';
+import {assert} from '../../../shared/src/asserts.ts';
 import {
   type Condition,
   type SimpleCondition,
-} from '../../../zero-protocol/src/ast.js';
-import {dnf} from './dnf.js';
-import {parse, stringify} from './expression-test-util.js';
-import {and, not, or} from './expression.js';
+} from '../../../zero-protocol/src/ast.ts';
+import {dnf} from './dnf.ts';
+import {parse, stringify} from './expression-test-util.ts';
+import {and, not, or} from './expression.ts';
 
 type TestCondition =
   | {

@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {getSizeOfEntry, getSizeOfValue} from './size-of-value.js';
+import {getSizeOfEntry, getSizeOfValue} from './size-of-value.ts';
 
 test('getSizeOfValue', () => {
   expect(getSizeOfValue(null)).to.equal(1);

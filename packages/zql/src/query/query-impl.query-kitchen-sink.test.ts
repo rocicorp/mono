@@ -1,8 +1,8 @@
 import {describe, expect, test} from 'vitest';
-import {must} from '../../../shared/src/must.js';
-import {newQuery, type QueryDelegate} from './query-impl.js';
-import {QueryDelegateImpl} from './test/query-delegate.js';
-import {schema} from './test/test-schemas.js';
+import {must} from '../../../shared/src/must.ts';
+import {newQuery, type QueryDelegate} from './query-impl.ts';
+import {QueryDelegateImpl} from './test/query-delegate.ts';
+import {schema} from './test/test-schemas.ts';
 
 function addData(queryDelegate: QueryDelegate) {
   const userSource = must(queryDelegate.getSource('user'));

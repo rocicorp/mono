@@ -1,8 +1,8 @@
 import {statSync} from 'fs';
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.js';
-import {randInt} from '../../shared/src/rand.js';
-import {Database, Statement} from '../../zqlite/src/db.js';
-import {bench} from './benchmark.js';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {randInt} from '../../shared/src/rand.ts';
+import {Database, Statement} from '../../zqlite/src/db.ts';
+import {bench} from './benchmark.ts';
 
 const lc = createSilentLogContext();
 

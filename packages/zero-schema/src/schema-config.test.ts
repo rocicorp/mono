@@ -1,9 +1,9 @@
 import {expect, test} from 'vitest';
-import {createSchema} from './builder/schema-builder.js';
-import {parseSchema, stringifySchema} from './schema-config.js';
-import {definePermissions} from './permissions.js';
-import {string, table} from './builder/table-builder.js';
-import {relationships} from './builder/relationship-builder.js';
+import {relationships} from './builder/relationship-builder.ts';
+import {createSchema} from './builder/schema-builder.ts';
+import {string, table} from './builder/table-builder.ts';
+import {definePermissions} from './permissions.ts';
+import {parseSchema, stringifySchema} from './schema-config.ts';
 
 test('round trip', async () => {
   const circular = table('circular')

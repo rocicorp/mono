@@ -1,13 +1,13 @@
 import {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, test} from 'vitest';
-import {createSilentLogContext} from '../../../../../../shared/src/logging-test-utils.js';
+import {createSilentLogContext} from '../../../../../../shared/src/logging-test-utils.ts';
 import {
   createVersionHistoryTable,
   type VersionHistory,
-} from '../../../../db/migration.js';
-import {expectTablesToMatch, initDB, testDBs} from '../../../../test/db.js';
-import type {PostgresDB} from '../../../../types/pg.js';
-import {initShardSchema, updateShardSchema} from './init.js';
+} from '../../../../db/migration.ts';
+import {expectTablesToMatch, initDB, testDBs} from '../../../../test/db.ts';
+import type {PostgresDB} from '../../../../types/pg.ts';
+import {initShardSchema, updateShardSchema} from './init.ts';
 
 const SHARD_ID = 'shard_schema_test_id';
 

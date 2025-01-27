@@ -1,12 +1,12 @@
 import {resolver} from '@rocicorp/resolver';
-import type {ReadonlyJSONObject} from '../../shared/src/json.js';
 import {afterEach, beforeEach, expect, test, vi} from 'vitest';
+import type {ReadonlyJSONObject} from '../../shared/src/json.ts';
 import {
   DatadogLogSink,
   FORCE_FLUSH_THRESHOLD,
   MAX_ENTRY_CHARS,
   MAX_LOG_ENTRIES_PER_FLUSH,
-} from './datadog-log-sink.js';
+} from './datadog-log-sink.ts';
 
 const originalFetch = globalThis.fetch;
 const fetch = vi.fn<typeof originalFetch>();

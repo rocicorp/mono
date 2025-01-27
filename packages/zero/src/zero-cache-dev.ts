@@ -6,12 +6,12 @@ import chalk from 'chalk';
 import {watch} from 'chokidar';
 import 'dotenv/config';
 import {spawn, type ChildProcess} from 'node:child_process';
-import {parseOptionsAdvanced} from '../../shared/src/options.js';
+import {parseOptionsAdvanced} from '../../shared/src/options.ts';
 import {
   ZERO_ENV_VAR_PREFIX,
   zeroOptions,
-} from '../../zero-cache/src/config/zero-config.js';
-import {buildSchemaOptions} from '../../zero-schema/src/build-schema-options.js';
+} from '../../zero-cache/src/config/zero-config.ts';
+import {buildSchemaOptions} from '../../zero-schema/src/build-schema-options.ts';
 
 const buildSchemaScript = 'zero-build-schema';
 const zeroCacheScript = 'zero-cache';

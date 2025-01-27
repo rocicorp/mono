@@ -1,5 +1,5 @@
-import type {ConnectionLoopDelegate} from './connection-loop.js';
-import type {ReplicacheImpl} from './replicache-impl.js';
+import type {ConnectionLoopDelegate} from './connection-loop.ts';
+import type {ReplicacheImpl} from './replicache-impl.ts';
 
 class ConnectionLoopDelegateImpl {
   readonly rep: ReplicacheImpl;

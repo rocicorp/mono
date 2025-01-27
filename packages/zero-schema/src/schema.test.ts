@@ -1,7 +1,7 @@
 import {expect, expectTypeOf, test} from 'vitest';
-import {createSchema} from './mod.js';
-import {number, string, table} from './builder/table-builder.js';
-import {relationships} from './builder/relationship-builder.js';
+import {relationships} from './builder/relationship-builder.ts';
+import {number, string, table} from './builder/table-builder.ts';
+import {createSchema} from './mod.ts';
 
 test('Key name does not matter', () => {
   const schema = createSchema(1, {

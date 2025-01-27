@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {MaybePromise} from '../../../shared/src/types.js';
-import * as ServerErrorKind from '../../../zero-protocol/src/error-kind-enum.js';
-import * as MetricName from './metric-name-enum.js';
+import type {MaybePromise} from '../../../shared/src/types.ts';
+import * as ServerErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
+import * as MetricName from './metric-name-enum.ts';
 
 type ServerErrorKind = (typeof ServerErrorKind)[keyof typeof ServerErrorKind];
 

@@ -1,10 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type {CloseEvent, ErrorEvent, MessageEvent, WebSocket} from 'ws';
-import {Queue} from '../../../shared/src/queue.js';
-import * as v from '../../../shared/src/valita.js';
-import {BigIntJSON, type JSONValue} from './bigint-json.js';
-import {Subscription} from './subscription.js';
+import {Queue} from '../../../shared/src/queue.ts';
+import * as v from '../../../shared/src/valita.ts';
+import {BigIntJSON, type JSONValue} from './bigint-json.ts';
+import {Subscription} from './subscription.ts';
 
 export type Source<T> = AsyncIterable<T> & {
   /**

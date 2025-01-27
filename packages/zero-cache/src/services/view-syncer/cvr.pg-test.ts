@@ -1,20 +1,20 @@
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {unreachable} from '../../../../shared/src/asserts.js';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import {testDBs} from '../../test/db.js';
-import type {PostgresDB} from '../../types/pg.js';
-import type {PatchToVersion} from './client-handler.js';
+import {unreachable} from '../../../../shared/src/asserts.ts';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {testDBs} from '../../test/db.ts';
+import type {PostgresDB} from '../../types/pg.ts';
+import type {PatchToVersion} from './client-handler.ts';
 import {
   ConcurrentModificationException,
   CVRStore,
   OwnershipError,
-} from './cvr-store.js';
+} from './cvr-store.ts';
 import {
   CVRConfigDrivenUpdater,
   CVRQueryDrivenUpdater,
   type CVRSnapshot,
   CVRUpdater,
-} from './cvr.js';
+} from './cvr.ts';
 import {
   type ClientsRow,
   compareClientsRows,
@@ -28,8 +28,8 @@ import {
   type RowsRow,
   type RowsVersionRow,
   setupCVRTables,
-} from './schema/cvr.js';
-import type {CVRVersion, RowID} from './schema/types.js';
+} from './schema/cvr.ts';
+import type {CVRVersion, RowID} from './schema/types.ts';
 
 const SHARD_ID = 'jkl';
 

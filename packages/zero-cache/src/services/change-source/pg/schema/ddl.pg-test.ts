@@ -5,14 +5,14 @@ import {
 } from 'pg-logical-replication';
 import type postgres from 'postgres';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {Queue} from '../../../../../../shared/src/queue.js';
-import {getConnectionURI, testDBs} from '../../../../test/db.js';
-import type {PostgresDB} from '../../../../types/pg.js';
+import {Queue} from '../../../../../../shared/src/queue.ts';
+import {getConnectionURI, testDBs} from '../../../../test/db.ts';
+import type {PostgresDB} from '../../../../types/pg.ts';
 import {
   createEventTriggerStatements,
   type DdlStartEvent,
   type DdlUpdateEvent,
-} from './ddl.js';
+} from './ddl.ts';
 
 const SLOT_NAME = 'ddl_test_slot';
 

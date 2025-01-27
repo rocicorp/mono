@@ -1,29 +1,29 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect} from 'vitest';
-import {assert, assertNotUndefined} from '../../../shared/src/asserts.js';
-import type {Enum} from '../../../shared/src/enum.js';
-import type {JSONValue} from '../../../shared/src/json.js';
-import {emptyDataNode} from '../btree/node.js';
-import {BTreeWrite} from '../btree/write.js';
-import type {Cookie} from '../cookies.js';
-import type {Chunk} from '../dag/chunk.js';
+import {assert, assertNotUndefined} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
+import {emptyDataNode} from '../btree/node.ts';
+import {BTreeWrite} from '../btree/write.ts';
+import type {Cookie} from '../cookies.ts';
+import type {Chunk} from '../dag/chunk.ts';
 import {
   type Write as DagWrite,
   type Store,
   mustGetHeadHash,
-} from '../dag/store.js';
-import {Visitor} from '../dag/visitor.js';
-import * as FormatVersion from '../format-version-enum.js';
-import {deepFreeze} from '../frozen-json.js';
-import {type Hash, emptyHash} from '../hash.js';
-import type {IndexDefinitions} from '../index-defs.js';
-import type {ClientID} from '../sync/ids.js';
-import {addSyncSnapshot} from '../sync/test-helpers.js';
+} from '../dag/store.ts';
+import {Visitor} from '../dag/visitor.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import {deepFreeze} from '../frozen-json.ts';
+import {type Hash, emptyHash} from '../hash.ts';
+import type {IndexDefinitions} from '../index-defs.ts';
+import type {ClientID} from '../sync/ids.ts';
+import {addSyncSnapshot} from '../sync/test-helpers.ts';
 import {
   withRead,
   withWrite,
   withWriteNoImplicitCommit,
-} from '../with-transactions.js';
+} from '../with-transactions.ts';
 import {
   Commit,
   DEFAULT_HEAD_NAME,
@@ -35,10 +35,10 @@ import {
   assertSnapshotCommitDD31,
   commitFromHead,
   toChunkIndexDefinition,
-} from './commit.js';
-import {IndexWrite} from './index.js';
-import * as MetaType from './meta-type-enum.js';
-import {Write, newWriteLocal, newWriteSnapshotDD31} from './write.js';
+} from './commit.ts';
+import {IndexWrite} from './index.ts';
+import * as MetaType from './meta-type-enum.ts';
+import {Write, newWriteLocal, newWriteSnapshotDD31} from './write.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

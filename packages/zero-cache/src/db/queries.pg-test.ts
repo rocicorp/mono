@@ -1,9 +1,9 @@
 import pg from 'pg';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {testDBs} from '../test/db.js';
-import type {PostgresDB} from '../types/pg.js';
-import type {RowKey} from '../types/row-key.js';
-import {lookupRowsWithKeys} from './queries.js';
+import {testDBs} from '../test/db.ts';
+import type {PostgresDB} from '../types/pg.ts';
+import type {RowKey} from '../types/row-key.ts';
+import {lookupRowsWithKeys} from './queries.ts';
 
 const {
   types: {builtins},

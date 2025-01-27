@@ -1,6 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
 import {describe, expect, test} from 'vitest';
-import {orTimeout, orTimeoutWith} from './timeout.js';
+import {orTimeout, orTimeoutWith} from './timeout.ts';
 
 describe('timeout', () => {
   test('resolved', async () => {

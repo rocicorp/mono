@@ -6,22 +6,22 @@ import {
   assertObject,
   assertString,
   unreachable,
-} from '../../../shared/src/asserts.js';
-import {assertJSONValue} from '../../../shared/src/json.js';
-import {skipCommitDataAsserts} from '../config.js';
-import {type FrozenCookie, compareCookies} from '../cookies.js';
-import {type Chunk, type CreateChunk, type Refs, toRefs} from '../dag/chunk.js';
-import {type MustGetChunk, type Read, mustGetHeadHash} from '../dag/store.js';
+} from '../../../shared/src/asserts.ts';
+import {assertJSONValue} from '../../../shared/src/json.ts';
+import {skipCommitDataAsserts} from '../config.ts';
+import {type FrozenCookie, compareCookies} from '../cookies.ts';
+import {type Chunk, type CreateChunk, type Refs, toRefs} from '../dag/chunk.ts';
+import {type MustGetChunk, type Read, mustGetHeadHash} from '../dag/store.ts';
 import {
   type FrozenJSONValue,
   type FrozenTag,
   assertDeepFrozen,
   deepFreeze,
-} from '../frozen-json.js';
-import {type Hash, assertHash} from '../hash.js';
-import type {IndexDefinition} from '../index-defs.js';
-import type {ClientID} from '../sync/ids.js';
-import * as MetaType from './meta-type-enum.js';
+} from '../frozen-json.ts';
+import {type Hash, assertHash} from '../hash.ts';
+import type {IndexDefinition} from '../index-defs.ts';
+import type {ClientID} from '../sync/ids.ts';
+import * as MetaType from './meta-type-enum.ts';
 
 export const DEFAULT_HEAD_NAME = 'main';
 

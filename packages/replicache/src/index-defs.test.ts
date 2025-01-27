@@ -4,7 +4,7 @@ import {
   indexDefinitionEqual,
   type IndexDefinitions,
   indexDefinitionsEqual,
-} from './index-defs.js';
+} from './index-defs.ts';
 
 test('indexDefinitionsEqual', () => {
   const t = (a: IndexDefinition, b: IndexDefinition = a) => {

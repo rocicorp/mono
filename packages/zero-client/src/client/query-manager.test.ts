@@ -9,11 +9,11 @@ import {
   type ScanNoIndexOptions,
   type ScanOptions,
   type ScanResult,
-} from '../../../replicache/src/mod.js';
-import type {AST} from '../../../zero-protocol/src/ast.js';
-import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/mod.js';
-import {toGotQueriesKey} from './keys.js';
-import {QueryManager} from './query-manager.js';
+} from '../../../replicache/src/mod.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/mod.ts';
+import {toGotQueriesKey} from './keys.ts';
+import {QueryManager} from './query-manager.ts';
 
 function createExperimentalWatchMock() {
   return vi.fn();

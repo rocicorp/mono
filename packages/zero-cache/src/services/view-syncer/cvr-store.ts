@@ -2,28 +2,28 @@ import {trace} from '@opentelemetry/api';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import type {MaybeRow, PendingQuery, Row} from 'postgres';
-import {startAsyncSpan} from '../../../../otel/src/span.js';
-import {version} from '../../../../otel/src/version.js';
-import {assert} from '../../../../shared/src/asserts.js';
-import {CustomKeyMap} from '../../../../shared/src/custom-key-map.js';
-import {CustomKeySet} from '../../../../shared/src/custom-key-set.js';
+import {startAsyncSpan} from '../../../../otel/src/span.ts';
+import {version} from '../../../../otel/src/version.ts';
+import {assert} from '../../../../shared/src/asserts.ts';
+import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
+import {CustomKeySet} from '../../../../shared/src/custom-key-set.ts';
 import {
   deepEqual,
   type ReadonlyJSONValue,
-} from '../../../../shared/src/json.js';
-import {must} from '../../../../shared/src/must.js';
-import {promiseVoid} from '../../../../shared/src/resolved-promises.js';
-import {sleep} from '../../../../shared/src/sleep.js';
-import {astSchema} from '../../../../zero-protocol/src/ast.js';
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.js';
-import * as Mode from '../../db/mode-enum.js';
-import {TransactionPool} from '../../db/transaction-pool.js';
-import type {JSONValue} from '../../types/bigint-json.js';
-import {ErrorForClient, ErrorWithLevel} from '../../types/error-for-client.js';
-import type {PostgresDB, PostgresTransaction} from '../../types/pg.js';
-import {rowIDString} from '../../types/row-key.js';
-import type {Patch, PatchToVersion} from './client-handler.js';
-import type {CVR, CVRSnapshot} from './cvr.js';
+} from '../../../../shared/src/json.ts';
+import {must} from '../../../../shared/src/must.ts';
+import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import {sleep} from '../../../../shared/src/sleep.ts';
+import {astSchema} from '../../../../zero-protocol/src/ast.ts';
+import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import * as Mode from '../../db/mode-enum.ts';
+import {TransactionPool} from '../../db/transaction-pool.ts';
+import type {JSONValue} from '../../types/bigint-json.ts';
+import {ErrorForClient, ErrorWithLevel} from '../../types/error-for-client.ts';
+import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
+import {rowIDString} from '../../types/row-key.ts';
+import type {Patch, PatchToVersion} from './client-handler.ts';
+import type {CVR, CVRSnapshot} from './cvr.ts';
 import {
   type ClientsRow,
   type DesiresRow,
@@ -32,7 +32,7 @@ import {
   rowRecordToRowsRow,
   type RowsRow,
   rowsRowToRowRecord,
-} from './schema/cvr.js';
+} from './schema/cvr.ts';
 import {
   type ClientQueryRecord,
   type ClientRecord,
@@ -48,7 +48,7 @@ import {
   versionFromString,
   versionString,
   versionToNullableCookie,
-} from './schema/types.js';
+} from './schema/types.ts';
 
 type NotNull<T> = T extends null ? never : T;
 

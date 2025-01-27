@@ -1,9 +1,9 @@
 import {expect, test, vi} from 'vitest';
-import {FanOut} from './fan-out.js';
-import {Catch} from './catch.js';
-import {Filter} from './filter.js';
-import {FanIn} from './fan-in.js';
-import {createSource} from './test/source-factory.js';
+import {Catch} from './catch.ts';
+import {FanIn} from './fan-in.ts';
+import {FanOut} from './fan-out.ts';
+import {Filter} from './filter.ts';
+import {createSource} from './test/source-factory.ts';
 
 test('fan-out pushes along all paths', () => {
   const s = createSource('table', {a: {type: 'number'}, b: {type: 'string'}}, [

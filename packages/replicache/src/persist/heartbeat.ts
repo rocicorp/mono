@@ -1,14 +1,14 @@
 import type {LogContext} from '@rocicorp/logger';
-import {initBgIntervalProcess} from '../bg-interval.js';
-import type {Store} from '../dag/store.js';
-import type {ClientID} from '../sync/ids.js';
-import {withWrite} from '../with-transactions.js';
+import {initBgIntervalProcess} from '../bg-interval.ts';
+import type {Store} from '../dag/store.ts';
+import type {ClientID} from '../sync/ids.ts';
+import {withWrite} from '../with-transactions.ts';
 import {
   type ClientMap,
   ClientStateNotFoundError,
   getClients,
   setClients,
-} from './clients.js';
+} from './clients.ts';
 
 export const HEARTBEAT_INTERVAL = 60 * 1000;
 

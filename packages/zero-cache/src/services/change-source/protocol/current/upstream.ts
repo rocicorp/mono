@@ -1,5 +1,5 @@
-import * as v from '../../../../../../shared/src/valita.js';
-import {statusMessageSchema} from './status.js';
+import * as v from '../../../../../../shared/src/valita.ts';
+import {statusMessageSchema} from './status.ts';
 
 /** At the moment, the only upstream messages are status messages.  */
 export const changeSourceUpstreamSchema = statusMessageSchema;

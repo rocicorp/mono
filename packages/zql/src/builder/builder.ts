@@ -1,6 +1,6 @@
-import {assert} from '../../../shared/src/asserts.js';
-import type {JSONValue} from '../../../shared/src/json.js';
-import {must} from '../../../shared/src/must.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
+import {must} from '../../../shared/src/must.ts';
 import type {
   AST,
   ColumnReference,
@@ -15,19 +15,19 @@ import type {
   Parameter,
   SimpleCondition,
   ValuePosition,
-} from '../../../zero-protocol/src/ast.js';
-import type {Row} from '../../../zero-protocol/src/data.js';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
-import {Exists} from '../ivm/exists.js';
-import {FanIn} from '../ivm/fan-in.js';
-import {FanOut} from '../ivm/fan-out.js';
-import {Filter} from '../ivm/filter.js';
-import {Join} from '../ivm/join.js';
-import type {Input, Storage} from '../ivm/operator.js';
-import {Skip} from '../ivm/skip.js';
-import type {Source} from '../ivm/source.js';
-import {Take} from '../ivm/take.js';
-import {createPredicate, type NoSubqueryCondition} from './filter.js';
+} from '../../../zero-protocol/src/ast.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import {Exists} from '../ivm/exists.ts';
+import {FanIn} from '../ivm/fan-in.ts';
+import {FanOut} from '../ivm/fan-out.ts';
+import {Filter} from '../ivm/filter.ts';
+import {Join} from '../ivm/join.ts';
+import type {Input, Storage} from '../ivm/operator.ts';
+import {Skip} from '../ivm/skip.ts';
+import type {Source} from '../ivm/source.ts';
+import {Take} from '../ivm/take.ts';
+import {createPredicate, type NoSubqueryCondition} from './filter.ts';
 
 export type StaticQueryParameters = {
   authData: Record<string, JSONValue>;

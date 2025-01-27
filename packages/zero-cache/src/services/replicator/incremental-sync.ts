@@ -1,28 +1,28 @@
 import type {LogContext} from '@rocicorp/logger';
 import {SqliteError} from '@rocicorp/zero-sqlite3';
-import {AbortError} from '../../../../shared/src/abort-error.js';
-import {assert, unreachable} from '../../../../shared/src/asserts.js';
-import {must} from '../../../../shared/src/must.js';
-import {Database} from '../../../../zqlite/src/db.js';
+import {AbortError} from '../../../../shared/src/abort-error.ts';
+import {assert, unreachable} from '../../../../shared/src/asserts.ts';
+import {must} from '../../../../shared/src/must.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
 import {
   columnDef,
   createIndexStatement,
   createTableStatement,
-} from '../../db/create.js';
-import {listIndexes, listTables} from '../../db/lite-tables.js';
+} from '../../db/create.ts';
+import {listIndexes, listTables} from '../../db/lite-tables.ts';
 import {
   mapPostgresToLite,
   mapPostgresToLiteColumn,
   mapPostgresToLiteIndex,
-} from '../../db/pg-to-lite.js';
-import type {LiteTableSpec} from '../../db/specs.js';
-import {StatementRunner} from '../../db/statements.js';
-import {stringify} from '../../types/bigint-json.js';
-import type {LexiVersion} from '../../types/lexi-version.js';
-import {liteRow} from '../../types/lite.js';
-import {liteTableName} from '../../types/names.js';
-import {id} from '../../types/sql.js';
-import type {Source} from '../../types/streams.js';
+} from '../../db/pg-to-lite.ts';
+import type {LiteTableSpec} from '../../db/specs.ts';
+import {StatementRunner} from '../../db/statements.ts';
+import {stringify} from '../../types/bigint-json.ts';
+import type {LexiVersion} from '../../types/lexi-version.ts';
+import {liteRow} from '../../types/lite.ts';
+import {liteTableName} from '../../types/names.ts';
+import {id} from '../../types/sql.ts';
+import type {Source} from '../../types/streams.ts';
 import type {
   Change,
   ColumnAdd,
@@ -38,26 +38,26 @@ import type {
   TableCreate,
   TableDrop,
   TableRename,
-} from '../change-source/protocol/current/data.js';
-import type {ChangeStreamData} from '../change-source/protocol/current/downstream.js';
+} from '../change-source/protocol/current/data.ts';
+import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {
   ChangeStreamer,
   Downstream,
-} from '../change-streamer/change-streamer.js';
-import {RunningState} from '../running-state.js';
-import {Notifier} from './notifier.js';
-import type {ReplicaState, ReplicatorMode} from './replicator.js';
+} from '../change-streamer/change-streamer.ts';
+import {RunningState} from '../running-state.ts';
+import {Notifier} from './notifier.ts';
+import type {ReplicaState, ReplicatorMode} from './replicator.ts';
 import {
   logDeleteOp,
   logResetOp,
   logSetOp,
   logTruncateOp,
-} from './schema/change-log.js';
+} from './schema/change-log.ts';
 import {
   ZERO_VERSION_COLUMN_NAME,
   getSubscriptionState,
   updateReplicationWatermark,
-} from './schema/replication-state.js';
+} from './schema/replication-state.ts';
 
 type TransactionMode = 'IMMEDIATE' | 'CONCURRENT';
 

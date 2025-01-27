@@ -1,6 +1,6 @@
 import {describe, expect, test} from 'vitest';
-import {ReplicationMessages} from '../replicator/test-utils.js';
-import {createSubscriber} from './test-utils.js';
+import {ReplicationMessages} from '../replicator/test-utils.ts';
+import {createSubscriber} from './test-utils.ts';
 
 describe('change-streamer/subscriber', () => {
   const messages = new ReplicationMessages({issues: 'id'});

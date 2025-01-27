@@ -1,15 +1,15 @@
 import {expect, test} from 'vitest';
-import {assertArray, unreachable} from '../../../shared/src/asserts.js';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
-import {stringCompare} from '../../../shared/src/string-compare.js';
-import {ArrayView} from './array-view.js';
-import type {Change} from './change.js';
-import {Join} from './join.js';
-import {MemoryStorage} from './memory-storage.js';
-import type {Input} from './operator.js';
-import type {SourceSchema} from './schema.js';
-import {Take} from './take.js';
-import {createSource} from './test/source-factory.js';
+import {assertArray, unreachable} from '../../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {stringCompare} from '../../../shared/src/string-compare.ts';
+import {ArrayView} from './array-view.ts';
+import type {Change} from './change.ts';
+import {Join} from './join.ts';
+import {MemoryStorage} from './memory-storage.ts';
+import type {Input} from './operator.ts';
+import type {SourceSchema} from './schema.ts';
+import {Take} from './take.ts';
+import {createSource} from './test/source-factory.ts';
 
 test('basics', () => {
   const ms = createSource('table', {a: {type: 'number'}, b: {type: 'string'}}, [

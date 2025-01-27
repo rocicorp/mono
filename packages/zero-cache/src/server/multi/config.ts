@@ -2,9 +2,9 @@ import {
   envSchema,
   parseOptionsAdvanced,
   type Config,
-} from '../../../../shared/src/options.js';
-import * as v from '../../../../shared/src/valita.js';
-import {zeroOptions} from '../../config/zero-config.js';
+} from '../../../../shared/src/options.ts';
+import * as v from '../../../../shared/src/valita.ts';
+import {zeroOptions} from '../../config/zero-config.ts';
 
 const ENV_VAR_PREFIX = 'ZERO_';
 

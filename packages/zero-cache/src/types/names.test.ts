@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import {liteTableName} from './names.js';
+import {liteTableName} from './names.ts';
 
 describe('tables/names', () => {
   (

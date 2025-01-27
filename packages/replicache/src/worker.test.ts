@@ -1,6 +1,6 @@
 import {afterEach, expect, test} from 'vitest';
-import {sleep} from '../../shared/src/sleep.js';
-import {closeAllReps, dbsToDrop, deleteAllDatabases} from './test-util.js';
+import {sleep} from '../../shared/src/sleep.ts';
+import {closeAllReps, dbsToDrop, deleteAllDatabases} from './test-util.ts';
 
 afterEach(async () => {
   await closeAllReps();

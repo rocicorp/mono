@@ -1,7 +1,7 @@
 import {expect, test} from 'vitest';
-import {Catch} from './catch.js';
-import {Filter} from './filter.js';
-import {createSource} from './test/source-factory.js';
+import {Catch} from './catch.ts';
+import {Filter} from './filter.ts';
+import {createSource} from './test/source-factory.ts';
 
 test('basics', () => {
   const ms = createSource('table', {a: {type: 'number'}, b: {type: 'string'}}, [

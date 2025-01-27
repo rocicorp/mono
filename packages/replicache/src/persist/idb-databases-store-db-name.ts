@@ -1,5 +1,5 @@
-import {randomUint64} from '../../../shared/src/random-uint64.js';
-import {dropIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.js';
+import {randomUint64} from '../../../shared/src/random-uint64.ts';
+import {dropIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.ts';
 
 const IDB_DATABASES_VERSION = 0;
 const IDB_DATABASES_DB_NAME = 'replicache-dbs-v' + IDB_DATABASES_VERSION;

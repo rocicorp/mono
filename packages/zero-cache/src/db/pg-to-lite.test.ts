@@ -1,7 +1,7 @@
 import {expect, test} from 'vitest';
-import {mapPostgresToLite, mapPostgresToLiteColumn} from './pg-to-lite.js';
-import * as PostgresTypeClass from './postgres-type-class-enum.js';
-import {type ColumnSpec} from './specs.js';
+import {mapPostgresToLite, mapPostgresToLiteColumn} from './pg-to-lite.ts';
+import * as PostgresTypeClass from './postgres-type-class-enum.ts';
+import {type ColumnSpec} from './specs.ts';
 
 test('postgres to lite table spec', () => {
   expect(

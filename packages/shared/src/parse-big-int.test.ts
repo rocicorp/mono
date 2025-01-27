@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import {expect, test} from 'vitest';
-import {parseBigInt} from './parse-big-int.js';
+import {parseBigInt} from './parse-big-int.ts';
 
 const cases = [
   ['0', 10, 0n],

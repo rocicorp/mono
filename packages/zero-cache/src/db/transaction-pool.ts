@@ -1,11 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
 import type postgres from 'postgres';
-import {assert} from '../../../shared/src/asserts.js';
-import type {Enum} from '../../../shared/src/enum.js';
-import {Queue} from '../../../shared/src/queue.js';
-import type {PostgresDB, PostgresTransaction} from '../types/pg.js';
-import * as Mode from './mode-enum.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import {Queue} from '../../../shared/src/queue.ts';
+import type {PostgresDB, PostgresTransaction} from '../types/pg.ts';
+import * as Mode from './mode-enum.ts';
 
 type Mode = Enum<typeof Mode>;
 

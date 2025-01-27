@@ -1,16 +1,16 @@
 import {LogContext} from '@rocicorp/logger';
 import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {getDocumentVisibilityWatcher} from '../../shared/src/document-visible.js';
-import {promiseTrue} from '../../shared/src/resolved-promises.js';
-import {sleep} from '../../shared/src/sleep.js';
+import {getDocumentVisibilityWatcher} from '../../shared/src/document-visible.ts';
+import {promiseTrue} from '../../shared/src/resolved-promises.ts';
+import {sleep} from '../../shared/src/sleep.ts';
 import {
   ConnectionLoop,
   type ConnectionLoopDelegate,
   DEBOUNCE_DELAY_MS,
   MAX_DELAY_MS,
   MIN_DELAY_MS,
-} from './connection-loop.js';
+} from './connection-loop.ts';
 
 let clock: SinonFakeTimers;
 beforeEach(() => {

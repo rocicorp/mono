@@ -1,11 +1,11 @@
 import {literal as lit} from 'pg-format';
-import * as v from '../../../../../../shared/src/valita.js';
-import {id} from '../../../../types/sql.js';
+import * as v from '../../../../../../shared/src/valita.ts';
+import {id} from '../../../../types/sql.ts';
 import {
   indexDefinitionsQuery,
   publishedSchema,
   publishedTableQuery,
-} from './published.js';
+} from './published.ts';
 
 // Sent in the 'version' tag of "ddlStart" and "ddlUpdate" event messages.
 // This is used to ensure that the message constructed in the upstream

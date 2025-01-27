@@ -1,6 +1,6 @@
 import {createSHA512} from 'hash-wasm';
-import type {Benchmark} from '../benchmark.js';
-import {makeRandomStrings} from '../data.js';
+import type {Benchmark} from '../benchmark.ts';
+import {makeRandomStrings} from '../data.ts';
 
 const encoder = new TextEncoder();
 

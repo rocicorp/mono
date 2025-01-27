@@ -1,19 +1,19 @@
 import {LogContext} from '@rocicorp/logger';
 import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import {afterEach, beforeEach, expect, test} from 'vitest';
-import {assertNotUndefined} from '../../../shared/src/asserts.js';
-import type {Read} from '../dag/store.js';
-import {TestStore} from '../dag/test-store.js';
-import {newRandomHash} from '../hash.js';
-import {withRead, withWrite} from '../with-transactions.js';
+import {assertNotUndefined} from '../../../shared/src/asserts.ts';
+import type {Read} from '../dag/store.ts';
+import {TestStore} from '../dag/test-store.ts';
+import {newRandomHash} from '../hash.ts';
+import {withRead, withWrite} from '../with-transactions.ts';
 import {
   CLIENT_MAX_INACTIVE_TIME,
   GC_INTERVAL,
   getLatestGCUpdate,
   initClientGC,
-} from './client-gc.js';
-import {makeClientV4, setClientsForTesting} from './clients-test-helpers.js';
-import {type ClientMap, getClients, setClient} from './clients.js';
+} from './client-gc.ts';
+import {makeClientV4, setClientsForTesting} from './clients-test-helpers.ts';
+import {type ClientMap, getClients, setClient} from './clients.ts';
 
 let clock: SinonFakeTimers;
 const START_TIME = 0;

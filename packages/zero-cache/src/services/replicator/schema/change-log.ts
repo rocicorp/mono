@@ -1,14 +1,14 @@
-import * as v from '../../../../../shared/src/valita.js';
-import type {Database} from '../../../../../zqlite/src/db.js';
-import {StatementRunner} from '../../../db/statements.js';
+import * as v from '../../../../../shared/src/valita.ts';
+import type {Database} from '../../../../../zqlite/src/db.ts';
+import {StatementRunner} from '../../../db/statements.ts';
 import {
   jsonObjectSchema,
   parse,
   stringify,
-} from '../../../types/bigint-json.js';
-import type {LexiVersion} from '../../../types/lexi-version.js';
-import type {LiteRowKey} from '../../../types/lite.js';
-import {normalizedKeyOrder} from '../../../types/row-key.js';
+} from '../../../types/bigint-json.ts';
+import type {LexiVersion} from '../../../types/lexi-version.ts';
+import type {LiteRowKey} from '../../../types/lite.ts';
+import {normalizedKeyOrder} from '../../../types/row-key.ts';
 
 /**
  * The Change Log tracks the last operation (set or delete) for each row in the

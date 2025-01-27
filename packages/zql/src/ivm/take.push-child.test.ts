@@ -1,13 +1,13 @@
 import {expect, test} from 'vitest';
-import type {Input, Storage} from './operator.js';
-import {Take} from './take.js';
+import type {Input, Storage} from './operator.ts';
+import {Take} from './take.ts';
 import {
   runJoinTest,
   type Joins,
   type SourceContents,
   type Sources,
-} from './test/join-push-tests.js';
-import type {Format} from './view.js';
+} from './test/join-push-tests.ts';
+import type {Format} from './view.ts';
 
 const sources: Sources = {
   issue: {

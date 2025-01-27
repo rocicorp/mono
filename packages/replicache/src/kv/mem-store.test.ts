@@ -1,8 +1,8 @@
 import {resolver} from '@rocicorp/resolver';
 import {beforeEach, expect, test} from 'vitest';
-import {withRead, withWrite} from '../with-transactions.js';
-import {MemStore, clearAllNamedMemStoresForTesting} from './mem-store.js';
-import {runAll} from './store-test-util.js';
+import {withRead, withWrite} from '../with-transactions.ts';
+import {MemStore, clearAllNamedMemStoresForTesting} from './mem-store.ts';
+import {runAll} from './store-test-util.ts';
 
 runAll('NamedMemStore', () => new MemStore('test'));
 

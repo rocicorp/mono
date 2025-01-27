@@ -1,15 +1,10 @@
 /* eslint-disable @typescript-eslint/ban-types */
 import {describe, expectTypeOf, test} from 'vitest';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
-import {
-  type Opaque,
-  type TableSchema,
-} from '../../../zero-schema/src/table-schema.js';
-import type {ExpressionFactory} from './expression.js';
-import {staticParam} from './query-impl.js';
-import type {AdvancedQuery} from './query-internal.js';
-import {type Query, type Row} from './query.js';
-import {toStaticParam} from '../../../zero-protocol/src/ast.js';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {toStaticParam} from '../../../zero-protocol/src/ast.ts';
+import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
+import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
   enumeration,
@@ -17,10 +12,15 @@ import {
   number,
   string,
   table,
-} from '../../../zero-schema/src/builder/table-builder.js';
-import {relationships} from '../../../zero-schema/src/builder/relationship-builder.js';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.js';
-import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.js';
+} from '../../../zero-schema/src/builder/table-builder.ts';
+import {
+  type Opaque,
+  type TableSchema,
+} from '../../../zero-schema/src/table-schema.ts';
+import type {ExpressionFactory} from './expression.ts';
+import {staticParam} from './query-impl.ts';
+import type {AdvancedQuery} from './query-internal.ts';
+import {type Query, type Row} from './query.ts';
 
 const mockQuery = {
   select() {

@@ -1,10 +1,10 @@
 import {expect, test} from 'vitest';
-import type {ReadonlyJSONValue} from '../../shared/src/json.js';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {
   deepFreeze,
   deepFreezeAllowUndefined,
   isDeepFrozen,
-} from './frozen-json.js';
+} from './frozen-json.ts';
 
 test('deepFreeze', () => {
   expect(deepFreeze(null)).equal(null);

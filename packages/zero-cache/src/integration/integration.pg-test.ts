@@ -11,18 +11,18 @@ import {
   vi,
 } from 'vitest';
 import WebSocket from 'ws';
-import {assert} from '../../../shared/src/asserts.js';
-import {Queue} from '../../../shared/src/queue.js';
-import {randInt} from '../../../shared/src/rand.js';
-import type {AST} from '../../../zero-protocol/src/ast.js';
-import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.js';
-import type {InitConnectionMessage} from '../../../zero-protocol/src/connect.js';
-import type {PokeStartMessage} from '../../../zero-protocol/src/poke.js';
-import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.js';
-import {getConnectionURI, testDBs} from '../test/db.js';
-import {DbFile} from '../test/lite.js';
-import type {PostgresDB} from '../types/pg.js';
-import {childWorker, type Worker} from '../types/processes.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import {Queue} from '../../../shared/src/queue.ts';
+import {randInt} from '../../../shared/src/rand.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
+import type {InitConnectionMessage} from '../../../zero-protocol/src/connect.ts';
+import type {PokeStartMessage} from '../../../zero-protocol/src/poke.ts';
+import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
+import {getConnectionURI, testDBs} from '../test/db.ts';
+import {DbFile} from '../test/lite.ts';
+import type {PostgresDB} from '../types/pg.ts';
+import {childWorker, type Worker} from '../types/processes.ts';
 
 // Adjust to debug.
 const LOG_LEVEL: LogLevel = 'error';

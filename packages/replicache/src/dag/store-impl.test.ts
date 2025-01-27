@@ -1,26 +1,26 @@
 import {describe, expect, test} from 'vitest';
-import {assert} from '../../../shared/src/asserts.js';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.js';
-import {deepFreeze} from '../frozen-json.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {deepFreeze} from '../frozen-json.ts';
 import {
   assertHash,
   fakeHash,
   type Hash,
   makeNewFakeHashFunction,
-} from '../hash.js';
-import type {Read, Store} from '../kv/store.js';
-import {TestMemStore} from '../kv/test-mem-store.js';
+} from '../hash.ts';
+import type {Read, Store} from '../kv/store.ts';
+import {TestMemStore} from '../kv/test-mem-store.ts';
 import {
   using,
   withRead,
   withWrite,
   withWriteNoImplicitCommit,
-} from '../with-transactions.js';
-import {Chunk, createChunk, type Refs, toRefs} from './chunk.js';
-import {chunkDataKey, chunkMetaKey, chunkRefCountKey, headKey} from './key.js';
-import {ReadImpl, StoreImpl, WriteImpl} from './store-impl.js';
-import {ChunkNotFoundError} from './store.js';
-import {TestStore} from './test-store.js';
+} from '../with-transactions.ts';
+import {Chunk, createChunk, type Refs, toRefs} from './chunk.ts';
+import {chunkDataKey, chunkMetaKey, chunkRefCountKey, headKey} from './key.ts';
+import {ReadImpl, StoreImpl, WriteImpl} from './store-impl.ts';
+import {ChunkNotFoundError} from './store.ts';
+import {TestStore} from './test-store.ts';
 
 describe('read', () => {
   test('has chunk', async () => {

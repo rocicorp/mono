@@ -1,15 +1,15 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect, test} from 'vitest';
-import type {Enum} from '../../../shared/src/enum.js';
-import type {JSONValue} from '../../../shared/src/json.js';
-import {stringCompare} from '../../../shared/src/string-compare.js';
-import {asyncIterableToArray} from '../async-iterable-to-array.js';
-import {BTreeWrite} from '../btree/write.js';
-import {TestStore} from '../dag/test-store.js';
-import * as FormatVersion from '../format-version-enum.js';
-import {deepFreeze} from '../frozen-json.js';
-import {withWrite} from '../with-transactions.js';
-import * as IndexOperation from './index-operation-enum.js';
+import type {Enum} from '../../../shared/src/enum.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
+import {stringCompare} from '../../../shared/src/string-compare.ts';
+import {asyncIterableToArray} from '../async-iterable-to-array.ts';
+import {BTreeWrite} from '../btree/write.ts';
+import {TestStore} from '../dag/test-store.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import {deepFreeze} from '../frozen-json.ts';
+import {withWrite} from '../with-transactions.ts';
+import * as IndexOperation from './index-operation-enum.ts';
 import {
   type IndexKey,
   KEY_SEPARATOR,
@@ -20,7 +20,7 @@ import {
   evaluateJSONPointer,
   getIndexKeys,
   indexValue,
-} from './index.js';
+} from './index.ts';
 
 type IndexOperation = Enum<typeof IndexOperation>;
 

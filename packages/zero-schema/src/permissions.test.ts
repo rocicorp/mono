@@ -1,9 +1,9 @@
 import {expect, test} from 'vitest';
-import {createSchema} from './builder/schema-builder.js';
-import {definePermissions} from './permissions.js';
-import type {ExpressionBuilder} from '../../zql/src/query/expression.js';
-import {table, column} from './builder/table-builder.js';
-import type {Schema as ZeroSchema} from './builder/schema-builder.js';
+import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
+import type {Schema as ZeroSchema} from './builder/schema-builder.ts';
+import {createSchema} from './builder/schema-builder.ts';
+import {column, table} from './builder/table-builder.ts';
+import {definePermissions} from './permissions.ts';
 
 const {string} = column;
 

@@ -2,13 +2,13 @@ import {resolver} from '@rocicorp/resolver';
 import {Server} from 'node:http';
 import {afterAll, afterEach, beforeAll, describe, expect, test} from 'vitest';
 import {WebSocket, WebSocketServer, type RawData} from 'ws';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import {randInt} from '../../../../shared/src/rand.js';
-import {inProcChannel} from '../../types/processes.js';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {randInt} from '../../../../shared/src/rand.ts';
+import {inProcChannel} from '../../types/processes.ts';
 import {
   installWebSocketHandoff,
   installWebSocketReceiver,
-} from './websocket-handoff.js';
+} from './websocket-handoff.ts';
 
 describe('dispatcher/websocket-handoff', () => {
   let port: number;

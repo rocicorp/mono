@@ -1,15 +1,15 @@
-import type {Cookie} from './cookies.js';
+import type {Cookie} from './cookies.ts';
 import type {
   ClientStateNotFoundResponse,
   VersionNotSupportedResponse,
-} from './error-responses.js';
-import type {HTTPRequestInfo} from './http-request-info.js';
+} from './error-responses.ts';
+import type {HTTPRequestInfo} from './http-request-info.ts';
 import type {
   PatchOperation,
   PatchOperationInternal,
-} from './patch-operation.js';
-import type {ClientID} from './sync/ids.js';
-import type {PullRequest} from './sync/pull.js';
+} from './patch-operation.ts';
+import type {ClientID} from './sync/ids.ts';
+import type {PullRequest} from './sync/pull.ts';
 
 // TODO(arv): Does it really make sense to call this httpRequestInfo? It is
 // really the response status code and error message!

@@ -1,8 +1,8 @@
 import {expect, test} from 'vitest';
-import {h64} from '../../shared/src/hash.js';
-import type {AST} from './ast.js';
-import {astSchema, normalizeAST} from './ast.js';
-import {PROTOCOL_VERSION} from './protocol-version.js';
+import {h64} from '../../shared/src/hash.ts';
+import type {AST} from './ast.ts';
+import {astSchema, normalizeAST} from './ast.ts';
+import {PROTOCOL_VERSION} from './protocol-version.ts';
 
 test('fields are placed into correct positions', () => {
   function normalizeAndStringify(ast: AST) {

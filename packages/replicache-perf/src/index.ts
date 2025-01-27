@@ -1,5 +1,5 @@
-import * as m from './perf.js';
-import {benchmarks, runAll} from './perf.js';
+import * as m from './perf.ts';
+import {benchmarks, runAll} from './perf.ts';
 
 // export all as globals
 for (const [n, v] of Object.entries(m)) {

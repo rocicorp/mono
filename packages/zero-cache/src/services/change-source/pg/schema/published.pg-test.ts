@@ -1,9 +1,9 @@
 import type postgres from 'postgres';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {assert} from '../../../../../../shared/src/asserts.js';
-import * as PostgresTypeClass from '../../../../db/postgres-type-class-enum.js';
-import {testDBs} from '../../../../test/db.js';
-import {type PublicationInfo, getPublicationInfo} from './published.js';
+import {assert} from '../../../../../../shared/src/asserts.ts';
+import * as PostgresTypeClass from '../../../../db/postgres-type-class-enum.ts';
+import {testDBs} from '../../../../test/db.ts';
+import {type PublicationInfo, getPublicationInfo} from './published.ts';
 
 describe('tables/published', () => {
   type Case = {

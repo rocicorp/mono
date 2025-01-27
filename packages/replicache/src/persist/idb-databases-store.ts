@@ -3,12 +3,12 @@ import {
   assertNumber,
   assertObject,
   assertString,
-} from '../../../shared/src/asserts.js';
-import {deepFreeze} from '../frozen-json.js';
-import type {CreateStore, Read, Store} from '../kv/store.js';
-import {withRead, withWrite} from '../with-transactions.js';
-import {getIDBDatabasesDBName} from './idb-databases-store-db-name.js';
-import {makeClientID} from './make-client-id.js';
+} from '../../../shared/src/asserts.ts';
+import {deepFreeze} from '../frozen-json.ts';
+import type {CreateStore, Read, Store} from '../kv/store.ts';
+import {withRead, withWrite} from '../with-transactions.ts';
+import {getIDBDatabasesDBName} from './idb-databases-store-db-name.ts';
+import {makeClientID} from './make-client-id.ts';
 
 const DBS_KEY = 'dbs';
 const PROFILE_ID_KEY = 'profileId';

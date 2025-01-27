@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {newRequestID} from './request-id.js';
+import {newRequestID} from './request-id.ts';
 
 test('newRequestID()', () => {
   {

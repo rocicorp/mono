@@ -1,14 +1,14 @@
 import {expect, test} from 'vitest';
-import type {AST, Disjunction} from '../../../zero-protocol/src/ast.js';
-import {Catch} from '../ivm/catch.js';
-import {MemoryStorage} from '../ivm/memory-storage.js';
-import type {Source} from '../ivm/source.js';
-import {createSource} from '../ivm/test/source-factory.js';
+import type {AST, Disjunction} from '../../../zero-protocol/src/ast.ts';
+import {Catch} from '../ivm/catch.ts';
+import {MemoryStorage} from '../ivm/memory-storage.ts';
+import type {Source} from '../ivm/source.ts';
+import {createSource} from '../ivm/test/source-factory.ts';
 import {
   bindStaticParameters,
   buildPipeline,
   groupSubqueryConditions,
-} from './builder.js';
+} from './builder.ts';
 
 export function testSources() {
   const users = createSource(

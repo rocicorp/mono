@@ -6,9 +6,9 @@ import {
   singleProcessMode,
   type Subprocess,
   type Worker,
-} from '../types/processes.js';
-import {RunningState} from './running-state.js';
-import type {SingletonService} from './service.js';
+} from '../types/processes.ts';
+import {RunningState} from './running-state.ts';
+import type {SingletonService} from './service.ts';
 
 /**
  * * `user-facing` workers serve external requests and are the first to

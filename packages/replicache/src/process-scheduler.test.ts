@@ -1,9 +1,9 @@
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import sinon, {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {AbortError} from '../../shared/src/abort-error.js';
-import {ProcessScheduler} from './process-scheduler.js';
-import {expectPromiseToReject} from './test-util.js';
+import {AbortError} from '../../shared/src/abort-error.ts';
+import {ProcessScheduler} from './process-scheduler.ts';
+import {expectPromiseToReject} from './test-util.ts';
 
 describe('ProcessScheduler', () => {
   let clock: SinonFakeTimers;

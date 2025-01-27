@@ -10,19 +10,19 @@ import {
   vi,
 } from 'vitest';
 import WebSocket from 'ws';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import {inProcChannel} from '../../types/processes.js';
-import type {Source} from '../../types/streams.js';
-import {Subscription} from '../../types/subscription.js';
-import {installWebSocketHandoff} from '../dispatcher/websocket-handoff.js';
-import {HttpService} from '../http-service.js';
-import {ReplicationMessages} from '../replicator/test-utils.js';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {inProcChannel} from '../../types/processes.ts';
+import type {Source} from '../../types/streams.ts';
+import {Subscription} from '../../types/subscription.ts';
+import {installWebSocketHandoff} from '../dispatcher/websocket-handoff.ts';
+import {HttpService} from '../http-service.ts';
+import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {
   ChangeStreamerHttpClient,
   ChangeStreamerHttpServer,
   getSubscriberContext,
-} from './change-streamer-http.js';
-import type {Downstream, SubscriberContext} from './change-streamer.js';
+} from './change-streamer-http.ts';
+import type {Downstream, SubscriberContext} from './change-streamer.ts';
 
 describe('change-streamer/http', () => {
   let lc: LogContext;

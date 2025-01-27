@@ -1,6 +1,6 @@
 import {describe, expect, test} from 'vitest';
-import {KeyColumns} from './key-columns.js';
-import type {RowID, RowRecord} from './schema/types.js';
+import {KeyColumns} from './key-columns.ts';
+import type {RowID, RowRecord} from './schema/types.ts';
 
 describe('key columns', () => {
   function rowRecord(rowID: RowID): RowRecord {

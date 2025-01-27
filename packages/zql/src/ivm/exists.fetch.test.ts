@@ -1,17 +1,17 @@
 import {expect, suite, test} from 'vitest';
-import {unreachable} from '../../../shared/src/asserts.js';
-import type {JSONValue} from '../../../shared/src/json.js';
-import type {CompoundKey, Ordering} from '../../../zero-protocol/src/ast.js';
-import type {Row} from '../../../zero-protocol/src/data.js';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.js';
-import type {SchemaValue} from '../../../zero-schema/src/table-schema.js';
-import {Catch} from './catch.js';
-import type {Node} from './data.js';
-import {Exists} from './exists.js';
-import {Join} from './join.js';
-import {MemoryStorage} from './memory-storage.js';
-import {Snitch, type SnitchMessage} from './snitch.js';
-import {createSource} from './test/source-factory.js';
+import {unreachable} from '../../../shared/src/asserts.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
+import type {CompoundKey, Ordering} from '../../../zero-protocol/src/ast.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
+import {Catch} from './catch.ts';
+import type {Node} from './data.ts';
+import {Exists} from './exists.ts';
+import {Join} from './join.ts';
+import {MemoryStorage} from './memory-storage.ts';
+import {Snitch, type SnitchMessage} from './snitch.ts';
+import {createSource} from './test/source-factory.ts';
 
 const base = {
   columns: [

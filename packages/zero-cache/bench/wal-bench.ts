@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import {walBenchmark} from './wal-benchmark.js';
+import {walBenchmark} from './wal-benchmark.ts';
 
 walBenchmark({
   dbFile: '/tmp/bench/zbugs-sync-replica.db',

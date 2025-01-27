@@ -1,5 +1,5 @@
 import {afterEach, beforeEach, expect, test, vi} from 'vitest';
-import {SlidingWindowLimiter} from './sliding-window-limiter.js';
+import {SlidingWindowLimiter} from './sliding-window-limiter.ts';
 
 beforeEach(() => {
   vi.useFakeTimers();

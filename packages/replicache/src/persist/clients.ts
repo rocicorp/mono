@@ -1,13 +1,13 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert, assertObject} from '../../../shared/src/asserts.js';
-import type {Enum} from '../../../shared/src/enum.js';
-import {hasOwn} from '../../../shared/src/has-own.js';
-import * as valita from '../../../shared/src/valita.js';
-import {emptyDataNode} from '../btree/node.js';
-import {BTreeRead} from '../btree/read.js';
-import {type FrozenCookie, compareCookies} from '../cookies.js';
-import {type Refs, toRefs} from '../dag/chunk.js';
-import type {Read, Store, Write} from '../dag/store.js';
+import {assert, assertObject} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import {hasOwn} from '../../../shared/src/has-own.ts';
+import * as valita from '../../../shared/src/valita.ts';
+import {emptyDataNode} from '../btree/node.ts';
+import {BTreeRead} from '../btree/read.ts';
+import {type FrozenCookie, compareCookies} from '../cookies.ts';
+import {type Refs, toRefs} from '../dag/chunk.ts';
+import type {Read, Store, Write} from '../dag/store.ts';
 import {
   type ChunkIndexDefinition,
   Commit,
@@ -19,26 +19,26 @@ import {
   getRefs,
   newSnapshotCommitDataDD31,
   toChunkIndexDefinition,
-} from '../db/commit.js';
-import {createIndexBTree} from '../db/write.js';
-import * as FormatVersion from '../format-version-enum.js';
-import {type FrozenJSONValue, deepFreeze} from '../frozen-json.js';
-import {type Hash, hashSchema} from '../hash.js';
-import {type IndexDefinitions, indexDefinitionsEqual} from '../index-defs.js';
+} from '../db/commit.ts';
+import {createIndexBTree} from '../db/write.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import {type FrozenJSONValue, deepFreeze} from '../frozen-json.ts';
+import {type Hash, hashSchema} from '../hash.ts';
+import {type IndexDefinitions, indexDefinitionsEqual} from '../index-defs.ts';
 import {
   type ClientGroupID,
   type ClientID,
   clientGroupIDSchema,
-} from '../sync/ids.js';
-import {withWriteNoImplicitCommit} from '../with-transactions.js';
+} from '../sync/ids.ts';
+import {withWriteNoImplicitCommit} from '../with-transactions.ts';
 import {
   type ClientGroup,
   getClientGroup,
   getClientGroups,
   mutatorNamesEqual,
   setClientGroup,
-} from './client-groups.js';
-import {makeClientID} from './make-client-id.js';
+} from './client-groups.ts';
+import {makeClientID} from './make-client-id.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

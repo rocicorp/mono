@@ -1,5 +1,5 @@
-import type {Enum} from '../../shared/src/enum.js';
-import * as FormatVersion from './format-version-enum.js';
+import type {Enum} from '../../shared/src/enum.ts';
+import * as FormatVersion from './format-version-enum.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

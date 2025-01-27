@@ -1,16 +1,16 @@
 import {describe, expect, test} from 'vitest';
-import {assert} from '../../../shared/src/asserts.js';
-import type {Enum} from '../../../shared/src/enum.js';
-import {LazyStore} from '../dag/lazy-store.js';
-import {TestLazyStore} from '../dag/test-lazy-store.js';
-import {TestStore} from '../dag/test-store.js';
-import {DEFAULT_HEAD_NAME} from '../db/commit.js';
-import * as MetaType from '../db/meta-type-enum.js';
-import {ChainBuilder} from '../db/test-helpers.js';
-import * as FormatVersion from '../format-version-enum.js';
-import {assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.js';
-import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
-import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import {LazyStore} from '../dag/lazy-store.ts';
+import {TestLazyStore} from '../dag/test-lazy-store.ts';
+import {TestStore} from '../dag/test-store.ts';
+import {DEFAULT_HEAD_NAME} from '../db/commit.ts';
+import * as MetaType from '../db/meta-type-enum.ts';
+import {ChainBuilder} from '../db/test-helpers.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import {assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.ts';
+import {withRead, withWriteNoImplicitCommit} from '../with-transactions.ts';
+import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

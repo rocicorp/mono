@@ -1,10 +1,10 @@
 // This test file is loaded by worker.test.ts
 
-import {assert} from '../../shared/src/asserts.js';
-import {deepEqual, type JSONValue} from '../../shared/src/json.js';
-import {asyncIterableToArray} from './async-iterable-to-array.js';
-import {Replicache} from './replicache.js';
-import type {ReadTransaction, WriteTransaction} from './transactions.js';
+import {assert} from '../../shared/src/asserts.ts';
+import {deepEqual, type JSONValue} from '../../shared/src/json.ts';
+import {asyncIterableToArray} from './async-iterable-to-array.ts';
+import {Replicache} from './replicache.ts';
+import type {ReadTransaction, WriteTransaction} from './transactions.ts';
 
 onmessage = async (e: MessageEvent) => {
   const {name} = e.data;

@@ -1,15 +1,15 @@
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.js';
-import {Database} from '../../../../../zqlite/src/db.js';
-import {expectTables, testDBs} from '../../../test/db.js';
-import type {PostgresDB} from '../../../types/pg.js';
-import {initReplicationState} from '../../replicator/schema/replication-state.js';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
+import {Database} from '../../../../../zqlite/src/db.ts';
+import {expectTables, testDBs} from '../../../test/db.ts';
+import type {PostgresDB} from '../../../types/pg.ts';
+import {initReplicationState} from '../../replicator/schema/replication-state.ts';
 import {
   AutoResetSignal,
   ensureReplicationConfig,
   markResetRequired,
   setupCDCTables,
-} from './tables.js';
+} from './tables.ts';
 
 describe('change-streamer/schema/tables', () => {
   const lc = createSilentLogContext();

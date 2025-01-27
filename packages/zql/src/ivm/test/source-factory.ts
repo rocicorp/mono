@@ -1,7 +1,7 @@
-import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.js';
-import type {SchemaValue} from '../../../../zero-schema/src/table-schema.js';
-import {MemorySource} from '../memory-source.js';
-import type {Source} from '../source.js';
+import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.ts';
+import type {SchemaValue} from '../../../../zero-schema/src/table-schema.ts';
+import {MemorySource} from '../memory-source.ts';
+import type {Source} from '../source.ts';
 
 export type SourceFactory = (
   tableName: string,

@@ -1,9 +1,9 @@
 import {LogContext} from '@rocicorp/logger';
-import {assert} from '../../../../shared/src/asserts.js';
-import {Database} from '../../../../zqlite/src/db.js';
-import type {ColumnSpec, IndexSpec, TableSpec} from '../../db/specs.js';
-import {StatementRunner} from '../../db/statements.js';
-import type {RowKey, RowValue} from '../../types/row-key.js';
+import {assert} from '../../../../shared/src/asserts.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
+import type {ColumnSpec, IndexSpec, TableSpec} from '../../db/specs.ts';
+import {StatementRunner} from '../../db/statements.ts';
+import type {RowKey, RowValue} from '../../types/row-key.ts';
 import type {
   ColumnAdd,
   ColumnDrop,
@@ -22,8 +22,8 @@ import type {
   TableCreate,
   TableDrop,
   TableRename,
-} from '../change-source/protocol/current/data.js';
-import {MessageProcessor} from './incremental-sync.js';
+} from '../change-source/protocol/current/data.ts';
+import {MessageProcessor} from './incremental-sync.ts';
 
 export interface FakeReplicator {
   processTransaction(finalWatermark: string, ...msgs: DataChange[]): void;

@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {MemoryStorage} from './memory-storage.js';
+import {MemoryStorage} from './memory-storage.ts';
 
 test('basics', () => {
   const ms = new MemoryStorage();

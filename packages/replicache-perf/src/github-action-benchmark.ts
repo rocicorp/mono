@@ -1,5 +1,5 @@
-import type {BenchmarkResult} from './benchmark.js';
-import {formatAsReplicache, formatVariance} from './format.js';
+import type {BenchmarkResult} from './benchmark.ts';
+import {formatAsReplicache, formatVariance} from './format.ts';
 
 // See https://github.com/benchmark-action/github-action-benchmark#examples
 export type Entry = {

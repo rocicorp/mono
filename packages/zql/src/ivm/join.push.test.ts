@@ -4,8 +4,8 @@ import {
   type Joins,
   type SourceContents,
   type Sources,
-} from './test/join-push-tests.js';
-import type {Format} from './view.js';
+} from './test/join-push-tests.ts';
+import type {Format} from './view.ts';
 
 suite('push one:many', () => {
   const sources: Sources = {

@@ -1,7 +1,7 @@
 import {stripVTControlCharacters as stripAnsi} from 'node:util';
 import {expect, test, vi} from 'vitest';
-import {parseOptions} from '../../../shared/src/options.js';
-import {zeroOptions} from './zero-config.js';
+import {parseOptions} from '../../../shared/src/options.ts';
+import {zeroOptions} from './zero-config.ts';
 
 class ExitAfterUsage extends Error {}
 const exit = () => {

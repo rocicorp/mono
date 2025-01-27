@@ -1,5 +1,5 @@
 import {resolver, type Resolver} from '@rocicorp/resolver';
-import {assert} from './asserts.js';
+import {assert} from './asserts.ts';
 
 /**
  * A Queue allows the consumers to await (possibly future) values,

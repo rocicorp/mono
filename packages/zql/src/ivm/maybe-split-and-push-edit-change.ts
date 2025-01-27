@@ -1,6 +1,6 @@
-import type {Row} from '../../../zero-protocol/src/data.js';
-import type {EditChange} from './change.js';
-import type {Output} from './operator.js';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {EditChange} from './change.ts';
+import type {Output} from './operator.ts';
 
 /**
  * This takes an {@linkcode EditChange} and a predicate that determines if a row

@@ -1,9 +1,9 @@
 /* eslint-disable no-console */
 import postgres from 'postgres';
 import {afterAll, expect, inject} from 'vitest';
-import {assert} from '../../../shared/src/asserts.js';
-import {sleep} from '../../../shared/src/sleep.js';
-import {type PostgresDB, postgresTypeConfig} from '../types/pg.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import {sleep} from '../../../shared/src/sleep.ts';
+import {type PostgresDB, postgresTypeConfig} from '../types/pg.ts';
 
 declare module 'vitest' {
   export interface ProvidedContext {

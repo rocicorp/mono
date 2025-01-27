@@ -1,57 +1,57 @@
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import {Queue} from '../../../../shared/src/queue.js';
-import {sleep} from '../../../../shared/src/sleep.js';
-import type {AST} from '../../../../zero-protocol/src/ast.js';
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.js';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {Queue} from '../../../../shared/src/queue.ts';
+import {sleep} from '../../../../shared/src/sleep.ts';
+import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import {
   type Downstream,
   type ErrorBody,
   type PokePartBody,
   type PokeStartBody,
   type QueriesPatch,
-} from '../../../../zero-protocol/src/mod.js';
-import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.js';
-import {definePermissions} from '../../../../zero-schema/src/permissions.js';
-import type {ExpressionBuilder} from '../../../../zql/src/query/expression.js';
-import {Database} from '../../../../zqlite/src/db.js';
-import {StatementRunner} from '../../db/statements.js';
-import {testDBs} from '../../test/db.js';
-import {DbFile} from '../../test/lite.js';
-import {ErrorForClient} from '../../types/error-for-client.js';
-import type {PostgresDB} from '../../types/pg.js';
-import {Subscription} from '../../types/subscription.js';
-import type {ReplicaState} from '../replicator/replicator.js';
-import {initChangeLog} from '../replicator/schema/change-log.js';
-import {
-  initReplicationState,
-  updateReplicationWatermark,
-} from '../replicator/schema/replication-state.js';
-import {
-  fakeReplicator,
-  type FakeReplicator,
-  ReplicationMessages,
-} from '../replicator/test-utils.js';
-import {CVRStore} from './cvr-store.js';
-import {CVRQueryDrivenUpdater} from './cvr.js';
-import {
-  type ClientGroupStorage,
-  CREATE_STORAGE_TABLE,
-  DatabaseStorage,
-} from './database-storage.js';
-import {DrainCoordinator} from './drain-coordinator.js';
-import {PipelineDriver} from './pipeline-driver.js';
-import {initViewSyncerSchema} from './schema/init.js';
-import {Snapshotter} from './snapshotter.js';
-import {pickToken, type SyncContext, ViewSyncerService} from './view-syncer.js';
-import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.js';
+} from '../../../../zero-protocol/src/mod.ts';
+import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.ts';
+import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import {
   json,
   number,
   string,
   table,
-} from '../../../../zero-schema/src/builder/table-builder.js';
-import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.js';
+} from '../../../../zero-schema/src/builder/table-builder.ts';
+import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.ts';
+import {definePermissions} from '../../../../zero-schema/src/permissions.ts';
+import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
+import {StatementRunner} from '../../db/statements.ts';
+import {testDBs} from '../../test/db.ts';
+import {DbFile} from '../../test/lite.ts';
+import {ErrorForClient} from '../../types/error-for-client.ts';
+import type {PostgresDB} from '../../types/pg.ts';
+import {Subscription} from '../../types/subscription.ts';
+import type {ReplicaState} from '../replicator/replicator.ts';
+import {initChangeLog} from '../replicator/schema/change-log.ts';
+import {
+  initReplicationState,
+  updateReplicationWatermark,
+} from '../replicator/schema/replication-state.ts';
+import {
+  fakeReplicator,
+  type FakeReplicator,
+  ReplicationMessages,
+} from '../replicator/test-utils.ts';
+import {CVRStore} from './cvr-store.ts';
+import {CVRQueryDrivenUpdater} from './cvr.ts';
+import {
+  type ClientGroupStorage,
+  CREATE_STORAGE_TABLE,
+  DatabaseStorage,
+} from './database-storage.ts';
+import {DrainCoordinator} from './drain-coordinator.ts';
+import {PipelineDriver} from './pipeline-driver.ts';
+import {initViewSyncerSchema} from './schema/init.ts';
+import {Snapshotter} from './snapshotter.ts';
+import {pickToken, type SyncContext, ViewSyncerService} from './view-syncer.ts';
 
 const SHARD_ID = 'ABC';
 

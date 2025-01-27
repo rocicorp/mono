@@ -1,10 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
-import {TestLogSink} from '../../../shared/src/logging-test-utils.js';
-import {sleep} from '../../../shared/src/sleep.js';
-import {getConnectionURI, testDBs} from '../test/db.js';
-import type {PostgresDB} from '../types/pg.js';
-import {ShortLivedClient} from './short-lived-client.js';
+import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
+import {sleep} from '../../../shared/src/sleep.ts';
+import {getConnectionURI, testDBs} from '../test/db.ts';
+import type {PostgresDB} from '../types/pg.ts';
+import {ShortLivedClient} from './short-lived-client.ts';
 
 describe('short-lived-client', () => {
   let db: PostgresDB;

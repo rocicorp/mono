@@ -1,14 +1,14 @@
-import * as v from '../../shared/src/valita.js';
-import {connectedMessageSchema} from './connect.js';
-import {errorMessageSchema} from './error.js';
+import * as v from '../../shared/src/valita.ts';
+import {connectedMessageSchema} from './connect.ts';
+import {errorMessageSchema} from './error.ts';
 import {
   pokeEndMessageSchema,
   pokePartMessageSchema,
   pokeStartMessageSchema,
-} from './poke.js';
-import {pongMessageSchema} from './pong.js';
-import {pullResponseMessageSchema} from './pull.js';
-import {warmMessageSchema} from './warm.js';
+} from './poke.ts';
+import {pongMessageSchema} from './pong.ts';
+import {pullResponseMessageSchema} from './pull.ts';
+import {warmMessageSchema} from './warm.ts';
 
 export const downstreamSchema = v.union(
   connectedMessageSchema,

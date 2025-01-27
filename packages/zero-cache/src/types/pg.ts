@@ -4,8 +4,8 @@ import {LogContext} from '@rocicorp/logger';
 import pg from 'pg';
 import postgres, {type Notice, type PostgresType} from 'postgres';
 import array from 'postgres-array';
-import {randInt} from '../../../shared/src/rand.js';
-import {BigIntJSON, type JSONValue} from './bigint-json.js';
+import {randInt} from '../../../shared/src/rand.ts';
+import {BigIntJSON, type JSONValue} from './bigint-json.ts';
 
 const {
   types: {builtins, setTypeParser},

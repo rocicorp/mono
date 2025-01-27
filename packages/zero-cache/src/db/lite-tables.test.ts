@@ -1,8 +1,8 @@
 import {describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
-import {Database} from '../../../zqlite/src/db.js';
-import {computeZqlSpecs, listIndexes, listTables} from './lite-tables.js';
-import type {LiteIndexSpec, LiteTableSpec} from './specs.js';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {Database} from '../../../zqlite/src/db.ts';
+import {computeZqlSpecs, listIndexes, listTables} from './lite-tables.ts';
+import type {LiteIndexSpec, LiteTableSpec} from './specs.ts';
 
 describe('lite/tables', () => {
   type Case = {

@@ -1,16 +1,16 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
-import {testDBs} from '../test/db.js';
-import type {PostgresDB} from '../types/pg.js';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {testDBs} from '../test/db.ts';
+import type {PostgresDB} from '../types/pg.ts';
 import {
   type IncrementalMigrationMap,
   type Migration,
   type VersionHistory,
   getVersionHistory,
   runSchemaMigrations,
-} from './migration.js';
+} from './migration.ts';
 
 describe('db/migration', () => {
   const schemaName = '_zero';

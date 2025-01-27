@@ -1,8 +1,8 @@
 import {literal} from 'pg-format';
 import type postgres from 'postgres';
-import {equals} from '../../../../../../shared/src/set-utils.js';
-import * as v from '../../../../../../shared/src/valita.js';
-import {publishedIndexSpec, publishedTableSpec} from '../../../../db/specs.js';
+import {equals} from '../../../../../../shared/src/set-utils.ts';
+import * as v from '../../../../../../shared/src/valita.ts';
+import {publishedIndexSpec, publishedTableSpec} from '../../../../db/specs.ts';
 
 export function publishedTableQuery(publications: string[]) {
   return `

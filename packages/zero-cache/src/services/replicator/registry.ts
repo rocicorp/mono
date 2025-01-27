@@ -1,4 +1,4 @@
-import type {Replicator} from './replicator.js';
+import type {Replicator} from './replicator.ts';
 
 export interface ReplicatorRegistry {
   /**

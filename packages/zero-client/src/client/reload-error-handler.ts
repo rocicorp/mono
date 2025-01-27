@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import * as v from '../../../shared/src/valita.js';
+import * as v from '../../../shared/src/valita.ts';
 
 export const RELOAD_REASON_STORAGE_KEY = '_zeroReloadReason';
 export const RELOAD_BACKOFF_STATE_KEY = '_zeroReloadBackoffState';

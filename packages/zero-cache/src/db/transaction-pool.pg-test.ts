@@ -2,13 +2,13 @@ import {PG_UNIQUE_VIOLATION} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import type {Enum} from '../../../shared/src/enum.js';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
-import {Queue} from '../../../shared/src/queue.js';
-import {sleep} from '../../../shared/src/sleep.js';
-import {expectTables, testDBs} from '../test/db.js';
-import type {PostgresDB} from '../types/pg.js';
-import * as Mode from './mode-enum.js';
+import type {Enum} from '../../../shared/src/enum.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {Queue} from '../../../shared/src/queue.ts';
+import {sleep} from '../../../shared/src/sleep.ts';
+import {expectTables, testDBs} from '../test/db.ts';
+import type {PostgresDB} from '../types/pg.ts';
+import * as Mode from './mode-enum.ts';
 import {
   importSnapshot,
   sharedSnapshot,
@@ -16,7 +16,7 @@ import {
   TIMEOUT_TASKS,
   TransactionPool,
   type Task,
-} from './transaction-pool.js';
+} from './transaction-pool.ts';
 
 type Mode = Enum<typeof Mode>;
 

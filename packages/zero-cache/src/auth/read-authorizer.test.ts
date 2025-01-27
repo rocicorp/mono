@@ -1,19 +1,19 @@
 import {describe, expect, test} from 'vitest';
-import {definePermissions} from '../../../zero-schema/src/permissions.js';
-import type {ExpressionBuilder} from '../../../zql/src/query/expression.js';
+import {must} from '../../../shared/src/must.ts';
+import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
+import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import {definePermissions} from '../../../zero-schema/src/permissions.ts';
+import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
 import {
   astForTestingSymbol,
   newQuery,
   QueryImpl,
   type QueryDelegate,
-} from '../../../zql/src/query/query-impl.js';
-import type {Query} from '../../../zql/src/query/query.js';
-import {transformQuery} from './read-authorizer.js';
-import {must} from '../../../shared/src/must.js';
-import {string, table} from '../../../zero-schema/src/builder/table-builder.js';
-import {relationships} from '../../../zero-schema/src/builder/relationship-builder.js';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.js';
-import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.js';
+} from '../../../zql/src/query/query-impl.ts';
+import type {Query} from '../../../zql/src/query/query.ts';
+import {transformQuery} from './read-authorizer.ts';
 
 const mockDelegate = {} as QueryDelegate;
 

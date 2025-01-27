@@ -2,7 +2,7 @@ import {expect, test} from 'vitest';
 import {
   SubscriptionImplForTesting,
   scanInfoMatchesKey,
-} from './subscriptions.js';
+} from './subscriptions.ts';
 
 test('scanInfoMatchesKey', () => {
   expect(scanInfoMatchesKey({options: {}}, '', 'a')).to.be.true;

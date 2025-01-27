@@ -1,9 +1,9 @@
 import {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
-import {AbortError} from '../../../../../shared/src/abort-error.js';
-import {equals} from '../../../../../shared/src/set-utils.js';
-import type {PostgresDB} from '../../../types/pg.js';
-import type {Change} from '../../change-source/protocol/current/data.js';
+import {AbortError} from '../../../../../shared/src/abort-error.ts';
+import {equals} from '../../../../../shared/src/set-utils.ts';
+import type {PostgresDB} from '../../../types/pg.ts';
+import type {Change} from '../../change-source/protocol/current/data.ts';
 
 export const PG_SCHEMA = 'cdc';
 

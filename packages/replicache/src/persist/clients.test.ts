@@ -1,30 +1,30 @@
 import {LogContext} from '@rocicorp/logger';
 import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {assert, assertNotUndefined} from '../../../shared/src/asserts.js';
-import {BTreeRead} from '../btree/read.js';
-import type {Read, Write} from '../dag/store.js';
-import {TestStore} from '../dag/test-store.js';
+import {assert, assertNotUndefined} from '../../../shared/src/asserts.ts';
+import {BTreeRead} from '../btree/read.ts';
+import type {Read, Write} from '../dag/store.ts';
+import {TestStore} from '../dag/test-store.ts';
 import {
   Commit,
   type SnapshotMetaDD31,
   commitFromHash,
   commitIsSnapshot,
   fromChunk,
-} from '../db/commit.js';
-import {ChainBuilder} from '../db/test-helpers.js';
-import * as FormatVersion from '../format-version-enum.js';
-import {deepFreeze} from '../frozen-json.js';
-import {assertHash, fakeHash, newRandomHash} from '../hash.js';
-import type {IndexDefinitions} from '../index-defs.js';
-import type {ClientGroupID, ClientID} from '../sync/ids.js';
-import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
+} from '../db/commit.ts';
+import {ChainBuilder} from '../db/test-helpers.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import {deepFreeze} from '../frozen-json.ts';
+import {assertHash, fakeHash, newRandomHash} from '../hash.ts';
+import type {IndexDefinitions} from '../index-defs.ts';
+import type {ClientGroupID, ClientID} from '../sync/ids.ts';
+import {withRead, withWriteNoImplicitCommit} from '../with-transactions.ts';
 import {
   type ClientGroup,
   getClientGroup,
   setClientGroup,
-} from './client-groups.js';
-import {makeClientV6, setClientsForTesting} from './clients-test-helpers.js';
+} from './client-groups.ts';
+import {makeClientV6, setClientsForTesting} from './clients-test-helpers.ts';
 import {
   CLIENTS_HEAD_NAME,
   type ClientV5,
@@ -40,8 +40,8 @@ import {
   getClients,
   initClientV6,
   setClient,
-} from './clients.js';
-import {makeClientID} from './make-client-id.js';
+} from './clients.ts';
+import {makeClientID} from './make-client-id.ts';
 
 let clock: SinonFakeTimers;
 beforeEach(() => {

@@ -1,6 +1,6 @@
 import {Range} from 'semver';
 import {expect, test} from 'vitest';
-import {isSupportedSemverRange} from './is-supported-semver-range.js';
+import {isSupportedSemverRange} from './is-supported-semver-range.ts';
 
 test('isSupportedSemverRange', () => {
   const t = (range: string, expected: boolean) =>

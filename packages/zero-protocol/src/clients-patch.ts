@@ -1,4 +1,4 @@
-import * as v from '../../shared/src/valita.js';
+import * as v from '../../shared/src/valita.ts';
 
 const putOpSchema = v.object({
   op: v.literal('put'),

@@ -1,16 +1,16 @@
 import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import {Database} from '../../../../zqlite/src/db.js';
-import {StatementRunner} from '../../db/statements.js';
-import {expectTables} from '../../test/lite.js';
-import type {ChangeStreamData} from '../change-source/protocol/current/downstream.js';
-import {initChangeLog} from './schema/change-log.js';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
+import {StatementRunner} from '../../db/statements.ts';
+import {expectTables} from '../../test/lite.ts';
+import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import {initChangeLog} from './schema/change-log.ts';
 import {
   getSubscriptionState,
   initReplicationState,
-} from './schema/replication-state.js';
-import {createMessageProcessor, ReplicationMessages} from './test-utils.js';
+} from './schema/replication-state.ts';
+import {createMessageProcessor, ReplicationMessages} from './test-utils.ts';
 
 describe('replicator/message-processor', () => {
   let lc: LogContext;

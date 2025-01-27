@@ -1,16 +1,16 @@
-import type {ClientID} from '../../../replicache/src/mod.js';
-import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.js';
-import {assert} from '../../../shared/src/asserts.js';
-import {must} from '../../../shared/src/must.js';
-import {hashOfAST} from '../../../zero-protocol/src/ast-hash.js';
-import {normalizeAST, type AST} from '../../../zero-protocol/src/ast.js';
+import type {ClientID} from '../../../replicache/src/mod.ts';
+import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import {must} from '../../../shared/src/must.ts';
+import {hashOfAST} from '../../../zero-protocol/src/ast-hash.ts';
+import {normalizeAST, type AST} from '../../../zero-protocol/src/ast.ts';
 import type {
   ChangeDesiredQueriesMessage,
   QueriesPatchOp,
-} from '../../../zero-protocol/src/mod.js';
-import type {GotCallback} from '../../../zql/src/query/query-impl.js';
-import type {ReadTransaction} from '../mod.js';
-import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.js';
+} from '../../../zero-protocol/src/mod.ts';
+import type {GotCallback} from '../../../zql/src/query/query-impl.ts';
+import type {ReadTransaction} from '../mod.ts';
+import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 
 type QueryHash = string;
 

@@ -9,8 +9,8 @@ import {
   parseOptionsAdvanced,
   type Config,
   type Options,
-} from './options.js';
-import * as v from './valita.js';
+} from './options.ts';
+import * as v from './valita.ts';
 
 const options = {
   port: {

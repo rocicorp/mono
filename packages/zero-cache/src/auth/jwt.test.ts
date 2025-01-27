@@ -1,8 +1,8 @@
-import {describe, expect, test} from 'vitest';
-import type {AuthConfig} from '../config/zero-config.js';
-import {verifyToken} from './jwt.js';
 import {exportJWK, generateKeyPair, SignJWT, type JWTPayload} from 'jose';
-import {must} from '../../../shared/src/must.js';
+import {describe, expect, test} from 'vitest';
+import {must} from '../../../shared/src/must.ts';
+import type {AuthConfig} from '../config/zero-config.ts';
+import {verifyToken} from './jwt.ts';
 
 async function generateJwkKeys() {
   const {publicKey, privateKey} = await generateKeyPair('PS256');

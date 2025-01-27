@@ -1,7 +1,7 @@
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {expect, test} from 'vitest';
-import {Database} from '../db.js';
-import {type CachedStatement, StatementCache} from './statement-cache.js';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {Database} from '../db.ts';
+import {type CachedStatement, StatementCache} from './statement-cache.ts';
 
 test('Same sql results in same statement instance. The same instance is not outstanding twice.', () => {
   const db = new Database(createSilentLogContext(), ':memory:');

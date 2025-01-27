@@ -1,41 +1,41 @@
 import sinon from 'sinon';
 import {describe, expect, test} from 'vitest';
-import {assert} from '../../shared/src/asserts.js';
-import type {Enum} from '../../shared/src/enum.js';
-import {type JSONObject, assertJSONObject} from '../../shared/src/json.js';
-import {randomUint64} from '../../shared/src/random-uint64.js';
-import {LazyStore} from './dag/lazy-store.js';
-import {StoreImpl} from './dag/store-impl.js';
-import * as FormatVersion from './format-version-enum.js';
+import {assert} from '../../shared/src/asserts.ts';
+import type {Enum} from '../../shared/src/enum.ts';
+import {type JSONObject, assertJSONObject} from '../../shared/src/json.ts';
+import {randomUint64} from '../../shared/src/random-uint64.ts';
+import {LazyStore} from './dag/lazy-store.ts';
+import {StoreImpl} from './dag/store-impl.ts';
+import * as FormatVersion from './format-version-enum.ts';
 import {
   createAndPersistClientWithPendingLocalDD31,
   createPerdag,
   createPushRequestBodyDD31,
   persistSnapshotDD31,
-} from './mutation-recovery-test-helper.js';
+} from './mutation-recovery-test-helper.ts';
 import {
   disableClientGroup,
   getClientGroup,
   getClientGroups,
-} from './persist/client-groups.js';
-import {assertClientV6, getClient, getClients} from './persist/clients.js';
-import type {PullResponseV1} from './puller.js';
-import type {PushResponse} from './pusher.js';
-import type {ClientID} from './sync/ids.js';
-import {PULL_VERSION_DD31, type PullRequestV1} from './sync/pull.js';
+} from './persist/client-groups.ts';
+import {assertClientV6, getClient, getClients} from './persist/clients.ts';
+import type {PullResponseV1} from './puller.ts';
+import type {PushResponse} from './pusher.ts';
+import type {ClientID} from './sync/ids.ts';
+import {PULL_VERSION_DD31, type PullRequestV1} from './sync/pull.ts';
 import {
   PUSH_VERSION_DD31,
   type PushRequestV1,
   assertPushRequestV1,
-} from './sync/push.js';
+} from './sync/push.ts';
 import {
   clock,
   disableAllBackgroundProcesses,
   initReplicacheTesting,
   replicacheForTesting,
   tickAFewTimes,
-} from './test-util.js';
-import {withRead, withWriteNoImplicitCommit} from './with-transactions.js';
+} from './test-util.ts';
+import {withRead, withWriteNoImplicitCommit} from './with-transactions.ts';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment

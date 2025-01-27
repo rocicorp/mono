@@ -1,8 +1,8 @@
 import {expectTypeOf, test} from 'vitest';
-import type {Query} from '../../../zql/src/query/query.js';
-import {relationships} from './relationship-builder.js';
-import {createSchema} from './schema-builder.js';
-import {number, string, table} from './table-builder.js';
+import type {Query} from '../../../zql/src/query/query.ts';
+import {relationships} from './relationship-builder.ts';
+import {createSchema} from './schema-builder.ts';
+import {number, string, table} from './table-builder.ts';
 
 const mockQuery = {
   select() {

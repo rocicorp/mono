@@ -1,10 +1,10 @@
-import {assert} from '../../../../../shared/src/asserts.js';
+import {assert} from '../../../../../shared/src/asserts.ts';
 import {
   versionFromLexi,
   versionToLexi,
   type LexiVersion,
-} from '../../../types/lexi-version.js';
-import type {Change} from '../protocol/current/data.js';
+} from '../../../types/lexi-version.ts';
+import type {Change} from '../protocol/current/data.ts';
 
 /**
  * Parsing and conversion utilities for the pg_lsn Type, which represents

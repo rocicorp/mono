@@ -3,9 +3,9 @@
 /* eslint-env es2022 */
 
 import {readFile} from 'node:fs/promises';
-import {packageUp} from 'package-up';
 import {resolve as resolvePath} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {packageUp} from 'package-up';
 import {isInternalPackage} from './internal-packages.js';
 
 /**

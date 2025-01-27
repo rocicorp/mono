@@ -1,11 +1,11 @@
 import {resolver} from '@rocicorp/resolver';
 import * as sinon from 'sinon';
 import {expect, test} from 'vitest';
-import type {VersionNotSupportedResponse} from './error-responses.js';
-import {getDefaultPuller} from './get-default-puller.js';
-import {type Hash, emptyHash} from './hash.js';
-import type {Puller} from './puller.js';
-import {httpStatusUnauthorized} from './replicache.js';
+import type {VersionNotSupportedResponse} from './error-responses.ts';
+import {getDefaultPuller} from './get-default-puller.ts';
+import {type Hash, emptyHash} from './hash.ts';
+import type {Puller} from './puller.ts';
+import {httpStatusUnauthorized} from './replicache.ts';
 import {
   disableAllBackgroundProcesses,
   expectConsoleLogContextStub,
@@ -15,9 +15,9 @@ import {
   requestIDLogContextRegex,
   tickAFewTimes,
   waitForSync,
-} from './test-util.js';
-import type {WriteTransaction} from './transactions.js';
-import type {UpdateNeededReason} from './types.js';
+} from './test-util.ts';
+import type {WriteTransaction} from './transactions.ts';
+import type {UpdateNeededReason} from './types.ts';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment

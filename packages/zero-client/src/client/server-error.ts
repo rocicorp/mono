@@ -1,8 +1,8 @@
-import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.js';
+import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
 import {
   type BackoffBody,
   type ErrorBody,
-} from '../../../zero-protocol/src/error.js';
+} from '../../../zero-protocol/src/error.ts';
 
 type ErrorKind = (typeof ErrorKind)[keyof typeof ErrorKind];
 

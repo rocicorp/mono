@@ -1,10 +1,10 @@
 import {resolver} from '@rocicorp/resolver';
 import {expect, test, vi} from 'vitest';
-import {number, string, table} from '../../zero-client/src/mod.js';
-import {createSchema} from '../../zero-schema/src/mod.js';
-import {MemorySource} from '../../zql/src/ivm/memory-source.js';
-import type {HumanReadable, Query} from '../../zql/src/query/query.js';
-import {SolidView, solidViewFactory} from './solid-view.js';
+import {number, string, table} from '../../zero-client/src/mod.ts';
+import {createSchema} from '../../zero-schema/src/mod.ts';
+import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
+import type {HumanReadable, Query} from '../../zql/src/query/query.ts';
+import {SolidView, solidViewFactory} from './solid-view.ts';
 
 test('basics', () => {
   const ms = new MemorySource(

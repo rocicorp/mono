@@ -1,14 +1,14 @@
 import {describe, expect, test} from 'vitest';
-import type {ExpressionFactory} from './expression.js';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {ExpressionFactory} from './expression.ts';
 import {
   astForTestingSymbol,
   newQuery,
   QueryImpl,
   type QueryDelegate,
-} from './query-impl.js';
-import type {Query} from './query.js';
-import {schema} from './test/test-schemas.js';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.js';
+} from './query-impl.ts';
+import type {Query} from './query.ts';
+import {schema} from './test/test-schemas.ts';
 
 const mockDelegate = {} as QueryDelegate;
 

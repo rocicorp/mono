@@ -1,4 +1,4 @@
-import type {Immutable} from '../../../shared/src/immutable.js';
+import type {Immutable} from '../../../shared/src/immutable.ts';
 
 export type ResultType = 'unknown' | 'complete';
 

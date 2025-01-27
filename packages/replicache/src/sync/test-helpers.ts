@@ -1,18 +1,18 @@
 import {expect} from 'vitest';
-import {assert} from '../../../shared/src/asserts.js';
-import type {Store} from '../dag/store.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Store} from '../dag/store.ts';
 import {
   Commit,
   type SnapshotMeta,
   commitFromHead,
   commitIsSnapshot,
-} from '../db/commit.js';
-import type {Chain} from '../db/test-helpers.js';
-import {newWriteSnapshotDD31} from '../db/write.js';
-import * as FormatVersion from '../format-version-enum.js';
-import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
-import type {ClientID} from './ids.js';
-import {SYNC_HEAD_NAME} from './sync-head-name.js';
+} from '../db/commit.ts';
+import type {Chain} from '../db/test-helpers.ts';
+import {newWriteSnapshotDD31} from '../db/write.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import {withRead, withWriteNoImplicitCommit} from '../with-transactions.ts';
+import type {ClientID} from './ids.ts';
+import {SYNC_HEAD_NAME} from './sync-head-name.ts';
 
 type FormatVersion = (typeof FormatVersion)[keyof typeof FormatVersion];
 

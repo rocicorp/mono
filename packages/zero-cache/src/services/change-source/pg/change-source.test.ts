@@ -1,6 +1,6 @@
 import type {LogicalReplicationService} from 'pg-logical-replication';
 import {afterEach, beforeEach, expect, test, vi} from 'vitest';
-import {Acker} from './change-source.js';
+import {Acker} from './change-source.ts';
 
 beforeEach(() => {
   vi.useFakeTimers();

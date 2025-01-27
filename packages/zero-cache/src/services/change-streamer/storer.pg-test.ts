@@ -1,18 +1,18 @@
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.js';
-import {Queue} from '../../../../shared/src/queue.js';
-import {sleep} from '../../../../shared/src/sleep.js';
-import {testDBs} from '../../test/db.js';
-import type {PostgresDB} from '../../types/pg.js';
-import {Subscription} from '../../types/subscription.js';
-import {type Commit} from '../change-source/protocol/current/downstream.js';
-import type {StatusMessage} from '../change-source/protocol/current/status.js';
-import {ReplicationMessages} from '../replicator/test-utils.js';
-import {type Downstream} from './change-streamer.js';
-import * as ErrorType from './error-type-enum.js';
-import {setupCDCTables} from './schema/tables.js';
-import {Storer} from './storer.js';
-import {createSubscriber} from './test-utils.js';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {Queue} from '../../../../shared/src/queue.ts';
+import {sleep} from '../../../../shared/src/sleep.ts';
+import {testDBs} from '../../test/db.ts';
+import type {PostgresDB} from '../../types/pg.ts';
+import {Subscription} from '../../types/subscription.ts';
+import {type Commit} from '../change-source/protocol/current/downstream.ts';
+import type {StatusMessage} from '../change-source/protocol/current/status.ts';
+import {ReplicationMessages} from '../replicator/test-utils.ts';
+import {type Downstream} from './change-streamer.ts';
+import * as ErrorType from './error-type-enum.ts';
+import {setupCDCTables} from './schema/tables.ts';
+import {Storer} from './storer.ts';
+import {createSubscriber} from './test-utils.ts';
 
 describe('change-streamer/storer', () => {
   const lc = createSilentLogContext();

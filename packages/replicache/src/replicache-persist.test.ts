@@ -10,33 +10,33 @@ import {
   replicacheForTesting,
   ReplicacheTest,
   tickAFewTimes,
-} from './test-util.js';
+} from './test-util.ts';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import {assert, assertNotUndefined} from '../../shared/src/asserts.js';
-import {sleep} from '../../shared/src/sleep.js';
-import {StoreImpl} from './dag/store-impl.js';
-import type {Store} from './dag/store.js';
-import {assertHash, newRandomHash} from './hash.js';
-import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.js';
-import {IDBNotFoundError, IDBStore} from './kv/idb-store.js';
+import {assert, assertNotUndefined} from '../../shared/src/asserts.ts';
+import {sleep} from '../../shared/src/sleep.ts';
+import {StoreImpl} from './dag/store-impl.ts';
+import type {Store} from './dag/store.ts';
+import {assertHash, newRandomHash} from './hash.ts';
+import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.ts';
+import {IDBNotFoundError, IDBStore} from './kv/idb-store.ts';
 import {
   type ClientGroup,
   deleteClientGroup,
   getClientGroup,
-} from './persist/client-groups.js';
-import {deleteClientForTesting} from './persist/clients-test-helpers.js';
+} from './persist/client-groups.ts';
+import {deleteClientForTesting} from './persist/clients-test-helpers.ts';
 import {
   assertClientV6,
   ClientStateNotFoundError,
   getClient,
-} from './persist/clients.js';
-import type {WriteTransaction} from './transactions.js';
-import type {MutatorDefs} from './types.js';
-import {withRead, withWriteNoImplicitCommit} from './with-transactions.js';
+} from './persist/clients.ts';
+import type {WriteTransaction} from './transactions.ts';
+import type {MutatorDefs} from './types.ts';
+import {withRead, withWriteNoImplicitCommit} from './with-transactions.ts';
 
 initReplicacheTesting();
 

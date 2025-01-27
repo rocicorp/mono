@@ -1,13 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type {Expand, ExpandRecursive} from '../../../shared/src/expand.js';
-import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.js';
+import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
+import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   LastInTuple,
   SchemaValueToTSType,
   TableSchema,
-} from '../../../zero-schema/src/table-schema.js';
-import type {ExpressionFactory, ParameterReference} from './expression.js';
-import type {TypedView} from './typed-view.js';
+} from '../../../zero-schema/src/table-schema.ts';
+import type {ExpressionFactory, ParameterReference} from './expression.ts';
+import type {TypedView} from './typed-view.ts';
 
 type Selector<E extends TableSchema> = keyof E['columns'];
 export type NoJsonSelector<T extends TableSchema> = Exclude<

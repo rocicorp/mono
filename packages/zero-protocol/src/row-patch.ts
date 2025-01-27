@@ -1,7 +1,7 @@
-import {jsonObjectSchema} from '../../shared/src/json-schema.js';
-import * as v from '../../shared/src/valita.js';
-import {rowSchema} from './data.js';
-import {primaryKeyValueRecordSchema} from './primary-key.js';
+import {jsonObjectSchema} from '../../shared/src/json-schema.ts';
+import * as v from '../../shared/src/valita.ts';
+import {rowSchema} from './data.ts';
+import {primaryKeyValueRecordSchema} from './primary-key.ts';
 
 const putOpSchema = v.object({
   op: v.literal('put'),

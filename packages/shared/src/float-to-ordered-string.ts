@@ -1,5 +1,5 @@
-import {assert} from './asserts.js';
-import {parseBigInt} from './parse-big-int.js';
+import {assert} from './asserts.ts';
+import {parseBigInt} from './parse-big-int.ts';
 
 const view = new DataView(new ArrayBuffer(8));
 

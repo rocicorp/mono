@@ -1,7 +1,7 @@
-import type {Enum} from '../../shared/src/enum.js';
-import type * as v from '../../shared/src/valita.js';
-import * as ErrorKind from './error-kind-enum.js';
-import type {errorBodySchema} from './error.js';
+import type {Enum} from '../../shared/src/enum.ts';
+import type * as v from '../../shared/src/valita.ts';
+import * as ErrorKind from './error-kind-enum.ts';
+import type {errorBodySchema} from './error.ts';
 
 type ErrorKind = Enum<typeof ErrorKind>;
 

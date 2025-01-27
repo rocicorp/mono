@@ -1,7 +1,7 @@
-import type {Enum} from '../../../shared/src/enum.js';
-import type * as v from '../../../shared/src/valita.js';
-import * as PostgresTypeClass from './postgres-type-class-enum.js';
-import type {pgTypeClassSchema} from './specs.js';
+import type {Enum} from '../../../shared/src/enum.ts';
+import type * as v from '../../../shared/src/valita.ts';
+import * as PostgresTypeClass from './postgres-type-class-enum.ts';
+import type {pgTypeClassSchema} from './specs.ts';
 
 type PostgresTypeClass = Enum<typeof PostgresTypeClass>;
 

@@ -1,4 +1,4 @@
-import {append, TAGS} from './ddl.js';
+import {append, TAGS} from './ddl.ts';
 
 export function dropEventTriggerStatements(shardID: string) {
   const sharded = append(shardID);

@@ -1,4 +1,4 @@
-import {sleepWithAbort} from '../../../shared/src/sleep.js';
+import {sleepWithAbort} from '../../../shared/src/sleep.ts';
 
 /**
  * Resolves to the the string `"timed-out"` if `timeoutMs` elapses before

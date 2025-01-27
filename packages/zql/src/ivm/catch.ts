@@ -1,8 +1,8 @@
-import {unreachable} from '../../../shared/src/asserts.js';
-import type {Row} from '../../../zero-protocol/src/data.js';
-import type {AddChange, Change, RemoveChange} from './change.js';
-import type {Node} from './data.js';
-import type {FetchRequest, Input, Output} from './operator.js';
+import {unreachable} from '../../../shared/src/asserts.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {AddChange, Change, RemoveChange} from './change.ts';
+import type {Node} from './data.ts';
+import type {FetchRequest, Input, Output} from './operator.ts';
 
 export type CaughtChildChange = {
   type: 'child';

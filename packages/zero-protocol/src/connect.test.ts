@@ -1,6 +1,6 @@
-import {expect, test} from 'vitest';
 import fc from 'fast-check';
-import {decodeSecProtocols, encodeSecProtocols} from './connect.js';
+import {expect, test} from 'vitest';
+import {decodeSecProtocols, encodeSecProtocols} from './connect.ts';
 
 test('encode/decodeSecProtocols round-trip', () => {
   fc.assert(

@@ -1,16 +1,16 @@
 import {LogContext} from '@rocicorp/logger';
 import sinon from 'sinon';
 import {afterEach, describe, expect, test} from 'vitest';
-import {assert} from '../../../shared/src/asserts.js';
-import type {Enum} from '../../../shared/src/enum.js';
-import {BTreeRead} from '../btree/read.js';
-import type {Read} from '../dag/store.js';
-import {TestStore} from '../dag/test-store.js';
-import * as FormatVersion from '../format-version-enum.js';
-import type {Hash} from '../hash.js';
-import {SYNC_HEAD_NAME} from '../sync/sync-head-name.js';
-import type {WriteTransaction} from '../transactions.js';
-import {withRead, withWriteNoImplicitCommit} from '../with-transactions.js';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import {BTreeRead} from '../btree/read.ts';
+import type {Read} from '../dag/store.ts';
+import {TestStore} from '../dag/test-store.ts';
+import * as FormatVersion from '../format-version-enum.ts';
+import type {Hash} from '../hash.ts';
+import {SYNC_HEAD_NAME} from '../sync/sync-head-name.ts';
+import type {WriteTransaction} from '../transactions.ts';
+import {withRead, withWriteNoImplicitCommit} from '../with-transactions.ts';
 import {
   Commit,
   type LocalMeta,
@@ -21,9 +21,9 @@ import {
   commitFromHead,
   commitIsLocal,
   commitIsLocalDD31,
-} from './commit.js';
-import {rebaseMutationAndCommit, rebaseMutationAndPutCommit} from './rebase.js';
-import {ChainBuilder} from './test-helpers.js';
+} from './commit.ts';
+import {rebaseMutationAndCommit, rebaseMutationAndPutCommit} from './rebase.ts';
+import {ChainBuilder} from './test-helpers.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 
