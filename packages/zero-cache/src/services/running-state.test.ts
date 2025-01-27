@@ -36,11 +36,11 @@ test('backoff', () => {
   );
 
   for (let i = 0; i < 8; i++) {
-    void state.backoff(lc);
+    void state.backoff(lc, 'any error');
   }
   void state.resetBackoff();
-  void state.backoff(lc);
-  void state.backoff(lc);
+  void state.backoff(lc, 'any error');
+  void state.backoff(lc, 'any error');
 
   expect(mockSleep.mock.calls.map(call => call[0])).toEqual([
     1000, 2000, 4000, 8000, 13_000, 13_000, 13_000, 13_000, 1000, 2000,
@@ -50,7 +50,7 @@ test('backoff', () => {
 test('cancel backoff on stop', async () => {
   const state = new RunningState('foo-service', {initialRetryDelay: 100_000});
 
-  const timeout = state.backoff(lc);
+  const timeout = state.backoff(lc, 'any error');
   state.stop(lc);
   await timeout;
 });

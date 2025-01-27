@@ -3,9 +3,13 @@ import EventEmitter from 'node:events';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.js';
 import {promiseVoid} from '../../../shared/src/resolved-promises.js';
+import {
+  ProcessManager,
+  runUntilKilled,
+  type WorkerType,
+} from '../services/life-cycle.js';
 import type {SingletonService} from '../services/service.js';
 import {inProcChannel} from '../types/processes.js';
-import {ProcessManager, runUntilKilled, type WorkerType} from './life-cycle.js';
 
 describe('shutdown', () => {
   const lc = createSilentLogContext();

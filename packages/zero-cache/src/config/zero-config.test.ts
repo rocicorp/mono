@@ -135,8 +135,7 @@ test('zero-cache --help', () => {
                                                                                                                                                      
      --port number                                 default: 4848                                                                                     
        ZERO_PORT env                                                                                                                                 
-                                                   The main port for client connections.                                                             
-                                                   Internally, zero-cache will also listen on the 2 ports after --port.                              
+                                                   The port for sync connections.                                                                    
                                                                                                                                                      
      --change-streamer-port number                 optional                                                                                          
        ZERO_CHANGE_STREAMER_PORT env                                                                                                                 
@@ -145,16 +144,6 @@ test('zero-cache --help', () => {
                                                    runs in the same process in local development.                                                    
                                                                                                                                                      
                                                    If unspecified, defaults to --port + 1.                                                           
-                                                                                                                                                     
-     --heartbeat-monitor-port number               optional                                                                                          
-       ZERO_HEARTBEAT_MONITOR_PORT env                                                                                                               
-                                                   The port on which the heartbeat monitor listens for heartbeat                                     
-                                                   health checks. Once health checks are received at this port,                                      
-                                                   the monitor considers it a keepalive signal and triggers a drain                                  
-                                                   if health checks stop for more than 15 seconds. If health checks                                  
-                                                   never arrive on this port, the monitor does nothing (i.e. opt-in).                                
-                                                                                                                                                     
-                                                   If unspecified, defaults to --port + 2.                                                           
                                                                                                                                                      
      --task-id string                              optional                                                                                          
        ZERO_TASK_ID env                                                                                                                              

@@ -93,6 +93,8 @@ export {
   number,
   string,
   table,
+  type TableBuilderWithColumns,
+  type ColumnBuilder,
 } from '../../zero-schema/src/builder/table-builder.js';
 export type {
   AssetPermissions as CompiledAssetPermissions,
@@ -123,6 +125,6 @@ export type {
   ExpressionFactory,
 } from '../../zql/src/query/expression.js';
 export type {Query, Row} from '../../zql/src/query/query.js';
-export type {TypedView} from '../../zql/src/query/typed-view.js';
+export type {TypedView, ResultType} from '../../zql/src/query/typed-view.js';
 export type {ZeroOptions} from './client/options.js';
 export {Zero} from './client/zero.js';

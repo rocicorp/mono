@@ -240,8 +240,8 @@ Resources:
       IpAddressType: ipv4
       HealthCheckEnabled: true
       HealthCheckProtocol: HTTP
-      HealthCheckPort: "4850"
-      HealthCheckPath: "/"
+      HealthCheckPort: "4848"
+      HealthCheckPath: "/keepalive"
       HealthCheckIntervalSeconds: 5
       HealthCheckTimeoutSeconds: 3
       HealthyThresholdCount: 3
@@ -294,11 +294,6 @@ Resources:
           FromPort: 4848
           IpProtocol: tcp
           ToPort: 4848
-        - CidrIp: 0.0.0.0/0
-          Description: Allow traffic to ZeroCache Heartbeat
-          FromPort: 4850
-          IpProtocol: tcp
-          ToPort: 4850
         - CidrIp: 0.0.0.0/0
           Description: Allow HTTPS traffic
           FromPort: 443

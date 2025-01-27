@@ -2,14 +2,13 @@ import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {pid} from 'process';
 import type {EventEmitter} from 'stream';
-import {HttpService, type Options} from '../services/http-service.js';
-import {RunningState} from '../services/running-state.js';
-import type {SingletonService} from '../services/service.js';
 import {
   singleProcessMode,
   type Subprocess,
   type Worker,
 } from '../types/processes.js';
+import {RunningState} from './running-state.js';
+import type {SingletonService} from './service.js';
 
 /**
  * * `user-facing` workers serve external requests and are the first to
@@ -257,40 +256,32 @@ export async function exitAfter(run: () => Promise<void>) {
 const DEFAULT_STOP_INTERVAL_MS = 15_000;
 
 /**
- * The HeartbeatMonitor listens on a dedicated port to monitor the cadence
- * of "heartbeat" requests (e.g. health checks) that signal that the server
+ * The HeartbeatMonitor monitors the cadence heartbeats (e.g. "/keepalive"
+ * health checks made to HttpServices) that signal that the server
  * should continue processing requests. When a configurable `stopInterval`
  * elapses without receiving these heartbeats, the monitor initiates a
  * graceful shutdown of the server. This works with common load balancing
  * frameworks such as AWS Elastic Load Balancing.
  *
  * The HeartbeatMonitor is **opt-in** in that it only kicks in after it
- * starts receiving health checks on that port.
+ * starts receiving keepalives.
  */
-export class HeartbeatMonitor extends HttpService {
+export class HeartbeatMonitor {
   readonly #stopInterval: number;
 
+  #lc: LogContext;
   #timer: NodeJS.Timeout | undefined;
   #lastHeartbeat = 0;
 
-  constructor(
-    lc: LogContext,
-    opts: Options,
-    stopInterval = DEFAULT_STOP_INTERVAL_MS,
-  ) {
-    super('heartbeat-monitor', lc, opts, fastify => {
-      fastify.get('/', (_req, res) => {
-        this.#onHeartbeat();
-        return res.send('OK');
-      });
-    });
+  constructor(lc: LogContext, stopInterval = DEFAULT_STOP_INTERVAL_MS) {
+    this.#lc = lc;
     this.#stopInterval = stopInterval;
   }
 
-  #onHeartbeat() {
+  onHeartbeat() {
     this.#lastHeartbeat = Date.now();
     if (this.#timer === undefined) {
-      this._lc.info?.(
+      this.#lc.info?.(
         `starting heartbeat monitor at ${
           this.#stopInterval / 1000
         } second interval`,
@@ -302,7 +293,7 @@ export class HeartbeatMonitor extends HttpService {
   #onStopInterval = () => {
     const timeSinceLastHeartbeat = Date.now() - this.#lastHeartbeat;
     if (timeSinceLastHeartbeat >= this.#stopInterval) {
-      this._lc.info?.(
+      this.#lc.info?.(
         `last heartbeat received ${
           timeSinceLastHeartbeat / 1000
         } seconds ago. draining.`,
@@ -311,8 +302,7 @@ export class HeartbeatMonitor extends HttpService {
     }
   };
 
-  async stop() {
+  stop() {
     clearTimeout(this.#timer);
-    await super.stop();
   }
 }

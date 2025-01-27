@@ -23,7 +23,6 @@ export class TenantDispatcher extends HttpService {
     opts: Options,
   ) {
     super('tenant-dispatcher', lc, opts, fastify => {
-      fastify.get('/', (_req, res) => res.send('OK'));
       installWebSocketHandoff(lc, req => this.#handoff(req), fastify.server);
     });
 

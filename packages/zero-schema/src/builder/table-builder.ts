@@ -129,3 +129,5 @@ class ColumnBuilder<TShape extends SchemaValue<any>> {
     return this.#schema;
   }
 }
+
+export type {ColumnBuilder};
