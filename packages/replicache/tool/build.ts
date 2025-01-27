@@ -1,11 +1,9 @@
-// @ts-check
-
 import * as esbuild from 'esbuild';
 import {writeFile} from 'node:fs/promises';
 import * as path from 'node:path';
 import process from 'node:process';
 import {fileURLToPath} from 'node:url';
-import {makeDefine, sharedOptions} from '../../shared/src/build.js';
+import {makeDefine, sharedOptions} from '../../shared/src/build.ts';
 
 const forBundleSizeDashboard = process.argv.includes('--bundle-sizes');
 const perf = process.argv.includes('--perf');
@@ -14,31 +12,20 @@ const metafile = process.argv.includes('--metafile');
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
-/**
- * @typedef {'unknown'|'debug'|'release'} BuildMode
- */
+type BuildMode = 'unknown' | 'debug' | 'release';
 
-/**
- * @typedef {{
- *   minify: boolean,
- *   ext: string,
- *   mode: BuildMode,
- *   external?: string[] | undefined,
- * }} BuildOptions
- */
+type BuildOptions = {
+  minify: boolean;
+  ext: string;
+  mode: BuildMode;
+  external?: string[] | undefined;
+};
 
-/**
- * @param {string[]} parts
- * @returns {string}
- */
-function basePath(...parts) {
+function basePath(...parts: string[]): string {
   return path.join(dirname, '..', ...parts);
 }
 
-/**
- * @param {BuildOptions} options
- */
-async function buildReplicache(options) {
+async function buildReplicache(options: BuildOptions) {
   const define = makeDefine(options.mode);
   const {ext, mode, external, ...restOfOptions} = options;
   const outfile = basePath('out', 'replicache.' + ext);

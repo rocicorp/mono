@@ -1,5 +1,3 @@
-/* eslint-env node, es2022 */
-
 import commandLineArgs from 'command-line-args';
 import commandLineUsage from 'command-line-usage';
 import * as fs from 'node:fs/promises';

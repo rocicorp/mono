@@ -1,5 +1,5 @@
 import {argv} from 'node:process';
-import {makeDefine} from '../build.js';
+import {makeDefine} from '../build.ts';
 
 const define = {
   ...makeDefine(),
