@@ -1,12 +1,8 @@
-/**
- * Relationships as secondary.
- */
-
 import {expectTypeOf, test} from 'vitest';
-import {table, number, string} from './table-builder.js';
-import {relationships} from './relationship-builder.js';
 import type {Query} from '../../../zql/src/query/query.js';
+import {relationships} from './relationship-builder.js';
 import {createSchema} from './schema-builder.js';
+import {number, string, table} from './table-builder.js';
 
 const mockQuery = {
   select() {
@@ -234,4 +230,237 @@ test('building a schema', () => {
       }[];
     }[]
   >();
+});
+
+test('too many relationships', () => {
+  function makeTable<const N extends string>(name: N) {
+    return table(name)
+      .columns({
+        id: string(),
+        next: string(),
+      })
+      .primaryKey('id');
+  }
+
+  const a = makeTable('a');
+  const b = makeTable('b');
+  const c = makeTable('c');
+  const d = makeTable('d');
+  const e = makeTable('e');
+  const f = makeTable('f');
+  const g = makeTable('g');
+  const h = makeTable('h');
+  const i = makeTable('i');
+  const j = makeTable('j');
+  const k = makeTable('k');
+  const l = makeTable('l');
+  const m = makeTable('m');
+  const n = makeTable('n');
+  const o = makeTable('o');
+  const p = makeTable('p');
+  const qt = makeTable('q');
+  const r = makeTable('r');
+  const s = makeTable('s');
+  const t = makeTable('t');
+  const u = makeTable('u');
+  const v = makeTable('v');
+  const w = makeTable('w');
+  const x = makeTable('x');
+  const y = makeTable('y');
+  const z = makeTable('z');
+
+  const schema = createSchema(1, {
+    tables: [
+      a,
+      b,
+      c,
+      d,
+      e,
+      f,
+      g,
+      h,
+      i,
+      j,
+      k,
+      l,
+      m,
+      n,
+      o,
+      p,
+      qt,
+      r,
+      s,
+      t,
+      u,
+      v,
+      w,
+      x,
+      y,
+      z,
+    ],
+    relationships: [
+      relationships(a, ({one}) => ({
+        toB: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: b,
+        }),
+        toC: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: c,
+        }),
+        toD: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: d,
+        }),
+        toE: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: e,
+        }),
+        toF: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: f,
+        }),
+        toG: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: g,
+        }),
+        toH: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: h,
+        }),
+        toI: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: i,
+        }),
+        toJ: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: j,
+        }),
+        toK: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: k,
+        }),
+        toL: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: l,
+        }),
+        toM: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: m,
+        }),
+        toN: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: n,
+        }),
+        toO: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: o,
+        }),
+        toP: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: p,
+        }),
+        toQ: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: qt,
+        }),
+        toR: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: r,
+        }),
+        toS: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: s,
+        }),
+        toT: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: t,
+        }),
+        toU: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: u,
+        }),
+        toV: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: v,
+        }),
+        toW: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: w,
+        }),
+        toX: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: x,
+        }),
+        toY: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: y,
+        }),
+        toZ: one({
+          sourceField: ['id'],
+          destField: ['next'],
+          destSchema: z,
+        }),
+      })),
+    ],
+  });
+
+  const q = mockQuery as unknown as Query<typeof schema, 'a'>;
+  const q2 = q
+    .related('toB')
+    .related('toC')
+    .related('toD')
+    .related('toE')
+    .related('toF')
+    .related('toG')
+    .related('toH')
+    .related('toI')
+    .related('toJ')
+    .related('toK')
+    .related('toL')
+    .related('toM')
+    .related('toN')
+    .related('toO')
+    .related('toP')
+    .related('toQ')
+    .related('toR')
+    .related('toS')
+    .related('toT')
+    .related('toU')
+    .related('toV')
+    .related('toW')
+    .related('toX')
+    .related('toY')
+    .related('toZ');
+
+  // Before this commit the below line would generate 2 TS errors. One for the type number
+  // but more importantly it used to raise:
+  // TS2589: Type instantiation is excessively deep and possibly infinite
+
+  // @ts-expect-error type 'number' does not satisfy the constraint
+  expectTypeOf(q2).toEqualTypeOf<123>();
 });
