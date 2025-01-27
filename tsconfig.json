@@ -3,6 +3,8 @@
     "target": "es2022",
     "module": "Node16",
     "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
     "esModuleInterop": true,
     "moduleResolution": "Node16",
     "moduleDetection": "force",
