@@ -35,7 +35,7 @@
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
     "compare-utf8": "^0.1.1",
-    "esbuild": "^0.20.2",
+    "esbuild": "^0.24.2",
     "fetch-mock": "^9.11.0",
     "playwright": "^1.43.1",
     "shared": "0.0.0",
