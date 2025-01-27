@@ -143,7 +143,7 @@ export const zeroOptions = {
         `replication stream.`,
         ``,
         `Note that this number must allow for at least one connection per`,
-        `sync worker, or zero-cache will fail to start. See {bold --numSyncWorkers}`,
+        `sync worker, or zero-cache will fail to start. See {bold num-sync-workers}`,
       ],
     },
 
@@ -171,7 +171,7 @@ export const zeroOptions = {
         `This is divided evenly amongst sync workers.`,
         ``,
         `Note that this number must allow for at least one connection per`,
-        `sync worker, or zero-cache will fail to start. See {bold --numSyncWorkers}`,
+        `sync worker, or zero-cache will fail to start. See {bold num-sync-workers}`,
       ],
     },
 

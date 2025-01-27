@@ -257,7 +257,7 @@ test('zero-cache --help', () => {
                                                    replication stream.                                                                               
                                                                                                                                                      
                                                    Note that this number must allow for at least one connection per                                  
-                                                   sync worker, or zero-cache will fail to start. See --numSyncWorkers                               
+                                                   sync worker, or zero-cache will fail to start. See num-sync-workers                               
                                                                                                                                                      
      --cvr-db string                               required                                                                                          
        ZERO_CVR_DB env                                                                                                                               
@@ -272,7 +272,7 @@ test('zero-cache --help', () => {
                                                    This is divided evenly amongst sync workers.                                                      
                                                                                                                                                      
                                                    Note that this number must allow for at least one connection per                                  
-                                                   sync worker, or zero-cache will fail to start. See --numSyncWorkers                               
+                                                   sync worker, or zero-cache will fail to start. See num-sync-workers                               
                                                                                                                                                      
      --query-hydration-stats boolean               optional                                                                                          
        ZERO_QUERY_HYDRATION_STATS env                                                                                                                
