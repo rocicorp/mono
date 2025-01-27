@@ -405,9 +405,9 @@ export class SubscriptionsManagerImpl implements SubscriptionsManager {
     this.#subscriptions.clear();
   }
 
-  async fire(diffs: DiffsMap): Promise<void> {
+  fire(diffs: DiffsMap): Promise<void> {
     const subscriptions = subscriptionsForDiffs(this.#subscriptions, diffs);
-    await this.#fireSubscriptions(subscriptions, InvokeKind.Regular, diffs);
+    return this.#fireSubscriptions(subscriptions, InvokeKind.Regular, diffs);
   }
 
   async #fireSubscriptions(

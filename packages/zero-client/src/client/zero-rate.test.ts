@@ -3,9 +3,9 @@ import {afterEach, beforeEach, expect, test} from 'vitest';
 import type {PushRequest} from '../../../replicache/src/sync/push.js';
 import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.js';
 import type {Mutation} from '../../../zero-protocol/src/push.js';
+import {createSchema, number, string, table} from '../mod.js';
 import * as ConnectionState from './connection-state-enum.js';
 import {MockSocket, tickAFewTimes, zeroForTest} from './test-utils.js';
-import {createSchema, number, string, table} from '../mod.js';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
@@ -75,6 +75,7 @@ test('a mutation after a rate limit error causes limited mutations to be resent'
   await z.mutate.issue.insert({id: 'a', value: 1});
   await z.triggerError(ErrorKind.MutationRateLimited, 'Rate limit exceeded');
 
+  await 1;
   expect(mockSocket.messages).to.have.lengthOf(1);
   expect(mockSocket.closed).toBe(false);
   expect(z.connectionState).eq(ConnectionState.Connected);
