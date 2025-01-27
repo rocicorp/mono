@@ -9,7 +9,7 @@ import {fileURLToPath} from 'node:url';
 import * as playwright from 'playwright';
 import {createServer} from 'vite';
 import {assert} from '../../shared/src/asserts.ts';
-import {makeDefine} from '../../shared/src/build.js';
+import {makeDefine} from '../../shared/src/build.ts';
 import {
   type BencherMetricsFormat,
   toBencherMetricFormat,
@@ -132,6 +132,7 @@ async function main() {
   const options = commandLineArgs(optionDefinitions) as Options;
 
   if (options.help) {
+    // eslint-disable-next-line no-console
     console.log(
       commandLineUsage([
         {content: 'Usage: perf [options...]'},
@@ -145,14 +146,17 @@ async function main() {
     options.browsers = allBrowsers;
   }
   if (options.devtools && options.browsers.length !== 1) {
+    // eslint-disable-next-line no-console
     console.error('Exactly one browser may be specified with --devtools');
     process.exit(1);
   }
   if (options.format === 'json' && options.browsers.length !== 1) {
+    // eslint-disable-next-line no-console
     console.error('Exactly one browser may be specified with --format=json');
     process.exit(1);
   }
   if (options.format === 'bmf' && options.browsers.length !== 1) {
+    // eslint-disable-next-line no-console
     console.error('Exactly one browser may be specified with --format=bmf');
     process.exit(1);
   }
@@ -199,6 +203,7 @@ async function main() {
     page.on('request', request => {
       const path = new URL(request.url()).pathname;
       if (path === '/src/replicache.js') {
+        // eslint-disable-next-line no-console
         console.error(
           `The perf test should not load:${path}. The perf tests should use the compiled output`,
         );
@@ -207,6 +212,7 @@ async function main() {
     });
 
     page.on('pageerror', e => {
+      // eslint-disable-next-line no-console
       console.error(e);
       process.exit(1);
     });
@@ -278,11 +284,13 @@ async function runInBrowser(
       }
       return a.name < b.name ? -1 : 1;
     });
+    // eslint-disable-next-line no-console
     console.log(
       'Available benchmarks (group / name):\n' +
         benchmarks.map(({name, group}) => `${group} / ${name}`).join('\n'),
     );
     if (options.devtools) {
+      // eslint-disable-next-line no-console
       console.log(
         'Run a single benchmark with',
         '`await runBenchmarkByNameAndGroup(name, group)`',
@@ -347,6 +355,7 @@ async function runInBrowser(
 }
 
 main().catch(err => {
+  // eslint-disable-next-line no-console
   console.error(err);
   process.exit(1);
 });

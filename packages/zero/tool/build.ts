@@ -5,8 +5,8 @@ import assert from 'node:assert/strict';
 import {readFile, writeFile} from 'node:fs/promises';
 import {builtinModules} from 'node:module';
 import {resolve as resolvePath} from 'node:path';
-import {makeDefine, sharedOptions} from '../../shared/src/build.js';
-import {getExternalFromPackageJSON} from '../../shared/src/tool/get-external-from-package-json.js';
+import {makeDefine, sharedOptions} from '../../shared/src/build.ts';
+import {getExternalFromPackageJSON} from '../../shared/src/tool/get-external-from-package-json.ts';
 
 const forBundleSizeDashboard = process.argv.includes('--bundle-sizes');
 const minify = process.argv.includes('--minify');
@@ -14,20 +14,12 @@ const minify = process.argv.includes('--minify');
 const metafile = process.argv.includes('--metafile');
 const splitting = !forBundleSizeDashboard;
 
-/**
- * @param {string} path
- * @returns {string}
- */
-function basePath(path) {
+function basePath(path: string): string {
   const base = resolvePath(path);
   return base;
 }
 
-/**
- * @param {boolean} includePeerDeps
- * @returns {Promise<string[]>}
- */
-async function getExternal(includePeerDeps) {
+async function getExternal(includePeerDeps: boolean): Promise<string[]> {
   const externalSet = new Set([
     ...(await getExternalFromPackageJSON(import.meta.url, true)),
     ...extraExternals,
@@ -36,7 +28,7 @@ async function getExternal(includePeerDeps) {
   /**
    * @param {string} internalPackageName
    */
-  async function addExternalDepsFor(internalPackageName) {
+  async function addExternalDepsFor(internalPackageName: string) {
     const internalPackageDir = basePath('../' + internalPackageName);
     for (const dep of await getExternalFromPackageJSON(
       internalPackageDir,
@@ -82,7 +74,7 @@ await verifyDependencies(await getExternal(false));
 /**
  * @param {Iterable<string>} external
  */
-async function verifyDependencies(external) {
+async function verifyDependencies(external: Iterable<string>) {
   // Get the dependencies from the package.json file
   const packageJSON = await readFile(basePath('package.json'), 'utf-8');
   const expectedDeps = new Set(external);

@@ -1,16 +1,11 @@
-// @ts-check
-
-/* eslint-env node, es2022 */
-
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 /**
  * Map from name to packages/name
- * @type {Map<string, string>}
  */
-export const internalPackagesMap = new Map();
+export const internalPackagesMap: Map<string, string> = new Map();
 
 const monoRootPath = fileURLToPath(new URL('../../../../', import.meta.url));
 
@@ -35,9 +30,6 @@ for (const p of ['packages']) {
 
 export const internalPackages = [...internalPackagesMap.keys()];
 
-/**
- * @param {string} name
- */
-export function isInternalPackage(name) {
+export function isInternalPackage(name: string): boolean {
   return internalPackagesMap.has(name);
 }

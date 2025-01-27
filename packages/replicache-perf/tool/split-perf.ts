@@ -3,7 +3,7 @@ import {argv} from 'node:process';
 
 if (argv.length !== 5) {
   console.error(
-    'Usage: node split-perf.js <input-file> <perf-file> <p95-file>',
+    'Usage: npx tsx split-perf.ts <input-file> <perf-file> <p95-file>',
   );
   process.exit(1);
 }

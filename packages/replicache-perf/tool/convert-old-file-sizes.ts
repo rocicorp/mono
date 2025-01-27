@@ -4,7 +4,7 @@
 // https://rocicorp.github.io/mono/bundle-sizes/ and convert it to the bencher.dev format.
 // Then it uses the Bencher REST API to upload the data.
 //
-// BENCHER_API_KEY=... node convert-old-file-sizes.js
+// BENCHER_API_KEY=... npx tsx convert-old-file-sizes.ts
 
 const branch = 'main';
 const testbed = 'localhost';
@@ -12,17 +12,17 @@ const projectSlug = 'replicache-bundle-size';
 const jsURL = 'https://rocicorp.github.io/mono/bundle-sizes/data.ts';
 const header = 'window.BENCHMARK_DATA = ';
 
-function benchesToBencher(benches) {
-  const bencher = {};
+function benchesToBencher(benches: {name: string; value: number}[]) {
+  const bencher: Record<string, {'file-size': {value: number}}> = {};
   for (const {name, value} of benches) {
     bencher[fixName(name)] = {
-      'file-size': {value},
+      ['file-size']: {value},
     };
   }
   return bencher;
 }
 
-function fixName(s) {
+function fixName(s: string) {
   s = s.slice('Size of '.length);
   if (s.endsWith(' (Brotli compressed)')) {
     s = s.slice(0, -' (Brotli compressed)'.length);
@@ -30,7 +30,7 @@ function fixName(s) {
   return s;
 }
 
-async function downloadOldData(url) {
+async function downloadOldData(url: string) {
   const data = await fetch(url);
   let text = await data.text();
   if (!text.startsWith(header)) {
@@ -62,7 +62,7 @@ for (const {commit, benches} of json.entries['Bundle Sizes']) {
   await sendReport(body);
 }
 
-async function sendReport(body) {
+async function sendReport(body: {hash: string}) {
   process.stdout.write(`Sending report for ${body.hash}...`);
   const r = await fetch(
     `https://api.bencher.dev/v0/projects/${projectSlug}/reports`,

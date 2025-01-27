@@ -1,6 +1,3 @@
-// @ts-check
-/* eslint-env node, es2022 */
-
 import {readFileSync} from 'node:fs';
 
 const external = [
@@ -13,12 +10,11 @@ const external = [
   'replicache',
 ];
 
-/**
- * @param {boolean=} minify
- * @param {boolean=} metafile
- */
-export function sharedOptions(minify = true, metafile = false) {
-  const opts = /** @type {const} */ ({
+export function sharedOptions(
+  minify: boolean | undefined = true,
+  metafile: boolean | undefined = false,
+) {
+  const opts = {
     bundle: true,
     target: 'es2022',
     format: 'esm',
@@ -26,35 +22,28 @@ export function sharedOptions(minify = true, metafile = false) {
     minify,
     sourcemap: true,
     metafile,
-  });
+  } as const;
   if (minify) {
-    return /** @type {const} */ ({
+    return /** @type {const} */ {
       ...opts,
       mangleProps: /^_./,
       reserveProps: /^__.*__$/,
-    });
+    } as const;
   }
   return opts;
 }
 
-/**
- * @param {string} name
- * @return {string}
- */
-
-function getVersion(name) {
+function getVersion(name: string): string {
   const url = new URL(`../../${name}/package.json`, import.meta.url);
   const s = readFileSync(url, 'utf-8');
   return JSON.parse(s).version;
 }
 
-/**
- * @param {'debug'|'release'|'unknown'} mode
- * @return {Record<string, string>}
- */
-export function makeDefine(mode = 'unknown') {
+export function makeDefine(
+  mode: 'debug' | 'release' | 'unknown' = 'unknown',
+): Record<string, string> {
   /** @type {Record<string, string>} */
-  const define = {
+  const define: Record<string, string> = {
     ['process.env.REPLICACHE_VERSION']: JSON.stringify(
       getVersion('replicache'),
     ),

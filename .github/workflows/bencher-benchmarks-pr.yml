@@ -32,7 +32,7 @@ jobs:
 
       - name: Build zero client single file package
         working-directory: packages/zero
-        run: node tool/build.js --bundle-sizes --minify
+        run: npx tsx tool/build.ts --bundle-sizes --minify
 
       - name: Compress
         working-directory: packages/zero
