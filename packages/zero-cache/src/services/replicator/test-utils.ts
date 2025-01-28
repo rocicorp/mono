@@ -23,14 +23,14 @@ import type {
   TableDrop,
   TableRename,
 } from '../change-source/protocol/current/data.ts';
-import {MessageProcessor} from './incremental-sync.ts';
+import {ChangeProcessor} from './change-processor.ts';
 
 export interface FakeReplicator {
   processTransaction(finalWatermark: string, ...msgs: DataChange[]): void;
 }
 
 export function fakeReplicator(lc: LogContext, db: Database): FakeReplicator {
-  const messageProcessor = createMessageProcessor(db);
+  const messageProcessor = createChangeProcessor(db);
   return {
     processTransaction: (watermark, ...msgs) => {
       messageProcessor.processMessage(lc, [
@@ -50,13 +50,13 @@ export function fakeReplicator(lc: LogContext, db: Database): FakeReplicator {
   };
 }
 
-export function createMessageProcessor(
+export function createChangeProcessor(
   db: Database,
   failures: (lc: LogContext, err: unknown) => void = (_, err) => {
     throw err;
   },
-): MessageProcessor {
-  return new MessageProcessor(new StatementRunner(db), 'IMMEDIATE', failures);
+): ChangeProcessor {
+  return new ChangeProcessor(new StatementRunner(db), 'IMMEDIATE', failures);
 }
 
 export class ReplicationMessages<
