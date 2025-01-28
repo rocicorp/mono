@@ -6,6 +6,8 @@ import {parseOptions, type Config} from '../../../shared/src/options.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {runtimeDebugFlags} from '../../../zqlite/src/runtime-debug.ts';
 import {singleProcessMode} from '../types/processes.ts';
+import {logOptions} from '../../../otel/src/log-options.ts';
+export type {LogConfig} from '../../../otel/src/log-options.ts';
 
 /**
  * Configures the view of the upstream database replicated to this zero-cache.
@@ -50,35 +52,6 @@ const shardOptions = {
 };
 
 export type ShardConfig = Config<typeof shardOptions>;
-
-const logOptions = {
-  level: v
-    .union(
-      v.literal('debug'),
-      v.literal('info'),
-      v.literal('warn'),
-      v.literal('error'),
-    )
-    .default('info'),
-
-  format: {
-    type: v.union(v.literal('text'), v.literal('json')).default('text'),
-    desc: [
-      `Use {bold text} for developer-friendly console logging`,
-      `and {bold json} for consumption by structured-logging services`,
-    ],
-  },
-
-  traceCollector: {
-    type: v.string().optional(),
-    desc: [
-      `The URL of the trace collector to which to send trace data. Traces are sent over http.`,
-      `Port defaults to 4318 for most collectors.`,
-    ],
-  },
-};
-
-export type LogConfig = Config<typeof logOptions>;
 
 const perUserMutationLimit = {
   max: {

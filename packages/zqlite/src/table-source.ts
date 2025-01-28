@@ -49,6 +49,9 @@ import {Database, Statement} from './db.ts';
 import {compile, format, sql} from './internal/sql.ts';
 import {StatementCache} from './internal/statement-cache.ts';
 import {runtimeDebugFlags, runtimeDebugStats} from './runtime-debug.ts';
+import type {LogConfig} from '../../otel/src/log-options.ts';
+import {timeSampled} from '../../otel/src/maybe-time.ts';
+import type {LogContext} from '@rocicorp/logger';
 
 type Connection = {
   input: Input;
@@ -94,16 +97,22 @@ export class TableSource implements Source {
   readonly #uniqueIndexes: Map<string, Set<string>>;
   readonly #primaryKey: PrimaryKey;
   readonly #clientGroupID: string;
+  readonly #logConfig: LogConfig;
+  readonly #lc: LogContext;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
 
   constructor(
+    logContext: LogContext,
+    logConfig: LogConfig,
     clientGroupID: string,
     db: Database,
     tableName: string,
     columns: Record<string, SchemaValue>,
     primaryKey: readonly [string, ...string[]],
   ) {
+    this.#lc = logContext;
+    this.#logConfig = logConfig;
     this.#clientGroupID = clientGroupID;
     this.#table = tableName;
     this.#columns = columns;
@@ -306,11 +315,27 @@ export class TableSource implements Source {
     rowIterator: IterableIterator<Row>,
     query: string,
   ): IterableIterator<Row> {
-    for (const row of rowIterator) {
-      if (runtimeDebugFlags.trackRowsVended) {
-        runtimeDebugStats.rowVended(this.#clientGroupID, this.#table, query);
-      }
-      yield fromSQLiteTypes(valueTypes, row);
+    let result;
+    let row = 0;
+    try {
+      do {
+        result = timeSampled(
+          this.#lc,
+          ++row,
+          this.#logConfig.ivmSampling,
+          () => rowIterator.next(),
+          this.#logConfig.slowRowThreshold,
+        );
+        if (result.done) {
+          break;
+        }
+        if (runtimeDebugFlags.trackRowsVended) {
+          runtimeDebugStats.rowVended(this.#clientGroupID, this.#table, query);
+        }
+        yield fromSQLiteTypes(valueTypes, result.value);
+      } while (!result.done);
+    } finally {
+      rowIterator.return?.();
     }
   }
 
