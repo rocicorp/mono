@@ -18,11 +18,19 @@ import {
 } from '../../../zqlite/src/runtime-debug.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import {getSchema} from '../auth/load-schema.ts';
-import {getDebugConfig} from '../config/zero-config.ts';
+import {getDebugConfig, type LogConfig} from '../config/zero-config.ts';
 
 const config = getDebugConfig();
 const schemaAndPermissions = await getSchema(config);
 runtimeDebugFlags.trackRowsVended = true;
+
+const lc = createSilentLogContext();
+const logConfig: LogConfig = {
+  format: 'text',
+  level: 'debug',
+  ivmSampling: 0,
+  slowRowThreshold: 0,
+};
 
 const db = new Database(createSilentLogContext(), config.replicaFile);
 const sources = new Map<string, TableSource>();
@@ -33,6 +41,8 @@ const host: QueryDelegate = {
       return source;
     }
     source = new TableSource(
+      lc,
+      logConfig,
       '',
       db,
       name,

@@ -39,7 +39,7 @@ import {
   fromSQLiteTypes,
   TableSource,
 } from '../../../zqlite/src/table-source.ts';
-import type {ZeroConfig} from '../config/zero-config.ts';
+import type {LogConfig, ZeroConfig} from '../config/zero-config.ts';
 import {computeZqlSpecs} from '../db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../db/specs.ts';
 import {StatementRunner} from '../db/statements.ts';
@@ -70,10 +70,11 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   readonly #statementRunner: StatementRunner;
   readonly #lc: LogContext;
   readonly #clientGroupID: string;
+  readonly #logConfig: LogConfig;
 
   constructor(
     lc: LogContext,
-    config: Pick<ZeroConfig, 'storageDBTmpDir'>,
+    config: ZeroConfig,
     schema: Schema,
     permissions: PermissionsConfig | undefined,
     replica: Database,
@@ -81,6 +82,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   ) {
     this.#clientGroupID = cgID;
     this.#lc = lc.withContext('class', 'WriteAuthorizerImpl');
+    this.#logConfig = config.log;
     this.#schema = schema;
     this.#permissionsConfig = permissions ?? {};
     this.#replica = replica;
@@ -228,6 +230,8 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     const {columns, primaryKey} = tableSpec.tableSpec;
     assert(primaryKey.length);
     source = new TableSource(
+      this.#lc,
+      this.#logConfig,
       this.#clientGroupID,
       this.#replica,
       tableName,
