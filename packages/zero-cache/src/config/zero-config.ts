@@ -391,6 +391,12 @@ const debugOptions = {
       type: v.string().optional(),
       desc: ['Hash of the query to fetch the AST for.'],
     },
+    query: {
+      type: v.string().optional(),
+      desc: [
+        `Query to be timed in the form of: z.query.table.where(...).related(...).etc`,
+      ],
+    },
   },
 };
 
