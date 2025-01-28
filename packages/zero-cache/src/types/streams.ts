@@ -89,9 +89,9 @@ export function stream<In extends JSONValue, Out extends JSONValue>(
 
   // Outgoing transform.
   async function sendOut() {
-    for await (const up of outstream) {
+    for await (const msg of outstream) {
       // Upstream backpressure is signaled by the tcp socket buffer.
-      if (!duplex.write(BigIntJSON.stringify(up))) {
+      if (!duplex.write(BigIntJSON.stringify(msg))) {
         const {promise: canWriteMore, resolve: drained} = resolver();
 
         const start = Date.now();
