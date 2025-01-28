@@ -145,9 +145,13 @@ export const parentWorker: Worker | null = process.send
   : null;
 
 const SINGLE_PROCESS = 'SINGLE_PROCESS';
-
+let singleProcessOverride = false;
 export function singleProcessMode(): boolean {
-  return (process.env[SINGLE_PROCESS] ?? '0') !== '0';
+  return singleProcessOverride || (process.env[SINGLE_PROCESS] ?? '0') !== '0';
+}
+
+export function setSingleProcessMode(enabled: boolean = true): void {
+  singleProcessOverride = enabled;
 }
 
 /**
