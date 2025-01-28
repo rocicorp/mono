@@ -537,9 +537,12 @@ export class TableSource implements Source {
       }
     }
     throw new Error(
-      `sort ordering ${JSON.stringify(
-        sort,
-      )} does not include uniquely indexed columns`,
+      `Cannot orderBy(${JSON.stringify(sort.map(([c]) => c))}). ` +
+        (sort.length === 1
+          ? `The column must be unique. `
+          : `One or more columns must form a unique index. `) +
+        `Did you forget to include a primary key or ` +
+        `(non-null) unique index on the "${this.#table}" table?`,
     );
   }
 }
