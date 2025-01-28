@@ -1,67 +1,42 @@
 import {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  type MockedFunction,
-  test,
-  vi,
-} from 'vitest';
+import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {listIndexes, listTables} from '../../db/lite-tables.ts';
 import type {LiteIndexSpec, LiteTableSpec} from '../../db/specs.ts';
-import {testDBs} from '../../test/db.ts';
+import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, initDB} from '../../test/lite.ts';
 import type {JSONObject} from '../../types/bigint-json.ts';
-import type {PostgresDB} from '../../types/pg.ts';
-import {Subscription} from '../../types/subscription.ts';
-import type {
-  Downstream,
-  SubscriberContext,
-} from '../change-streamer/change-streamer.ts';
-import {IncrementalSyncer} from './incremental-sync.ts';
+import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import {ChangeProcessor} from './change-processor.ts';
 import {initChangeLog} from './schema/change-log.ts';
-import {initReplicationState} from './schema/replication-state.ts';
-import {ReplicationMessages} from './test-utils.ts';
-
-const REPLICA_ID = 'incremental_sync_test_id';
+import {
+  getSubscriptionState,
+  initReplicationState,
+} from './schema/replication-state.ts';
+import {createChangeProcessor, ReplicationMessages} from './test-utils.ts';
 
 describe('replicator/incremental-sync', () => {
   let lc: LogContext;
-  let upstream: PostgresDB;
   let replica: Database;
-  let syncer: IncrementalSyncer;
-  let downstream: Subscription<Downstream>;
-  let subscribeFn: MockedFunction<
-    (ctx: SubscriberContext) => Promise<Subscription<Downstream>>
-  >;
+  let processor: ChangeProcessor;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     lc = createSilentLogContext();
-    upstream = await testDBs.create('incremental_sync_test_upstream');
     replica = new Database(lc, ':memory:');
-    downstream = Subscription.create();
-    subscribeFn = vi.fn();
-    syncer = new IncrementalSyncer(
-      REPLICA_ID,
-      {subscribe: subscribeFn.mockResolvedValue(downstream)},
-      replica,
-      'serving',
+    processor = new ChangeProcessor(
+      new StatementRunner(replica),
+      'CONCURRENT',
+      (_, err) => {
+        throw err;
+      },
     );
-  });
-
-  afterEach(async () => {
-    await syncer.stop(lc);
-    await testDBs.drop(upstream);
   });
 
   type Case = {
     name: string;
     setup: string;
-    downstream: Downstream[];
+    downstream: ChangeStreamData[];
     data: Record<string, Record<string, unknown>[]>;
     tableSpecs?: LiteTableSpec[];
     indexSpecs?: LiteIndexSpec[];
@@ -1643,29 +1618,13 @@ describe('replicator/incremental-sync', () => {
   ];
 
   for (const c of cases) {
-    test(c.name, async () => {
+    test(c.name, () => {
       initDB(replica, c.setup);
       initReplicationState(replica, ['zero_data'], '02');
       initChangeLog(replica);
 
-      const syncing = syncer.run(lc);
-      const notifications = syncer.subscribe();
-      const versionReady = notifications[Symbol.asyncIterator]();
-
-      await versionReady.next(); // Get the initial nextStateVersion.
-      expect(subscribeFn.mock.calls[0][0]).toEqual({
-        id: 'incremental_sync_test_id',
-        mode: 'serving',
-        replicaVersion: '02',
-        watermark: '02',
-        initial: true,
-      });
-
       for (const change of c.downstream) {
-        downstream.push(change);
-        if (change[0] === 'commit') {
-          await Promise.race([versionReady.next(), syncing]);
-        }
+        processor.processMessage(lc, change);
       }
 
       expectTables(replica, c.data, 'bigint');
@@ -1681,58 +1640,125 @@ describe('replicator/incremental-sync', () => {
       expectTables(replica, c.data, 'bigint');
     });
   }
+});
 
-  test('retry on initial change-streamer connection failure', async () => {
-    initReplicationState(replica, ['zero_data'], '02');
+describe('replicator/change-processor-errors', () => {
+  let lc: LogContext;
+  let replica: Database;
 
-    const {promise: hasRetried, resolve: retried} = resolver<true>();
-    const syncer = new IncrementalSyncer(
-      REPLICA_ID,
-      {
-        subscribe: vi
-          .fn()
-          .mockRejectedValueOnce('error')
-          .mockImplementation(() => {
-            retried(true);
-            return resolver().promise;
-          }),
-      },
-      replica,
-      'serving',
+  beforeEach(() => {
+    lc = createSilentLogContext();
+    replica = new Database(lc, ':memory:');
+
+    replica.exec(`
+    CREATE TABLE "foo" (
+      id INTEGER PRIMARY KEY,
+      big INTEGER,
+      _0_version TEXT NOT NULL
     );
+    `);
 
-    void syncer.run(lc);
-
-    expect(await hasRetried).toBe(true);
-
-    void syncer.stop(lc);
+    initReplicationState(replica, ['zero_data', 'zero_metadata'], '02');
+    initChangeLog(replica);
   });
 
-  test('retry on error in change-stream', async () => {
-    initReplicationState(replica, ['zero_data'], '02');
+  type Case = {
+    name: string;
+    messages: ChangeStreamData[];
+    finalCommit: string;
+    expectedVersionChanges: number;
+    replicated: Record<string, object[]>;
+    expectFailure: boolean;
+  };
 
-    const {promise: hasRetried, resolve: retried} = resolver<true>();
-    const syncer = new IncrementalSyncer(
-      REPLICA_ID,
-      {
-        subscribe: vi
-          .fn()
-          .mockImplementationOnce(() => Promise.resolve(downstream))
-          .mockImplementation(() => {
-            retried(true);
-            return resolver().promise;
-          }),
+  const messages = new ReplicationMessages({foo: 'id'});
+
+  const cases: Case[] = [
+    {
+      name: 'malformed replication stream',
+      messages: [
+        ['begin', messages.begin(), {commitWatermark: '07'}],
+        ['data', messages.insert('foo', {id: 123})],
+        ['data', messages.insert('foo', {id: 234})],
+        ['commit', messages.commit(), {watermark: '07'}],
+
+        // Induce a failure with a missing 'begin' message.
+        ['data', messages.insert('foo', {id: 456})],
+        ['data', messages.insert('foo', {id: 345})],
+        ['commit', messages.commit(), {watermark: '0a'}],
+
+        // This should be dropped.
+        ['begin', messages.begin(), {commitWatermark: '0e'}],
+        ['data', messages.insert('foo', {id: 789})],
+        ['data', messages.insert('foo', {id: 987})],
+        ['commit', messages.commit(), {watermark: '0e'}],
+      ],
+      finalCommit: '07',
+      expectedVersionChanges: 1,
+      replicated: {
+        foo: [
+          {id: 123, big: null, ['_0_version']: '07'},
+          {id: 234, big: null, ['_0_version']: '07'},
+        ],
       },
-      replica,
-      'serving',
-    );
+      expectFailure: true,
+    },
+  ];
 
-    void syncer.run(lc);
+  for (const c of cases) {
+    test(c.name, () => {
+      const failures: unknown[] = [];
+      let versionChanges = 0;
 
-    downstream.fail(new Error('doh'));
+      const processor = createChangeProcessor(
+        replica,
+        (_: LogContext, err: unknown) => failures.push(err),
+      );
 
-    expect(await hasRetried).toBe(true);
+      for (const msg of c.messages) {
+        if (processor.processMessage(lc, msg)) {
+          versionChanges++;
+        }
+      }
 
-    void syncer.stop(lc);
+      expect(versionChanges).toBe(c.expectedVersionChanges);
+      if (c.expectFailure) {
+        expect(failures[0]).toBeInstanceOf(Error);
+      } else {
+        expect(failures).toHaveLength(0);
+      }
+      expectTables(replica, c.replicated);
+
+      const {watermark} = getSubscriptionState(new StatementRunner(replica));
+      expect(watermark).toBe(c.finalCommit);
+    });
+  }
+
+  test('rollback', () => {
+    const processor = createChangeProcessor(replica);
+
+    expect(replica.inTransaction).toBe(false);
+    processor.processMessage(lc, [
+      'begin',
+      {tag: 'begin'},
+      {commitWatermark: '0a'},
+    ]);
+    expect(replica.inTransaction).toBe(true);
+    processor.processMessage(lc, ['rollback', {tag: 'rollback'}]);
+    expect(replica.inTransaction).toBe(false);
+  });
+
+  test('abort', () => {
+    const processor = createChangeProcessor(replica);
+
+    expect(replica.inTransaction).toBe(false);
+    processor.processMessage(lc, [
+      'begin',
+      {tag: 'begin'},
+      {commitWatermark: '0e'},
+    ]);
+    expect(replica.inTransaction).toBe(true);
+    processor.abort(lc);
+    expect(replica.inTransaction).toBe(false);
   });
 });

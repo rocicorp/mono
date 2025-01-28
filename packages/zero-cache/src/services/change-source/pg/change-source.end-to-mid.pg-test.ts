@@ -10,8 +10,8 @@ import {DbFile, expectMatchingObjectsInTables} from '../../../test/lite.ts';
 import type {JSONValue} from '../../../types/bigint-json.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import type {Source} from '../../../types/streams.ts';
-import type {MessageProcessor} from '../../replicator/incremental-sync.ts';
-import {createMessageProcessor} from '../../replicator/test-utils.ts';
+import type {ChangeProcessor} from '../../replicator/change-processor.ts';
+import {createChangeProcessor} from '../../replicator/test-utils.ts';
 import type {DataChange} from '../protocol/current/data.ts';
 import type {ChangeStreamMessage} from '../protocol/current/downstream.ts';
 import {initializeChangeSource} from './change-source.ts';
@@ -33,7 +33,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
   let replica: Database;
   let changes: Source<ChangeStreamMessage>;
   let downstream: Queue<ChangeStreamMessage>;
-  let replicator: MessageProcessor;
+  let replicator: ChangeProcessor;
 
   beforeAll(async () => {
     lc = createSilentLogContext();
@@ -82,7 +82,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
 
     changes = stream.changes;
     downstream = drainToQueue(changes);
-    replicator = createMessageProcessor(replica);
+    replicator = createChangeProcessor(replica);
   }, 30000);
 
   afterAll(async () => {
