@@ -207,7 +207,7 @@ export class Join implements Input {
       for (const parentNode of parentNodes) {
         const childChange: ChildChange = {
           type: 'child',
-          row: parentNode.row,
+          node: parentNode,
           child: {
             relationshipName: this.#relationshipName,
             change,
@@ -223,7 +223,7 @@ export class Join implements Input {
         pushChildChange(change.node.row, change);
         break;
       case 'child':
-        pushChildChange(change.row, change);
+        pushChildChange(change.node.row, change);
         break;
       case 'edit': {
         const childRow = change.node.row;
@@ -255,17 +255,9 @@ export class Join implements Input {
 
   #processParentNode(
     parentNodeRow: Row,
-    parentNodeRelations: Record<string, Stream<Node>>,
+    parentNodeRelations: Record<string, () => Stream<Node>>,
     mode: ProcessParentMode,
   ): Node {
-    // This storage key tracks the primary keys seen for each unique
-    // value joined on. This is used to know when to cleanup a child's state.
-    const storageKey = makeStorageKey(
-      this.#parentKey,
-      this.#parent.getSchema().primaryKey,
-      parentNodeRow,
-    );
-
     let method: ProcessParentMode = mode;
     if (mode === 'cleanup') {
       const [, second] = take(
@@ -277,21 +269,33 @@ export class Join implements Input {
       method = second ? 'fetch' : 'cleanup';
     }
 
-    const childStream = this.#child[method]({
-      constraint: Object.fromEntries(
-        this.#childKey.map((key, i) => [
-          key,
-          parentNodeRow[this.#parentKey[i]],
-        ]),
-      ),
-    });
-
-    if (mode === 'fetch') {
-      this.#storage.set(storageKey, true);
-    } else {
-      mode satisfies 'cleanup';
-      this.#storage.del(storageKey);
-    }
+    let storageUpdated = false;
+    const childStream = () => {
+      if (!storageUpdated) {
+        storageUpdated = true;
+        // Defer the work to update storage until the child stream
+        // is actually accessed
+        const storageKey = makeStorageKey(
+          this.#parentKey,
+          this.#parent.getSchema().primaryKey,
+          parentNodeRow,
+        );
+        if (mode === 'fetch') {
+          this.#storage.set(storageKey, true);
+        } else {
+          mode satisfies 'cleanup';
+          this.#storage.del(storageKey);
+        }
+      }
+      return this.#child[method]({
+        constraint: Object.fromEntries(
+          this.#childKey.map((key, i) => [
+            key,
+            parentNodeRow[this.#parentKey[i]],
+          ]),
+        ),
+      });
+    };
 
     return {
       row: parentNodeRow,
@@ -316,7 +320,10 @@ export function makeStorageKeyPrefix(row: Row, key: CompoundKey): string {
   return makeStorageKeyForValues(key.map(k => row[k]));
 }
 
-/** Exported for testing. */
+/** Exported for testing.
+ * This storage key tracks the primary keys seen for each unique
+ * value joined on. This is used to know when to cleanup a child's state.
+ */
 export function makeStorageKey(
   key: CompoundKey,
   primaryKey: PrimaryKey,

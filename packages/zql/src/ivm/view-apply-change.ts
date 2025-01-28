@@ -27,7 +27,7 @@ export function applyChange(
           change.node.relationships,
         )) {
           const childSchema = must(schema.relationships[relationship]);
-          for (const node of children) {
+          for (const node of children()) {
             applyChange(
               parentEntry,
               {type: change.type, node},
@@ -94,7 +94,7 @@ export function applyChange(
 
         const newView = childFormat.singular ? undefined : ([] as EntryList);
         newEntry[relationship] = newView;
-        for (const node of children) {
+        for (const node of children()) {
           applyChange(
             newEntry,
             {type: 'add', node},
@@ -132,7 +132,11 @@ export function applyChange(
         existing = parentEntry[relationship];
       } else {
         const view = getChildEntryList(parentEntry, relationship);
-        const {pos, found} = binarySearch(view, change.row, schema.compareRows);
+        const {pos, found} = binarySearch(
+          view,
+          change.node.row,
+          schema.compareRows,
+        );
         assert(found, 'node does not exist');
         existing = view[pos];
       }
@@ -246,7 +250,7 @@ function makeEntryPreserveRelationships(
 
 function drainStreams(node: Node) {
   for (const stream of Object.values(node.relationships)) {
-    for (const node of stream) {
+    for (const node of stream()) {
       drainStreams(node);
     }
   }

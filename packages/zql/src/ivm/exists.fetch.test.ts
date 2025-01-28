@@ -5,8 +5,7 @@ import type {CompoundKey, Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
-import {Catch} from './catch.ts';
-import type {Node} from './data.ts';
+import {Catch, type CaughtNode} from './catch.ts';
 import {Exists} from './exists.ts';
 import {Join} from './join.ts';
 import {MemoryStorage} from './memory-storage.ts';
@@ -2016,5 +2015,5 @@ type FetchTestResults = {
     cleanup: SnitchMessage[];
   };
   storage: Record<string, JSONValue>;
-  hydrate: Node[];
+  hydrate: CaughtNode[];
 };

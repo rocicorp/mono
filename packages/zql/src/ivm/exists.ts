@@ -1,10 +1,8 @@
 import {areEqual} from '../../../shared/src/arrays.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
-import {must} from '../../../shared/src/must.ts';
 import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
-import {rowForChange, type Change} from './change.ts';
-import {normalizeUndefined, type NormalizedValue} from './data.ts';
+import {type Change} from './change.ts';
+import {normalizeUndefined, type Node, type NormalizedValue} from './data.ts';
 import {
   throwOutput,
   type FetchRequest,
@@ -76,7 +74,7 @@ export class Exists implements Operator {
 
   *fetch(req: FetchRequest) {
     for (const node of this.#input.fetch(req)) {
-      if (this.#filter(node.row)) {
+      if (this.#filter(node)) {
         yield node;
       }
     }
@@ -84,10 +82,10 @@ export class Exists implements Operator {
 
   *cleanup(req: FetchRequest) {
     for (const node of this.#input.cleanup(req)) {
-      if (this.#filter(node.row)) {
+      if (this.#filter(node)) {
         yield node;
       }
-      this.#delSize(node.row);
+      this.#delSize(node);
     }
   }
 
@@ -101,10 +99,10 @@ export class Exists implements Operator {
         return;
       }
       case 'remove': {
-        const size = this.#getSize(change.node.row);
+        const size = this.#getSize(change.node);
         // If size is undefined, this operator has not output
         // this row before and so it is unnecessary to output a remove for
-        // it.  Which is fortunate, since #fetchSize/#fetchNodeForRow would
+        // it.  Which is fortunate, since #fetchSize would
         // not be able to fetch a Node for this change since it is
         // removed from the source.
         if (size === undefined) {
@@ -112,7 +110,7 @@ export class Exists implements Operator {
         }
 
         this.#pushWithFilter(change, size);
-        this.#delSize(change.node.row);
+        this.#delSize(change.node);
         return;
       }
       case 'child':
@@ -130,13 +128,13 @@ export class Exists implements Operator {
         }
         switch (change.child.change.type) {
           case 'add': {
-            let size = this.#getSize(change.row);
+            let size = this.#getSize(change.node);
             if (size !== undefined) {
               size++;
-              this.#setCachedSize(change.row, size);
-              this.#setSize(change.row, size);
+              this.#setCachedSize(change.node, size);
+              this.#setSize(change.node, size);
             } else {
-              size = this.#fetchSize(change.row);
+              size = this.#fetchSize(change.node);
             }
             if (size === 1) {
               const type = this.#not ? 'remove' : 'add';
@@ -150,7 +148,7 @@ export class Exists implements Operator {
               }
               this.#output.push({
                 type,
-                node: this.#fetchNodeForRow(change.row),
+                node: change.node,
               });
             } else {
               this.#pushWithFilter(change, size);
@@ -158,7 +156,7 @@ export class Exists implements Operator {
             return;
           }
           case 'remove': {
-            let size = this.#getSize(change.row);
+            let size = this.#getSize(change.node);
             if (size !== undefined) {
               // Work around for issue https://bugs.rocicorp.dev/issue/3204
               // assert(size > 0);
@@ -166,10 +164,10 @@ export class Exists implements Operator {
                 return;
               }
               size--;
-              this.#setCachedSize(change.row, size);
-              this.#setSize(change.row, size);
+              this.#setCachedSize(change.node, size);
+              this.#setSize(change.node, size);
             } else {
-              size = this.#fetchSize(change.row);
+              size = this.#fetchSize(change.node);
             }
             if (size === 0) {
               const type = this.#not ? 'add' : 'remove';
@@ -182,7 +180,7 @@ export class Exists implements Operator {
               }
               this.#output.push({
                 type,
-                node: this.#fetchNodeForRow(change.row),
+                node: change.node,
               });
             } else {
               this.#pushWithFilter(change, size);
@@ -197,15 +195,15 @@ export class Exists implements Operator {
   }
 
   /**
-   * Returns whether or not the change's row's this.#relationshipName
+   * Returns whether or not the node's this.#relationshipName
    * relationship passes the exist/not exists filter condition.
    * If the optional `size` is passed it is used.
    * Otherwise, if there is a stored size for the row it is used.
    * Otherwise the size is computed by fetching a node for the row from
    * this.#input (this computed size is also stored).
    */
-  #filter(row: Row, size?: number): boolean {
-    const exists = (size ?? this.#getOrFetchSize(row)) > 0;
+  #filter(node: Node, size?: number): boolean {
+    const exists = (size ?? this.#getOrFetchSize(node)) > 0;
     return this.#not ? !exists : exists;
   }
 
@@ -213,116 +211,92 @@ export class Exists implements Operator {
    * Pushes a change if this.#filter is true for its row.
    */
   #pushWithFilter(change: Change, size?: number): void {
-    const row = rowForChange(change);
-    if (this.#filter(row, size)) {
+    if (this.#filter(change.node, size)) {
       this.#output.push(change);
     }
   }
 
-  #getSize(row: Row): number | undefined {
-    return this.#storage.get(this.#makeSizeStorageKey(row));
+  #getSize(node: Node): number | undefined {
+    return this.#storage.get(this.#makeSizeStorageKey(node));
   }
 
-  #setSize(row: Row, size: number) {
-    this.#storage.set(this.#makeSizeStorageKey(row), size);
+  #setSize(node: Node, size: number) {
+    this.#storage.set(this.#makeSizeStorageKey(node), size);
   }
 
-  #setCachedSize(row: Row, size: number) {
+  #setCachedSize(node: Node, size: number) {
     if (this.#skipCache) {
       return;
     }
 
-    this.#storage.set(this.#makeCacheStorageKey(row), size);
+    this.#storage.set(this.#makeCacheStorageKey(node), size);
   }
 
-  #getCachedSize(row: Row): number | undefined {
+  #getCachedSize(node: Node): number | undefined {
     if (this.#skipCache) {
       return undefined;
     }
 
-    return this.#storage.get(this.#makeCacheStorageKey(row));
+    return this.#storage.get(this.#makeCacheStorageKey(node));
   }
 
-  #delSize(row: Row) {
-    this.#storage.del(this.#makeSizeStorageKey(row));
+  #delSize(node: Node) {
+    this.#storage.del(this.#makeSizeStorageKey(node));
     if (!this.#skipCache) {
-      const cacheKey = this.#makeCacheStorageKey(row);
+      const cacheKey = this.#makeCacheStorageKey(node);
       if (first(this.#storage.scan({prefix: `${cacheKey}/`})) === undefined) {
         this.#storage.del(cacheKey);
       }
     }
   }
 
-  #getOrFetchSize(row: Row): number {
-    const size = this.#getSize(row);
+  #getOrFetchSize(node: Node): number {
+    const size = this.#getSize(node);
     if (size !== undefined) {
       return size;
     }
-    // We fetch this node so we can consume the relationship to
-    // determine its size (we can't consume the relationship of
-    // the node we are going to push or return via fetch to
-    // our output, because the relationships are one time use streams).
-    return this.#fetchSize(row);
+    return this.#fetchSize(node);
   }
 
-  #fetchSize(row: Row) {
-    const cachedSize = this.#getCachedSize(row);
+  #fetchSize(node: Node) {
+    const cachedSize = this.#getCachedSize(node);
     if (cachedSize !== undefined) {
-      this.#setSize(row, cachedSize);
+      this.#setSize(node, cachedSize);
       return cachedSize;
     }
 
-    const relationship =
-      this.#fetchNodeForRow(row).relationships[this.#relationshipName];
+    const relationship = node.relationships[this.#relationshipName];
     assert(relationship);
     let size = 0;
-    for (const _relatedNode of relationship) {
+    for (const _relatedNode of relationship()) {
       size++;
     }
 
-    this.#setCachedSize(row, size);
-    this.#setSize(row, size);
+    this.#setCachedSize(node, size);
+    this.#setSize(node, size);
     return size;
   }
 
-  #fetchNodeForRow(row: Row) {
-    const fetched = must(
-      first(
-        this.#input.fetch({
-          start: {row, basis: 'at'},
-        }),
-      ),
-    );
-    assert(
-      this.getSchema().compareRows(row, fetched.row) === 0,
-      () =>
-        `fetchNodeForRow returned unexpected row, expected ${JSON.stringify(
-          row,
-        )}, received ${JSON.stringify(fetched.row)}`,
-    );
-    return fetched;
-  }
-
-  #makeCacheStorageKey(row: Row): CacheStorageKey {
+  #makeCacheStorageKey(node: Node): CacheStorageKey {
     return `row/${JSON.stringify(
-      this.#getKeyValues(row, this.#parentJoinKey),
+      this.#getKeyValues(node, this.#parentJoinKey),
     )}`;
   }
 
-  #makeSizeStorageKey(row: Row): SizeStorageKey {
+  #makeSizeStorageKey(node: Node): SizeStorageKey {
     return `row/${
       this.#skipCache
         ? ''
-        : JSON.stringify(this.#getKeyValues(row, this.#parentJoinKey))
+        : JSON.stringify(this.#getKeyValues(node, this.#parentJoinKey))
     }/${JSON.stringify(
-      this.#getKeyValues(row, this.#input.getSchema().primaryKey),
+      this.#getKeyValues(node, this.#input.getSchema().primaryKey),
     )}`;
   }
 
-  #getKeyValues(row: Row, def: CompoundKey): NormalizedValue[] {
+  #getKeyValues(node: Node, def: CompoundKey): NormalizedValue[] {
     const values: NormalizedValue[] = [];
     for (const key of def) {
-      values.push(normalizeUndefined(row[key]));
+      values.push(normalizeUndefined(node.row[key]));
     }
     return values;
   }

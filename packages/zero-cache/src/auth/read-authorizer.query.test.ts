@@ -26,8 +26,7 @@ import {
   bindStaticParameters,
   buildPipeline,
 } from '../../../zql/src/builder/builder.ts';
-import {Catch} from '../../../zql/src/ivm/catch.ts';
-import type {Node} from '../../../zql/src/ivm/data.ts';
+import {Catch, type CaughtNode} from '../../../zql/src/ivm/catch.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
@@ -1526,7 +1525,7 @@ describe('read permissions against nested paths', () => {
 
 // maps over nodes, drops all information from `row` except the id
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function toIdsOnly(nodes: Node[]): any[] {
+function toIdsOnly(nodes: CaughtNode[]): any[] {
   return nodes.map(node => {
     return {
       id: node.row.id,

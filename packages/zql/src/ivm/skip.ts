@@ -88,8 +88,7 @@ export class Skip implements Operator {
 
     change satisfies AddChange | RemoveChange | ChildChange;
 
-    const changeRow = change.type === 'child' ? change.row : change.node.row;
-    if (shouldBePresent(changeRow)) {
+    if (shouldBePresent(change.node.row)) {
       this.#output.push(change);
     }
   }

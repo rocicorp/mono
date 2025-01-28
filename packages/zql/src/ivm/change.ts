@@ -1,4 +1,3 @@
-import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Node} from './data.ts';
 
 export type Change = AddChange | RemoveChange | ChildChange | EditChange;
@@ -24,11 +23,13 @@ export type RemoveChange = {
 };
 
 /**
- * The node itself is unchanged, but one of its descendants has changed.
+ * The node's row is unchanged, but one of its descendants has changed.
+ * The node's relationships will reflect the change, `child` specifies the
+ * specific descendant change.
  */
 export type ChildChange = {
   type: 'child';
-  row: Row;
+  node: Node;
   child: {
     relationshipName: string;
     change: Change;
@@ -62,8 +63,3 @@ export type EditChange = {
   node: Node;
   oldNode: Node;
 };
-
-export function rowForChange(change: Change): Row {
-  const {type} = change;
-  return type === 'child' ? change.row : change.node.row;
-}

@@ -4,12 +4,7 @@ import {must} from '../../../shared/src/must.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import {assertOrderingIncludesPK} from '../builder/builder.ts';
-import {
-  rowForChange,
-  type Change,
-  type EditChange,
-  type RemoveChange,
-} from './change.ts';
+import {type Change, type EditChange, type RemoveChange} from './change.ts';
 import type {Constraint} from './constraint.ts';
 import {compareValues, type Comparator, type Node} from './data.ts';
 import {
@@ -233,7 +228,7 @@ export class Take implements Operator {
     }
 
     const {takeState, takeStateKey, maxBound, constraint} =
-      this.#getStateAndConstraint(rowForChange(change));
+      this.#getStateAndConstraint(change.node.row);
     if (!takeState) {
       return;
     }
@@ -377,7 +372,10 @@ export class Take implements Operator {
     } else if (change.type === 'child') {
       // A 'child' change should be pushed to output if its row
       // is <= bound.
-      if (takeState.bound && compareRows(change.row, takeState.bound) <= 0) {
+      if (
+        takeState.bound &&
+        compareRows(change.node.row, takeState.bound) <= 0
+      ) {
         this.#output.push(change);
       }
     }

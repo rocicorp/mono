@@ -595,7 +595,7 @@ test('collapse', () => {
         name: 'issue',
       },
       relationships: {
-        labels: [
+        labels: () => [
           {
             row: {
               id: 1,
@@ -604,7 +604,7 @@ test('collapse', () => {
               extra: 'a',
             },
             relationships: {
-              labels: [
+              labels: () => [
                 {
                   row: {
                     id: 1,
@@ -655,9 +655,53 @@ test('collapse', () => {
 
   view.push({
     type: 'child',
-    row: {
-      id: 1,
-      name: 'issue',
+    node: {
+      row: {
+        id: 1,
+        name: 'issue',
+      },
+      relationships: {
+        labels: () => [
+          {
+            row: {
+              id: 1,
+              issueId: 1,
+              labelId: 1,
+              extra: 'a',
+            },
+            relationships: {
+              labels: () => [
+                {
+                  row: {
+                    id: 1,
+                    name: 'label',
+                  },
+                  relationships: {},
+                },
+              ],
+            },
+          },
+          {
+            row: {
+              id: 2,
+              issueId: 1,
+              labelId: 2,
+              extra: 'b',
+            },
+            relationships: {
+              labels: () => [
+                {
+                  row: {
+                    id: 2,
+                    name: 'label2',
+                  },
+                  relationships: {},
+                },
+              ],
+            },
+          },
+        ],
+      },
     },
     child: {
       relationshipName: 'labels',
@@ -671,7 +715,7 @@ test('collapse', () => {
             extra: 'b',
           },
           relationships: {
-            labels: [
+            labels: () => [
               {
                 row: {
                   id: 2,
@@ -707,9 +751,53 @@ test('collapse', () => {
   // edit the hidden row
   view.push({
     type: 'child',
-    row: {
-      id: 1,
-      name: 'issue',
+    node: {
+      row: {
+        id: 1,
+        name: 'issue',
+      },
+      relationships: {
+        labels: () => [
+          {
+            row: {
+              id: 1,
+              issueId: 1,
+              labelId: 1,
+              extra: 'a',
+            },
+            relationships: {
+              labels: () => [
+                {
+                  row: {
+                    id: 1,
+                    name: 'label',
+                  },
+                  relationships: {},
+                },
+              ],
+            },
+          },
+          {
+            row: {
+              id: 2,
+              issueId: 1,
+              labelId: 2,
+              extra: 'b2',
+            },
+            relationships: {
+              labels: () => [
+                {
+                  row: {
+                    id: 2,
+                    name: 'label2',
+                  },
+                  relationships: {},
+                },
+              ],
+            },
+          },
+        ],
+      },
     },
     child: {
       relationshipName: 'labels',
@@ -722,7 +810,17 @@ test('collapse', () => {
             labelId: 2,
             extra: 'b',
           },
-          relationships: {},
+          relationships: {
+            labels: () => [
+              {
+                row: {
+                  id: 2,
+                  name: 'label2',
+                },
+                relationships: {},
+              },
+            ],
+          },
         },
         node: {
           row: {
@@ -731,7 +829,17 @@ test('collapse', () => {
             labelId: 2,
             extra: 'b2',
           },
-          relationships: {},
+          relationships: {
+            labels: () => [
+              {
+                row: {
+                  id: 2,
+                  name: 'label2',
+                },
+                relationships: {},
+              },
+            ],
+          },
         },
       },
     },
@@ -758,19 +866,76 @@ test('collapse', () => {
   // edit the leaf
   view.push({
     type: 'child',
-    row: {
-      id: 1,
-      name: 'issue',
+    node: {
+      row: {
+        id: 1,
+        name: 'issue',
+      },
+      relationships: {
+        labels: () => [
+          {
+            row: {
+              id: 1,
+              issueId: 1,
+              labelId: 1,
+              extra: 'a',
+            },
+            relationships: {
+              labels: () => [
+                {
+                  row: {
+                    id: 1,
+                    name: 'label',
+                  },
+                  relationships: {},
+                },
+              ],
+            },
+          },
+          {
+            row: {
+              id: 2,
+              issueId: 1,
+              labelId: 2,
+              extra: 'b2',
+            },
+            relationships: {
+              labels: () => [
+                {
+                  row: {
+                    id: 2,
+                    name: 'label2x',
+                  },
+                  relationships: {},
+                },
+              ],
+            },
+          },
+        ],
+      },
     },
     child: {
       relationshipName: 'labels',
       change: {
         type: 'child',
-        row: {
-          id: 2,
-          issueId: 1,
-          labelId: 2,
-          extra: 'b2',
+        node: {
+          row: {
+            id: 2,
+            issueId: 1,
+            labelId: 2,
+            extra: 'b2',
+          },
+          relationships: {
+            labels: () => [
+              {
+                row: {
+                  id: 2,
+                  name: 'label2x',
+                },
+                relationships: {},
+              },
+            ],
+          },
         },
         child: {
           relationshipName: 'labels',
@@ -892,7 +1057,7 @@ test('collapse-single', () => {
         name: 'issue',
       },
       relationships: {
-        labels: [
+        labels: () => [
           {
             row: {
               id: 1,
@@ -900,7 +1065,7 @@ test('collapse-single', () => {
               labelId: 1,
             },
             relationships: {
-              labels: [
+              labels: () => [
                 {
                   row: {
                     id: 1,
@@ -1248,7 +1413,7 @@ test('edit to preserve relationships', () => {
     node: {
       row: {id: 1, title: 'issue1'},
       relationships: {
-        labels: [
+        labels: () => [
           {
             row: {id: 1, name: 'label1'},
             relationships: {},
@@ -1262,7 +1427,7 @@ test('edit to preserve relationships', () => {
     node: {
       row: {id: 2, title: 'issue2'},
       relationships: {
-        labels: [
+        labels: () => [
           {
             row: {id: 2, name: 'label2'},
             relationships: {},

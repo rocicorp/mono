@@ -5,9 +5,8 @@ import type {
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
-import {Catch, expandNode} from './catch.ts';
+import {Catch, expandNode, type CaughtNode} from './catch.ts';
 import type {Constraint} from './constraint.ts';
-import type {Node} from './data.ts';
 import type {FetchRequest, Input, Output, Start} from './operator.ts';
 import type {SourceChange} from './source.ts';
 import {createSource} from './test/source-factory.ts';
@@ -41,7 +40,7 @@ function asChanges(sc: SourceChange[]) {
 
 class OverlaySpy implements Output {
   #input: Input;
-  fetches: Node[][] = [];
+  fetches: CaughtNode[][] = [];
 
   onPush = () => {};
 
