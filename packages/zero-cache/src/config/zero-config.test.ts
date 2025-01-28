@@ -91,6 +91,14 @@ test('zero-cache --help', () => {
                                                    The URL of the trace collector to which to send trace data. Traces are sent over http.            
                                                    Port defaults to 4318 for most collectors.                                                        
                                                                                                                                                      
+     --log-slow-row-threshold number               default: 3                                                                                        
+       ZERO_LOG_SLOW_ROW_THRESHOLD env                                                                                                               
+                                                   The number of ms a row must take to fetch from table-source before it is considered slow.         
+                                                                                                                                                     
+     --log-ivm-sampling number                     default: 0                                                                                        
+       ZERO_LOG_IVM_SAMPLING env                                                                                                                     
+                                                   How often to take collect IVM metrics. 1 means always, 100 means 1% of the time, 0 means never    
+                                                                                                                                                     
      --shard-id string                             default: "0"                                                                                      
        ZERO_SHARD_ID env                                                                                                                             
                                                    Unique identifier for the zero-cache shard.                                                       

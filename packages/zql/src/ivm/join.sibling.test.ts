@@ -12,6 +12,16 @@ import type {Input} from './operator.ts';
 import {Snitch, type SnitchMessage} from './snitch.ts';
 import type {SourceChange} from './source.ts';
 import {createSource} from './test/source-factory.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {LogConfig} from '../../../otel/src/log-options.ts';
+
+const lc = createSilentLogContext();
+const logConfig: LogConfig = {
+  format: 'text',
+  level: 'debug',
+  ivmSampling: 0,
+  slowRowThreshold: 0,
+};
 
 suite('sibling relationships tests with issues, comments, and owners', () => {
   const base = {
@@ -865,7 +875,13 @@ function pushSiblingTest(t: PushTestSibling): PushTestSiblingResults {
 
   const sources = t.sources.map((rows, i) => {
     const ordering = t.sorts?.[i] ?? [['id', 'asc']];
-    const source = createSource('test', t.columns[i], t.primaryKeys[i]);
+    const source = createSource(
+      lc,
+      logConfig,
+      'test',
+      t.columns[i],
+      t.primaryKeys[i],
+    );
     for (const row of rows) {
       source.push({type: 'add', row});
     }

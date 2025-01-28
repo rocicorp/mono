@@ -11,10 +11,22 @@ import {
   overlaysForStartAtForTest,
 } from './memory-source.ts';
 import {createSource} from './test/source-factory.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {LogConfig} from '../../../otel/src/log-options.ts';
+
+const lc = createSilentLogContext();
+const logConfig: LogConfig = {
+  format: 'text',
+  level: 'debug',
+  ivmSampling: 0,
+  slowRowThreshold: 0,
+};
 
 test('schema', () => {
   compareRowsTest((order: Ordering) => {
-    const ms = createSource('table', {a: {type: 'string'}}, ['a']);
+    const ms = createSource(lc, logConfig, 'table', {a: {type: 'string'}}, [
+      'a',
+    ]);
     return ms.connect(order).getSchema().compareRows;
   });
 });
@@ -97,6 +109,8 @@ test('indexes get cleaned up when not needed', () => {
 
 test('push edit change', () => {
   const ms = createSource(
+    lc,
+    logConfig,
     'table',
     {a: {type: 'string'}, b: {type: 'string'}, c: {type: 'string'}},
     ['a'],
@@ -134,6 +148,8 @@ test('push edit change', () => {
 
 test('fetch during push edit change', () => {
   const ms = createSource(
+    lc,
+    logConfig,
     'table',
     {a: {type: 'string'}, b: {type: 'string'}, c: {type: 'string'}},
     ['a'],

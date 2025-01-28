@@ -12,6 +12,8 @@ import {Join} from './join.ts';
 import {MemoryStorage} from './memory-storage.ts';
 import {Snitch, type SnitchMessage} from './snitch.ts';
 import {createSource} from './test/source-factory.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {LogConfig} from '../../../otel/src/log-options.ts';
 
 const base = {
   columns: [
@@ -25,6 +27,14 @@ const base = {
     relationshipName: 'comments',
   },
 } as const;
+
+const lc = createSilentLogContext();
+const logConfig: LogConfig = {
+  format: 'text',
+  level: 'debug',
+  ivmSampling: 0,
+  slowRowThreshold: 0,
+};
 
 const oneParentWithChildTest: FetchTest = {
   ...base,
@@ -1898,7 +1908,13 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
 
   const sources = t.sources.map((rows, i) => {
     const ordering = t.sorts?.[i] ?? [['id', 'asc']];
-    const source = createSource(`t${i}`, t.columns[i], t.primaryKeys[i]);
+    const source = createSource(
+      lc,
+      logConfig,
+      `t${i}`,
+      t.columns[i],
+      t.primaryKeys[i],
+    );
     for (const row of rows) {
       source.push({type: 'add', row});
     }

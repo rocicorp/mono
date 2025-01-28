@@ -15,6 +15,14 @@ import {
 import {CREATE_STORAGE_TABLE, DatabaseStorage} from './database-storage.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
 import {ResetPipelinesSignal, Snapshotter} from './snapshotter.ts';
+import type {LogConfig} from '../../config/zero-config.ts';
+
+const logConfig: LogConfig = {
+  format: 'text',
+  level: 'debug',
+  ivmSampling: 0,
+  slowRowThreshold: 0,
+};
 
 describe('view-syncer/pipeline-driver', () => {
   let dbFile: DbFile;
@@ -33,6 +41,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     pipelines = new PipelineDriver(
       lc,
+      logConfig,
       new Snapshotter(lc, dbFile.path),
       new DatabaseStorage(storage).createClientGroupStorage('foo-client-group'),
       'pipeline-driver.test.ts',

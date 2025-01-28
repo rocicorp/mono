@@ -14,6 +14,16 @@ import {Snitch, type SnitchMessage} from '../snitch.ts';
 import type {Source, SourceChange} from '../source.ts';
 import type {Format} from '../view.ts';
 import {createSource} from './source-factory.ts';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import type {LogConfig} from '../../../../otel/src/log-options.ts';
+
+const lc = createSilentLogContext();
+const logConfig: LogConfig = {
+  format: 'text',
+  level: 'debug',
+  ivmSampling: 0,
+  slowRowThreshold: 0,
+};
 
 function makeSource(
   rows: readonly Row[],
@@ -23,7 +33,7 @@ function makeSource(
   snitchName: string,
   log: SnitchMessage[],
 ): {source: Source; snitch: Snitch} {
-  const source = createSource('test', columns, primaryKeys);
+  const source = createSource(lc, logConfig, 'test', columns, primaryKeys);
   for (const row of rows) {
     source.push({type: 'add', row});
   }

@@ -21,6 +21,7 @@ import type {SchemaVersions} from '../../types/schema-versions.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 import type {ClientGroupStorage} from './database-storage.ts';
 import {type SnapshotDiff, Snapshotter} from './snapshotter.ts';
+import type {LogConfig} from '../../config/zero-config.ts';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -64,12 +65,14 @@ export class PipelineDriver {
   readonly #snapshotter: Snapshotter;
   readonly #storage: ClientGroupStorage;
   readonly #clientGroupID: string;
+  readonly #logConfig: LogConfig;
   #tableSpecs: Map<string, LiteAndZqlSpec> | null = null;
   #streamer: Streamer | null = null;
   #replicaVersion: string | null = null;
 
   constructor(
     lc: LogContext,
+    logConfig: LogConfig,
     snapshotter: Snapshotter,
     storage: ClientGroupStorage,
     clientGroupID: string,
@@ -78,6 +81,7 @@ export class PipelineDriver {
     this.#snapshotter = snapshotter;
     this.#storage = storage;
     this.#clientGroupID = clientGroupID;
+    this.#logConfig = logConfig;
   }
 
   /**
@@ -339,6 +343,8 @@ export class PipelineDriver {
 
     const {db} = this.#snapshotter.current();
     source = new TableSource(
+      this.#lc,
+      this.#logConfig,
       this.#clientGroupID,
       db.db,
       tableName,

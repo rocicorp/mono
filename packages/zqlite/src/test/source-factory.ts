@@ -1,3 +1,4 @@
+import type {LogContext} from '@rocicorp/logger';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
@@ -6,8 +7,11 @@ import type {SourceFactory} from '../../../zql/src/ivm/test/source-factory.ts';
 import {Database} from '../db.ts';
 import {compile, sql} from '../internal/sql.ts';
 import {TableSource} from '../table-source.ts';
+import type {LogConfig} from '../../../otel/src/log-options.ts';
 
 export const createSource: SourceFactory = (
+  lc: LogContext,
+  logConfig: LogConfig,
   tableName: string,
   columns: Record<string, SchemaValue>,
   primaryKey: PrimaryKey,
@@ -24,5 +28,13 @@ export const createSource: SourceFactory = (
     )}));`,
   );
   db.exec(query);
-  return new TableSource('zqlite-test', db, tableName, columns, primaryKey);
+  return new TableSource(
+    lc,
+    logConfig,
+    'zqlite-test',
+    db,
+    tableName,
+    columns,
+    primaryKey,
+  );
 };

@@ -2,11 +2,25 @@ import {expect, test} from 'vitest';
 import {Catch} from './catch.ts';
 import {Filter} from './filter.ts';
 import {createSource} from './test/source-factory.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {LogConfig} from '../../../otel/src/log-options.ts';
+
+const lc = createSilentLogContext();
+const logConfig: LogConfig = {
+  format: 'text',
+  level: 'debug',
+  ivmSampling: 0,
+  slowRowThreshold: 0,
+};
 
 test('basics', () => {
-  const ms = createSource('table', {a: {type: 'number'}, b: {type: 'string'}}, [
-    'a',
-  ]);
+  const ms = createSource(
+    lc,
+    logConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
   ms.push({type: 'add', row: {a: 3, b: 'foo'}});
   ms.push({type: 'add', row: {a: 2, b: 'bar'}});
   ms.push({type: 'add', row: {a: 1, b: 'foo'}});
@@ -49,9 +63,13 @@ test('basics', () => {
 });
 
 test('edit', () => {
-  const ms = createSource('table', {a: {type: 'number'}, x: {type: 'number'}}, [
-    'a',
-  ]);
+  const ms = createSource(
+    lc,
+    logConfig,
+    'table',
+    {a: {type: 'number'}, x: {type: 'number'}},
+    ['a'],
+  );
   for (const row of [
     {a: 1, x: 1},
     {a: 2, x: 2},

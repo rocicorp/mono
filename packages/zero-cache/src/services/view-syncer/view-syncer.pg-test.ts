@@ -52,8 +52,15 @@ import {PipelineDriver} from './pipeline-driver.ts';
 import {initViewSyncerSchema} from './schema/init.ts';
 import {Snapshotter} from './snapshotter.ts';
 import {pickToken, type SyncContext, ViewSyncerService} from './view-syncer.ts';
+import type {LogConfig} from '../../config/zero-config.ts';
 
 const SHARD_ID = 'ABC';
+const logConfig: LogConfig = {
+  format: 'text',
+  level: 'debug',
+  ivmSampling: 0,
+  slowRowThreshold: 0,
+};
 
 const EXPECTED_LMIDS_AST: AST = {
   schema: '',
@@ -378,6 +385,7 @@ async function setup(permissions: PermissionsConfig = {}) {
     cvrDB,
     new PipelineDriver(
       lc.withContext('component', 'pipeline-driver'),
+      logConfig,
       new Snapshotter(lc, replicaDbFile.path),
       operatorStorage,
       'view-syncer.pg-test.ts',
