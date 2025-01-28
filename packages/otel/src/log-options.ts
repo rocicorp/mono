@@ -28,16 +28,16 @@ export const logOptions = {
   },
 
   slowRowThreshold: {
-    type: v.number().default(3),
+    type: v.number().default(2),
     desc: [
       `The number of ms a row must take to fetch from table-source before it is considered slow.`,
     ],
   },
 
   ivmSampling: {
-    type: v.number().default(0),
+    type: v.number().default(5000),
     desc: [
-      `How often to take collect IVM metrics. 1 means always, 100 means 1% of the time, 0 means never`,
+      `How often to collect IVM metrics. 1 out of N requests will be sampled where N is this value.`,
     ],
   },
 };

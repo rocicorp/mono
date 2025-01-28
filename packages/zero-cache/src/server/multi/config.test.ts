@@ -69,9 +69,9 @@ test('parse options', () => {
         },
         "log": {
           "format": "text",
-          "ivmSampling": 0,
+          "ivmSampling": 5000,
           "level": "info",
-          "slowRowThreshold": 3,
+          "slowRowThreshold": 2,
         },
         "perUserMutationLimit": {
           "windowMs": 60000,
@@ -132,9 +132,9 @@ test('parse options', () => {
         "ZERO_LITESTREAM_CONFIG_PATH": "./src/services/litestream/config.yml",
         "ZERO_LITESTREAM_LOG_LEVEL": "warn",
         "ZERO_LOG_FORMAT": "text",
-        "ZERO_LOG_IVM_SAMPLING": "0",
+        "ZERO_LOG_IVM_SAMPLING": "5000",
         "ZERO_LOG_LEVEL": "info",
-        "ZERO_LOG_SLOW_ROW_THRESHOLD": "3",
+        "ZERO_LOG_SLOW_ROW_THRESHOLD": "2",
         "ZERO_PER_USER_MUTATION_LIMIT_WINDOW_MS": "60000",
         "ZERO_PORT": "4848",
         "ZERO_SCHEMA_FILE": "zero-schema.json",
@@ -324,13 +324,13 @@ test('zero-cache --help', () => {
                                                    The URL of the trace collector to which to send trace data. Traces are sent over http.            
                                                    Port defaults to 4318 for most collectors.                                                        
                                                                                                                                                      
-     --log-slow-row-threshold number               default: 3                                                                                        
+     --log-slow-row-threshold number               default: 2                                                                                        
        ZERO_LOG_SLOW_ROW_THRESHOLD env                                                                                                               
                                                    The number of ms a row must take to fetch from table-source before it is considered slow.         
                                                                                                                                                      
-     --log-ivm-sampling number                     default: 0                                                                                        
+     --log-ivm-sampling number                     default: 5000                                                                                     
        ZERO_LOG_IVM_SAMPLING env                                                                                                                     
-                                                   How often to take collect IVM metrics. 1 means always, 100 means 1% of the time, 0 means never    
+                                                   How often to collect IVM metrics. 1 out of N requests will be sampled where N is this value.      
                                                                                                                                                      
      --shard-id string                             default: "0"                                                                                      
        ZERO_SHARD_ID env                                                                                                                             

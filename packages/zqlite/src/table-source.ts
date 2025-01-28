@@ -74,6 +74,8 @@ type Statements = {
   readonly checkExists: Statement;
 };
 
+let eventCount = 0;
+
 /**
  * A source that is backed by a SQLite table.
  *
@@ -316,15 +318,16 @@ export class TableSource implements Source {
     query: string,
   ): IterableIterator<Row> {
     let result;
-    let row = 0;
     try {
       do {
         result = timeSampled(
           this.#lc,
-          ++row,
+          ++eventCount,
           this.#logConfig.ivmSampling,
           () => rowIterator.next(),
           this.#logConfig.slowRowThreshold,
+          () =>
+            `table-source.next took too long for ${query}. Are you missing an index?`,
         );
         if (result.done) {
           break;
