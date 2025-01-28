@@ -3,7 +3,7 @@ import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import WebSocket, {WebSocketServer} from 'ws';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {randInt} from '../../../shared/src/rand.ts';
-import {closeWithProtocolError} from './ws.ts';
+import {closeWithError, PROTOCOL_ERROR} from './ws.ts';
 
 describe('types/ws', () => {
   let port: number;
@@ -20,10 +20,11 @@ describe('types/ws', () => {
 
   test('close with protocol error', async () => {
     wss.on('connection', ws =>
-      closeWithProtocolError(
+      closeWithError(
         createSilentLogContext(),
         ws,
         'こんにちは' + 'あ'.repeat(150),
+        PROTOCOL_ERROR,
       ),
     );
 

@@ -1,15 +1,25 @@
 import websocket from '@fastify/websocket';
-import type {LogContext} from '@rocicorp/logger';
+import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import Fastify, {type FastifyInstance} from 'fastify';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import WebSocket from 'ws';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {unreachable} from '../../../shared/src/asserts.ts';
+import {
+  createSilentLogContext,
+  TestLogSink,
+} from '../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../shared/src/queue.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
 import * as v from '../../../shared/src/valita.ts';
-import {type Source, streamIn, streamOut} from './streams.ts';
+import {
+  type Sink,
+  type Source,
+  stream,
+  streamIn,
+  streamOut,
+} from './streams.ts';
 import {Subscription} from './subscription.ts';
 
 const messageSchema = v.object({
@@ -20,7 +30,184 @@ const messageSchema = v.object({
 
 type Message = v.Infer<typeof messageSchema>;
 
-describe('streams', () => {
+describe('streams with flow control', () => {
+  let logSink: TestLogSink;
+  let lc: LogContext;
+
+  let server: FastifyInstance;
+  let serverRequests: Queue<{
+    serverIn: Source<Message>;
+    serverOut: Sink<Message>;
+  }>;
+  let ws: WebSocket;
+  let wsClosed: Promise<void>;
+
+  beforeEach(async () => {
+    logSink = new TestLogSink();
+    lc = new LogContext('debug', {}, logSink);
+
+    server = Fastify();
+    await server.register(websocket);
+
+    serverRequests = new Queue();
+    server.get('/', {websocket: true}, (ws: WebSocket) => {
+      const {instream, outstream} = stream<Message, Message>(
+        lc,
+        ws,
+        messageSchema,
+      );
+      void serverRequests.enqueue({serverIn: instream, serverOut: outstream});
+    });
+    const url = await server.listen({port: 0});
+    lc.info?.(`server running on ${url}`);
+
+    const closed = resolver();
+    ws = new WebSocket(url);
+    ws.on('close', closed.resolve);
+    wsClosed = closed.promise;
+  });
+
+  afterEach(async () => {
+    await wsClosed;
+    await server.close();
+  });
+
+  test.each([
+    // With the default 16k buffer, sending 4 ~8k messages should result in 2 drains.
+    [{}, 2],
+    // With a 64k buffer, sending 4 ~8k messages should not block for any drains.
+    [{highWaterMark: 64_000}, 0],
+  ])('stream out with back pressure: %o', async (streamOptions, numDrains) => {
+    const out = [
+      {
+        from: 1,
+        to: 2,
+        str: 'a'.repeat(8192),
+        bigint: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
+        passthrough: true,
+      },
+      {
+        from: 2,
+        to: 3,
+        str: 'b'.repeat(8192),
+        bigint: BigInt(Number.MAX_SAFE_INTEGER) + 2n,
+      },
+      {
+        from: 3,
+        to: 4,
+        str: 'c'.repeat(8192),
+        bigint: BigInt(Number.MAX_SAFE_INTEGER) + 3n,
+      },
+      {
+        from: 4,
+        to: 5,
+        str: 'd'.repeat(8192),
+        bigint: BigInt(Number.MAX_SAFE_INTEGER) + 4n,
+      },
+    ];
+
+    const {outstream} = stream<Message, Message>(
+      lc,
+      ws,
+      messageSchema,
+      {},
+      {},
+      streamOptions,
+    );
+    // Send a stuff before confirming the server connection.
+    for (const msg of out) {
+      outstream.push(msg);
+    }
+
+    const {serverIn} = await serverRequests.dequeue();
+    let i = 0;
+    for await (const msg of serverIn) {
+      expect(msg).toEqual(out[i++]);
+      if (i === out.length) {
+        break;
+      }
+    }
+
+    expect(
+      logSink.messages.filter(
+        ([level, _ctx, args]) =>
+          level === 'debug' && (args[0] as string).match(/drained messages/),
+      ),
+    ).toHaveLength(numDrains);
+  });
+
+  test('stream in', async () => {
+    const inMsgs = [
+      {
+        from: 1,
+        to: 2,
+        str: 'w'.repeat(8192),
+        bigint: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
+        passthrough: true,
+      },
+      {
+        from: 2,
+        to: 3,
+        str: 'x'.repeat(8192),
+        bigint: BigInt(Number.MAX_SAFE_INTEGER) + 2n,
+      },
+      {
+        from: 3,
+        to: 4,
+        str: 'y'.repeat(8192),
+        bigint: BigInt(Number.MAX_SAFE_INTEGER) + 3n,
+      },
+      {
+        from: 4,
+        to: 5,
+        str: 'z'.repeat(8192),
+        bigint: BigInt(Number.MAX_SAFE_INTEGER) + 4n,
+      },
+    ];
+
+    const {serverOut} = await serverRequests.dequeue();
+
+    for (const msg of inMsgs) {
+      serverOut.push(msg);
+    }
+
+    const {instream} = stream<Message, Message>(lc, ws, messageSchema);
+    let i = 0;
+    for await (const msg of instream) {
+      expect(msg).toEqual(inMsgs[i++]);
+      if (i === inMsgs.length) {
+        break;
+      }
+    }
+
+    // Check that back pressure kicked in twice for the four 8K+ messages,
+    // as the default watermark is 16k.
+    expect(
+      logSink.messages.filter(
+        ([level, _ctx, args]) =>
+          level === 'debug' && (args[0] as string).match(/drained messages/),
+      ),
+    ).toHaveLength(2);
+  });
+
+  test('propagates connection failures', async () => {
+    await server.close();
+
+    const {instream} = stream<Message, Message>(lc, ws, messageSchema);
+
+    let result: unknown | undefined;
+    try {
+      for await (const _ of instream) {
+        unreachable();
+      }
+    } catch (e) {
+      result = e;
+    }
+    expect(String(result)).toMatch(/Error: connect ECONNRE(SET|FUSED)/);
+  });
+});
+
+describe('streams with internal acks', () => {
   let lc: LogContext;
 
   let server: FastifyInstance;
