@@ -3,7 +3,8 @@ import {must} from '../../../shared/src/must.ts';
 import {DatabaseInitError} from '../../../zqlite/src/db.ts';
 import {getZeroConfig} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
-import {initializeChangeSource} from '../services/change-source/pg/change-source.ts';
+import {initializeCustomChangeSource} from '../services/change-source/custom/change-source.ts';
+import {initializePostgresChangeSource} from '../services/change-source/pg/change-source.ts';
 import {ChangeStreamerHttpServer} from '../services/change-streamer/change-streamer-http.ts';
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.ts';
 import type {ChangeStreamerService} from '../services/change-streamer/change-streamer.ts';
@@ -42,13 +43,21 @@ export default async function runWorker(
   for (const first of [true, false]) {
     try {
       // Note: This performs initial sync of the replica if necessary.
-      const {changeSource, replicationConfig} = await initializeChangeSource(
-        lc,
-        config.upstream.db,
-        config.shard,
-        config.replicaFile,
-        config.initialSync,
-      );
+      const {changeSource, replicationConfig} =
+        config.upstream.type === 'pg'
+          ? await initializePostgresChangeSource(
+              lc,
+              config.upstream.db,
+              config.shard,
+              config.replicaFile,
+              config.initialSync,
+            )
+          : await initializeCustomChangeSource(
+              lc,
+              config.upstream.db,
+              config.shard,
+              config.replicaFile,
+            );
 
       changeStreamer = await initializeStreamer(
         lc,
