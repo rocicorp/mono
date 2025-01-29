@@ -7,7 +7,6 @@ import {Database} from '../../../../../zqlite/src/db.ts';
 import {computeZqlSpecs} from '../../../db/lite-tables.ts';
 import {StatementRunner} from '../../../db/statements.ts';
 import {stringify} from '../../../types/bigint-json.ts';
-import {registerPostgresTypeParsers} from '../../../types/pg.ts';
 import {stream} from '../../../types/streams.ts';
 import type {
   ChangeSource,
@@ -24,9 +23,6 @@ import type {ShardConfig} from '../pg/shard-config.ts';
 import {changeStreamMessageSchema} from '../protocol/current/downstream.ts';
 import {type ChangeSourceUpstream} from '../protocol/current/upstream.ts';
 import {initSyncSchema} from './sync-schema.ts';
-
-// BigInt support from LogicalReplicationService.
-registerPostgresTypeParsers();
 
 /**
  * Initializes a Postgres change source, including the initial sync of the
