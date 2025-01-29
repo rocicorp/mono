@@ -5,7 +5,7 @@ import WebSocket from 'ws';
 import {type Worker} from '../../types/processes.ts';
 import {streamIn, streamOut, type Source} from '../../types/streams.ts';
 import {URLParams} from '../../types/url-params.ts';
-import {closeWithProtocolError} from '../../types/ws.ts';
+import {closeWithError, PROTOCOL_ERROR} from '../../types/ws.ts';
 import {installWebSocketReceiver} from '../dispatcher/websocket-handoff.ts';
 import {HttpService, type Options} from '../http-service.ts';
 import {
@@ -53,7 +53,7 @@ export class ChangeStreamerHttpServer extends HttpService {
     try {
       ctx = getSubscriberContext(req);
     } catch (err) {
-      closeWithProtocolError(this._lc, ws, err);
+      closeWithError(this._lc, ws, err, PROTOCOL_ERROR);
       return;
     }
     await this.#handleSubscription(ws, ctx);

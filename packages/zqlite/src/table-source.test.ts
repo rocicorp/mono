@@ -338,9 +338,7 @@ describe('no primary key', () => {
       ],
     ],
   ] satisfies [Ordering][])('disallows non-unique orderings: %o', sort => {
-    expect(() => source.connect(sort)).toThrowError(
-      'does not include uniquely indexed columns',
-    );
+    expect(() => source.connect(sort)).toThrowError('Cannot orderBy(');
   });
 
   test.each([

@@ -1,10 +1,18 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import type {CloseEvent, ErrorEvent, MessageEvent, WebSocket} from 'ws';
+import {pipeline, Writable, type DuplexOptions} from 'node:stream';
+import {
+  createWebSocketStream,
+  type CloseEvent,
+  type ErrorEvent,
+  type MessageEvent,
+  type WebSocket,
+} from 'ws';
 import {Queue} from '../../../shared/src/queue.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {BigIntJSON, type JSONValue} from './bigint-json.ts';
-import {Subscription} from './subscription.ts';
+import {Subscription, type Options} from './subscription.ts';
+import {closeWithError} from './ws.ts';
 
 export type Source<T> = AsyncIterable<T> & {
   /**
@@ -31,6 +39,123 @@ export type Source<T> = AsyncIterable<T> & {
 export type Sink<T> = {
   push(message: T): void;
 };
+
+/**
+ * Back-pressure-aware transformation of a WebSocket into
+ * upstream and downstream {@link Subscription} objects.
+ */
+// TODO: Change {@link streamIn} and {@link streamOut} to use this
+//       under the covers so that internal communication is also
+//       responsive to backpressure.
+export function stream<In extends JSONValue, Out extends JSONValue>(
+  lc: LogContext,
+  ws: WebSocket,
+  inSchema: v.Type<In>,
+  outOptions: Options<Out> = {},
+  inOptions: Options<In> = {},
+  streamOptions: DuplexOptions = {},
+): {outstream: Sink<Out>; instream: Source<In>} {
+  const endpoint = ws.url ?? 'client';
+  function close(err?: unknown) {
+    if (ws.readyState !== ws.CLOSED && ws.readyState !== ws.CLOSING) {
+      if (err) {
+        closeWithError(lc, ws, err);
+      } else {
+        lc.info?.(`closing connection to ${endpoint}`);
+        ws.close();
+      }
+    }
+  }
+
+  const instream = Subscription.create<In>({
+    ...inOptions,
+    cleanup: (unconsumed, err) => {
+      inOptions.cleanup?.(unconsumed, err);
+      close(err);
+    },
+  });
+  const outstream = Subscription.create<Out>({
+    ...outOptions,
+    cleanup: (unconsumed, err) => {
+      outOptions.cleanup?.(unconsumed, err);
+      close(err);
+    },
+  });
+
+  const duplex = createWebSocketStream(ws, {
+    ...streamOptions,
+    decodeStrings: false,
+  });
+
+  // Outgoing transform.
+  async function sendOut() {
+    for await (const msg of outstream) {
+      // Upstream backpressure is signaled by the tcp socket buffer.
+      if (!duplex.write(BigIntJSON.stringify(msg))) {
+        const {promise: canWriteMore, resolve: drained} = resolver();
+
+        const start = Date.now();
+        duplex.once('drain', drained);
+        await canWriteMore;
+        lc.debug?.(
+          `drained messages to ${endpoint} in ${Date.now() - start} ms`,
+        );
+      }
+    }
+  }
+
+  if (ws.readyState === ws.CONNECTING) {
+    ws.on('open', () => {
+      lc.info?.(`connected to ${endpoint}`);
+      void sendOut();
+    });
+  } else {
+    void sendOut();
+  }
+
+  // Incoming transform.
+  pipeline(
+    duplex,
+    new Writable({
+      decodeStrings: false,
+      write: (chunk, _encoding, callback) => {
+        let msg: In;
+        try {
+          const json = BigIntJSON.parse(chunk.toString());
+          msg = v.parse(json, inSchema, 'passthrough');
+        } catch (err) {
+          callback(ensureError(err));
+          return;
+        }
+        const {result} = instream.push(msg);
+        // Inbound backpressure is exerted by unconsumed
+        // messages in the subscription.
+        void result.then(
+          () => callback(),
+          err => callback(err),
+        );
+      },
+      destroy: (err, callback) => {
+        if (err) {
+          instream.fail(ensureError(err));
+        }
+        // Otherwise, final will handle the cancel.
+        callback();
+      },
+      final: callback => {
+        instream.cancel();
+        callback();
+      },
+    }),
+    close,
+  );
+
+  return {outstream, instream};
+}
+
+function ensureError(err: unknown) {
+  return err instanceof Error ? err : new Error(String(err));
+}
 
 const ackSchema = v.object({ack: v.number()});
 

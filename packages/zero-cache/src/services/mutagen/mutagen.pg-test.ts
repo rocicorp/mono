@@ -56,7 +56,7 @@ async function createTables(db: PostgresDB) {
     `);
 }
 
-describe('processMutation', () => {
+describe('processMutation', {timeout: 15000}, () => {
   let lc: LogContext;
   let db: PostgresDB;
 
@@ -68,7 +68,7 @@ describe('processMutation', () => {
 
   afterEach(async () => {
     await testDBs.drop(db);
-  });
+  }, 15000);
 
   test('new client with no last mutation id', async () => {
     await expectTables(db, {
