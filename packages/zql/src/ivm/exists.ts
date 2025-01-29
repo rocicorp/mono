@@ -161,7 +161,7 @@ export class Exists implements Operator {
             let size = this.#getSize(change.row);
             if (size !== undefined) {
               // Work around for issue https://bugs.rocicorp.dev/issue/3204
-              // assert(size > 0);
+              assert(size > 0);
               if (size === 0) {
                 return;
               }

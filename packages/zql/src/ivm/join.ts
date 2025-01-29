@@ -49,6 +49,14 @@ export class Join implements Input {
   readonly #schema: SourceSchema;
 
   #output: Output = throwOutput;
+  #hiddenDueToSplitEdit: Row | undefined;
+  #manyToOneChildChangeInProgress:
+    | {
+        childRow: Row;
+        change: Change;
+        parentRowBound: Row;
+      }
+    | undefined;
 
   constructor({
     parent,
@@ -109,6 +117,13 @@ export class Join implements Input {
 
   *fetch(req: FetchRequest): Stream<Node> {
     for (const parentNode of this.#parent.fetch(req)) {
+      // if (
+      //   this.#hiddenDueToSplitEdit &&
+      //   this.#schema.compareRows(parentNode.row, this.#hiddenDueToSplitEdit) ===
+      //     0
+      // ) {
+      //   continue;
+      // }
       yield this.#processParentNode(
         parentNode.row,
         parentNode.relationships,
@@ -179,10 +194,13 @@ export class Join implements Input {
             ),
           });
         } else {
+          // this.#hiddenDueToSplitEdit = change.node.row;
           this.#pushParent({
             type: 'remove',
             node: change.oldNode,
           });
+          this.#hiddenDueToSplitEdit = undefined;
+
           this.#pushParent({
             type: 'add',
             node: change.node,
@@ -213,8 +231,14 @@ export class Join implements Input {
             change,
           },
         };
+        this.#manyToOneChildChangeInProgress = {
+          childRow,
+          change,
+          parentRowBound: parentNode.row,
+        };
         this.#output.push(childChange);
       }
+      this.#manyToOneChildChangeInProgress = undefined;
     };
 
     switch (change.type) {
@@ -277,15 +301,6 @@ export class Join implements Input {
       method = second ? 'fetch' : 'cleanup';
     }
 
-    const childStream = this.#child[method]({
-      constraint: Object.fromEntries(
-        this.#childKey.map((key, i) => [
-          key,
-          parentNodeRow[this.#parentKey[i]],
-        ]),
-      ),
-    });
-
     if (mode === 'fetch') {
       this.#storage.set(storageKey, true);
     } else {
@@ -297,9 +312,88 @@ export class Join implements Input {
       row: parentNodeRow,
       relationships: {
         ...parentNodeRelations,
-        [this.#relationshipName]: childStream,
+        [this.#relationshipName]: this.#childStream(method, parentNodeRow),
       },
     };
+  }
+
+  *#childStream(method: 'fetch' | 'cleanup', parentNodeRow: Row) {
+    // yield* this.#child[method]({
+    //   constraint: Object.fromEntries(
+    //     this.#childKey.map((key, i) => [
+    //       key,
+    //       parentNodeRow[this.#parentKey[i]],
+    //     ]),
+    //   ),
+    // });
+
+    const shouldOverlay =
+      this.#manyToOneChildChangeInProgress &&
+      this.#schema.compareRows(
+        parentNodeRow,
+        this.#manyToOneChildChangeInProgress.parentRowBound,
+      ) > 0;
+    let removedYielded = false;
+    for (const node of this.#child[method]({
+      constraint: Object.fromEntries(
+        this.#childKey.map((key, i) => [
+          key,
+          parentNodeRow[this.#parentKey[i]],
+        ]),
+      ),
+    })) {
+      if (shouldOverlay && this.#manyToOneChildChangeInProgress) {
+        const {change} = this.#manyToOneChildChangeInProgress;
+        switch (change.type) {
+          case 'add': {
+            if (
+              this.#child
+                .getSchema()
+                .compareRows(
+                  node.row,
+                  this.#manyToOneChildChangeInProgress?.childRow,
+                ) === 0
+            ) {
+              continue;
+            }
+            break;
+          }
+          case 'edit': {
+            if (
+              this.#child
+                .getSchema()
+                .compareRows(
+                  node.row,
+                  this.#manyToOneChildChangeInProgress?.childRow,
+                ) === 0
+            ) {
+              yield change.oldNode;
+              continue;
+            }
+            break;
+          }
+          case 'remove': {
+            if (
+              !removedYielded &&
+              this.#child
+                .getSchema()
+                .compareRows(
+                  node.row,
+                  this.#manyToOneChildChangeInProgress?.childRow,
+                ) > 0
+            ) {
+              removedYielded = true;
+              yield change.node;
+            }
+            break;
+          }
+          case 'child': {
+            break;
+          }
+        }
+      }
+      yield node;
+    }
   }
 }
 
