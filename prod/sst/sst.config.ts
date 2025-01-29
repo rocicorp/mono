@@ -48,6 +48,16 @@ export default $config({
     // ECS Cluster
     const cluster = new sst.aws.Cluster(`cluster`, {
       vpc,
+      transform: {
+        cluster: {
+          settings: [
+            {
+              name: "containerInsights",
+              value: "enabled",
+            },
+          ],
+        },
+      },
     });
 
     // Common environment variables
