@@ -945,7 +945,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           }
 
           if (rows.size % TIME_SLICE_CHECK_SIZE === 0) {
-            const elapsed = stopwatch.elapsed;
+            const {elapsed} = stopwatch;
             if (elapsed > TIME_SLICE_MS) {
               lc.debug?.(`yielding at ${rows.size} rows (${elapsed} ms)`);
               stopwatch.stop(RECORD_LAP);
