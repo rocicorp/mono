@@ -74,6 +74,8 @@ jobs:
           AWS_REGION: ${{ vars.AWS_DEFAULT_REGION }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
           ECR_IMAGE_ZERO_CACHE: zero-zbugs-sandbox
+          DOMAIN_NAME: "zbugs-sync-sandbox.rocicorp.dev"
+          DOMAIN_CERT: ${{ vars.SANDBOX_CERTIFICATE_ARN }}
         run: |
           cd prod/sst
           npm install

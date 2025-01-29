@@ -117,10 +117,19 @@ export default $config({
       },
       loadBalancer: {
         public: true,
+        domain: {
+          name: process.env.DOMAIN_NAME!,
+          dns: false,
+          cert: process.env.DOMAIN_CERT!,
+        },
         ports: [
           {
             listen: "80/http",
             forward: "4848/http",
+          },
+          {
+            listen: "443/https",
+            forward: "4848/https",
           },
         ],
       },
