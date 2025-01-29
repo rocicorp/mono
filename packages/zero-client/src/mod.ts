@@ -128,3 +128,11 @@ export type {Query, Row} from '../../zql/src/query/query.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 export type {ZeroOptions} from './client/options.ts';
 export {Zero} from './client/zero.ts';
+export type {
+  DBMutator,
+  TableMutator,
+  InsertValue,
+  UpsertValue,
+  UpdateValue,
+  DeleteID,
+} from './client/crud.ts';
