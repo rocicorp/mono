@@ -207,7 +207,11 @@ export class Join implements Input {
       for (const parentNode of parentNodes) {
         const childChange: ChildChange = {
           type: 'child',
-          node: parentNode,
+          node: this.#processParentNode(
+            parentNode.row,
+            parentNode.relationships,
+            'fetch',
+          ),
           child: {
             relationshipName: this.#relationshipName,
             change,

@@ -966,6 +966,35 @@ describe('view-syncer/pipeline-driver', () => {
           "table": "labels",
           "type": "add",
         },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "134",
+            "issueID": "2",
+            "labelID": "1",
+            "legacyID": "2-1",
+          },
+          "rowKey": {
+            "issueID": "2",
+            "labelID": "1",
+            "legacyID": "2-1",
+          },
+          "table": "issueLabels",
+          "type": "add",
+        },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "123",
+            "id": "1",
+            "name": "bug",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "labels",
+          "type": "add",
+        },
       ]
     `);
 

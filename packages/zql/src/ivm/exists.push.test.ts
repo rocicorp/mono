@@ -409,7 +409,9 @@ suite('EXISTS 1 to many', () => {
         },
         {
           "node": {
-            "relationships": {},
+            "relationships": {
+              "issue": [],
+            },
             "row": {
               "id": "c1",
               "issueID": "i1",
@@ -459,7 +461,9 @@ suite('EXISTS 1 to many', () => {
         },
         {
           "node": {
-            "relationships": {},
+            "relationships": {
+              "issue": [],
+            },
             "row": {
               "id": "c2",
               "issueID": "i1",
@@ -1057,6 +1061,13 @@ suite('EXISTS', () => {
           "text": "first issue",
         },
         {
+          "comments": [
+            {
+              "id": "c4",
+              "issueID": "i2",
+              "text": "i2 c4 text",
+            },
+          ],
           "id": "i2",
           "text": "second issue",
         },
@@ -1099,7 +1110,18 @@ suite('EXISTS', () => {
       [
         {
           "node": {
-            "relationships": {},
+            "relationships": {
+              "comments": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": "c4",
+                    "issueID": "i2",
+                    "text": "i2 c4 text",
+                  },
+                },
+              ],
+            },
             "row": {
               "id": "i2",
               "text": "second issue",
@@ -1340,7 +1362,9 @@ suite('EXISTS', () => {
         },
         {
           "node": {
-            "relationships": {},
+            "relationships": {
+              "comments": [],
+            },
             "row": {
               "id": "i1",
               "text": "first issue",
@@ -1615,6 +1639,13 @@ suite('EXISTS', () => {
     expect(data).toMatchInlineSnapshot(`
       [
         {
+          "comments": [
+            {
+              "id": "c1",
+              "issueID": "i2",
+              "text": "i2 c1 text",
+            },
+          ],
           "id": "i2",
           "text": "second issue",
         },
@@ -1708,7 +1739,9 @@ suite('EXISTS', () => {
         },
         {
           "node": {
-            "relationships": {},
+            "relationships": {
+              "comments": [],
+            },
             "row": {
               "id": "i1",
               "text": "first issue",
@@ -1718,7 +1751,18 @@ suite('EXISTS', () => {
         },
         {
           "node": {
-            "relationships": {},
+            "relationships": {
+              "comments": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": "c1",
+                    "issueID": "i2",
+                    "text": "i2 c1 text",
+                  },
+                },
+              ],
+            },
             "row": {
               "id": "i2",
               "text": "second issue",
@@ -2239,7 +2283,18 @@ suite('NOT EXISTS', () => {
         },
         {
           "node": {
-            "relationships": {},
+            "relationships": {
+              "comments": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": "c4",
+                    "issueID": "i2",
+                    "text": "i2 c4 text",
+                  },
+                },
+              ],
+            },
             "row": {
               "id": "i2",
               "text": "second issue",
@@ -2334,6 +2389,7 @@ suite('NOT EXISTS', () => {
     expect(data).toMatchInlineSnapshot(`
       [
         {
+          "comments": [],
           "id": "i1",
           "text": "first issue",
         },
@@ -2370,7 +2426,9 @@ suite('NOT EXISTS', () => {
       [
         {
           "node": {
-            "relationships": {},
+            "relationships": {
+              "comments": [],
+            },
             "row": {
               "id": "i1",
               "text": "first issue",
@@ -2517,6 +2575,7 @@ suite('NOT EXISTS', () => {
     expect(data).toMatchInlineSnapshot(`
       [
         {
+          "comments": [],
           "id": "i1",
           "text": "first issue",
         },
@@ -2578,7 +2637,9 @@ suite('NOT EXISTS', () => {
       [
         {
           "node": {
-            "relationships": {},
+            "relationships": {
+              "comments": [],
+            },
             "row": {
               "id": "i1",
               "text": "first issue",
@@ -2609,7 +2670,18 @@ suite('NOT EXISTS', () => {
         },
         {
           "node": {
-            "relationships": {},
+            "relationships": {
+              "comments": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": "c1",
+                    "issueID": "i2",
+                    "text": "i2 c1 text",
+                  },
+                },
+              ],
+            },
             "row": {
               "id": "i2",
               "text": "second issue",

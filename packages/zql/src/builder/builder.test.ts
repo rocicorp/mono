@@ -1296,7 +1296,26 @@ test('exists junction', () => {
       },
       {
         "node": {
-          "relationships": {},
+          "relationships": {
+            "zsubq_userStates": [
+              {
+                "relationships": {
+                  "zsubq_states": [
+                    {
+                      "relationships": {},
+                      "row": {
+                        "code": "HI",
+                      },
+                    },
+                  ],
+                },
+                "row": {
+                  "stateCode": "HI",
+                  "userID": 2,
+                },
+              },
+            ],
+          },
           "row": {
             "id": 2,
             "name": "erik",
