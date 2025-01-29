@@ -120,6 +120,7 @@ export default async function runWorker(
       cvrDB,
       new PipelineDriver(
         logger,
+        config.log,
         new Snapshotter(logger, replicaFile),
         operatorStorage.createClientGroupStorage(id),
         id,

@@ -12,6 +12,8 @@ import {newQuery, type QueryDelegate, QueryImpl} from './query-impl.ts';
 import type {AdvancedQuery} from './query-internal.ts';
 import {QueryDelegateImpl} from './test/query-delegate.ts';
 import {schema} from './test/test-schemas.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {LogConfig} from '../../../otel/src/log-options.ts';
 
 /**
  * Some basic manual tests to get us started.
@@ -27,6 +29,14 @@ import {schema} from './test/test-schemas.ts';
  * and the generative testing will cover more than we can possibly
  * write by hand.
  */
+
+const lc = createSilentLogContext();
+const logConfig: LogConfig = {
+  format: 'text',
+  level: 'debug',
+  ivmSampling: 0,
+  slowRowThreshold: 0,
+};
 
 function addData(queryDelegate: QueryDelegate) {
   const userSource = must(queryDelegate.getSource('user'));
@@ -1013,8 +1023,20 @@ test('join with compound keys', () => {
   });
 
   const sources = {
-    a: createSource('a', schema.tables.a.columns, schema.tables.a.primaryKey),
-    b: createSource('b', schema.tables.b.columns, schema.tables.b.primaryKey),
+    a: createSource(
+      lc,
+      logConfig,
+      'a',
+      schema.tables.a.columns,
+      schema.tables.a.primaryKey,
+    ),
+    b: createSource(
+      lc,
+      logConfig,
+      'b',
+      schema.tables.b.columns,
+      schema.tables.b.primaryKey,
+    ),
   };
 
   const queryDelegate = new QueryDelegateImpl(sources);

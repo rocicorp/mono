@@ -9,9 +9,21 @@ import {
   buildPipeline,
   groupSubqueryConditions,
 } from './builder.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {LogConfig} from '../../../otel/src/log-options.ts';
+
+const lc = createSilentLogContext();
+const logConfig: LogConfig = {
+  format: 'text',
+  level: 'debug',
+  ivmSampling: 0,
+  slowRowThreshold: 0,
+};
 
 export function testSources() {
   const users = createSource(
+    lc,
+    logConfig,
     'table',
     {
       id: {type: 'number'},
@@ -28,7 +40,13 @@ export function testSources() {
   users.push({type: 'add', row: {id: 6, name: 'darick', recruiterID: 3}});
   users.push({type: 'add', row: {id: 7, name: 'alex', recruiterID: 1}});
 
-  const states = createSource('table', {code: {type: 'string'}}, ['code']);
+  const states = createSource(
+    lc,
+    logConfig,
+    'table',
+    {code: {type: 'string'}},
+    ['code'],
+  );
   states.push({type: 'add', row: {code: 'CA'}});
   states.push({type: 'add', row: {code: 'HI'}});
   states.push({type: 'add', row: {code: 'AZ'}});
@@ -36,6 +54,8 @@ export function testSources() {
   states.push({type: 'add', row: {code: 'GA'}});
 
   const userStates = createSource(
+    lc,
+    logConfig,
     'table',
     {userID: {type: 'number'}, stateCode: {type: 'string'}},
     ['userID', 'stateCode'],

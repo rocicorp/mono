@@ -10,8 +10,18 @@ import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import type {Rule} from '../../../zero-schema/src/compiled-permissions.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {WriteAuthorizerImpl} from './write-authorizer.ts';
+import type {LogConfig, ZeroConfig} from '../config/zero-config.ts';
 
 const lc = createSilentLogContext();
+const logConfig: LogConfig = {
+  format: 'text',
+  level: 'debug',
+  ivmSampling: 0,
+  slowRowThreshold: 0,
+};
+const zeroConfig = {
+  log: logConfig,
+} as unknown as ZeroConfig;
 
 const allowIfSubject = [
   'allow',
@@ -64,7 +74,7 @@ describe('normalize ops', () => {
   test('upsert converted to update if row exists', () => {
     const authorizer = new WriteAuthorizerImpl(
       lc,
-      {},
+      zeroConfig,
       schema,
       {},
       replica,
@@ -90,7 +100,7 @@ describe('normalize ops', () => {
   test('upsert converted to insert if row does not exist', () => {
     const authorizer = new WriteAuthorizerImpl(
       lc,
-      {},
+      zeroConfig,
       schema,
       {},
       replica,
@@ -119,7 +129,7 @@ describe('pre & post mutation', () => {
   test('delete is run pre-mutation', () => {
     const authorizer = new WriteAuthorizerImpl(
       lc,
-      {},
+      zeroConfig,
       schema,
       {
         foo: {
@@ -151,7 +161,7 @@ describe('pre & post mutation', () => {
   test('insert is run post-mutation', () => {
     const authorizer = new WriteAuthorizerImpl(
       lc,
-      {},
+      zeroConfig,
       schema,
       {
         foo: {
@@ -183,7 +193,7 @@ describe('pre & post mutation', () => {
   test('update is run pre-mutation when specified', () => {
     const authorizer = new WriteAuthorizerImpl(
       lc,
-      {},
+      zeroConfig,
       schema,
       {
         foo: {
@@ -217,7 +227,7 @@ describe('pre & post mutation', () => {
   test('update is run post-mutation when specified', () => {
     const authorizer = new WriteAuthorizerImpl(
       lc,
-      {},
+      zeroConfig,
       schema,
       {
         foo: {

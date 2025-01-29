@@ -13,6 +13,16 @@ import {Snitch, type SnitchMessage} from './snitch.ts';
 import type {Stream} from './stream.ts';
 import {Take, type PartitionKey} from './take.ts';
 import {createSource} from './test/source-factory.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {LogConfig} from '../../../otel/src/log-options.ts';
+
+const lc = createSilentLogContext();
+const logConfig: LogConfig = {
+  format: 'text',
+  level: 'debug',
+  ivmSampling: 0,
+  slowRowThreshold: 0,
+};
 
 suite('take with no partition', () => {
   const base = {
@@ -427,7 +437,7 @@ test('exception during hydrate', () => {
   const columns = {id: {type: 'string'}, created: {type: 'number'}} as const;
   const primaryKey = ['id'] as const;
   const log: SnitchMessage[] = [];
-  const source = createSource('table', columns, primaryKey);
+  const source = createSource(lc, logConfig, 'table', columns, primaryKey);
   const snitch = new ThrowingSnitch(
     source.connect([['id', 'asc']]),
     'takeSnitch',
@@ -444,7 +454,7 @@ test('early return during hydrate', () => {
   const columns = {id: {type: 'string'}, created: {type: 'number'}} as const;
   const primaryKey = ['id'] as const;
   const log: SnitchMessage[] = [];
-  const source = createSource('table', columns, primaryKey);
+  const source = createSource(lc, logConfig, 'table', columns, primaryKey);
   const sourceRows = [
     {id: 'i1', created: 100},
     {id: 'i2', created: 200},
@@ -1755,7 +1765,7 @@ suite('take with partition', () => {
 
 function takeTest(t: TakeTest): TakeTestResults {
   const log: SnitchMessage[] = [];
-  const source = createSource('table', t.columns, t.primaryKey);
+  const source = createSource(lc, logConfig, 'table', t.columns, t.primaryKey);
   for (const row of t.sourceRows) {
     source.push({type: 'add', row});
   }

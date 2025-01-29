@@ -42,6 +42,17 @@ import {Database} from '../../../zqlite/src/db.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import {transformQuery} from './read-authorizer.ts';
 import {WriteAuthorizerImpl} from './write-authorizer.ts';
+import type {LogConfig, ZeroConfig} from '../config/zero-config.ts';
+
+const logConfig: LogConfig = {
+  format: 'text',
+  level: 'debug',
+  ivmSampling: 0,
+  slowRowThreshold: 0,
+};
+const zeroConfig = {
+  log: logConfig,
+} as unknown as ZeroConfig;
 
 const user = table('user')
   .columns({
@@ -488,6 +499,8 @@ beforeEach(() => {
       )`);
 
       source = new TableSource(
+        lc,
+        logConfig,
         'read-auth-test',
         replica,
         name,
@@ -520,7 +533,7 @@ beforeEach(() => {
 
   writeAuthorizer = new WriteAuthorizerImpl(
     lc,
-    {},
+    zeroConfig,
     schema,
     permissions,
     replica,

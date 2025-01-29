@@ -25,16 +25,20 @@ export const rollbackSchema = v.object({
 });
 
 export const relationSchema = v.object({
-  tag: v.literal('relation'),
   schema: v.string(),
   name: v.string(),
-  replicaIdentity: v.union(
-    v.literal('default'),
-    v.literal('nothing'),
-    v.literal('full'),
-    v.literal('index'),
-  ),
   keyColumns: v.array(v.string()),
+
+  // Deprecated tags will be removed in a later release.
+  tag: v.literal('relation').optional(),
+  replicaIdentity: v
+    .union(
+      v.literal('default'),
+      v.literal('nothing'),
+      v.literal('full'),
+      v.literal('index'),
+    )
+    .optional(),
 });
 
 export const rowSchema = v.record(jsonValueSchema);

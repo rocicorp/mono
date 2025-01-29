@@ -10,11 +10,25 @@ import type {Input} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {Take} from './take.ts';
 import {createSource} from './test/source-factory.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {LogConfig} from '../../../otel/src/log-options.ts';
+
+const lc = createSilentLogContext();
+const logConfig: LogConfig = {
+  format: 'text',
+  level: 'debug',
+  ivmSampling: 0,
+  slowRowThreshold: 0,
+};
 
 test('basics', () => {
-  const ms = createSource('table', {a: {type: 'number'}, b: {type: 'string'}}, [
-    'a',
-  ]);
+  const ms = createSource(
+    lc,
+    logConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
   ms.push({row: {a: 2, b: 'b'}, type: 'add'});
 
@@ -74,9 +88,13 @@ test('basics', () => {
 });
 
 test('single-format', () => {
-  const ms = createSource('table', {a: {type: 'number'}, b: {type: 'string'}}, [
-    'a',
-  ]);
+  const ms = createSource(
+    lc,
+    logConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
 
   const view = new ArrayView(
@@ -117,9 +135,13 @@ test('single-format', () => {
 });
 
 test('hydrate-empty', () => {
-  const ms = createSource('table', {a: {type: 'number'}, b: {type: 'string'}}, [
-    'a',
-  ]);
+  const ms = createSource(
+    lc,
+    logConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
 
   const view = new ArrayView(
     ms.connect([
@@ -142,6 +164,8 @@ test('hydrate-empty', () => {
 
 test('tree', () => {
   const ms = createSource(
+    lc,
+    logConfig,
     'table',
     {id: {type: 'number'}, name: {type: 'string'}, childID: {type: 'number'}},
     ['id'],
@@ -414,6 +438,8 @@ test('tree', () => {
 
 test('tree-single', () => {
   const ms = createSource(
+    lc,
+    logConfig,
     'table',
     {id: {type: 'number'}, name: {type: 'string'}, childID: {type: 'number'}},
     ['id'],
@@ -908,9 +934,13 @@ test('collapse-single', () => {
 });
 
 test('basic with edit pushes', () => {
-  const ms = createSource('table', {a: {type: 'number'}, b: {type: 'string'}}, [
-    'a',
-  ]);
+  const ms = createSource(
+    lc,
+    logConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
   ms.push({row: {a: 2, b: 'b'}, type: 'add'});
 
@@ -957,6 +987,8 @@ test('basic with edit pushes', () => {
 
 test('tree edit', () => {
   const ms = createSource(
+    lc,
+    logConfig,
     'table',
     {
       id: {type: 'number'},
@@ -1101,9 +1133,13 @@ test('tree edit', () => {
 });
 
 test('edit to change the order', () => {
-  const ms = createSource('table', {a: {type: 'number'}, b: {type: 'string'}}, [
-    'a',
-  ]);
+  const ms = createSource(
+    lc,
+    logConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
   for (const row of [
     {a: 10, b: 'a'},
     {a: 20, b: 'b'},

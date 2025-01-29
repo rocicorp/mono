@@ -25,6 +25,17 @@ import {testDBs} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {zeroSchema} from './mutagen-test-shared.ts';
 import {processMutation} from './mutagen.ts';
+import type {LogConfig, ZeroConfig} from '../../config/zero-config.ts';
+
+const logConfig: LogConfig = {
+  format: 'text',
+  level: 'debug',
+  ivmSampling: 0,
+  slowRowThreshold: 0,
+};
+const zeroConfig = {
+  log: logConfig,
+} as unknown as ZeroConfig;
 
 const SHARD_ID = '0';
 const CG_ID = 'abc';
@@ -294,7 +305,7 @@ beforeEach(async () => {
   createReplicaTables(replica);
   authorizer = new WriteAuthorizerImpl(
     lc,
-    {},
+    zeroConfig,
     schema,
     permissionsConfig,
     replica,

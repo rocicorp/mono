@@ -7,8 +7,18 @@ import {newQuery, type QueryDelegate} from '../../zql/src/query/query-impl.ts';
 import {schema} from '../../zql/src/query/test/test-schemas.ts';
 import {Database} from './db.ts';
 import {TableSource, toSQLiteTypeName} from './table-source.ts';
+import type {LogConfig} from '../../otel/src/log-options.ts';
 
 let queryDelegate: QueryDelegate;
+
+const lc = createSilentLogContext();
+const logConfig: LogConfig = {
+  format: 'text',
+  level: 'debug',
+  ivmSampling: 0,
+  slowRowThreshold: 0,
+};
+
 beforeEach(() => {
   const db = new Database(createSilentLogContext(), ':memory:');
   const sources = new Map<string, Source>();
@@ -31,6 +41,8 @@ beforeEach(() => {
       )`);
 
       source = new TableSource(
+        lc,
+        logConfig,
         'query.test.ts',
         db,
         name,

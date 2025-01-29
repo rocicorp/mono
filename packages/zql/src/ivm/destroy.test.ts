@@ -5,11 +5,25 @@ import {FanOut} from './fan-out.ts';
 import {Filter} from './filter.ts';
 import {Snitch} from './snitch.ts';
 import {createSource} from './test/source-factory.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {LogConfig} from '../../../otel/src/log-options.ts';
+
+const lc = createSilentLogContext();
+const logConfig: LogConfig = {
+  format: 'text',
+  level: 'debug',
+  ivmSampling: 0,
+  slowRowThreshold: 0,
+};
 
 test('destroy source connections', () => {
-  const ms = createSource('table', {a: {type: 'string'}, b: {type: 'string'}}, [
-    'a',
-  ]);
+  const ms = createSource(
+    lc,
+    logConfig,
+    'table',
+    {a: {type: 'string'}, b: {type: 'string'}},
+    ['a'],
+  );
   const connection1 = ms.connect([['a', 'asc']]);
   const connection2 = ms.connect([['a', 'asc']]);
 
@@ -56,9 +70,13 @@ test('destroy source connections', () => {
 });
 
 test('destroy a pipeline that has forking', () => {
-  const ms = createSource('table', {a: {type: 'number'}, b: {type: 'string'}}, [
-    'a',
-  ]);
+  const ms = createSource(
+    lc,
+    logConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
   const connector = ms.connect([['a', 'asc']]);
   const fanOut = new FanOut(connector);
   const filter1 = new Filter(fanOut, () => true);
