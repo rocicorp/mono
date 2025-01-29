@@ -129,7 +129,7 @@ export default $config({
           },
           {
             listen: "443/https",
-            forward: "4848/https",
+            forward: "4848/http",
           },
         ],
       },
