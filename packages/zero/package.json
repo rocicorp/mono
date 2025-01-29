@@ -45,6 +45,7 @@
     "js-xxhash": "^4.0.0",
     "json-custom-numbers": "^3.1.1",
     "kasi": "^1.1.0",
+    "magic-stopwatch": "^1.0.1",
     "nanoid": "^5.0.8",
     "pg": "^8.11.3",
     "pg-format": "npm:pg-format-fix@^1.0.5",
