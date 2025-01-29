@@ -1,0 +1,74 @@
+name: Build and Deploy Sandbox Zero-Cache AWS SST
+
+on:
+  push:
+    branches: [cesara/sst]
+    # paths:
+    #   - 'packages/zero-cache/**'
+env:
+  # Setting an environment variable with the value of a configuration variable
+  ECR_IMAGE_ZERO_CACHE: zero-zbugs-sandbox
+  AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_DEFAULT_REGION }}
+
+      - name: Set up QEMU for amd64
+        run: |
+          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+        if: runner.os == 'Linux'
+
+      - name: Set up Docker for amd64
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: linux/amd64
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+
+      - name: Build and push Docker image
+        run: |
+          docker buildx create --use
+          docker buildx inspect --bootstrap
+          docker buildx build --platform linux/amd64 --build-arg NPM_TOKEN=${{ secrets.NPM_TOKEN }} -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE_ZERO_CACHE:latest -f ./prod/zbugs/Dockerfile --push .
+
+      - name: Install dependencies
+        run: |
+          cd prod/sst
+          npm ci
+
+      - name: Deploy SST app
+        env:
+          ZERO_UPSTREAM_DB: ${{ secrets.SANDBOX_ZERO_UPSTREAM_DB }}
+          ZERO_CVR_DB: ${{ secrets.SANDBOX_ZERO_CVR_DB }}
+          ZERO_CHANGE_DB: ${{ secrets.SANDBOX_ZERO_CHANGE_DB }}
+          ZERO_AUTH_SECRET: ${{ secrets.SANDBOX_ZERO_JWT_SECRET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ vars.AWS_DEFAULT_REGION }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          ECR_IMAGE_ZERO_CACHE: zero-zbugs-sandbox
+        run: |
+          cd prod/sst
+          npx sst deploy --stage sandbox

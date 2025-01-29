@@ -8,40 +8,35 @@ export default $config({
       name: "zero",
       removal: input?.stage === "production" ? "retain" : "remove",
       home: "aws",
-      providers: {
-        aws: { region: "us-east-1" }
-      }
+      region: process.env.AWS_REGION || "us-east-1",
     };
   },
   async run() {
     // Load .env file
     require("dotenv").config();
 
-    // Config parameters
-    
     const loadSchemaJson = () => {
-      // Try environment variable first
       if (process.env.ZERO_SCHEMA_JSON) {
         return process.env.ZERO_SCHEMA_JSON;
       }
-      
-      // Fall back to file
+
       try {
-        return readFileSync("zero-schema.json", 'utf8');
+        return readFileSync("zero-schema.json", "utf8");
       } catch (error) {
         const e = error as Error;
         console.error(`Failed to read schema file: ${e.message}`);
-        throw new Error('Schema must be provided via ZERO_SCHEMA_JSON env var or zero-schema.json file');
+        throw new Error(
+          "Schema must be provided via ZERO_SCHEMA_JSON env var or zero-schema.json file",
+        );
       }
     };
 
     const schemaJson = loadSchemaJson();
 
     // S3 Bucket
-    const replicationBucket = new sst.aws.Bucket(
-      `replication-bucket`,
-      { public: false }
-    );
+    const replicationBucket = new sst.aws.Bucket(`replication-bucket`, {
+      public: false,
+    });
 
     // VPC Configuration
     const vpc = new sst.aws.Vpc(`vpc`, {
@@ -68,45 +63,41 @@ export default $config({
       ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup`,
     };
 
-
     // Replication Manager Service
-    const replicationManager = cluster.addService(
-      `replication-manager`,
-      {
-        cpu: "2 vCPU",
-        memory: "8 GB",
-        image: "rocicorp/zero:canary",
-        health: {
-          command: ["CMD-SHELL", "curl -f http://localhost:4849/ || exit 1"],
-          interval: "5 seconds",
-          retries: 3,
-          startPeriod: "300 seconds",
-        },
-        environment: {
-          ...commonEnv,
-          ZERO_CHANGE_MAX_CONNS: "3",
-          ZERO_NUM_SYNC_WORKERS: "0",
-        },
-        logging: {
-          retention: "1 month",
-        },
-        loadBalancer: {
-          public: false,
-          ports: [
-            {
-              listen: "80/http",
-              forward: "4849/http",
-            },
-          ],
-        },
-      }
-    );
+    const replicationManager = cluster.addService(`replication-manager`, {
+      cpu: "2 vCPU",
+      memory: "8 GB",
+      image: `${process.env.AWS_ACCOUNT_ID}.dkr.ecr.${process.env.AWS_REGION}.amazonaws.com/${process.env.ECR_IMAGE_ZERO_CACHE}:latest`,
+      health: {
+        command: ["CMD-SHELL", "curl -f http://localhost:4849/ || exit 1"],
+        interval: "5 seconds",
+        retries: 3,
+        startPeriod: "300 seconds",
+      },
+      environment: {
+        ...commonEnv,
+        ZERO_CHANGE_MAX_CONNS: "3",
+        ZERO_NUM_SYNC_WORKERS: "0",
+      },
+      logging: {
+        retention: "1 month",
+      },
+      loadBalancer: {
+        public: false,
+        ports: [
+          {
+            listen: "80/http",
+            forward: "4849/http",
+          },
+        ],
+      },
+    });
 
     // View Syncer Service
     cluster.addService(`view-syncer`, {
       cpu: "2 vCPU",
       memory: "8 GB",
-      image: "rocicorp/zero:canary",
+      image: `${process.env.AWS_ACCOUNT_ID}.dkr.ecr.${process.env.AWS_REGION}.amazonaws.com/${process.env.ECR_IMAGE_ZERO_CACHE}:latest`,
       health: {
         command: ["CMD-SHELL", "curl -f http://localhost:4848/ || exit 1"],
         interval: "5 seconds",
