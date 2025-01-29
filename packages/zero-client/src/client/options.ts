@@ -5,7 +5,7 @@ import type {Schema} from '../../../zero-schema/src/mod.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 
 /**
- * Configuration for [[Zero]].
+ * Configuration for {@linkcode Zero}.
  */
 export interface ZeroOptions<
   S extends Schema,

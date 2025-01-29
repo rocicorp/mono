@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {pid} from 'process';
+import {pid} from 'node:process';
 import type {EventEmitter} from 'stream';
 import {
   singleProcessMode,
