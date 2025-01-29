@@ -53,7 +53,7 @@ export default $config({
           settings: [
             {
               name: "containerInsights",
-              value: "enabled",
+              value: "enhanced",
             },
           ],
         },
@@ -144,6 +144,7 @@ export default $config({
         ],
       },
       transform: {
+        
         target: {
           healthCheck: {
             enabled: true,
