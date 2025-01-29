@@ -119,6 +119,7 @@ test('parse options', () => {
         "upstream": {
           "db": "foo",
           "maxConns": 20,
+          "type": "pg",
         },
       },
       "env": {
@@ -138,6 +139,7 @@ test('parse options', () => {
         "ZERO_TENANTS_JSON": "{"tenants":[{"id":"ten-boo","host":"Normalize.ME","path":"tenboo","env":{"ZERO_REPLICA_FILE":"tenboo.db","ZERO_CVR_DB":"foo","ZERO_CHANGE_DB":"foo","ZERO_SHARD_ID":"foo"}},{"id":"ten_bar","path":"/tenbar","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_CVR_DB":"bar","ZERO_CHANGE_DB":"bar","ZERO_SHARD_ID":"bar"}},{"id":"tenbaz-123","path":"/tenbaz","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_UPSTREAM_DB":"overridden","ZERO_CVR_DB":"baz","ZERO_CHANGE_DB":"baz","ZERO_SHARD_ID":"foo"}}]}",
         "ZERO_UPSTREAM_DB": "foo",
         "ZERO_UPSTREAM_MAX_CONNS": "20",
+        "ZERO_UPSTREAM_TYPE": "pg",
       },
     }
   `);
