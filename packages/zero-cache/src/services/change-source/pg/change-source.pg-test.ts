@@ -28,7 +28,7 @@ import type {
   ChangeStreamMessage,
   Commit,
 } from '../protocol/current/downstream.ts';
-import {initializePostgresChangeSource} from './change-source.ts';
+import {initializeChangeSource} from './change-source.ts';
 import {replicationSlot} from './initial-sync.ts';
 import {fromLexiVersion} from './lsn.ts';
 import {dropEventTriggerStatements} from './schema/ddl-test-utils.ts';
@@ -76,7 +76,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
     `);
 
     source = (
-      await initializePostgresChangeSource(
+      await initializeChangeSource(
         lc,
         upstreamURI,
         {id: SHARD_ID, publications: ['zero_foo', 'zero_zero']},
@@ -690,7 +690,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
   test('error on wrong publications', async () => {
     let err;
     try {
-      await initializePostgresChangeSource(
+      await initializeChangeSource(
         lc,
         upstreamURI,
         {id: SHARD_ID, publications: ['zero_different_publication']},

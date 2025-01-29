@@ -61,7 +61,7 @@ export function stream<In extends JSONValue, Out extends JSONValue>(
       if (err) {
         closeWithError(lc, ws, err);
       } else {
-        lc.info?.(`closing connection to ${endpoint}`);
+        lc.info?.(`closing conneciton to ${endpoint}`);
         ws.close();
       }
     }
@@ -136,10 +136,7 @@ export function stream<In extends JSONValue, Out extends JSONValue>(
         );
       },
       destroy: (err, callback) => {
-        if (err) {
-          instream.fail(ensureError(err));
-        }
-        // Otherwise, final will handle the cancel.
+        instream.fail(ensureError(err));
         callback();
       },
       final: callback => {

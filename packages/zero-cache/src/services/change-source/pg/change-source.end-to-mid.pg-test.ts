@@ -14,7 +14,7 @@ import type {ChangeProcessor} from '../../replicator/change-processor.ts';
 import {createChangeProcessor} from '../../replicator/test-utils.ts';
 import type {DataChange} from '../protocol/current/data.ts';
 import type {ChangeStreamMessage} from '../protocol/current/downstream.ts';
-import {initializePostgresChangeSource} from './change-source.ts';
+import {initializeChangeSource} from './change-source.ts';
 
 const SHARD_ID = 'change_source_end_to_mid_test_id';
 
@@ -70,7 +70,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     `);
 
     const source = (
-      await initializePostgresChangeSource(
+      await initializeChangeSource(
         lc,
         upstreamURI,
         {id: SHARD_ID, publications: ['zero_some_public', 'zero_all_test']},
