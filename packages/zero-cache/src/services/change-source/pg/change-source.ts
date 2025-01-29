@@ -479,9 +479,15 @@ class ChangeMaker {
           ['begin', msg, {commitWatermark: toLexiVersion(must(msg.commitLsn))}],
         ];
 
-      case 'delete':
-        assert(msg.key);
-        return [['data', msg as MessageDelete]];
+      case 'delete': {
+        const key = msg.key ?? msg.old;
+        if (!key) {
+          throw new Error(
+            `Invalid DELETE msg (missing key): ${stringify(msg)}`,
+          );
+        }
+        return [['data', msg.key ? (msg as MessageDelete) : {...msg, key}]];
+      }
 
       case 'insert':
       case 'update':
