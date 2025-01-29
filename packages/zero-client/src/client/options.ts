@@ -9,7 +9,7 @@ import type {CustomMutatorDefs} from './custom.ts';
  */
 export interface ZeroOptions<
   S extends Schema,
-  MD extends CustomMutatorDefs<S> = Record<string, never>,
+  MD extends CustomMutatorDefs<S> | undefined = undefined,
 > {
   /**
    * URL to the zero-cache. This can be a simple hostname, e.g.
@@ -77,7 +77,7 @@ export interface ZeroOptions<
    */
   schema: S;
 
-  mutators?: MD | undefined;
+  mutators?: MD;
 
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes.
@@ -152,7 +152,7 @@ export interface ZeroOptions<
 
 export interface ZeroAdvancedOptions<
   S extends Schema,
-  MD extends CustomMutatorDefs<S> = Record<string, never>,
+  MD extends CustomMutatorDefs<S> | undefined = undefined,
 > extends ZeroOptions<S, MD> {
   /**
    * UI rendering libraries will often provide a utility for batching multiple

@@ -307,7 +307,7 @@ function defaultOptionalFieldsToNull(
   return rv;
 }
 
-async function insertImpl(
+export async function insertImpl(
   tx: WriteTransaction,
   arg: InsertOp,
   schema: Schema,
@@ -326,7 +326,7 @@ async function insertImpl(
   }
 }
 
-async function upsertImpl(
+export async function upsertImpl(
   tx: WriteTransaction,
   arg: InsertOp | UpsertOp,
   schema: Schema,
@@ -343,7 +343,7 @@ async function upsertImpl(
   await tx.set(key, val);
 }
 
-async function updateImpl(
+export async function updateImpl(
   tx: WriteTransaction,
   arg: UpdateOp,
   schema: Schema,
@@ -367,7 +367,7 @@ async function updateImpl(
   await tx.set(key, next);
 }
 
-async function deleteImpl(
+export async function deleteImpl(
   tx: WriteTransaction,
   arg: DeleteOp,
   schema: Schema,

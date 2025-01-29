@@ -1409,13 +1409,13 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   #register<Return extends ReadonlyJSONValue | void, Args extends JSONValue>(
     name: string,
     mutatorImpl: (tx: WriteTransaction, args?: Args) => MaybePromise<Return>,
-  ): (args?: Args) => Promise<Return> {
+  ): (...args: Args[]) => Promise<Return> {
     this.#mutatorRegistry[name] = mutatorImpl as (
       tx: WriteTransaction,
       args: JSONValue | undefined,
     ) => Promise<void | JSONValue>;
 
-    return (args?: Args): Promise<Return> =>
+    return (...args: Args[]): Promise<Return> =>
       this.#mutate(name, mutatorImpl, args, performance.now());
   }
 
@@ -1441,7 +1441,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   >(
     name: string,
     mutatorImpl: (tx: WriteTransaction, args?: A) => MaybePromise<R>,
-    args: A | undefined,
+    args: A[] | undefined,
     timestamp: number,
   ): Promise<R> {
     const frozenArgs = deepFreeze(args ?? null);
@@ -1477,7 +1477,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           dbWrite,
           this.#lc,
         );
-        const result: R = await mutatorImpl(tx, args);
+        const result: R = await mutatorImpl(tx, ...(args ?? []));
         throwIfClosed(dbWrite);
         const lastMutationID = await dbWrite.getMutationID();
         const diffs = await dbWrite.commitWithDiffs(
