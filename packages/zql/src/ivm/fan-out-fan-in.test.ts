@@ -33,31 +33,111 @@ test('fan-out pushes along all paths', () => {
   s.push({type: 'edit', oldRow: {a: 1, b: 'foo'}, row: {a: 1, b: 'bar'}});
   s.push({type: 'remove', row: {a: 1, b: 'bar'}});
 
-  const expected = [
-    {
-      type: 'add',
-      node: {
-        row: {a: 1, b: 'foo'},
-        relationships: {},
+  expect(catch1.pushes).toMatchInlineSnapshot(`
+    [
+      {
+        "node": {
+          "relationships": {},
+          "row": {
+            "a": 1,
+            "b": "foo",
+          },
+        },
+        "type": "add",
       },
-    },
-    {
-      type: 'edit',
-      oldRow: {a: 1, b: 'foo'},
-      row: {a: 1, b: 'bar'},
-    },
-    {
-      type: 'remove',
-      node: {
-        row: {a: 1, b: 'bar'},
-        relationships: {},
+      {
+        "oldRow": {
+          "a": 1,
+          "b": "foo",
+        },
+        "row": {
+          "a": 1,
+          "b": "bar",
+        },
+        "type": "edit",
       },
-    },
-  ];
-
-  expect(catch1.pushes).toEqual(expected);
-  expect(catch2.pushes).toEqual(expected);
-  expect(catch3.pushes).toEqual(expected);
+      {
+        "node": {
+          "relationships": {},
+          "row": {
+            "a": 1,
+            "b": "bar",
+          },
+        },
+        "type": "remove",
+      },
+    ]
+  `);
+  expect(catch2.pushes).toMatchInlineSnapshot(`
+    [
+      {
+        "node": {
+          "relationships": {},
+          "row": {
+            "a": 1,
+            "b": "foo",
+          },
+        },
+        "type": "add",
+      },
+      {
+        "oldRow": {
+          "a": 1,
+          "b": "foo",
+        },
+        "row": {
+          "a": 1,
+          "b": "bar",
+        },
+        "type": "edit",
+      },
+      {
+        "node": {
+          "relationships": {},
+          "row": {
+            "a": 1,
+            "b": "bar",
+          },
+        },
+        "type": "remove",
+      },
+    ]
+  `);
+  expect(catch3.pushes).toMatchInlineSnapshot(`
+    [
+      {
+        "node": {
+          "relationships": {},
+          "row": {
+            "a": 1,
+            "b": "foo",
+          },
+        },
+        "type": "add",
+      },
+      {
+        "oldRow": {
+          "a": 1,
+          "b": "foo",
+        },
+        "row": {
+          "a": 1,
+          "b": "bar",
+        },
+        "type": "edit",
+      },
+      {
+        "node": {
+          "relationships": {},
+          "row": {
+            "a": 1,
+            "b": "bar",
+          },
+        },
+        "type": "remove",
+      },
+    ]
+  `);
 });
 
 test('fan-out,fan-in pairing does not duplicate pushes', () => {
@@ -81,38 +161,40 @@ test('fan-out,fan-in pairing does not duplicate pushes', () => {
   s.push({type: 'add', row: {a: 2, b: 'foo'}});
   s.push({type: 'add', row: {a: 3, b: 'foo'}});
 
-  expect(out.pushes).toEqual([
-    {
-      node: {
-        relationships: {},
-        row: {
-          a: 1,
-          b: 'foo',
+  expect(out.pushes).toMatchInlineSnapshot(`
+    [
+      {
+        "node": {
+          "relationships": {},
+          "row": {
+            "a": 1,
+            "b": "foo",
+          },
         },
+        "type": "add",
       },
-      type: 'add',
-    },
-    {
-      node: {
-        relationships: {},
-        row: {
-          a: 2,
-          b: 'foo',
+      {
+        "node": {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo",
+          },
         },
+        "type": "add",
       },
-      type: 'add',
-    },
-    {
-      node: {
-        relationships: {},
-        row: {
-          a: 3,
-          b: 'foo',
+      {
+        "node": {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "foo",
+          },
         },
+        "type": "add",
       },
-      type: 'add',
-    },
-  ]);
+    ]
+  `);
 });
 
 test('fan-in fetch', () => {
@@ -143,29 +225,31 @@ test('fan-in fetch', () => {
   const fanIn = new FanIn(fanOut, [filter1, filter2, filter3, filter4]);
   const out = new Catch(fanIn);
   const result = out.fetch();
-  expect(result).toEqual([
-    {
-      relationships: {},
-      row: {
-        a: false,
-        b: true,
+  expect(result).toMatchInlineSnapshot(`
+    [
+      {
+        "relationships": {},
+        "row": {
+          "a": false,
+          "b": true,
+        },
       },
-    },
-    {
-      relationships: {},
-      row: {
-        a: true,
-        b: false,
+      {
+        "relationships": {},
+        "row": {
+          "a": true,
+          "b": false,
+        },
       },
-    },
-    {
-      relationships: {},
-      row: {
-        a: true,
-        b: true,
+      {
+        "relationships": {},
+        "row": {
+          "a": true,
+          "b": true,
+        },
       },
-    },
-  ]);
+    ]
+  `);
 });
 
 test('cleanup called once per branch', () => {

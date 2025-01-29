@@ -260,13 +260,23 @@ export class Join implements Input {
   ): Node {
     let method: ProcessParentMode = mode;
     if (mode === 'cleanup') {
-      const [, second] = take(
-        this.#storage.scan({
-          prefix: makeStorageKeyPrefix(parentNodeRow, this.#parentKey),
-        }),
-        2,
+      this.#storage.del(
+        makeStorageKey(
+          this.#parentKey,
+          this.#parent.getSchema().primaryKey,
+          parentNodeRow,
+        ),
       );
-      method = second ? 'fetch' : 'cleanup';
+      const empty =
+        [
+          ...take(
+            this.#storage.scan({
+              prefix: makeStorageKeyPrefix(parentNodeRow, this.#parentKey),
+            }),
+            1,
+          ),
+        ].length === 0;
+      method = empty ? 'cleanup' : 'fetch';
     }
 
     let storageUpdated = false;
@@ -275,16 +285,15 @@ export class Join implements Input {
         storageUpdated = true;
         // Defer the work to update storage until the child stream
         // is actually accessed
-        const storageKey = makeStorageKey(
-          this.#parentKey,
-          this.#parent.getSchema().primaryKey,
-          parentNodeRow,
-        );
         if (mode === 'fetch') {
-          this.#storage.set(storageKey, true);
-        } else {
-          mode satisfies 'cleanup';
-          this.#storage.del(storageKey);
+          this.#storage.set(
+            makeStorageKey(
+              this.#parentKey,
+              this.#parent.getSchema().primaryKey,
+              parentNodeRow,
+            ),
+            true,
+          );
         }
       }
       return this.#child[method]({

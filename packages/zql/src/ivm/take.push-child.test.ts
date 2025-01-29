@@ -152,30 +152,30 @@ test('child change, parent is within bound', () => {
     `);
 
   expect(pushes).toMatchInlineSnapshot(`
-        [
-          {
-            "child": {
-              "change": {
-                "node": {
-                  "relationships": {},
-                  "row": {
-                    "id": "c3",
-                    "issueID": "i2",
-                    "text": "i2 c3 text",
-                  },
-                },
-                "type": "add",
+    [
+      {
+        "child": {
+          "change": {
+            "node": {
+              "relationships": {},
+              "row": {
+                "id": "c3",
+                "issueID": "i2",
+                "text": "i2 c3 text",
               },
-              "relationshipName": "comments",
             },
-            "row": {
-              "id": "i2",
-              "text": "second issue",
-            },
-            "type": "child",
+            "type": "add",
           },
-        ]
-    `);
+          "relationshipName": "comments",
+        },
+        "row": {
+          "id": "i2",
+          "text": "second issue",
+        },
+        "type": "child",
+      },
+    ]
+  `);
 
   expect(actualStorage['take']).toMatchInlineSnapshot(`
         {

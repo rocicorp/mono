@@ -2557,26 +2557,86 @@ test('json is a valid type to read and write to/from a source', () => {
     row: {a: 4, j: {foo: 'bar'}},
   });
   source.push({type: 'remove', row: {a: 5, j: {baz: 'qux'}}});
-  expect(out.pushes).toEqual([
-    {
-      type: 'edit',
-      oldRow: {a: 4, j: {foo: 'foo'}},
-      row: {a: 4, j: {foo: 'bar'}},
-    },
-    {
-      type: 'remove',
-      node: {relationships: {}, row: {a: 5, j: {baz: 'qux'}}},
-    },
-  ]);
-  expect(out.fetch({})).toEqual(
-    asNodes([
-      {a: 1, j: {foo: 'bar'}},
-      {a: 2, j: {baz: 'qux'}},
-      {a: 3, j: {foo: 'foo'}},
-      {a: 4, j: {foo: 'bar'}},
-      {a: 6, j: {foo: 'bar'}},
-    ]),
-  );
+  expect(out.pushes).toMatchInlineSnapshot(`
+    [
+      {
+        "oldRow": {
+          "a": 4,
+          "j": {
+            "foo": "foo",
+          },
+        },
+        "row": {
+          "a": 4,
+          "j": {
+            "foo": "bar",
+          },
+        },
+        "type": "edit",
+      },
+      {
+        "node": {
+          "relationships": {},
+          "row": {
+            "a": 5,
+            "j": {
+              "baz": "qux",
+            },
+          },
+        },
+        "type": "remove",
+      },
+    ]
+  `);
+  expect(out.fetch({})).toMatchInlineSnapshot(`
+    [
+      {
+        "relationships": {},
+        "row": {
+          "a": 1,
+          "j": {
+            "foo": "bar",
+          },
+        },
+      },
+      {
+        "relationships": {},
+        "row": {
+          "a": 2,
+          "j": {
+            "baz": "qux",
+          },
+        },
+      },
+      {
+        "relationships": {},
+        "row": {
+          "a": 3,
+          "j": {
+            "foo": "foo",
+          },
+        },
+      },
+      {
+        "relationships": {},
+        "row": {
+          "a": 4,
+          "j": {
+            "foo": "bar",
+          },
+        },
+      },
+      {
+        "relationships": {},
+        "row": {
+          "a": 6,
+          "j": {
+            "foo": "bar",
+          },
+        },
+      },
+    ]
+  `);
 });
 
 test('IS and IS NOT comparisons against null', () => {
@@ -2609,15 +2669,17 @@ test('IS and IS NOT comparisons against null', () => {
       },
     }),
   );
-  expect(out.fetch({})).toEqual([
-    {
-      relationships: {},
-      row: {
-        a: 3,
-        s: null,
+  expect(out.fetch({})).toMatchInlineSnapshot(`
+    [
+      {
+        "relationships": {},
+        "row": {
+          "a": 3,
+          "s": null,
+        },
       },
-    },
-  ]);
+    ]
+  `);
 
   // nothing `=` null
   out = new Catch(
@@ -2668,22 +2730,24 @@ test('IS and IS NOT comparisons against null', () => {
       },
     }),
   );
-  expect(out.fetch({})).toEqual([
-    {
-      relationships: {},
-      row: {
-        a: 1,
-        s: 'foo',
+  expect(out.fetch({})).toMatchInlineSnapshot(`
+    [
+      {
+        "relationships": {},
+        "row": {
+          "a": 1,
+          "s": "foo",
+        },
       },
-    },
-    {
-      relationships: {},
-      row: {
-        a: 2,
-        s: 'bar',
+      {
+        "relationships": {},
+        "row": {
+          "a": 2,
+          "s": "bar",
+        },
       },
-    },
-  ]);
+    ]
+  `);
 });
 
 test('constant/literal expression', () => {

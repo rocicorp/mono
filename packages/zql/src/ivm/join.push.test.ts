@@ -71,15 +71,6 @@ suite('push one:many', () => {
           },
         ],
         [
-          "comment",
-          "cleanup",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
           "comments",
           "push",
           {
@@ -87,6 +78,15 @@ suite('push one:many', () => {
               "id": "i1",
             },
             "type": "remove",
+          },
+        ],
+        [
+          "comment",
+          "cleanup",
+          {
+            "constraint": {
+              "issueID": "i1",
+            },
           },
         ],
       ]
@@ -184,15 +184,6 @@ suite('push one:many', () => {
           },
         ],
         [
-          "comment",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
           "comments",
           "push",
           {
@@ -200,6 +191,15 @@ suite('push one:many', () => {
               "id": "i1",
             },
             "type": "add",
+          },
+        ],
+        [
+          "comment",
+          "fetch",
+          {
+            "constraint": {
+              "issueID": "i1",
+            },
           },
         ],
       ]
@@ -277,15 +277,6 @@ suite('push one:many', () => {
           },
         ],
         [
-          "comment",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
           "comments",
           "push",
           {
@@ -293,6 +284,15 @@ suite('push one:many', () => {
               "id": "i1",
             },
             "type": "add",
+          },
+        ],
+        [
+          "comment",
+          "fetch",
+          {
+            "constraint": {
+              "issueID": "i1",
+            },
           },
         ],
       ]
@@ -378,15 +378,6 @@ suite('push one:many', () => {
           },
         ],
         [
-          "comment",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i2",
-            },
-          },
-        ],
-        [
           "comments",
           "push",
           {
@@ -394,6 +385,15 @@ suite('push one:many', () => {
               "id": "i2",
             },
             "type": "add",
+          },
+        ],
+        [
+          "comment",
+          "fetch",
+          {
+            "constraint": {
+              "issueID": "i2",
+            },
           },
         ],
       ]
@@ -607,15 +607,6 @@ suite('push one:many', () => {
           },
         ],
         [
-          "comment",
-          "cleanup",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
           "comments",
           "push",
           {
@@ -623,6 +614,15 @@ suite('push one:many', () => {
               "id": "i1",
             },
             "type": "remove",
+          },
+        ],
+        [
+          "comment",
+          "cleanup",
+          {
+            "constraint": {
+              "issueID": "i1",
+            },
           },
         ],
       ]
@@ -686,15 +686,6 @@ suite('push one:many', () => {
           },
         ],
         [
-          "comment",
-          "cleanup",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
           "comments",
           "push",
           {
@@ -702,6 +693,15 @@ suite('push one:many', () => {
               "id": "i1",
             },
             "type": "remove",
+          },
+        ],
+        [
+          "comment",
+          "cleanup",
+          {
+            "constraint": {
+              "issueID": "i1",
+            },
           },
         ],
       ]
@@ -775,15 +775,6 @@ suite('push one:many', () => {
           },
         ],
         [
-          "comment",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
           "comments",
           "push",
           {
@@ -791,6 +782,15 @@ suite('push one:many', () => {
               "id": "i1",
             },
             "type": "add",
+          },
+        ],
+        [
+          "comment",
+          "fetch",
+          {
+            "constraint": {
+              "issueID": "i1",
+            },
           },
         ],
         [
@@ -915,15 +915,6 @@ suite('push one:many', () => {
           },
         ],
         [
-          "comment",
-          "cleanup",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
           "comments",
           "push",
           {
@@ -931,6 +922,15 @@ suite('push one:many', () => {
               "id": "i1",
             },
             "type": "remove",
+          },
+        ],
+        [
+          "comment",
+          "cleanup",
+          {
+            "constraint": {
+              "issueID": "i1",
+            },
           },
         ],
       ]
@@ -1117,24 +1117,6 @@ suite('push one:many', () => {
             },
           ],
           [
-            "comment",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-          [
-            "comment",
-            "fetch",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-          [
             "comments",
             "push",
             {
@@ -1173,9 +1155,7 @@ suite('push one:many', () => {
       `);
       expect(actualStorage).toMatchInlineSnapshot(`
         {
-          "comments": {
-            ""pKeySet","i1","i1",": true,
-          },
+          "comments": {},
         }
       `);
       expect(pushes).toMatchInlineSnapshot(`
@@ -1561,6 +1541,17 @@ suite('push one:many', () => {
             },
           ],
           [
+            "comments",
+            "push",
+            {
+              "row": {
+                "id": "i1",
+                "text": "issue 1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
             "comment",
             "cleanup",
             {
@@ -1574,10 +1565,10 @@ suite('push one:many', () => {
             "push",
             {
               "row": {
-                "id": "i1",
-                "text": "issue 1",
+                "id": "i3",
+                "text": "issue 1.3",
               },
-              "type": "remove",
+              "type": "add",
             },
           ],
           [
@@ -1587,17 +1578,6 @@ suite('push one:many', () => {
               "constraint": {
                 "issueID": "i3",
               },
-            },
-          ],
-          [
-            "comments",
-            "push",
-            {
-              "row": {
-                "id": "i3",
-                "text": "issue 1.3",
-              },
-              "type": "add",
             },
           ],
         ]
@@ -1751,15 +1731,6 @@ suite('push many:one', () => {
           },
         ],
         [
-          "user",
-          "fetch",
-          {
-            "constraint": {
-              "id": "u1",
-            },
-          },
-        ],
-        [
           "comments",
           "push",
           {
@@ -1768,6 +1739,15 @@ suite('push many:one', () => {
               "ownerID": "u1",
             },
             "type": "add",
+          },
+        ],
+        [
+          "user",
+          "fetch",
+          {
+            "constraint": {
+              "id": "u1",
+            },
           },
         ],
       ]
@@ -1841,15 +1821,6 @@ suite('push many:one', () => {
           },
         ],
         [
-          "user",
-          "fetch",
-          {
-            "constraint": {
-              "id": "u2",
-            },
-          },
-        ],
-        [
           "comments",
           "push",
           {
@@ -1858,6 +1829,15 @@ suite('push many:one', () => {
               "ownerID": "u2",
             },
             "type": "add",
+          },
+        ],
+        [
+          "user",
+          "fetch",
+          {
+            "constraint": {
+              "id": "u2",
+            },
           },
         ],
       ]
@@ -2456,24 +2436,6 @@ suite('push many:one', () => {
             },
           ],
           [
-            "comment",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i2",
-              },
-            },
-          ],
-          [
-            "comment",
-            "fetch",
-            {
-              "constraint": {
-                "issueID": "i2",
-              },
-            },
-          ],
-          [
             "comments",
             "push",
             {
@@ -2519,6 +2481,15 @@ suite('push many:one', () => {
             },
           ],
           [
+            "comment",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i2",
+              },
+            },
+          ],
+          [
             "user",
             "fetch",
             {
@@ -2544,6 +2515,15 @@ suite('push many:one', () => {
                 "text": "user 1",
               },
               "type": "child",
+            },
+          ],
+          [
+            "comment",
+            "fetch",
+            {
+              "constraint": {
+                "issueID": "i2",
+              },
             },
           ],
         ]
@@ -3163,15 +3143,6 @@ suite('push one:many:many', () => {
           },
         ],
         [
-          "revision",
-          "fetch",
-          {
-            "constraint": {
-              "commentID": "c1",
-            },
-          },
-        ],
-        [
           "revisions",
           "push",
           {
@@ -3206,6 +3177,15 @@ suite('push one:many:many', () => {
               "id": "i1",
             },
             "type": "child",
+          },
+        ],
+        [
+          "revision",
+          "fetch",
+          {
+            "constraint": {
+              "commentID": "c1",
+            },
           },
         ],
       ]
@@ -3300,15 +3280,6 @@ suite('push one:many:many', () => {
           },
         ],
         [
-          "revisions",
-          "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
           "comments",
           "push",
           {
@@ -3316,6 +3287,15 @@ suite('push one:many:many', () => {
               "id": "i1",
             },
             "type": "add",
+          },
+        ],
+        [
+          "revisions",
+          "fetch",
+          {
+            "constraint": {
+              "issueID": "i1",
+            },
           },
         ],
         [
@@ -3428,15 +3408,6 @@ suite('push one:many:many', () => {
           },
         ],
         [
-          "revisions",
-          "cleanup",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
-        ],
-        [
           "comments",
           "push",
           {
@@ -3444,6 +3415,15 @@ suite('push one:many:many', () => {
               "id": "i1",
             },
             "type": "remove",
+          },
+        ],
+        [
+          "revisions",
+          "cleanup",
+          {
+            "constraint": {
+              "issueID": "i1",
+            },
           },
         ],
         [
@@ -3744,15 +3724,6 @@ suite('push one:many:one', () => {
           },
         ],
         [
-          "label",
-          "fetch",
-          {
-            "constraint": {
-              "id": "l1",
-            },
-          },
-        ],
-        [
           "labels",
           "push",
           {
@@ -3787,6 +3758,15 @@ suite('push one:many:one', () => {
               "id": "i1",
             },
             "type": "child",
+          },
+        ],
+        [
+          "label",
+          "fetch",
+          {
+            "constraint": {
+              "id": "l1",
+            },
           },
         ],
       ]
@@ -4256,24 +4236,6 @@ describe('edit assignee', () => {
           },
         ],
         [
-          "user",
-          "cleanup",
-          {
-            "constraint": {
-              "userID": "u1",
-            },
-          },
-        ],
-        [
-          "user",
-          "fetch",
-          {
-            "constraint": {
-              "userID": "u1",
-            },
-          },
-        ],
-        [
           "creator",
           "push",
           {
@@ -4293,15 +4255,6 @@ describe('edit assignee', () => {
           },
         ],
         [
-          "user",
-          "cleanup",
-          {
-            "constraint": {
-              "userID": undefined,
-            },
-          },
-        ],
-        [
           "assignee",
           "push",
           {
@@ -4316,10 +4269,19 @@ describe('edit assignee', () => {
         ],
         [
           "user",
-          "fetch",
+          "cleanup",
           {
             "constraint": {
               "userID": "u1",
+            },
+          },
+        ],
+        [
+          "user",
+          "cleanup",
+          {
+            "constraint": {
+              "userID": undefined,
             },
           },
         ],
@@ -4334,6 +4296,24 @@ describe('edit assignee', () => {
               "text": "first issue",
             },
             "type": "add",
+          },
+        ],
+        [
+          "user",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          "user",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
           },
         ],
       ]
@@ -4542,24 +4522,6 @@ describe('edit assignee', () => {
           },
         ],
         [
-          "user",
-          "cleanup",
-          {
-            "constraint": {
-              "userID": "u1",
-            },
-          },
-        ],
-        [
-          "user",
-          "fetch",
-          {
-            "constraint": {
-              "userID": "u1",
-            },
-          },
-        ],
-        [
           "creator",
           "push",
           {
@@ -4579,15 +4541,6 @@ describe('edit assignee', () => {
           },
         ],
         [
-          "user",
-          "cleanup",
-          {
-            "constraint": {
-              "userID": undefined,
-            },
-          },
-        ],
-        [
           "assignee",
           "push",
           {
@@ -4602,10 +4555,19 @@ describe('edit assignee', () => {
         ],
         [
           "user",
-          "fetch",
+          "cleanup",
           {
             "constraint": {
               "userID": "u1",
+            },
+          },
+        ],
+        [
+          "user",
+          "cleanup",
+          {
+            "constraint": {
+              "userID": undefined,
             },
           },
         ],
@@ -4620,6 +4582,24 @@ describe('edit assignee', () => {
               "text": "first issue",
             },
             "type": "add",
+          },
+        ],
+        [
+          "user",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          "user",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
           },
         ],
       ]
@@ -4817,24 +4797,6 @@ describe('edit assignee', () => {
           },
         ],
         [
-          "user",
-          "cleanup",
-          {
-            "constraint": {
-              "userID": "u1",
-            },
-          },
-        ],
-        [
-          "user",
-          "fetch",
-          {
-            "constraint": {
-              "userID": "u1",
-            },
-          },
-        ],
-        [
           "creator",
           "push",
           {
@@ -4854,15 +4816,6 @@ describe('edit assignee', () => {
           },
         ],
         [
-          "user",
-          "cleanup",
-          {
-            "constraint": {
-              "userID": "u1",
-            },
-          },
-        ],
-        [
           "assignee",
           "push",
           {
@@ -4877,10 +4830,19 @@ describe('edit assignee', () => {
         ],
         [
           "user",
-          "fetch",
+          "cleanup",
           {
             "constraint": {
-              "userID": undefined,
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          "user",
+          "cleanup",
+          {
+            "constraint": {
+              "userID": "u1",
             },
           },
         ],
@@ -4895,6 +4857,24 @@ describe('edit assignee', () => {
               "text": "first issue",
             },
             "type": "add",
+          },
+        ],
+        [
+          "user",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          "user",
+          "fetch",
+          {
+            "constraint": {
+              "userID": undefined,
+            },
           },
         ],
       ]
@@ -5093,24 +5073,6 @@ describe('edit assignee', () => {
           },
         ],
         [
-          "user",
-          "cleanup",
-          {
-            "constraint": {
-              "userID": "u1",
-            },
-          },
-        ],
-        [
-          "user",
-          "fetch",
-          {
-            "constraint": {
-              "userID": "u1",
-            },
-          },
-        ],
-        [
           "creator",
           "push",
           {
@@ -5130,15 +5092,6 @@ describe('edit assignee', () => {
           },
         ],
         [
-          "user",
-          "cleanup",
-          {
-            "constraint": {
-              "userID": "u1",
-            },
-          },
-        ],
-        [
           "assignee",
           "push",
           {
@@ -5153,10 +5106,19 @@ describe('edit assignee', () => {
         ],
         [
           "user",
-          "fetch",
+          "cleanup",
           {
             "constraint": {
-              "userID": undefined,
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          "user",
+          "cleanup",
+          {
+            "constraint": {
+              "userID": "u1",
             },
           },
         ],
@@ -5171,6 +5133,24 @@ describe('edit assignee', () => {
               "text": "first issue",
             },
             "type": "add",
+          },
+        ],
+        [
+          "user",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          "user",
+          "fetch",
+          {
+            "constraint": {
+              "userID": undefined,
+            },
           },
         ],
       ]
@@ -5419,16 +5399,6 @@ describe('joins with compound join keys', () => {
           },
         ],
         [
-          "b",
-          "fetch",
-          {
-            "constraint": {
-              "b1": 8,
-              "b2": 7,
-            },
-          },
-        ],
-        [
           "ab",
           "push",
           {
@@ -5439,6 +5409,16 @@ describe('joins with compound join keys', () => {
               "id": 2,
             },
             "type": "add",
+          },
+        ],
+        [
+          "b",
+          "fetch",
+          {
+            "constraint": {
+              "b1": 8,
+              "b2": 7,
+            },
           },
         ],
         [
@@ -5616,26 +5596,6 @@ describe('joins with compound join keys', () => {
           },
         ],
         [
-          "b",
-          "cleanup",
-          {
-            "constraint": {
-              "b1": 2,
-              "b2": 1,
-            },
-          },
-        ],
-        [
-          "b",
-          "fetch",
-          {
-            "constraint": {
-              "b1": 2,
-              "b2": 1,
-            },
-          },
-        ],
-        [
           "ab",
           "push",
           {
@@ -5680,7 +5640,6 @@ describe('joins with compound join keys', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         "ab": {
-          ""pKeySet",1,2,0,": true,
           ""pKeySet",4,5,1,": true,
         },
       }

@@ -129,19 +129,35 @@ test('push edit change', () => {
     oldRow: {a: 'a', b: 'b', c: 'c'},
     row: {a: 'a', b: 'b2', c: 'c2'},
   });
-  expect(c.pushes).toEqual([
-    {
-      type: 'edit',
-      row: {a: 'a', b: 'b2', c: 'c2'},
-      oldRow: {a: 'a', b: 'b', c: 'c'},
-    },
-  ]);
-  expect(c.fetch()).toEqual([
-    {
-      row: {a: 'a', b: 'b2', c: 'c2'},
-      relationships: {},
-    },
-  ]);
+  expect(c.pushes).toMatchInlineSnapshot(`
+    [
+      {
+        "oldRow": {
+          "a": "a",
+          "b": "b",
+          "c": "c",
+        },
+        "row": {
+          "a": "a",
+          "b": "b2",
+          "c": "c2",
+        },
+        "type": "edit",
+      },
+    ]
+  `);
+  expect(c.fetch()).toMatchInlineSnapshot(`
+    [
+      {
+        "relationships": {},
+        "row": {
+          "a": "a",
+          "b": "b2",
+          "c": "c2",
+        },
+      },
+    ]
+  `);
 
   conn.destroy();
 });
@@ -178,12 +194,18 @@ test('fetch during push edit change', () => {
     oldRow: {a: 'a', b: 'b', c: 'c'},
     row: {a: 'a', b: 'b2', c: 'c2'},
   });
-  expect(fetchDuringPush).toEqual([
-    {
-      row: {a: 'a', b: 'b2', c: 'c2'},
-      relationships: {},
-    },
-  ]);
+  expect(fetchDuringPush).toMatchInlineSnapshot(`
+    [
+      {
+        "relationships": {},
+        "row": {
+          "a": "a",
+          "b": "b2",
+          "c": "c2",
+        },
+      },
+    ]
+  `);
 });
 
 describe('generateWithOverlayInner', () => {

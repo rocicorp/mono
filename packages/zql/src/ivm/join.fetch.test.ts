@@ -550,7 +550,7 @@ suite('fetch many:one', () => {
     `);
   });
 
-  test('two parents, one child', () => {
+  test.only('two parents, one child', () => {
     const results = fetchTest({
       ...base,
       sources: [

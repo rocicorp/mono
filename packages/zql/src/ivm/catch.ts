@@ -21,7 +21,7 @@ export type CaughtRemoveChange = {
 
 export type CaughtChildChange = {
   type: 'child';
-  node: CaughtNode;
+  row: Row;
   child: {
     relationshipName: string;
     change: CaughtChange;
@@ -30,8 +30,8 @@ export type CaughtChildChange = {
 
 export type CaughtEditChange = {
   type: 'edit';
-  oldNode: CaughtNode;
-  node: CaughtNode;
+  oldRow: Row;
+  row: Row;
 };
 
 export type CaughtChange =
@@ -85,13 +85,13 @@ export function expandChange(change: Change): CaughtChange {
     case 'edit':
       return {
         type: 'edit',
-        oldNode: expandNode(change.oldNode),
-        node: expandNode(change.node),
+        oldRow: change.oldNode.row,
+        row: change.node.row,
       };
     case 'child':
       return {
         type: 'child',
-        node: expandNode(change.node),
+        row: change.node.row,
         child: {
           ...change.child,
           change: expandChange(change.child.change),

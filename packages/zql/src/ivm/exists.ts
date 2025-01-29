@@ -199,8 +199,9 @@ export class Exists implements Operator {
    * relationship passes the exist/not exists filter condition.
    * If the optional `size` is passed it is used.
    * Otherwise, if there is a stored size for the row it is used.
-   * Otherwise the size is computed by fetching a node for the row from
-   * this.#input (this computed size is also stored).
+   * Otherwise the size is computed by streaming the node's
+   * relationship with this.#relationshipName (this computed size is also
+   * stored).
    */
   #filter(node: Node, size?: number): boolean {
     const exists = (size ?? this.#getOrFetchSize(node)) > 0;
