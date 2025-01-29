@@ -55,8 +55,13 @@ jobs:
 
       - name: Install dependencies
         run: |
+          npm ci
           cd prod/sst
           npm ci
+
+      - name: Generate Schema
+        run: |
+          npm run zero-build-schema -- --schema-path apps/zbugs/schema.ts --out-file prod/sst/zero-schema.json
 
       - name: Deploy SST app
         env:
