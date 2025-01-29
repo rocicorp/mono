@@ -1868,7 +1868,7 @@ test('empty and - everything goes through', () => {
     ),
   );
 
-  expect(sink.fetch().length).toMatchInlineSnapshot(`7`);
+  expect(sink.fetch().length).toEqual(7);
 
   sources.users.push({type: 'add', row: {id: 8, name: 'sam'}});
   expect(sink.pushes).toMatchInlineSnapshot(`
@@ -2031,12 +2031,7 @@ test('groupSubqueryConditions', () => {
     conditions: [],
   };
 
-  expect(groupSubqueryConditions(empty)).toMatchInlineSnapshot(`
-    [
-      [],
-      [],
-    ]
-  `);
+  expect(groupSubqueryConditions(empty)).toEqual([[], []]);
 
   const oneSimple: Disjunction = {
     type: 'or',
@@ -2050,25 +2045,10 @@ test('groupSubqueryConditions', () => {
     ],
   };
 
-  expect(groupSubqueryConditions(oneSimple)).toMatchInlineSnapshot(`
-    [
-      [],
-      [
-        {
-          "left": {
-            "name": "id",
-            "type": "column",
-          },
-          "op": "=",
-          "right": {
-            "type": "literal",
-            "value": 1,
-          },
-          "type": "simple",
-        },
-      ],
-    ]
-  `);
+  expect(groupSubqueryConditions(oneSimple)).toEqual([
+    [],
+    [oneSimple.conditions[0]],
+  ]);
 
   const oneSubquery: Disjunction = {
     type: 'or',
@@ -2092,97 +2072,20 @@ test('groupSubqueryConditions', () => {
     ],
   };
 
-  expect(groupSubqueryConditions(oneSubquery)).toMatchInlineSnapshot(`
-    [
-      [
-        {
-          "op": "EXISTS",
-          "related": {
-            "correlation": {
-              "childField": [
-                "userID",
-              ],
-              "parentField": [
-                "id",
-              ],
-            },
-            "subquery": {
-              "alias": "userStates",
-              "orderBy": [
-                [
-                  "userID",
-                  "asc",
-                ],
-                [
-                  "stateCode",
-                  "asc",
-                ],
-              ],
-              "table": "userStates",
-            },
-            "system": "client",
-          },
-          "type": "correlatedSubquery",
-        },
-      ],
-      [],
-    ]
-  `);
+  expect(groupSubqueryConditions(oneSubquery)).toEqual([
+    [oneSubquery.conditions[0]],
+    [],
+  ]);
 
   const oneEach: Disjunction = {
     type: 'or',
     conditions: [oneSimple.conditions[0], oneSubquery.conditions[0]],
   };
 
-  expect(groupSubqueryConditions(oneEach)).toMatchInlineSnapshot(`
-    [
-      [
-        {
-          "op": "EXISTS",
-          "related": {
-            "correlation": {
-              "childField": [
-                "userID",
-              ],
-              "parentField": [
-                "id",
-              ],
-            },
-            "subquery": {
-              "alias": "userStates",
-              "orderBy": [
-                [
-                  "userID",
-                  "asc",
-                ],
-                [
-                  "stateCode",
-                  "asc",
-                ],
-              ],
-              "table": "userStates",
-            },
-            "system": "client",
-          },
-          "type": "correlatedSubquery",
-        },
-      ],
-      [
-        {
-          "left": {
-            "name": "id",
-            "type": "column",
-          },
-          "op": "=",
-          "right": {
-            "type": "literal",
-            "value": 1,
-          },
-          "type": "simple",
-        },
-      ],
-    ]
-  `);
+  expect(groupSubqueryConditions(oneEach)).toEqual([
+    [oneSubquery.conditions[0]],
+    [oneSimple.conditions[0]],
+  ]);
 
   const subqueryInAnd: Disjunction = {
     type: 'or',
@@ -2198,63 +2101,8 @@ test('groupSubqueryConditions', () => {
     ],
   };
 
-  expect(groupSubqueryConditions(subqueryInAnd)).toMatchInlineSnapshot(`
-    [
-      [
-        {
-          "conditions": [
-            {
-              "op": "EXISTS",
-              "related": {
-                "correlation": {
-                  "childField": [
-                    "userID",
-                  ],
-                  "parentField": [
-                    "id",
-                  ],
-                },
-                "subquery": {
-                  "alias": "userStates",
-                  "orderBy": [
-                    [
-                      "userID",
-                      "asc",
-                    ],
-                    [
-                      "stateCode",
-                      "asc",
-                    ],
-                  ],
-                  "table": "userStates",
-                },
-                "system": "client",
-              },
-              "type": "correlatedSubquery",
-            },
-          ],
-          "type": "and",
-        },
-      ],
-      [
-        {
-          "conditions": [
-            {
-              "left": {
-                "name": "id",
-                "type": "column",
-              },
-              "op": "=",
-              "right": {
-                "type": "literal",
-                "value": 1,
-              },
-              "type": "simple",
-            },
-          ],
-          "type": "and",
-        },
-      ],
-    ]
-  `);
+  expect(groupSubqueryConditions(subqueryInAnd)).toEqual([
+    [subqueryInAnd.conditions[0]],
+    [subqueryInAnd.conditions[1]],
+  ]);
 });
