@@ -40,6 +40,15 @@ function connect(
     replica.pragma(`journal_mode = ${walMode}`);
   }
 
+  // Set a busy timeout at litestream's recommended 5 seconds:
+  // (https://litestream.io/tips/#busy-timeout).
+  //
+  // In the view-syncer (for which there is no litestream replicate
+  // process), this is still useful for handling the `PRAGMA optimize`
+  // call the sync workers, which results in occasional `ANALYZE` calls
+  // that may contend with each other and with the replicator for the lock.
+  replica.pragma('busy_timeout = 5000');
+
   replica.pragma('synchronous = NORMAL');
   replica.exec('VACUUM');
   replica.pragma('optimize = 0x10002');
@@ -57,13 +66,7 @@ export function setupReplica(
   switch (mode) {
     case 'backup': {
       const replica = connect(lc, replicaDbFile, 'wal');
-      // In 'backup' mode, litestream is replicating the file, and
-      // locks it to perform its backups and checkpoints.
-      // The official docs recommend a 5 second timeout
-      // (https://litestream.io/tips/#busy-timeout), but since this is
-      // an isolated backup replica, we can wait longer to achieve
-      // higher write throughput.
-      replica.pragma('busy_timeout = 60000');
+      // https://litestream.io/tips/#disable-autocheckpoints-for-high-write-load-servers
       replica.pragma('wal_autocheckpoint = 0');
       return replica;
     }
