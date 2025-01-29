@@ -55,7 +55,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          npm ci
+          npm run build-ci
           cd prod/sst
           npm ci
 
