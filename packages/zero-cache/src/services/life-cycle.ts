@@ -286,11 +286,16 @@ export class HeartbeatMonitor {
           this.#stopInterval / 1000
         } second interval`,
       );
-      this.#timer = setInterval(this.#onStopInterval, this.#stopInterval);
+      // e.g. check every 5 seconds to see if it's been over 15 seconds
+      //      since the last heartbeat.
+      this.#timer = setInterval(
+        this.#checkStopInterval,
+        this.#stopInterval / 3,
+      );
     }
   }
 
-  #onStopInterval = () => {
+  #checkStopInterval = () => {
     const timeSinceLastHeartbeat = Date.now() - this.#lastHeartbeat;
     if (timeSinceLastHeartbeat >= this.#stopInterval) {
       this.#lc.info?.(
