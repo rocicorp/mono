@@ -61,7 +61,9 @@ jobs:
 
       - name: Generate Schema
         run: |
-          npm run zero-build-schema -- --schema-path apps/zbugs/schema.ts --out-file prod/sst/zero-schema.json
+          cd packages/zero
+          npm run zero-build-schema -- --schema-path ../../apps/zbugs/schema.ts --out-file ../../prod/sst/zero-schema.json
+          cd ../../prod/sst
 
       - name: Deploy SST app
         env:
@@ -75,5 +77,4 @@ jobs:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
           ECR_IMAGE_ZERO_CACHE: zero-zbugs-sandbox
         run: |
-          cd prod/sst
           npx sst deploy --stage sandbox
