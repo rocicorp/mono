@@ -2,11 +2,15 @@ import type {LogLevel} from '@rocicorp/logger';
 import type {KVStoreProvider} from '../../../replicache/src/mod.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import type {Schema} from '../../../zero-schema/src/mod.ts';
+import type {CustomMutatorDefs} from './custom.ts';
 
 /**
  * Configuration for [[Zero]].
  */
-export interface ZeroOptions<S extends Schema> {
+export interface ZeroOptions<
+  S extends Schema,
+  MD extends CustomMutatorDefs<S> = Record<string, never>,
+> {
   /**
    * URL to the zero-cache. This can be a simple hostname, e.g.
    * - "https://myapp-myteam.zero.ms"
@@ -72,6 +76,8 @@ export interface ZeroOptions<S extends Schema> {
    * to one another.
    */
   schema: S;
+
+  mutators?: MD | undefined;
 
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes.
@@ -144,7 +150,10 @@ export interface ZeroOptions<S extends Schema> {
   maxHeaderLength?: number | undefined;
 }
 
-export interface ZeroAdvancedOptions<S extends Schema> extends ZeroOptions<S> {
+export interface ZeroAdvancedOptions<
+  S extends Schema,
+  MD extends CustomMutatorDefs<S> = Record<string, never>,
+> extends ZeroOptions<S, MD> {
   /**
    * UI rendering libraries will often provide a utility for batching multiple
    * state updates into a single render. Some examples are React's
