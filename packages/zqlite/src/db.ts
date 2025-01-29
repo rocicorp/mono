@@ -72,7 +72,16 @@ export class Database {
   }
 
   close(): void {
-    this.#db.pragma('optimize');
+    const start = Date.now();
+    try {
+      this.#db.pragma('optimize');
+      const elapsed = Date.now() - start;
+      if (elapsed > 2) {
+        this.#lc.debug?.(`PRAGMA optimized (${elapsed} ms)`);
+      }
+    } catch (e) {
+      this.#lc.warn?.('error running PRAGMA optimize', e);
+    }
     this.#db.close();
   }
 

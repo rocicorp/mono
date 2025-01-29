@@ -274,6 +274,8 @@ class TransactionProcessor {
   readonly #version: LexiVersion;
   readonly #tableSpecs: Map<string, LiteTableSpec>;
 
+  #schemaChanged = false;
+
   constructor(
     lc: LogContext,
     db: StatementRunner,
@@ -546,6 +548,7 @@ class TransactionProcessor {
   }
 
   #logResetOp(table: string) {
+    this.#schemaChanged = true;
     if (this.#txMode !== 'INITIAL-SYNC') {
       logResetOp(this.#db, this.#version, table);
     }
@@ -561,6 +564,14 @@ class TransactionProcessor {
       );
     }
     updateReplicationWatermark(this.#db, watermark);
+
+    if (this.#schemaChanged) {
+      const start = Date.now();
+      this.#db.db.pragma('optimize');
+      this.#lc.info?.(
+        `PRAGMA optimized after schema change (${Date.now() - start} ms)`,
+      );
+    }
 
     if (this.#txMode !== 'INITIAL-SYNC') {
       this.#db.commit();
