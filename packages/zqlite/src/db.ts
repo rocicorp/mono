@@ -72,6 +72,7 @@ export class Database {
   }
 
   close(): void {
+    this.#db.pragma('optimize');
     this.#db.close();
   }
 
