@@ -134,17 +134,6 @@ export const zeroOptions = {
       ],
     },
 
-    type: {
-      type: v.union(v.literal('pg'), v.literal('custom')).default('pg'),
-      desc: [
-        `The meaning of the {bold upstream-db} depends on the upstream type:`,
-        `* {bold pg}: The connection database string, e.g. "postgres://..."`,
-        `* {bold custom}: The base URI of the change source "endpoint, e.g.`,
-        `          "https://my-change-source.dev/changes/v0/stream?apiKey=..."`,
-      ],
-      hidden: true, // TODO: Unhide when ready to officially support.
-    },
-
     maxConns: {
       type: v.number().default(20),
       desc: [
