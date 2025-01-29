@@ -62,7 +62,7 @@ jobs:
       - name: Generate Schema
         run: |
           cd packages/zero
-          npm run zero-build-schema -- --schema-path ../../apps/zbugs/schema.ts --out-file ../../prod/sst/zero-schema.json
+          npx tsx src/build-schema.ts --schema-path ../../apps/zbugs/schema.ts --schema-output ../../prod/sst/zero-schema.json
           cd ../../prod/sst
 
       - name: Deploy SST app
