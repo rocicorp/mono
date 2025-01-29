@@ -8,14 +8,21 @@ type Schema = typeof schema;
 test('argument types are preserved on the generated mutator interface', () => {
   const mutators = {
     issue: {
-      setTitle: (tx, id: string, title: string) =>
+      setTitle: (tx, {id, title}: {id: string; title: string}) =>
         tx.mutate.issue.update({id, title}),
       setProps: (
         tx,
-        id: string,
-        title: string,
-        status: 'open' | 'closed',
-        assignee: string,
+        {
+          id,
+          title,
+          status,
+          assignee,
+        }: {
+          id: string;
+          title: string;
+          status: 'open' | 'closed';
+          assignee: string;
+        },
       ) =>
         tx.mutate.issue.update({
           id,
@@ -25,7 +32,7 @@ test('argument types are preserved on the generated mutator interface', () => {
         }),
     },
     nonTableNamespace: {
-      doThing: (_tx, _arg1: string, _arg2: number) => {
+      doThing: (_tx, _a: {arg1: string; arg2: number}) => {
         throw new Error('not implemented');
       },
     },
@@ -34,16 +41,16 @@ test('argument types are preserved on the generated mutator interface', () => {
   type MutatorsInterface = MakeCustomMutatorInterfaces<Schema, typeof mutators>;
   expectTypeOf<MutatorsInterface>().toEqualTypeOf<{
     readonly issue: {
-      readonly setTitle: (id: string, title: string) => void;
-      readonly setProps: (
-        id: string,
-        title: string,
-        status: 'closed' | 'open',
-        assignee: string,
-      ) => void;
+      readonly setTitle: (args: {id: string; title: string}) => void;
+      readonly setProps: (args: {
+        id: string;
+        title: string;
+        status: 'closed' | 'open';
+        assignee: string;
+      }) => void;
     };
     readonly nonTableNamespace: {
-      readonly doThing: (arg1: string, arg2: number) => void;
+      readonly doThing: (args: {arg1: string; arg2: number}) => void;
     };
   }>();
 });
@@ -54,10 +61,10 @@ test('custom mutators write to the local store', async () => {
     schema,
     mutators: {
       issue: {
-        setTitle: async (tx, id: string, title: string) => {
+        setTitle: async (tx, {id, title}: {id: string; title: string}) => {
           await tx.mutate.issue.update({id, title});
         },
-        deleteTwoIssues: async (tx, id1: string, id2: string) => {
+        deleteTwoIssues: async (tx, {id1, id2}: {id1: string; id2: string}) => {
           await Promise.all([
             tx.mutate.issue.delete({id: id1}),
             tx.mutate.issue.delete({id: id2}),
@@ -92,7 +99,7 @@ test('custom mutators write to the local store', async () => {
   let issues = z.query.issue.run();
   expect(issues[0].title).toEqual('foo');
 
-  await z.mutate.issue.setTitle('1', 'bar');
+  await z.mutate.issue.setTitle({id: '1', title: 'bar'});
   issues = z.query.issue.run();
   expect(issues[0].title).toEqual('bar');
 
@@ -104,7 +111,7 @@ test('custom mutators write to the local store', async () => {
   issues = z.query.issue.run();
   expect(issues.length).toEqual(2);
 
-  await z.mutate.issue.deleteTwoIssues(issues[0].id, issues[1].id);
+  await z.mutate.issue.deleteTwoIssues({id1: issues[0].id, id2: issues[1].id});
   issues = z.query.issue.run();
   expect(issues.length).toEqual(0);
 });
