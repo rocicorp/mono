@@ -12,7 +12,15 @@ import type {ClientID} from '../types/client-state.ts';
  * The shape which a user's custom mutator definitions must conform to.
  */
 export type CustomMutatorDefs<S extends Schema> = {
-  readonly [key: string]: CustomMutatorImpl<S>;
+  readonly [Table in keyof S['tables']]?: {
+    readonly [key: string]: CustomMutatorImpl<S>;
+  };
+} & {
+  // The user is not required to associate mutators with tables.
+  // Maybe that have some other arbitrary way to namespace.
+  [namespace: string]: {
+    [key: string]: CustomMutatorImpl<S>;
+  };
 };
 
 export type CustomMutatorImpl<S extends Schema> = (
@@ -20,6 +28,33 @@ export type CustomMutatorImpl<S extends Schema> = (
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ...args: any[]
 ) => void;
+
+/**
+ * The shape exposed on the `Zero.mutate` instance.
+ * The signature of a custom mutator takes a `transaction` as its first arg
+ * but the user does not provide this arg when calling the mutator.
+ *
+ * This utility strips the `tx` arg from the user's custom mutator signatures.
+ */
+export type MakeCustomMutatorInterfaces<
+  S extends Schema,
+  MD extends CustomMutatorDefs<S>,
+> = {
+  readonly [Table in keyof MD]: {
+    readonly [P in keyof MD[Table]]: MakeCustomMutatorInterface<
+      S,
+      MD[Table][P]
+    >;
+  };
+};
+
+export type MakeCustomMutatorInterface<
+  S extends Schema,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  F,
+> = F extends (tx: Transaction<S>, ...args: infer Args) => void
+  ? (...args: Args) => void
+  : never;
 
 export type TransactionReason = 'optimistic' | 'rebase';
 
