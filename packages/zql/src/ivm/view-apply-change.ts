@@ -8,7 +8,7 @@ import {
 import {must} from '../../../shared/src/must.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Change} from './change.ts';
-import type {Comparator, Node} from './data.ts';
+import {drainStreams, type Comparator} from './data.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Entry, EntryList, Format} from './view.ts';
 
@@ -246,14 +246,6 @@ function makeEntryPreserveRelationships(
     result[relationship] = entry[relationship];
   }
   return result;
-}
-
-function drainStreams(node: Node) {
-  for (const stream of Object.values(node.relationships)) {
-    for (const node of stream()) {
-      drainStreams(node);
-    }
-  }
 }
 
 function getChildEntryList(

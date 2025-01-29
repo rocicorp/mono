@@ -2,7 +2,12 @@ import {areEqual} from '../../../shared/src/arrays.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
 import {type Change} from './change.ts';
-import {normalizeUndefined, type Node, type NormalizedValue} from './data.ts';
+import {
+  drainStreams,
+  normalizeUndefined,
+  type Node,
+  type NormalizedValue,
+} from './data.ts';
 import {
   throwOutput,
   type FetchRequest,
@@ -84,6 +89,8 @@ export class Exists implements Operator {
     for (const node of this.#input.cleanup(req)) {
       if (this.#filter(node)) {
         yield node;
+      } else {
+        drainStreams(node);
       }
       this.#delSize(node);
     }

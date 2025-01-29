@@ -260,6 +260,15 @@ suite('EXISTS', () => {
             "cleanup",
             {},
           ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
+          ],
         ],
         "fetch": [
           [
@@ -336,6 +345,15 @@ suite('EXISTS', () => {
             "0",
             "cleanup",
             {},
+          ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i2",
+              },
+            },
           ],
           [
             "1",
@@ -639,6 +657,33 @@ suite('EXISTS', () => {
             "cleanup",
             {},
           ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
+          ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i2",
+              },
+            },
+          ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i3",
+              },
+            },
+          ],
         ],
         "fetch": [
           [
@@ -743,6 +788,15 @@ suite('NOT EXISTS', () => {
             "cleanup",
             {},
           ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i1",
+              },
+            },
+          ],
         ],
         "fetch": [
           [
@@ -793,6 +847,15 @@ suite('NOT EXISTS', () => {
             "1",
             "cleanup",
             {},
+          ],
+          [
+            "0",
+            "cleanup",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
           ],
         ],
         "fetch": [
@@ -970,6 +1033,24 @@ suite('NOT EXISTS', () => {
             "cleanup",
             {
               "constraint": {
+                "issueID": "i1",
+              },
+            },
+          ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
+                "issueID": "i3",
+              },
+            },
+          ],
+          [
+            "1",
+            "cleanup",
+            {
+              "constraint": {
                 "issueID": "i2",
               },
             },
@@ -1072,6 +1153,24 @@ suite('NOT EXISTS', () => {
             "1",
             "cleanup",
             {},
+          ],
+          [
+            "0",
+            "cleanup",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            "0",
+            "cleanup",
+            {
+              "constraint": {
+                "id": "i3",
+              },
+            },
           ],
         ],
         "fetch": [
