@@ -81,3 +81,5 @@ parameters.json
 playwright-report/
 test-results/
 debug-scratch.md
+
+apps/repro

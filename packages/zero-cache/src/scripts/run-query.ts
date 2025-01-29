@@ -1,5 +1,6 @@
 /* eslint-disable no-console */
 import 'dotenv/config';
+import chalk from 'chalk';
 
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
@@ -100,16 +101,74 @@ function runQuery(queryString: string): [number, number] {
   return [start, end];
 }
 
-let totalRowsConsidered = 0;
-for (const source of sources.values()) {
-  const entires = [
-    ...(runtimeDebugStats.getRowsVended('')?.get(source.table)?.entries() ??
-      []),
-  ];
-  totalRowsConsidered += entires.reduce((acc, entry) => acc + entry[1], 0);
-  console.log(source.table + ' VENDED: ', entires);
+console.log(chalk.blue.bold('=== Query Stats: ===\n'));
+showStats();
+console.log(chalk.blue.bold('\n\n=== Query Plans: ===\n'));
+explainQueries();
+
+function showStats() {
+  let totalRowsConsidered = 0;
+  for (const source of sources.values()) {
+    const entires = [
+      ...(runtimeDebugStats.getRowsVended('')?.get(source.table)?.entries() ??
+        []),
+    ];
+    totalRowsConsidered += entires.reduce((acc, entry) => acc + entry[1], 0);
+    console.log(chalk.bold(source.table + ' vended:'), entires);
+  }
+
+  console.log(
+    chalk.bold('total rows considered:'),
+    colorRowsConsidered(totalRowsConsidered),
+  );
+  console.log(chalk.bold('time:'), colorTime(end - start), 'ms');
 }
 
-// console.log(JSON.stringify(view, null, 2));
-console.log('ROWS CONSIDERED:', totalRowsConsidered);
-console.log('TIME:', (end - start).toFixed(2), 'ms');
+function explainQueries() {
+  for (const source of sources.values()) {
+    const queries =
+      runtimeDebugStats.getRowsVended('')?.get(source.table)?.keys() ?? [];
+    for (const query of queries) {
+      console.log(chalk.bold('query'), query);
+      console.log(
+        db
+          // we should be more intelligent about value replacement.
+          // Different values result in different plans. E.g., picking a value at the start
+          // of an index will result in `scan` vs `search`. The scan is fine in that case.
+          .prepare(`EXPLAIN QUERY PLAN ${query.replaceAll('?', "'sdfse'")}`)
+          .all<{detail: string}>()
+          .map((row, i) => colorPlanRow(row.detail, i))
+          .join('\n'),
+      );
+      console.log('\n');
+    }
+  }
+}
+
+function colorTime(duration: number) {
+  if (duration < 100) {
+    return chalk.green(duration.toFixed(2) + 'ms');
+  } else if (duration < 1000) {
+    return chalk.yellow(duration.toFixed(2) + 'ms');
+  }
+  return chalk.red(duration.toFixed(2) + 'ms');
+}
+
+function colorRowsConsidered(n: number) {
+  if (n < 1000) {
+    return chalk.green(n.toString());
+  } else if (n < 10000) {
+    return chalk.yellow(n.toString());
+  }
+  return chalk.red(n.toString());
+}
+
+function colorPlanRow(row: string, i: number) {
+  if (row.includes('SCAN')) {
+    if (i === 0) {
+      return chalk.yellow(row);
+    }
+    return chalk.red(row);
+  }
+  return chalk.green(row);
+}
