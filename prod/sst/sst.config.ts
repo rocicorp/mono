@@ -21,7 +21,9 @@ export default $config({
       }
 
       try {
-        return readFileSync("zero-schema.json", "utf8");
+        const schema = readFileSync("zero-schema.json", "utf8");
+        // Parse and stringify to ensure single line
+        return JSON.stringify(JSON.parse(schema));
       } catch (error) {
         const e = error as Error;
         console.error(`Failed to read schema file: ${e.message}`);
