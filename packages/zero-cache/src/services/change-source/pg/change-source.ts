@@ -83,7 +83,7 @@ registerPostgresTypeParsers();
  * replica, before streaming changes from the corresponding logical replication
  * stream.
  */
-export async function initializeChangeSource(
+export async function initializePostgresChangeSource(
   lc: LogContext,
   upstreamURI: string,
   shard: ShardConfig,
@@ -316,7 +316,7 @@ class PostgresChangeSource implements ChangeSource {
       .subscribe(
         new PgoutputPlugin({
           protoVersion: 1,
-          publicationNames: this.#replicationConfig.publications,
+          publicationNames: [...this.#replicationConfig.publications],
           messages: true,
         }),
         slot,

@@ -34,7 +34,7 @@ const CREATE_CHANGE_LOG_TABLE = `
  */
 export type ReplicationConfig = {
   replicaVersion: string;
-  publications: string[];
+  publications: readonly string[];
 };
 
 const CREATE_REPLICATION_CONFIG_TABLE = `
