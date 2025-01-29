@@ -1,8 +1,8 @@
 //@ts-check
 
+import {execSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
-import {execSync} from 'node:child_process';
 import * as path from 'path';
 
 /** @param {string[]} parts */
@@ -71,9 +71,9 @@ function bumpCanaryVersion(version) {
   // there's no way to include them consistently across docker and npm and this
   // was confusing people.
   // See: https://discord.com/channels/830183651022471199/1325165395015110688/1325585636111155293
-  const match = version.match(/^(\d+)\.(\d+)\.(\d{10})\+/);
+  const match = version.match(/^(\d+)\.(\d+)\.(\d{10})/);
   if (!match) {
-    throw new Error('Cannot parse existing version');
+    throw new Error(`Cannot parse existing version: ${version}`);
   }
 
   const [, major, minor, prevPatch] = match;
