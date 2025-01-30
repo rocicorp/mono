@@ -1,19 +1,20 @@
 /* eslint-disable */
 /// <reference path="./.sst/platform/config.d.ts" />
 import { readFileSync } from "fs";
+// Load .env file
+require("dotenv").config();
 
 export default $config({
   app(input) {
     return {
-      name: "zero",
+      name: process.env.APP_NAME || "zero",
       removal: input?.stage === "production" ? "retain" : "remove",
       home: "aws",
       region: process.env.AWS_REGION || "us-east-1",
     };
   },
   async run() {
-    // Load .env file
-    require("dotenv").config();
+
 
     const loadSchemaJson = () => {
       if (process.env.ZERO_SCHEMA_JSON) {
