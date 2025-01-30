@@ -263,29 +263,29 @@ export class Join implements Input {
     mode: ProcessParentMode,
   ): Node {
     let method: ProcessParentMode = mode;
-    if (mode === 'cleanup') {
-      this.#storage.del(
-        makeStorageKey(
-          this.#parentKey,
-          this.#parent.getSchema().primaryKey,
-          parentNodeRow,
-        ),
-      );
-      const empty =
-        [
-          ...take(
-            this.#storage.scan({
-              prefix: makeStorageKeyPrefix(parentNodeRow, this.#parentKey),
-            }),
-            1,
-          ),
-        ].length === 0;
-      method = empty ? 'cleanup' : 'fetch';
-    }
-
     let storageUpdated = false;
     const childStream = () => {
       if (!storageUpdated) {
+        if (mode === 'cleanup') {
+          this.#storage.del(
+            makeStorageKey(
+              this.#parentKey,
+              this.#parent.getSchema().primaryKey,
+              parentNodeRow,
+            ),
+          );
+          const empty =
+            [
+              ...take(
+                this.#storage.scan({
+                  prefix: makeStorageKeyPrefix(parentNodeRow, this.#parentKey),
+                }),
+                1,
+              ),
+            ].length === 0;
+          method = empty ? 'cleanup' : 'fetch';
+        }
+
         storageUpdated = true;
         // Defer the work to update storage until the child stream
         // is actually accessed

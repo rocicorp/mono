@@ -1155,7 +1155,9 @@ suite('push one:many', () => {
       `);
       expect(actualStorage).toMatchInlineSnapshot(`
         {
-          "comments": {},
+          "comments": {
+            ""pKeySet","i1","i1",": true,
+          },
         }
       `);
       expect(pushes).toMatchInlineSnapshot(`
@@ -5640,6 +5642,7 @@ describe('joins with compound join keys', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         "ab": {
+          ""pKeySet",1,2,0,": true,
           ""pKeySet",4,5,1,": true,
         },
       }

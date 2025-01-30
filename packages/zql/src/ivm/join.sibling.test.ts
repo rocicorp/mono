@@ -548,7 +548,7 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
       ],
     } as const;
 
-    test('edit issue', () => {
+    test.only('edit issue', () => {
       const {log, storage, output} = pushSiblingTest({
         ...base,
         pushes: [
@@ -586,9 +586,11 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
       expect(storage).toMatchInlineSnapshot(`
         [
           {
+            ""pKeySet","i1","i1",": true,
             ""pKeySet","i2","i2",": true,
           },
           {
+            ""pKeySet","o1","i1",": true,
             ""pKeySet","o2","i2",": true,
           },
         ]
@@ -865,6 +867,12 @@ function pushSiblingTest(t: PushTestSibling): PushTestSiblingResults {
 
   const c = new Catch(finalJoin.join);
   c.fetch();
+
+  const s: Record<string, JSONValue>[] = [];
+  for (const j of joins.values()) {
+    s.push(j.storage.cloneData());
+  }
+  console.log(JSON.stringify(s));
 
   log.length = 0;
 
