@@ -3,8 +3,8 @@ import type {
   AdvancedQuery,
   HumanReadable,
   Query,
-} from '../../zero-advanced/src/mod.ts';
-import type {Schema} from '../../zero-schema/src/mod.ts';
+} from '../../zero/src/advanced.ts';
+import type {Schema} from '../../zero/src/zero.ts';
 import {solidViewFactory, type QueryResultDetails} from './solid-view.ts';
 
 export type QueryResult<TReturn> = readonly [

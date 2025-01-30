@@ -8,7 +8,10 @@
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "test": "vitest run",
-    "test:watch": "vitest watch"
+    "test:watch": "vitest watch",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
   },
   "peerDependencies": {
     "react": "^18.3.1"

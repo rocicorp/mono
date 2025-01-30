@@ -1,5 +1,5 @@
 import {beforeEach, describe, expect, test, vi} from 'vitest';
-import type {Schema} from '../../zero-schema/src/mod.ts';
+import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {AdvancedQuery} from '../../zql/src/query/query-internal.ts';
 import type {ResultType} from '../../zql/src/query/typed-view.ts';
 import {getAllViewsSizeForTesting, ViewStore} from './use-query.tsx';

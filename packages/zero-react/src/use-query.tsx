@@ -1,15 +1,11 @@
 import {useSyncExternalStore} from 'react';
 import {deepClone} from '../../shared/src/deep-clone.ts';
 import type {Immutable} from '../../shared/src/immutable.ts';
-import type {
-  Query,
-  ReadonlyJSONValue,
-  Schema,
-  TypedView,
-} from '../../zero-client/src/mod.ts';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {AdvancedQuery} from '../../zql/src/query/query-internal.ts';
-import type {HumanReadable} from '../../zql/src/query/query.ts';
-import type {ResultType} from '../../zql/src/query/typed-view.ts';
+import type {HumanReadable, Query} from '../../zql/src/query/query.ts';
+import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 import {useZero} from './use-zero.tsx';
 
 export type QueryResultDetails = Readonly<{
