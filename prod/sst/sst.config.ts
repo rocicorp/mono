@@ -5,7 +5,7 @@ import { readFileSync } from "fs";
 export default $config({
   app(input) {
     return {
-      name: "zero",
+      name: "hello-zero",
       removal: input?.stage === "production" ? "retain" : "remove",
       home: "aws",
       region: process.env.AWS_REGION || "us-east-1",
@@ -156,18 +156,25 @@ export default $config({
                 dns: false,
                 cert: process.env.DOMAIN_CERT,
               },
+              ports: [
+                {
+                  listen: "80/http",
+                  forward: "4848/http",
+                },
+                {
+                  listen: "443/https",
+                  forward: "4848/http",
+                },
+              ],
             }
-          : {}),
-        ports: [
-          {
-            listen: "80/http",
-            forward: "4848/http",
-          },
-          {
-            listen: "443/https",
-            forward: "4848/http",
-          },
-        ],
+          : {
+              ports: [
+                {
+                  listen: "80/http",
+                  forward: "4848/http",
+                },
+              ],
+            }),
       },
       transform: {
         target: {

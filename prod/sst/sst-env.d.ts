@@ -5,21 +5,16 @@
 
 declare module "sst" {
   export interface Resource {
-    "test-replication-bucket": {
+    "replication-bucket": {
       "name": string
       "type": "sst.aws.Bucket"
     }
-    "test-replication-manager": {
+    "replication-manager": {
       "service": string
       "type": "sst.aws.Service"
       "url": string
     }
-    "test-view-syncer": {
-      "service": string
-      "type": "sst.aws.Service"
-      "url": string
-    }
-    "test-vpc": {
+    "vpc": {
       "type": "sst.aws.Vpc"
     }
   }
