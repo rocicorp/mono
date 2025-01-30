@@ -706,9 +706,11 @@ export class Zero<const S extends Schema> {
 
       case 'pull':
         return this.#handlePullResponse(lc, downMessage);
+
       case 'warm':
         // we ignore warming messages
         break;
+
       default:
         msgType satisfies never;
         rejectInvalidMessage();
@@ -1046,15 +1048,15 @@ export class Zero<const S extends Schema> {
     this.#pokeHandler.handleDisconnect();
   }
 
-  async #handlePokeStart(_lc: LogContext, pokeMessage: PokeStartMessage) {
+  #handlePokeStart(_lc: LogContext, pokeMessage: PokeStartMessage): void {
     resetBackoff();
     this.#abortPingTimeout();
-    await this.#pokeHandler.handlePokeStart(pokeMessage[1]);
+    this.#pokeHandler.handlePokeStart(pokeMessage[1]);
   }
 
-  async #handlePokePart(_lc: LogContext, pokeMessage: PokePartMessage) {
+  #handlePokePart(_lc: LogContext, pokeMessage: PokePartMessage): void {
     this.#abortPingTimeout();
-    const lastMutationIDChangeForSelf = await this.#pokeHandler.handlePokePart(
+    const lastMutationIDChangeForSelf = this.#pokeHandler.handlePokePart(
       pokeMessage[1],
     );
     if (lastMutationIDChangeForSelf !== undefined) {
@@ -1062,12 +1064,12 @@ export class Zero<const S extends Schema> {
     }
   }
 
-  async #handlePokeEnd(_lc: LogContext, pokeMessage: PokeEndMessage) {
+  #handlePokeEnd(_lc: LogContext, pokeMessage: PokeEndMessage): void {
     this.#abortPingTimeout();
-    await this.#pokeHandler.handlePokeEnd(pokeMessage[1]);
+    this.#pokeHandler.handlePokeEnd(pokeMessage[1]);
   }
 
-  #onPokeError() {
+  #onPokeError(): void {
     const lc = this.#lc;
     lc.info?.(
       'poke error, disconnecting?',
@@ -1087,7 +1089,7 @@ export class Zero<const S extends Schema> {
   #handlePullResponse(
     lc: LogContext,
     pullResponseMessage: PullResponseMessage,
-  ) {
+  ): void {
     this.#abortPingTimeout();
     const body = pullResponseMessage[1];
     lc = lc.withContext('requestID', body.requestID);
