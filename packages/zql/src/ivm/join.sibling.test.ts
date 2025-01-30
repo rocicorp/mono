@@ -548,7 +548,7 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
       ],
     } as const;
 
-    test.only('edit issue', () => {
+    test('edit issue', () => {
       const {log, storage, output} = pushSiblingTest({
         ...base,
         pushes: [
@@ -867,12 +867,6 @@ function pushSiblingTest(t: PushTestSibling): PushTestSiblingResults {
 
   const c = new Catch(finalJoin.join);
   c.fetch();
-
-  const s: Record<string, JSONValue>[] = [];
-  for (const j of joins.values()) {
-    s.push(j.storage.cloneData());
-  }
-  console.log(JSON.stringify(s));
 
   log.length = 0;
 
