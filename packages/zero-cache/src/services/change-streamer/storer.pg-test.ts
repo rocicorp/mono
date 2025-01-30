@@ -215,22 +215,6 @@ describe('change-streamer/storer', () => {
     ]);
   });
 
-  test('watermark not found', async () => {
-    // '123' is some watermark from the future.
-    const [sub, _, stream] = createSubscriber('123');
-    storer.catchup(sub);
-
-    expect(await drain(stream)).toEqual([
-      [
-        'error',
-        {
-          type: ErrorType.WatermarkNotFound,
-          message: 'cannot catch up from requested watermark 123',
-        },
-      ],
-    ]);
-  });
-
   test('queued if transaction in progress', async () => {
     const [sub1, _0, stream1] = createSubscriber('03');
     const [sub2, _1, stream2] = createSubscriber('06');

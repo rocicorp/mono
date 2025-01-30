@@ -16,6 +16,7 @@ import {Queue} from '../../../../shared/src/queue.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {testDBs} from '../../test/db.ts';
+import {stringify} from '../../types/bigint-json.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
@@ -102,7 +103,7 @@ describe('change-streamer/service', () => {
 
   async function nextChange(sub: Queue<Downstream>) {
     const down = await sub.dequeue();
-    assert(down[0] !== 'error');
+    assert(down[0] !== 'error', `Unexpected error ${stringify(down)}`);
     return down[1];
   }
 
@@ -300,6 +301,57 @@ describe('change-streamer/service', () => {
       'insert',
       'commit',
     ]);
+  });
+
+  test('subscriber ahead of change log', async () => {
+    // Process some changes upstream.
+    changes.push(['begin', messages.begin(), {commitWatermark: '09'}]);
+    changes.push(['data', messages.insert('foo', {id: 'hello'})]);
+    changes.push(['data', messages.insert('foo', {id: 'world'})]);
+    changes.push([
+      'commit',
+      messages.commit({extra: 'stuff'}),
+      {watermark: '09'},
+    ]);
+
+    // Subscribe to a watermark from "the future".
+    const sub = await streamer.subscribe({
+      id: 'myid',
+      mode: 'serving',
+      watermark: '0b',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
+    // Process more upstream changes.
+    changes.push(['begin', messages.begin(), {commitWatermark: '0b'}]);
+    changes.push(['data', messages.delete('foo', {id: 'world'})]);
+    changes.push([
+      'commit',
+      messages.commit({more: 'stuff'}),
+      {watermark: '0b'},
+    ]);
+
+    // Finally something the subscriber hasn't seen.
+    changes.push(['begin', messages.begin(), {commitWatermark: '0c'}]);
+    changes.push(['data', messages.insert('foo', {id: 'voila'})]);
+    changes.push([
+      'commit',
+      messages.commit({something: 'new'}),
+      {watermark: '0c'},
+    ]);
+
+    // The subscriber should only see what's new to it.
+    const downstream = drainToQueue(sub);
+    expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
+    expect(await nextChange(downstream)).toMatchObject({
+      tag: 'insert',
+      new: {id: 'voila'},
+    });
+    expect(await nextChange(downstream)).toMatchObject({
+      tag: 'commit',
+      something: 'new',
+    });
   });
 
   test('data types (forwarded and catchup)', async () => {
