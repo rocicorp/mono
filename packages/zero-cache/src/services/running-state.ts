@@ -3,7 +3,7 @@ import {resolver} from '@rocicorp/resolver';
 import {AbortError} from '../../../shared/src/abort-error.ts';
 import {sleepWithAbort} from '../../../shared/src/sleep.ts';
 
-const DEFAULT_INITIAL_RETRY_DELAY_MS = 100;
+const DEFAULT_INITIAL_RETRY_DELAY_MS = 25;
 export const DEFAULT_MAX_RETRY_DELAY_MS = 10000;
 
 export type RetryConfig = {
