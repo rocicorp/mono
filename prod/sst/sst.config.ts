@@ -5,7 +5,7 @@ import { readFileSync } from "fs";
 export default $config({
   app(input) {
     return {
-      name: "hello-zero",
+      name: "zero",
       removal: input?.stage === "production" ? "retain" : "remove",
       home: "aws",
       region: process.env.AWS_REGION || "us-east-1",
