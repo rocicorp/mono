@@ -239,10 +239,6 @@ export class Storer implements Service {
           }
         }
         if (watermarkFound) {
-          // Flushes the backlog of messages buffered during catchup and
-          // allows the subscription to forward subsequent messages immediately.
-          sub.setCaughtUp();
-
           this.#lc.info?.(
             `caught up ${sub.id} with ${count} changes (${
               Date.now() - start
@@ -251,13 +247,12 @@ export class Storer implements Service {
         } else {
           const lastStoredWatermark = await this.getLastStoredWatermark();
           this.#lc.warn?.(
-            `rejecting subscriber at watermark ${sub.watermark} (latest watermark: ${lastStoredWatermark})`,
-          );
-          sub.close(
-            ErrorType.WatermarkNotFound,
-            `cannot catch up from requested watermark ${sub.watermark}`,
+            `subscriber at watermark ${sub.watermark} is ahead of latest watermark: ${lastStoredWatermark}`,
           );
         }
+        // Flushes the backlog of messages buffered during catchup and
+        // allows the subscription to forward subsequent messages immediately.
+        sub.setCaughtUp();
       });
     } catch (err) {
       sub.fail(err);
