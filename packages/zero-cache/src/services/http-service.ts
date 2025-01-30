@@ -41,8 +41,8 @@ export class HttpService implements Service {
   // run() is the lifecycle method called by the ServiceRunner.
   async start(): Promise<string> {
     this.#fastify.get('/', (_req, res) => res.send('OK'));
-    this.#fastify.get('/keepalive', (req, res) => {
-      this.#heartbeatMonitor.onHeartbeat(req.headers);
+    this.#fastify.get('/keepalive', ({headers}, res) => {
+      this.#heartbeatMonitor.onHeartbeat(headers);
       return res.send('OK');
     });
     await this.#init(this.#fastify);
