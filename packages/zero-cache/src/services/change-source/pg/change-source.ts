@@ -186,7 +186,6 @@ class PostgresChangeSource implements ChangeSource {
   async startStream(clientWatermark: string): Promise<ChangeStream> {
     const db = pgClient(this.#lc, this.#upstreamUri);
     const slot = replicationSlot(this.#shardID);
-    const clientStart = oneAfter(clientWatermark);
 
     try {
       await this.#stopExistingReplicationSlotSubscriber(db, slot);
@@ -207,7 +206,7 @@ class PostgresChangeSource implements ChangeSource {
           // Unlike the postgres.js client, the pg client does not have an option to
           // only use SSL if the server supports it. We achieve it manually by
           // trying SSL first, and then falling back to connecting without SSL.
-          return await this.#startStream(slot, clientStart, config, useSSL);
+          return await this.#startStream(slot, clientWatermark, config, useSSL);
         } catch (e) {
           if (e instanceof SSLUnsupportedError) {
             this.#lc.info?.('retrying upstream connection without SSL');
@@ -237,7 +236,7 @@ class PostgresChangeSource implements ChangeSource {
 
   async #startStream(
     slot: string,
-    clientStart: string,
+    clientWatermark: string,
     shardConfig: InternalShardConfig,
     useSSL: boolean,
   ): Promise<ChangeStream> {
@@ -312,6 +311,7 @@ class PostgresChangeSource implements ChangeSource {
 
     acker = new Acker(service);
 
+    const clientStart = oneAfter(clientWatermark);
     service
       .subscribe(
         new PgoutputPlugin({
@@ -325,7 +325,11 @@ class PostgresChangeSource implements ChangeSource {
       .then(() => changes.cancel(), handleError);
 
     await started;
-    this.#lc.info?.(`started replication stream@${slot}`);
+
+    const {replicaVersion} = this.#replicationConfig;
+    this.#lc.info?.(
+      `started replication stream@${slot} from ${clientWatermark} (replicaVersion: ${replicaVersion})`,
+    );
 
     return {
       changes,

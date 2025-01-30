@@ -228,7 +228,7 @@ export class Storer implements Service {
               count++;
             } else {
               this.#lc.warn?.(
-                `rejecting subscriber at watermark ${sub.watermark}`,
+                `rejecting subscriber at watermark ${sub.watermark} (earliest watermark: ${entry.watermark})`,
               );
               sub.close(
                 ErrorType.WatermarkTooOld,
@@ -249,7 +249,10 @@ export class Storer implements Service {
             } ms)`,
           );
         } else {
-          this.#lc.warn?.(`rejecting subscriber at watermark ${sub.watermark}`);
+          const lastStoredWatermark = await this.getLastStoredWatermark();
+          this.#lc.warn?.(
+            `rejecting subscriber at watermark ${sub.watermark} (latest watermark: ${lastStoredWatermark})`,
+          );
           sub.close(
             ErrorType.WatermarkNotFound,
             `cannot catch up from requested watermark ${sub.watermark}`,
