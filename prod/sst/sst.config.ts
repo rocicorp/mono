@@ -78,11 +78,17 @@ export default $config({
         `${process.env.AWS_ACCOUNT_ID}.dkr.ecr.${process.env.AWS_REGION}.amazonaws.com/${process.env.ECR_IMAGE_ZERO_CACHE}:latest`,
     };
 
+    if (!commonEnv.ZERO_IMAGE_URL) {
+      throw new Error(
+        "ZERO_IMAGE_URL is required. Either provide it directly or ensure AWS_ACCOUNT_ID, AWS_REGION, and ECR_IMAGE_ZERO_CACHE are set.",
+      );
+    }
+
     // Replication Manager Service
     const replicationManager = cluster.addService(`replication-manager`, {
       cpu: "2 vCPU",
       memory: "8 GB",
-      image: process.env.ZERO_IMAGE_URL,
+      image: commonEnv.ZERO_IMAGE_URL,
       health: {
         command: ["CMD-SHELL", "curl -f http://localhost:4849/ || exit 1"],
         interval: "5 seconds",
@@ -124,7 +130,7 @@ export default $config({
     cluster.addService(`view-syncer`, {
       cpu: "2 vCPU",
       memory: "8 GB",
-      image: process.env.ZERO_IMAGE_URL,
+      image: commonEnv.ZERO_IMAGE_URL,
       health: {
         command: ["CMD-SHELL", "curl -f http://localhost:4848/ || exit 1"],
         interval: "5 seconds",
