@@ -1,5 +1,6 @@
 import type {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
+import type {MaybePromise} from '../../../shared/src/types.ts';
 import {initBgIntervalProcess} from '../bg-interval.ts';
 import {StoreImpl} from '../dag/store-impl.ts';
 import type {Store} from '../dag/store.ts';
@@ -8,13 +9,15 @@ import {assertHash, newRandomHash} from '../hash.ts';
 import {IDBStore} from '../kv/idb-store.ts';
 import type {DropStore, StoreProvider} from '../kv/store.ts';
 import {createLogContext} from '../log-options.ts';
+import type {OnClientsDeleted} from '../replicache-impl.ts';
 import {getKVStoreProvider} from '../replicache.ts';
+import type {ClientID} from '../sync/ids.ts';
 import {withRead} from '../with-transactions.ts';
 import {
   clientGroupHasPendingMutations,
   getClientGroups,
 } from './client-groups.ts';
-import {type ClientMap, getClients} from './clients.ts';
+import {getClients} from './clients.ts';
 import type {IndexedDBDatabase} from './idb-databases-store.ts';
 import {IDBDatabasesStore} from './idb-databases-store.ts';
 
@@ -22,17 +25,6 @@ import {IDBDatabasesStore} from './idb-databases-store.ts';
  * How frequently to try to collect
  */
 export const COLLECT_IDB_INTERVAL = 12 * 60 * 60 * 1000; // 12 hours
-
-/**
- * If an IDB database is older than MAX_AGE, then it can be collected.
- */
-export const SDD_IDB_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 1 month
-
-/**
- * If an IDB database is older than DD31_MAX_AGE **and** has no pending
- * mutations, then it can be collected.
- */
-export const DD31_IDB_MAX_AGE = 14 * 24 * 60 * 60 * 1000; // 2 weeks
 
 /**
  * We delay the initial collection to prevent doing it at startup.
@@ -44,10 +36,10 @@ export function initCollectIDBDatabases(
   kvDropStore: DropStore,
   collectInterval: number,
   initialCollectDelay: number,
-  sddMaxAge: number,
-  dd31MaxAge: number,
+  maxAge: number,
   lc: LogContext,
   signal: AbortSignal,
+  onClientsDeleted: OnClientsDeleted,
 ): void {
   let initial = true;
   initBgIntervalProcess(
@@ -56,9 +48,9 @@ export function initCollectIDBDatabases(
       await collectIDBDatabases(
         idbDatabasesStore,
         Date.now(),
-        sddMaxAge,
-        dd31MaxAge,
+        maxAge,
         kvDropStore,
+        onClientsDeleted,
       );
     },
     () => {
@@ -79,35 +71,44 @@ export function initCollectIDBDatabases(
 export async function collectIDBDatabases(
   idbDatabasesStore: IDBDatabasesStore,
   now: number,
-  sddMaxAge: number,
-  dd31MaxAge: number,
+  maxAge: number,
   kvDropStore: DropStore,
+  onClientsDeleted: OnClientsDeleted,
   newDagStore = defaultNewDagStore,
 ): Promise<void> {
   const databases = await idbDatabasesStore.getDatabases();
 
   const dbs = Object.values(databases) as IndexedDBDatabase[];
-  const canCollectResults = await Promise.all(
+  const collectResults = await Promise.all(
     dbs.map(
       async db =>
         [
           db.name,
-          await canCollectDatabase(db, now, sddMaxAge, dd31MaxAge, newDagStore),
+          await gatherDatabaseInfoForCollect(db, now, maxAge, newDagStore),
         ] as const,
     ),
   );
 
-  const namesToRemove = canCollectResults
-    .filter(result => result[1])
-    .map(result => result[0]);
+  const dbNamesToRemove: string[] = [];
+  const clientIDsToRemove: ClientID[] = [];
+  for (const [dbName, [canCollect, clientIDs]] of collectResults) {
+    if (canCollect) {
+      dbNamesToRemove.push(dbName);
+      clientIDsToRemove.push(...clientIDs);
+    }
+  }
 
   const {errors} = await dropDatabases(
     idbDatabasesStore,
-    namesToRemove,
+    dbNamesToRemove,
     kvDropStore,
   );
   if (errors.length) {
     throw errors[0];
+  }
+
+  if (clientIDsToRemove.length) {
+    onClientsDeleted(clientIDsToRemove);
   }
 }
 
@@ -152,62 +153,37 @@ function defaultNewDagStore(name: string): Store {
   return new StoreImpl(perKvStore, newRandomHash, assertHash);
 }
 
-async function canCollectDatabase(
+/**
+ * If the database is older than maxAge and there are no pending mutations we
+ * return `true` and an array of the clientIDs in that db. If the database is
+ * too new or there are pending mutations we return `[false]`.
+ */
+function gatherDatabaseInfoForCollect(
   db: IndexedDBDatabase,
   now: number,
-  sddMaxAge: number,
-  dd31MaxAge: number,
+  maxAge: number,
   newDagStore: typeof defaultNewDagStore,
-): Promise<boolean> {
+): MaybePromise<[canCollect: false] | [canCollect: true, ClientID[]]> {
   if (db.replicacheFormatVersion > FormatVersion.Latest) {
-    return false;
+    return [false];
   }
 
   // 0 is used in testing
-  if (db.lastOpenedTimestampMS !== undefined) {
-    const isDD31 = db.replicacheFormatVersion >= FormatVersion.DD31;
+  assert(db.lastOpenedTimestampMS !== undefined);
 
-    // - For SDD we can delete the database if it is older than maxAge.
-    // - For DD31 we can delete the database if it is older than dd31MaxAge and
-    //   there are no pending mutations.
-    if (now - db.lastOpenedTimestampMS < (isDD31 ? dd31MaxAge : sddMaxAge)) {
-      return false;
-    }
-
-    if (!isDD31) {
-      return true;
-    }
-
-    // If increase the format version we need to decide how to deal with this
-    // logic.
-    assert(
-      db.replicacheFormatVersion === FormatVersion.DD31 ||
-        db.replicacheFormatVersion === FormatVersion.V6 ||
-        db.replicacheFormatVersion === FormatVersion.V7,
-    );
-    return !(await anyPendingMutationsInClientGroups(newDagStore(db.name)));
+  // - For DD31 we can delete the database if it is older than maxAge and
+  //   there are no pending mutations.
+  if (now - db.lastOpenedTimestampMS < maxAge) {
+    return [false];
   }
-
-  // For legacy databases we do not have a lastOpenedTimestampMS so we check the
-  // time stamps of the clients
-  const perdag = newDagStore(db.name);
-  const clientMap = await withRead(perdag, getClients);
-  await perdag.close();
-
-  return allClientsOlderThan(clientMap, now, sddMaxAge);
-}
-
-function allClientsOlderThan(
-  clients: ClientMap,
-  now: number,
-  maxAge: number,
-): boolean {
-  for (const client of clients.values()) {
-    if (now - client.heartbeatTimestampMs < maxAge) {
-      return false;
-    }
-  }
-  return true;
+  // If increase the format version we need to decide how to deal with this
+  // logic.
+  assert(
+    db.replicacheFormatVersion === FormatVersion.DD31 ||
+      db.replicacheFormatVersion === FormatVersion.V6 ||
+      db.replicacheFormatVersion === FormatVersion.V7,
+  );
+  return gatherPendingMutationsInClientGroups(newDagStore(db.name));
 }
 
 /**
@@ -303,14 +279,23 @@ export function deleteAllReplicacheData(
   return dropAllDatabases(opts);
 }
 
-async function anyPendingMutationsInClientGroups(
+/**
+ * If the there are pending mutations in any of the clients in this db we return
+ * `[false]`. Otherwise we return `true` and an array of the clientIDs to
+ * remove.
+ */
+function gatherPendingMutationsInClientGroups(
   perdag: Store,
-): Promise<boolean> {
-  const clientGroups = await withRead(perdag, getClientGroups);
-  for (const clientGroup of clientGroups.values()) {
-    if (clientGroupHasPendingMutations(clientGroup)) {
-      return true;
+): Promise<[canCollect: false] | [canCollect: true, ClientID[]]> {
+  return withRead(perdag, async read => {
+    const clientGroups = await getClientGroups(read);
+    for (const clientGroup of clientGroups.values()) {
+      if (clientGroupHasPendingMutations(clientGroup)) {
+        return [false];
+      }
     }
-  }
-  return false;
+
+    const clients = await getClients(read);
+    return [true, [...clients.keys()]];
+  });
 }

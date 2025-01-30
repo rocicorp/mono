@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {type SinonFakeTimers, useFakeTimers} from 'sinon';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {assertNotUndefined} from '../../../shared/src/asserts.ts';
 import type {Store} from '../dag/store.ts';
 import {TestStore} from '../dag/test-store.ts';
@@ -9,8 +9,10 @@ import {fakeHash} from '../hash.ts';
 import {IDBStore} from '../kv/idb-store.ts';
 import {hasMemStore} from '../kv/mem-store.ts';
 import {TestMemStore} from '../kv/test-mem-store.ts';
+import type {OnClientsDeleted} from '../replicache-impl.ts';
 import {getKVStoreProvider} from '../replicache.ts';
-import {withWrite, withWriteNoImplicitCommit} from '../with-transactions.ts';
+import type {ClientID} from '../sync/ids.ts';
+import {withWrite} from '../with-transactions.ts';
 import {makeClientGroupMap} from './client-groups.test.ts';
 import {type ClientGroupMap, setClientGroups} from './client-groups.ts';
 import {
@@ -62,63 +64,61 @@ describe('collectIDBDatabases', () => {
     lastOpenedTimestampMS,
   });
 
-  const NO_LEGACY = [false];
-  const INCLUDE_LEGACY = [false, true];
-
   const t = (
     name: string,
     entries: Entries,
     now: number,
     expectedDatabases: string[],
-    legacyValues = INCLUDE_LEGACY,
+    expectedClientsDeleted?: ClientID[],
   ) => {
-    for (const legacy of legacyValues) {
-      test(name + ' > time ' + now + (legacy ? ' > legacy' : ''), async () => {
-        const store = new IDBDatabasesStore(_ => new TestMemStore());
-        const dropStore = (name: string) => store.deleteDatabases([name]);
-        const clientDagStores = new Map<IndexedDBName, Store>();
-        for (const [db, clients, clientGroups] of entries) {
-          const dagStore = new TestStore();
-          clientDagStores.set(db.name, dagStore);
-          if (legacy) {
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const {lastOpenedTimestampMS: _, ...rest} = db;
-            await store.putDatabaseForTesting(rest);
-          } else {
-            await store.putDatabaseForTesting(db);
-          }
+    test(name + ' > time ' + now, async () => {
+      const store = new IDBDatabasesStore(_ => new TestMemStore());
+      const dropStore = (name: string) => store.deleteDatabases([name]);
+      const clientDagStores = new Map<IndexedDBName, Store>();
+      for (const [db, clients, clientGroups] of entries) {
+        const dagStore = new TestStore();
+        clientDagStores.set(db.name, dagStore);
 
-          await setClientsForTesting(clients, dagStore);
-          if (clientGroups) {
-            await withWriteNoImplicitCommit(dagStore, async tx => {
-              await setClientGroups(clientGroups, tx);
-              await tx.commit();
-            });
-          }
+        await store.putDatabaseForTesting(db);
+
+        await setClientsForTesting(clients, dagStore);
+        if (clientGroups) {
+          await withWrite(dagStore, async tx => {
+            await setClientGroups(clientGroups, tx);
+          });
         }
+      }
 
-        const newDagStore = (name: string) => {
-          const dagStore = clientDagStores.get(name);
-          assertNotUndefined(dagStore);
-          return dagStore;
-        };
+      const newDagStore = (name: string) => {
+        const dagStore = clientDagStores.get(name);
+        assertNotUndefined(dagStore);
+        return dagStore;
+      };
 
-        const maxAge = 1000;
+      const maxAge = 1000;
 
-        await collectIDBDatabases(
-          store,
-          now,
-          maxAge,
-          maxAge,
-          dropStore,
-          newDagStore,
+      const onClientsDeleted = vi.fn<OnClientsDeleted>();
+
+      await collectIDBDatabases(
+        store,
+        now,
+        maxAge,
+        dropStore,
+        onClientsDeleted,
+        newDagStore,
+      );
+
+      expect(Object.keys(await store.getDatabases())).to.deep.equal(
+        expectedDatabases,
+      );
+
+      if (expectedClientsDeleted) {
+        expect(onClientsDeleted).toHaveBeenCalledOnce();
+        expect(onClientsDeleted).toHaveBeenLastCalledWith(
+          expectedClientsDeleted,
         );
-
-        expect(Object.keys(await store.getDatabases())).to.deep.equal(
-          expectedDatabases,
-        );
-      });
-    }
+      }
+    });
   };
 
   t('empty', [], 0, []);
@@ -261,26 +261,6 @@ describe('collectIDBDatabases', () => {
         makeIndexedDBDatabase({
           name: 'a',
           lastOpenedTimestampMS: 0,
-          replicacheFormatVersion: FormatVersion.SDD - 1,
-        }),
-        makeClientMapDD31({
-          clientA1: {
-            headHash: fakeHash('a1'),
-            heartbeatTimestampMs: 0,
-          },
-        }),
-      ],
-    ];
-    t('one idb, one client, old format version', entries, 0, ['a']);
-    t('one idb, one client, old format version', entries, 1000, []);
-  }
-
-  {
-    const entries: Entries = [
-      [
-        makeIndexedDBDatabase({
-          name: 'a',
-          lastOpenedTimestampMS: 0,
           replicacheFormatVersion: FormatVersion.V6,
         }),
         makeClientMapDD31({
@@ -303,33 +283,194 @@ describe('collectIDBDatabases', () => {
         }),
       ],
     ];
+    t('one idb, one client, with pending mutations', entries, 0, ['a']);
+    t('one idb, one client, with pending mutations', entries, 1000, ['a']);
+    t('one idb, one client, with pending mutations', entries, 2000, ['a']);
+    t('one idb, one client, with pending mutations', entries, 5000, ['a']);
+  }
+
+  {
+    const entries: Entries = [
+      [
+        makeIndexedDBDatabase({name: 'a', lastOpenedTimestampMS: 0}),
+        makeClientMapDD31({
+          clientA1: {
+            headHash: fakeHash('a1'),
+            heartbeatTimestampMs: 0,
+            clientGroupID: 'clientGroupA1',
+          },
+        }),
+        makeClientGroupMap({
+          clientGroupA1: {
+            headHash: fakeHash('a1'),
+            mutationIDs: {
+              clientA1: 2,
+            },
+            lastServerAckdMutationIDs: {
+              clientA1: 2,
+            },
+          },
+        }),
+      ],
+    ];
+
     t(
-      'one idb, one client, with pending mutations',
+      'one idb with one client without any pending mutations should call onClientIDsDeleted',
       entries,
-      0,
-      ['a'],
-      NO_LEGACY,
+      5000,
+      [],
+      ['clientA1'],
     );
+  }
+
+  {
+    const entries: Entries = [
+      [
+        makeIndexedDBDatabase({name: 'a', lastOpenedTimestampMS: 0}),
+        makeClientMapDD31({
+          clientA1: {
+            headHash: fakeHash('a1'),
+            heartbeatTimestampMs: 0,
+            clientGroupID: 'clientGroupA1',
+          },
+          clientA2: {
+            headHash: fakeHash('a2'),
+            heartbeatTimestampMs: 0,
+            clientGroupID: 'clientGroupA1',
+          },
+        }),
+        makeClientGroupMap({
+          clientGroupA1: {
+            headHash: fakeHash('a1'),
+            mutationIDs: {
+              clientA1: 2,
+              clientA2: 5,
+            },
+            lastServerAckdMutationIDs: {
+              clientA1: 2,
+              clientA2: 5,
+            },
+          },
+        }),
+      ],
+    ];
+
     t(
-      'one idb, one client, with pending mutations',
+      'one idb with two clients without any pending mutations should call onClientIDsDeleted',
       entries,
-      1000,
-      ['a'],
-      NO_LEGACY,
+      5000,
+      [],
+      ['clientA1', 'clientA2'],
     );
+  }
+
+  {
+    const entries: Entries = [
+      [
+        makeIndexedDBDatabase({name: 'a', lastOpenedTimestampMS: 0}),
+        makeClientMapDD31({
+          clientA1: {
+            headHash: fakeHash('a1'),
+            heartbeatTimestampMs: 0,
+            clientGroupID: 'clientGroupA1',
+          },
+        }),
+        makeClientGroupMap({
+          clientGroupA1: {
+            headHash: fakeHash('a1'),
+            mutationIDs: {
+              clientA1: 2,
+            },
+            lastServerAckdMutationIDs: {
+              clientA1: 2,
+            },
+          },
+        }),
+      ],
+      [
+        makeIndexedDBDatabase({name: 'b', lastOpenedTimestampMS: 0}),
+        makeClientMapDD31({
+          clientB1: {
+            headHash: fakeHash('b1'),
+            heartbeatTimestampMs: 0,
+            clientGroupID: 'clientGroupB1',
+          },
+        }),
+        makeClientGroupMap({
+          clientGroupB1: {
+            headHash: fakeHash('b1'),
+            mutationIDs: {
+              clientB1: 2,
+            },
+            lastServerAckdMutationIDs: {
+              clientB1: 2,
+            },
+          },
+        }),
+      ],
+    ];
+
     t(
-      'one idb, one client, with pending mutations',
+      'two idb with one client in each without any pending mutations should call onClientIDsDeleted',
       entries,
-      2000,
-      ['a'],
-      NO_LEGACY,
+      5000,
+      [],
+      ['clientA1', 'clientB1'],
     );
+  }
+
+  {
+    const entries: Entries = [
+      [
+        makeIndexedDBDatabase({name: 'a', lastOpenedTimestampMS: 0}),
+        makeClientMapDD31({
+          clientA1: {
+            headHash: fakeHash('a1'),
+            heartbeatTimestampMs: 0,
+            clientGroupID: 'clientGroupA1',
+          },
+        }),
+        makeClientGroupMap({
+          clientGroupA1: {
+            headHash: fakeHash('a1'),
+            mutationIDs: {
+              clientA1: 2,
+            },
+            lastServerAckdMutationIDs: {
+              clientA1: 1,
+            },
+          },
+        }),
+      ],
+      [
+        makeIndexedDBDatabase({name: 'b', lastOpenedTimestampMS: 0}),
+        makeClientMapDD31({
+          clientB1: {
+            headHash: fakeHash('b1'),
+            heartbeatTimestampMs: 0,
+            clientGroupID: 'clientGroupB1',
+          },
+        }),
+        makeClientGroupMap({
+          clientGroupB1: {
+            headHash: fakeHash('b1'),
+            mutationIDs: {
+              clientB1: 2,
+            },
+            lastServerAckdMutationIDs: {
+              clientB1: 2,
+            },
+          },
+        }),
+      ],
+    ];
+
     t(
-      'one idb, one client, with pending mutations',
+      'two idb with one client in each, one client has pending mutations should call onClientIDsDeleted',
       entries,
       5000,
       ['a'],
-      NO_LEGACY,
+      ['clientB1'],
     );
   }
 });
