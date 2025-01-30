@@ -1,8 +1,23 @@
 import {unreachable} from '../../../shared/src/asserts.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
-import type {AddChange, Change, RemoveChange} from './change.ts';
+import type {Change} from './change.ts';
 import type {Node} from './data.ts';
 import type {FetchRequest, Input, Output} from './operator.ts';
+
+export type CaughtNode = {
+  row: Row;
+  relationships: Record<string, CaughtNode[]>;
+};
+
+export type CaughtAddChange = {
+  type: 'add';
+  node: CaughtNode;
+};
+
+export type CaughtRemoveChange = {
+  type: 'remove';
+  node: CaughtNode;
+};
 
 export type CaughtChildChange = {
   type: 'child';
@@ -20,8 +35,8 @@ export type CaughtEditChange = {
 };
 
 export type CaughtChange =
-  | AddChange
-  | RemoveChange
+  | CaughtAddChange
+  | CaughtRemoveChange
   | CaughtChildChange
   | CaughtEditChange;
 
@@ -75,7 +90,8 @@ export function expandChange(change: Change): CaughtChange {
       };
     case 'child':
       return {
-        ...change,
+        type: 'child',
+        row: change.node.row,
         child: {
           ...change.child,
           change: expandChange(change.child.change),
@@ -86,13 +102,13 @@ export function expandChange(change: Change): CaughtChange {
   }
 }
 
-export function expandNode(node: Node): Node {
+export function expandNode(node: Node): CaughtNode {
   return {
-    ...node,
+    row: node.row,
     relationships: Object.fromEntries(
       Object.entries(node.relationships).map(([k, v]) => [
         k,
-        [...v].map(expandNode),
+        [...v()].map(expandNode),
       ]),
     ),
   };

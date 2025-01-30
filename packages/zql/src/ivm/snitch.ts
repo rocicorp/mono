@@ -97,7 +97,7 @@ function toChangeRecord(change: Change): ChangeRecord {
     case 'child':
       return {
         type: 'child',
-        row: change.row,
+        row: change.node.row,
         child: toChangeRecord(change.child.change),
       };
     default:

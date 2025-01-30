@@ -21,7 +21,7 @@ export function filterPush(
       }
       break;
     case 'child':
-      if (predicate(change.row)) {
+      if (predicate(change.node.row)) {
         output.push(change);
       }
       break;

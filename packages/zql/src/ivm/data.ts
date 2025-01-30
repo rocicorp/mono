@@ -14,7 +14,7 @@ import type {Stream} from './stream.ts';
  */
 export type Node = {
   row: Row;
-  relationships: Record<string, Stream<Node>>;
+  relationships: Record<string, () => Stream<Node>>;
 };
 
 /**
@@ -108,4 +108,12 @@ export function valuesEqual(a: Value, b: Value): boolean {
     return false;
   }
   return a === b;
+}
+
+export function drainStreams(node: Node) {
+  for (const stream of Object.values(node.relationships)) {
+    for (const node of stream()) {
+      drainStreams(node);
+    }
+  }
 }
