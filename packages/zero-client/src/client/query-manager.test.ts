@@ -1,17 +1,21 @@
 import {describe, expect, test, vi} from 'vitest';
+import type {IndexKey} from '../../../replicache/src/db/index.ts';
 import {
   makeScanResult,
-  type DeepReadonly,
-  type IndexKey,
-  type ReadonlyJSONValue,
-  type ReadTransaction,
-  type ScanIndexOptions,
-  type ScanNoIndexOptions,
-  type ScanOptions,
   type ScanResult,
-} from '../../../replicache/src/mod.ts';
+} from '../../../replicache/src/scan-iterator.ts';
+import type {
+  ScanIndexOptions,
+  ScanNoIndexOptions,
+  ScanOptions,
+} from '../../../replicache/src/scan-options.ts';
+import {
+  type DeepReadonly,
+  type ReadTransaction,
+} from '../../../replicache/src/transactions.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
-import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/mod.ts';
+import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
 import {toGotQueriesKey} from './keys.ts';
 import {QueryManager} from './query-manager.ts';
 

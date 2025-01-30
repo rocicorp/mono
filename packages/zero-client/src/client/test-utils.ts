@@ -4,23 +4,25 @@ import type {SinonFakeTimers} from 'sinon';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
+import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
+import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
-import {
-  type ConnectedMessage,
-  type Downstream,
-  type ErrorMessage,
-  type PokeEndBody,
-  type PokeEndMessage,
-  type PokePartBody,
-  type PokePartMessage,
-  type PokeStartBody,
-  type PokeStartMessage,
-  type PongMessage,
-  type PullResponseBody,
-  type PullResponseMessage,
-  upstreamSchema,
-} from '../../../zero-protocol/src/mod.ts';
-import type {Schema} from '../../../zero-schema/src/mod.ts';
+import type {ErrorMessage} from '../../../zero-protocol/src/error.ts';
+import type {
+  PokeEndBody,
+  PokeEndMessage,
+  PokePartBody,
+  PokePartMessage,
+  PokeStartBody,
+  PokeStartMessage,
+} from '../../../zero-protocol/src/poke.ts';
+import type {PongMessage} from '../../../zero-protocol/src/pong.ts';
+import type {
+  PullResponseBody,
+  PullResponseMessage,
+} from '../../../zero-protocol/src/pull.ts';
+import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import * as ConnectionState from './connection-state-enum.ts';
 import type {LogOptions} from './log-options.ts';
 import type {ZeroOptions} from './options.ts';

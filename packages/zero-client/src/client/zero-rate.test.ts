@@ -3,7 +3,12 @@ import {afterEach, beforeEach, expect, test} from 'vitest';
 import type {PushRequest} from '../../../replicache/src/sync/push.ts';
 import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
 import type {Mutation} from '../../../zero-protocol/src/push.ts';
-import {createSchema, number, string, table} from '../mod.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  number,
+  string,
+  table,
+} from '../../../zero-schema/src/builder/table-builder.ts';
 import * as ConnectionState from './connection-state-enum.ts';
 import {MockSocket, tickAFewTimes, zeroForTest} from './test-utils.ts';
 

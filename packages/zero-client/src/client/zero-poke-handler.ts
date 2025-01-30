@@ -4,16 +4,17 @@ import type {
   PatchOperationInternal,
   PokeInternal,
 } from '../../../replicache/src/impl.ts';
-import type {ClientID, PatchOperation} from '../../../replicache/src/mod.ts';
+import type {PatchOperation} from '../../../replicache/src/patch-operation.ts';
+import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {getBrowserGlobalMethod} from '../../../shared/src/browser-env.ts';
+import type {ClientsPatchOp} from '../../../zero-protocol/src/clients-patch.ts';
 import type {
-  ClientsPatchOp,
   PokeEndBody,
   PokePartBody,
   PokeStartBody,
-  QueriesPatchOp,
-  RowPatchOp,
-} from '../../../zero-protocol/src/mod.ts';
+} from '../../../zero-protocol/src/poke.ts';
+import type {QueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
+import type {RowPatchOp} from '../../../zero-protocol/src/row-patch.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   toClientsKey,

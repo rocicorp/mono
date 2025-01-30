@@ -9,23 +9,30 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
-import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
+import {changeDesiredQueriesMessageSchema} from '../../../zero-protocol/src/change-desired-queries.ts';
 import {
-  changeDesiredQueriesMessageSchema,
   decodeSecProtocols,
   encodeSecProtocols,
   initConnectionMessageSchema,
-  type QueriesPatchOp,
-} from '../../../zero-protocol/src/mod.ts';
+} from '../../../zero-protocol/src/connect.ts';
+import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
 import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import {
   type Mutation,
   pushMessageSchema,
 } from '../../../zero-protocol/src/push.ts';
+import type {QueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
-import {createSchema, type Schema} from '../../../zero-schema/src/mod.ts';
-import {number, string, table} from '../mod.ts';
+import {
+  createSchema,
+  type Schema,
+} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  number,
+  string,
+  table,
+} from '../../../zero-schema/src/builder/table-builder.ts';
 import * as ConnectionState from './connection-state-enum.ts';
 import type {WSString} from './http-string.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';

@@ -7,13 +7,13 @@ import {
 import * as v from '../../../../shared/src/valita.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {rowSchema} from '../../../../zero-protocol/src/data.ts';
+import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import type {
-  Downstream,
   PokePartBody,
   PokeStartBody,
-  RowPatchOp,
-} from '../../../../zero-protocol/src/mod.ts';
+} from '../../../../zero-protocol/src/poke.ts';
 import {primaryKeyValueRecordSchema} from '../../../../zero-protocol/src/primary-key.ts';
+import type {RowPatchOp} from '../../../../zero-protocol/src/row-patch.ts';
 import type {JSONObject} from '../../types/bigint-json.ts';
 import {getLogLevel} from '../../types/error-for-client.ts';
 import {

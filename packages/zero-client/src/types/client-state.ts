@@ -1,4 +1,4 @@
-import type {Mutation} from '../../../zero-protocol/src/mod.ts';
+import type {Mutation} from '../../../zero-protocol/src/push.ts';
 
 export type ClientID = string;
 

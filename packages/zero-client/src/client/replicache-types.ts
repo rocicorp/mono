@@ -1,9 +1,9 @@
 import type {
-  MutatorReturn,
-  ReadonlyJSONObject,
   ReadTransaction as ReplicacheReadTransaction,
   WriteTransaction as ReplicacheWriteTransaction,
-} from '../../../replicache/src/mod.ts';
+} from '../../../replicache/src/transactions.ts';
+import type {MutatorReturn} from '../../../replicache/src/types.ts';
+import type {ReadonlyJSONObject} from '../../../shared/src/json.ts';
 
 /**
  * `AuthData` must include a `userID` which is unique stable identifier

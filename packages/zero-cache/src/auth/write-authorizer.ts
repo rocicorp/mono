@@ -9,17 +9,17 @@ import type {JSONValue} from '../../../shared/src/json.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {Condition} from '../../../zero-protocol/src/ast.ts';
+import {
+  primaryKeyValueSchema,
+  type PrimaryKeyValue,
+} from '../../../zero-protocol/src/primary-key.ts';
 import type {
   CRUDOp,
   DeleteOp,
   InsertOp,
   UpdateOp,
   UpsertOp,
-} from '../../../zero-protocol/src/mod.ts';
-import {
-  primaryKeyValueSchema,
-  type PrimaryKeyValue,
-} from '../../../zero-protocol/src/primary-key.ts';
+} from '../../../zero-protocol/src/push.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   PermissionsConfig,

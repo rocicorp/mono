@@ -8,7 +8,7 @@ import {
 import {
   DatadogLogSink,
   type DatadogLogSinkOptions,
-} from '../../../datadog/src/mod.ts';
+} from '../../../datadog/src/datadog-log-sink.ts';
 import {appendPath, type HTTPString} from './http-string.ts';
 import {version} from './version.ts';
 

@@ -1,8 +1,8 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {type JWTPayload} from 'jose';
-import {pid} from 'process';
-import {MessagePort} from 'worker_threads';
+import {pid} from 'node:process';
+import {MessagePort} from 'node:worker_threads';
 import {WebSocketServer, type WebSocket} from 'ws';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
