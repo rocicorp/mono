@@ -7,7 +7,6 @@
     "src/server/*.ts",
     "src/cli.ts",
     "src/build-schema.ts",
-    "src/zero-cache-dev.ts",
-    "src/change-protocol.ts"
+    "src/zero-cache-dev.ts"
   ]
 }

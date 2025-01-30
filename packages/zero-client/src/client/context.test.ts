@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import type {ExperimentalNoIndexDiff} from '../../../replicache/src/mod.ts';
+import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
@@ -235,7 +235,7 @@ test('transactions', () => {
   });
   const out = new Catch(join);
 
-  const changes: ExperimentalNoIndexDiff = [
+  const changes: NoIndexDiff = [
     {
       key: `${ENTITIES_KEY_PREFIX}server/s1`,
       op: 'add',

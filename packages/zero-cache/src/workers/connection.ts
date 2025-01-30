@@ -8,18 +8,16 @@ import {startAsyncSpan, startSpan} from '../../../otel/src/span.ts';
 import {version} from '../../../otel/src/version.ts';
 import {unreachable} from '../../../shared/src/asserts.ts';
 import * as valita from '../../../shared/src/valita.ts';
+import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
+import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
 import {type ErrorBody} from '../../../zero-protocol/src/error.ts';
-import {
-  type ConnectedMessage,
-  type Downstream,
-  type PongMessage,
-  upstreamSchema,
-} from '../../../zero-protocol/src/mod.ts';
+import type {PongMessage} from '../../../zero-protocol/src/pong.ts';
 import {
   MIN_SERVER_SUPPORTED_PROTOCOL_VERSION,
   PROTOCOL_VERSION,
 } from '../../../zero-protocol/src/protocol-version.ts';
+import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
 import type {ConnectParams} from '../services/dispatcher/connect-params.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
 import type {

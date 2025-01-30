@@ -23,6 +23,7 @@ type OneConnection<TSourceField, TDestField, TDest extends TableSchema> = {
 };
 
 type Prev = [-1, 0, 1, 2, 3, 4, 5, 6];
+
 export type PreviousSchema<
   TSource extends TableSchema,
   K extends number,

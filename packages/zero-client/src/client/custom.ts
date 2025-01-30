@@ -1,12 +1,7 @@
-import type {
-  DeleteID,
-  InsertValue,
-  Schema,
-  TableSchema,
-  UpdateValue,
-  UpsertValue,
-} from '../mod.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {ClientID} from '../types/client-state.ts';
+import type {DeleteID, InsertValue, UpdateValue, UpsertValue} from './crud.ts';
 
 /**
  * The shape which a user's custom mutator definitions must conform to.

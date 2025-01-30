@@ -1,16 +1,14 @@
-import type {ClientID} from '../../../replicache/src/mod.ts';
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
+import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {hashOfAST} from '../../../zero-protocol/src/ast-hash.ts';
 import {normalizeAST, type AST} from '../../../zero-protocol/src/ast.ts';
-import type {
-  ChangeDesiredQueriesMessage,
-  QueriesPatchOp,
-} from '../../../zero-protocol/src/mod.ts';
+import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
+import type {QueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import type {GotCallback} from '../../../zql/src/query/query-impl.ts';
-import type {ReadTransaction} from '../mod.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
+import type {ReadTransaction} from './replicache-types.ts';
 
 type QueryHash = string;
 

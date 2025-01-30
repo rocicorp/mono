@@ -1,27 +1,28 @@
+export type {VersionNotSupportedResponse} from '../../replicache/src/error-responses.ts';
+export {getDefaultPuller} from '../../replicache/src/get-default-puller.ts';
+export type {HTTPRequestInfo} from '../../replicache/src/http-request-info.ts';
+export {IDBNotFoundError} from '../../replicache/src/kv/idb-store.ts';
+export type {
+  CreateStore as CreateKVStore,
+  Read as KVRead,
+  Store as KVStore,
+  Write as KVWrite,
+} from '../../replicache/src/kv/store.ts';
 export {
   dropAllDatabases,
   dropDatabase,
-  getDefaultPuller,
-  IDBNotFoundError,
-  makeIDBName,
-  TransactionClosedError,
-} from '../../replicache/src/mod.ts';
+} from '../../replicache/src/persist/collect-idb-databases.ts';
+export {makeIDBName} from '../../replicache/src/replicache.ts';
+export type {ClientGroupID, ClientID} from '../../replicache/src/sync/ids.ts';
+export {TransactionClosedError} from '../../replicache/src/transaction-closed-error.ts';
+export type {UpdateNeededReason} from '../../replicache/src/types.ts';
 export type {
-  ClientGroupID,
-  ClientID,
-  CreateKVStore,
-  HTTPRequestInfo,
   JSONObject,
   JSONValue,
-  KVRead,
-  KVStore,
-  KVWrite,
-  MaybePromise,
   ReadonlyJSONObject,
   ReadonlyJSONValue,
-  UpdateNeededReason,
-  VersionNotSupportedResponse,
-} from '../../replicache/src/mod.ts';
+} from '../../shared/src/json.ts';
+export type {MaybePromise} from '../../shared/src/types.ts';
 export type {
   AST,
   Bound,
@@ -91,13 +92,13 @@ export type {
 } from '../../zql/src/query/expression.ts';
 export type {Query, Row} from '../../zql/src/query/query.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
-export type {ZeroOptions} from './client/options.ts';
-export {Zero} from './client/zero.ts';
 export type {
   DBMutator,
-  TableMutator,
-  InsertValue,
-  UpsertValue,
-  UpdateValue,
   DeleteID,
+  InsertValue,
+  TableMutator,
+  UpdateValue,
+  UpsertValue,
 } from './client/crud.ts';
+export type {ZeroOptions} from './client/options.ts';
+export {Zero} from './client/zero.ts';

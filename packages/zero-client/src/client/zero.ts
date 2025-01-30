@@ -1,24 +1,24 @@
 import {LogContext, type LogLevel} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
+import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import {
   ReplicacheImpl,
   type ReplicacheImplOptions,
 } from '../../../replicache/src/impl.ts';
-import {
-  type ClientGroupID,
-  type ClientID,
-  type ExperimentalNoIndexDiff,
-  type MutatorDefs,
-  type PullRequest,
-  type Puller,
-  type PullerResult,
-  type PushRequest,
-  type Pusher,
-  type PusherResult,
-  type ReplicacheOptions,
-  type UpdateNeededReason as ReplicacheUpdateNeededReason,
-  dropDatabase,
-} from '../../../replicache/src/mod.ts';
+import {dropDatabase} from '../../../replicache/src/persist/collect-idb-databases.ts';
+import type {Puller, PullerResult} from '../../../replicache/src/puller.ts';
+import type {Pusher, PusherResult} from '../../../replicache/src/pusher.ts';
+import type {ReplicacheOptions} from '../../../replicache/src/replicache-options.ts';
+import type {
+  ClientGroupID,
+  ClientID,
+} from '../../../replicache/src/sync/ids.ts';
+import type {PullRequest} from '../../../replicache/src/sync/pull.ts';
+import type {PushRequest} from '../../../replicache/src/sync/push.ts';
+import type {
+  MutatorDefs,
+  UpdateNeededReason as ReplicacheUpdateNeededReason,
+} from '../../../replicache/src/types.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {
   getBrowserGlobal,
@@ -31,34 +31,36 @@ import {navigator} from '../../../shared/src/navigator.ts';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
+import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
+import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
+import type {Downstream} from '../../../zero-protocol/src/down.ts';
+import {downstreamSchema} from '../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
-import {
-  type CRUDMutation,
-  type CRUDMutationArg,
-  CRUD_MUTATION_NAME,
-  type ConnectedMessage,
-  type CustomMutation,
-  type Downstream,
-  type ErrorMessage,
-  type NullableVersion,
-  type PingMessage,
-  type PokeEndMessage,
-  type PokePartMessage,
-  type PokeStartMessage,
-  type PushMessage,
-  type QueriesPatchOp,
-  downstreamSchema,
-  encodeSecProtocols,
-  nullableVersionSchema,
-} from '../../../zero-protocol/src/mod.ts';
+import type {ErrorMessage} from '../../../zero-protocol/src/error.ts';
 import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
+import type {PingMessage} from '../../../zero-protocol/src/ping.ts';
+import type {
+  PokeEndMessage,
+  PokePartMessage,
+  PokeStartMessage,
+} from '../../../zero-protocol/src/poke.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import type {
   PullRequestMessage,
   PullResponseBody,
   PullResponseMessage,
 } from '../../../zero-protocol/src/pull.ts';
-import type {Schema} from '../../../zero-schema/src/mod.ts';
+import type {
+  CRUDMutation,
+  CRUDMutationArg,
+  CustomMutation,
+  PushMessage,
+} from '../../../zero-protocol/src/push.ts';
+import {CRUD_MUTATION_NAME} from '../../../zero-protocol/src/push.ts';
+import type {QueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
+import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
+import {nullableVersionSchema} from '../../../zero-protocol/src/version.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {nanoid} from '../util/nanoid.ts';
@@ -479,7 +481,7 @@ export class Zero<const S extends Schema> {
     );
 
     rep.experimentalWatch(
-      diff => this.#zeroContext.processChanges(diff as ExperimentalNoIndexDiff),
+      diff => this.#zeroContext.processChanges(diff as NoIndexDiff),
       {
         prefix: ENTITIES_KEY_PREFIX,
         initialValuesInFirstDiff: true,

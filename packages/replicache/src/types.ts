@@ -1,8 +1,8 @@
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {MaybePromise} from '../../shared/src/types.ts';
 import type {Hash} from './hash.ts';
-import type {ReadonlyJSONValue, WriteTransaction} from './mod.ts';
 import type {PullResponseV1, PullResponseV1Internal} from './puller.ts';
-import type {ReadTransactionImpl} from './transactions.ts';
+import type {ReadTransactionImpl, WriteTransaction} from './transactions.ts';
 
 export type BeginPullResult = {
   requestID: string;

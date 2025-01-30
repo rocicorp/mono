@@ -3,12 +3,12 @@ import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
 import {
   type CRUDMutation,
   type CRUDOp,
   type UpsertOp,
-} from '../../../../zero-protocol/src/mod.ts';
-import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
+} from '../../../../zero-protocol/src/push.ts';
 import type {WriteAuthorizer} from '../../auth/write-authorizer.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {expectTables, testDBs} from '../../test/db.ts';

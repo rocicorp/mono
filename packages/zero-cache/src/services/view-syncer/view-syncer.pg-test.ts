@@ -3,14 +3,14 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
-import {
-  type Downstream,
-  type ErrorBody,
-  type PokePartBody,
-  type PokeStartBody,
-  type QueriesPatch,
-} from '../../../../zero-protocol/src/mod.ts';
+import type {ErrorBody} from '../../../../zero-protocol/src/error.ts';
+import type {
+  PokePartBody,
+  PokeStartBody,
+} from '../../../../zero-protocol/src/poke.ts';
+import type {QueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.ts';
 import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import {
@@ -23,6 +23,7 @@ import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permi
 import {definePermissions} from '../../../../zero-schema/src/permissions.ts';
 import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import type {LogConfig} from '../../config/zero-config.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {testDBs} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
@@ -52,7 +53,6 @@ import {PipelineDriver} from './pipeline-driver.ts';
 import {initViewSyncerSchema} from './schema/init.ts';
 import {Snapshotter} from './snapshotter.ts';
 import {pickToken, type SyncContext, ViewSyncerService} from './view-syncer.ts';
-import type {LogConfig} from '../../config/zero-config.ts';
 
 const SHARD_ID = 'ABC';
 const logConfig: LogConfig = {

@@ -1,4 +1,5 @@
 import type {Expand} from '../../../shared/src/expand.ts';
+import type {ReadonlyJSONObject} from '../../../shared/src/json.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import {
@@ -11,12 +12,11 @@ import {
   type UpdateOp,
   type UpsertOp,
 } from '../../../zero-protocol/src/push.ts';
-import type {Schema} from '../../../zero-schema/src/mod.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   SchemaValueToTSType,
   TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
-import type {ReadonlyJSONObject} from '../mod.ts';
 import {toPrimaryKeyString} from './keys.ts';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.ts';
 

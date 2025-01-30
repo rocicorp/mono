@@ -1,7 +1,7 @@
 import type {LogLevel} from '@rocicorp/logger';
-import type {KVStoreProvider} from '../../../replicache/src/mod.ts';
+import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
-import type {Schema} from '../../../zero-schema/src/mod.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 
 /**
@@ -135,7 +135,7 @@ export interface ZeroOptions<
    * You can also set this to a function that is used to create new KV stores,
    * allowing a custom implementation of the underlying storage layer.
    */
-  kvStore?: 'mem' | 'idb' | KVStoreProvider | undefined;
+  kvStore?: 'mem' | 'idb' | StoreProvider | undefined;
 
   /**
    * The maximum number of bytes to allow in a single header.

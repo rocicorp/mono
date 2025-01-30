@@ -1,9 +1,9 @@
 import {expect, test} from 'vitest';
 import {h64} from '../../../../../shared/src/hash.ts';
+import * as v0 from './current.ts';
 import {changeStreamMessageSchema} from './current/downstream.ts';
 import {CHANGE_SOURCE_PATH} from './current/path.ts';
 import {changeSourceUpstreamSchema} from './current/upstream.ts';
-import {v0} from './mod.ts';
 
 function t(
   module: {

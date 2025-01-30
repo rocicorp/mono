@@ -1,12 +1,12 @@
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
-import {
-  type Downstream,
-  type PokeEndMessage,
-  type PokePartMessage,
-  type PokeStartMessage,
-} from '../../../../zero-protocol/src/mod.ts';
+import type {
+  PokeEndMessage,
+  PokePartMessage,
+  PokeStartMessage,
+} from '../../../../zero-protocol/src/poke.ts';
 import type {JSONObject} from '../../types/bigint-json.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import {Subscription} from '../../types/subscription.ts';

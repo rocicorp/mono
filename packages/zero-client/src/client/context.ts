@@ -1,4 +1,4 @@
-import type {ExperimentalNoIndexDiff} from '../../../replicache/src/mod.ts';
+import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
@@ -89,7 +89,7 @@ export class ZeroContext implements QueryDelegate {
     return result as T;
   }
 
-  processChanges(changes: ExperimentalNoIndexDiff) {
+  processChanges(changes: NoIndexDiff) {
     try {
       this.batchViewUpdates(() => {
         for (const diff of changes) {
