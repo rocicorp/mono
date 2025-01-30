@@ -31,6 +31,7 @@ async function main() {
     const module = await tsImport(relativePath, import.meta.url);
     await writeFile(config.schema.output, await stringifySchema(module));
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error(`Failed to load zero schema from ${absoluteConfigPath}:`, e);
     process.exit(1);
   }

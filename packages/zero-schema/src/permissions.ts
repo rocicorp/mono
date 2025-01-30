@@ -8,11 +8,11 @@ import {AuthQuery} from '../../zql/src/query/auth-query.ts';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
 import {staticParam} from '../../zql/src/query/query-impl.ts';
 import type {Query} from '../../zql/src/query/query.ts';
+import type {Schema} from './builder/schema-builder.ts';
 import type {
   AssetPermissions as CompiledAssetPermissions,
   PermissionsConfig as CompiledPermissionsConfig,
 } from './compiled-permissions.ts';
-import type {Schema} from './mod.ts';
 
 export const ANYONE_CAN = undefined;
 export const NOBODY_CAN = [];

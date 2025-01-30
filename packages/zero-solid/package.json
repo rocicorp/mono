@@ -8,7 +8,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check-types": "tsc",
-    "check-types:watch": "tsc --watch"
+    "check-types:watch": "tsc --watch",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
   },
   "peerDependencies": {
     "solid-js": "^1.0.0"

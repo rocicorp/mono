@@ -6,7 +6,10 @@
   "module": "true",
   "scripts": {
     "check-types": "tsc",
-    "check-types:watch": "tsc --watch"
+    "check-types:watch": "tsc --watch",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
   },
   "devDependencies": {
     "zql": "0.0.0"

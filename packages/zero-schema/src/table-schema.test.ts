@@ -2,8 +2,8 @@
 /* eslint-disable @typescript-eslint/ban-types */
 import {expectTypeOf, test} from 'vitest';
 import {relationships} from './builder/relationship-builder.ts';
+import {createSchema} from './builder/schema-builder.ts';
 import {number, string, table} from './builder/table-builder.ts';
-import {createSchema} from './mod.ts';
 import type {Relationship, TableSchema} from './table-schema.ts';
 
 test('relationship schema types', () => {

@@ -1,7 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
 import {expect, test, vi} from 'vitest';
-import {number, string, table} from '../../zero-client/src/mod.ts';
-import {createSchema} from '../../zero-schema/src/mod.ts';
+import {createSchema, number, string, table} from '../../zero/src/zero.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import type {HumanReadable, Query} from '../../zql/src/query/query.ts';
 import {SolidView, solidViewFactory} from './solid-view.ts';

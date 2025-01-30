@@ -542,7 +542,7 @@ describe('view-syncer/service', () => {
     });
   });
 
-  test('responds to changeQueriesPatch', async () => {
+  test('responds to changeDesiredQueries patch', async () => {
     connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
