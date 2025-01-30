@@ -1,5 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import type {IncomingHttpHeaders} from 'node:http';
 import {pid} from 'node:process';
 import type {EventEmitter} from 'stream';
 import {
@@ -278,13 +279,14 @@ export class HeartbeatMonitor {
     this.#stopInterval = stopInterval;
   }
 
-  onHeartbeat() {
+  onHeartbeat(reqHeaders: IncomingHttpHeaders) {
     this.#lastHeartbeat = Date.now();
     if (this.#timer === undefined) {
       this.#lc.info?.(
         `starting heartbeat monitor at ${
           this.#stopInterval / 1000
         } second interval`,
+        reqHeaders,
       );
       // e.g. check every 5 seconds to see if it's been over 15 seconds
       //      since the last heartbeat.
