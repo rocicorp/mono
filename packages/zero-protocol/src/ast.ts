@@ -235,15 +235,17 @@ export type AST = {
   readonly orderBy?: Ordering | undefined;
 };
 
+export type Correlation = {
+  readonly parentField: CompoundKey;
+  readonly childField: CompoundKey;
+};
+
 export type CorrelatedSubquery = {
   /**
    * Only equality correlation are supported for now.
    * E.g., direct foreign key relationships.
    */
-  readonly correlation: {
-    parentField: CompoundKey;
-    childField: CompoundKey;
-  };
+  readonly correlation: Correlation;
   readonly subquery: AST;
   readonly system?: System | undefined;
   // If a hop in the subquery chain should be hidden from the output view.
