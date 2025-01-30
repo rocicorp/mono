@@ -73,13 +73,16 @@ export default $config({
       ZERO_LOG_FORMAT: "json",
       ZERO_REPLICA_FILE: "sync-replica.db",
       ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup`,
+      ZERO_IMAGE_URL:
+        process.env.ZERO_IMAGE_URL ||
+        `${process.env.AWS_ACCOUNT_ID}.dkr.ecr.${process.env.AWS_REGION}.amazonaws.com/${process.env.ECR_IMAGE_ZERO_CACHE}:latest`,
     };
 
     // Replication Manager Service
     const replicationManager = cluster.addService(`replication-manager`, {
       cpu: "2 vCPU",
       memory: "8 GB",
-      image: `${process.env.AWS_ACCOUNT_ID}.dkr.ecr.${process.env.AWS_REGION}.amazonaws.com/${process.env.ECR_IMAGE_ZERO_CACHE}:latest`,
+      image: process.env.ZERO_IMAGE_URL,
       health: {
         command: ["CMD-SHELL", "curl -f http://localhost:4849/ || exit 1"],
         interval: "5 seconds",
@@ -103,13 +106,25 @@ export default $config({
           },
         ],
       },
+      transform: {
+        target: {
+          healthCheck: {
+            enabled: true,
+            path: "/keepalive",
+            protocol: "HTTP",
+            interval: 5,
+            healthyThreshold: 2,
+            timeout: 3,
+          },
+        },
+      },
     });
 
     // View Syncer Service
     cluster.addService(`view-syncer`, {
       cpu: "2 vCPU",
       memory: "8 GB",
-      image: `${process.env.AWS_ACCOUNT_ID}.dkr.ecr.${process.env.AWS_REGION}.amazonaws.com/${process.env.ECR_IMAGE_ZERO_CACHE}:latest`,
+      image: process.env.ZERO_IMAGE_URL,
       health: {
         command: ["CMD-SHELL", "curl -f http://localhost:4848/ || exit 1"],
         interval: "5 seconds",
@@ -127,11 +142,16 @@ export default $config({
       },
       loadBalancer: {
         public: true,
-        domain: {
-          name: process.env.DOMAIN_NAME!,
-          dns: false,
-          cert: process.env.DOMAIN_CERT!,
-        },
+        //only set domain if both are provided
+        ...(process.env.DOMAIN_NAME && process.env.DOMAIN_CERT
+          ? {
+              domain: {
+                name: process.env.DOMAIN_NAME,
+                dns: false,
+                cert: process.env.DOMAIN_CERT,
+              },
+            }
+          : {}),
         ports: [
           {
             listen: "80/http",
@@ -144,7 +164,6 @@ export default $config({
         ],
       },
       transform: {
-        
         target: {
           healthCheck: {
             enabled: true,
