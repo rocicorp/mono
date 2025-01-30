@@ -191,7 +191,7 @@ class PostgresChangeSource implements ChangeSource {
       await this.#stopExistingReplicationSlotSubscriber(db, slot);
 
       const config = await getInternalShardConfig(db, this.#shardID);
-      this.#lc.info?.(`starting replication stream @${slot}`);
+      this.#lc.info?.(`starting replication stream@${slot}`);
 
       // Enabling ssl according to the logic in:
       // https://github.com/brianc/node-postgres/blob/95d7e620ef8b51743b4cbca05dd3c3ce858ecea7/packages/pg-connection-string/index.js#L90
