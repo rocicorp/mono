@@ -566,10 +566,18 @@ class ChangeMaker {
    * but SQLite will error instead (https://sqlite.org/forum/forumpost/2e62dba69f?t=c&hist).
    * The current workaround is to drop indexes first.
    *
-   * More generally, the order of replicating DDL updates is:
+   * Also note that although it should not be possible to both rename and
+   * add/drop tables/columns in a single statement, the operations are
+   * ordered to handle that possibility, by always dropping old entities,
+   * then modifying kept entities, and then adding new entities.
+   *
+   * Thus, the order of replicating DDL updates is:
    * - drop indexes
-   * - alter tables
    * - drop tables
+   * - alter tables
+   *   - drop columns
+   *   - alter columns
+   *   - add columns
    * - create tables
    * - create indexes
    *
@@ -582,165 +590,101 @@ class ChangeMaker {
     preSchema: PublishedSchema,
     update: DdlUpdateEvent,
   ): DataChange[] {
-    const [prevTables, prevIndexes] = specsByName(preSchema);
-    const [nextTables, nextIndexes] = specsByName(update.schema);
-    const {tag} = update.event;
+    const [prevTbl, prevIdx] = specsByID(preSchema);
+    const [nextTbl, nextIdx] = specsByID(update.schema);
     const changes: DataChange[] = [];
 
     // Validate the new table schemas
-    for (const table of nextTables.values()) {
+    for (const table of nextTbl.values()) {
       validate(this.#lc, this.#shardID, table);
     }
 
-    const [dropped, created] = symmetricDifferences(prevIndexes, nextIndexes);
-
-    // Drop indexes first so that allow dropping dependent objects.
-    for (const id of dropped) {
-      const {schema, name} = must(prevIndexes.get(id));
+    const [droppedIdx, createdIdx] = symmetricDifferences(prevIdx, nextIdx);
+    for (const id of droppedIdx) {
+      const {schema, name} = must(prevIdx.get(id));
       changes.push({tag: 'drop-index', id: {schema, name}});
     }
 
-    if (tag === 'ALTER PUBLICATION') {
-      const tables = intersection(prevTables, nextTables);
-      for (const id of tables) {
-        changes.push(
-          ...this.#getAddedOrDroppedColumnChanges(
-            must(prevTables.get(id)),
-            must(nextTables.get(id)),
-          ),
-        );
-      }
-    } else if (tag === 'ALTER TABLE') {
-      const altered = idString(update.event.table);
-      const table = must(nextTables.get(altered));
-      const prevTable = prevTables.get(altered);
-      if (!prevTable) {
-        // table rename. Find the old name.
-        let old: Identifier | undefined;
-        for (const [id, {schema, name}] of prevTables.entries()) {
-          if (!nextTables.has(id)) {
-            old = {schema, name};
-            break;
-          }
-        }
-        if (!old) {
-          throw new Error(`can't find previous table: ${stringify(update)}`);
-        }
-        changes.push({tag: 'rename-table', old, new: table});
-      } else {
-        changes.push(...this.#getSingleColumnChange(prevTable, table));
-      }
+    // DROP
+    const [droppedTbl, createdTbl] = symmetricDifferences(prevTbl, nextTbl);
+    for (const id of droppedTbl) {
+      const {schema, name} = must(prevTbl.get(id));
+      changes.push({tag: 'drop-table', id: {schema, name}});
     }
-
-    // Added/dropped tables are handled in the same way for most DDL updates, with
-    // the exception being `ALTER TABLE`, for which a table rename should not be
-    // confused as a drop + add.
-    if (tag !== 'ALTER TABLE') {
-      const [dropped, created] = symmetricDifferences(prevTables, nextTables);
-      for (const id of dropped) {
-        const {schema, name} = must(prevTables.get(id));
-        changes.push({tag: 'drop-table', id: {schema, name}});
-      }
-      for (const id of created) {
-        const spec = must(nextTables.get(id));
-        changes.push({tag: 'create-table', spec});
-      }
+    // ALTER
+    const tables = intersection(prevTbl, nextTbl);
+    for (const id of tables) {
+      changes.push(
+        ...this.#getTableChanges(must(prevTbl.get(id)), must(nextTbl.get(id))),
+      );
+    }
+    // CREATE
+    for (const id of createdTbl) {
+      const spec = must(nextTbl.get(id));
+      changes.push({tag: 'create-table', spec});
     }
 
     // Add indexes last since they may reference tables / columns that need
     // to be created first.
-    for (const id of created) {
-      const spec = must(nextIndexes.get(id));
+    for (const id of createdIdx) {
+      const spec = must(nextIdx.get(id));
       changes.push({tag: 'create-index', spec});
     }
     return changes;
   }
 
-  // ALTER PUBLICATION can only add and drop columns, but never change them.
-  #getAddedOrDroppedColumnChanges(
-    oldTable: TableSpec,
-    newTable: TableSpec,
-  ): DataChange[] {
-    const table = {schema: newTable.schema, name: newTable.name};
-    const [dropped, added] = symmetricDifferences(
-      new Set(Object.keys(oldTable.columns)),
-      new Set(Object.keys(newTable.columns)),
-    );
-
+  #getTableChanges(oldTable: TableSpec, newTable: TableSpec): DataChange[] {
     const changes: DataChange[] = [];
-    for (const column of dropped) {
-      changes.push({tag: 'drop-column', table, column});
-    }
-    for (const name of added) {
+    if (
+      oldTable.schema !== newTable.schema ||
+      oldTable.name !== newTable.name
+    ) {
       changes.push({
-        tag: 'add-column',
-        table,
-        column: {name, spec: newTable.columns[name]},
+        tag: 'rename-table',
+        old: {schema: oldTable.schema, name: oldTable.name},
+        new: {schema: newTable.schema, name: newTable.name},
       });
     }
-
-    return changes;
-  }
-
-  // ALTER TABLE can add, drop, or change/rename a single column.
-  #getSingleColumnChange(
-    oldTable: TableSpec,
-    newTable: TableSpec,
-  ): DataChange[] {
     const table = {schema: newTable.schema, name: newTable.name};
-    const [d, a] = symmetricDifferences(
-      new Set(Object.keys(oldTable.columns)),
-      new Set(Object.keys(newTable.columns)),
-    );
-    const dropped = [...d];
-    const added = [...a];
-    assert(
-      dropped.length <= 1 && added.length <= 1,
-      `too many dropped [${[dropped]}] or added [${[added]}] columns`,
-    );
-    if (dropped.length === 1 && added.length === 1) {
-      const oldName = dropped[0];
-      const newName = added[0];
-      return [
-        {
-          tag: 'update-column',
-          table,
-          old: {name: oldName, spec: oldTable.columns[oldName]},
-          new: {name: newName, spec: newTable.columns[newName]},
-        },
-      ];
-    } else if (added.length) {
-      const name = added[0];
-      return [
-        {
-          tag: 'add-column',
-          table,
-          column: {name, spec: newTable.columns[name]},
-        },
-      ];
-    } else if (dropped.length) {
-      return [{tag: 'drop-column', table, column: dropped[0]}];
+    const oldColumns = columnsByID(oldTable.columns);
+    const newColumns = columnsByID(newTable.columns);
+
+    // DROP
+    const [dropped, added] = symmetricDifferences(oldColumns, newColumns);
+    for (const id of dropped) {
+      const {name: column} = must(oldColumns.get(id));
+      changes.push({tag: 'drop-column', table, column});
     }
-    // Not a rename, add, or drop. Find the column with a relevant update.
-    for (const [name, oldSpec] of Object.entries(oldTable.columns)) {
-      const newSpec = newTable.columns[name];
-      // Besides the name, we only care about the data type and not null.
-      // Default values and other constraints are not relevant.
+
+    // ALTER
+    const both = intersection(oldColumns, newColumns);
+    for (const id of both) {
+      const {name: oldName, ...oldSpec} = must(oldColumns.get(id));
+      const {name: newName, ...newSpec} = must(newColumns.get(id));
+      // The three things that we care about are:
+      // 1. name
+      // 2. type
+      // 3. not-null
       if (
+        oldName !== newName ||
         oldSpec.dataType !== newSpec.dataType ||
         oldSpec.notNull !== newSpec.notNull
       ) {
-        return [
-          {
-            tag: 'update-column',
-            table,
-            old: {name, spec: oldSpec},
-            new: {name, spec: newSpec},
-          },
-        ];
+        changes.push({
+          tag: 'update-column',
+          table,
+          old: {name: oldName, spec: oldSpec},
+          new: {name: newName, spec: newSpec},
+        });
       }
     }
-    return [];
+
+    // ADD
+    for (const id of added) {
+      const {name, ...spec} = must(newColumns.get(id));
+      changes.push({tag: 'add-column', table, column: {name, spec}});
+    }
+    return changes;
   }
 
   #parseReplicationEvent(content: Uint8Array) {
@@ -845,7 +789,8 @@ export function tablesDifferent(a: PublishedTableSpec, b: PublishedTableSpec) {
       return (
         aname !== bname ||
         acol.pos !== bcol.pos ||
-        acol.typeOID !== bcol.typeOID
+        acol.typeOID !== bcol.typeOID ||
+        acol.notNull !== bcol.notNull
       );
     })
   );
@@ -882,13 +827,25 @@ function translateError(e: unknown): Error {
 }
 const idString = (id: Identifier) => `${id.schema}.${id.name}`;
 
-function specsByName(published: PublishedSchema) {
+function specsByID(published: PublishedSchema) {
   return [
     // It would have been nice to use a CustomKeyMap here, but we rely on set-utils
     // operations which use plain Sets.
-    new Map(published.tables.map(t => [idString(t), t])),
+    new Map(published.tables.map(t => [t.oid, t])),
     new Map(published.indexes.map(i => [idString(i), i])),
   ] as const;
+}
+
+function columnsByID(
+  columns: Record<string, ColumnSpec>,
+): Map<number, ColumnSpec & {name: string}> {
+  const colsByID = new Map<number, ColumnSpec & {name: string}>();
+  for (const [name, spec] of Object.entries(columns)) {
+    // The `pos` field is the `attnum` in `pg_attribute`, which is a stable
+    // identifier for the column in this table (i.e. never reused).
+    colsByID.set(spec.pos, {...spec, name});
+  }
+  return colsByID;
 }
 
 class SSLUnsupportedError extends Error {}

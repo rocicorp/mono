@@ -7,7 +7,7 @@ import {listIndexes, listTables} from '../../../db/lite-tables.ts';
 import type {LiteIndexSpec, LiteTableSpec} from '../../../db/specs.ts';
 import {getConnectionURI, testDBs} from '../../../test/db.ts';
 import {DbFile, expectMatchingObjectsInTables} from '../../../test/lite.ts';
-import type {JSONValue} from '../../../types/bigint-json.ts';
+import {type JSONValue} from '../../../types/bigint-json.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import type {Source} from '../../../types/streams.ts';
 import type {ChangeProcessor} from '../../replicator/change-processor.ts';
@@ -32,7 +32,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
   let replicaDbFile: DbFile;
   let replica: Database;
   let changes: Source<ChangeStreamMessage>;
-  let downstream: Queue<ChangeStreamMessage>;
+  let downstream: Queue<ChangeStreamMessage | 'timeout'>;
   let replicator: ChangeProcessor;
 
   beforeAll(async () => {
@@ -93,8 +93,8 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
 
   function drainToQueue(
     sub: Source<ChangeStreamMessage>,
-  ): Queue<ChangeStreamMessage> {
-    const queue = new Queue<ChangeStreamMessage>();
+  ): Queue<ChangeStreamMessage | 'timeout'> {
+    const queue = new Queue<ChangeStreamMessage | 'timeout'>();
     void (async () => {
       for await (const msg of sub) {
         void queue.enqueue(msg);
@@ -106,7 +106,10 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
   async function nextTransaction(): Promise<DataChange[]> {
     const data: DataChange[] = [];
     for (;;) {
-      const change = await downstream.dequeue();
+      const change = await downstream.dequeue('timeout', 2000);
+      if (change === 'timeout') {
+        throw new Error('timed out waiting for change');
+      }
       const [type] = change;
       if (type !== 'control' && type !== 'status') {
         replicator.processMessage(lc, change);
@@ -539,6 +542,104 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               dflt: null,
               notNull: false,
               pos: 3,
+            },
+          },
+          name: 'zero.bar',
+        },
+      ],
+      [],
+    ],
+    [
+      'add multiple columns',
+      'ALTER TABLE zero.bar ADD foo TEXT, ADD bar TEXT;',
+      [{tag: 'add-column'}, {tag: 'add-column'}],
+      {['zero.bar']: []},
+      [
+        {
+          columns: {
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: false,
+              pos: 2,
+            },
+            id: {
+              characterMaximumLength: null,
+              dataType: 'int8|NOT_NULL',
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            handle: {
+              characterMaximumLength: null,
+              dataType: 'text|NOT_NULL',
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            bar: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: false,
+              pos: 4,
+            },
+            foo: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: false,
+              pos: 5,
+            },
+          },
+          name: 'zero.bar',
+        },
+      ],
+      [],
+    ],
+    [
+      'alter, add, and drop columns',
+      'ALTER TABLE zero.bar ALTER foo SET NOT NULL, ADD boo TEXT, DROP bar;',
+      [{tag: 'drop-column'}, {tag: 'update-column'}, {tag: 'add-column'}],
+      {['zero.bar']: []},
+      [
+        {
+          columns: {
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: false,
+              pos: 2,
+            },
+            id: {
+              characterMaximumLength: null,
+              dataType: 'int8|NOT_NULL',
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            handle: {
+              characterMaximumLength: null,
+              dataType: 'text|NOT_NULL',
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            foo: {
+              characterMaximumLength: null,
+              dataType: 'text|NOT_NULL',
+              dflt: null,
+              notNull: false,
+              pos: 4,
+            },
+            boo: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: false,
+              pos: 5,
             },
           },
           name: 'zero.bar',

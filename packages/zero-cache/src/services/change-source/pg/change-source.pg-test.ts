@@ -525,6 +525,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
     ['ALTER TABLE foo RENAME times TO timez', null],
     ['ALTER TABLE foo DROP COLUMN date', null],
     ['ALTER TABLE foo ALTER COLUMN times TYPE TIMESTAMPTZ[]', null],
+    ['ALTER TABLE foo ALTER COLUMN int SET NOT NULL', null],
     [
       // Rename column and rename back
       'ALTER TABLE foo RENAME times TO timez',
@@ -574,7 +575,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
         const downstream = drainToQueue(changes);
 
         // This statement should be successfully converted to Changes.
-        await upstream`INSERT INTO foo(id) VALUES('hello')`;
+        await upstream`INSERT INTO foo(id, int) VALUES('hello', 0)`;
         expect(await downstream.dequeue()).toMatchObject([
           'begin',
           {tag: 'begin'},
@@ -594,8 +595,8 @@ describe('change-source/pg', {timeout: 30000}, () => {
         // effectively freeze replication.
         await upstream.begin(async tx => {
           await tx.unsafe(before);
-          await tx`INSERT INTO foo(id) VALUES('wide')`;
-          await tx`INSERT INTO foo(id) VALUES('world')`;
+          await tx`INSERT INTO foo(id, int) VALUES('wide', 1)`;
+          await tx`INSERT INTO foo(id, int) VALUES('world', 2)`;
           if (after) {
             await tx.unsafe(after);
           }
