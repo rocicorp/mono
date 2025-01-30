@@ -100,10 +100,8 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'insert',
       relation: {
-        tag: 'relation',
         schema: 'public',
         name: 'foo',
-        replicaIdentity: 'default',
         keyColumns: ['id'],
       },
       new: {
@@ -136,10 +134,8 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'insert',
       relation: {
-        tag: 'relation',
         schema: 'public',
         name: 'nopk',
-        replicaIdentity: 'default',
         keyColumns: [],
       },
       new: {
@@ -216,10 +212,8 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'insert',
       relation: {
-        tag: 'relation',
         schema: 'zero',
         name: 'schemaVersions',
-        replicaIdentity: 'default',
         keyColumns: ['lock'],
       },
       new: {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
@@ -582,10 +576,8 @@ describe('integration', {timeout: 30000}, () => {
             {
               tag: 'insert',
               relation: {
-                tag: 'relation',
                 schema: 'public',
                 name: 'foo',
-                replicaIdentity: 'default',
                 keyColumns: ['id'],
               },
               new: {
@@ -645,10 +637,8 @@ describe('integration', {timeout: 30000}, () => {
               tag: 'truncate',
               relations: [
                 {
-                  tag: 'relation',
                   schema: 'public',
                   name: 'foo',
-                  replicaIdentity: 'default',
                   keyColumns: ['id'],
                 },
               ],
@@ -709,10 +699,8 @@ describe('integration', {timeout: 30000}, () => {
             {
               tag: 'insert',
               relation: {
-                tag: 'relation',
                 schema: 'public',
                 name: 'nopk',
-                replicaIdentity: 'default',
                 keyColumns: [],
               },
               new: {

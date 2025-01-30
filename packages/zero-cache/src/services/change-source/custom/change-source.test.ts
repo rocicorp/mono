@@ -88,10 +88,8 @@ describe('change-source/custom', () => {
         {
           tag: 'insert',
           relation: {
-            tag: 'relation',
             schema: 'public',
             name: 'foo',
-            replicaIdentity: 'default',
             keyColumns: ['id'],
           },
           new: {id: 'abcde', bar: 'baz'},
@@ -164,10 +162,8 @@ describe('change-source/custom', () => {
         {
           tag: 'insert',
           relation: {
-            tag: 'relation',
             schema: 'zero',
             name: 'schemaVersions',
-            replicaIdentity: 'default',
             keyColumns: ['lock'],
           },
           new: {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
