@@ -97,7 +97,7 @@ export class PokeHandler {
     return pokePart.lastMutationIDChanges?.[this.#clientID];
   }
 
-  handlePokeEnd(pokeEnd: PokeEndBody) {
+  handlePokeEnd(pokeEnd: PokeEndBody): void {
     if (pokeEnd.pokeID !== this.#receivingPoke?.pokeStart.pokeID) {
       this.#handlePokeError(
         `pokeEnd for ${pokeEnd.pokeID}, when receiving ${this.#receivingPoke
