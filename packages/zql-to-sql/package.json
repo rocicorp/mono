@@ -20,6 +20,6 @@
   "dependencies": {
     "@databases/escape-identifier": "^1.0.3",
     "@databases/sql": "^3.3.0",
-    "vitest": "^3.0.4"
+    "vitest": "^2.1.5"
   }
 }
