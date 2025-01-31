@@ -127,8 +127,8 @@ export default $config({
 
     // View Syncer Service
     cluster.addService(`view-syncer`, {
-      cpu: "2 vCPU",
-      memory: "8 GB",
+      cpu: "8 vCPU",
+      memory: "16 GB",
       image: commonEnv.ZERO_IMAGE_URL,
       health: {
         command: ["CMD-SHELL", "curl -f http://localhost:4848/ || exit 1"],
