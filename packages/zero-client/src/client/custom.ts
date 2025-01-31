@@ -14,7 +14,10 @@ import {
   type UpsertValue,
 } from './crud.ts';
 import type {WriteTransaction} from './replicache-types.ts';
-
+import type {IVMSourceBranch, IVMSourceRepo} from './ivm-source-repo.ts';
+import {newQuery} from '../../../zql/src/query/query-impl.ts';
+import type {Query} from '../../../zql/src/query/query.ts';
+import {ZeroContext} from './context.ts';
 /**
  * The shape which a user's custom mutator definitions must conform to.
  */
@@ -85,6 +88,7 @@ export interface Transaction<S extends Schema> {
   readonly reason: TransactionReason;
 
   readonly mutate: SchemaCRUD<S>;
+  readonly query: SchemaQuery<S>;
 }
 
 type SchemaCRUD<S extends Schema> = {
@@ -123,28 +127,64 @@ export type TableCRUD<S extends TableSchema> = {
 };
 
 export class TransactionImpl implements Transaction<Schema> {
-  constructor(repTx: WriteTransaction, schema: Schema) {
+  constructor(
+    repTx: WriteTransaction,
+    schema: Schema,
+    ivmSourceRepo: IVMSourceRepo,
+  ) {
     must(repTx.reason === 'initial' || repTx.reason === 'rebase');
     this.clientID = repTx.clientID;
     this.mutationID = repTx.mutationID;
     this.reason = repTx.reason === 'initial' ? 'optimistic' : 'rebase';
     this.mutate = makeSchemaCRUD(schema, repTx);
+    this.query = makeSchemaQuery(
+      schema,
+      this.reason === 'optimistic'
+        ? ivmSourceRepo.main
+        : // TODO: we don't initialize the sync branch yet.
+          // to fix in the next PR.
+          ivmSourceRepo.main,
+    );
   }
 
   readonly clientID: ClientID;
   readonly mutationID: number;
   readonly reason: TransactionReason;
   readonly mutate: SchemaCRUD<Schema>;
+  readonly query: SchemaQuery<Schema>;
 }
+
+type SchemaQuery<S extends Schema> = {
+  readonly [K in keyof S['tables'] & string]: Omit<
+    Query<S, K>,
+    'materialize' | 'preload'
+  >;
+};
 
 export function makeReplicacheMutator(
   mutator: CustomMutatorImpl<Schema>,
   schema: Schema,
+  ivmSourceRepo: IVMSourceRepo,
 ) {
   return (repTx: WriteTransaction, args: ReadonlyJSONValue): Promise<void> => {
-    const tx = new TransactionImpl(repTx, schema);
+    const tx = new TransactionImpl(repTx, schema, ivmSourceRepo);
     return mutator(tx, args);
   };
+}
+
+function makeSchemaQuery(schema: Schema, ivmBranch: IVMSourceBranch) {
+  const rv = {} as Record<string, Query<Schema, string>>;
+  const context = new ZeroContext(
+    ivmBranch,
+    () => () => {},
+    applyViewUpdates => applyViewUpdates(),
+  );
+
+  for (const name of Object.keys(schema.tables)) {
+    rv[name] = newQuery(context, schema, name);
+  }
+
+  return rv as SchemaQuery<Schema>;
 }
 
 function makeSchemaCRUD(schema: Schema, tx: WriteTransaction) {
