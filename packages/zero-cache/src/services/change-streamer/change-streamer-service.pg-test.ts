@@ -352,6 +352,25 @@ describe('change-streamer/service', () => {
       tag: 'commit',
       something: 'new',
     });
+
+    await expectAcks('09', '0b', '0c');
+
+    // Only the changes for the committed (i.e. first) transaction are persisted.
+    const logEntries = await changeDB<
+      ChangeLogEntry[]
+    >`SELECT * FROM cdc."changeLog"`;
+    expect(logEntries.map(e => e.change.tag)).toEqual([
+      'begin',
+      'insert',
+      'insert',
+      'commit',
+      'begin',
+      'delete',
+      'commit',
+      'begin',
+      'insert',
+      'commit',
+    ]);
   });
 
   test('data types (forwarded and catchup)', async () => {
