@@ -163,7 +163,9 @@ function gatherDatabaseInfoForCollect(
   now: number,
   maxAge: number,
   newDagStore: typeof defaultNewDagStore,
-): MaybePromise<[canCollect: false] | [canCollect: true, ClientID[]]> {
+): MaybePromise<
+  [canCollect: false] | [canCollect: true, clientIDs: ClientID[]]
+> {
   if (db.replicacheFormatVersion > FormatVersion.Latest) {
     return [false];
   }
@@ -286,7 +288,7 @@ export function deleteAllReplicacheData(
  */
 function gatherPendingMutationsInClientGroups(
   perdag: Store,
-): Promise<[canCollect: false] | [canCollect: true, ClientID[]]> {
+): Promise<[canCollect: false] | [canCollect: true, clientIDs: ClientID[]]> {
   return withRead(perdag, async read => {
     const clientGroups = await getClientGroups(read);
     for (const clientGroup of clientGroups.values()) {
