@@ -124,3 +124,41 @@ test('custom mutators write to the local store', async () => {
   issues = z.query.issue.run();
   expect(issues.length).toEqual(0);
 });
+
+test('custom mutators can query the local store during an optimistic mutation', async () => {
+  const z = zeroForTest({
+    schema,
+    mutators: {
+      issue: {
+        closeAll: async tx => {
+          await Promise.all(
+            tx.query.issue
+              .run()
+              .map(issue =>
+                tx.mutate.issue.update({id: issue.id, closed: true}),
+              ),
+          );
+        },
+      },
+    },
+  });
+
+  await Promise.all(
+    Array.from({length: 10}, async (_, i) => {
+      await z.mutate.issue.insert({
+        id: i.toString().padStart(3, '0'),
+        title: `issue ${i}`,
+        closed: false,
+        description: '',
+        ownerId: '',
+      });
+    }),
+  );
+  let issues = z.query.issue.where('closed', false).run();
+  expect(issues.length).toEqual(10);
+
+  await z.mutate.issue.closeAll();
+
+  issues = z.query.issue.where('closed', false).run();
+  expect(issues.length).toEqual(0);
+});

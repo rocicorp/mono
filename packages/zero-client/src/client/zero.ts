@@ -119,7 +119,7 @@ import {
 import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
-import {IVMSourceBranch} from './ivm-source-repo.ts';
+import {IVMSourceRepo} from './ivm-source-repo.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -266,6 +266,7 @@ export class Zero<
 
   readonly #pokeHandler: PokeHandler;
   readonly #queryManager: QueryManager;
+  readonly #ivmSources: IVMSourceRepo;
 
   /**
    * The queries we sent when inside the sec-protocol header when establishing a connection.
@@ -410,6 +411,7 @@ export class Zero<
     const replicacheMutators = {
       [CRUD_MUTATION_NAME]: makeCRUDMutator(schema),
     };
+    this.#ivmSources = new IVMSourceRepo(schema.tables);
 
     for (const [namespace, mutatorsForNamespace] of Object.entries(
       options.mutators ?? {},
@@ -418,7 +420,7 @@ export class Zero<
         mutatorsForNamespace as Record<string, CustomMutatorImpl<Schema>>,
       )) {
         (replicacheMutators as MutatorDefs)[customMutatorKey(namespace, name)] =
-          makeReplicacheMutator(mutator, schema);
+          makeReplicacheMutator(mutator, schema, this.#ivmSources);
       }
     }
 
@@ -517,7 +519,7 @@ export class Zero<
     );
 
     this.#zeroContext = new ZeroContext(
-      new IVMSourceBranch(schema.tables),
+      this.#ivmSources.main,
       (ast, gotCallback) => this.#queryManager.add(ast, gotCallback),
       batchViewUpdates,
     );

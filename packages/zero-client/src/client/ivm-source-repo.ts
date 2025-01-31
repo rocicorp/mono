@@ -10,15 +10,23 @@ import {wrapIterable} from '../../../shared/src/iterables.ts';
  */
 export class IVMSourceRepo {
   readonly #main: IVMSourceBranch;
-  sync: IVMSourceBranch;
+  readonly #tables: Record<string, TableSchema>;
+  sync: IVMSourceBranch | undefined;
 
-  constructor(main: IVMSourceBranch, sync: IVMSourceBranch) {
-    this.#main = main;
-    this.sync = sync;
+  constructor(tables: Record<string, TableSchema>) {
+    this.#main = new IVMSourceBranch(tables);
+    this.#tables = tables;
   }
 
   get main() {
     return this.#main;
+  }
+
+  /**
+   * Creates a new empty branch.
+   */
+  newBranch() {
+    return new IVMSourceBranch(this.#tables);
   }
 }
 
