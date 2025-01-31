@@ -1,4 +1,4 @@
-import {must} from '../../shared/src/must.ts';
+import {assert} from '../../shared/src/asserts.ts';
 import type {
   CorrelatedSubqueryCondition,
   Ordering,
@@ -63,19 +63,11 @@ export function related(
       `inner_${relationship.subquery.alias}`,
     )})) FROM (${select(
       relationship.subquery,
-      sql.join(
-        zip(
-          relationship.correlation.parentField,
-          relationship.correlation.childField,
-        ).map(
-          ([parentField, childField]) =>
-            sql`${sql.ident(parentTable)}.${sql.ident(
-              parentField,
-            )} = ${sql.ident(relationship.subquery.table)}.${sql.ident(
-              childField,
-            )}`,
-        ),
-        ' AND ',
+      correlate(
+        parentTable,
+        relationship.correlation.parentField,
+        relationship.subquery.table,
+        relationship.correlation.childField,
       ),
     )}) ${sql.ident(`inner_${relationship.subquery.alias}`)}
   ) as ${sql.ident(relationship.subquery.alias)}`,
@@ -144,7 +136,7 @@ export function any(condition: SimpleCondition): SQLQuery {
   } (${valuePosition(condition.right)})`;
 }
 
-function valuePosition(value: ValuePosition): SQLQuery {
+export function valuePosition(value: ValuePosition): SQLQuery {
   switch (value.type) {
     case 'column':
       return sql.ident(value.name);
@@ -194,11 +186,11 @@ export function correlate(
   );
 }
 
-function zip<T>(a1: readonly T[], a2: readonly T[]): T[] {
-  must(a1.length === a2.length);
-  const result = [];
+function zip<T>(a1: readonly T[], a2: readonly T[]): [T, T][] {
+  assert(a1.length === a2.length);
+  const result: [T, T][] = [];
   for (let i = 0; i < a1.length; i++) {
-    result.push(a1[i], a2[i]);
+    result.push([a1[i], a2[i]]);
   }
   return result;
 }
