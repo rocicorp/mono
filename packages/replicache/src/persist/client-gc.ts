@@ -27,8 +27,8 @@ export function initClientGC(
   clientID: ClientID,
   dagStore: Store,
   clientMaxInactiveTime: number,
-  onClientsDeleted: OnClientsDeleted,
   gcInterval: number,
+  onClientsDeleted: OnClientsDeleted,
   lc: LogContext,
   signal: AbortSignal,
 ): void {

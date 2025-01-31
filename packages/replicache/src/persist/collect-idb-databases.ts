@@ -37,9 +37,9 @@ export function initCollectIDBDatabases(
   collectInterval: number,
   initialCollectDelay: number,
   maxAge: number,
+  onClientsDeleted: OnClientsDeleted,
   lc: LogContext,
   signal: AbortSignal,
-  onClientsDeleted: OnClientsDeleted,
 ): void {
   let initial = true;
   initBgIntervalProcess(

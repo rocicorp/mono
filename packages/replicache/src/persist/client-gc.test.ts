@@ -76,8 +76,8 @@ test('initClientGC starts 5 min interval that collects clients that have been in
     'client1',
     dagStore,
     CLIENT_MAX_INACTIVE_TIME,
-    onClientsDeleted,
     GC_INTERVAL,
+    onClientsDeleted,
     new LogContext(),
     controller.signal,
   );

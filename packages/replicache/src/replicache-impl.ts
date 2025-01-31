@@ -576,8 +576,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       clientID,
       this.perdag,
       clientMaxAgeMs,
-      onClientsDeleted,
       GC_INTERVAL,
+      onClientsDeleted,
       this.#lc,
       signal,
     );
@@ -587,9 +587,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       COLLECT_IDB_INTERVAL,
       INITIAL_COLLECT_IDB_DELAY,
       2 * clientMaxAgeMs,
+      onClientsDeleted,
       this.#lc,
       signal,
-      onClientsDeleted,
     );
     initClientGroupGC(this.perdag, this.#lc, signal);
     initNewClientChannel(
