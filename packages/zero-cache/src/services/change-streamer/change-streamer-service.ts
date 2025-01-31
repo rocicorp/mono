@@ -43,6 +43,7 @@ import {Subscriber} from './subscriber.ts';
  */
 export async function initializeStreamer(
   lc: LogContext,
+  taskID: string,
   changeDB: PostgresDB,
   changeSource: ChangeSource,
   replicationConfig: ReplicationConfig,
@@ -56,6 +57,7 @@ export async function initializeStreamer(
   const {replicaVersion} = replicationConfig;
   return new ChangeStreamerImpl(
     lc,
+    taskID,
     changeDB,
     replicaVersion,
     changeSource,
@@ -267,6 +269,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
   constructor(
     lc: LogContext,
+    taskID: string,
     changeDB: PostgresDB,
     replicaVersion: string,
     source: ChangeSource,
@@ -280,6 +283,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#source = source;
     this.#storer = new Storer(
       lc,
+      taskID,
       changeDB,
       replicaVersion,
       consumed => this.#stream?.acks.push(['status', consumed[1], consumed[2]]),
@@ -304,7 +308,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     while (this.#state.shouldRun()) {
       let err: unknown;
       try {
-        const startAfter = await this.#storer.getLastStoredWatermark();
+        const startAfter = await this.#storer.assumeOwnershipAndGetWatermark();
         const stream = await this.#source.startStream(
           startAfter ?? this.#replicaVersion,
         );
