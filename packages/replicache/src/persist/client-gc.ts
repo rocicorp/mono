@@ -3,6 +3,7 @@ import {initBgIntervalProcess} from '../bg-interval.ts';
 import type {Store} from '../dag/store.ts';
 import type {ClientID} from '../sync/ids.ts';
 import {withWrite} from '../with-transactions.ts';
+import type {Client, OnClientsDeleted} from './clients.ts';
 import {type ClientMap, getClients, setClients} from './clients.ts';
 
 /**
@@ -27,13 +28,19 @@ export function initClientGC(
   dagStore: Store,
   clientMaxInactiveTime: number,
   gcInterval: number,
+  onClientsDeleted: OnClientsDeleted,
   lc: LogContext,
   signal: AbortSignal,
 ): void {
   initBgIntervalProcess(
     'ClientGC',
     () => {
-      latestGCUpdate = gcClients(clientID, dagStore, clientMaxInactiveTime);
+      latestGCUpdate = gcClients(
+        clientID,
+        dagStore,
+        clientMaxInactiveTime,
+        onClientsDeleted,
+      );
       return latestGCUpdate;
     },
     () => gcInterval,
@@ -46,20 +53,29 @@ function gcClients(
   clientID: ClientID,
   dagStore: Store,
   clientMaxInactiveTime: number,
+  onClientsDeleted: OnClientsDeleted,
 ): Promise<ClientMap> {
   return withWrite(dagStore, async dagWrite => {
     const now = Date.now();
     const clients = await getClients(dagWrite);
-    const clientsAfterGC = Array.from(clients).filter(
-      ([id, client]) =>
+    const deletedClients: ClientID[] = [];
+    const newClients: Map<ClientID, Client> = new Map();
+    for (const [id, client] of clients) {
+      if (
         id === clientID /* never collect ourself */ ||
-        now - client.heartbeatTimestampMs <= clientMaxInactiveTime,
-    );
-    if (clientsAfterGC.length === clients.size) {
+        now - client.heartbeatTimestampMs <= clientMaxInactiveTime
+      ) {
+        newClients.set(id, client);
+      } else {
+        deletedClients.push(id);
+      }
+    }
+
+    if (newClients.size === clients.size) {
       return clients;
     }
-    const newClients = new Map(clientsAfterGC);
     await setClients(newClients, dagWrite);
+    onClientsDeleted(deletedClients);
     return newClients;
   });
 }

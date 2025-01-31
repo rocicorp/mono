@@ -57,13 +57,13 @@ import {disableClientGroup} from './persist/client-groups.ts';
 import {
   ClientStateNotFoundError,
   initClientV6,
+  type OnClientsDeleted,
   hasClientState as persistHasClientState,
 } from './persist/clients.ts';
 import {
   COLLECT_IDB_INTERVAL,
   initCollectIDBDatabases,
   INITIAL_COLLECT_IDB_DELAY,
-  SDD_IDB_MAX_AGE,
 } from './persist/collect-idb-databases.ts';
 import {HEARTBEAT_INTERVAL, startHeartbeats} from './persist/heartbeat.ts';
 import {
@@ -192,6 +192,11 @@ export interface ReplicacheImplOptions {
    * from an existing client group.
    */
   enableClientGroupForking?: boolean | undefined;
+
+  /**
+   * Callback for when Replicache has deleted clients.
+   */
+  onClientsDeleted?: OnClientsDeleted | undefined;
 }
 
 // eslint-disable-next-line @typescript-eslint/ban-types
@@ -408,6 +413,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       enableScheduledRefresh = true,
       enablePullAndPushInOpen = true,
       enableClientGroupForking = true,
+      onClientsDeleted = clientIDs => {
+        this.#lc.info?.('ClientIDs deleted', clientIDs);
+      },
     } = implOptions;
     this.auth = auth ?? '';
     this.pullURL = pullURL;
@@ -510,6 +518,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       profileIDResolver.resolve,
       clientGroupIDResolver.resolve,
       readyResolver.resolve,
+      onClientsDeleted,
     );
   }
 
@@ -520,6 +529,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     profileIDResolver: (profileID: string) => void,
     resolveClientGroupID: (clientGroupID: ClientGroupID) => void,
     resolveReady: () => void,
+    onClientsDeleted: OnClientsDeleted,
   ): Promise<void> {
     const {clientID} = this;
     // If we are currently closing a Replicache instance with the same name,
@@ -567,6 +577,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       this.perdag,
       clientMaxAgeMs,
       GC_INTERVAL,
+      onClientsDeleted,
       this.#lc,
       signal,
     );
@@ -575,8 +586,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       this.#kvStoreProvider.drop,
       COLLECT_IDB_INTERVAL,
       INITIAL_COLLECT_IDB_DELAY,
-      SDD_IDB_MAX_AGE,
       2 * clientMaxAgeMs,
+      onClientsDeleted,
       this.#lc,
       signal,
     );

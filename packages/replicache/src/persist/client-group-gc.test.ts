@@ -5,7 +5,7 @@ import {assertNotUndefined} from '../../../shared/src/asserts.ts';
 import type {Read} from '../dag/store.ts';
 import {TestStore} from '../dag/test-store.ts';
 import {fakeHash} from '../hash.ts';
-import {withRead, withWriteNoImplicitCommit} from '../with-transactions.ts';
+import {withRead, withWrite} from '../with-transactions.ts';
 import {getLatestGCUpdate, initClientGroupGC} from './client-group-gc.ts';
 import {
   type ClientGroup,
@@ -69,21 +69,17 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
     lastServerAckdMutationIDs: {},
     disabled: false,
   };
-  const clientGroupMap = await withWriteNoImplicitCommit(
-    dagStore,
-    async write => {
-      const clientGroupMap = new Map(
-        Object.entries({
-          'client-group-1': clientGroup1,
-          'client-group-2': clientGroup2,
-          'client-group-3': clientGroup3,
-        }),
-      );
-      await setClientGroups(clientGroupMap, write);
-      await write.commit();
-      return clientGroupMap;
-    },
-  );
+  const clientGroupMap = await withWrite(dagStore, async write => {
+    const clientGroupMap = new Map(
+      Object.entries({
+        'client-group-1': clientGroup1,
+        'client-group-2': clientGroup2,
+        'client-group-3': clientGroup3,
+      }),
+    );
+    await setClientGroups(clientGroupMap, write);
+    return clientGroupMap;
+  });
   const client1 = makeClientV6({
     heartbeatTimestampMs: START_TIME,
     refreshHashes: [fakeHash('eadce1')],
@@ -161,10 +157,8 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
     ...clientGroup1,
     lastServerAckdMutationIDs: clientGroup1.mutationIDs,
   };
-  await withWriteNoImplicitCommit(dagStore, async write => {
+  await withWrite(dagStore, async write => {
     await setClientGroup('client-group-1', updatedClientGroup1, write);
-    await write.commit();
-    return clientGroupMap;
   });
 
   // nothing collected yet because gc has not run yet
