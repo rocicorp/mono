@@ -23,16 +23,24 @@ export default async function runWorker(
   env: NodeJS.ProcessEnv,
 ): Promise<void> {
   const config = getZeroConfig(env);
-  const port = config.changeStreamerPort ?? config.port + 1;
+  const {
+    taskID,
+    changeStreamerPort: port = config.port + 1,
+    upstream,
+    change,
+    shard,
+    replicaFile,
+    initialSync,
+  } = config;
   const lc = createLogContext(config, {worker: 'change-streamer'});
 
   // Kick off DB connection warmup in the background.
-  const changeDB = pgClient(lc, config.change.db, {
-    max: config.change.maxConns,
+  const changeDB = pgClient(lc, change.db, {
+    max: change.maxConns,
     connection: {['application_name']: 'zero-change-streamer'},
   });
   void Promise.allSettled(
-    Array.from({length: config.change.maxConns}, () =>
+    Array.from({length: change.maxConns}, () =>
       changeDB`SELECT 1`.simple().execute(),
     ),
   );
@@ -44,23 +52,24 @@ export default async function runWorker(
     try {
       // Note: This performs initial sync of the replica if necessary.
       const {changeSource, replicationConfig} =
-        config.upstream.type === 'pg'
+        upstream.type === 'pg'
           ? await initializePostgresChangeSource(
               lc,
-              config.upstream.db,
-              config.shard,
-              config.replicaFile,
-              config.initialSync,
+              upstream.db,
+              shard,
+              replicaFile,
+              initialSync,
             )
           : await initializeCustomChangeSource(
               lc,
-              config.upstream.db,
-              config.shard,
-              config.replicaFile,
+              upstream.db,
+              shard,
+              replicaFile,
             );
 
       changeStreamer = await initializeStreamer(
         lc,
+        must(taskID, `main must set --task-id`),
         changeDB,
         changeSource,
         replicationConfig,
@@ -69,15 +78,15 @@ export default async function runWorker(
       break;
     } catch (e) {
       if (first && e instanceof AutoResetSignal) {
-        lc.warn?.(`resetting replica ${config.replicaFile}`, e);
+        lc.warn?.(`resetting replica ${replicaFile}`, e);
         // TODO: Make deleteLiteDB work with litestream. It will probably have to be
         //       a semantic wipe instead of a file delete.
-        deleteLiteDB(config.replicaFile);
+        deleteLiteDB(replicaFile);
         continue; // execute again with a fresh initial-sync
       }
       if (e instanceof DatabaseInitError) {
         throw new Error(
-          `Cannot open ZERO_REPLICA_FILE at "${config.replicaFile}". Please check that the path is valid.`,
+          `Cannot open ZERO_REPLICA_FILE at "${replicaFile}". Please check that the path is valid.`,
           {cause: e},
         );
       }
