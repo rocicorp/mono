@@ -37,7 +37,7 @@ const config: Config = {
         disableSources: true,
         name: 'Replicache',
         readme: 'none',
-        out: 'api',
+        out: 'docs/api',
         watch: process.env.TYPEDOC_WATCH ?? false,
       },
     ],
