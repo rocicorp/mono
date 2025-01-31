@@ -27,15 +27,7 @@ const migrateV2ToV3 = {
   },
 
   migrateData: async (_: LogContext, db: PostgresTransaction) => {
-    let lastWatermark = await getLastStoredWatermark(db);
-    if (!lastWatermark) {
-      // If no changes were received since initial-sync, the replicaVersion
-      // serves as the lastWatermark.
-      [{lastWatermark}] = await db<{lastWatermark: string}[]>`
-        SELECT "replicaVersion" as "lastWatermark" FROM cdc."replicationConfig"
-    `;
-    }
-
+    const lastWatermark = await getLastWatermarkV2(db);
     const replicationState: Partial<ReplicationState> = {lastWatermark};
     await db`TRUNCATE TABLE cdc."replicationState"`;
     await db`INSERT INTO cdc."replicationState" ${db(replicationState)}`;
@@ -61,10 +53,16 @@ export async function initChangeStreamerSchema(
   );
 }
 
-async function getLastStoredWatermark(
-  db: PostgresTransaction,
-): Promise<string | null> {
+export async function getLastWatermarkV2(db: PostgresDB): Promise<string> {
   const [{max}] = await db<{max: string | null}[]>`
     SELECT MAX(watermark) as max FROM cdc."changeLog"`;
-  return max;
+  if (max !== null) {
+    return max;
+  }
+  // The changeLog is only empty if nothing has been synced since initial-sync.
+  // In this case, the last watermark is the replicaVersion.
+  const [{replicaVersion}] = await db<{replicaVersion: string}[]>`
+    SELECT "replicaVersion" FROM cdc."replicationConfig"
+    `;
+  return replicaVersion;
 }
