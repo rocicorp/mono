@@ -112,6 +112,9 @@ export default $config({
         ],
       },
       transform: {
+        loadBalancer: {
+          idleTimeout: 3600, // Keep idle connections alive
+        },
         target: {
           healthCheck: {
             enabled: true,
@@ -121,6 +124,7 @@ export default $config({
             healthyThreshold: 2,
             timeout: 3,
           },
+          deregistrationDelay: 1, // Drain as soon as a new instance is healthy.
         },
       },
     });
@@ -188,6 +192,7 @@ export default $config({
           stickiness: {
             enabled: true,
             type: "lb_cookie",
+            cookieDuration: 120,
           },
           loadBalancingAlgorithmType: "least_outstanding_requests",
         },
