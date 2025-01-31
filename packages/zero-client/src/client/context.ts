@@ -2,8 +2,6 @@ import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
-import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Storage} from '../../../zql/src/ivm/operator.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
@@ -12,6 +10,7 @@ import type {
   GotCallback,
   QueryDelegate,
 } from '../../../zql/src/query/query-impl.ts';
+import type {IVMSourceBranch} from './ivm-source-repo.ts';
 import {ENTITIES_KEY_PREFIX} from './keys.ts';
 
 export type AddQuery = (
@@ -29,8 +28,7 @@ export class ZeroContext implements QueryDelegate {
   // data in from the Replicache db. But we want the data to be accessible via
   // pipelines *synchronously* and the core Replicache infra is all async. So
   // that needs to be fixed.
-  readonly #sources = new Map<string, MemorySource | undefined>();
-  readonly #tables: Record<string, TableSchema>;
+  readonly #mainSources: IVMSourceBranch;
   readonly #addQuery: AddQuery;
   readonly #batchViewUpdates: (applyViewUpdates: () => void) => void;
   readonly #commitListeners: Set<CommitListener> = new Set();
@@ -38,26 +36,17 @@ export class ZeroContext implements QueryDelegate {
   readonly staticQueryParameters = undefined;
 
   constructor(
-    tables: Record<string, TableSchema>,
+    mainSources: IVMSourceBranch,
     addQuery: AddQuery,
     batchViewUpdates: (applyViewUpdates: () => void) => void,
   ) {
-    this.#tables = tables;
+    this.#mainSources = mainSources;
     this.#addQuery = addQuery;
     this.#batchViewUpdates = batchViewUpdates;
   }
 
   getSource(name: string): Source | undefined {
-    if (this.#sources.has(name)) {
-      return this.#sources.get(name);
-    }
-
-    const schema = this.#tables[name];
-    const source = schema
-      ? new MemorySource(name, schema.columns, schema.primaryKey)
-      : undefined;
-    this.#sources.set(name, source);
-    return source;
+    return this.#mainSources.getSource(name);
   }
 
   addServerQuery(ast: AST, gotCallback?: GotCallback | undefined) {

@@ -82,4 +82,4 @@ playwright-report/
 test-results/
 debug-scratch.md
 
-apps/repro
+repro/
