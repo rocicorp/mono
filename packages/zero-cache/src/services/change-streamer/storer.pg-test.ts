@@ -1,4 +1,3 @@
-import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
@@ -16,8 +15,7 @@ import {Storer} from './storer.ts';
 import {createSubscriber} from './test-utils.ts';
 
 describe('change-streamer/storer', () => {
-  const lc = new LogContext('debug', {}, consoleLogSink);
-  createSilentLogContext();
+  const lc = createSilentLogContext();
   let db: PostgresDB;
   let storer: Storer;
   let done: Promise<void>;
@@ -51,7 +49,7 @@ describe('change-streamer/storer', () => {
     storer = new Storer(lc, 'task-id', db, REPLICA_VERSION, msg =>
       consumed.enqueue(msg),
     );
-    await storer.assumeOwnershipAndGetWatermark();
+    await storer.assumeOwnership();
     done = storer.run();
   });
 

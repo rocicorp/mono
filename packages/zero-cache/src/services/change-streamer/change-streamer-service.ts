@@ -303,27 +303,22 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     }
     this.#lc.info?.('starting change stream');
 
-    let storerRunning = false;
+    // Once this change-streamer acquires "ownership" of the change DB,
+    // it is safe to start the storer.
+    await this.#storer.assumeOwnership();
+    // The storer will, in turn, detect changes to ownership and stop
+    // the change-streamer appropriately.
+    this.#storer.run().catch(e => this.stop(e));
 
     while (this.#state.shouldRun()) {
       let err: unknown;
       try {
-        const startAfter = await this.#storer.assumeOwnershipAndGetWatermark();
-        const stream = await this.#source.startStream(
-          startAfter ?? this.#replicaVersion,
-        );
+        const startAfter = await this.#storer.getLastWatermark();
+        const stream = await this.#source.startStream(startAfter);
         this.#stream = stream;
         this.#state.resetBackoff();
 
         let watermark: string | null = null;
-
-        // Once this change-streamer "owns" the replication stream,
-        // it is safe to start the storer, given the guarantee that this
-        // process is the single writer to the change DB.
-        if (!storerRunning) {
-          this.#storer.run().catch(e => this.stop(e));
-          storerRunning = true;
-        }
 
         for await (const change of stream.changes) {
           const [type, msg] = change;

@@ -85,12 +85,15 @@ export class Storer implements Service {
     this.#onConsumed = onConsumed;
   }
 
-  async assumeOwnershipAndGetWatermark(): Promise<string> {
+  async assumeOwnership() {
     const db = this.#db;
     const owner = this.#taskID;
-    const [{lastWatermark}] = await db<{lastWatermark: string}[]>`
-      UPDATE cdc."replicationState" SET ${db({owner})}
-        RETURNING "lastWatermark"`;
+    await db`UPDATE cdc."replicationState" SET ${db({owner})}`;
+  }
+
+  async getLastWatermark(): Promise<string> {
+    const [{lastWatermark}] = await this.#db<{lastWatermark: string}[]>`
+      SELECT "lastWatermark" FROM cdc."replicationState"`;
     return lastWatermark;
   }
 
