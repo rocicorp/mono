@@ -1,0 +1,15 @@
+{
+  "name": "pg-test",
+  "description": "Configures a test environment for tests that depend on PostgreSQL",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {},
+  "eslintConfig": {
+    "extends": "../../eslint-config.json"
+  },
+  "prettier": "@rocicorp/prettier-config",
+  "dependencies": {
+    "vitest": "^2.1.5"
+  }
+}
