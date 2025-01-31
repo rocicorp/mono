@@ -9,8 +9,8 @@ packages/replicache/doc/docs/api
 packages/replicache/doc/.docusaurus/
 **/.next
 **/.vercel
+*.tsbuildinfo
 renderer
 vendor
 !/renderer/src/constants.ts
-**/bot-recordings.ts
-*.tsbuildinfo
+.sst

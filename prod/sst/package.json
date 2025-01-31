@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "format": "prettier --write .",
+    "check-format": "prettier --check ."
   },
   "keywords": [],
   "author": "",
@@ -14,6 +15,7 @@
     "sst": "3.6.7"
   },
   "devDependencies": {
-    "@types/aws-lambda": "8.10.147"
+    "@types/aws-lambda": "8.10.147",
+    "prettier": "@rocicorp/prettier-config"
   }
 }

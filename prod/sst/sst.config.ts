@@ -14,8 +14,6 @@ export default $config({
     };
   },
   async run() {
-
-
     const loadSchemaJson = () => {
       if (process.env.ZERO_SCHEMA_JSON) {
         return process.env.ZERO_SCHEMA_JSON;
