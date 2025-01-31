@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import postgres from 'postgres';
+import postgres, {type PendingQuery, type Row} from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {equals} from '../../../../../shared/src/set-utils.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
@@ -27,6 +27,23 @@ const CREATE_CHANGE_LOG_TABLE = `
 `;
 
 /**
+ * Tracks the watermark from which to resume the change stream and the
+ * current owner (task ID) acting as the single writer to the changeLog.
+ */
+export type ReplicationState = {
+  lastWatermark: string;
+  owner: string | null;
+};
+
+export const CREATE_REPLICATION_STATE_TABLE = `
+  CREATE TABLE cdc."replicationState" (
+    "lastWatermark" TEXT NOT NULL,
+    "owner" TEXT,
+    "lock" INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
+  );
+`;
+
+/**
  * This mirrors the analogously named table in the SQLite replica
  * (`services/replicator/schema/replication-state.ts`), and is used
  * to detect when the replica has been reset and is no longer compatible
@@ -47,7 +64,10 @@ const CREATE_REPLICATION_CONFIG_TABLE = `
 `;
 
 const CREATE_CDC_TABLES =
-  CREATE_CDC_SCHEMA + CREATE_CHANGE_LOG_TABLE + CREATE_REPLICATION_CONFIG_TABLE;
+  CREATE_CDC_SCHEMA +
+  CREATE_CHANGE_LOG_TABLE +
+  CREATE_REPLICATION_STATE_TABLE +
+  CREATE_REPLICATION_CONFIG_TABLE;
 
 export async function setupCDCTables(
   lc: LogContext,
@@ -70,8 +90,12 @@ export async function ensureReplicationConfig(
   // Restrict the fields of the supplied `config`.
   const {publications, replicaVersion} = config;
   const replicaConfig = {publications, replicaVersion};
+  const replicationState: Partial<ReplicationState> = {
+    lastWatermark: replicaVersion,
+  };
 
   await db.begin(async tx => {
+    const stmts: PendingQuery<Row[]>[] = [];
     const results = await tx<
       {
         replicaVersion: string;
@@ -80,26 +104,33 @@ export async function ensureReplicationConfig(
       }[]
     >`SELECT "replicaVersion", "publications", "resetRequired" FROM cdc."replicationConfig"`;
 
-    if (results.length === 0) {
-      return tx`INSERT INTO cdc."replicationConfig" ${tx(replicaConfig)}`;
+    if (results.length) {
+      const {replicaVersion, publications} = results[0];
+      if (
+        replicaVersion !== replicaConfig.replicaVersion ||
+        !equals(new Set(publications), new Set(replicaConfig.publications))
+      ) {
+        lc.info?.(
+          `Data in cdc tables @${replicaVersion} is incompatible ` +
+            `with replica @${replicaConfig.replicaVersion}. Clearing tables.`,
+        );
+        stmts.push(
+          tx`TRUNCATE TABLE cdc."changeLog"`,
+          tx`TRUNCATE TABLE cdc."replicationConfig"`,
+          tx`TRUNCATE TABLE cdc."replicationState"`,
+        );
+      }
     }
-
-    const {replicaVersion, publications, resetRequired} = results[0];
-    if (
-      replicaVersion !== replicaConfig.replicaVersion ||
-      !equals(new Set(publications), new Set(replicaConfig.publications))
-    ) {
-      lc.info?.(
-        `Data in cdc tables @${replicaVersion} is incompatible ` +
-          `with replica @${replicaConfig.replicaVersion}. Clearing tables.`,
-      );
-      return [
-        tx`TRUNCATE TABLE cdc."changeLog"`,
-        tx`TRUNCATE TABLE cdc."replicationConfig"`,
+    // Initialize (or re-initialize TRUNCATED) tables
+    if (results.length === 0 || stmts.length > 0) {
+      stmts.push(
         tx`INSERT INTO cdc."replicationConfig" ${tx(replicaConfig)}`,
-      ].map(stmt => stmt.execute());
+        tx`INSERT INTO cdc."replicationState" ${tx(replicationState)}`,
+      );
+      return Promise.all(stmts);
     }
 
+    const {resetRequired} = results[0];
     if (resetRequired) {
       if (autoReset) {
         throw new AutoResetSignal('reset required by replication stream');

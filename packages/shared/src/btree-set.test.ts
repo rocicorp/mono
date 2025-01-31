@@ -11,6 +11,51 @@ test('delete', () => {
   expect(t.size).toBe(0);
 });
 
+test('clone', () => {
+  // Test that cloned set has same elements as original
+  const t1 = new BTreeSet<number>((a, b) => a - b);
+  for (let i = 0; i < 100; i++) {
+    t1.add(i);
+  }
+  const t2 = t1.clone();
+
+  // Verify t2 has all elements from t1
+  for (let i = 0; i < 100; i++) {
+    expect(t2.has(i)).toBe(true);
+  }
+  expect(t2.size).toBe(t1.size);
+
+  // Mutations to t2 don't affect t1
+  for (let i = 0; i < 50; i++) {
+    t2.delete(i);
+  }
+  expect(t2.size).toBe(50);
+  expect(t1.size).toBe(100);
+  for (let i = 0; i < 50; i++) {
+    expect(t2.has(i)).toBe(false);
+    expect(t1.has(i)).toBe(true);
+  }
+  for (let i = 50; i < 100; i++) {
+    expect(t2.has(i)).toBe(true);
+    expect(t1.has(i)).toBe(true);
+  }
+
+  // Mutations to t1 don't affect t2
+  for (let i = 50; i < 100; i++) {
+    t1.delete(i);
+  }
+  expect(t2.size).toBe(50);
+  expect(t1.size).toBe(50);
+  for (let i = 0; i < 50; i++) {
+    expect(t1.has(i)).toBe(true);
+    expect(t2.has(i)).toBe(false);
+  }
+  for (let i = 50; i < 100; i++) {
+    expect(t1.has(i)).toBe(false);
+    expect(t2.has(i)).toBe(true);
+  }
+});
+
 suite('iterators', () => {
   const t = new BTreeSet<number>((a, b) => a - b);
   t.add(10);

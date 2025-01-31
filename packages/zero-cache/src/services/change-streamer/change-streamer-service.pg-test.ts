@@ -13,9 +13,10 @@ import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
+import {sleep} from '../../../../shared/src/sleep.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
-import {testDBs} from '../../test/db.ts';
+import {expectTables, testDBs} from '../../test/db.ts';
 import {stringify} from '../../types/bigint-json.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Source} from '../../types/streams.ts';
@@ -70,6 +71,7 @@ describe('change-streamer/service', () => {
 
     streamer = await initializeStreamer(
       lc,
+      'task-id',
       changeDB,
       {
         startStream: () =>
@@ -162,6 +164,11 @@ describe('change-streamer/service', () => {
       'insert',
       'commit',
     ]);
+    await expectTables(changeDB, {
+      ['cdc.replicationState']: [
+        {lock: 1, owner: 'task-id', lastWatermark: '09'},
+      ],
+    });
   });
 
   test('subscriber catchup and continuation', async () => {
@@ -237,6 +244,11 @@ describe('change-streamer/service', () => {
       'delete',
       'commit',
     ]);
+    await expectTables(changeDB, {
+      ['cdc.replicationState']: [
+        {lock: 1, owner: 'task-id', lastWatermark: '0b'},
+      ],
+    });
   });
 
   test('subscriber catchup and continuation after rollback', async () => {
@@ -301,6 +313,11 @@ describe('change-streamer/service', () => {
       'insert',
       'commit',
     ]);
+    await expectTables(changeDB, {
+      ['cdc.replicationState']: [
+        {lock: 1, owner: 'task-id', lastWatermark: '09'},
+      ],
+    });
   });
 
   test('subscriber ahead of change log', async () => {
@@ -351,6 +368,30 @@ describe('change-streamer/service', () => {
     expect(await nextChange(downstream)).toMatchObject({
       tag: 'commit',
       something: 'new',
+    });
+
+    await expectAcks('09', '0b', '0c');
+
+    // Only the changes for the committed (i.e. first) transaction are persisted.
+    const logEntries = await changeDB<
+      ChangeLogEntry[]
+    >`SELECT * FROM cdc."changeLog"`;
+    expect(logEntries.map(e => e.change.tag)).toEqual([
+      'begin',
+      'insert',
+      'insert',
+      'commit',
+      'begin',
+      'delete',
+      'commit',
+      'begin',
+      'insert',
+      'commit',
+    ]);
+    await expectTables(changeDB, {
+      ['cdc.replicationState']: [
+        {lock: 1, owner: 'task-id', lastWatermark: '0c'},
+      ],
     });
   });
 
@@ -441,6 +482,11 @@ describe('change-streamer/service', () => {
       tag: 'commit',
       extra: 'info',
     });
+    await expectTables(changeDB, {
+      ['cdc.replicationState']: [
+        {lock: 1, owner: 'task-id', lastWatermark: '09'},
+      ],
+    });
   });
 
   test('change log cleanup', async () => {
@@ -452,6 +498,7 @@ describe('change-streamer/service', () => {
       INSERT INTO cdc."changeLog" (watermark, pos, change) VALUES ('06', 0, '{"tag":"commit"}'::json);
       INSERT INTO cdc."changeLog" (watermark, pos, change) VALUES ('07', 0, '{"tag":"begin"}'::json);
       INSERT INTO cdc."changeLog" (watermark, pos, change) VALUES ('08', 0, '{"tag":"commit"}'::json);
+      UPDATE cdc."replicationState" SET "lastWatermark" = '08';
     `.simple();
 
     // Start two subscribers: one at 06 and one at 04
@@ -506,6 +553,12 @@ describe('change-streamer/service', () => {
         break;
       }
     }
+    // replicationState is unaffected
+    await expectTables(changeDB, {
+      ['cdc.replicationState']: [
+        {lock: 1, owner: 'task-id', lastWatermark: '08'},
+      ],
+    });
 
     // No more timeouts should have been scheduled because both initialWatermarks
     // were cleaned up.
@@ -562,6 +615,7 @@ describe('change-streamer/service', () => {
     };
     const streamer = await initializeStreamer(
       lc,
+      'task-id',
       changeDB,
       source,
       replicaConfig,
@@ -591,6 +645,7 @@ describe('change-streamer/service', () => {
     };
     let streamer = await initializeStreamer(
       lc,
+      'task-id',
       changeDB,
       source,
       replicaConfig,
@@ -612,10 +667,12 @@ describe('change-streamer/service', () => {
     await changeDB`
       INSERT INTO cdc."changeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
       INSERT INTO cdc."changeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"commit"}'::json);
+      UPDATE cdc."replicationState" SET "lastWatermark" = '04';
     `.simple();
 
     streamer = await initializeStreamer(
       lc,
+      'task-id',
       changeDB,
       source,
       replicaConfig,
@@ -654,6 +711,7 @@ describe('change-streamer/service', () => {
     };
     const streamer = await initializeStreamer(
       lc,
+      'task-id',
       changeDB,
       source,
       replicaConfig,
@@ -673,6 +731,96 @@ describe('change-streamer/service', () => {
     changes.fail(new Error('doh'));
 
     expect(await hasRetried).toBe(true);
+  });
+
+  test('ownership takeover before tx begins', async () => {
+    // Kick off the initial stream with a serving request.
+    void streamer.subscribe({
+      id: 'myid',
+      mode: 'serving',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
+    changes.push(['begin', {tag: 'begin'}, {commitWatermark: '0d'}]);
+    changes.push(['data', messages.insert('foo', {id: 'hello'})]);
+    changes.push(['commit', {tag: 'commit'}, {watermark: '0d'}]);
+
+    // Wait for the ack of the first commit.
+    await expectAcks('0d');
+    // Take over ownership.
+    await changeDB`UPDATE cdc."replicationState" SET owner = 'other-task'`;
+
+    // The begin will read the new owner and eventually fail the transaction.
+    changes.push(['begin', {tag: 'begin'}, {commitWatermark: '0f'}]);
+    changes.push(['data', messages.insert('foo', {id: 'world'})]);
+    changes.push(['commit', {tag: 'commit'}, {watermark: '0f'}]);
+
+    await streamerDone;
+
+    // Only the first changes should be committed.
+    const logEntries = await changeDB<
+      ChangeLogEntry[]
+    >`SELECT * FROM cdc."changeLog"`;
+    expect(logEntries.map(e => e.change.tag)).toEqual([
+      'begin',
+      'insert',
+      'commit',
+    ]);
+
+    await expectTables(changeDB, {
+      ['cdc.replicationState']: [
+        {lock: 1, owner: 'other-task', lastWatermark: '0d'},
+      ],
+    });
+  });
+
+  test('ownership takeover during tx', async () => {
+    // Kick off the initial stream with a serving request.
+    void streamer.subscribe({
+      id: 'myid',
+      mode: 'serving',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
+    changes.push(['begin', {tag: 'begin'}, {commitWatermark: '0d'}]);
+    changes.push(['data', messages.insert('foo', {id: 'hello'})]);
+    changes.push(['commit', {tag: 'commit'}, {watermark: '0d'}]);
+
+    changes.push(['begin', {tag: 'begin'}, {commitWatermark: '0f'}]);
+    changes.push(['data', messages.insert('foo', {id: 'world'})]);
+
+    // Wait for the ack of the first commit.
+    await expectAcks('0d');
+
+    // Let the next transaction begin, reading the old owner.
+    await sleep(10);
+
+    // Take over ownership.
+    await changeDB`UPDATE cdc."replicationState" SET owner = 'other-task'`;
+    // The commit should fail (with a SERIALIZATION error).
+    changes.push(['commit', {tag: 'commit'}, {watermark: '0f'}]);
+
+    await streamerDone;
+
+    // Only the first changes should be committed.
+    const logEntries = await changeDB<
+      ChangeLogEntry[]
+    >`SELECT * FROM cdc."changeLog"`;
+    expect(logEntries.map(e => e.change.tag)).toEqual([
+      'begin',
+      'insert',
+      'commit',
+    ]);
+
+    await expectTables(changeDB, {
+      ['cdc.replicationState']: [
+        {lock: 1, owner: 'other-task', lastWatermark: '0d'},
+      ],
+    });
   });
 
   test('reset required', async () => {
