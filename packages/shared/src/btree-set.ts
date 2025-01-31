@@ -24,6 +24,14 @@ export class BTreeSet<K> {
     this.size = 0;
   }
 
+  clone() {
+    this.#root.isShared = true;
+    const ret = new BTreeSet<K>(this.comparator);
+    ret.#root = this.#root;
+    ret.size = this.size;
+    return ret;
+  }
+
   get(key: K): K | undefined {
     return this.#root.get(key, this);
   }
