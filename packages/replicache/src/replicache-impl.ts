@@ -57,6 +57,7 @@ import {disableClientGroup} from './persist/client-groups.ts';
 import {
   ClientStateNotFoundError,
   initClientV6,
+  type OnClientsDeleted,
   hasClientState as persistHasClientState,
 } from './persist/clients.ts';
 import {
@@ -158,11 +159,6 @@ const updateNeededReasonNewClientGroup: UpdateNeededReason = {
 export interface MakeSubscriptionsManager {
   (queryInternal: QueryInternal, lc: LogContext): SubscriptionsManager;
 }
-
-/**
- * Callback function for when Replicache has deleted one or more clients.
- */
-export type OnClientsDeleted = (clientIDs: ClientID[]) => void;
 
 export interface ReplicacheImplOptions {
   /**
@@ -580,6 +576,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       clientID,
       this.perdag,
       clientMaxAgeMs,
+      onClientsDeleted,
       GC_INTERVAL,
       this.#lc,
       signal,

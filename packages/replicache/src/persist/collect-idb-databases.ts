@@ -9,7 +9,6 @@ import {assertHash, newRandomHash} from '../hash.ts';
 import {IDBStore} from '../kv/idb-store.ts';
 import type {DropStore, StoreProvider} from '../kv/store.ts';
 import {createLogContext} from '../log-options.ts';
-import type {OnClientsDeleted} from '../replicache-impl.ts';
 import {getKVStoreProvider} from '../replicache.ts';
 import type {ClientID} from '../sync/ids.ts';
 import {withRead} from '../with-transactions.ts';
@@ -17,6 +16,7 @@ import {
   clientGroupHasPendingMutations,
   getClientGroups,
 } from './client-groups.ts';
+import type {OnClientsDeleted} from './clients.ts';
 import {getClients} from './clients.ts';
 import type {IndexedDBDatabase} from './idb-databases-store.ts';
 import {IDBDatabasesStore} from './idb-databases-store.ts';

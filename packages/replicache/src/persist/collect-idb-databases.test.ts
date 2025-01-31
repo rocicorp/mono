@@ -9,7 +9,6 @@ import {fakeHash} from '../hash.ts';
 import {IDBStore} from '../kv/idb-store.ts';
 import {hasMemStore} from '../kv/mem-store.ts';
 import {TestMemStore} from '../kv/test-mem-store.ts';
-import type {OnClientsDeleted} from '../replicache-impl.ts';
 import {getKVStoreProvider} from '../replicache.ts';
 import type {ClientID} from '../sync/ids.ts';
 import {withWrite} from '../with-transactions.ts';
@@ -19,7 +18,7 @@ import {
   makeClientMapDD31,
   setClientsForTesting,
 } from './clients-test-helpers.ts';
-import type {ClientMap} from './clients.ts';
+import type {ClientMap, OnClientsDeleted} from './clients.ts';
 import {
   collectIDBDatabases,
   dropAllDatabases,

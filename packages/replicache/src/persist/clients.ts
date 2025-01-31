@@ -604,3 +604,8 @@ export async function setClients(
   await dagWrite.setHead(CLIENTS_HEAD_NAME, chunk.hash);
   return chunk.hash;
 }
+
+/**
+ * Callback function for when Replicache has deleted one or more clients.
+ */
+export type OnClientsDeleted = (clientIDs: ClientID[]) => void;
