@@ -68,9 +68,9 @@ export type MakeCustomMutatorInterface<
 export type TransactionReason = 'optimistic' | 'rebase';
 
 /**
- * WriteTransactions are used with *mutators* which are registered using
- * {@link ReplicacheOptions.mutators} and allows read and write operations on the
- * database.
+ * An instance of this is passed to custom mutator implementations and
+ * allows reading and writing to the database and IVM at the head
+ * at which the mutator is being applied.
  */
 export interface Transaction<S extends Schema> {
   readonly clientID: ClientID;

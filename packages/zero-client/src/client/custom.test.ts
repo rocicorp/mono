@@ -55,6 +55,15 @@ test('argument types are preserved on the generated mutator interface', () => {
   }>();
 });
 
+test('cannot support non-namespace custom mutators', () => {
+  ({
+    // @ts-expect-error - all mutators must be in a namespace
+    setTitle: (_tx, _a: {id: string; title: string}) => {
+      throw new Error('not implemented');
+    },
+  }) satisfies CustomMutatorDefs<Schema>;
+});
+
 test('custom mutators write to the local store', async () => {
   const z = zeroForTest({
     logLevel: 'debug',
