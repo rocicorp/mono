@@ -104,5 +104,5 @@ jobs:
           --start-point-reset \
           --threshold-measure throughput \
           --threshold-test t_test \
-          --threshold-lower-boundary 0.95 \
+          --threshold-lower-boundary 0.90 \
           --err
