@@ -9,6 +9,7 @@ import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import {type AddQuery, ZeroContext} from './context.ts';
 import {ENTITIES_KEY_PREFIX} from './keys.ts';
+import {IVMSourceBranch} from './ivm-source-repo.ts';
 
 const testBatchViewUpdates = (applyViewUpdates: () => void) =>
   applyViewUpdates();
@@ -32,7 +33,7 @@ test('getSource', () => {
   });
 
   const context = new ZeroContext(
-    schema.tables,
+    new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
     testBatchViewUpdates,
   );
@@ -102,7 +103,7 @@ const schema = createSchema(1, {
 
 test('processChanges', () => {
   const context = new ZeroContext(
-    schema.tables,
+    new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
     testBatchViewUpdates,
   );
@@ -165,7 +166,7 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
     ]);
   };
   const context = new ZeroContext(
-    schema.tables,
+    new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
     batchViewUpdates,
   );
@@ -217,7 +218,7 @@ test('transactions', () => {
   });
 
   const context = new ZeroContext(
-    schema.tables,
+    new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
     testBatchViewUpdates,
   );
@@ -290,7 +291,7 @@ test('batchViewUpdates errors if applyViewUpdates is not called', () => {
     batchViewUpdatesCalls++;
   };
   const context = new ZeroContext(
-    schema.tables,
+    new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
     batchViewUpdates,
   );
@@ -307,7 +308,7 @@ test('batchViewUpdates returns value', () => {
     batchViewUpdatesCalls++;
   };
   const context = new ZeroContext(
-    schema.tables,
+    new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
     batchViewUpdates,
   );

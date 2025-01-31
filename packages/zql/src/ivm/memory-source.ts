@@ -87,6 +87,7 @@ export class MemorySource implements Source {
     tableName: string,
     columns: Record<string, SchemaValue>,
     primaryKey: PrimaryKey,
+    primaryIndexData?: BTreeSet<Row> | undefined,
   ) {
     this.#tableName = tableName;
     this.#columns = columns;
@@ -95,7 +96,7 @@ export class MemorySource implements Source {
     const comparator = makeBoundComparator(this.#primaryIndexSort);
     this.#indexes.set(JSON.stringify(this.#primaryIndexSort), {
       comparator,
-      data: new BTreeSet<Row>(comparator),
+      data: primaryIndexData ?? new BTreeSet<Row>(comparator),
       usedBy: new Set(),
     });
     assertOrderingIncludesPK(this.#primaryIndexSort, this.#primaryKey);
@@ -108,6 +109,16 @@ export class MemorySource implements Source {
       columns: this.#columns,
       primaryKey: this.#primaryKey,
     };
+  }
+
+  fork() {
+    const primaryIndex = this.#getPrimaryIndex();
+    return new MemorySource(
+      this.#tableName,
+      this.#columns,
+      this.#primaryKey,
+      primaryIndex.data.clone(),
+    );
   }
 
   #getSchema(connection: Connection): SourceSchema {
