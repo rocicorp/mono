@@ -446,21 +446,19 @@ export function normalizeAST(ast: AST): Required<AST> {
   return normalized;
 }
 
-export function makeServerAST(ast: AST, tables: Record<string, TableSchema>) {
-  return transformAST(ast, makeRenameTransform(tables));
+export function toServerAST(ast: AST, tables: Record<string, TableSchema>) {
+  return transformAST(ast, clientToServer(tables));
 }
 
-export function makeServerCondition(
+export function toServerCondition(
   cond: Condition,
   table: string,
   tables: Record<string, TableSchema>,
 ) {
-  return transformWhere(cond, table, makeRenameTransform(tables));
+  return transformWhere(cond, table, clientToServer(tables));
 }
 
-function makeRenameTransform(
-  tables: Record<string, TableSchema>,
-): ASTTransform {
+function clientToServer(tables: Record<string, TableSchema>): ASTTransform {
   const mustTable = (table: string) => {
     const t = tables[table];
     if (!table) {
@@ -477,6 +475,54 @@ function makeRenameTransform(
         throw new Error(`invalid column "${col}" in table "${table}"`);
       }
       return c.serverName ?? col;
+    },
+    related: r => r,
+    where: w => w,
+    conditions: c => c,
+  };
+}
+
+export function toClientAST(ast: AST, tables: Record<string, TableSchema>) {
+  return transformAST(ast, serverToClient(tables));
+}
+
+function serverToClient(tables: Record<string, TableSchema>): ASTTransform {
+  const tableNames = Object.fromEntries(
+    Object.entries(tables).map(([clientName, {serverName}]) => [
+      serverName ?? clientName,
+      clientName,
+    ]),
+  );
+  const columnNamesByTable = Object.fromEntries(
+    Object.entries(tables).map(
+      ([clientTable, {serverName: serverTable, columns}]) => {
+        const columnNames = Object.fromEntries(
+          Object.entries(columns).map(([clientName, {serverName}]) => [
+            serverName ?? clientName,
+            clientName,
+          ]),
+        );
+        return [serverTable ?? clientTable, columnNames] as const;
+      },
+    ),
+  );
+
+  function mustTable<T>(table: string, tables: Record<string, T>): T {
+    const t = tables[table];
+    if (!table) {
+      throw new Error(`invalid table "${table}"`);
+    }
+    return t;
+  }
+
+  return {
+    tableName: (table: string) => mustTable(table, tableNames),
+    columnName: (table: string, col: string) => {
+      const name = mustTable(table, columnNamesByTable)[col];
+      if (!name) {
+        throw new Error(`invalid column "${col}" in table "${table}"`);
+      }
+      return name;
     },
     related: r => r,
     where: w => w,

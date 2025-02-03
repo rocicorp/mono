@@ -4,8 +4,8 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {hashOfAST} from '../../../zero-protocol/src/ast-hash.ts';
 import {
-  makeServerAST,
   normalizeAST,
+  toServerAST,
   type AST,
 } from '../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
@@ -137,7 +137,7 @@ export class QueryManager {
     let entry = this.#queries.get(astHash);
     this.#recentQueries.delete(astHash);
     if (!entry) {
-      const serverAST = makeServerAST(normalized, this.#tables);
+      const serverAST = toServerAST(normalized, this.#tables);
       entry = {
         normalized: serverAST,
         count: 1,

@@ -7,6 +7,7 @@ import type {
 import type {PatchOperation} from '../../../replicache/src/patch-operation.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {getBrowserGlobalMethod} from '../../../shared/src/browser-env.ts';
+import {toClientAST} from '../../../zero-protocol/src/ast.ts';
 import type {ClientsPatchOp} from '../../../zero-protocol/src/clients-patch.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {
@@ -267,8 +268,10 @@ export function mergePokes(
         )) {
           mergedPatch.push(
             ...queriesPatch.map(op =>
-              queryPatchOpToReplicachePatchOp(op, hash =>
-                toDesiredQueriesKey(clientID, hash),
+              queryPatchOpToReplicachePatchOp(
+                op,
+                hash => toDesiredQueriesKey(clientID, hash),
+                schema,
               ),
             ),
           );
@@ -277,7 +280,7 @@ export function mergePokes(
       if (pokePart.gotQueriesPatch) {
         mergedPatch.push(
           ...pokePart.gotQueriesPatch.map(op =>
-            queryPatchOpToReplicachePatchOp(op, toGotQueriesKey),
+            queryPatchOpToReplicachePatchOp(op, toGotQueriesKey, schema),
           ),
         );
       }
@@ -322,6 +325,7 @@ function clientsPatchOpToReplicachePatchOp(op: ClientsPatchOp): PatchOperation {
 function queryPatchOpToReplicachePatchOp(
   op: QueriesPatchOp,
   toKey: (hash: string) => string,
+  schema: Schema,
 ): PatchOperation {
   switch (op.op) {
     case 'clear':
@@ -336,7 +340,7 @@ function queryPatchOpToReplicachePatchOp(
       return {
         op: 'put',
         key: toKey(op.hash),
-        value: op.ast,
+        value: toClientAST(op.ast, schema.tables),
       };
   }
 }

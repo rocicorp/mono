@@ -1371,16 +1371,16 @@ test('mergePokes with all optionals defined', () => {
           op: 'put',
           key: 'd/c1/h1',
           value: {
-            table: 'issues',
-            orderBy: [['issue_id', 'asc']],
+            table: 'issue',
+            orderBy: [['id', 'asc']],
           },
         },
         {
           op: 'put',
           key: 'g/h1',
           value: {
-            table: 'issues',
-            orderBy: [['issue_id', 'asc']],
+            table: 'issue',
+            orderBy: [['id', 'asc']],
           },
         },
         {
@@ -1403,16 +1403,16 @@ test('mergePokes with all optionals defined', () => {
           op: 'put',
           key: 'd/c1/h2',
           value: {
-            table: 'labels',
-            orderBy: [['label_id', 'asc']],
+            table: 'label',
+            orderBy: [['id', 'asc']],
           },
         },
         {
           op: 'put',
           key: 'g/h2',
           value: {
-            table: 'labels',
-            orderBy: [['label_id', 'asc']],
+            table: 'label',
+            orderBy: [['id', 'asc']],
           },
         },
         {
@@ -1549,8 +1549,8 @@ test('mergePokes sparse', () => {
           op: 'put',
           key: 'g/h1',
           value: {
-            table: 'issues',
-            orderBy: [['issue_id', 'asc']],
+            table: 'issue',
+            orderBy: [['id', 'asc']],
           } satisfies AST,
         },
         {
@@ -1573,8 +1573,8 @@ test('mergePokes sparse', () => {
           op: 'put',
           key: 'd/c1/h2',
           value: {
-            table: 'labels',
-            orderBy: [['label_id', 'asc']],
+            table: 'label',
+            orderBy: [['id', 'asc']],
           },
         },
         {

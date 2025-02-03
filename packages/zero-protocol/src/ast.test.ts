@@ -6,7 +6,7 @@ import {
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import type {AST} from './ast.ts';
-import {astSchema, makeServerAST, normalizeAST} from './ast.ts';
+import {astSchema, normalizeAST, toClientAST, toServerAST} from './ast.ts';
 import {PROTOCOL_VERSION} from './protocol-version.ts';
 
 test('fields are placed into correct positions', () => {
@@ -326,9 +326,9 @@ test('makeServerAST', () => {
       .primaryKey('id')
       .build(),
   };
-  const normalized = makeServerAST(ast, tables);
+  const serverAST = toServerAST(ast, tables);
 
-  const json = JSON.stringify(normalized);
+  const json = JSON.stringify(serverAST);
   expect(json).toMatch(/"issues"/);
   expect(json).toMatch(/"comments"/);
   expect(json).toMatch(/"users"/);
@@ -342,7 +342,7 @@ test('makeServerAST', () => {
   expect(json).not.toMatch(/"ownerId"/);
   expect(json).not.toMatch(/"commentId"/);
 
-  expect(normalized).toMatchInlineSnapshot(`
+  expect(serverAST).toMatchInlineSnapshot(`
     {
       "alias": undefined,
       "limit": undefined,
@@ -455,6 +455,133 @@ test('makeServerAST', () => {
                 "schema": undefined,
                 "start": undefined,
                 "table": "comments",
+                "where": undefined,
+              },
+              "system": "client",
+            },
+            "type": "correlatedSubquery",
+          },
+        ],
+        "type": "and",
+      },
+    }
+  `);
+
+  const clientAST = toClientAST(serverAST, tables);
+  expect(clientAST).toEqual(ast);
+  expect(clientAST).toMatchInlineSnapshot(`
+    {
+      "alias": undefined,
+      "limit": undefined,
+      "orderBy": [
+        [
+          "modified",
+          "desc",
+        ],
+        [
+          "id",
+          "asc",
+        ],
+      ],
+      "related": [
+        {
+          "correlation": {
+            "childField": [
+              "issueId",
+            ],
+            "parentField": [
+              "id",
+            ],
+          },
+          "hidden": undefined,
+          "subquery": {
+            "alias": "alias2",
+            "limit": undefined,
+            "orderBy": undefined,
+            "related": undefined,
+            "schema": undefined,
+            "start": undefined,
+            "table": "comment",
+            "where": undefined,
+          },
+          "system": "client",
+        },
+        {
+          "correlation": {
+            "childField": [
+              "id",
+            ],
+            "parentField": [
+              "ownerId",
+            ],
+          },
+          "hidden": undefined,
+          "subquery": {
+            "alias": "alias1",
+            "limit": undefined,
+            "orderBy": undefined,
+            "related": undefined,
+            "schema": undefined,
+            "start": undefined,
+            "table": "user",
+            "where": undefined,
+          },
+          "system": "client",
+        },
+      ],
+      "schema": undefined,
+      "start": {
+        "exclusive": true,
+        "row": {
+          "id": "123",
+        },
+      },
+      "table": "issue",
+      "where": {
+        "conditions": [
+          {
+            "left": {
+              "name": "id",
+              "type": "column",
+            },
+            "op": "=",
+            "right": {
+              "type": "literal",
+              "value": "value",
+            },
+            "type": "simple",
+          },
+          {
+            "left": {
+              "name": "ownerId",
+              "type": "column",
+            },
+            "op": "=",
+            "right": {
+              "type": "literal",
+              "value": "value",
+            },
+            "type": "simple",
+          },
+          {
+            "op": "EXISTS",
+            "related": {
+              "correlation": {
+                "childField": [
+                  "issueId",
+                ],
+                "parentField": [
+                  "id",
+                ],
+              },
+              "subquery": {
+                "alias": "alias2",
+                "limit": undefined,
+                "orderBy": undefined,
+                "related": undefined,
+                "schema": undefined,
+                "start": undefined,
+                "table": "comment",
                 "where": undefined,
               },
               "system": "client",

@@ -1,6 +1,6 @@
 import {assert} from '../../shared/src/asserts.ts';
 import {
-  makeServerCondition,
+  toServerCondition,
   toStaticParam,
   type Condition,
   type Parameter,
@@ -168,7 +168,7 @@ function compileRules<
     const cond = rule(authDataRef as TAuthDataShape, expressionBuilder);
     return [
       'allow',
-      makeServerCondition(cond, tableName, schema.tables),
+      toServerCondition(cond, tableName, schema.tables),
     ] as const;
   });
 }
