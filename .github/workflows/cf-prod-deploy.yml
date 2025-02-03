@@ -2,7 +2,7 @@ name: Build and Deploy Zero-Cache AWS CF
 
 on:
   push:
-    branches: [main]
+    branches: [main-disable]
     # paths:
     #   - 'packages/zero-cache/**'
 env:
