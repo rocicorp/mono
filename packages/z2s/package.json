@@ -1,5 +1,5 @@
 {
-  "name": "zql-to-sql",
+  "name": "z2s",
   "description": "ZQL to SQL compiler. Used for testing the ZQL implementation and reads inside of custom mutators",
   "version": "0.0.0",
   "private": true,
