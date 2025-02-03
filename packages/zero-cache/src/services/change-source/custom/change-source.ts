@@ -25,9 +25,8 @@ import {type ChangeSourceUpstream} from '../protocol/current/upstream.ts';
 import {initSyncSchema} from './sync-schema.ts';
 
 /**
- * Initializes a Postgres change source, including the initial sync of the
- * replica, before streaming changes from the corresponding logical replication
- * stream.
+ * Initializes a Custom change source before streaming changes from the
+ * corresponding logical replication stream.
  */
 export async function initializeCustomChangeSource(
   lc: LogContext,
