@@ -1,7 +1,6 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 apps/zbugs/docker
 # build outputs
-**/*.tgz
 **/*.gz
 .git
 packages/replicache/doc

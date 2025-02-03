@@ -72,16 +72,8 @@ export default $config({
       ZERO_LOG_FORMAT: "json",
       ZERO_REPLICA_FILE: "sync-replica.db",
       ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup`,
-      ZERO_IMAGE_URL:
-        process.env.ZERO_IMAGE_URL ||
-        `${process.env.AWS_ACCOUNT_ID}.dkr.ecr.${process.env.AWS_REGION}.amazonaws.com/${process.env.ECR_IMAGE_ZERO_CACHE}:latest`,
+      ZERO_IMAGE_URL: process.env.ZERO_IMAGE_URL!,
     };
-
-    if (!commonEnv.ZERO_IMAGE_URL) {
-      throw new Error(
-        "ZERO_IMAGE_URL is required. Either provide it directly or ensure AWS_ACCOUNT_ID, AWS_REGION, and ECR_IMAGE_ZERO_CACHE are set.",
-      );
-    }
 
     // Replication Manager Service
     const replicationManager = cluster.addService(`replication-manager`, {

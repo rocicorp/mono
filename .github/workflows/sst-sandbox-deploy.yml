@@ -44,22 +44,26 @@ jobs:
       - name: Login to Amazon ECR
         run: |
           aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
-
+      - name: Install dependencies
+        run: |
+          npm run build-ci
+      - name: Create package tarball
+        run: |
+          cd packages/zero
+          npm pack
+          cp rocicorp-zero-*.tgz ./pkgs/
+      - name: Get Git SHA
+        id: git-sha
+        run: echo "SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
       - name: Build and push Docker image
         run: |
           docker buildx create --use
           docker buildx inspect --bootstrap
-          docker buildx build --platform linux/amd64 --build-arg NPM_TOKEN=${{ secrets.NPM_TOKEN }} -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE_ZERO_CACHE:latest -f ./prod/zbugs/Dockerfile --push .
-
-      - name: Install dependencies
-        run: |
-          npm run build-ci
-
+          docker buildx build --platform linux/amd64 --build-arg ZERO_VERSION=rocicorp-zero-*.tgz -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE_ZERO_CACHE:${{ env.SHA }} -f ./packages/zero/Dockerfile --push .
       - name: Generate Schema
         run: |
           cd packages/zero
           npx tsx src/build-schema.ts --schema-path ../../apps/zbugs/schema.ts --schema-output ../../prod/sst/zero-schema.json
-
 
       - name: Deploy SST app
         env:
@@ -71,7 +75,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ vars.AWS_DEFAULT_REGION }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-          ECR_IMAGE_ZERO_CACHE: zero-zbugs-sandbox
+          ZERO_IMAGE_URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_DEFAULT_REGION }}.amazonaws.com/${{ env.ECR_IMAGE_ZERO_CACHE }}:${{ env.SHA }}
           DOMAIN_NAME: "zbugs-sync-sandbox.rocicorp.dev"
           DOMAIN_CERT: ${{ vars.SANDBOX_CERTIFICATE_ARN }}
         run: |
