@@ -29,8 +29,10 @@ export function select(ast: AST, correlation: SQLQuery | undefined) {
   selectionSet.push(sql.__dangerous__rawValue('*'));
   return sql`SELECT ${sql.join(selectionSet, ',')} FROM ${sql.ident(
     ast.table,
-  )} WHERE (${where(ast.where, ast.table)}) ${
-    correlation ? sql`AND ${correlation}` : sql``
+  )} ${ast.where ? sql`WHERE ${where(ast.where, ast.table)}` : sql``} ${
+    correlation
+      ? sql`${ast.where ? sql`AND` : sql`WHERE`} (${correlation})`
+      : sql``
   } ${orderBy(ast.orderBy)} ${limit(ast.limit)}`;
 }
 
