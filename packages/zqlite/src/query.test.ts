@@ -1,13 +1,11 @@
 import {beforeEach, expect, expectTypeOf, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {must} from '../../shared/src/must.ts';
-import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
-import type {Source} from '../../zql/src/ivm/source.ts';
 import {newQuery, type QueryDelegate} from '../../zql/src/query/query-impl.ts';
 import {schema} from '../../zql/src/query/test/test-schemas.ts';
 import {Database} from './db.ts';
-import {TableSource, toSQLiteTypeName} from './table-source.ts';
 import type {LogConfig} from '../../otel/src/log-options.ts';
+import {newQueryDelegate} from './test/source-factory.ts';
 
 let queryDelegate: QueryDelegate;
 
@@ -21,52 +19,7 @@ const logConfig: LogConfig = {
 
 beforeEach(() => {
   const db = new Database(createSilentLogContext(), ':memory:');
-  const sources = new Map<string, Source>();
-  queryDelegate = {
-    getSource: (name: string) => {
-      let source = sources.get(name);
-      if (source) {
-        return source;
-      }
-
-      const tableSchema = schema.tables[name as keyof typeof schema.tables];
-
-      // create the SQLite table
-      db.exec(`
-      CREATE TABLE "${name}" (
-        ${Object.entries(tableSchema.columns)
-          .map(([name, c]) => `"${name}" ${toSQLiteTypeName(c.type)}`)
-          .join(', ')},
-        PRIMARY KEY (${tableSchema.primaryKey.map(k => `"${k}"`).join(', ')})
-      )`);
-
-      source = new TableSource(
-        lc,
-        logConfig,
-        'query.test.ts',
-        db,
-        name,
-        tableSchema.columns,
-        tableSchema.primaryKey,
-      );
-
-      sources.set(name, source);
-      return source;
-    },
-
-    createStorage() {
-      return new MemoryStorage();
-    },
-    addServerQuery() {
-      return () => {};
-    },
-    onTransactionCommit() {
-      return () => {};
-    },
-    batchViewUpdates<T>(applyViewUpdates: () => T): T {
-      return applyViewUpdates();
-    },
-  };
+  queryDelegate = newQueryDelegate(lc, logConfig, db, schema);
 
   const userSource = must(queryDelegate.getSource('user'));
   const issueSource = must(queryDelegate.getSource('issue'));
