@@ -5,7 +5,7 @@ const pgConfigForVersion = (version: number) => ({
   test: {
     name: `pg-${version}`,
     include: ['src/**/*.pg-test.?(c|m)[jt]s?(x)'],
-    globalSetup: [`./test/pg-${version}.ts`],
+    globalSetup: [`../zero-cache/test/pg-${version}.ts`],
   },
 });
 
