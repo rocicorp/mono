@@ -11,7 +11,11 @@ import {assertHash, fakeHash, newRandomHash} from '../hash.ts';
 import {dropIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.ts';
 import {IDBNotFoundError, IDBStore} from '../kv/idb-store.ts';
 import {withRead} from '../with-transactions.ts';
-import {makeClientV5, setClientsForTesting} from './clients-test-helpers.ts';
+import {
+  makeClientV5,
+  makeClientV6,
+  setClientsForTesting,
+} from './clients-test-helpers.ts';
 import {
   type ClientMap,
   ClientStateNotFoundError,
@@ -44,19 +48,15 @@ function awaitLatestHeartbeatUpdate(): Promise<ClientMap> {
 
 test('startHeartbeats starts interval that writes heartbeat each minute', async () => {
   const dagStore = new TestStore();
-  const client1 = {
+  const client1 = makeClientV6({
     heartbeatTimestampMs: 1000,
-    headHash: fakeHash('eadc1e1'),
-    mutationID: 10,
-    lastServerAckdMutationID: 10,
-  };
-  const client2 = {
+    refreshHashes: [fakeHash('eadc1e1')],
+  });
+  const client2 = makeClientV6({
     heartbeatTimestampMs: 3000,
-    headHash: fakeHash('eadc1e2'),
-    mutationID: 100,
-    lastServerAckdMutationID: 90,
-  };
-  const clientMap = new Map(
+    refreshHashes: [fakeHash('eadc1e2')],
+  });
+  const clientMap: ClientMap = new Map(
     Object.entries({
       client1,
       client2,
@@ -184,19 +184,15 @@ test('calling function returned by startHeartbeats, stops heartbeats', async () 
 
 test('writeHeartbeat writes heartbeat', async () => {
   const dagStore = new TestStore();
-  const client1 = {
+  const client1 = makeClientV6({
     heartbeatTimestampMs: 1000,
-    headHash: fakeHash('eadc1e1'),
-    mutationID: 10,
-    lastServerAckdMutationID: 10,
-  };
-  const client2 = {
+    refreshHashes: [fakeHash('eadc1e1')],
+  });
+  const client2 = makeClientV6({
     heartbeatTimestampMs: 3000,
-    headHash: fakeHash('eadc1e2'),
-    mutationID: 100,
-    lastServerAckdMutationID: 90,
-  };
-  const clientMap = new Map(
+    refreshHashes: [fakeHash('eadc1e2')],
+  });
+  const clientMap: ClientMap = new Map(
     Object.entries({
       client1,
       client2,

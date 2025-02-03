@@ -9,7 +9,6 @@ import {withWrite} from '../with-transactions.ts';
 import {
   type ClientMap,
   type ClientMapDD31,
-  type ClientV4,
   type ClientV5,
   type ClientV6,
   getClients,
@@ -29,22 +28,11 @@ export function setClientsForTesting(
   });
 }
 
-type PartialClientV4 = Partial<ClientV4> &
-  Pick<ClientV4, 'heartbeatTimestampMs' | 'headHash'>;
-
 type PartialClientV5 = Partial<ClientV5> &
   Pick<ClientV5, 'heartbeatTimestampMs' | 'headHash'>;
 
 type PartialClientV6 = Partial<ClientV6> &
   Pick<ClientV6, 'heartbeatTimestampMs' | 'refreshHashes'>;
-
-export function makeClientV4(partialClient: PartialClientV4): ClientV4 {
-  return {
-    mutationID: 0,
-    lastServerAckdMutationID: 0,
-    ...partialClient,
-  };
-}
 
 export function makeClientV5(partialClient: PartialClientV5): ClientV5 {
   return {

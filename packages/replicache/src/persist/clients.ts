@@ -42,58 +42,8 @@ import {makeClientID} from './make-client-id.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 
-export type ClientMap = ReadonlyMap<ClientID, ClientV4 | ClientV5 | ClientV6>;
+export type ClientMap = ReadonlyMap<ClientID, ClientV5 | ClientV6>;
 export type ClientMapDD31 = ReadonlyMap<ClientID, ClientV5 | ClientV6>;
-
-const clientV4Schema = valita.readonlyObject({
-  /**
-   * A UNIX timestamp in milliseconds updated by the client once a minute
-   * while it is active and every time the client persists its state to
-   * the perdag.
-   * Should only be updated by the client represented by this structure.
-   */
-  heartbeatTimestampMs: valita.number(),
-
-  /**
-   * The hash of the commit in the perdag this client last persisted.
-   * Should only be updated by the client represented by this structure.
-   */
-  headHash: hashSchema,
-
-  /**
-   * The mutationID of the commit at headHash (mutationID if it is a
-   * local commit, lastMutationID if it is an index change or snapshot commit).
-   * Should only be updated by the client represented by this structure.
-   * Read by other clients to determine if there are unacknowledged pending
-   * mutations for them to push on behalf of the client represented by this
-   * structure.
-   * This is redundant with information in the commit graph at headHash,
-   * but allows other clients to determine if there are unacknowledged pending
-   * mutations without having to load the commit graph at headHash.
-   */
-  mutationID: valita.number(),
-
-  /**
-   * The highest lastMutationID received from the server for this client.
-   *
-   * Should be updated by the client represented by this structure whenever
-   * it persists its state to the perdag.
-   * Read by other clients to determine if there are unacknowledged pending
-   * mutations for them to push on behalf of the client represented by this
-   * structure, and *updated* by other clients upon successfully pushing
-   * pending mutations to avoid redundant pushes of those mutations.
-   *
-   * Note: This will be the same as the lastMutationID of the base snapshot of
-   * the commit graph at headHash when written by the client represented by this
-   * structure.  However, when written by another client pushing pending
-   * mutations on this client's behalf it will be different.  This is because
-   * the other client does not update the commit graph (it is unsafe to update
-   * another client's commit graph).
-   */
-  lastServerAckdMutationID: valita.number(),
-});
-
-export type ClientV4 = valita.Infer<typeof clientV4Schema>;
 
 const clientV5Schema = valita.readonlyObject({
   heartbeatTimestampMs: valita.number(),
@@ -147,38 +97,18 @@ const clientV6Schema = valita.readonlyObject({
 
 export type ClientV6 = valita.Infer<typeof clientV6Schema>;
 
-export type Client = ClientV4 | ClientV5 | ClientV6;
+export type Client = ClientV5 | ClientV6;
 
 function isClientV6(client: Client): client is ClientV6 {
   return (client as ClientV6).refreshHashes !== undefined;
 }
 
-function isClientV5(client: Client): client is ClientV5 {
-  return (client as ClientV5).clientGroupID !== undefined;
-}
-
-export function isClientV4(client: Client): client is ClientV4 {
-  return (client as ClientV4).lastServerAckdMutationID !== undefined;
-}
-
 export const CLIENTS_HEAD_NAME = 'clients';
 
-const clientSchema = valita.union(
-  clientV4Schema,
-  clientV5Schema,
-  clientV6Schema,
-);
+const clientSchema = valita.union(clientV5Schema, clientV6Schema);
 
 function assertClient(value: unknown): asserts value is Client {
   valita.assert(value, clientSchema);
-}
-
-export function assertClientV4(value: unknown): asserts value is ClientV4 {
-  valita.assert(value, clientV4Schema);
-}
-
-export function assertClientV5(value: unknown): asserts value is ClientV5 {
-  valita.assert(value, clientV5Schema);
 }
 
 export function assertClientV6(value: unknown): asserts value is ClientV6 {
@@ -212,7 +142,7 @@ function clientMapToChunkData(
       }
     } else {
       dagWrite.assertValidHash(client.headHash);
-      if (isClientV5(client) && client.tempRefreshHash) {
+      if (client.tempRefreshHash) {
         dagWrite.assertValidHash(client.tempRefreshHash);
       }
     }
@@ -546,7 +476,7 @@ function getRefsForClients(clients: ClientMap): Refs {
       }
     } else {
       refs.add(client.headHash);
-      if (isClientV5(client) && client.tempRefreshHash) {
+      if (client.tempRefreshHash) {
         refs.add(client.tempRefreshHash);
       }
     }
@@ -570,10 +500,7 @@ export async function getClientGroupIDForClient(
   read: Read,
 ): Promise<ClientGroupID | undefined> {
   const client = await getClient(clientID, read);
-  if (!client || !isClientV5(client)) {
-    return undefined;
-  }
-  return client.clientGroupID;
+  return client?.clientGroupID;
 }
 
 /**

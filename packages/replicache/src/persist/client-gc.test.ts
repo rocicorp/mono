@@ -12,7 +12,7 @@ import {
   getLatestGCUpdate,
   initClientGC,
 } from './client-gc.ts';
-import {makeClientV4, setClientsForTesting} from './clients-test-helpers.ts';
+import {makeClientV5, setClientsForTesting} from './clients-test-helpers.ts';
 import {
   type ClientMap,
   getClients,
@@ -41,21 +41,22 @@ function awaitLatestGCUpdate(): Promise<ClientMap> {
 
 test('initClientGC starts 5 min interval that collects clients that have been inactive for > 24 hours', async () => {
   const dagStore = new TestStore();
-  const client1 = makeClientV4({
+  const client1 = makeClientV5({
     heartbeatTimestampMs: START_TIME,
     headHash: newRandomHash(),
-    mutationID: 100,
-    lastServerAckdMutationID: 90,
+
+    // mutationID: 100,
+    // lastServerAckdMutationID: 90,
   });
-  const client2 = makeClientV4({
+  const client2 = makeClientV5({
     heartbeatTimestampMs: START_TIME,
     headHash: newRandomHash(),
   });
-  const client3 = makeClientV4({
+  const client3 = makeClientV5({
     heartbeatTimestampMs: START_TIME + 6 * 60 * 1000,
     headHash: newRandomHash(),
   });
-  const client4 = makeClientV4({
+  const client4 = makeClientV5({
     heartbeatTimestampMs: START_TIME + 6 * 60 * 1000,
     headHash: newRandomHash(),
   });
