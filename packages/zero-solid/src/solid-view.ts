@@ -1,6 +1,6 @@
 import {
   createStore,
-  reconcile,
+  produce,
   type SetStoreFunction,
   type Store,
 } from 'solid-js/store';
@@ -14,14 +14,17 @@ import {
   type Output,
   type Query,
   type ViewFactory,
-} from '../../zero/src/advanced.ts';
-import type {ResultType, Schema} from '../../zero/src/zero.ts';
-import {deepClone} from '../../shared/src/deep-clone.ts';
-import {createSignal} from 'solid-js';
+} from '../../zero-advanced/src/mod.js';
+import type {Schema} from '../../zero-schema/src/mod.js';
+import type {ResultType} from '../../zql/src/query/typed-view.js';
+import type {Row} from '../../zero-protocol/src/data.ts';
+import type {Node} from '../../zql/src/ivm/data.ts';
 
 export type QueryResultDetails = {
   readonly type: ResultType;
 };
+
+type State = [Entry, QueryResultDetails];
 
 const complete = {type: 'complete'} as const;
 const unknown = {type: 'unknown'} as const;
@@ -31,12 +34,10 @@ export class SolidView<V> implements Output {
   readonly #format: Format;
   readonly #onDestroy: () => void;
 
-  // Synthetic "root" entry that has a single "" relationship, so that we can
-  // treat all changes, including the root change, generically.
-  #root: Entry;
-  #rootStore: Store<Entry>;
-  #setRootStore: SetStoreFunction<Entry>;
-  #resultDetails: () => QueryResultDetails;
+  #state: Store<State>;
+  #setState: SetStoreFunction<State>;
+
+  #pendingChanges: DrainedChange[] = [];
 
   constructor(
     input: Input,
@@ -49,43 +50,27 @@ export class SolidView<V> implements Output {
     onTransactionCommit(this.#onTransactionCommit);
     this.#format = format;
     this.#onDestroy = onDestroy;
-    this.#root = {'': format.singular ? undefined : []};
+    [this.#state, this.#setState] = createStore<State>([
+      {'': format.singular ? undefined : []},
+      queryComplete === true ? complete : unknown,
+    ]);
     input.setOutput(this);
 
-    for (const node of input.fetch({})) {
-      applyChange(
-        this.#root,
-        {
-          type: 'add',
-          node,
-        },
-        this.#input.getSchema(),
-        '',
-        this.#format,
-      );
-    }
-
-    [this.#rootStore, this.#setRootStore] = createStore<Entry>(
-      deepClone(this.#root) as Entry,
-    );
-    const [resultDetails, setResultDetails] = createSignal<QueryResultDetails>(
-      queryComplete === true ? complete : unknown,
-    );
-    this.#resultDetails = resultDetails;
+    this.#applyChanges(input.fetch({}), node => ({type: 'add', node}));
 
     if (queryComplete !== true) {
       void queryComplete.then(() => {
-        setResultDetails(complete);
+        this.#setState(oldState => [oldState[0], complete]);
       });
     }
   }
 
   get data(): V {
-    return this.#rootStore[''] as V;
+    return this.#state[0][''] as V;
   }
 
   get resultDetails(): QueryResultDetails {
-    return this.#resultDetails();
+    return this.#state[1];
   }
 
   destroy(): void {
@@ -93,12 +78,69 @@ export class SolidView<V> implements Output {
   }
 
   #onTransactionCommit = () => {
-    this.#setRootStore(reconcile(this.#root));
+    this.#applyChanges(this.#pendingChanges, c => c);
   };
 
-  push(change: Change): void {
-    applyChange(this.#root, change, this.#input.getSchema(), '', this.#format);
+  #applyChanges<T>(changes: Iterable<T>, mapper: (v: T) => Change): void {
+    try {
+      this.#setState(
+        produce((draftState: State) => {
+          for (const change of changes) {
+            applyChange(
+              draftState[0],
+              mapper(change),
+              this.#input.getSchema(),
+              '',
+              this.#format,
+            );
+          }
+        }),
+      );
+    } finally {
+      this.#pendingChanges = [];
+    }
   }
+
+  push(change: Change): void {
+    // Delay setting the state until the transaction commit.
+    this.#pendingChanges.push(drain(change));
+  }
+}
+
+function drain(change: Change): DrainedChange {
+  switch (change.type) {
+    case 'add':
+      return {type: 'add', node: drainNode(change.node)};
+    case 'remove':
+      return {type: 'remove', node: drainNode(change.node)};
+    case 'child':
+      return {
+        type: 'child',
+        node: drainNode(change.node),
+        child: {
+          relationshipName: change.child.relationshipName,
+          change: drain(change.child.change),
+        },
+      };
+    case 'edit':
+      return {
+        type: 'edit',
+        node: drainNode(change.node),
+        oldNode: drainNode(change.oldNode),
+      };
+  }
+}
+
+function drainNode(node: Node): DrainedNode {
+  return {
+    row: node.row,
+    relationships: Object.fromEntries(
+      Object.entries(node.relationships).map(([relationship, stream]) => {
+        const drained = [...stream()].map(drainNode);
+        return [relationship, () => drained];
+      }),
+    ),
+  };
 }
 
 export function solidViewFactory<
@@ -123,3 +165,35 @@ export function solidViewFactory<
 }
 
 solidViewFactory satisfies ViewFactory<Schema, string, unknown, unknown>;
+
+type DrainedChange = AddChange | RemoveChange | ChildChange | EditChange;
+
+export type AddChange = {
+  type: 'add';
+  node: DrainedNode;
+};
+
+export type RemoveChange = {
+  type: 'remove';
+  node: DrainedNode;
+};
+
+type ChildChange = {
+  type: 'child';
+  node: DrainedNode;
+  child: {
+    relationshipName: string;
+    change: DrainedChange;
+  };
+};
+
+type EditChange = {
+  type: 'edit';
+  node: DrainedNode;
+  oldNode: DrainedNode;
+};
+
+type DrainedNode = {
+  row: Row;
+  relationships: Record<string, () => DrainedNode[]>;
+};
