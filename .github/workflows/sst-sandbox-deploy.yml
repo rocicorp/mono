@@ -57,9 +57,10 @@ jobs:
         run: echo "SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
       - name: Build and push Docker image
         run: |
+          cd packages/zero
           docker buildx create --use
           docker buildx inspect --bootstrap
-          docker buildx build --platform linux/amd64 --build-arg ZERO_VERSION=rocicorp-zero-*.tgz -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE_ZERO_CACHE:${{ env.SHA }} -f ./packages/zero/Dockerfile --push .
+          docker buildx build --platform linux/amd64 --build-arg ZERO_VERSION=rocicorp-zero-*.tgz -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE_ZERO_CACHE:${{ env.SHA }} -f ./Dockerfile --push .
       - name: Generate Schema
         run: |
           cd packages/zero
