@@ -60,9 +60,17 @@ function getLitestream(
 async function tryRestore(config: ZeroLitestreamConfig) {
   // The log output for litestream restore is minimal. Include it all.
   const {litestream, env} = getLitestream(config, 'debug');
+  const {restoreParallelism: parallelism} = config.litestream;
   const proc = spawn(
     litestream,
-    ['restore', '-if-db-not-exists', '-if-replica-exists', config.replicaFile],
+    [
+      'restore',
+      '-if-db-not-exists',
+      '-if-replica-exists',
+      '-parallelism',
+      String(parallelism),
+      config.replicaFile,
+    ],
     {env, stdio: 'inherit', windowsHide: true},
   );
   const {promise, resolve, reject} = resolver();

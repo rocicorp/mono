@@ -2,11 +2,11 @@
  * These types represent the _compiled_ config whereas `define-config` types represent the _source_ config.
  */
 
+import {logOptions} from '../../../otel/src/log-options.ts';
 import {parseOptions, type Config} from '../../../shared/src/options.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {runtimeDebugFlags} from '../../../zqlite/src/runtime-debug.ts';
 import {singleProcessMode} from '../types/processes.ts';
-import {logOptions} from '../../../otel/src/log-options.ts';
 export type {LogConfig} from '../../../otel/src/log-options.ts';
 
 /**
@@ -325,6 +325,14 @@ export const zeroOptions = {
       desc: [
         `The location of the litestream backup, usually an {bold s3://} URL.`,
         `If set, the {bold litestream-executable} must also be specified.`,
+      ],
+    },
+
+    restoreParallelism: {
+      type: v.number().default(16),
+      desc: [
+        `The number of WAL files to download in parallel when performing the`,
+        `initial restore of the replica from the backup.`,
       ],
     },
   },
