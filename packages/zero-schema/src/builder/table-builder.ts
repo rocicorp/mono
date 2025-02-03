@@ -64,7 +64,14 @@ export class TableBuilder<TShape extends TableSchema> {
     this.#schema = schema;
   }
 
-  columns<TColumns extends Record<string, ColumnBuilder<SchemaValue>>>(
+  from<ServerName extends string>(serverName: ServerName) {
+    return new TableBuilder<TShape>({
+      ...this.#schema,
+      serverName,
+    });
+  }
+
+  columns<const TColumns extends Record<string, ColumnBuilder<SchemaValue>>>(
     columns: TColumns,
   ): TableBuilderWithColumns<{
     name: TShape['name'];
@@ -108,6 +115,18 @@ export class TableBuilderWithColumns<TShape extends TableSchema> {
     if (this.#schema.primaryKey.length === 0) {
       throw new Error(`Table "${this.#schema.name}" is missing a primary key`);
     }
+    const names = new Set<string>();
+    for (const [col, {serverName}] of Object.entries(this.#schema.columns)) {
+      const name = serverName ?? col;
+      if (names.has(name)) {
+        throw new Error(
+          `Table "${
+            this.#schema.name
+          }" has multiple columns referencing "${name}"`,
+        );
+      }
+      names.add(name);
+    }
     return this.#schema;
   }
 }
@@ -116,6 +135,13 @@ class ColumnBuilder<TShape extends SchemaValue<any>> {
   readonly #schema: TShape;
   constructor(schema: TShape) {
     this.#schema = schema;
+  }
+
+  from<ServerName extends string>(serverName: ServerName) {
+    return new ColumnBuilder<TShape & {serverName: string}>({
+      ...this.#schema,
+      serverName,
+    });
   }
 
   optional(): ColumnBuilder<Omit<TShape, 'optional'> & {optional: true}> {

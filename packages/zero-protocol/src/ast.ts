@@ -11,6 +11,7 @@ import {defined} from '../../shared/src/arrays.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import * as v from '../../shared/src/valita.ts';
+import type {TableSchema} from '../../zero-schema/src/table-schema.ts';
 import {rowSchema, type Row} from './data.ts';
 
 export const selectorSchema = v.string();
@@ -118,6 +119,8 @@ export const simpleConditionSchema: v.Type<SimpleCondition> = v.readonlyObject({
   right: v.union(parameterReferenceSchema, literalReferenceSchema),
 });
 
+type ConditionValue = v.Infer<typeof conditionValueSchema>;
+
 export const correlatedSubqueryConditionOperatorSchema: v.Type<CorrelatedSubqueryConditionOperator> =
   v.union(v.literal('EXISTS'), v.literal('NOT EXISTS'));
 
@@ -146,6 +149,11 @@ const disjunctionSchema: v.Type<Disjunction> = v.readonlyObject({
 });
 
 export type CompoundKey = readonly [string, ...string[]];
+
+function mustCompoundKey(field: readonly string[]): CompoundKey {
+  assert(Array.isArray(field) && field.length >= 1);
+  return field as unknown as CompoundKey;
+}
 
 export const compoundKeySchema: v.Type<CompoundKey> = v.readonly(
   v.tuple([v.string()]).concat(v.array(v.string())),
@@ -322,48 +330,203 @@ export type CorrelatedSubqueryCondition = {
 
 export type CorrelatedSubqueryConditionOperator = 'EXISTS' | 'NOT EXISTS';
 
-const normalizeCache = new WeakMap<AST, Required<AST>>();
+interface ASTTransform {
+  tableName(orig: string): string;
+  columnName(origTable: string, origColumn: string): string;
+  related(subqueries: CorrelatedSubquery[]): readonly CorrelatedSubquery[];
+  where(cond: Condition): Condition | undefined;
+  // conjunction or disjunction, called when traversing the return value of where()
+  conditions(conds: Condition[]): readonly Condition[];
+}
 
-export function normalizeAST(ast: AST): Required<AST> {
-  const cached = normalizeCache.get(ast);
-  if (cached) {
-    return cached;
-  }
-  const where = flattened(ast.where);
-  const normalized = {
+function transformAST(ast: AST, transform: ASTTransform): Required<AST> {
+  // Name mapping functions (e.g. to server names)
+  const {tableName, columnName} = transform;
+  const colName = (c: string) => columnName(ast.table, c);
+  const key = (table: string, k: CompoundKey) => {
+    const serverKey = k.map(col => columnName(table, col));
+    return mustCompoundKey(serverKey);
+  };
+
+  const where = ast.where ? transform.where(ast.where) : undefined;
+  const transformed = {
     schema: ast.schema,
-    table: ast.table,
+    table: tableName(ast.table),
     alias: ast.alias,
-    where: where ? sortedWhere(where) : undefined,
+    where: where ? transformWhere(where, ast.table, transform) : undefined,
     related: ast.related
-      ? sortedRelated(
+      ? transform.related(
           ast.related.map(
             r =>
               ({
-                correlation: r.correlation,
+                correlation: {
+                  parentField: key(ast.table, r.correlation.parentField),
+                  childField: key(r.subquery.table, r.correlation.childField),
+                },
                 hidden: r.hidden,
-                subquery: normalizeAST(r.subquery),
+                subquery: transformAST(r.subquery, transform),
                 system: r.system,
               }) satisfies Required<CorrelatedSubquery>,
           ),
         )
       : undefined,
-    start: ast.start,
+    start: ast.start
+      ? {
+          ...ast.start,
+          row: Object.fromEntries(
+            Object.entries(ast.start.row).map(([col, val]) => [
+              colName(col),
+              val,
+            ]),
+          ),
+        }
+      : undefined,
     limit: ast.limit,
-    orderBy: ast.orderBy,
+    orderBy: ast.orderBy?.map(([col, dir]) => [colName(col), dir] as const),
   };
 
-  normalizeCache.set(ast, normalized);
+  return transformed;
+}
+
+function transformWhere(
+  where: Condition,
+  table: string,
+  transform: ASTTransform,
+): Condition {
+  // Name mapping functions (e.g. to server names)
+  const {columnName} = transform;
+  const condValue = (c: ConditionValue) =>
+    c.type !== 'column' ? c : {...c, name: columnName(table, c.name)};
+  const key = (table: string, k: CompoundKey) => {
+    const serverKey = k.map(col => columnName(table, col));
+    return mustCompoundKey(serverKey);
+  };
+
+  if (where.type === 'simple') {
+    return {...where, left: condValue(where.left)};
+  } else if (where.type === 'correlatedSubquery') {
+    const {correlation, subquery} = where.related;
+    return {
+      ...where,
+      related: {
+        ...where.related,
+        correlation: {
+          parentField: key(table, correlation.parentField),
+          childField: key(subquery.table, correlation.childField),
+        },
+        subquery: transformAST(subquery, transform),
+      },
+    };
+  }
+
+  return {
+    type: where.type,
+    conditions: transform.conditions(
+      where.conditions.map(c => transformWhere(c, table, transform)),
+    ),
+  };
+}
+
+const normalizeCache = new WeakMap<AST, Required<AST>>();
+
+const NORMALIZE_TRANSFORM: ASTTransform = {
+  tableName: t => t,
+  columnName: (_, c) => c,
+  related: sortedRelated,
+  where: flattened,
+  conditions: c => c.sort(cmpCondition),
+};
+
+export function normalizeAST(ast: AST): Required<AST> {
+  let normalized = normalizeCache.get(ast);
+  if (!normalized) {
+    normalized = transformAST(ast, NORMALIZE_TRANSFORM);
+    normalizeCache.set(ast, normalized);
+  }
   return normalized;
 }
 
-function sortedWhere(where: Condition): Condition {
-  if (where.type === 'simple' || where.type === 'correlatedSubquery') {
-    return where;
-  }
+export function toServerAST(ast: AST, tables: Record<string, TableSchema>) {
+  return transformAST(ast, clientToServer(tables));
+}
+
+export function toServerCondition(
+  cond: Condition,
+  table: string,
+  tables: Record<string, TableSchema>,
+) {
+  return transformWhere(cond, table, clientToServer(tables));
+}
+
+function clientToServer(tables: Record<string, TableSchema>): ASTTransform {
+  const mustTable = (table: string) => {
+    const t = tables[table];
+    if (!table) {
+      throw new Error(`invalid table "${table}"`);
+    }
+    return t;
+  };
+
   return {
-    type: where.type,
-    conditions: where.conditions.map(w => sortedWhere(w)).sort(cmpCondition),
+    tableName: (table: string) => mustTable(table).serverName ?? table,
+    columnName: (table: string, col: string) => {
+      const c = mustTable(table).columns[col];
+      if (!c) {
+        throw new Error(`invalid column "${col}" in table "${table}"`);
+      }
+      return c.serverName ?? col;
+    },
+    related: r => r,
+    where: w => w,
+    conditions: c => c,
+  };
+}
+
+export function toClientAST(ast: AST, tables: Record<string, TableSchema>) {
+  return transformAST(ast, serverToClient(tables));
+}
+
+function serverToClient(tables: Record<string, TableSchema>): ASTTransform {
+  const tableNames = Object.fromEntries(
+    Object.entries(tables).map(([clientName, {serverName}]) => [
+      serverName ?? clientName,
+      clientName,
+    ]),
+  );
+  const columnNamesByTable = Object.fromEntries(
+    Object.entries(tables).map(
+      ([clientTable, {serverName: serverTable, columns}]) => {
+        const columnNames = Object.fromEntries(
+          Object.entries(columns).map(([clientName, {serverName}]) => [
+            serverName ?? clientName,
+            clientName,
+          ]),
+        );
+        return [serverTable ?? clientTable, columnNames] as const;
+      },
+    ),
+  );
+
+  function mustTable<T>(table: string, tables: Record<string, T>): T {
+    const t = tables[table];
+    if (!table) {
+      throw new Error(`invalid table "${table}"`);
+    }
+    return t;
+  }
+
+  return {
+    tableName: (table: string) => mustTable(table, tableNames),
+    columnName: (table: string, col: string) => {
+      const name = mustTable(table, columnNamesByTable)[col];
+      if (!name) {
+        throw new Error(`invalid column "${col}" in table "${table}"`);
+      }
+      return name;
+    },
+    related: r => r,
+    where: w => w,
+    conditions: c => c,
   };
 }
 
@@ -451,10 +614,7 @@ function cmpRelated(a: CorrelatedSubquery, b: CorrelatedSubquery): number {
  * Also flattens singleton Conjunctions regardless of operator, and removes
  * empty Conjunctions.
  */
-function flattened<T extends Condition>(cond: T | undefined): T | undefined {
-  if (cond === undefined) {
-    return undefined;
-  }
+function flattened(cond: Condition): Condition | undefined {
   if (cond.type === 'simple' || cond.type === 'correlatedSubquery') {
     return cond;
   }
@@ -468,12 +628,12 @@ function flattened<T extends Condition>(cond: T | undefined): T | undefined {
     case 0:
       return undefined;
     case 1:
-      return conditions[0] as T;
+      return conditions[0];
     default:
       return {
         type: cond.type,
         conditions,
-      } as unknown as T;
+      };
   }
 }
 

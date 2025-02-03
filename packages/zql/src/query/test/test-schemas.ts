@@ -9,16 +9,18 @@ import {
 } from '../../../../zero-schema/src/builder/table-builder.ts';
 
 const issue = table('issue')
+  .from('issues')
   .columns({
     id: string(),
     title: string(),
     description: string(),
     closed: boolean(),
-    ownerId: string().optional(),
+    ownerId: string().from('owner_id').optional(),
   })
   .primaryKey('id');
 
 const user = table('user')
+  .from('users')
   .columns({
     id: string(),
     name: string(),
@@ -31,10 +33,11 @@ const user = table('user')
   .primaryKey('id');
 
 const comment = table('comment')
+  .from('comments')
   .columns({
     id: string(),
     authorId: string(),
-    issueId: string(),
+    issueId: string().from('issue_id'),
     text: string(),
     createdAt: number(),
   })

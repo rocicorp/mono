@@ -1,5 +1,6 @@
 import {assert} from '../../shared/src/asserts.ts';
 import {
+  toServerCondition,
   toStaticParam,
   type Condition,
   type Parameter,
@@ -77,10 +78,11 @@ export async function definePermissions<TAuthDataShape, TSchema extends Schema>(
   }
 
   const config = await definer();
-  return compilePermissions(config, expressionBuilders);
+  return compilePermissions(schema, config, expressionBuilders);
 }
 
 function compilePermissions<TAuthDataShape, TSchema extends Schema>(
+  schema: TSchema,
   authz: PermissionsConfig<TAuthDataShape, TSchema> | undefined,
   expressionBuilders: Record<string, ExpressionBuilder<Schema, string>>,
 ): CompiledPermissionsConfig | undefined {
@@ -89,9 +91,20 @@ function compilePermissions<TAuthDataShape, TSchema extends Schema>(
   }
   const ret: CompiledPermissionsConfig = {};
   for (const [tableName, tableConfig] of Object.entries(authz)) {
-    ret[tableName] = {
-      row: compileRowConfig(tableConfig.row, expressionBuilders[tableName]),
-      cell: compileCellConfig(tableConfig.cell, expressionBuilders[tableName]),
+    const serverName = schema.tables[tableName].serverName ?? tableName;
+    ret[serverName] = {
+      row: compileRowConfig(
+        schema,
+        tableName,
+        tableConfig.row,
+        expressionBuilders[tableName],
+      ),
+      cell: compileCellConfig(
+        schema,
+        tableName,
+        tableConfig.cell,
+        expressionBuilders[tableName],
+      ),
     };
   }
 
@@ -103,6 +116,8 @@ function compileRowConfig<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
 >(
+  schema: TSchema,
+  tableName: TTable,
   rowRules: AssetPermissions<TAuthDataShape, TSchema, TTable> | undefined,
   expressionBuilder: ExpressionBuilder<TSchema, TTable>,
 ): CompiledAssetPermissions | undefined {
@@ -110,19 +125,23 @@ function compileRowConfig<
     return undefined;
   }
   return {
-    select: compileRules(rowRules.select, expressionBuilder),
-    insert: compileRules(rowRules.insert, expressionBuilder),
+    select: compileRules(schema, tableName, rowRules.select, expressionBuilder),
+    insert: compileRules(schema, tableName, rowRules.insert, expressionBuilder),
     update: {
       preMutation: compileRules(
+        schema,
+        tableName,
         rowRules.update?.preMutation,
         expressionBuilder,
       ),
       postMutation: compileRules(
+        schema,
+        tableName,
         rowRules.update?.postMutation,
         expressionBuilder,
       ),
     },
-    delete: compileRules(rowRules.delete, expressionBuilder),
+    delete: compileRules(schema, tableName, rowRules.delete, expressionBuilder),
   };
 }
 
@@ -136,6 +155,8 @@ function compileRules<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
 >(
+  schema: TSchema,
+  tableName: TTable,
   rules: PermissionRule<TAuthDataShape, TSchema, TTable>[] | undefined,
   expressionBuilder: ExpressionBuilder<TSchema, TTable>,
 ): ['allow', Condition][] | undefined {
@@ -143,13 +164,13 @@ function compileRules<
     return undefined;
   }
 
-  return rules.map(
-    rule =>
-      [
-        'allow',
-        rule(authDataRef as TAuthDataShape, expressionBuilder),
-      ] as const,
-  );
+  return rules.map(rule => {
+    const cond = rule(authDataRef as TAuthDataShape, expressionBuilder);
+    return [
+      'allow',
+      toServerCondition(cond, tableName, schema.tables),
+    ] as const;
+  });
 }
 
 function compileCellConfig<
@@ -157,6 +178,8 @@ function compileCellConfig<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
 >(
+  schema: TSchema,
+  tableName: TTable,
   cellRules:
     | Record<string, AssetPermissions<TAuthDataShape, TSchema, TTable>>
     | undefined,
@@ -168,16 +191,23 @@ function compileCellConfig<
   const ret: Record<string, CompiledAssetPermissions> = {};
   for (const [columnName, rules] of Object.entries(cellRules)) {
     ret[columnName] = {
-      select: compileRules(rules.select, expressionBuilder),
-      insert: compileRules(rules.insert, expressionBuilder),
+      select: compileRules(schema, tableName, rules.select, expressionBuilder),
+      insert: compileRules(schema, tableName, rules.insert, expressionBuilder),
       update: {
-        preMutation: compileRules(rules.update?.preMutation, expressionBuilder),
+        preMutation: compileRules(
+          schema,
+          tableName,
+          rules.update?.preMutation,
+          expressionBuilder,
+        ),
         postMutation: compileRules(
+          schema,
+          tableName,
           rules.update?.postMutation,
           expressionBuilder,
         ),
       },
-      delete: compileRules(rules.delete, expressionBuilder),
+      delete: compileRules(schema, tableName, rules.delete, expressionBuilder),
     };
   }
   return ret;

@@ -16,6 +16,7 @@ import {
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
+import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import {toGotQueriesKey} from './keys.ts';
 import {QueryManager} from './query-manager.ts';
 
@@ -28,12 +29,13 @@ test('add', () => {
   const maxRecentQueriesSize = 0;
   const queryManager = new QueryManager(
     'client1',
+    schema.tables,
     send,
     () => () => {},
     maxRecentQueriesSize,
   );
   const ast: AST = {
-    table: 'issues',
+    table: 'issue',
     orderBy: [['id', 'asc']],
   };
   queryManager.add(ast);
@@ -44,7 +46,7 @@ test('add', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '3w07tflzjgrd9',
+          hash: '12hwg3ihkijhm',
           ast: {
             table: 'issues',
             where: undefined,
@@ -59,17 +61,186 @@ test('add', () => {
   expect(send).toBeCalledTimes(1);
 });
 
-test('remove, recent queries max size 0', () => {
+test('add renamed fields', () => {
   const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
   const maxRecentQueriesSize = 0;
   const queryManager = new QueryManager(
     'client1',
+    schema.tables,
     send,
     () => () => {},
     maxRecentQueriesSize,
   );
   const ast: AST = {
-    table: 'issues',
+    table: 'issue',
+    where: {
+      type: 'and',
+      conditions: [
+        {
+          type: 'simple',
+          left: {
+            type: 'column',
+            name: 'ownerId',
+          },
+          op: 'IS NOT',
+          right: {
+            type: 'literal',
+            value: 'null',
+          },
+        },
+        {
+          type: 'correlatedSubquery',
+          related: {
+            correlation: {
+              parentField: ['id'],
+              childField: ['issueId'],
+            },
+            subquery: {
+              table: 'comment',
+            },
+          },
+          op: 'EXISTS',
+        },
+      ],
+    },
+    related: [
+      {
+        correlation: {
+          parentField: ['ownerId'],
+          childField: ['id'],
+        },
+        subquery: {
+          table: 'user',
+        },
+      },
+    ],
+    orderBy: [
+      ['ownerId', 'desc'],
+      ['id', 'asc'],
+    ],
+    start: {
+      row: {id: '123', ownerId: 'foobar'},
+      exclusive: false,
+    },
+  };
+
+  queryManager.add(ast);
+  expect(send).toBeCalledTimes(1);
+  expect(send.mock.calls[0][0]).toMatchInlineSnapshot(`
+    [
+      "changeDesiredQueries",
+      {
+        "desiredQueriesPatch": [
+          {
+            "ast": {
+              "alias": undefined,
+              "limit": undefined,
+              "orderBy": [
+                [
+                  "owner_id",
+                  "desc",
+                ],
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "related": [
+                {
+                  "correlation": {
+                    "childField": [
+                      "id",
+                    ],
+                    "parentField": [
+                      "owner_id",
+                    ],
+                  },
+                  "hidden": undefined,
+                  "subquery": {
+                    "alias": undefined,
+                    "limit": undefined,
+                    "orderBy": undefined,
+                    "related": undefined,
+                    "schema": undefined,
+                    "start": undefined,
+                    "table": "users",
+                    "where": undefined,
+                  },
+                  "system": undefined,
+                },
+              ],
+              "schema": undefined,
+              "start": {
+                "exclusive": false,
+                "row": {
+                  "id": "123",
+                  "owner_id": "foobar",
+                },
+              },
+              "table": "issues",
+              "where": {
+                "conditions": [
+                  {
+                    "left": {
+                      "name": "owner_id",
+                      "type": "column",
+                    },
+                    "op": "IS NOT",
+                    "right": {
+                      "type": "literal",
+                      "value": "null",
+                    },
+                    "type": "simple",
+                  },
+                  {
+                    "op": "EXISTS",
+                    "related": {
+                      "correlation": {
+                        "childField": [
+                          "issue_id",
+                        ],
+                        "parentField": [
+                          "id",
+                        ],
+                      },
+                      "subquery": {
+                        "alias": undefined,
+                        "limit": undefined,
+                        "orderBy": undefined,
+                        "related": undefined,
+                        "schema": undefined,
+                        "start": undefined,
+                        "table": "comments",
+                        "where": undefined,
+                      },
+                    },
+                    "type": "correlatedSubquery",
+                  },
+                ],
+                "type": "and",
+              },
+            },
+            "hash": "2courpv3kf7et",
+            "op": "put",
+          },
+        ],
+      },
+    ]
+  `);
+});
+
+test('remove, recent queries max size 0', () => {
+  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+  const maxRecentQueriesSize = 0;
+  const queryManager = new QueryManager(
+    'client1',
+    schema.tables,
+    send,
+    () => () => {},
+    maxRecentQueriesSize,
+  );
+  const ast: AST = {
+    table: 'issue',
     orderBy: [['id', 'asc']],
   };
 
@@ -81,7 +252,7 @@ test('remove, recent queries max size 0', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '3w07tflzjgrd9',
+          hash: '12hwg3ihkijhm',
           ast: {
             table: 'issues',
             where: undefined,
@@ -105,7 +276,7 @@ test('remove, recent queries max size 0', () => {
       desiredQueriesPatch: [
         {
           op: 'del',
-          hash: '3w07tflzjgrd9',
+          hash: '12hwg3ihkijhm',
         },
       ],
     },
@@ -120,27 +291,28 @@ test('remove, max recent queries size 2', () => {
   const maxRecentQueriesSize = 2;
   const queryManager = new QueryManager(
     'client1',
+    schema.tables,
     send,
     () => () => {},
     maxRecentQueriesSize,
   );
   const ast1: AST = {
-    table: 'issues',
+    table: 'issue',
     orderBy: [['id', 'asc']],
   };
 
   const ast2: AST = {
-    table: 'issues',
+    table: 'issue',
     orderBy: [['id', 'desc']],
   };
 
   const ast3: AST = {
-    table: 'users',
+    table: 'user',
     orderBy: [['id', 'asc']],
   };
 
   const ast4: AST = {
-    table: 'users',
+    table: 'user',
     orderBy: [['id', 'desc']],
   };
 
@@ -152,7 +324,7 @@ test('remove, max recent queries size 2', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '3w07tflzjgrd9',
+          hash: '12hwg3ihkijhm',
           ast: {
             table: 'issues',
             where: undefined,
@@ -174,7 +346,7 @@ test('remove, max recent queries size 2', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '23xyk6p9abj0c',
+          hash: '1hydj1t7t5yv4',
           ast: {
             table: 'issues',
             where: undefined,
@@ -193,7 +365,7 @@ test('remove, max recent queries size 2', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '2rltuh73615pi',
+          hash: '3c5d3uiyypuxu',
           ast: {
             table: 'users',
             where: undefined,
@@ -212,7 +384,7 @@ test('remove, max recent queries size 2', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: 'aaaqpuy7h6qi',
+          hash: '2q7cds8pild5w',
           ast: {
             table: 'users',
             where: undefined,
@@ -239,7 +411,7 @@ test('remove, max recent queries size 2', () => {
       desiredQueriesPatch: [
         {
           op: 'del',
-          hash: '3w07tflzjgrd9',
+          hash: '12hwg3ihkijhm',
         },
       ],
     },
@@ -253,7 +425,7 @@ test('remove, max recent queries size 2', () => {
       desiredQueriesPatch: [
         {
           op: 'del',
-          hash: '23xyk6p9abj0c',
+          hash: '1hydj1t7t5yv4',
         },
       ],
     },
@@ -265,27 +437,28 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
   const maxRecentQueriesSize = 2;
   const queryManager = new QueryManager(
     'client1',
+    schema.tables,
     send,
     () => () => {},
     maxRecentQueriesSize,
   );
   const ast1: AST = {
-    table: 'issues',
+    table: 'issue',
     orderBy: [['id', 'asc']],
   };
 
   const ast2: AST = {
-    table: 'issues',
+    table: 'issue',
     orderBy: [['id', 'desc']],
   };
 
   const ast3: AST = {
-    table: 'users',
+    table: 'user',
     orderBy: [['id', 'asc']],
   };
 
   const ast4: AST = {
-    table: 'users',
+    table: 'user',
     orderBy: [['id', 'desc']],
   };
 
@@ -297,7 +470,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '3w07tflzjgrd9',
+          hash: '12hwg3ihkijhm',
           ast: {
             table: 'issues',
             where: undefined,
@@ -316,7 +489,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '23xyk6p9abj0c',
+          hash: '1hydj1t7t5yv4',
           ast: {
             table: 'issues',
             where: undefined,
@@ -335,7 +508,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '2rltuh73615pi',
+          hash: '3c5d3uiyypuxu',
           ast: {
             table: 'users',
             where: undefined,
@@ -354,7 +527,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: 'aaaqpuy7h6qi',
+          hash: '2q7cds8pild5w',
           ast: {
             table: 'users',
             where: undefined,
@@ -386,7 +559,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
       desiredQueriesPatch: [
         {
           op: 'del',
-          hash: '23xyk6p9abj0c',
+          hash: '1hydj1t7t5yv4',
         },
       ],
     },
@@ -400,7 +573,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
       desiredQueriesPatch: [
         {
           op: 'del',
-          hash: '3w07tflzjgrd9',
+          hash: '12hwg3ihkijhm',
         },
       ],
     },
@@ -462,26 +635,27 @@ test('getQueriesPatch', async () => {
   const maxRecentQueriesSize = 0;
   const queryManager = new QueryManager(
     'client1',
+    schema.tables,
     send,
     () => () => {},
     maxRecentQueriesSize,
   );
-  // hash: 3w07tflzjgrd9
+  // hash: 12hwg3ihkijhm
   const ast1: AST = {
-    table: 'issues',
+    table: 'issue',
     orderBy: [['id', 'asc']],
   };
   queryManager.add(ast1);
-  // hash 23xyk6p9abj0c
+  // hash 1hydj1t7t5yv4
   const ast2: AST = {
-    table: 'issues',
+    table: 'issue',
     orderBy: [['id', 'desc']],
   };
   queryManager.add(ast2);
 
   const testReadTransaction = new TestTransaction();
   testReadTransaction.scanEntries = [
-    ['d/client1/3w07tflzjgrd9', 'unused'],
+    ['d/client1/12hwg3ihkijhm', 'unused'],
     ['d/client1/shouldBeDeleted', 'unused'],
   ];
 
@@ -495,7 +669,7 @@ test('getQueriesPatch', async () => {
         },
         {
           op: 'put',
-          hash: '23xyk6p9abj0c',
+          hash: '1hydj1t7t5yv4',
           ast: {
             table: 'issues',
             orderBy: [['id', 'desc']],
@@ -512,27 +686,28 @@ test('getQueriesPatch includes recent queries in desired', async () => {
   const maxRecentQueriesSize = 2;
   const queryManager = new QueryManager(
     'client1',
+    schema.tables,
     send,
     () => () => {},
     maxRecentQueriesSize,
   );
   const ast1: AST = {
-    table: 'issues',
+    table: 'issue',
     orderBy: [['id', 'asc']],
   };
   const remove1 = queryManager.add(ast1);
   const ast2: AST = {
-    table: 'issues',
+    table: 'issue',
     orderBy: [['id', 'desc']],
   };
   const remove2 = queryManager.add(ast2);
   const ast3: AST = {
-    table: 'users',
+    table: 'user',
     orderBy: [['id', 'asc']],
   };
   const remove3 = queryManager.add(ast3);
   const ast4: AST = {
-    table: 'users',
+    table: 'user',
     orderBy: [['id', 'desc']],
   };
   const remove4 = queryManager.add(ast4);
@@ -545,22 +720,22 @@ test('getQueriesPatch includes recent queries in desired', async () => {
 
   const testReadTransaction = new TestTransaction();
   testReadTransaction.scanEntries = [
-    ['d/client1/3w07tflzjgrd9', 'unused'],
+    ['d/client1/12hwg3ihkijhm', 'unused'],
     ['d/client1/shouldBeDeleted', 'unused'],
   ];
 
   const patch = await queryManager.getQueriesPatch(testReadTransaction);
   expect(patch).toMatchInlineSnapshot(`
     Map {
-      "3w07tflzjgrd9" => {
-        "hash": "3w07tflzjgrd9",
+      "12hwg3ihkijhm" => {
+        "hash": "12hwg3ihkijhm",
         "op": "del",
       },
       "shouldBeDeleted" => {
         "hash": "shouldBeDeleted",
         "op": "del",
       },
-      "2rltuh73615pi" => {
+      "3c5d3uiyypuxu" => {
         "ast": {
           "alias": undefined,
           "limit": undefined,
@@ -576,10 +751,10 @@ test('getQueriesPatch includes recent queries in desired', async () => {
           "table": "users",
           "where": undefined,
         },
-        "hash": "2rltuh73615pi",
+        "hash": "3c5d3uiyypuxu",
         "op": "put",
       },
-      "aaaqpuy7h6qi" => {
+      "2q7cds8pild5w" => {
         "ast": {
           "alias": undefined,
           "limit": undefined,
@@ -595,7 +770,7 @@ test('getQueriesPatch includes recent queries in desired', async () => {
           "table": "users",
           "where": undefined,
         },
-        "hash": "aaaqpuy7h6qi",
+        "hash": "2q7cds8pild5w",
         "op": "put",
       },
     }
@@ -604,13 +779,14 @@ test('getQueriesPatch includes recent queries in desired', async () => {
 });
 
 test('gotCallback, query already got', () => {
-  const queryHash = '3w07tflzjgrd9';
+  const queryHash = '12hwg3ihkijhm';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
 
   const maxRecentQueriesSize = 0;
   const queryManager = new QueryManager(
     'client1',
+    schema.tables,
     send,
     experimentalWatch,
     maxRecentQueriesSize,
@@ -626,7 +802,7 @@ test('gotCallback, query already got', () => {
   ]);
 
   const ast: AST = {
-    table: 'issues',
+    table: 'issue',
     orderBy: [['id', 'asc']],
   };
 
@@ -666,12 +842,13 @@ test('gotCallback, query already got', () => {
 });
 
 test('gotCallback, query got after add', () => {
-  const queryHash = '3w07tflzjgrd9';
+  const queryHash = '12hwg3ihkijhm';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
   const maxRecentQueriesSize = 0;
   const queryManager = new QueryManager(
     'client1',
+    schema.tables,
     send,
     experimentalWatch,
     maxRecentQueriesSize,
@@ -680,7 +857,7 @@ test('gotCallback, query got after add', () => {
   const watchCallback = experimentalWatch.mock.calls[0][0];
 
   const ast: AST = {
-    table: 'issues',
+    table: 'issue',
     orderBy: [['id', 'asc']],
   };
 
@@ -723,12 +900,13 @@ test('gotCallback, query got after add', () => {
 });
 
 test('gotCallback, query got after add then removed', () => {
-  const queryHash = '3w07tflzjgrd9';
+  const queryHash = '12hwg3ihkijhm';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
   const maxRecentQueriesSize = 0;
   const queryManager = new QueryManager(
     'client1',
+    schema.tables,
     send,
     experimentalWatch,
     maxRecentQueriesSize,
@@ -737,7 +915,7 @@ test('gotCallback, query got after add then removed', () => {
   const watchCallback = experimentalWatch.mock.calls[0][0];
 
   const ast: AST = {
-    table: 'issues',
+    table: 'issue',
     orderBy: [['id', 'asc']],
   };
 
@@ -790,12 +968,13 @@ test('gotCallback, query got after add then removed', () => {
 });
 
 test('gotCallback, query got after subscription removed', () => {
-  const queryHash = '3w07tflzjgrd9';
+  const queryHash = '12hwg3ihkijhm';
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(q: ChangeDesiredQueriesMessage) => void>();
   const maxRecentQueriesSize = 0;
   const queryManager = new QueryManager(
     'client1',
+    schema.tables,
     send,
     experimentalWatch,
     maxRecentQueriesSize,
@@ -804,7 +983,7 @@ test('gotCallback, query got after subscription removed', () => {
   const watchCallback = experimentalWatch.mock.calls[0][0];
 
   const ast: AST = {
-    table: 'issues',
+    table: 'issue',
     orderBy: [['id', 'asc']],
   };
 
@@ -866,6 +1045,7 @@ describe('queriesPatch with lastPatch', () => {
     const maxRecentQueriesSize = 0;
     const queryManager = new QueryManager(
       'client1',
+      schema.tables,
       send,
       () => () => {},
       maxRecentQueriesSize,
@@ -881,7 +1061,7 @@ describe('queriesPatch with lastPatch', () => {
       {
         ast: {
           orderBy: [['id', 'asc']],
-          table: 'issue',
+          table: 'issues',
           ...normalizingFields,
         },
         hash: '12hwg3ihkijhm',
@@ -894,7 +1074,13 @@ describe('queriesPatch with lastPatch', () => {
     const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => boolean>(
       () => false,
     );
-    const queryManager = new QueryManager('client1', send, () => () => {}, 0);
+    const queryManager = new QueryManager(
+      'client1',
+      schema.tables,
+      send,
+      () => () => {},
+      0,
+    );
 
     const clean = queryManager.add({
       table: 'issue',
@@ -911,7 +1097,7 @@ describe('queriesPatch with lastPatch', () => {
           {
             ast: {
               orderBy: [['id', 'asc']],
-              table: 'issue',
+              table: 'issues',
             },
             hash: '12hwg3ihkijhm',
             op: 'put',
@@ -931,7 +1117,7 @@ describe('queriesPatch with lastPatch', () => {
           {
             ast: {
               orderBy: [['id', 'asc']],
-              table: 'issue',
+              table: 'issues',
             },
             hash: '12hwg3ihkijhm',
             op: 'put',

@@ -7,7 +7,9 @@ import type {
 import type {PatchOperation} from '../../../replicache/src/patch-operation.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {getBrowserGlobalMethod} from '../../../shared/src/browser-env.ts';
+import {toClientAST} from '../../../zero-protocol/src/ast.ts';
 import type {ClientsPatchOp} from '../../../zero-protocol/src/clients-patch.ts';
+import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {
   PokeEndBody,
   PokePartBody,
@@ -27,6 +29,34 @@ type PokeAccumulator = {
   readonly pokeStart: PokeStartBody;
   readonly parts: PokePartBody[];
 };
+
+type ServerToClientColumns = {[serverName: string]: string};
+
+type ClientNames = {
+  tableName: string;
+  columns: ServerToClientColumns | null;
+};
+
+export function makeClientNames(schema: Schema): Map<string, ClientNames> {
+  return new Map(
+    Object.entries(schema.tables).map(
+      ([tableName, {serverName: serverTableName, columns}]) => {
+        let allSame = true;
+        const names: Record<string, string> = {};
+        for (const [name, {serverName}] of Object.entries(columns)) {
+          if (serverName && serverName !== name) {
+            allSame = false;
+          }
+          names[serverName ?? name] = name;
+        }
+        return [
+          serverTableName ?? tableName,
+          {tableName, columns: allSame ? null : names},
+        ];
+      },
+    ),
+  );
+}
 
 /**
  * Handles the multi-part format of zero pokes.
@@ -50,6 +80,7 @@ export class PokeHandler {
   // order poke errors.
   readonly #pokeLock = new Lock();
   readonly #schema: Schema;
+  readonly #clientNames: Map<string, ClientNames>;
 
   readonly #raf =
     getBrowserGlobalMethod('requestAnimationFrame') ?? rafFallback;
@@ -65,6 +96,7 @@ export class PokeHandler {
     this.#onPokeError = onPokeError;
     this.#clientID = clientID;
     this.#schema = schema;
+    this.#clientNames = makeClientNames(schema);
     this.#lc = lc.withContext('PokeHandler');
   }
 
@@ -151,7 +183,11 @@ export class PokeHandler {
       lc.debug?.('got poke lock at', now);
       lc.debug?.('merging', this.#pokeBuffer.length);
       try {
-        const merged = mergePokes(this.#pokeBuffer, this.#schema);
+        const merged = mergePokes(
+          this.#pokeBuffer,
+          this.#schema,
+          this.#clientNames,
+        );
         this.#pokeBuffer.length = 0;
         if (merged === undefined) {
           lc.debug?.('frame is empty');
@@ -189,6 +225,7 @@ export class PokeHandler {
 export function mergePokes(
   pokeBuffer: PokeAccumulator[],
   schema: Schema,
+  clientNames: Map<string, ClientNames>,
 ): PokeInternal | undefined {
   if (pokeBuffer.length === 0) {
     return undefined;
@@ -231,8 +268,10 @@ export function mergePokes(
         )) {
           mergedPatch.push(
             ...queriesPatch.map(op =>
-              queryPatchOpToReplicachePatchOp(op, hash =>
-                toDesiredQueriesKey(clientID, hash),
+              queryPatchOpToReplicachePatchOp(
+                op,
+                hash => toDesiredQueriesKey(clientID, hash),
+                schema,
               ),
             ),
           );
@@ -241,14 +280,14 @@ export function mergePokes(
       if (pokePart.gotQueriesPatch) {
         mergedPatch.push(
           ...pokePart.gotQueriesPatch.map(op =>
-            queryPatchOpToReplicachePatchOp(op, toGotQueriesKey),
+            queryPatchOpToReplicachePatchOp(op, toGotQueriesKey, schema),
           ),
         );
       }
       if (pokePart.rowsPatch) {
         mergedPatch.push(
           ...pokePart.rowsPatch.map(p =>
-            rowsPatchOpToReplicachePatchOp(p, schema),
+            rowsPatchOpToReplicachePatchOp(p, schema, clientNames),
           ),
         );
       }
@@ -286,6 +325,7 @@ function clientsPatchOpToReplicachePatchOp(op: ClientsPatchOp): PatchOperation {
 function queryPatchOpToReplicachePatchOp(
   op: QueriesPatchOp,
   toKey: (hash: string) => string,
+  schema: Schema,
 ): PatchOperation {
   switch (op.op) {
     case 'clear':
@@ -300,7 +340,7 @@ function queryPatchOpToReplicachePatchOp(
       return {
         op: 'put',
         key: toKey(op.hash),
-        value: op.ast,
+        value: toClientAST(op.ast, schema.tables),
       };
   }
 }
@@ -308,43 +348,70 @@ function queryPatchOpToReplicachePatchOp(
 function rowsPatchOpToReplicachePatchOp(
   op: RowPatchOp,
   schema: Schema,
+  clientNames: Map<string, ClientNames>,
 ): PatchOperationInternal {
+  if (op.op === 'clear') {
+    return op;
+  }
+  const names = clientNames.get(op.tableName);
+  if (!names) {
+    throw new Error(`unknown table name in ${JSON.stringify(op)}`);
+  }
+  const {tableName, columns} = names;
   switch (op.op) {
-    case 'clear':
-      return op;
     case 'del':
       return {
         op: 'del',
         key: toPrimaryKeyString(
-          op.tableName,
-          schema.tables[op.tableName].primaryKey,
-          op.id,
+          tableName,
+          schema.tables[tableName].primaryKey,
+          toClientRow(op.id, columns),
         ),
       };
     case 'put':
       return {
         op: 'put',
         key: toPrimaryKeyString(
-          op.tableName,
-          schema.tables[op.tableName].primaryKey,
-          op.value,
+          tableName,
+          schema.tables[tableName].primaryKey,
+          toClientRow(op.value, columns),
         ),
-        value: op.value,
+        value: toClientRow(op.value, columns),
       };
     case 'update':
       return {
         op: 'update',
         key: toPrimaryKeyString(
-          op.tableName,
-          schema.tables[op.tableName].primaryKey,
-          op.id,
+          tableName,
+          schema.tables[tableName].primaryKey,
+          toClientRow(op.id, columns),
         ),
-        merge: op.merge,
-        constrain: op.constrain,
+        merge: op.merge ? toClientRow(op.merge, columns) : undefined,
+        constrain: toClientColumns(op.constrain, columns),
       };
     default:
       throw new Error('to be implemented');
   }
+}
+
+function toClientRow(row: Row, names: ServerToClientColumns | null) {
+  if (names === null) {
+    return row;
+  }
+  const clientRow: Record<string, Value> = {};
+  for (const col in row) {
+    // Note: Columns not defined in the client schema simply pass through.
+    clientRow[names[col] ?? col] = row[col];
+  }
+  return clientRow;
+}
+
+function toClientColumns(
+  columns: string[] | undefined,
+  names: ServerToClientColumns | null,
+): string[] | undefined {
+  // Note: Columns not defined in the client schema simply pass through.
+  return !names || !columns ? columns : columns.map(col => names[col] ?? col);
 }
 
 /**

@@ -74,6 +74,12 @@ import {
   makeCRUDMutate,
   makeCRUDMutator,
 } from './crud.ts';
+import {
+  type CustomMutatorDefs,
+  type CustomMutatorImpl,
+  type MakeCustomMutatorInterfaces,
+  makeReplicacheMutator,
+} from './custom.ts';
 import {shouldEnableAnalytics} from './enable-analytics.ts';
 import {
   type HTTPString,
@@ -113,12 +119,6 @@ import {
 import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
-import {
-  makeReplicacheMutator,
-  type CustomMutatorDefs,
-  type CustomMutatorImpl,
-  type MakeCustomMutatorInterfaces,
-} from './custom.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -509,6 +509,7 @@ export class Zero<
 
     this.#queryManager = new QueryManager(
       rep.clientID,
+      schema.tables,
       msg => this.#sendChangeDesiredQueries(msg),
       rep.experimentalWatch.bind(rep),
       maxRecentQueries,
