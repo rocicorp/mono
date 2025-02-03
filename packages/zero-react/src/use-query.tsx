@@ -29,7 +29,7 @@ export function useQuery<
   const view = viewStore.getView(
     z.clientID,
     q as AdvancedQuery<TSchema, TTable, TReturn>,
-    enable && z.server !== null,
+    enable,
   );
   // https://react.dev/reference/react/useSyncExternalStore
   return useSyncExternalStore(

@@ -1,6 +1,6 @@
 {
   "name": "@rocicorp/zero",
-  "version": "0.13.2025013101",
+  "version": "0.13.2025020201",
   "scripts": {
     "build": "rm -rf out && npm run build-server && npm run build-client",
     "build-client": "tsc -p tsconfig.client.json && tsc-alias -p tsconfig.client.json && npx tsx tool/build.js",
@@ -93,8 +93,8 @@
       "default": "./out/advanced.js"
     },
     "./change-protocol/v0": {
-      "types": "./out/zero-cache/src/services/change-source/protocol/current/mod.d.ts",
-      "default": "./out/zero-cache/src/services/change-source/protocol/current/mod.js"
+      "types": "./out/zero/src/change-protocol/v0.d.ts",
+      "default": "./out/zero/src/change-protocol/v0.js"
     }
   },
   "bin": {
