@@ -66,6 +66,7 @@ test('parse options', () => {
         "litestream": {
           "configPath": "./src/services/litestream/config.yml",
           "logLevel": "warn",
+          "restoreParallelism": 16,
         },
         "log": {
           "format": "text",
@@ -131,6 +132,7 @@ test('parse options', () => {
         "ZERO_INITIAL_SYNC_TABLE_COPY_WORKERS": "5",
         "ZERO_LITESTREAM_CONFIG_PATH": "./src/services/litestream/config.yml",
         "ZERO_LITESTREAM_LOG_LEVEL": "warn",
+        "ZERO_LITESTREAM_RESTORE_PARALLELISM": "16",
         "ZERO_LOG_FORMAT": "text",
         "ZERO_LOG_IVM_SAMPLING": "5000",
         "ZERO_LOG_LEVEL": "info",
@@ -453,6 +455,11 @@ test('zero-cache --help', () => {
        ZERO_LITESTREAM_BACKUP_URL env                                                                                                                
                                                    The location of the litestream backup, usually an s3:// URL.                                      
                                                    If set, the litestream-executable must also be specified.                                         
+                                                                                                                                                     
+     --litestream-restore-parallelism number       default: 16                                                                                       
+       ZERO_LITESTREAM_RESTORE_PARALLELISM env                                                                                                       
+                                                   The number of WAL files to download in parallel when performing the                               
+                                                   initial restore of the replica from the backup.                                                   
                                                                                                                                                      
      --storage-db-tmp-dir string                   optional                                                                                          
        ZERO_STORAGE_DB_TMP_DIR env                                                                                                                   
