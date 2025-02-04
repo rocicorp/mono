@@ -122,7 +122,7 @@ export async function initialSync(
         getPublicationInfo(db, publications),
       );
       // Note: If this throws, initial-sync is aborted.
-      validatePublications(lc, shard.id, published);
+      validatePublications(lc, published);
 
       // Now that tables have been validated, kick off the copiers.
       const {tables, indexes} = published;

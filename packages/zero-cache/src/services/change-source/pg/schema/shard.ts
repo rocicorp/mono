@@ -229,7 +229,6 @@ export async function setupTablesAndReplication(
 
 export function validatePublications(
   lc: LogContext,
-  shardID: string,
   published: PublicationInfo,
 ) {
   // Verify that all publications export the proper events.
@@ -247,7 +246,7 @@ export function validatePublications(
     }
   });
 
-  published.tables.forEach(table => validate(lc, shardID, table));
+  published.tables.forEach(table => validate(lc, table));
 }
 
 type ReplicaIdentities = {

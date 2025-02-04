@@ -411,7 +411,6 @@ const SET_REPLICA_IDENTITY_DELAY_MS = 500;
 
 class ChangeMaker {
   readonly #lc: LogContext;
-  readonly #shardID: string;
   readonly #shardPrefix: string;
   readonly #shardConfig: InternalShardConfig;
   readonly #upstream: ShortLivedClient;
@@ -426,7 +425,6 @@ class ChangeMaker {
     upstreamURI: string,
   ) {
     this.#lc = lc;
-    this.#shardID = shardID;
     // Note: This matches the prefix used in pg_logical_emit_message() in pg/schema/ddl.ts.
     this.#shardPrefix = `zero/${shardID}`;
     this.#shardConfig = shardConfig;
@@ -600,7 +598,7 @@ class ChangeMaker {
 
     // Validate the new table schemas
     for (const table of nextTbl.values()) {
-      validate(this.#lc, this.#shardID, table);
+      validate(this.#lc, table);
     }
 
     const [droppedIdx, createdIdx] = symmetricDifferences(prevIdx, nextIdx);
