@@ -33,8 +33,8 @@ export function getSchema(config: ZeroConfig): Promise<{
     );
     return parseSchema(fileContent, config.schema.file);
   })().then(({schema, permissions}) => ({
-    // The schema includes serverName's but is structured with client names.
-    // Remap it to the server namespace.
+    // The schema includes serverName fields but is structured with client
+    // names. Remap it into the server namespace.
     schema: mapSchemaToServer(schema),
     // Permissions are already compiled with server names
     permissions,
