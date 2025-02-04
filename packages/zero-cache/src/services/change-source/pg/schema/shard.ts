@@ -247,7 +247,7 @@ export function validatePublications(
     }
   });
 
-  published.tables.forEach(table => validate(lc, shardID, table));
+  published.tables.forEach(table => validate(lc, table));
 }
 
 type ReplicaIdentities = {

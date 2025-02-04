@@ -40,7 +40,8 @@ async function createTables(db: PostgresDB) {
         id text,
         PRIMARY KEY(id)
       );
-      CREATE TABLE id_and_cols (
+      CREATE SCHEMA my_schema;
+      CREATE TABLE my_schema.id_and_cols (
         id text,
         col1 text,
         col2 text,
@@ -454,7 +455,7 @@ describe('processMutation', {timeout: 15000}, () => {
             ops: [
               {
                 op: 'insert',
-                tableName: 'id_and_cols',
+                tableName: 'my_schema.id_and_cols',
                 primaryKey: ['id'],
                 value: {
                   id: '1',
@@ -464,7 +465,7 @@ describe('processMutation', {timeout: 15000}, () => {
               },
               {
                 op: 'upsert',
-                tableName: 'id_and_cols',
+                tableName: 'my_schema.id_and_cols',
                 primaryKey: ['id'],
                 value: {
                   id: '2',
@@ -474,7 +475,7 @@ describe('processMutation', {timeout: 15000}, () => {
               },
               {
                 op: 'update',
-                tableName: 'id_and_cols',
+                tableName: 'my_schema.id_and_cols',
                 primaryKey: ['id'],
                 value: {
                   id: '1',
@@ -483,7 +484,7 @@ describe('processMutation', {timeout: 15000}, () => {
               },
               {
                 op: 'update',
-                tableName: 'id_and_cols',
+                tableName: 'my_schema.id_and_cols',
                 primaryKey: ['id'],
                 value: {
                   id: '1',
@@ -492,7 +493,7 @@ describe('processMutation', {timeout: 15000}, () => {
               },
               {
                 op: 'delete',
-                tableName: 'id_and_cols',
+                tableName: 'my_schema.id_and_cols',
                 primaryKey: ['id'],
                 value: {id: '2'},
               },
@@ -508,7 +509,7 @@ describe('processMutation', {timeout: 15000}, () => {
     expect(error).undefined;
 
     await expectTables(db, {
-      ['id_and_cols']: [
+      ['my_schema.id_and_cols']: [
         {
           id: '1',
           col1: 'update',

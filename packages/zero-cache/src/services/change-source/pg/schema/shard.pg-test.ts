@@ -203,10 +203,11 @@ describe('change-source/pg', () => {
 
   test('supplied publications', async () => {
     await db`
+    CREATE SCHEMA far;
     CREATE TABLE foo(id INT4 PRIMARY KEY);
-    CREATE TABLE bar(id TEXT PRIMARY KEY);
+    CREATE TABLE far.bar(id TEXT PRIMARY KEY);
     CREATE PUBLICATION zero_foo FOR TABLE foo WHERE (id > 1000);
-    CREATE PUBLICATION zero_bar FOR TABLE bar;`.simple();
+    CREATE PUBLICATION zero_bar FOR TABLE far.bar;`.simple();
 
     await db.begin(tx =>
       setupTablesAndReplication(lc, tx, {
@@ -218,7 +219,7 @@ describe('change-source/pg', () => {
     expect(await publications()).toEqual([
       [`_zero_metadata_A`, 'zero', 'schemaVersions', null],
       [`_zero_metadata_A`, `zero_A`, 'clients', null],
-      ['zero_bar', 'public', 'bar', null],
+      ['zero_bar', 'far', 'bar', null],
       ['zero_foo', 'public', 'foo', '(id > 1000)'],
     ]);
 
@@ -309,27 +310,6 @@ describe('change-source/pg', () => {
           "orgID" INTEGER, 
           _0_version INTEGER);
       `,
-    },
-    {
-      error: 'Only the default "public" schema is supported',
-      setupUpstreamQuery: `
-        CREATE SCHEMA _zero;
-        CREATE TABLE _zero.is_not_allowed(
-          "issueID" INTEGER PRIMARY KEY, 
-          "orgID" INTEGER
-        );
-        CREATE PUBLICATION zero_foo FOR TABLES IN SCHEMA _zero;
-        `,
-      requestedPublications: ['zero_foo'],
-    },
-    {
-      error: 'Only the default "public" schema is supported',
-      setupUpstreamQuery: `
-        CREATE SCHEMA unsupported;
-        CREATE TABLE unsupported.issues ("issueID" INTEGER PRIMARY KEY, "orgID" INTEGER);
-        CREATE PUBLICATION zero_foo FOR TABLES IN SCHEMA unsupported;
-      `,
-      requestedPublications: ['zero_foo'],
     },
     {
       error: 'Table "table/with/slashes" has invalid characters',
