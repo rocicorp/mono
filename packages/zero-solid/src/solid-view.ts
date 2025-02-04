@@ -19,6 +19,7 @@ import type {Schema} from '../../zero-schema/src/mod.js';
 import type {ResultType} from '../../zql/src/query/typed-view.js';
 import type {Node} from '../../zql/src/ivm/data.ts';
 import type {ViewChange} from '../../zql/src/ivm/view-apply-change.ts';
+import type {Stream} from '../../zql/src/ivm/stream.ts';
 
 export type QueryResultDetails = {
   readonly type: ResultType;
@@ -181,14 +182,17 @@ function materializeRelationships(change: Change): ViewChange {
 }
 
 function materializeNodeRelationships(node: Node): Node {
+  const relationships: Record<string, () => Stream<Node>> = {};
+  for (const relationship in node.relationships) {
+    const materialized: Node[] = [];
+    for (const n of node.relationships[relationship]()) {
+      materialized.push(materializeNodeRelationships(n));
+    }
+    relationships[relationship] = () => materialized;
+  }
   return {
     row: node.row,
-    relationships: Object.fromEntries(
-      Object.entries(node.relationships).map(([relationship, stream]) => {
-        const materialized = [...stream()].map(materializeNodeRelationships);
-        return [relationship, () => materialized];
-      }),
-    ),
+    relationships,
   };
 }
 
