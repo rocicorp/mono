@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import {clientToServer} from '../name-mapper.ts';
 import type {
   Relationship,
   RelationshipsSchema,
@@ -115,4 +116,64 @@ function checkRelationship(
       source = tables[connection.destSchema];
     });
   });
+}
+
+// TODO: Remove when the server no longer needs the (client) schema.
+//       Currently the only dependency is the WriteAuthorizer, which
+//       will go away when transitioning to custom mutators.
+export function mapSchemaToServer({
+  version,
+  tables,
+  relationships,
+}: Schema): Schema {
+  const map = clientToServer(tables);
+  return {
+    version,
+    tables: Object.fromEntries(
+      Object.values(tables).map(({name: table, columns, primaryKey}) => {
+        const serverColumns = Object.fromEntries(
+          Object.entries(columns).map(([col, spec]) => [
+            map.columnName(table, col),
+            spec,
+          ]),
+        );
+        const serverSchema: TableSchema = {
+          name: map.tableName(table),
+          columns: serverColumns,
+          primaryKey: map.columns(table, primaryKey),
+        };
+        return [serverSchema.name, serverSchema] as const;
+      }),
+    ),
+    relationships: Object.fromEntries(
+      Object.entries(relationships).map(([table, rels]) => {
+        const serverRels = Object.fromEntries(
+          Object.entries(rels).map(([name, rel]) => {
+            const {sourceField, destField, destSchema, cardinality} = rel[0];
+            const conn1 = {
+              sourceField: map.columns(table, sourceField),
+              destField: map.columns(destSchema, destField),
+              destSchema: map.tableName(destSchema),
+              cardinality,
+            };
+            if (rel.length === 1) {
+              return [name, [conn1]] as const;
+            }
+            const srcTable = destSchema;
+            {
+              const {sourceField, destField, destSchema, cardinality} = rel[1];
+              const conn2 = {
+                sourceField: map.columns(srcTable, sourceField),
+                destField: map.columns(destSchema, destField),
+                destSchema: map.tableName(destSchema),
+                cardinality,
+              };
+              return [name, [conn1, conn2]] as const;
+            }
+          }),
+        );
+        return [map.tableName(table), serverRels] as const;
+      }),
+    ),
+  };
 }

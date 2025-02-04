@@ -1,6 +1,9 @@
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  mapSchemaToServer,
+  type Schema,
+} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {type PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.ts';
 import {parseSchema} from '../../../zero-schema/src/schema-config.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
@@ -29,7 +32,13 @@ export function getSchema(config: ZeroConfig): Promise<{
       'utf-8',
     );
     return parseSchema(fileContent, config.schema.file);
-  })();
+  })().then(({schema, permissions}) => ({
+    // The schema includes serverName's but is structured with client names.
+    // Remap it to the server namespace.
+    schema: mapSchemaToServer(schema),
+    // Permissions are already compiled with server names
+    permissions,
+  }));
 
   return loadedSchema;
 }
