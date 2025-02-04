@@ -33,25 +33,6 @@ describe('change-source/pg', () => {
       `,
     },
     {
-      error: 'Only the default "public" schema is supported',
-      setupUpstreamQuery: `
-        CREATE SCHEMA _zero;
-        CREATE TABLE _zero.is_not_allowed(
-          "issueID" INTEGER PRIMARY KEY, 
-          "orgID" INTEGER
-        );
-        CREATE PUBLICATION zero_foo FOR TABLES IN SCHEMA _zero;
-        `,
-    },
-    {
-      error: 'Only the default "public" schema is supported',
-      setupUpstreamQuery: `
-        CREATE SCHEMA unsupported;
-        CREATE TABLE unsupported.issues ("issueID" INTEGER PRIMARY KEY, "orgID" INTEGER);
-        CREATE PUBLICATION zero_foo FOR TABLES IN SCHEMA unsupported;
-      `,
-    },
-    {
       error: 'Table "table/with/slashes" has invalid characters',
       setupUpstreamQuery: `
         CREATE TABLE "table/with/slashes" ("issueID" INTEGER PRIMARY KEY, "orgID" INTEGER);
@@ -90,7 +71,7 @@ describe('change-source/pg', () => {
       expect(pubs.tables.length).toBe(1);
       let result;
       try {
-        validate(lc, '0', pubs.tables[0]);
+        validate(lc, pubs.tables[0]);
       } catch (e) {
         result = e;
       }

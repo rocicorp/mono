@@ -6,22 +6,10 @@ import {
 import {Default} from '../../../../db/postgres-replica-identity-enum.ts';
 import type {PublishedTableSpec} from '../../../../db/specs.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/replication-state.ts';
-import {unescapedSchema} from './shard.ts';
 
 const ALLOWED_IDENTIFIER_CHARS = /^[A-Za-z_]+[A-Za-z0-9_-]*$/;
 
-export function validate(
-  lc: LogContext,
-  shardID: string,
-  table: PublishedTableSpec,
-) {
-  const shardSchema = unescapedSchema(shardID);
-  if (!['public', 'zero', shardSchema].includes(table.schema)) {
-    // This may be relaxed in the future. We would need a plan for support in the AST first.
-    throw new UnsupportedTableSchemaError(
-      'Only the default "public" schema is supported.',
-    );
-  }
+export function validate(lc: LogContext, table: PublishedTableSpec) {
   if (ZERO_VERSION_COLUMN_NAME in table.columns) {
     throw new UnsupportedTableSchemaError(
       `Table "${table.name}" uses reserved column name "${ZERO_VERSION_COLUMN_NAME}"`,

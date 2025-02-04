@@ -1,11 +1,11 @@
-name: Build and Deploy Sandbox Zero-Cache AWS SST
+name: Build and Deploy Production Zero-Cache AWS SST
 
 on:
   push:
-    branches: [sandbox]
+    branches: [main]
 env:
   # Setting an environment variable with the value of a configuration variable
-  ECR_IMAGE_ZERO_CACHE: zero-zbugs-sandbox
+  ECR_IMAGE_ZERO_CACHE: zero-zbugs
   AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
 jobs:
   deploy:
@@ -68,18 +68,18 @@ jobs:
 
       - name: Deploy SST app
         env:
-          ZERO_UPSTREAM_DB: ${{ secrets.SANDBOX_ZERO_UPSTREAM_DB }}
-          ZERO_CVR_DB: ${{ secrets.SANDBOX_ZERO_CVR_DB }}
-          ZERO_CHANGE_DB: ${{ secrets.SANDBOX_ZERO_CHANGE_DB }}
-          ZERO_AUTH_SECRET: ${{ secrets.SANDBOX_ZERO_JWT_SECRET }}
+          ZERO_UPSTREAM_DB: ${{ secrets.PROD_ZERO_UPSTREAM_DB }}
+          ZERO_CVR_DB: ${{ secrets.PROD_ZERO_CVR_DB }}
+          ZERO_CHANGE_DB: ${{ secrets.PROD_ZERO_CHANGE_DB }}
+          ZERO_AUTH_SECRET: ${{ secrets.PROD_ZERO_JWT_SECRET }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ vars.AWS_DEFAULT_REGION }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
           ZERO_IMAGE_URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_DEFAULT_REGION }}.amazonaws.com/${{ env.ECR_IMAGE_ZERO_CACHE }}:${{ env.SHA }}
-          DOMAIN_NAME: "zbugs-sync-sandbox.rocicorp.dev"
-          DOMAIN_CERT: ${{ vars.SANDBOX_CERTIFICATE_ARN }}
+          DOMAIN_NAME: "zbugs-sync.rocicorp.dev"
+          DOMAIN_CERT: ${{ vars.PROD_CERTIFICATE_ARN }}
         run: |
           cd prod/sst
           npm install
-          npx sst deploy --stage sandbox
+          npx sst deploy --stage production

@@ -39,14 +39,14 @@ const LOG_LEVEL: LogLevel = 'error';
 const INITIAL_PG_SETUP = `
       CREATE TABLE foo(
         id TEXT PRIMARY KEY, 
-        val TEXT,
+        far_id TEXT,
         b BOOL,
         j1 JSON,
         j2 JSONB,
         j3 JSON,
         j4 JSON
       );
-      INSERT INTO foo(id, val, b, j1, j2, j3, j4) 
+      INSERT INTO foo(id, far_id, b, j1, j2, j3, j4) 
         VALUES (
           'bar',
           'baz',
@@ -56,8 +56,14 @@ const INITIAL_PG_SETUP = `
           '123',
           '"string"');
 
+      CREATE SCHEMA boo;
+      CREATE TABLE boo.far(id TEXT PRIMARY KEY);
+      INSERT INTO boo.far(id) VALUES ('baz');
+
       CREATE TABLE nopk(id TEXT NOT NULL, val TEXT);
       INSERT INTO nopk(id, val) VALUES ('foo', 'bar');
+
+      CREATE PUBLICATION zero_all FOR TABLE foo, TABLE boo.far, TABLE nopk;
 `;
 
 // Keep this in sync with the INITIAL_PG_SETUP
@@ -72,7 +78,7 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
         name: 'foo',
         columns: {
           id: {pos: 0, dataType: 'text', notNull: true},
-          val: {pos: 1, dataType: 'text'},
+          ['far_id']: {pos: 1, dataType: 'text'},
           b: {pos: 2, dataType: 'bool'},
           j1: {pos: 3, dataType: 'json'},
           j2: {pos: 4, dataType: 'jsonb'},
@@ -106,12 +112,52 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
       },
       new: {
         id: 'bar',
-        val: 'baz',
+        ['far_id']: 'baz',
         b: true,
         j1: {foo: 'bar'},
         j2: true,
         j3: 123,
         j4: 'string',
+      },
+    },
+  ],
+  [
+    'data',
+    {
+      tag: 'create-table',
+      spec: {
+        schema: 'boo',
+        name: 'far',
+        columns: {
+          id: {pos: 0, dataType: 'text', notNull: true},
+        },
+      },
+    },
+  ],
+  [
+    'data',
+    {
+      tag: 'create-index',
+      spec: {
+        name: 'boo_far_key',
+        schema: 'boo',
+        tableName: 'far',
+        columns: {id: 'ASC'},
+        unique: true,
+      },
+    },
+  ],
+  [
+    'data',
+    {
+      tag: 'insert',
+      relation: {
+        schema: 'boo',
+        name: 'far',
+        keyColumns: ['id'],
+      },
+      new: {
+        id: 'baz',
       },
     },
   ],
@@ -305,6 +351,7 @@ describe('integration', {timeout: 30000}, () => {
       ['ZERO_UPSTREAM_MAX_CONNS']: '3',
       ['ZERO_CVR_DB']: getConnectionURI(cvrDB),
       ['ZERO_CVR_MAX_CONNS']: '3',
+      ['ZERO_SHARD_PUBLICATIONS']: 'zero_all',
       ['ZERO_CHANGE_DB']: getConnectionURI(changeDB),
       ['ZERO_REPLICA_FILE']: replicaDbFile.path,
       ['ZERO_SCHEMA_JSON']: JSON.stringify(SCHEMA),
@@ -315,6 +362,19 @@ describe('integration', {timeout: 30000}, () => {
   const FOO_QUERY: AST = {
     table: 'foo',
     orderBy: [['id', 'asc']],
+    related: [
+      {
+        correlation: {
+          parentField: ['far_id'],
+          childField: ['id'],
+        },
+        subquery: {
+          table: 'boo.far',
+          orderBy: [['id', 'asc']],
+          alias: 'far',
+        },
+      },
+    ],
   };
 
   const NOPK_QUERY: AST = {
@@ -547,12 +607,19 @@ describe('integration', {timeout: 30000}, () => {
               tableName: 'foo',
               value: {
                 id: 'bar',
-                val: 'baz',
+                ['far_id']: 'baz',
                 b: true,
                 j1: {foo: 'bar'},
                 j2: true,
                 j3: 123,
                 j4: 'string',
+              },
+            },
+            {
+              op: 'put',
+              tableName: 'boo.far',
+              value: {
+                id: 'baz',
               },
             },
           ],
@@ -566,8 +633,10 @@ describe('integration', {timeout: 30000}, () => {
       // Trigger an upstream change and verify replication.
       if (backend === 'pg') {
         await upDB`
-          INSERT INTO foo(id, val, b, j1, j2, j3, j4) 
-            VALUES ('voo', 'doo', false, '"foo"', 'false', '456.789', '{"bar":"baz"}')`;
+          INSERT INTO foo(id, far_id, b, j1, j2, j3, j4) 
+            VALUES ('voo', 'doo', false, '"foo"', 'false', '456.789', '{"bar":"baz"}');
+          UPDATE foo SET far_id = 'not_baz' WHERE id = 'bar';
+        `.simple();
       } else {
         await streamCustomChanges([
           ['begin', {tag: 'begin'}, {commitWatermark: '102'}],
@@ -582,13 +651,30 @@ describe('integration', {timeout: 30000}, () => {
               },
               new: {
                 id: 'voo',
-                val: 'doo',
+                ['far_id']: 'doo',
                 b: false,
                 j1: 'foo',
                 j2: false,
                 j3: 456.789,
                 j4: {bar: 'baz'},
               },
+            },
+          ],
+          [
+            'data',
+            {
+              tag: 'update',
+              relation: {
+                schema: 'public',
+                name: 'foo',
+                keyColumns: ['id'],
+              },
+              new: {
+                id: 'bar',
+                ['far_id']: 'not_baz',
+              },
+              key: null,
+              old: null,
             },
           ],
           ['commit', {tag: 'commit'}, {watermark: '102'}],
@@ -608,8 +694,29 @@ describe('integration', {timeout: 30000}, () => {
               op: 'put',
               tableName: 'foo',
               value: {
+                b: true,
+                ['far_id']: 'not_baz',
+                id: 'bar',
+                j1: {
+                  foo: 'bar',
+                },
+                j2: true,
+                j3: 123,
+                j4: 'string',
+              },
+            },
+            // boo.far {id: 'baz'} is no longer referenced by foo {id: 'bar}
+            {
+              id: {id: 'baz'},
+              op: 'del',
+              tableName: 'boo.far',
+            },
+            {
+              op: 'put',
+              tableName: 'foo',
+              value: {
                 id: 'voo',
-                val: 'doo',
+                ['far_id']: 'doo',
                 b: false,
                 j1: 'foo',
                 j2: false,

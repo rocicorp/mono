@@ -221,6 +221,11 @@ test('zero-cache --help', () => {
                                                    The location of the litestream backup, usually an s3:// URL.                                      
                                                    If set, the litestream-executable must also be specified.                                         
                                                                                                                                                      
+     --litestream-restore-parallelism number       default: 16                                                                                       
+       ZERO_LITESTREAM_RESTORE_PARALLELISM env                                                                                                       
+                                                   The number of WAL files to download in parallel when performing the                               
+                                                   initial restore of the replica from the backup.                                                   
+                                                                                                                                                     
      --storage-db-tmp-dir string                   optional                                                                                          
        ZERO_STORAGE_DB_TMP_DIR env                                                                                                                   
                                                    tmp directory for IVM operator storage. Leave unset to use os.tmpdir()                            
