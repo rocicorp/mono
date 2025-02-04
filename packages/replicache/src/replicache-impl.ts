@@ -122,6 +122,7 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.ts';
+import type {Diff} from './sync/patch.ts';
 
 declare const TESTING: boolean;
 
@@ -1053,7 +1054,14 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    *
    * @experimental This method is under development and its semantics will change.
    */
-  async poke(poke: PokeInternal): Promise<void> {
+  async poke(
+    poke: PokeInternal,
+    pullApplied: (
+      store: Store,
+      syncHead: Hash,
+      patches: readonly Diff[],
+    ) => Promise<void>,
+  ): Promise<void> {
     await this.#ready;
     // TODO(MP) Previously we created a request ID here and included it with the
     // PullRequest to the server so we could tie events across client and server
@@ -1090,6 +1098,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
     switch (result.type) {
       case HandlePullResponseResultEnum.Applied:
+        await pullApplied(this.memdag, result.syncHead, result.diffs);
         await this.maybeEndPull(result.syncHead, requestID);
         break;
       case HandlePullResponseResultEnum.CookieMismatch:

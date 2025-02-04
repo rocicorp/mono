@@ -554,7 +554,7 @@ export class Zero<
     this.#metrics.tags.push(`version:${this.version}`);
 
     this.#pokeHandler = new PokeHandler(
-      poke => this.#rep.poke(poke),
+      poke => this.#rep.poke(poke, this.#ivmSources.advanceSyncHead),
       () => this.#onPokeError(),
       rep.clientID,
       schema,
