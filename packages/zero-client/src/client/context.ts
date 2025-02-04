@@ -79,8 +79,8 @@ export class ZeroContext implements QueryDelegate {
   }
 
   processChanges(changes: NoIndexDiff) {
-    try {
-      this.batchViewUpdates(() => {
+    this.batchViewUpdates(() => {
+      try {
         for (const diff of changes) {
           const {key} = diff;
           assert(key.startsWith(ENTITIES_KEY_PREFIX));
@@ -123,10 +123,10 @@ export class ZeroContext implements QueryDelegate {
               unreachable(diff);
           }
         }
-      });
-    } finally {
-      this.#endTransaction();
-    }
+      } finally {
+        this.#endTransaction();
+      }
+    });
   }
 
   #endTransaction() {

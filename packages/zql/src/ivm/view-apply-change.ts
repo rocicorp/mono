@@ -7,14 +7,51 @@ import {
 } from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
-import type {Change} from './change.ts';
-import {drainStreams, type Comparator} from './data.ts';
+import {drainStreams, type Comparator, type Node} from './data.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Entry, EntryList, Format} from './view.ts';
 
+/**
+ * `applyChange` does not consume the `relationships` of `ChildChange#node`,
+ * `EditChange#node` and `EditChange#oldNode`.  The `ViewChange` type
+ * documents and enforces this via the type system.
+ */
+export type ViewChange =
+  | AddViewChange
+  | RemoveViewChange
+  | ChildViewChange
+  | EditViewChange;
+
+export type RowOnlyNode = {row: Row};
+
+export type AddViewChange = {
+  type: 'add';
+  node: Node;
+};
+
+export type RemoveViewChange = {
+  type: 'remove';
+  node: Node;
+};
+
+type ChildViewChange = {
+  type: 'child';
+  node: RowOnlyNode;
+  child: {
+    relationshipName: string;
+    change: ViewChange;
+  };
+};
+
+type EditViewChange = {
+  type: 'edit';
+  node: RowOnlyNode;
+  oldNode: RowOnlyNode;
+};
+
 export function applyChange(
   parentEntry: Entry,
-  change: Change,
+  change: ViewChange,
   schema: SourceSchema,
   relationship: string,
   format: Format,

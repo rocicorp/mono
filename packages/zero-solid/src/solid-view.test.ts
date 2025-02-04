@@ -540,7 +540,7 @@ test('tree-single', () => {
   expect(view.data).toEqual(undefined);
 });
 
-test.fails('collapse', () => {
+test('collapse', () => {
   const schema: SourceSchema = {
     tableName: 'issue',
     primaryKey: ['id'],
@@ -1700,7 +1700,7 @@ test('edit to preserve relationships', () => {
   ]);
 });
 
-test.fails('edit leaf', () => {
+test('edit leaf', () => {
   const schema: SourceSchema = {
     tableName: 'issue',
     primaryKey: ['id'],
