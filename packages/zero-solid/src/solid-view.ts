@@ -34,6 +34,15 @@ export class SolidView<V> implements Output {
   readonly #format: Format;
   readonly #onDestroy: () => void;
 
+  // Optimization: if the store is currently empty we build up
+  // the view on a plain old JS object stored at #builderRoot, and return
+  // that for the new state on transaction commit.  This avoids building up
+  // large views from scratch via solid produce.  The proxy object used by
+  // solid produce is slow and in this case we don't care about solid tracking
+  // the fine grained changes (everything has changed, it's all new).  For a
+  // test case with a view with 3000 rows, each row having 2 children, this
+  // optimization reduced #applyChanges time from 743ms to 133ms.
+  #builderRoot: Entry | undefined;
   #state: Store<State>;
   #setState: SetStoreFunction<State>;
 
@@ -50,13 +59,21 @@ export class SolidView<V> implements Output {
     onTransactionCommit(this.#onTransactionCommit);
     this.#format = format;
     this.#onDestroy = onDestroy;
-    [this.#state, this.#setState] = createStore<State>([
-      this.#initialEmptyEntry(),
-      queryComplete === true ? complete : unknown,
-    ]);
     input.setOutput(this);
 
-    this.#applyChanges(input.fetch({}), node => ({type: 'add', node}));
+    const initialRoot = this.#createEmptyRoot();
+    this.#applyChangesToRoot(
+      input.fetch({}),
+      node => ({type: 'add', node}),
+      initialRoot,
+    );
+    [this.#state, this.#setState] = createStore<State>([
+      initialRoot,
+      queryComplete === true ? complete : unknown,
+    ]);
+    if (isEmptyRoot(initialRoot)) {
+      this.#builderRoot = this.#createEmptyRoot();
+    }
 
     if (queryComplete !== true) {
       void queryComplete.then(() => {
@@ -78,43 +95,44 @@ export class SolidView<V> implements Output {
   }
 
   #onTransactionCommit = () => {
-    try {
-      this.#applyChanges(this.#pendingChanges, c => c);
-    } finally {
-      this.#pendingChanges = [];
+    const builderRoot = this.#builderRoot;
+    if (builderRoot) {
+      if (!isEmptyRoot(builderRoot)) {
+        this.#setState(oldState => [builderRoot, oldState[1]]);
+        this.#builderRoot = undefined;
+      }
+    } else {
+      try {
+        this.#applyChanges(this.#pendingChanges, c => c);
+      } finally {
+        this.#pendingChanges = [];
+      }
     }
   };
 
   push(change: Change): void {
     // Delay updating the solid store state until the transaction commit
-    // (because each update of the solid store is quite expensive), but
-    // read the relationships now as they are only valid to read
-    // when the push is received.
-    this.#pendingChanges.push(materializeRelationships(change));
+    // (because each update of the solid store is quite expensive).  If
+    // this.#builderRoot is defined apply the changes to it (we are building
+    // from an empty root), otherwise queue the changes to be applied
+    // using produce at the end of the transaction but read the relationships
+    // now as they are only valid to read when the push is received.
+    if (this.#builderRoot) {
+      this.#applyChangeToRoot(change, this.#builderRoot);
+    } else {
+      this.#pendingChanges.push(materializeRelationships(change));
+    }
   }
 
   #applyChanges<T>(changes: Iterable<T>, mapper: (v: T) => ViewChange): void {
-    this.#setState(oldState => {
-      // Optimization: if the store is currently empty build up
-      // the view on a new plain old JS object root, and return that
-      // for the new state.  This avoids building up large views from
-      // scratch via solid produce.  The proxy object used by solid produce
-      // is slow and in this case we don't care about solid tracking the fine
-      // grained changes (everything has changed, its all new).  For a test case
-      // with a view with 3000 rows, each row having 2 children, this
-      // optimization reduced #applyChanges time from 743ms to 133ms.
-      if (
-        oldState[0][''] === undefined ||
-        (Array.isArray(oldState[0]['']) && oldState[0][''].length === 0)
-      ) {
-        const root: Entry = this.#initialEmptyEntry();
-        this.#applyChangesToRoot<T>(changes, mapper, root);
-        return [root, oldState[1]];
-      }
-      return produce((draftState: State) => {
+    this.#setState(
+      produce((draftState: State) => {
         this.#applyChangesToRoot<T>(changes, mapper, draftState[0]);
-      })(oldState);
-    });
+        if (isEmptyRoot(draftState[0])) {
+          this.#builderRoot = this.#createEmptyRoot();
+        }
+      }),
+    );
   }
 
   #applyChangesToRoot<T>(
@@ -123,17 +141,15 @@ export class SolidView<V> implements Output {
     root: Entry,
   ) {
     for (const change of changes) {
-      applyChange(
-        root,
-        mapper(change),
-        this.#input.getSchema(),
-        '',
-        this.#format,
-      );
+      this.#applyChangeToRoot(mapper(change), root);
     }
   }
 
-  #initialEmptyEntry(): Entry {
+  #applyChangeToRoot(change: ViewChange, root: Entry) {
+    applyChange(root, change, this.#input.getSchema(), '', this.#format);
+  }
+
+  #createEmptyRoot(): Entry {
     return {
       '': this.#format.singular ? undefined : [],
     };
@@ -143,9 +159,9 @@ export class SolidView<V> implements Output {
 function materializeRelationships(change: Change): ViewChange {
   switch (change.type) {
     case 'add':
-      return {type: 'add', node: materializeNodesRelationships(change.node)};
+      return {type: 'add', node: materializeNodeRelationships(change.node)};
     case 'remove':
-      return {type: 'remove', node: materializeNodesRelationships(change.node)};
+      return {type: 'remove', node: materializeNodeRelationships(change.node)};
     case 'child':
       return {
         type: 'child',
@@ -164,16 +180,21 @@ function materializeRelationships(change: Change): ViewChange {
   }
 }
 
-function materializeNodesRelationships(node: Node): Node {
+function materializeNodeRelationships(node: Node): Node {
   return {
     row: node.row,
     relationships: Object.fromEntries(
       Object.entries(node.relationships).map(([relationship, stream]) => {
-        const drained = [...stream()].map(materializeNodesRelationships);
-        return [relationship, () => drained];
+        const materialized = [...stream()].map(materializeNodeRelationships);
+        return [relationship, () => materialized];
       }),
     ),
   };
+}
+
+function isEmptyRoot(entry: Entry) {
+  const data = entry[''];
+  return data === undefined || (Array.isArray(data) && data.length === 0);
 }
 
 export function solidViewFactory<
