@@ -288,6 +288,7 @@ describe('integration', {timeout: 30000}, () => {
     schema: {
       version: 1,
       tables: {},
+      relationships: {},
     },
   } as const;
 
