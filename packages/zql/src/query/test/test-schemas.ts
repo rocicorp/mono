@@ -7,6 +7,7 @@ import {
   string,
   table,
 } from '../../../../zero-schema/src/builder/table-builder.ts';
+import type {Row} from '../query.ts';
 
 const issue = table('issue')
   .from('issues')
@@ -162,3 +163,10 @@ export const issueLabelSchema = schema.tables.issueLabel;
 export const labelSchema = schema.tables.label;
 export const revisionSchema = schema.tables.revision;
 export const userSchema = schema.tables.user;
+
+export type Issue = Row<typeof issueSchema>;
+export type Comment = Row<typeof commentSchema>;
+export type IssueLabel = Row<typeof issueLabelSchema>;
+export type Label = Row<typeof labelSchema>;
+export type Revision = Row<typeof revisionSchema>;
+export type User = Row<typeof userSchema>;

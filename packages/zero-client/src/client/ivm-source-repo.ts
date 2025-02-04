@@ -4,12 +4,12 @@ import {wrapIterable} from '../../../shared/src/iterables.ts';
 import type {Store} from '../../../replicache/src/dag/store.ts';
 import {withRead} from '../../../replicache/src/with-transactions.ts';
 import type {Hash} from '../../../replicache/src/hash.ts';
-import {BTreeRead} from '../../../replicache/src/btree/read.ts';
 import * as FormatVersion from '../../../replicache/src/format-version-enum.ts';
 import {ENTITIES_KEY_PREFIX} from './keys.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Diff} from '../../../replicache/src/sync/patch.ts';
+import {readFromHash} from '../../../replicache/src/db/read.ts';
 
 /**
  * Provides handles to IVM sources at different heads.
@@ -71,11 +71,15 @@ export class IVMSourceRepo {
     if (this.#sync === undefined) {
       await withRead(store, async dagRead => {
         const syncSources = new IVMSourceBranch(this.#tables);
-        for await (const entry of new BTreeRead(
+        const read = await readFromHash(
+          syncHeadHash,
           dagRead,
           FormatVersion.Latest,
-          syncHeadHash,
-        ).scan(ENTITIES_KEY_PREFIX)) {
+        );
+        for await (const entry of read.map.scan(ENTITIES_KEY_PREFIX)) {
+          if (!entry[0].startsWith(ENTITIES_KEY_PREFIX)) {
+            break;
+          }
           const name = nameFromKey(entry[0]);
           const source = must(syncSources.getSource(name));
           source.push({
@@ -94,6 +98,9 @@ export class IVMSourceRepo {
         }
 
         const {key} = patch;
+        if (!key.startsWith(ENTITIES_KEY_PREFIX)) {
+          continue;
+        }
         const name = nameFromKey(key);
         const source = must(this.#sync.getSource(name));
         switch (patch.op) {
