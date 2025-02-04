@@ -56,11 +56,15 @@ import type {
   CustomMutation,
   PushMessage,
 } from '../../../zero-protocol/src/push.ts';
-import {CRUD_MUTATION_NAME} from '../../../zero-protocol/src/push.ts';
+import {CRUD_MUTATION_NAME, mapCRUD} from '../../../zero-protocol/src/push.ts';
 import type {QueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
 import {nullableVersionSchema} from '../../../zero-protocol/src/version.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  type NameMapper,
+  clientToServer,
+} from '../../../zero-schema/src/name-mapper.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {nanoid} from '../util/nanoid.ts';
@@ -87,6 +91,7 @@ import {
   appendPath,
   toWSString,
 } from './http-string.ts';
+import {IVMSourceRepo} from './ivm-source-repo.ts';
 import {ENTITIES_KEY_PREFIX} from './keys.ts';
 import {type LogOptions, createLogOptions} from './log-options.ts';
 import {
@@ -119,7 +124,6 @@ import {
 import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
-import {IVMSourceRepo} from './ivm-source-repo.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -267,6 +271,7 @@ export class Zero<
   readonly #pokeHandler: PokeHandler;
   readonly #queryManager: QueryManager;
   readonly #ivmSources: IVMSourceRepo;
+  readonly #clientToServer: NameMapper;
 
   /**
    * The queries we sent when inside the sec-protocol header when establishing a connection.
@@ -517,6 +522,7 @@ export class Zero<
       rep.experimentalWatch.bind(rep),
       maxRecentQueries,
     );
+    this.#clientToServer = clientToServer(schema.tables);
 
     this.#zeroContext = new ZeroContext(
       this.#ivmSources.main,
@@ -1188,7 +1194,7 @@ export class Zero<
               id: m.id,
               clientID: m.clientID,
               name: m.name,
-              args: [m.args as CRUDMutationArg],
+              args: [mapCRUD(m.args as CRUDMutationArg, this.#clientToServer)],
             } satisfies CRUDMutation)
           : ({
               type: MutationType.Custom,
