@@ -1,5 +1,24 @@
-import {expect, test} from 'vitest';
-import {IVMSourceBranch} from './ivm-source-repo.ts';
+import {describe, expect, test} from 'vitest';
+import {IVMSourceBranch, IVMSourceRepo} from './ivm-source-repo.ts';
+import {
+  schema,
+  type Issue,
+  type IssueLabel,
+  type Label,
+  type Revision,
+} from '../../../zql/src/query/test/test-schemas.ts';
+import {initDB} from '../../../replicache/src/db/test-helpers.ts';
+import * as FormatVersion from '../../../replicache/src/format-version-enum.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../shared/src/must.ts';
+import {TestStore} from '../../../replicache/src/dag/test-store.ts';
+import {SYNC_HEAD_NAME} from '../../../replicache/src/sync/sync-head-name.ts';
+import {newWriteLocal} from '../../../replicache/src/db/write.ts';
+import {mustGetHeadHash} from '../../../replicache/src/dag/store.ts';
+import {ENTITIES_KEY_PREFIX} from './keys.ts';
+import type {FrozenJSONValue} from '../../../replicache/src/frozen-json.ts';
+import type {Diff} from '../../../replicache/src/sync/patch.ts';
+import type {Node} from '../../../zql/src/ivm/data.ts';
 
 test('fork', () => {
   const main = new IVMSourceBranch({
@@ -86,4 +105,364 @@ test('fork', () => {
       },
     ]
   `);
+});
+
+const lc = createSilentLogContext();
+let timestamp = 42;
+async function createDb(
+  puts: Array<[string, Issue | Comment | Label | IssueLabel | Revision]>,
+) {
+  const clientID = 'client-id';
+  const dagStore = new TestStore();
+  await initDB(
+    await dagStore.write(),
+    SYNC_HEAD_NAME,
+    clientID,
+    {},
+    FormatVersion.Latest,
+  );
+  const dagWrite = await dagStore.write();
+  const w = await newWriteLocal(
+    await mustGetHeadHash(SYNC_HEAD_NAME, dagWrite),
+    'mutator_name',
+    JSON.stringify([]),
+    null,
+    dagWrite,
+    timestamp++,
+    clientID,
+    FormatVersion.Latest,
+  );
+  await Promise.all(
+    puts.map(([key, value]) =>
+      w.put(lc, key, value as unknown as FrozenJSONValue),
+    ),
+  );
+  const syncHash = await w.commit(SYNC_HEAD_NAME);
+
+  return {dagStore, syncHash};
+}
+
+describe('advanceSyncHead', () => {
+  test("sync head is initialized to match replicache's sync head", async () => {
+    const repo = new IVMSourceRepo(schema.tables);
+    const {dagStore, syncHash} = await createDb([
+      [
+        `${ENTITIES_KEY_PREFIX}issue/sdf`,
+        {
+          id: 'sdf',
+          title: 'test',
+          description: 'test',
+          closed: false,
+          ownerId: null,
+        },
+      ],
+    ]);
+    await repo.advanceSyncHead(dagStore, syncHash, []);
+
+    expect([
+      ...must(repo.rebase.getSource('issue'))
+        .connect([['id', 'asc']])
+        .fetch({}),
+    ]).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "closed": false,
+            "description": "test",
+            "id": "sdf",
+            "ownerId": null,
+            "title": "test",
+          },
+        },
+      ]
+    `);
+  });
+
+  test('sync is advanced via diffs when already initialized', async () => {
+    const repo = new IVMSourceRepo(schema.tables);
+    const {dagStore, syncHash} = await createDb([
+      [
+        `${ENTITIES_KEY_PREFIX}issue/sdf`,
+        {
+          id: 'sdf',
+          title: 'test',
+          description: 'test',
+          closed: false,
+          ownerId: null,
+        },
+      ],
+    ]);
+
+    // initialize the sync head
+    await repo.advanceSyncHead(dagStore, syncHash, []);
+
+    // write something to the db that will not be included in diffs and should not be in the ivm sync head for
+    // that reason. This would never happen in practice.
+    const w = await newWriteLocal(
+      syncHash,
+      'mutator_name',
+      JSON.stringify([]),
+      null,
+      await dagStore.write(),
+      timestamp++,
+      'client-id',
+      FormatVersion.Latest,
+    );
+    await w.put(lc, `${ENTITIES_KEY_PREFIX}issue/abc`, {
+      id: 'abc',
+      title: 'test',
+      description: 'test',
+      closed: false,
+      ownerId: null,
+    } as unknown as FrozenJSONValue);
+    await w.commit(SYNC_HEAD_NAME);
+
+    await repo.advanceSyncHead(dagStore, syncHash, [
+      {
+        op: 'add',
+        key: `${ENTITIES_KEY_PREFIX}issue/def`,
+        newValue: {
+          id: 'def',
+          title: 'test',
+          description: 'test',
+          closed: false,
+          ownerId: null,
+        } as unknown as FrozenJSONValue,
+      },
+    ]);
+
+    expect([
+      ...must(repo.rebase.getSource('issue'))
+        .connect([['id', 'asc']])
+        .fetch({}),
+    ]).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "closed": false,
+            "description": "test",
+            "id": "def",
+            "ownerId": null,
+            "title": "test",
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "closed": false,
+            "description": "test",
+            "id": "sdf",
+            "ownerId": null,
+            "title": "test",
+          },
+        },
+      ]
+    `);
+  });
+
+  // test various cases of diff operations result in the correct state of the rebase branch
+  type DiffCase = {
+    name: string;
+    initial: Array<[string, Issue | Comment | Label | IssueLabel | Revision]>;
+    diffs: Diff[];
+    expected: Array<Node>;
+  };
+  describe('diff cases', () => {
+    test.each([
+      {
+        name: 'add to empty dataset',
+        initial: [],
+        diffs: [],
+        expected: [],
+      },
+      {
+        name: 'add to non-empty dataset',
+        initial: [
+          [
+            `${ENTITIES_KEY_PREFIX}issue/sdf`,
+            {
+              id: 'sdf',
+              title: 'test',
+              description: 'test',
+              closed: false,
+              ownerId: null,
+            },
+          ],
+        ],
+        diffs: [
+          {
+            op: 'add',
+            key: `${ENTITIES_KEY_PREFIX}issue/def`,
+            newValue: {
+              id: 'def',
+              title: 'test',
+              description: 'test',
+              closed: false,
+              ownerId: null,
+            } as unknown as FrozenJSONValue,
+          },
+        ],
+        expected: [
+          {
+            relationships: {},
+            row: {
+              closed: false,
+              description: 'test',
+              id: 'def',
+              ownerId: null,
+              title: 'test',
+            },
+          },
+          {
+            relationships: {},
+            row: {
+              closed: false,
+              description: 'test',
+              id: 'sdf',
+              ownerId: null,
+              title: 'test',
+            },
+          },
+        ],
+      },
+      {
+        name: 'change existing data',
+        initial: [
+          [
+            `${ENTITIES_KEY_PREFIX}issue/sdf`,
+            {
+              id: 'sdf',
+              title: 'test',
+              description: 'test',
+              closed: false,
+              ownerId: null,
+            },
+          ],
+        ],
+        diffs: [
+          {
+            op: 'change',
+            key: `${ENTITIES_KEY_PREFIX}issue/sdf`,
+            oldValue: {
+              id: 'sdf',
+              title: 'test',
+              description: 'test',
+              closed: false,
+              ownerId: null,
+            } as unknown as FrozenJSONValue,
+            newValue: {
+              id: 'sdf',
+              title: 'test',
+              description: 'test',
+              closed: true,
+              ownerId: null,
+            } as unknown as FrozenJSONValue,
+          },
+        ],
+        expected: [
+          {
+            relationships: {},
+            row: {
+              closed: true,
+              description: 'test',
+              id: 'sdf',
+              ownerId: null,
+              title: 'test',
+            },
+          },
+        ],
+      },
+      // diffs change their own data
+      {
+        name: 'change existing data',
+        initial: [],
+        diffs: [
+          {
+            op: 'add',
+            key: `${ENTITIES_KEY_PREFIX}issue/sdf`,
+            newValue: {
+              id: 'sdf',
+              title: 'test',
+              description: 'test',
+              closed: false,
+              ownerId: null,
+            } as unknown as FrozenJSONValue,
+          },
+          {
+            op: 'change',
+            key: `${ENTITIES_KEY_PREFIX}issue/sdf`,
+            oldValue: {
+              id: 'sdf',
+              title: 'test',
+              description: 'test',
+              closed: false,
+              ownerId: null,
+            } as unknown as FrozenJSONValue,
+            newValue: {
+              id: 'sdf',
+              title: 'changed',
+              description: 'changed',
+              closed: true,
+              ownerId: null,
+            } as unknown as FrozenJSONValue,
+          },
+        ],
+        expected: [
+          {
+            relationships: {},
+            row: {
+              closed: true,
+              description: 'changed',
+              id: 'sdf',
+              ownerId: null,
+              title: 'changed',
+            },
+          },
+        ],
+      },
+      {
+        name: 'remove existing data',
+        initial: [
+          [
+            `${ENTITIES_KEY_PREFIX}issue/sdf`,
+            {
+              id: 'sdf',
+              title: 'test',
+              description: 'test',
+              closed: false,
+              ownerId: null,
+            },
+          ],
+        ],
+        diffs: [
+          {
+            op: 'del',
+            key: `${ENTITIES_KEY_PREFIX}issue/sdf`,
+            oldValue: {
+              id: 'sdf',
+              title: 'test',
+              description: 'test',
+              closed: false,
+              ownerId: null,
+            } as unknown as FrozenJSONValue,
+          },
+        ],
+        expected: [],
+      },
+      // remove existing data
+    ] satisfies DiffCase[])('$name', async ({initial, diffs, expected}) => {
+      const repo = new IVMSourceRepo(schema.tables);
+      const {dagStore, syncHash} = await createDb(initial);
+      await repo.advanceSyncHead(dagStore, syncHash, []);
+
+      await repo.advanceSyncHead(dagStore, syncHash, diffs);
+      expect([
+        ...must(repo.rebase.getSource('issue'))
+          .connect([['id', 'asc']])
+          .fetch({}),
+      ]).toEqual(expected);
+    });
+  });
 });
