@@ -34,34 +34,6 @@ type PokeAccumulator = {
   readonly parts: PokePartBody[];
 };
 
-type ServerToClientColumns = {[serverName: string]: string};
-
-type ClientNames = {
-  tableName: string;
-  columns: ServerToClientColumns | null;
-};
-
-export function makeClientNames(schema: Schema): Map<string, ClientNames> {
-  return new Map(
-    Object.entries(schema.tables).map(
-      ([tableName, {serverName: serverTableName, columns}]) => {
-        let allSame = true;
-        const names: Record<string, string> = {};
-        for (const [name, {serverName}] of Object.entries(columns)) {
-          if (serverName && serverName !== name) {
-            allSame = false;
-          }
-          names[serverName ?? name] = name;
-        }
-        return [
-          serverTableName ?? tableName,
-          {tableName, columns: allSame ? null : names},
-        ];
-      },
-    ),
-  );
-}
-
 /**
  * Handles the multi-part format of zero pokes.
  * As an optimization it also debounces pokes, only poking Replicache with a
