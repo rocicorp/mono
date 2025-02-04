@@ -20,10 +20,14 @@ import type {Diff} from '../../../replicache/src/sync/patch.ts';
 export class IVMSourceRepo {
   readonly #main: IVMSourceBranch;
   readonly #tables: Record<string, TableSchema>;
-  // sync is undefined until the first pull
+  /**
+   * Sync is lazily created when the first response from the server is received.
+   */
   #sync: IVMSourceBranch | undefined;
-  // rebase is set to a fork of sync prior to a rebase
-  // rebased mutations are applied to this branch
+  /**
+   * Rebase is created when the sync head is advanced and points to a fork
+   * of the sync head. This is used to rebase optimistic mutations.
+   */
   #rebase: IVMSourceBranch | undefined;
 
   constructor(tables: Record<string, TableSchema>) {
@@ -35,6 +39,12 @@ export class IVMSourceRepo {
     return this.#main;
   }
 
+  /**
+   * Used for reads in `zero.TransactionImpl`.
+   * Writes in `zero.TransactionImpl` also get applied to the rebase branch.
+   *
+   * The rebase branch is always forked off of the sync branch when a rebase begins.
+   */
   get rebase() {
     return must(this.#rebase, 'rebase branch does not exist!');
   }
@@ -46,27 +56,16 @@ export class IVMSourceRepo {
   ): Promise<void> => {
     /**
      * The sync head may not exist yet as we do not create it on construction of Zero.
-     * One reason is that the `main` head must exist immediately on startup of Zero since
-     * a user can immediately construct queries on Zero without awaiting. E.g.,
+     * One reason it is not created eagerly is that the `main` head must exist immediately
+     * on startup of Zero since a user can immediately construct queries without awaiting. E.g.,
      *
      * ```ts
      * const z = new Zero();
      * z.query.issue...
      * ```
      *
-     * This means that the original plan of:
-     * 1. Create the sync head
-     * 2. Fork sync head
-     * 3. Create main head via applying diffs to the forked sync head
-     *
-     * Does not work since it would require the user to `await` before
-     * they can construct a query.
-     *
-     * Instead, we create an empty `main` head immediately on construction of Zero
-     * which is later filled by `experimentalWatch`.
-     *
-     * To do less work on startup, we defer sync head creation until the
-     * first response from the server.
+     * Since the main `IVM Sources` must exist immediately on construction of Zero,
+     * we cannot wait for `sync` to be populated then forked off to `main`.
      *
      */
     if (this.#sync === undefined) {
