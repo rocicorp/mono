@@ -800,7 +800,6 @@ test('pusher sends one mutation per push message', async () => {
     }[],
   ) => {
     const r = zeroForTest();
-
     await r.triggerConnected();
 
     const mockSocket = await r.socket;
