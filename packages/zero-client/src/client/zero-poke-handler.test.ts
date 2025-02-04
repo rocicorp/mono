@@ -12,7 +12,8 @@ import {
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
-import {PokeHandler, makeClientNames, mergePokes} from './zero-poke-handler.ts';
+import {serverToClient} from '../../../zero-schema/src/name-mapper.ts';
+import {PokeHandler, mergePokes} from './zero-poke-handler.ts';
 
 let rafStub: MockInstance<(cb: FrameRequestCallback) => number>;
 // The FrameRequestCallback in PokeHandler does not use
@@ -1217,7 +1218,7 @@ test('handlePoke returns the last mutation id change for this client from pokePa
 });
 
 test('mergePokes with empty array returns undefined', () => {
-  const merged = mergePokes([], schema, makeClientNames(schema));
+  const merged = mergePokes([], schema, serverToClient(schema.tables));
   expect(merged).to.be.undefined;
 });
 
@@ -1348,7 +1349,7 @@ test('mergePokes with all optionals defined', () => {
       },
     ],
     schema,
-    makeClientNames(schema),
+    serverToClient(schema.tables),
   );
 
   expect(result).toEqual({
@@ -1535,7 +1536,7 @@ test('mergePokes sparse', () => {
       },
     ],
     schema,
-    makeClientNames(schema),
+    serverToClient(schema.tables),
   );
   expect(result).toEqual({
     baseCookie: '3',
@@ -1634,7 +1635,7 @@ test('mergePokes throws error on cookie gaps', () => {
         },
       ],
       schema,
-      makeClientNames(schema),
+      serverToClient(schema.tables),
     );
   }).to.throw();
 });

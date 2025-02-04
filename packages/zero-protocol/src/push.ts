@@ -1,8 +1,13 @@
 import {jsonSchema} from '../../shared/src/json-schema.ts';
 import * as v from '../../shared/src/valita.ts';
+import type {NameMapper} from '../../zero-schema/src/name-mapper.ts';
 import {rowSchema} from './data.ts';
 import * as MutationType from './mutation-type-enum.ts';
-import {primaryKeySchema, primaryKeyValueRecordSchema} from './primary-key.ts';
+import {
+  primaryKeySchema,
+  primaryKeyValueRecordSchema,
+  type PrimaryKey,
+} from './primary-key.ts';
 
 export const CRUD_MUTATION_NAME = '_zero_crud';
 
@@ -105,3 +110,37 @@ export type CustomMutation = v.Infer<typeof customMutationSchema>;
 export type Mutation = v.Infer<typeof mutationSchema>;
 export type PushBody = v.Infer<typeof pushBodySchema>;
 export type PushMessage = v.Infer<typeof pushMessageSchema>;
+
+export function mapCRUD(
+  arg: CRUDMutationArg,
+  map: NameMapper,
+): CRUDMutationArg {
+  return {
+    ops: arg.ops.map(({op, tableName, primaryKey, value}) => {
+      switch (op) {
+        case 'delete': {
+          // 'delete' is separated to appease ts since its `value` is of a different type.
+          return {
+            op,
+            tableName: map.tableName(tableName),
+            primaryKey: map.columns(
+              tableName,
+              primaryKey as unknown as string[],
+            ) as PrimaryKey,
+            value: map.row(tableName, value),
+          } satisfies CRUDOp;
+        }
+        default:
+          return {
+            op,
+            tableName: map.tableName(tableName),
+            primaryKey: map.columns(
+              tableName,
+              primaryKey as unknown as string[],
+            ) as PrimaryKey,
+            value: map.row(tableName, value),
+          } satisfies CRUDOp;
+      }
+    }),
+  };
+}

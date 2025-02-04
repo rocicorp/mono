@@ -11,7 +11,7 @@ import {defined} from '../../shared/src/arrays.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import * as v from '../../shared/src/valita.ts';
-import type {TableSchema} from '../../zero-schema/src/table-schema.ts';
+import type {NameMapper} from '../../zero-schema/src/name-mapper.ts';
 import {rowSchema, type Row} from './data.ts';
 
 export const selectorSchema = v.string();
@@ -446,88 +446,28 @@ export function normalizeAST(ast: AST): Required<AST> {
   return normalized;
 }
 
-export function toServerAST(ast: AST, tables: Record<string, TableSchema>) {
-  return transformAST(ast, clientToServer(tables));
+export function mapAST(ast: AST, mapper: NameMapper) {
+  return transformAST(ast, {
+    tableName: table => mapper.tableName(table),
+    columnName: (table, col) => mapper.columnName(table, col),
+    related: r => r,
+    where: w => w,
+    conditions: c => c,
+  });
 }
 
-export function toServerCondition(
+export function mapCondition(
   cond: Condition,
   table: string,
-  tables: Record<string, TableSchema>,
+  mapper: NameMapper,
 ) {
-  return transformWhere(cond, table, clientToServer(tables));
-}
-
-function clientToServer(tables: Record<string, TableSchema>): ASTTransform {
-  const mustTable = (table: string) => {
-    const t = tables[table];
-    if (!table) {
-      throw new Error(`invalid table "${table}"`);
-    }
-    return t;
-  };
-
-  return {
-    tableName: (table: string) => mustTable(table).serverName ?? table,
-    columnName: (table: string, col: string) => {
-      const c = mustTable(table).columns[col];
-      if (!c) {
-        throw new Error(`invalid column "${col}" in table "${table}"`);
-      }
-      return c.serverName ?? col;
-    },
+  return transformWhere(cond, table, {
+    tableName: table => mapper.tableName(table),
+    columnName: (table, col) => mapper.columnName(table, col),
     related: r => r,
     where: w => w,
     conditions: c => c,
-  };
-}
-
-export function toClientAST(ast: AST, tables: Record<string, TableSchema>) {
-  return transformAST(ast, serverToClient(tables));
-}
-
-function serverToClient(tables: Record<string, TableSchema>): ASTTransform {
-  const tableNames = Object.fromEntries(
-    Object.entries(tables).map(([clientName, {serverName}]) => [
-      serverName ?? clientName,
-      clientName,
-    ]),
-  );
-  const columnNamesByTable = Object.fromEntries(
-    Object.entries(tables).map(
-      ([clientTable, {serverName: serverTable, columns}]) => {
-        const columnNames = Object.fromEntries(
-          Object.entries(columns).map(([clientName, {serverName}]) => [
-            serverName ?? clientName,
-            clientName,
-          ]),
-        );
-        return [serverTable ?? clientTable, columnNames] as const;
-      },
-    ),
-  );
-
-  function mustTable<T>(table: string, tables: Record<string, T>): T {
-    const t = tables[table];
-    if (!table) {
-      throw new Error(`invalid table "${table}"`);
-    }
-    return t;
-  }
-
-  return {
-    tableName: (table: string) => mustTable(table, tableNames),
-    columnName: (table: string, col: string) => {
-      const name = mustTable(table, columnNamesByTable)[col];
-      if (!name) {
-        throw new Error(`invalid column "${col}" in table "${table}"`);
-      }
-      return name;
-    },
-    related: r => r,
-    where: w => w,
-    conditions: c => c,
-  };
+  });
 }
 
 function sortedRelated(

@@ -20,7 +20,7 @@ export type PatchOperationInternal =
       readonly op: 'update';
       readonly key: string;
       readonly merge?: ReadonlyJSONObject | undefined;
-      readonly constrain?: string[] | undefined;
+      readonly constrain?: readonly string[] | undefined;
     }
   | {
       readonly op: 'del';

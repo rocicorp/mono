@@ -5,8 +5,12 @@ import {
   string,
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
+import {
+  clientToServer,
+  serverToClient,
+} from '../../zero-schema/src/name-mapper.ts';
 import type {AST} from './ast.ts';
-import {astSchema, normalizeAST, toClientAST, toServerAST} from './ast.ts';
+import {astSchema, mapAST, normalizeAST} from './ast.ts';
 import {PROTOCOL_VERSION} from './protocol-version.ts';
 
 test('fields are placed into correct positions', () => {
@@ -326,7 +330,7 @@ test('makeServerAST', () => {
       .primaryKey('id')
       .build(),
   };
-  const serverAST = toServerAST(ast, tables);
+  const serverAST = mapAST(ast, clientToServer(tables));
 
   const json = JSON.stringify(serverAST);
   expect(json).toMatch(/"issues"/);
@@ -467,7 +471,7 @@ test('makeServerAST', () => {
     }
   `);
 
-  const clientAST = toClientAST(serverAST, tables);
+  const clientAST = mapAST(serverAST, serverToClient(tables));
   expect(clientAST).toEqual(ast);
   expect(clientAST).toMatchInlineSnapshot(`
     {

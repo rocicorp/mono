@@ -19,6 +19,7 @@ import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
 import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import {
+  type CRUDOp,
   type Mutation,
   pushMessageSchema,
 } from '../../../zero-protocol/src/push.ts';
@@ -798,7 +799,35 @@ test('pusher sends one mutation per push message', async () => {
       requestID?: string;
     }[],
   ) => {
-    const r = zeroForTest();
+    const r = zeroForTest({
+      schema: createSchema(1, {
+        tables: [
+          table('issue')
+            .from('issues')
+            .columns({
+              id: string(),
+              title: string().optional(),
+            })
+            .primaryKey('id'),
+          table('comment')
+            .from('comments')
+            .columns({
+              id: string(),
+              issueID: string().from('issue_id'),
+              text: string().optional(),
+            })
+            .primaryKey('id'),
+          table('compoundPKTest')
+            .columns({
+              id1: string(),
+              id2: string(),
+              text: string(),
+            })
+            .primaryKey('id1', 'id2'),
+        ],
+      }),
+    });
+
     await r.triggerConnected();
 
     const mockSocket = await r.socket;
@@ -1009,6 +1038,138 @@ test('pusher sends one mutation per push message', async () => {
         },
       ],
       expectedPushMessages: 3,
+    },
+  ]);
+});
+
+test('pusher maps CRUD mutation names', async () => {
+  const t = async (
+    pushes: {
+      client: CRUDOp[];
+      server: CRUDOp[];
+    }[],
+  ) => {
+    const r = zeroForTest({
+      schema: createSchema(1, {
+        tables: [
+          table('issue')
+            .from('issues')
+            .columns({
+              id: string(),
+              title: string().optional(),
+            })
+            .primaryKey('id'),
+          table('comment')
+            .from('comments')
+            .columns({
+              id: string(),
+              issueId: string().from('issue_id'),
+              text: string().optional(),
+            })
+            .primaryKey('id'),
+          table('compoundPKTest')
+            .columns({
+              id1: string().from('id_1'),
+              id2: string().from('id_2'),
+              text: string(),
+            })
+            .primaryKey('id1', 'id2'),
+        ],
+      }),
+    });
+
+    await r.triggerConnected();
+
+    const mockSocket = await r.socket;
+
+    for (const push of pushes) {
+      const {client, server} = push;
+
+      const pushReq: PushRequest = {
+        profileID: 'p1',
+        clientGroupID: await r.clientGroupID,
+        pushVersion: 1,
+        schemaVersion: '1',
+        mutations: [
+          {
+            // type: MutationType.CRUD,
+            clientID: 'c2',
+            id: 2,
+            name: '_zero_crud',
+            args: {ops: client},
+            timestamp: 3,
+          },
+        ],
+      };
+
+      mockSocket.messages.length = 0;
+
+      await r.pusher(pushReq, 'test-request-id');
+
+      expect(mockSocket.messages).to.have.lengthOf(1);
+      for (let i = 0; i < mockSocket.messages.length; i++) {
+        const raw = mockSocket.messages[i];
+        const msg = valita.parse(JSON.parse(raw), pushMessageSchema);
+        expect(msg[1].mutations[0].args[0]).toEqual({ops: server});
+      }
+    }
+  };
+
+  await t([
+    {
+      client: [
+        {
+          op: 'insert',
+          tableName: 'issue',
+          primaryKey: ['id'],
+          value: {id: 'foo', ownerId: 'bar', closed: true},
+        },
+        {
+          op: 'update',
+          tableName: 'comment',
+          primaryKey: ['id'],
+          value: {id: 'baz', issueId: 'foo', description: 'boom'},
+        },
+        {
+          op: 'upsert',
+          tableName: 'compoundPKTest',
+          primaryKey: ['id1', 'id2'],
+          value: {id1: 'voo', id2: 'doo', text: 'zoo'},
+        },
+        {
+          op: 'delete',
+          tableName: 'comment',
+          primaryKey: ['id'],
+          value: {id: 'boo'},
+        },
+      ],
+
+      server: [
+        {
+          op: 'insert',
+          tableName: 'issues',
+          primaryKey: ['id'],
+          value: {id: 'foo', ownerId: 'bar', closed: true},
+        },
+        {
+          op: 'update',
+          tableName: 'comments',
+          primaryKey: ['id'],
+          value: {id: 'baz', ['issue_id']: 'foo', description: 'boom'},
+        },
+        {
+          op: 'upsert',
+          tableName: 'compoundPKTest',
+          primaryKey: ['id_1', 'id_2'],
+          value: {['id_1']: 'voo', ['id_2']: 'doo', text: 'zoo'},
+        },
+        {
+          op: 'delete',
+          tableName: 'comments',
+          primaryKey: ['id'],
+          value: {id: 'boo'},
+        },
+      ],
     },
   ]);
 });
@@ -2268,15 +2429,17 @@ suite('CRUD', () => {
       schema: createSchema(1, {
         tables: [
           table('issue')
+            .from('issues')
             .columns({
               id: string(),
               title: string().optional(),
             })
             .primaryKey('id'),
           table('comment')
+            .from('comments')
             .columns({
               id: string(),
-              issueID: string(),
+              issueID: string().from('issue_id'),
               text: string().optional(),
             })
             .primaryKey('id'),
