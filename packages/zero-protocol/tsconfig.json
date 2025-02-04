@@ -1,4 +1,4 @@
 {
   "extends": "../../tsconfig.json",
-  "include": ["src/**/*.ts", "../zero-schema/src/name-mapper.ts"]
+  "include": ["src/**/*.ts"]
 }
