@@ -34,6 +34,9 @@ export class SolidView<V> implements Output {
   readonly #format: Format;
   readonly #onDestroy: () => void;
 
+  #state: Store<State>;
+  #setState: SetStoreFunction<State>;
+
   // Optimization: if the store is currently empty we build up
   // the view on a plain old JS object stored at #builderRoot, and return
   // that for the new state on transaction commit.  This avoids building up
@@ -43,9 +46,6 @@ export class SolidView<V> implements Output {
   // test case with a view with 3000 rows, each row having 2 children, this
   // optimization reduced #applyChanges time from 743ms to 133ms.
   #builderRoot: Entry | undefined;
-  #state: Store<State>;
-  #setState: SetStoreFunction<State>;
-
   #pendingChanges: ViewChange[] = [];
 
   constructor(
