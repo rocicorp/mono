@@ -799,34 +799,7 @@ test('pusher sends one mutation per push message', async () => {
       requestID?: string;
     }[],
   ) => {
-    const r = zeroForTest({
-      schema: createSchema(1, {
-        tables: [
-          table('issue')
-            .from('issues')
-            .columns({
-              id: string(),
-              title: string().optional(),
-            })
-            .primaryKey('id'),
-          table('comment')
-            .from('comments')
-            .columns({
-              id: string(),
-              issueID: string().from('issue_id'),
-              text: string().optional(),
-            })
-            .primaryKey('id'),
-          table('compoundPKTest')
-            .columns({
-              id1: string(),
-              id2: string(),
-              text: string(),
-            })
-            .primaryKey('id1', 'id2'),
-        ],
-      }),
-    });
+    const r = zeroForTest();
 
     await r.triggerConnected();
 
