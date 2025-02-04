@@ -136,14 +136,19 @@ export class TransactionImpl implements Transaction<Schema> {
     this.clientID = repTx.clientID;
     this.mutationID = repTx.mutationID;
     this.reason = repTx.reason === 'initial' ? 'optimistic' : 'rebase';
-    this.mutate = makeSchemaCRUD(schema, repTx);
+    // ~ Note: we will likely need to leverage proxies one day to create
+    // ~ crud mutators and queries on demand for users with very large schemas.
+    this.mutate = makeSchemaCRUD(
+      schema,
+      repTx,
+      // Mutators do not write to the main IVM sources during optimistic mutations
+      // so we pass undefined here.
+      // ExperimentalWatch handles updating main.
+      this.reason === 'optimistic' ? undefined : ivmSourceRepo.rebase,
+    );
     this.query = makeSchemaQuery(
       schema,
-      this.reason === 'optimistic'
-        ? ivmSourceRepo.main
-        : // TODO: we don't initialize the sync branch yet.
-          // to fix in the next PR.
-          ivmSourceRepo.main,
+      this.reason === 'optimistic' ? ivmSourceRepo.main : ivmSourceRepo.rebase,
     );
   }
 
@@ -187,10 +192,14 @@ function makeSchemaQuery(schema: Schema, ivmBranch: IVMSourceBranch) {
   return rv as SchemaQuery<Schema>;
 }
 
-function makeSchemaCRUD(schema: Schema, tx: WriteTransaction) {
+function makeSchemaCRUD(
+  schema: Schema,
+  tx: WriteTransaction,
+  ivmBranch: IVMSourceBranch | undefined,
+) {
   const mutate: Record<string, TableCRUD<TableSchema>> = {};
   for (const [name] of Object.entries(schema.tables)) {
-    mutate[name] = makeTableCRUD(schema, name, tx);
+    mutate[name] = makeTableCRUD(schema, name, tx, ivmBranch);
   }
   return mutate;
 }
@@ -199,17 +208,38 @@ function makeTableCRUD(
   schema: Schema,
   tableName: string,
   tx: WriteTransaction,
+  ivmBranch: IVMSourceBranch | undefined,
 ) {
   const table = must(schema.tables[tableName]);
   const {primaryKey} = table;
   return {
     insert: (value: InsertValue<TableSchema>) =>
-      insertImpl(tx, {op: 'insert', tableName, primaryKey, value}, schema),
+      insertImpl(
+        tx,
+        {op: 'insert', tableName, primaryKey, value},
+        schema,
+        ivmBranch,
+      ),
     upsert: (value: UpsertValue<TableSchema>) =>
-      upsertImpl(tx, {op: 'upsert', tableName, primaryKey, value}, schema),
+      upsertImpl(
+        tx,
+        {op: 'upsert', tableName, primaryKey, value},
+        schema,
+        ivmBranch,
+      ),
     update: (value: UpdateValue<TableSchema>) =>
-      updateImpl(tx, {op: 'update', tableName, primaryKey, value}, schema),
+      updateImpl(
+        tx,
+        {op: 'update', tableName, primaryKey, value},
+        schema,
+        ivmBranch,
+      ),
     delete: (id: DeleteID<TableSchema>) =>
-      deleteImpl(tx, {op: 'delete', tableName, primaryKey, value: id}, schema),
+      deleteImpl(
+        tx,
+        {op: 'delete', tableName, primaryKey, value: id},
+        schema,
+        ivmBranch,
+      ),
   };
 }

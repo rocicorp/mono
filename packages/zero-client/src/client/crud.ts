@@ -1,7 +1,9 @@
 import type {Expand} from '../../../shared/src/expand.ts';
 import type {ReadonlyJSONObject} from '../../../shared/src/json.ts';
+import {must} from '../../../shared/src/must.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
 import {
   CRUD_MUTATION_NAME,
   type CRUDMutationArg,
@@ -17,6 +19,7 @@ import type {
   SchemaValueToTSType,
   TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
+import type {IVMSourceBranch} from './ivm-source-repo.ts';
 import {toPrimaryKeyString} from './keys.ts';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.ts';
 
@@ -270,6 +273,10 @@ export type CRUDMutator = (
   crudArg: CRUDMutationArg,
 ) => Promise<void>;
 
+// Zero crud mutators cannot function at the same
+// time as custom mutators as the rebase of crud mutators will not
+// update the IVM branch. That's ok, we're removing crud mutators
+// in favor of custom mutators.
 export function makeCRUDMutator(schema: Schema): CRUDMutator {
   return async function zeroCRUDMutator(
     tx: WriteTransaction,
@@ -278,16 +285,16 @@ export function makeCRUDMutator(schema: Schema): CRUDMutator {
     for (const op of crudArg.ops) {
       switch (op.op) {
         case 'insert':
-          await insertImpl(tx, op, schema);
+          await insertImpl(tx, op, schema, undefined);
           break;
         case 'upsert':
-          await upsertImpl(tx, op, schema);
+          await upsertImpl(tx, op, schema, undefined);
           break;
         case 'update':
-          await updateImpl(tx, op, schema);
+          await updateImpl(tx, op, schema, undefined);
           break;
         case 'delete':
-          await deleteImpl(tx, op, schema);
+          await deleteImpl(tx, op, schema, undefined);
           break;
       }
     }
@@ -311,6 +318,7 @@ export async function insertImpl(
   tx: WriteTransaction,
   arg: InsertOp,
   schema: Schema,
+  ivmBranch: IVMSourceBranch | undefined,
 ): Promise<void> {
   const key = toPrimaryKeyString(
     arg.tableName,
@@ -323,6 +331,12 @@ export async function insertImpl(
       arg.value,
     );
     await tx.set(key, val);
+    if (ivmBranch) {
+      must(ivmBranch.getSource(arg.tableName)).push({
+        type: 'add',
+        row: arg.value,
+      });
+    }
   }
 }
 
@@ -330,6 +344,7 @@ export async function upsertImpl(
   tx: WriteTransaction,
   arg: InsertOp | UpsertOp,
   schema: Schema,
+  ivmBranch: IVMSourceBranch | undefined,
 ): Promise<void> {
   const key = toPrimaryKeyString(
     arg.tableName,
@@ -341,12 +356,19 @@ export async function upsertImpl(
     arg.value,
   );
   await tx.set(key, val);
+  if (ivmBranch) {
+    must(ivmBranch.getSource(arg.tableName)).push({
+      type: 'add',
+      row: arg.value,
+    });
+  }
 }
 
 export async function updateImpl(
   tx: WriteTransaction,
   arg: UpdateOp,
   schema: Schema,
+  ivmBranch: IVMSourceBranch | undefined,
 ): Promise<void> {
   const key = toPrimaryKeyString(
     arg.tableName,
@@ -365,17 +387,35 @@ export async function updateImpl(
     }
   }
   await tx.set(key, next);
+  if (ivmBranch) {
+    must(ivmBranch.getSource(arg.tableName)).push({
+      type: 'edit',
+      oldRow: prev as Row,
+      row: next,
+    });
+  }
 }
 
 export async function deleteImpl(
   tx: WriteTransaction,
   arg: DeleteOp,
   schema: Schema,
+  ivmBranch: IVMSourceBranch | undefined,
 ): Promise<void> {
   const key = toPrimaryKeyString(
     arg.tableName,
     schema.tables[arg.tableName].primaryKey,
     arg.value,
   );
+  const prev = await tx.get(key);
+  if (prev === undefined) {
+    return;
+  }
   await tx.del(key);
+  if (ivmBranch) {
+    must(ivmBranch.getSource(arg.tableName)).push({
+      type: 'remove',
+      row: prev as Row,
+    });
+  }
 }
