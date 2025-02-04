@@ -1,8 +1,17 @@
-import {expect, expectTypeOf, test} from 'vitest';
+import {beforeEach, describe, expect, expectTypeOf, test} from 'vitest';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
-import type {CustomMutatorDefs, MakeCustomMutatorInterfaces} from './custom.ts';
+import {
+  TransactionImpl,
+  type CustomMutatorDefs,
+  type MakeCustomMutatorInterfaces,
+  type Transaction,
+} from './custom.ts';
 import {zeroForTest} from './test-utils.ts';
 import {nanoid} from '../util/nanoid.ts';
+import {createDb} from './ivm-source-repo.test.ts';
+import {IVMSourceRepo} from './ivm-source-repo.ts';
+import type {WriteTransaction} from './replicache-types.ts';
+import {must} from '../../../shared/src/must.ts';
 type Schema = typeof schema;
 
 test('argument types are preserved on the generated mutator interface', () => {
@@ -161,4 +170,126 @@ test('custom mutators can query the local store during an optimistic mutation', 
 
   issues = z.query.issue.where('closed', false).run();
   expect(issues.length).toEqual(0);
+});
+
+describe('rebasing custom mutators', () => {
+  let repo: IVMSourceRepo;
+  beforeEach(async () => {
+    const {dagStore, syncHash} = await createDb([]);
+    repo = new IVMSourceRepo(schema.tables);
+    await repo.advanceSyncHead(dagStore, syncHash, []);
+  });
+
+  test('mutations write to the rebase branch', async () => {
+    const tx1 = new TransactionImpl(
+      {
+        reason: 'rebase',
+        has: () => false,
+        set: () => {},
+      } as unknown as WriteTransaction,
+      schema,
+      repo,
+    ) as unknown as Transaction<Schema>;
+
+    await tx1.mutate.issue.insert({
+      closed: false,
+      description: '',
+      id: '1',
+      ownerId: '',
+      title: 'foo',
+    });
+
+    expect([
+      ...must(repo.rebase.getSource('issue'))
+        .connect([['id', 'asc']])
+        .fetch({}),
+    ]).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "closed": false,
+            "description": "",
+            "id": "1",
+            "ownerId": "",
+            "title": "foo",
+          },
+        },
+      ]
+    `);
+  });
+
+  test('mutations can read their own writes', async () => {
+    const tx1 = new TransactionImpl(
+      {
+        reason: 'rebase',
+        has: () => false,
+        set: () => {},
+      } as unknown as WriteTransaction,
+      schema,
+      repo,
+    ) as unknown as Transaction<Schema>;
+
+    await tx1.mutate.issue.insert({
+      closed: false,
+      description: '',
+      id: '1',
+      ownerId: '',
+      title: 'foo',
+    });
+
+    expect(tx1.query.issue.run()).toMatchInlineSnapshot(`
+      [
+        {
+          "closed": false,
+          "description": "",
+          "id": "1",
+          "ownerId": "",
+          "title": "foo",
+        },
+      ]
+    `);
+  });
+
+  test('later mutations can read writes done by earlier mutations', async () => {
+    const tx1 = new TransactionImpl(
+      {
+        reason: 'rebase',
+        has: () => false,
+        set: () => {},
+      } as unknown as WriteTransaction,
+      schema,
+      repo,
+    ) as unknown as Transaction<Schema>;
+
+    await tx1.mutate.issue.insert({
+      closed: false,
+      description: '',
+      id: '1',
+      ownerId: '',
+      title: 'foo',
+    });
+
+    const tx2 = new TransactionImpl(
+      {
+        reason: 'rebase',
+        has: () => false,
+        set: () => {},
+      } as unknown as WriteTransaction,
+      schema,
+      repo,
+    ) as unknown as Transaction<Schema>;
+
+    expect(tx2.query.issue.run()).toMatchInlineSnapshot(`
+      [
+        {
+          "closed": false,
+          "description": "",
+          "id": "1",
+          "ownerId": "",
+          "title": "foo",
+        },
+      ]
+    `);
+  });
 });

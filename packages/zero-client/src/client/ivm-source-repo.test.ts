@@ -109,7 +109,7 @@ test('fork', () => {
 
 const lc = createSilentLogContext();
 let timestamp = 42;
-async function createDb(
+export async function createDb(
   puts: Array<[string, Issue | Comment | Label | IssueLabel | Revision]>,
 ) {
   const clientID = 'client-id';
