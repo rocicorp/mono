@@ -229,7 +229,6 @@ export async function setupTablesAndReplication(
 
 export function validatePublications(
   lc: LogContext,
-  shardID: string,
   published: PublicationInfo,
 ) {
   // Verify that all publications export the proper events.

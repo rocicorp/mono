@@ -339,8 +339,6 @@ describe('change-source/pg', () => {
     },
   ];
 
-  const SHARD_ID = 'publication_validation_test_id';
-
   for (const c of invalidUpstreamCases) {
     test(`Invalid publication: ${c.error}`, async () => {
       await initDB(
@@ -354,9 +352,7 @@ describe('change-source/pg', () => {
         'zero_data',
         ...(c.requestedPublications ?? []),
       ]);
-      expect(() => validatePublications(lc, SHARD_ID, published)).toThrowError(
-        c.error,
-      );
+      expect(() => validatePublications(lc, published)).toThrowError(c.error);
     });
   }
 });

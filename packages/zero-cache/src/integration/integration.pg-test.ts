@@ -695,7 +695,7 @@ describe('integration', {timeout: 30000}, () => {
               tableName: 'foo',
               value: {
                 b: true,
-                far_id: 'not_baz',
+                ['far_id']: 'not_baz',
                 id: 'bar',
                 j1: {
                   foo: 'bar',
