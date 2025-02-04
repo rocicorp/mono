@@ -28,13 +28,23 @@ export async function apply(
   for (const p of patch) {
     switch (p.op) {
       case 'put': {
+        const existing = await dbWrite.get(p.key);
         const frozen = deepFreeze(p.value);
         await dbWrite.put(lc, p.key, frozen);
-        ret.push({
-          op: 'add',
-          key: p.key,
-          newValue: frozen,
-        });
+        if (existing === undefined) {
+          ret.push({
+            op: 'add',
+            key: p.key,
+            newValue: frozen,
+          });
+        } else {
+          ret.push({
+            op: 'change',
+            key: p.key,
+            oldValue: existing,
+            newValue: frozen,
+          });
+        }
         break;
       }
       case 'update': {
