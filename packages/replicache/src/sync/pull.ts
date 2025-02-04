@@ -186,6 +186,7 @@ type HandlePullResponseResult =
   | {
       type: HandlePullResponseResultType.Applied;
       syncHead: Hash;
+      diffs: readonly patch.Diff[];
     }
   | {
       type:
@@ -293,11 +294,12 @@ export function handlePullResponseV1(
       formatVersion,
     );
 
-    await patch.apply(lc, dbWrite, response.patch);
+    const diffs = await patch.apply(lc, dbWrite, response.patch);
 
     return {
       type: HandlePullResponseResultType.Applied,
       syncHead: await dbWrite.commit(SYNC_HEAD_NAME),
+      diffs,
     };
   });
 }
