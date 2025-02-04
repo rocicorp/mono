@@ -3,11 +3,7 @@ import * as v from '../../shared/src/valita.ts';
 import type {NameMapper} from '../../zero-schema/src/name-mapper.ts';
 import {rowSchema} from './data.ts';
 import * as MutationType from './mutation-type-enum.ts';
-import {
-  primaryKeySchema,
-  primaryKeyValueRecordSchema,
-  type PrimaryKey,
-} from './primary-key.ts';
+import {primaryKeySchema, primaryKeyValueRecordSchema} from './primary-key.ts';
 
 export const CRUD_MUTATION_NAME = '_zero_crud';
 
@@ -123,10 +119,7 @@ export function mapCRUD(
           return {
             op,
             tableName: map.tableName(tableName),
-            primaryKey: map.columns(
-              tableName,
-              primaryKey as unknown as string[],
-            ) as PrimaryKey,
+            primaryKey: map.columns(tableName, primaryKey),
             value: map.row(tableName, value),
           } satisfies CRUDOp;
         }
@@ -134,10 +127,7 @@ export function mapCRUD(
           return {
             op,
             tableName: map.tableName(tableName),
-            primaryKey: map.columns(
-              tableName,
-              primaryKey as unknown as string[],
-            ) as PrimaryKey,
+            primaryKey: map.columns(tableName, primaryKey),
             value: map.row(tableName, value),
           } satisfies CRUDOp;
       }

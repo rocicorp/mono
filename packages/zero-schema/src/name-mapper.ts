@@ -103,16 +103,16 @@ export class NameMapper {
     return clientRow as R;
   }
 
-  columns(
+  columns<Columns extends readonly string[] | undefined>(
     table: string,
-    cols: readonly string[] | undefined,
-  ): readonly string[] | undefined {
+    cols: Columns,
+  ): Columns {
     const dest = this.#getTable(table);
     const {allColumnsSame, columns} = dest;
 
     // Note: Columns not defined in the schema simply pass through.
     return cols === undefined || allColumnsSame
       ? cols
-      : cols.map(col => columns[col] ?? col);
+      : (cols.map(col => columns[col] ?? col) as unknown as Columns);
   }
 }
