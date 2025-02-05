@@ -52,7 +52,7 @@ export function makeClientV6(partialClient: PartialClientV6): ClientV6 {
   };
 }
 
-export function makeClientMapDD31(
+export function makeClientMap(
   obj: Record<ClientID, PartialClientV5>,
 ): ClientMapDD31 {
   return new Map(

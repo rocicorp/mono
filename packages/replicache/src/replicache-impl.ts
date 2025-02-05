@@ -514,6 +514,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     void this.#open(
       indexes,
       enableClientGroupForking,
+      enableMutationRecovery,
       clientMaxAgeMs,
       profileIDResolver.resolve,
       clientGroupIDResolver.resolve,
@@ -525,6 +526,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   async #open(
     indexes: IndexDefinitions,
     enableClientGroupForking: boolean,
+    enableMutationRecovery: boolean,
     clientMaxAgeMs: number,
     profileIDResolver: (profileID: string) => void,
     resolveClientGroupID: (clientGroupID: ClientGroupID) => void,
@@ -587,6 +589,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       COLLECT_IDB_INTERVAL,
       INITIAL_COLLECT_IDB_DELAY,
       2 * clientMaxAgeMs,
+      enableMutationRecovery,
       onClientsDeleted,
       this.#lc,
       signal,

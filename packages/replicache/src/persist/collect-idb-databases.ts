@@ -37,6 +37,7 @@ export function initCollectIDBDatabases(
   collectInterval: number,
   initialCollectDelay: number,
   maxAge: number,
+  enableMutationRecovery: boolean,
   onClientsDeleted: OnClientsDeleted,
   lc: LogContext,
   signal: AbortSignal,
@@ -50,6 +51,7 @@ export function initCollectIDBDatabases(
         Date.now(),
         maxAge,
         kvDropStore,
+        enableMutationRecovery,
         onClientsDeleted,
       );
     },
@@ -73,6 +75,7 @@ export async function collectIDBDatabases(
   now: number,
   maxAge: number,
   kvDropStore: DropStore,
+  enableMutationRecovery: boolean,
   onClientsDeleted: OnClientsDeleted,
   newDagStore = defaultNewDagStore,
 ): Promise<void> {
@@ -84,7 +87,13 @@ export async function collectIDBDatabases(
       async db =>
         [
           db.name,
-          await gatherDatabaseInfoForCollect(db, now, maxAge, newDagStore),
+          await gatherDatabaseInfoForCollect(
+            db,
+            now,
+            maxAge,
+            enableMutationRecovery,
+            newDagStore,
+          ),
         ] as const,
     ),
   );
@@ -162,9 +171,10 @@ function gatherDatabaseInfoForCollect(
   db: IndexedDBDatabase,
   now: number,
   maxAge: number,
+  enableMutationRecovery: boolean,
   newDagStore: typeof defaultNewDagStore,
 ): MaybePromise<
-  [canCollect: false] | [canCollect: true, clientIDs: ClientID[]]
+  [canCollect: false] | [canCollect: true, deletedClientIDs: ClientID[]]
 > {
   if (db.replicacheFormatVersion > FormatVersion.Latest) {
     return [false];
@@ -185,7 +195,10 @@ function gatherDatabaseInfoForCollect(
       db.replicacheFormatVersion === FormatVersion.V6 ||
       db.replicacheFormatVersion === FormatVersion.V7,
   );
-  return gatherPendingMutationsInClientGroups(newDagStore(db.name));
+  return canDatabaseBeCollectedAndGetDeletedClientIDs(
+    enableMutationRecovery,
+    newDagStore(db.name),
+  );
 }
 
 /**
@@ -286,14 +299,21 @@ export function deleteAllReplicacheData(
  * `[false]`. Otherwise we return `true` and an array of the clientIDs to
  * remove.
  */
-function gatherPendingMutationsInClientGroups(
+function canDatabaseBeCollectedAndGetDeletedClientIDs(
+  enableMutationRecovery: boolean,
   perdag: Store,
-): Promise<[canCollect: false] | [canCollect: true, clientIDs: ClientID[]]> {
+): Promise<
+  [canCollect: false] | [canCollect: true, deletedClientIDs: ClientID[]]
+> {
   return withRead(perdag, async read => {
-    const clientGroups = await getClientGroups(read);
-    for (const clientGroup of clientGroups.values()) {
-      if (clientGroupHasPendingMutations(clientGroup)) {
-        return [false];
+    // If mutation recovery is disabled we do not care if there are pending
+    // mutations when we decide if we can collect the database.
+    if (enableMutationRecovery) {
+      const clientGroups = await getClientGroups(read);
+      for (const clientGroup of clientGroups.values()) {
+        if (clientGroupHasPendingMutations(clientGroup)) {
+          return [false];
+        }
       }
     }
 
