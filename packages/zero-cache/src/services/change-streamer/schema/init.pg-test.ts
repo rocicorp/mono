@@ -5,13 +5,15 @@ import type {PostgresDB} from '../../../types/pg.ts';
 import {getLastWatermarkV2} from './init.ts';
 import {ensureReplicationConfig, setupCDCTables} from './tables.ts';
 
+const SHARD_ID = 'bcd';
+
 describe('change-streamer/schema/migration', () => {
   const lc = createSilentLogContext();
   let db: PostgresDB;
 
   beforeEach(async () => {
     db = await testDBs.create('change_streamer_schema_migration');
-    await db.begin(tx => setupCDCTables(lc, tx));
+    await db.begin(tx => setupCDCTables(lc, tx, SHARD_ID));
   });
 
   afterEach(async () => {
@@ -23,19 +25,20 @@ describe('change-streamer/schema/migration', () => {
       lc,
       db,
       {replicaVersion: '123', publications: []},
+      SHARD_ID,
       true,
     );
 
-    expect(await getLastWatermarkV2(db)).toEqual('123');
+    expect(await getLastWatermarkV2(db, SHARD_ID)).toEqual('123');
 
     await db`
-    INSERT INTO cdc."changeLog" (watermark, pos, change)
+    INSERT INTO cdc_bcd."changeLog" (watermark, pos, change)
        VALUES ('136', 2, '{"tag":"commit"}'::json);
-    INSERT INTO cdc."changeLog" (watermark, pos, change)
+    INSERT INTO cdc_bcd."changeLog" (watermark, pos, change)
        VALUES ('145', 0, '{"tag":"begin"}'::json);
-    INSERT INTO cdc."changeLog" (watermark, pos, change)
+    INSERT INTO cdc_bcd."changeLog" (watermark, pos, change)
        VALUES ('145', 1, '{"tag":"commit"}'::json);`.simple();
 
-    expect(await getLastWatermarkV2(db)).toEqual('145');
+    expect(await getLastWatermarkV2(db, SHARD_ID)).toEqual('145');
   });
 });
