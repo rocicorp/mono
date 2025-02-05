@@ -14,10 +14,7 @@ import type {ClientID} from '../sync/ids.ts';
 import {withWrite} from '../with-transactions.ts';
 import {makeClientGroupMap} from './client-groups.test.ts';
 import {type ClientGroupMap, setClientGroups} from './client-groups.ts';
-import {
-  makeClientMapDD31,
-  setClientsForTesting,
-} from './clients-test-helpers.ts';
+import {makeClientMap, setClientsForTesting} from './clients-test-helpers.ts';
 import type {ClientMap, OnClientsDeleted} from './clients.ts';
 import {
   collectIDBDatabases,
@@ -63,13 +60,21 @@ describe('collectIDBDatabases', () => {
     lastOpenedTimestampMS,
   });
 
-  const t = (
-    name: string,
-    entries: Entries,
-    now: number,
-    expectedDatabases: string[],
-    expectedClientsDeleted?: ClientID[],
-  ) => {
+  const t = ({
+    name,
+    entries,
+    now,
+    expectedDatabases,
+    expectedClientsDeleted = [],
+    enableMutationRecovery = true,
+  }: {
+    name: string;
+    entries: Entries;
+    now: number;
+    expectedDatabases: string[];
+    expectedClientsDeleted?: ClientID[] | undefined;
+    enableMutationRecovery?: boolean | undefined;
+  }) => {
     test(name + ' > time ' + now, async () => {
       const store = new IDBDatabasesStore(_ => new TestMemStore());
       const dropStore = (name: string) => store.deleteDatabases([name]);
@@ -103,6 +108,7 @@ describe('collectIDBDatabases', () => {
         now,
         maxAge,
         dropStore,
+        enableMutationRecovery,
         onClientsDeleted,
         newDagStore,
       );
@@ -111,22 +117,24 @@ describe('collectIDBDatabases', () => {
         expectedDatabases,
       );
 
-      if (expectedClientsDeleted) {
+      if (expectedClientsDeleted.length > 0) {
         expect(onClientsDeleted).toHaveBeenCalledOnce();
         expect(onClientsDeleted).toHaveBeenLastCalledWith(
           expectedClientsDeleted,
         );
+      } else {
+        expect(onClientsDeleted).not.toHaveBeenCalledOnce();
       }
     });
   };
 
-  t('empty', [], 0, []);
+  t({name: 'empty', entries: [], now: 0, expectedDatabases: []});
 
   {
     const entries: Entries = [
       [
         makeIndexedDBDatabase({name: 'a', lastOpenedTimestampMS: 0}),
-        makeClientMapDD31({
+        makeClientMap({
           clientA1: {
             headHash: fakeHash('a1'),
             heartbeatTimestampMs: 0,
@@ -135,16 +143,28 @@ describe('collectIDBDatabases', () => {
       ],
     ];
 
-    t('one idb, one client', entries, 0, ['a']);
-    t('one idb, one client', entries, 1000, []);
-    t('one idb, one client', entries, 2000, []);
+    t({name: 'one idb, one client', entries, now: 0, expectedDatabases: ['a']});
+    t({
+      name: 'one idb, one client',
+      entries,
+      now: 1000,
+      expectedDatabases: [],
+      expectedClientsDeleted: ['clientA1'],
+    });
+    t({
+      name: 'one idb, one client',
+      entries,
+      now: 2000,
+      expectedDatabases: [],
+      expectedClientsDeleted: ['clientA1'],
+    });
   }
 
   {
     const entries: Entries = [
       [
         makeIndexedDBDatabase({name: 'a', lastOpenedTimestampMS: 0}),
-        makeClientMapDD31({
+        makeClientMap({
           clientA1: {
             headHash: fakeHash('a1'),
             heartbeatTimestampMs: 0,
@@ -153,7 +173,7 @@ describe('collectIDBDatabases', () => {
       ],
       [
         makeIndexedDBDatabase({name: 'b', lastOpenedTimestampMS: 1000}),
-        makeClientMapDD31({
+        makeClientMap({
           clientB1: {
             headHash: fakeHash('b1'),
             heartbeatTimestampMs: 1000,
@@ -161,16 +181,33 @@ describe('collectIDBDatabases', () => {
         }),
       ],
     ];
-    t('x', entries, 0, ['a', 'b']);
-    t('x', entries, 1000, ['b']);
-    t('x', entries, 2000, []);
+    t({
+      name: 'two idb, one client in each',
+      entries,
+      now: 0,
+      expectedDatabases: ['a', 'b'],
+    });
+    t({
+      name: 'two idb, one client in each',
+      entries,
+      now: 1000,
+      expectedDatabases: ['b'],
+      expectedClientsDeleted: ['clientA1'],
+    });
+    t({
+      name: 'two idb, one client in each',
+      entries,
+      now: 2000,
+      expectedDatabases: [],
+      expectedClientsDeleted: ['clientA1', 'clientB1'],
+    });
   }
 
   {
     const entries: Entries = [
       [
         makeIndexedDBDatabase({name: 'a', lastOpenedTimestampMS: 2000}),
-        makeClientMapDD31({
+        makeClientMap({
           clientA1: {
             headHash: fakeHash('a1'),
             heartbeatTimestampMs: 0,
@@ -183,7 +220,7 @@ describe('collectIDBDatabases', () => {
       ],
       [
         makeIndexedDBDatabase({name: 'b', lastOpenedTimestampMS: 1000}),
-        makeClientMapDD31({
+        makeClientMap({
           clientB1: {
             headHash: fakeHash('b1'),
             heartbeatTimestampMs: 1000,
@@ -191,17 +228,39 @@ describe('collectIDBDatabases', () => {
         }),
       ],
     ];
-    t('two idb, three clients', entries, 0, ['a', 'b']);
-    t('two idb, three clients', entries, 1000, ['a', 'b']);
-    t('two idb, three clients', entries, 2000, ['a']);
-    t('two idb, three clients', entries, 3000, []);
+    t({
+      name: 'two idb, three clients',
+      entries,
+      now: 0,
+      expectedDatabases: ['a', 'b'],
+    });
+    t({
+      name: 'two idb, three clients',
+      entries,
+      now: 1000,
+      expectedDatabases: ['a', 'b'],
+    });
+    t({
+      name: 'two idb, three clients',
+      entries,
+      now: 2000,
+      expectedDatabases: ['a'],
+      expectedClientsDeleted: ['clientB1'],
+    });
+    t({
+      name: 'two idb, three clients',
+      entries,
+      now: 3000,
+      expectedDatabases: [],
+      expectedClientsDeleted: ['clientA1', 'clientA2', 'clientB1'],
+    });
   }
 
   {
     const entries: Entries = [
       [
         makeIndexedDBDatabase({name: 'a', lastOpenedTimestampMS: 3000}),
-        makeClientMapDD31({
+        makeClientMap({
           clientA1: {
             headHash: fakeHash('a1'),
             heartbeatTimestampMs: 1000,
@@ -214,7 +273,7 @@ describe('collectIDBDatabases', () => {
       ],
       [
         makeIndexedDBDatabase({name: 'b', lastOpenedTimestampMS: 4000}),
-        makeClientMapDD31({
+        makeClientMap({
           clientB1: {
             headHash: fakeHash('b1'),
             heartbeatTimestampMs: 2000,
@@ -226,11 +285,38 @@ describe('collectIDBDatabases', () => {
         }),
       ],
     ];
-    t('two idb, four clients', entries, 1000, ['a', 'b']);
-    t('two idb, four clients', entries, 2000, ['a', 'b']);
-    t('two idb, four clients', entries, 3000, ['a', 'b']);
-    t('two idb, four clients', entries, 4000, ['b']);
-    t('two idb, four clients', entries, 5000, []);
+    t({
+      name: 'two idb, four clients',
+      entries,
+      now: 1000,
+      expectedDatabases: ['a', 'b'],
+    });
+    t({
+      name: 'two idb, four clients',
+      entries,
+      now: 2000,
+      expectedDatabases: ['a', 'b'],
+    });
+    t({
+      name: 'two idb, four clients',
+      entries,
+      now: 3000,
+      expectedDatabases: ['a', 'b'],
+    });
+    t({
+      name: 'two idb, four clients',
+      entries,
+      now: 4000,
+      expectedDatabases: ['b'],
+      expectedClientsDeleted: ['clientA1', 'clientA2'],
+    });
+    t({
+      name: 'two idb, four clients',
+      entries,
+      now: 5000,
+      expectedDatabases: [],
+      expectedClientsDeleted: ['clientA1', 'clientA2', 'clientB1', 'clientB2'],
+    });
   }
 
   {
@@ -241,7 +327,7 @@ describe('collectIDBDatabases', () => {
           lastOpenedTimestampMS: 0,
           replicacheFormatVersion: FormatVersion.Latest + 1,
         }),
-        makeClientMapDD31({
+        makeClientMap({
           clientA1: {
             headHash: fakeHash('a1'),
             heartbeatTimestampMs: 0,
@@ -249,9 +335,31 @@ describe('collectIDBDatabases', () => {
         }),
       ],
     ];
-    t('one idb, one client, format version too new', entries, 0, ['a']);
-    t('one idb, one client, format version too new', entries, 1000, ['a']);
-    t('one idb, one client, format version too new', entries, 2000, ['a']);
+    t({
+      name: 'one idb, one client, format version too new',
+      entries,
+      now: 0,
+      expectedDatabases: ['a'],
+    });
+    t({
+      name: 'one idb, one client, format version too new',
+      entries,
+      now: 1000,
+      expectedDatabases: ['a'],
+    });
+    t({
+      name: 'one idb, one client, format version too new',
+      entries,
+      now: 2000,
+      expectedDatabases: ['a'],
+    });
+    t({
+      name: 'one idb, one client, format version too new, enableMutationRecovery is false',
+      entries,
+      now: 2000,
+      expectedDatabases: ['a'],
+      enableMutationRecovery: false,
+    });
   }
 
   {
@@ -262,7 +370,7 @@ describe('collectIDBDatabases', () => {
           lastOpenedTimestampMS: 0,
           replicacheFormatVersion: FormatVersion.V6,
         }),
-        makeClientMapDD31({
+        makeClientMap({
           clientA1: {
             headHash: fakeHash('a1'),
             heartbeatTimestampMs: 0,
@@ -282,17 +390,45 @@ describe('collectIDBDatabases', () => {
         }),
       ],
     ];
-    t('one idb, one client, with pending mutations', entries, 0, ['a']);
-    t('one idb, one client, with pending mutations', entries, 1000, ['a']);
-    t('one idb, one client, with pending mutations', entries, 2000, ['a']);
-    t('one idb, one client, with pending mutations', entries, 5000, ['a']);
+    t({
+      name: 'one idb, one client, with pending mutations',
+      entries,
+      now: 0,
+      expectedDatabases: ['a'],
+    });
+    t({
+      name: 'one idb, one client, with pending mutations',
+      entries,
+      now: 1000,
+      expectedDatabases: ['a'],
+    });
+    t({
+      name: 'one idb, one client, with pending mutations',
+      entries,
+      now: 2000,
+      expectedDatabases: ['a'],
+    });
+    t({
+      name: 'one idb, one client, with pending mutations',
+      entries,
+      now: 5000,
+      expectedDatabases: ['a'],
+    });
+    t({
+      name: 'one idb, one client, with pending mutations, enableMutationRecovery is false',
+      entries,
+      now: 5000,
+      enableMutationRecovery: false,
+      expectedDatabases: [],
+      expectedClientsDeleted: ['clientA1'],
+    });
   }
 
   {
     const entries: Entries = [
       [
         makeIndexedDBDatabase({name: 'a', lastOpenedTimestampMS: 0}),
-        makeClientMapDD31({
+        makeClientMap({
           clientA1: {
             headHash: fakeHash('a1'),
             heartbeatTimestampMs: 0,
@@ -313,20 +449,20 @@ describe('collectIDBDatabases', () => {
       ],
     ];
 
-    t(
-      'one idb with one client without any pending mutations should call onClientIDsDeleted',
+    t({
+      name: 'one idb with one client without any pending mutations should call onClientIDsDeleted',
       entries,
-      5000,
-      [],
-      ['clientA1'],
-    );
+      now: 5000,
+      expectedDatabases: [],
+      expectedClientsDeleted: ['clientA1'],
+    });
   }
 
   {
     const entries: Entries = [
       [
         makeIndexedDBDatabase({name: 'a', lastOpenedTimestampMS: 0}),
-        makeClientMapDD31({
+        makeClientMap({
           clientA1: {
             headHash: fakeHash('a1'),
             heartbeatTimestampMs: 0,
@@ -354,20 +490,20 @@ describe('collectIDBDatabases', () => {
       ],
     ];
 
-    t(
-      'one idb with two clients without any pending mutations should call onClientIDsDeleted',
+    t({
+      name: 'one idb with two clients without any pending mutations should call onClientIDsDeleted',
       entries,
-      5000,
-      [],
-      ['clientA1', 'clientA2'],
-    );
+      now: 5000,
+      expectedDatabases: [],
+      expectedClientsDeleted: ['clientA1', 'clientA2'],
+    });
   }
 
   {
     const entries: Entries = [
       [
         makeIndexedDBDatabase({name: 'a', lastOpenedTimestampMS: 0}),
-        makeClientMapDD31({
+        makeClientMap({
           clientA1: {
             headHash: fakeHash('a1'),
             heartbeatTimestampMs: 0,
@@ -388,7 +524,7 @@ describe('collectIDBDatabases', () => {
       ],
       [
         makeIndexedDBDatabase({name: 'b', lastOpenedTimestampMS: 0}),
-        makeClientMapDD31({
+        makeClientMap({
           clientB1: {
             headHash: fakeHash('b1'),
             heartbeatTimestampMs: 0,
@@ -409,20 +545,20 @@ describe('collectIDBDatabases', () => {
       ],
     ];
 
-    t(
-      'two idb with one client in each without any pending mutations should call onClientIDsDeleted',
+    t({
+      name: 'two idb with one client in each without any pending mutations should call onClientIDsDeleted',
       entries,
-      5000,
-      [],
-      ['clientA1', 'clientB1'],
-    );
+      now: 5000,
+      expectedDatabases: [],
+      expectedClientsDeleted: ['clientA1', 'clientB1'],
+    });
   }
 
   {
     const entries: Entries = [
       [
         makeIndexedDBDatabase({name: 'a', lastOpenedTimestampMS: 0}),
-        makeClientMapDD31({
+        makeClientMap({
           clientA1: {
             headHash: fakeHash('a1'),
             heartbeatTimestampMs: 0,
@@ -443,7 +579,7 @@ describe('collectIDBDatabases', () => {
       ],
       [
         makeIndexedDBDatabase({name: 'b', lastOpenedTimestampMS: 0}),
-        makeClientMapDD31({
+        makeClientMap({
           clientB1: {
             headHash: fakeHash('b1'),
             heartbeatTimestampMs: 0,
@@ -464,13 +600,22 @@ describe('collectIDBDatabases', () => {
       ],
     ];
 
-    t(
-      'two idb with one client in each, one client has pending mutations should call onClientIDsDeleted',
+    t({
+      name: 'two idb with one client in each, one client has pending mutations should call onClientIDsDeleted',
       entries,
-      5000,
-      ['a'],
-      ['clientB1'],
-    );
+      now: 5000,
+      expectedDatabases: ['a'],
+      expectedClientsDeleted: ['clientB1'],
+    });
+
+    t({
+      name: 'two idb with one client in each, one client has pending mutations but enableMutationRecovery is false should call onClientIDsDeleted',
+      entries,
+      now: 5000,
+      expectedDatabases: [],
+      expectedClientsDeleted: ['clientA1', 'clientB1'],
+      enableMutationRecovery: false,
+    });
   }
 });
 
