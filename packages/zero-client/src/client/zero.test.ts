@@ -2771,6 +2771,102 @@ test('mutate is a function for batching', async () => {
   ).toBeUndefined();
 });
 
+test('custom mutations get pushed', async () => {
+  const schema = createSchema(1, {
+    tables: [
+      table('issues').columns({id: string(), value: number()}).primaryKey('id'),
+    ],
+  });
+  const z = zeroForTest({
+    schema,
+    mutators: {
+      issues: {
+        foo: (tx, {foo}: {foo: number}) =>
+          tx.mutate.issues.insert({id: foo.toString(), value: foo}),
+      },
+    },
+  });
+  await z.triggerConnected();
+  const mockSocket = await z.socket;
+  mockSocket.messages.length = 0;
+
+  await Promise.all([
+    z.mutate.issues.foo({foo: 42}),
+    z.mutate.issues.foo({foo: 43}),
+  ]);
+  await z.mutate.issues.foo({foo: 44});
+  await tickAFewTimes(clock, RUN_LOOP_INTERVAL_MS);
+
+  expect(
+    mockSocket.messages.map(x => {
+      const ret = JSON.parse(x);
+      if ('requestID' in ret[1]) {
+        delete ret[1].requestID;
+      }
+      return ret;
+    }),
+  ).toEqual([
+    [
+      'push',
+      {
+        timestamp: 1678829450000,
+        clientGroupID: await z.clientGroupID,
+        mutations: [
+          {
+            type: 'custom',
+            timestamp: 1678829450000,
+            id: 1,
+            clientID: z.clientID,
+            name: 'issues.foo',
+            args: [{foo: 42}],
+          },
+        ],
+        pushVersion: 1,
+        schemaVersion: 1,
+      },
+    ],
+    [
+      'push',
+      {
+        timestamp: 1678829450000,
+        clientGroupID: await z.clientGroupID,
+        mutations: [
+          {
+            type: 'custom',
+            timestamp: 1678829450000,
+            id: 2,
+            clientID: z.clientID,
+            name: 'issues.foo',
+            args: [{foo: 43}],
+          },
+        ],
+        pushVersion: 1,
+        schemaVersion: 1,
+      },
+    ],
+    [
+      'push',
+      {
+        timestamp: 1678829450000,
+        clientGroupID: await z.clientGroupID,
+        mutations: [
+          {
+            type: 'custom',
+            timestamp: 1678829450000,
+            id: 3,
+            clientID: z.clientID,
+            name: 'issues.foo',
+            args: [{foo: 44}],
+          },
+        ],
+        pushVersion: 1,
+        schemaVersion: 1,
+      },
+    ],
+    ['ping', {}],
+  ]);
+});
+
 test('calling mutate on the non batch version should throw inside a batch', async () => {
   const z = zeroForTest({
     schema: createSchema(1, {
