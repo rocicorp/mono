@@ -15,12 +15,14 @@ import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
+import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {
   ChangeDesiredQueriesBody,
   ChangeDesiredQueriesMessage,
 } from '../../../../zero-protocol/src/change-desired-queries.ts';
 import type {InitConnectionMessage} from '../../../../zero-protocol/src/connect.ts';
+import type {DeleteClientsMessage} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.ts';
@@ -86,6 +88,8 @@ export interface ViewSyncer {
     ctx: SyncContext,
     msg: ChangeDesiredQueriesMessage,
   ): Promise<void>;
+
+  deleteClients(ctx: SyncContext, msg: DeleteClientsMessage): Promise<void>;
 }
 
 const DEFAULT_KEEPALIVE_MS = 5_000;
@@ -384,6 +388,27 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     msg: ChangeDesiredQueriesMessage,
   ): Promise<void> {
     await this.#runInLockForClient(ctx, msg, this.#patchQueries);
+  }
+
+  async deleteClients(
+    ctx: SyncContext,
+    msg: DeleteClientsMessage,
+  ): Promise<void> {
+    try {
+      return await this.#runInLockForClient(
+        ctx,
+        msg,
+        (lc, _clientID, _body, _cvr) => {
+          lc.info?.('TODO: deleting clients');
+          // TODO: Implement deletion of clients
+          // Find all clients from the msg and delete them. Send back the IDs of the
+          // deleted clients to the client.
+          return promiseVoid;
+        },
+      );
+    } catch (e) {
+      return this.#lc.error?.('deleteClients failed', e);
+    }
   }
 
   /**

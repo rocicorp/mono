@@ -58,6 +58,7 @@ import type {
 } from '../../../zero-protocol/src/push.ts';
 import {CRUD_MUTATION_NAME, mapCRUD} from '../../../zero-protocol/src/push.ts';
 import type {QueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
+import type {Upstream} from '../../../zero-protocol/src/up.ts';
 import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
 import {nullableVersionSchema} from '../../../zero-protocol/src/version.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
@@ -84,6 +85,7 @@ import {
   type MakeCustomMutatorInterfaces,
   makeReplicacheMutator,
 } from './custom.ts';
+import {DeleteClientsManager} from './delete-clients-manager.ts';
 import {shouldEnableAnalytics} from './enable-analytics.ts';
 import {
   type HTTPString,
@@ -272,6 +274,7 @@ export class Zero<
   readonly #queryManager: QueryManager;
   readonly #ivmSources: IVMSourceRepo;
   readonly #clientToServer: NameMapper;
+  readonly #deleteClientsManager: DeleteClientsManager;
 
   /**
    * The queries we sent when inside the sec-protocol header when establishing a connection.
@@ -452,6 +455,8 @@ export class Zero<
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
       enableMutationRecovery: false,
+      onClientsDeleted: clientIDs =>
+        this.#deleteClientsManager.onClientsDeleted(clientIDs),
     };
 
     const rep = new ReplicacheImpl(replicacheOptions, replicacheImplOptions);
@@ -524,6 +529,13 @@ export class Zero<
     );
     this.#clientToServer = clientToServer(schema.tables);
 
+    this.#deleteClientsManager = new DeleteClientsManager(
+      () => this.#connectResolver.promise,
+      msg => this.#send(msg),
+      rep.memdag,
+      this.#lc,
+    );
+
     this.#zeroContext = new ZeroContext(
       this.#ivmSources.main,
       (ast, gotCallback) => this.#queryManager.add(ast, gotCallback),
@@ -585,6 +597,10 @@ export class Zero<
   }
 
   #sendChangeDesiredQueries(msg: ChangeDesiredQueriesMessage): void {
+    this.#send(msg);
+  }
+
+  #send(msg: Upstream): void {
     if (this.#socket && this.#connectionState === ConnectionState.Connected) {
       send(this.#socket, msg);
     }
@@ -763,6 +779,11 @@ export class Zero<
         // we ignore warming messages
         break;
 
+      case 'deleteClients':
+        return this.#deleteClientsManager.clientsDeletedOnServer(
+          downMessage[1].clientIDs,
+        );
+
       default:
         msgType satisfies never;
         rejectInvalidMessage();
@@ -840,7 +861,7 @@ export class Zero<
   async #handleConnectedMessage(
     lc: LogContext,
     connectedMessage: ConnectedMessage,
-  ) {
+  ): Promise<void> {
     const now = Date.now();
     const [, connectBody] = connectedMessage;
     lc = addWebSocketIDToLogContext(connectBody.wsid, lc);
@@ -856,8 +877,8 @@ export class Zero<
     const proceedingConnectErrorCount = this.#connectErrorCount;
     this.#connectErrorCount = 0;
 
-    let timeToConnectMs = undefined;
-    let connectMsgLatencyMs = undefined;
+    let timeToConnectMs: number | undefined;
+    let connectMsgLatencyMs: number | undefined;
     if (this.#connectStart === undefined) {
       lc.error?.(
         'Got connected message but connect start time is undefined. This should not happen.',
@@ -871,7 +892,7 @@ export class Zero<
           : undefined;
       this.#connectStart = undefined;
     }
-    let totalTimeToConnectMs = undefined;
+    let totalTimeToConnectMs: number | undefined;
     if (this.#totalToConnectStart === undefined) {
       lc.error?.(
         'Got connected message but total to connect start time is undefined. This should not happen.',
@@ -1098,6 +1119,7 @@ export class Zero<
     this.#socket = undefined;
     this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
     this.#pokeHandler.handleDisconnect();
+    this.#deleteClientsManager.handleDisconnect();
   }
 
   #handlePokeStart(_lc: LogContext, pokeMessage: PokeStartMessage): void {

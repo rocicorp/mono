@@ -207,16 +207,15 @@ export class Connection {
           lc.error?.('TODO: implement pull');
           break;
         case 'changeDesiredQueries':
-          await startAsyncSpan(
-            tracer,
-            'connection.changeDesiredQueries',
-            async () => {
-              await viewSyncer.changeDesiredQueries(this.#syncContext, msg);
-            },
+          await startAsyncSpan(tracer, 'connection.changeDesiredQueries', () =>
+            viewSyncer.changeDesiredQueries(this.#syncContext, msg),
           );
           break;
         case 'deleteClients':
-          lc.error?.('TODO: implement deleteClients');
+          await startAsyncSpan(tracer, 'connection.deleteClients', () =>
+            viewSyncer.deleteClients(this.#syncContext, msg),
+          );
+          break;
           break;
         case 'initConnection': {
           // TODO (mlaw): tell mutagens about the new token too

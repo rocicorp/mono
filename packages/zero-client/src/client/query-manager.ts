@@ -42,7 +42,7 @@ export class QueryManager {
     clientID: ClientID,
     tables: Record<string, TableSchema>,
     send: (change: ChangeDesiredQueriesMessage) => void,
-    experimentalWatch: InstanceType<typeof ReplicacheImpl>['experimentalWatch'],
+    experimentalWatch: ReplicacheImpl['experimentalWatch'],
     recentQueriesMaxSize: number,
   ) {
     this.#clientID = clientID;

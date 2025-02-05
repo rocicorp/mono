@@ -8,7 +8,6 @@ import type {ClientID} from '../sync/ids.ts';
 import {withWrite} from '../with-transactions.ts';
 import {
   type ClientMap,
-  type ClientMapDD31,
   type ClientV5,
   type ClientV6,
   getClients,
@@ -54,7 +53,7 @@ export function makeClientV6(partialClient: PartialClientV6): ClientV6 {
 
 export function makeClientMap(
   obj: Record<ClientID, PartialClientV5>,
-): ClientMapDD31 {
+): ClientMap {
   return new Map(
     Object.entries(obj).map(
       ([id, client]) => [id, makeClientV5(client)] as const,
