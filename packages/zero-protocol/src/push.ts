@@ -112,25 +112,14 @@ export function mapCRUD(
   map: NameMapper,
 ): CRUDMutationArg {
   return {
-    ops: arg.ops.map(({op, tableName, primaryKey, value}) => {
-      switch (op) {
-        case 'delete': {
-          // 'delete' is separated to appease ts since its `value` is of a different type.
-          return {
-            op,
-            tableName: map.tableName(tableName),
-            primaryKey: map.columns(tableName, primaryKey),
-            value: map.row(tableName, value),
-          } satisfies CRUDOp;
-        }
-        default:
-          return {
-            op,
-            tableName: map.tableName(tableName),
-            primaryKey: map.columns(tableName, primaryKey),
-            value: map.row(tableName, value),
-          } satisfies CRUDOp;
-      }
-    }),
+    ops: arg.ops.map(
+      ({op, tableName, primaryKey, value}) =>
+        ({
+          op,
+          tableName: map.tableName(tableName),
+          primaryKey: map.columns(tableName, primaryKey),
+          value: map.row(tableName, value),
+        }) as unknown as CRUDOp,
+    ),
   };
 }
