@@ -1,5 +1,5 @@
 import type {JSONValue} from '../../shared/src/json.ts';
-import type {Row, Value} from '../../zero-protocol/src/data.ts';
+import type {Value} from '../../zero-protocol/src/data.ts';
 import type {TableSchema} from './table-schema.ts';
 
 type ColumnNames = {[src: string]: string};
@@ -89,18 +89,21 @@ export class NameMapper {
     return dst;
   }
 
-  row<R extends Row>(table: string, row: R): R {
+  row<V extends Value>(
+    table: string,
+    row: Readonly<Record<string, V>>,
+  ): Readonly<Record<string, V>> {
     const dest = this.#getTable(table);
     const {allColumnsSame, columns} = dest;
     if (allColumnsSame) {
       return row;
     }
-    const clientRow: Record<string, Value> = {};
+    const clientRow: Record<string, V> = {};
     for (const col in row) {
       // Note: columns with unknown names simply pass through.
       clientRow[columns[col] ?? col] = row[col];
     }
-    return clientRow as R;
+    return clientRow;
   }
 
   columns<Columns extends readonly string[] | undefined>(
