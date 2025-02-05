@@ -1,7 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
 import {assert} from '../../../shared/src/asserts.ts';
-import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {PostgresDB, PostgresTransaction} from '../types/pg.ts';
 
@@ -64,10 +63,7 @@ export async function runSchemaMigrations(
   setupMigration: Migration,
   incrementalMigrationMap: IncrementalMigrationMap,
 ): Promise<void> {
-  log = log.withContext(
-    'initSchema',
-    randInt(0, Number.MAX_SAFE_INTEGER).toString(36),
-  );
+  log = log.withContext('initSchema', schemaName);
   try {
     const versionMigrations = sorted(incrementalMigrationMap);
     assert(
