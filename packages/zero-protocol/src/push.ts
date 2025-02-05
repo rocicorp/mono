@@ -119,6 +119,8 @@ export function mapCRUD(
           tableName: map.tableName(tableName),
           primaryKey: map.columns(tableName, primaryKey),
           value: map.row(tableName, value),
+          // The cast is necessary because ts objects to the `value` field
+          // for "delete" ops being different.
         }) as unknown as CRUDOp,
     ),
   };
