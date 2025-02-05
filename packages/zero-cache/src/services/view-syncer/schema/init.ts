@@ -15,7 +15,7 @@ async function migrateFromLegacySchema(
 ) {
   const result = await db`SELECT * FROM pg_namespace WHERE nspname = 'cvr'`;
   if (result.length > 0) {
-    lc.info?.(`Migrated cvr to ${newSchema}`);
+    lc.info?.(`Migrating cvr to ${newSchema}`);
     await db`ALTER SCHEMA cvr RENAME TO ${db(newSchema)}`;
   }
 }
