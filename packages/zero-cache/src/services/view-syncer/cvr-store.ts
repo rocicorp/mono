@@ -1106,14 +1106,18 @@ export class ConcurrentModificationException extends ErrorWithLevel {
   }
 }
 
-export class OwnershipError extends ErrorWithLevel {
+export class OwnershipError extends ErrorForClient {
   readonly name = 'OwnershipError';
 
   constructor(owner: string | null, grantedAt: number | null) {
     super(
-      `CVR ownership was transferred to ${owner} at ${new Date(
-        grantedAt ?? 0,
-      ).toISOString()}`,
+      {
+        kind: ErrorKind.Rehome,
+        message:
+          `CVR ownership was transferred to ${owner} at ` +
+          `${new Date(grantedAt ?? 0).toISOString()}`,
+        maxBackoffMs: 0,
+      },
       'info',
     );
   }
