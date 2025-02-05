@@ -26,6 +26,7 @@ import type {Patch, PatchToVersion} from './client-handler.ts';
 import type {CVR, CVRSnapshot} from './cvr.ts';
 import {
   type ClientsRow,
+  cvrSchema,
   type DesiresRow,
   type InstancesRow,
   type QueriesRow,
@@ -121,6 +122,7 @@ class RowRecordCache {
   #cache: Promise<CustomKeyMap<RowID, RowRecord>> | undefined;
   readonly #lc: LogContext;
   readonly #db: PostgresDB;
+  readonly #schema: string;
   readonly #cvrID: string;
   readonly #failService: (e: unknown) => void;
   readonly #deferredRowFlushThreshold: number;
@@ -135,6 +137,7 @@ class RowRecordCache {
   constructor(
     lc: LogContext,
     db: PostgresDB,
+    shardID: string,
     cvrID: string,
     failService: (e: unknown) => void,
     deferredRowFlushThreshold = 100,
@@ -142,10 +145,15 @@ class RowRecordCache {
   ) {
     this.#lc = lc;
     this.#db = db;
+    this.#schema = cvrSchema(shardID);
     this.#cvrID = cvrID;
     this.#failService = failService;
     this.#deferredRowFlushThreshold = deferredRowFlushThreshold;
     this.#setTimeout = setTimeoutFn;
+  }
+
+  #cvr(table: string) {
+    return this.#db(`${this.#schema}.${table}`);
   }
 
   async #ensureLoaded(): Promise<CustomKeyMap<RowID, RowRecord>> {
@@ -158,11 +166,9 @@ class RowRecordCache {
     this.#cache = r.promise;
 
     const cache: CustomKeyMap<RowID, RowRecord> = new CustomKeyMap(rowIDString);
-    for await (const rows of this.#db<
-      RowsRow[]
-    >`SELECT * FROM cvr.rows WHERE "clientGroupID" = ${
-      this.#cvrID
-    } AND "refCounts" IS NOT NULL`
+    for await (const rows of this.#db<RowsRow[]>`
+      SELECT * FROM ${this.#cvr(`rows`)} 
+        WHERE "clientGroupID" = ${this.#cvrID} AND "refCounts" IS NOT NULL`
       // TODO(arv): Arbitrary page size
       .cursor(5000)) {
       for (const row of rows) {
@@ -302,18 +308,18 @@ class RowRecordCache {
     try {
       // Verify that we are reading the right version of the CVR.
       await reader.processReadTask(tx =>
-        checkVersion(tx, this.#cvrID, current),
+        checkVersion(tx, this.#schema, this.#cvrID, current),
       );
 
       const {query} = await reader.processReadTask(tx => {
         const query =
           excludeQueryHashes.length === 0
-            ? tx<RowsRow[]>`SELECT * FROM cvr.rows
+            ? tx<RowsRow[]>`SELECT * FROM ${this.#cvr('rows')}
         WHERE "clientGroupID" = ${this.#cvrID}
           AND "patchVersion" > ${start}
           AND "patchVersion" <= ${end}`
             : // Exclude rows that were already sent as part of query hydration.
-              tx<RowsRow[]>`SELECT * FROM cvr.rows
+              tx<RowsRow[]>`SELECT * FROM ${this.#cvr('rows')}
         WHERE "clientGroupID" = ${this.#cvrID}
           AND "patchVersion" > ${start}
           AND "patchVersion" <= ${end}
@@ -352,7 +358,7 @@ class RowRecordCache {
       version: versionString(version),
     };
     const pending: PendingQuery<Row[]>[] = [
-      tx`INSERT INTO cvr."rowsVersion" ${tx(rowsVersion)}
+      tx`INSERT INTO ${this.#cvr('rowsVersion')} ${tx(rowsVersion)}
            ON CONFLICT ("clientGroupID") 
            DO UPDATE SET ${tx(rowsVersion)}`.execute(),
     ];
@@ -362,7 +368,7 @@ class RowRecordCache {
       if (row === null) {
         pending.push(
           tx`
-          DELETE FROM cvr.rows
+          DELETE FROM ${this.#cvr('rows')}
             WHERE "clientGroupID" = ${this.#cvrID}
               AND "schema" = ${id.schema}
               AND "table" = ${id.table}
@@ -376,7 +382,7 @@ class RowRecordCache {
     if (rowRecordRows.length) {
       pending.push(
         tx`
-  INSERT INTO cvr.rows(
+  INSERT INTO ${this.#cvr('rows')}(
       "clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts"
   ) SELECT
       "clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts"
@@ -447,6 +453,7 @@ const LOAD_ATTEMPT_INTERVAL_MS = 500;
 const MAX_LOAD_ATTEMPTS = 10;
 
 export class CVRStore {
+  readonly #schema: string;
   readonly #taskID: string;
   readonly #id: string;
   readonly #db: PostgresDB;
@@ -468,6 +475,7 @@ export class CVRStore {
   constructor(
     lc: LogContext,
     db: PostgresDB,
+    shardID: string,
     taskID: string,
     cvrID: string,
     failService: (e: unknown) => void,
@@ -477,11 +485,13 @@ export class CVRStore {
     setTimeoutFn = setTimeout,
   ) {
     this.#db = db;
+    this.#schema = cvrSchema(shardID);
     this.#taskID = taskID;
     this.#id = cvrID;
     this.#rowCache = new RowRecordCache(
       lc,
       db,
+      shardID,
       cvrID,
       failService,
       deferredRowFlushThreshold,
@@ -489,6 +499,10 @@ export class CVRStore {
     );
     this.#loadAttemptIntervalMs = loadAttemptIntervalMs;
     this.#maxLoadAttempts = maxLoadAttempts;
+  }
+
+  #cvr(table: string) {
+    return this.#db(`${this.#schema}.${table}`);
   }
 
   load(lc: LogContext, lastConnectTime: number): Promise<CVR> {
@@ -540,19 +554,18 @@ export class CVRStore {
                  "owner", 
                  "grantedAt", 
                  rows."version" as "rowsVersion"
-            FROM cvr.instances AS cvr
-            LEFT JOIN cvr."rowsVersion" AS rows 
+            FROM ${this.#cvr('instances')} AS cvr
+            LEFT JOIN ${this.#cvr('rowsVersion')} AS rows 
             ON cvr."clientGroupID" = rows."clientGroupID"
             WHERE cvr."clientGroupID" = ${id}`,
-        tx<
-          Pick<ClientsRow, 'clientID' | 'patchVersion'>[]
-        >`SELECT "clientID", "patchVersion" FROM cvr.clients WHERE "clientGroupID" = ${id}`,
-        tx<
-          QueryRow[]
-        >`SELECT * FROM cvr.queries WHERE "clientGroupID" = ${id} AND (deleted IS NULL OR deleted = FALSE)`,
-        tx<
-          DesiresRow[]
-        >`SELECT * FROM cvr.desires WHERE "clientGroupID" = ${id} AND (deleted IS NULL OR deleted = FALSE)`,
+        tx<Pick<ClientsRow, 'clientID' | 'patchVersion'>[]>`
+        SELECT "clientID", "patchVersion" FROM ${this.#cvr('clients')}
+           WHERE "clientGroupID" = ${id}`,
+        tx<QueryRow[]>`
+        SELECT * FROM ${this.#cvr('queries')} 
+          WHERE "clientGroupID" = ${id} AND (deleted IS NULL OR deleted = FALSE)`,
+        tx<DesiresRow[]>`SELECT * FROM ${this.#cvr('desires')}
+          WHERE "clientGroupID" = ${id} AND (deleted IS NULL OR deleted = FALSE)`,
       ]);
 
     if (instance.length === 0) {
@@ -581,8 +594,9 @@ export class CVRStore {
           // Note that the query is structured such that it only succeeds in the
           // correct conditions (i.e. gated on `grantedAt`).
           void this.#db`
-            UPDATE cvr.instances SET "owner"     = ${this.#taskID}, 
-                                     "grantedAt" = ${lastConnectTime}
+            UPDATE ${this.#cvr('instances')} 
+              SET "owner"     = ${this.#taskID}, 
+                  "grantedAt" = ${lastConnectTime}
               WHERE "clientGroupID" = ${this.#id} AND
                     ("grantedAt" IS NULL OR
                      "grantedAt" <= to_timestamp(${lastConnectTime / 1000}))
@@ -686,7 +700,7 @@ export class CVRStore {
           grantedAt: lastConnectTime,
         };
         return tx`
-        INSERT INTO cvr.instances ${tx(change)} 
+        INSERT INTO ${this.#cvr('instances')} ${tx(change)} 
           ON CONFLICT ("clientGroupID") DO UPDATE SET ${tx(change)}`;
       },
     });
@@ -695,7 +709,7 @@ export class CVRStore {
   markQueryAsDeleted(version: CVRVersion, queryPatch: QueryPatch): void {
     this.#writes.add({
       stats: {queries: 1},
-      write: tx => tx`UPDATE cvr.queries SET ${tx({
+      write: tx => tx`UPDATE ${this.#cvr('queries')} SET ${tx({
         patchVersion: versionString(version),
         deleted: true,
         transformationHash: null,
@@ -736,7 +750,7 @@ export class CVRStore {
         };
     this.#writes.add({
       stats: {queries: 1},
-      write: tx => tx`INSERT INTO cvr.queries ${tx(change)}
+      write: tx => tx`INSERT INTO ${this.#cvr('queries')} ${tx(change)}
       ON CONFLICT ("clientGroupID", "queryHash")
       DO UPDATE SET ${tx(change)}`,
     });
@@ -763,7 +777,7 @@ export class CVRStore {
 
     this.#writes.add({
       stats: {queries: 1},
-      write: tx => tx`UPDATE cvr.queries SET ${tx(change)}
+      write: tx => tx`UPDATE ${this.#cvr('queries')} SET ${tx(change)}
       WHERE "clientGroupID" = ${this.#id} AND "queryHash" = ${query.id}`,
     });
   }
@@ -771,7 +785,7 @@ export class CVRStore {
   updateClientPatchVersion(clientID: string, patchVersion: CVRVersion): void {
     this.#writes.add({
       stats: {clients: 1},
-      write: tx => tx`UPDATE cvr.clients
+      write: tx => tx`UPDATE ${this.#cvr('clients')}
       SET "patchVersion" = ${versionString(patchVersion)}
       WHERE "clientGroupID" = ${this.#id} AND "clientID" = ${clientID}`,
     });
@@ -788,7 +802,7 @@ export class CVRStore {
 
     this.#writes.add({
       stats: {clients: 1},
-      write: tx => tx`INSERT INTO cvr.clients ${tx(change)}`,
+      write: tx => tx`INSERT INTO ${this.#cvr('clients')} ${tx(change)}`,
     });
   }
 
@@ -808,7 +822,7 @@ export class CVRStore {
     this.#writes.add({
       stats: {desires: 1},
       write: tx => tx`
-      INSERT INTO cvr.desires ${tx(change)}
+      INSERT INTO ${this.#cvr('desires')} ${tx(change)}
         ON CONFLICT ("clientGroupID", "clientID", "queryHash")
         DO UPDATE SET ${tx(change)}
       `,
@@ -849,23 +863,26 @@ export class CVRStore {
     const reader = new TransactionPool(lc, Mode.READONLY).run(this.#db);
     try {
       // Verify that we are reading the right version of the CVR.
-      await reader.processReadTask(tx => checkVersion(tx, this.#id, current));
+      await reader.processReadTask(tx =>
+        checkVersion(tx, this.#schema, this.#id, current),
+      );
 
       const [allDesires, clientRows, queryRows] = await reader.processReadTask(
         tx =>
           Promise.all([
-            tx<DesiresRow[]>`SELECT * FROM cvr.desires
-       WHERE "clientGroupID" = ${this.#id}
+            tx<DesiresRow[]>`
+      SELECT * FROM ${this.#cvr('desires')}
+        WHERE "clientGroupID" = ${this.#id}
         AND "patchVersion" > ${start}
         AND "patchVersion" <= ${end}`,
-            tx<ClientsRow[]>`SELECT * FROM cvr.clients
-       WHERE "clientGroupID" = ${this.#id}
+            tx<ClientsRow[]>`
+      SELECT * FROM ${this.#cvr('clients')}
+        WHERE "clientGroupID" = ${this.#id}
         AND "patchVersion" > ${start}
         AND "patchVersion" <= ${end}`,
-            tx<
-              Pick<QueriesRow, 'deleted' | 'queryHash' | 'patchVersion'>[]
-            >`SELECT deleted, "queryHash", "patchVersion" FROM cvr.queries
-      WHERE "clientGroupID" = ${this.#id}
+            tx<Pick<QueriesRow, 'deleted' | 'queryHash' | 'patchVersion'>[]>`
+      SELECT deleted, "queryHash", "patchVersion" FROM ${this.#cvr('queries')}
+        WHERE "clientGroupID" = ${this.#id}
         AND "patchVersion" > ${start}
         AND "patchVersion" <= ${end}`,
           ]),
@@ -916,7 +933,7 @@ export class CVRStore {
     const expected = versionString(expectedCurrentVersion);
     const result = await tx<
       Pick<InstancesRow, 'version' | 'owner' | 'grantedAt'>[]
-    >`SELECT "version", "owner", "grantedAt" FROM cvr.instances 
+    >`SELECT "version", "owner", "grantedAt" FROM ${this.#cvr('instances')}
         WHERE "clientGroupID" = ${this.#id}
         FOR UPDATE`.execute(); // Note: execute() immediately to send the query before others.
     const {version, owner, grantedAt} =
@@ -1063,12 +1080,14 @@ export class CVRStore {
  */
 async function checkVersion(
   tx: PostgresTransaction,
+  schema: string,
   clientGroupID: string,
   expectedCurrentVersion: CVRVersion,
 ): Promise<void> {
   const expected = versionString(expectedCurrentVersion);
   const result = await tx<Pick<InstancesRow, 'version'>[]>`
-    SELECT version FROM cvr.instances WHERE "clientGroupID" = ${clientGroupID}`;
+    SELECT version FROM ${tx(schema)}.instances 
+      WHERE "clientGroupID" = ${clientGroupID}`;
   const {version} =
     result.length > 0 ? result[0] : {version: EMPTY_CVR_VERSION.stateVersion};
   if (version !== expected) {

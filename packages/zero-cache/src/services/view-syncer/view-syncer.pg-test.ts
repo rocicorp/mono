@@ -54,7 +54,7 @@ import {initViewSyncerSchema} from './schema/init.ts';
 import {Snapshotter} from './snapshotter.ts';
 import {pickToken, type SyncContext, ViewSyncerService} from './view-syncer.ts';
 
-const SHARD_ID = 'ABC';
+const SHARD_ID = 'abc';
 const logConfig: LogConfig = {
   format: 'text',
   level: 'debug',
@@ -64,7 +64,7 @@ const logConfig: LogConfig = {
 
 const EXPECTED_LMIDS_AST: AST = {
   schema: '',
-  table: 'zero_ABC.clients',
+  table: 'zero_abc.clients',
   where: {
     type: 'simple',
     op: '=',
@@ -298,7 +298,7 @@ async function setup(permissions: PermissionsConfig = {}) {
   replica.pragma('journal_mode = WAL2');
   replica.pragma('busy_timeout = 1');
   replica.exec(`
-  CREATE TABLE "zero_ABC.clients" (
+  CREATE TABLE "zero_abc.clients" (
     "clientGroupID"  TEXT,
     "clientID"       TEXT,
     "lastMutationID" INTEGER,
@@ -344,7 +344,7 @@ async function setup(permissions: PermissionsConfig = {}) {
     _0_version TEXT NOT NULL
   );
 
-  INSERT INTO "zero_ABC.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
+  INSERT INTO "zero_abc.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
     VALUES ('9876', 'foo', 42, '01');
   INSERT INTO "zero.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
     VALUES (1, 2, 3, '01');  
@@ -369,7 +369,7 @@ async function setup(permissions: PermissionsConfig = {}) {
   `);
 
   const cvrDB = await testDBs.create('view_syncer_service_test');
-  await initViewSyncerSchema(lc, cvrDB);
+  await initViewSyncerSchema(lc, cvrDB, SHARD_ID);
 
   const replicator = fakeReplicator(lc, replica);
   const stateChanges: Subscription<ReplicaState> = Subscription.create();
@@ -520,7 +520,14 @@ describe('view-syncer/service', () => {
     ]);
     await nextPoke(client);
 
-    const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
+    const cvrStore = new CVRStore(
+      lc,
+      cvrDB,
+      SHARD_ID,
+      TASK_ID,
+      serviceID,
+      ON_FAILURE,
+    );
     const cvr = await cvrStore.load(lc, Date.now());
     expect(cvr).toMatchObject({
       clients: {
@@ -568,7 +575,14 @@ describe('view-syncer/service', () => {
       },
     ]);
 
-    const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
+    const cvrStore = new CVRStore(
+      lc,
+      cvrDB,
+      SHARD_ID,
+      TASK_ID,
+      serviceID,
+      ON_FAILURE,
+    );
     const cvr = await cvrStore.load(lc, Date.now());
     expect(cvr).toMatchObject({
       clients: {
@@ -779,7 +793,7 @@ describe('view-syncer/service', () => {
       ]
     `);
 
-    expect(await cvrDB`SELECT * from cvr.rows`).toMatchInlineSnapshot(`
+    expect(await cvrDB`SELECT * from cvr_abc.rows`).toMatchInlineSnapshot(`
       Result [
         {
           "clientGroupID": "9876",
@@ -793,7 +807,7 @@ describe('view-syncer/service', () => {
           },
           "rowVersion": "01",
           "schema": "",
-          "table": "zero_ABC.clients",
+          "table": "zero_abc.clients",
         },
         {
           "clientGroupID": "9876",
@@ -1081,7 +1095,7 @@ describe('view-syncer/service', () => {
       ]
     `);
 
-    expect(await cvrDB`SELECT * from cvr.rows`).toMatchInlineSnapshot(`
+    expect(await cvrDB`SELECT * from cvr_abc.rows`).toMatchInlineSnapshot(`
       Result [
         {
           "clientGroupID": "9876",
@@ -1095,7 +1109,7 @@ describe('view-syncer/service', () => {
           },
           "rowVersion": "01",
           "schema": "",
-          "table": "zero_ABC.clients",
+          "table": "zero_abc.clients",
         },
         {
           "clientGroupID": "9876",
@@ -1439,7 +1453,7 @@ describe('view-syncer/service', () => {
       ]
     `);
 
-    expect(await cvrDB`SELECT * from cvr.rows`).toMatchInlineSnapshot(`
+    expect(await cvrDB`SELECT * from cvr_abc.rows`).toMatchInlineSnapshot(`
       Result [
         {
           "clientGroupID": "9876",
@@ -1453,7 +1467,7 @@ describe('view-syncer/service', () => {
           },
           "rowVersion": "01",
           "schema": "",
-          "table": "zero_ABC.clients",
+          "table": "zero_abc.clients",
         },
         {
           "clientGroupID": "9876",
@@ -1613,7 +1627,7 @@ describe('view-syncer/service', () => {
       ]
     `);
 
-    expect(await cvrDB`SELECT * from cvr.rows`).toMatchInlineSnapshot(`
+    expect(await cvrDB`SELECT * from cvr_abc.rows`).toMatchInlineSnapshot(`
       Result [
         {
           "clientGroupID": "9876",
@@ -1627,7 +1641,7 @@ describe('view-syncer/service', () => {
           },
           "rowVersion": "01",
           "schema": "",
-          "table": "zero_ABC.clients",
+          "table": "zero_abc.clients",
         },
         {
           "clientGroupID": "9876",
@@ -2654,7 +2668,14 @@ describe('view-syncer/service', () => {
   test('waits for replica to catch up', async () => {
     // Before connecting, artificially set the CVR version to '07',
     // which is ahead of the current replica version '01'.
-    const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
+    const cvrStore = new CVRStore(
+      lc,
+      cvrDB,
+      SHARD_ID,
+      TASK_ID,
+      serviceID,
+      ON_FAILURE,
+    );
     await new CVRQueryDrivenUpdater(
       cvrStore,
       await cvrStore.load(lc, Date.now()),
@@ -2815,7 +2836,14 @@ describe('view-syncer/service', () => {
   });
 
   test('sends reset for CVR from older replica version up', async () => {
-    const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
+    const cvrStore = new CVRStore(
+      lc,
+      cvrDB,
+      SHARD_ID,
+      TASK_ID,
+      serviceID,
+      ON_FAILURE,
+    );
     await new CVRQueryDrivenUpdater(
       cvrStore,
       await cvrStore.load(lc, Date.now()),
@@ -2864,7 +2892,14 @@ describe('view-syncer/service', () => {
   });
 
   test('sends invalid base cookie if client is ahead of CVR', async () => {
-    const cvrStore = new CVRStore(lc, cvrDB, TASK_ID, serviceID, ON_FAILURE);
+    const cvrStore = new CVRStore(
+      lc,
+      cvrDB,
+      SHARD_ID,
+      TASK_ID,
+      serviceID,
+      ON_FAILURE,
+    );
     await new CVRQueryDrivenUpdater(
       cvrStore,
       await cvrStore.load(lc, Date.now()),

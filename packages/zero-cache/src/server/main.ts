@@ -109,7 +109,7 @@ export default async function runWorker(
     // but it is done here in the main thread because it is wasteful to have all of
     // the Syncers attempt the migration in parallel.
     const cvrDB = pgClient(lc, config.cvr.db);
-    await initViewSyncerSchema(lc, cvrDB);
+    await initViewSyncerSchema(lc, cvrDB, config.shard.id);
     void cvrDB.end();
   }
 
