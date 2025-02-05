@@ -69,6 +69,7 @@ export default async function runWorker(
 
       changeStreamer = await initializeStreamer(
         lc,
+        shard.id,
         must(taskID, `main must set --task-id`),
         changeDB,
         changeSource,

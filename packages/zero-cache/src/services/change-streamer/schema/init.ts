@@ -6,63 +6,85 @@ import {
 } from '../../../db/migration.ts';
 import type {PostgresDB, PostgresTransaction} from '../../../types/pg.ts';
 import {
-  CREATE_REPLICATION_STATE_TABLE,
-  PG_SCHEMA,
+  cdcSchema,
+  createReplicationStateTable,
   setupCDCTables,
   type ReplicationState,
 } from './tables.ts';
 
-const setupMigration: Migration = {
-  migrateSchema: setupCDCTables,
-  minSafeVersion: 1,
-};
-
-async function migrateV1toV2(_: LogContext, db: PostgresTransaction) {
-  await db`ALTER TABLE cdc."replicationConfig" ADD "resetRequired" BOOL`;
+async function migrateFromLegacySchema(
+  lc: LogContext,
+  db: PostgresDB,
+  newSchema: string,
+) {
+  const result = await db`SELECT * FROM pg_namespace WHERE nspname = 'cdc'`;
+  if (result.length > 0) {
+    lc.info?.(`Migrating cdc to ${newSchema}`);
+    await db`ALTER SCHEMA cdc RENAME TO ${db(newSchema)}`;
+  }
 }
-
-const migrateV2ToV3 = {
-  migrateSchema: async (_: LogContext, db: PostgresTransaction) => {
-    await db.unsafe(CREATE_REPLICATION_STATE_TABLE);
-  },
-
-  migrateData: async (_: LogContext, db: PostgresTransaction) => {
-    const lastWatermark = await getLastWatermarkV2(db);
-    const replicationState: Partial<ReplicationState> = {lastWatermark};
-    await db`TRUNCATE TABLE cdc."replicationState"`;
-    await db`INSERT INTO cdc."replicationState" ${db(replicationState)}`;
-  },
-};
-
-const schemaVersionMigrationMap: IncrementalMigrationMap = {
-  2: {migrateSchema: migrateV1toV2},
-  3: migrateV2ToV3,
-};
-
 export async function initChangeStreamerSchema(
   log: LogContext,
   db: PostgresDB,
+  shardID: string,
 ): Promise<void> {
+  const schema = cdcSchema(shardID);
+  await migrateFromLegacySchema(log, db, schema);
+
+  const setupMigration: Migration = {
+    migrateSchema: (lc, tx) => setupCDCTables(lc, tx, shardID),
+    minSafeVersion: 1,
+  };
+
+  async function migrateV1toV2(_: LogContext, db: PostgresTransaction) {
+    await db`
+    ALTER TABLE ${db(schema)}."replicationConfig" ADD "resetRequired" BOOL`;
+  }
+
+  const migrateV2ToV3 = {
+    migrateSchema: async (_: LogContext, db: PostgresTransaction) => {
+      await db.unsafe(createReplicationStateTable(shardID));
+    },
+
+    migrateData: async (_: LogContext, db: PostgresTransaction) => {
+      const lastWatermark = await getLastWatermarkV2(db, shardID);
+      const replicationState: Partial<ReplicationState> = {lastWatermark};
+      await db`
+      TRUNCATE TABLE ${db(schema)}."replicationState"`;
+      await db`
+      INSERT INTO ${db(schema)}."replicationState" ${db(replicationState)}`;
+    },
+  };
+
+  const schemaVersionMigrationMap: IncrementalMigrationMap = {
+    2: {migrateSchema: migrateV1toV2},
+    3: migrateV2ToV3,
+  };
+
   await runSchemaMigrations(
     log,
     'change-streamer',
-    PG_SCHEMA,
+    schema,
     db,
     setupMigration,
     schemaVersionMigrationMap,
   );
 }
 
-export async function getLastWatermarkV2(db: PostgresDB): Promise<string> {
+export async function getLastWatermarkV2(
+  db: PostgresDB,
+  shardID: string,
+): Promise<string> {
+  const schema = cdcSchema(shardID);
   const [{max}] = await db<{max: string | null}[]>`
-    SELECT MAX(watermark) as max FROM cdc."changeLog"`;
+    SELECT MAX(watermark) as max FROM ${db(schema)}."changeLog"`;
   if (max !== null) {
     return max;
   }
   // The changeLog is only empty if nothing has been synced since initial-sync.
   // In this case, the last watermark is the replicaVersion.
   const [{replicaVersion}] = await db<{replicaVersion: string}[]>`
-    SELECT "replicaVersion" FROM cdc."replicationConfig"
+    SELECT "replicaVersion" FROM ${db(schema)}."replicationConfig"
     `;
   return replicaVersion;
 }

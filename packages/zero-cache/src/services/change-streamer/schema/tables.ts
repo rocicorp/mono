@@ -1,13 +1,25 @@
 import {LogContext} from '@rocicorp/logger';
+import {ident} from 'pg-format';
 import postgres, {type PendingQuery, type Row} from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {equals} from '../../../../../shared/src/set-utils.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import type {Change} from '../../change-source/protocol/current/data.ts';
 
+export function cdcSchema(shardID: string) {
+  return `cdc_${shardID}`;
+}
+
+// For readability in the sql statements.
+function schema(shardID: string) {
+  return ident(cdcSchema(shardID));
+}
+
 export const PG_SCHEMA = 'cdc';
 
-const CREATE_CDC_SCHEMA = `CREATE SCHEMA IF NOT EXISTS cdc;`;
+function createSchema(shardID: string) {
+  return `CREATE SCHEMA IF NOT EXISTS ${schema(shardID)};`;
+}
 
 export type ChangeLogEntry = {
   // A strictly monotonically increasing, lexicographically sortable
@@ -16,8 +28,9 @@ export type ChangeLogEntry = {
   change: Change;
 };
 
-const CREATE_CHANGE_LOG_TABLE = `
-  CREATE TABLE cdc."changeLog" (
+function createChangeLogTable(shardID: string) {
+  return `
+  CREATE TABLE ${schema(shardID)}."changeLog" (
     watermark  TEXT,
     pos        INT8,
     change     JSONB NOT NULL,
@@ -25,6 +38,7 @@ const CREATE_CHANGE_LOG_TABLE = `
     PRIMARY KEY (watermark, pos)
   );
 `;
+}
 
 /**
  * Tracks the watermark from which to resume the change stream and the
@@ -35,13 +49,15 @@ export type ReplicationState = {
   owner: string | null;
 };
 
-export const CREATE_REPLICATION_STATE_TABLE = `
-  CREATE TABLE cdc."replicationState" (
+export function createReplicationStateTable(shardID: string) {
+  return `
+  CREATE TABLE ${schema(shardID)}."replicationState" (
     "lastWatermark" TEXT NOT NULL,
     "owner" TEXT,
     "lock" INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
   );
 `;
+}
 
 /**
  * This mirrors the analogously named table in the SQLite replica
@@ -54,37 +70,47 @@ export type ReplicationConfig = {
   publications: readonly string[];
 };
 
-const CREATE_REPLICATION_CONFIG_TABLE = `
-  CREATE TABLE cdc."replicationConfig" (
+function createReplicationConfigTable(shardID: string) {
+  return `
+  CREATE TABLE ${schema(shardID)}."replicationConfig" (
     "replicaVersion" TEXT NOT NULL,
     "publications" TEXT[] NOT NULL,
     "resetRequired" BOOL,
     "lock" INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
   );
 `;
+}
 
-const CREATE_CDC_TABLES =
-  CREATE_CDC_SCHEMA +
-  CREATE_CHANGE_LOG_TABLE +
-  CREATE_REPLICATION_STATE_TABLE +
-  CREATE_REPLICATION_CONFIG_TABLE;
+function createTables(shardID: string) {
+  return (
+    createSchema(shardID) +
+    createChangeLogTable(shardID) +
+    createReplicationStateTable(shardID) +
+    createReplicationConfigTable(shardID)
+  );
+}
 
 export async function setupCDCTables(
   lc: LogContext,
   db: postgres.TransactionSql,
+  shardID: string,
 ) {
   lc.info?.(`Setting up CDC tables`);
-  await db.unsafe(CREATE_CDC_TABLES);
+  await db.unsafe(createTables(shardID));
 }
 
-export async function markResetRequired(db: PostgresDB) {
-  await db`UPDATE cdc."replicationConfig" SET "resetRequired" = true`;
+export async function markResetRequired(db: PostgresDB, shardID: string) {
+  const schema = cdcSchema(shardID);
+  await db`
+  UPDATE ${db(schema)}."replicationConfig"
+    SET "resetRequired" = true`;
 }
 
 export async function ensureReplicationConfig(
   lc: LogContext,
   db: PostgresDB,
   config: ReplicationConfig,
+  shardID: string,
   autoReset: boolean,
 ) {
   // Restrict the fields of the supplied `config`.
@@ -93,6 +119,7 @@ export async function ensureReplicationConfig(
   const replicationState: Partial<ReplicationState> = {
     lastWatermark: replicaVersion,
   };
+  const schema = cdcSchema(shardID);
 
   await db.begin(async tx => {
     const stmts: PendingQuery<Row[]>[] = [];
@@ -102,7 +129,9 @@ export async function ensureReplicationConfig(
         publications: string[];
         resetRequired: boolean | null;
       }[]
-    >`SELECT "replicaVersion", "publications", "resetRequired" FROM cdc."replicationConfig"`;
+    >`
+    SELECT "replicaVersion", "publications", "resetRequired" 
+      FROM ${tx(schema)}."replicationConfig"`;
 
     if (results.length) {
       const {replicaVersion, publications} = results[0];
@@ -115,17 +144,18 @@ export async function ensureReplicationConfig(
             `with replica @${replicaConfig.replicaVersion}. Clearing tables.`,
         );
         stmts.push(
-          tx`TRUNCATE TABLE cdc."changeLog"`,
-          tx`TRUNCATE TABLE cdc."replicationConfig"`,
-          tx`TRUNCATE TABLE cdc."replicationState"`,
+          tx`TRUNCATE TABLE ${tx(schema)}."changeLog"`,
+          tx`TRUNCATE TABLE ${tx(schema)}."replicationConfig"`,
+          tx`TRUNCATE TABLE ${tx(schema)}."replicationState"`,
         );
       }
     }
     // Initialize (or re-initialize TRUNCATED) tables
     if (results.length === 0 || stmts.length > 0) {
       stmts.push(
-        tx`INSERT INTO cdc."replicationConfig" ${tx(replicaConfig)}`,
-        tx`INSERT INTO cdc."replicationState" ${tx(replicationState)}`,
+        tx`INSERT INTO ${tx(schema)}."replicationConfig" ${tx(replicaConfig)}`,
+        tx`INSERT INTO ${tx(schema)}."replicationState" 
+           ${tx(replicationState)}`,
       );
       return Promise.all(stmts);
     }
