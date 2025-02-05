@@ -2220,12 +2220,12 @@ suite('Invalid Downstream message', () => {
 });
 
 async function tryNTimesAsync(n: number, fn: () => Promise<void>) {
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; ; ) {
     try {
       await fn();
       return;
     } catch (e) {
-      if (i === n - 1) {
+      if (++i === n) {
         throw e;
       }
     }
