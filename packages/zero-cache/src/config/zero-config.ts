@@ -137,6 +137,21 @@ export const zeroOptions = {
     },
   },
 
+  push: {
+    url: {
+      type: v.string().optional(), // optional until we remove CRUD mutations
+      desc: [
+        `The URL of the API server to which zero-cache will push mutations.`,
+      ],
+    },
+    apiKey: {
+      type: v.string().optional(),
+      desc: [
+        `An optional secret used to authorize zero-cache to call the API server.`,
+      ],
+    },
+  },
+
   cvr: {
     db: {
       type: v.string(),
