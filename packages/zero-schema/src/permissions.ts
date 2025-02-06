@@ -5,7 +5,7 @@ import {
   type Condition,
   type Parameter,
 } from '../../zero-protocol/src/ast.ts';
-import {AuthQuery} from '../../zql/src/query/auth-query.ts';
+import {StaticQuery} from '../../zql/src/query/static-query.ts';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
 import {staticParam} from '../../zql/src/query/query-impl.ts';
 import type {Query} from '../../zql/src/query/query.ts';
@@ -75,7 +75,10 @@ export async function definePermissions<TAuthDataShape, TSchema extends Schema>(
     ExpressionBuilder<Schema, string>
   >;
   for (const name of Object.keys(schema.tables)) {
-    expressionBuilders[name] = new AuthQuery(schema, name).expressionBuilder();
+    expressionBuilders[name] = new StaticQuery(
+      schema,
+      name,
+    ).expressionBuilder();
   }
 
   const config = await definer();

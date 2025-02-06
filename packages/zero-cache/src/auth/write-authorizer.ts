@@ -30,7 +30,7 @@ import {
   bindStaticParameters,
   buildPipeline,
 } from '../../../zql/src/builder/builder.ts';
-import {AuthQuery, authQuery} from '../../../zql/src/query/auth-query.ts';
+import {StaticQuery, staticQuery} from '../../../zql/src/query/static-query.ts';
 import {dnf} from '../../../zql/src/query/dnf.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {Database} from '../../../zqlite/src/db.ts';
@@ -294,7 +294,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     }
 
     const rowPolicies = rules.row;
-    let rowQuery = authQuery(this.#schema, op.tableName);
+    let rowQuery = staticQuery(this.#schema, op.tableName);
     op.primaryKey.forEach(pk => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       rowQuery = rowQuery.where(pk, '=', op.value[pk] as any);
@@ -447,7 +447,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     if (policy.length === 0) {
       return false;
     }
-    let rowQueryAst = (rowQuery as AuthQuery<Schema, string>).ast;
+    let rowQueryAst = (rowQuery as StaticQuery<Schema, string>).ast;
     rowQueryAst = bindStaticParameters(
       {
         ...rowQueryAst,

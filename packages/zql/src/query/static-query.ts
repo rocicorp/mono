@@ -6,14 +6,18 @@ import {AbstractQuery} from './query-impl.ts';
 import type {HumanReadable, PullRow, Query} from './query.ts';
 import type {TypedView} from './typed-view.ts';
 
-export function authQuery<
+export function staticQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
 >(schema: TSchema, tableName: TTable): Query<TSchema, TTable> {
-  return new AuthQuery<TSchema, TTable>(schema, tableName);
+  return new StaticQuery<TSchema, TTable>(schema, tableName);
 }
 
-export class AuthQuery<
+/**
+ * A query that cannot be run.
+ * Only serves to generate ASTs.
+ */
+export class StaticQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
@@ -43,7 +47,7 @@ export class AuthQuery<
     ast: AST,
     format: Format | undefined,
   ): Query<TSchema, TTable, TReturn> {
-    return new AuthQuery(schema, tableName, ast, format);
+    return new StaticQuery(schema, tableName, ast, format);
   }
 
   get ast() {
