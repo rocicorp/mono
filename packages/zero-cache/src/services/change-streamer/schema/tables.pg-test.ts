@@ -15,9 +15,11 @@ describe('change-streamer/schema/tables', () => {
   const lc = createSilentLogContext();
   let db: PostgresDB;
 
+  const SHARD_ID = 'oiu';
+
   beforeEach(async () => {
     db = await testDBs.create('change_streamer_schema_tables');
-    await db.begin(tx => setupCDCTables(lc, tx));
+    await db.begin(tx => setupCDCTables(lc, tx, SHARD_ID));
   });
 
   afterEach(async () => {
@@ -35,11 +37,12 @@ describe('change-streamer/schema/tables', () => {
         replicaVersion: '183',
         publications: ['zero_data', 'zero_metadata'],
       },
+      SHARD_ID,
       true,
     );
 
     await expectTables(db, {
-      ['cdc.replicationConfig']: [
+      ['cdc_oiu.replicationConfig']: [
         {
           replicaVersion: '183',
           publications: ['zero_data', 'zero_metadata'],
@@ -47,20 +50,20 @@ describe('change-streamer/schema/tables', () => {
           lock: 1,
         },
       ],
-      ['cdc.replicationState']: [
+      ['cdc_oiu.replicationState']: [
         {
           lastWatermark: '183',
           owner: null,
           lock: 1,
         },
       ],
-      ['cdc.changeLog']: [],
+      ['cdc_oiu.changeLog']: [],
     });
 
     await db`
-    INSERT INTO cdc."changeLog" (watermark, pos, change)
+    INSERT INTO cdc_oiu."changeLog" (watermark, pos, change)
         values ('184', 1, JSONB('{"foo":"bar"}'));
-    UPDATE cdc."replicationState" 
+    UPDATE cdc_oiu."replicationState" 
         SET "lastWatermark" = '184', owner = 'my-task';
     `.simple();
 
@@ -72,11 +75,12 @@ describe('change-streamer/schema/tables', () => {
         replicaVersion: '183',
         publications: ['zero_metadata', 'zero_data'],
       },
+      SHARD_ID,
       true,
     );
 
     await expectTables(db, {
-      ['cdc.replicationConfig']: [
+      ['cdc_oiu.replicationConfig']: [
         {
           replicaVersion: '183',
           publications: ['zero_data', 'zero_metadata'],
@@ -84,14 +88,14 @@ describe('change-streamer/schema/tables', () => {
           lock: 1,
         },
       ],
-      ['cdc.replicationState']: [
+      ['cdc_oiu.replicationState']: [
         {
           lastWatermark: '184',
           owner: 'my-task',
           lock: 1,
         },
       ],
-      ['cdc.changeLog']: [
+      ['cdc_oiu.changeLog']: [
         {
           watermark: '184',
           pos: 1n,
@@ -101,9 +105,9 @@ describe('change-streamer/schema/tables', () => {
       ],
     });
 
-    await markResetRequired(db);
+    await markResetRequired(db, SHARD_ID);
     await expectTables(db, {
-      ['cdc.replicationConfig']: [
+      ['cdc_oiu.replicationConfig']: [
         {
           replicaVersion: '183',
           publications: ['zero_data', 'zero_metadata'],
@@ -111,7 +115,7 @@ describe('change-streamer/schema/tables', () => {
           lock: 1,
         },
       ],
-      ['cdc.replicationState']: [
+      ['cdc_oiu.replicationState']: [
         {
           lastWatermark: '184',
           owner: 'my-task',
@@ -128,6 +132,7 @@ describe('change-streamer/schema/tables', () => {
         replicaVersion: '183',
         publications: ['zero_metadata', 'zero_data'],
       },
+      SHARD_ID,
       false,
     );
 
@@ -140,6 +145,7 @@ describe('change-streamer/schema/tables', () => {
           replicaVersion: '183',
           publications: ['zero_metadata', 'zero_data'],
         },
+        SHARD_ID,
         true,
       ),
     ).rejects.toThrow(AutoResetSignal);
@@ -152,11 +158,12 @@ describe('change-streamer/schema/tables', () => {
         replicaVersion: '1g8',
         publications: ['zero_data', 'zero_metadata'],
       },
+      SHARD_ID,
       true,
     );
 
     await expectTables(db, {
-      ['cdc.replicationConfig']: [
+      ['cdc_oiu.replicationConfig']: [
         {
           replicaVersion: '1g8',
           publications: ['zero_data', 'zero_metadata'],
@@ -164,14 +171,14 @@ describe('change-streamer/schema/tables', () => {
           lock: 1,
         },
       ],
-      ['cdc.replicationState']: [
+      ['cdc_oiu.replicationState']: [
         {
           lastWatermark: '1g8',
           owner: null,
           lock: 1,
         },
       ],
-      ['cdc.changeLog']: [],
+      ['cdc_oiu.changeLog']: [],
     });
   });
 });

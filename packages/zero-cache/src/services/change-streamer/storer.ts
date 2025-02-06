@@ -16,7 +16,7 @@ import type {Service} from '../service.ts';
 import type {WatermarkedChange} from './change-streamer-service.ts';
 import {type ChangeEntry} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
-import type {ReplicationState} from './schema/tables.ts';
+import {cdcSchema, type ReplicationState} from './schema/tables.ts';
 import {Subscriber} from './subscriber.ts';
 
 type QueueEntry =
@@ -64,6 +64,7 @@ type PendingTransaction = {
 export class Storer implements Service {
   readonly id = 'storer';
   readonly #lc: LogContext;
+  readonly #shardID: string;
   readonly #taskID: string;
   readonly #db: PostgresDB;
   readonly #replicaVersion: string;
@@ -73,34 +74,41 @@ export class Storer implements Service {
 
   constructor(
     lc: LogContext,
+    shardID: string,
     taskID: string,
     db: PostgresDB,
     replicaVersion: string,
     onConsumed: (c: Commit | StatusMessage) => void,
   ) {
     this.#lc = lc;
+    this.#shardID = shardID;
     this.#taskID = taskID;
     this.#db = db;
     this.#replicaVersion = replicaVersion;
     this.#onConsumed = onConsumed;
   }
 
+  // For readability in SQL statements.
+  #cdc(table: string) {
+    return this.#db(`${cdcSchema(this.#shardID)}.${table}`);
+  }
+
   async assumeOwnership() {
     const db = this.#db;
     const owner = this.#taskID;
-    await db`UPDATE cdc."replicationState" SET ${db({owner})}`;
+    await db`UPDATE ${this.#cdc('replicationState')} SET ${db({owner})}`;
   }
 
   async getLastWatermark(): Promise<string> {
     const [{lastWatermark}] = await this.#db<{lastWatermark: string}[]>`
-      SELECT "lastWatermark" FROM cdc."replicationState"`;
+      SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}`;
     return lastWatermark;
   }
 
   async purgeRecordsBefore(watermark: string): Promise<number> {
     const result = await this.#db<{deleted: bigint}[]>`
       WITH purged AS (
-        DELETE FROM cdc."changeLog" WHERE watermark < ${watermark} 
+        DELETE FROM ${this.#cdc('changeLog')} WHERE watermark < ${watermark} 
           RETURNING watermark, pos
       ) SELECT COUNT(*) as deleted FROM purged;`;
 
@@ -160,7 +168,8 @@ export class Storer implements Service {
         // Pipeline a read of the current ReplicationState,
         // which will be checked before committing.
         tx.pool.process(tx => {
-          tx<ReplicationState[]>`SELECT * FROM cdc."replicationState"`.then(
+          tx<ReplicationState[]>`
+          SELECT * FROM ${this.#cdc('replicationState')}`.then(
             ([result]) => resolve(result),
             reject,
           );
@@ -178,7 +187,10 @@ export class Storer implements Service {
         change: change as unknown as JSONValue,
       };
 
-      tx.pool.process(tx => [tx`INSERT INTO cdc."changeLog" ${tx(entry)}`]);
+      tx.pool.process(tx => [
+        tx`
+        INSERT INTO ${this.#cdc('changeLog')} ${tx(entry)}`,
+      ]);
 
       if (tag === 'commit') {
         const {owner} = await tx.startingReplicationState;
@@ -191,7 +203,8 @@ export class Storer implements Service {
           // Update the replication state.
           const lastWatermark = watermark;
           tx.pool.process(tx => [
-            tx`UPDATE cdc."replicationState" SET ${tx({lastWatermark})}`,
+            tx`
+            UPDATE ${this.#cdc('replicationState')} SET ${tx({lastWatermark})}`,
           ]);
           tx.pool.setDone();
         }
@@ -265,7 +278,7 @@ export class Storer implements Service {
         let watermarkFound = sub.watermark === this.#replicaVersion;
         let count = 0;
         for await (const entries of tx<ChangeEntry[]>`
-          SELECT watermark, change FROM cdc."changeLog"
+          SELECT watermark, change FROM ${this.#cdc('changeLog')}
            WHERE watermark >= ${sub.watermark}
            ORDER BY watermark, pos`.cursor(10000)) {
           for (const entry of entries) {
@@ -296,7 +309,7 @@ export class Storer implements Service {
           );
         } else {
           const [{lastWatermark}] = await this.#db<{lastWatermark: string}[]>`
-            SELECT "lastWatermark" FROM cdc."replicationState"`;
+            SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}`;
           this.#lc.warn?.(
             `subscriber at watermark ${sub.watermark} is ahead of latest watermark: ${lastWatermark}`,
           );

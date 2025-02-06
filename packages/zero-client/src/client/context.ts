@@ -10,7 +10,7 @@ import type {
   GotCallback,
   QueryDelegate,
 } from '../../../zql/src/query/query-impl.ts';
-import type {IVMSourceBranch} from './ivm-source-repo.ts';
+import {nameFromKey, type IVMSourceBranch} from './ivm-source-repo.ts';
 import {ENTITIES_KEY_PREFIX} from './keys.ts';
 
 export type AddQuery = (
@@ -84,8 +84,7 @@ export class ZeroContext implements QueryDelegate {
         for (const diff of changes) {
           const {key} = diff;
           assert(key.startsWith(ENTITIES_KEY_PREFIX));
-          const slash = key.indexOf('/', ENTITIES_KEY_PREFIX.length);
-          const name = key.slice(ENTITIES_KEY_PREFIX.length, slash);
+          const name = nameFromKey(key);
           const source = this.getSource(name);
           if (!source) {
             continue;

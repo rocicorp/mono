@@ -142,6 +142,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#cvrStore = new CVRStore(
       lc,
       db,
+      shardID,
       taskID,
       clientGroupID,
       // On failure, cancel the #stateChanges subscription. The run()

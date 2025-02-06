@@ -43,6 +43,7 @@ import {Subscriber} from './subscriber.ts';
  */
 export async function initializeStreamer(
   lc: LogContext,
+  shardID: string,
   taskID: string,
   changeDB: PostgresDB,
   changeSource: ChangeSource,
@@ -51,12 +52,19 @@ export async function initializeStreamer(
   setTimeoutFn = setTimeout,
 ): Promise<ChangeStreamerService> {
   // Make sure the ChangeLog DB is set up.
-  await initChangeStreamerSchema(lc, changeDB);
-  await ensureReplicationConfig(lc, changeDB, replicationConfig, autoReset);
+  await initChangeStreamerSchema(lc, changeDB, shardID);
+  await ensureReplicationConfig(
+    lc,
+    changeDB,
+    replicationConfig,
+    shardID,
+    autoReset,
+  );
 
   const {replicaVersion} = replicationConfig;
   return new ChangeStreamerImpl(
     lc,
+    shardID,
     taskID,
     changeDB,
     replicaVersion,
@@ -245,6 +253,7 @@ const MAX_SERVING_DELAY = 30_000;
 class ChangeStreamerImpl implements ChangeStreamerService {
   readonly id: string;
   readonly #lc: LogContext;
+  readonly #shardID: string;
   readonly #changeDB: PostgresDB;
   readonly #replicaVersion: string;
   readonly #source: ChangeSource;
@@ -269,6 +278,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
   constructor(
     lc: LogContext,
+    shardID: string,
     taskID: string,
     changeDB: PostgresDB,
     replicaVersion: string,
@@ -278,11 +288,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   ) {
     this.id = `change-streamer`;
     this.#lc = lc.withContext('component', 'change-streamer');
+    this.#shardID = shardID;
     this.#changeDB = changeDB;
     this.#replicaVersion = replicaVersion;
     this.#source = source;
     this.#storer = new Storer(
       lc,
+      shardID,
       taskID,
       changeDB,
       replicaVersion,
@@ -373,7 +385,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
     switch (tag) {
       case 'reset-required':
-        await markResetRequired(this.#changeDB);
+        await markResetRequired(this.#changeDB, this.#shardID);
         if (this.#autoReset) {
           this.#lc.warn?.('shutting down for auto-reset');
           await this.stop(new AutoResetSignal());
