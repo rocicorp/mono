@@ -25,26 +25,33 @@ export async function apply(
   patch: readonly PatchOperationInternal[],
 ): Promise<readonly Diff[]> {
   const ret: Diff[] = [];
+  function pushChangeOrAdd(
+    key: string,
+    oldValue: FrozenJSONValue | undefined,
+    newValue: FrozenJSONValue,
+  ) {
+    if (oldValue === undefined) {
+      ret.push({
+        op: 'add',
+        key,
+        newValue,
+      });
+    } else {
+      ret.push({
+        op: 'change',
+        key,
+        oldValue,
+        newValue,
+      });
+    }
+  }
   for (const p of patch) {
     switch (p.op) {
       case 'put': {
         const existing = await dbWrite.get(p.key);
         const frozen = deepFreeze(p.value);
+        pushChangeOrAdd(p.key, existing, frozen);
         await dbWrite.put(lc, p.key, frozen);
-        if (existing === undefined) {
-          ret.push({
-            op: 'add',
-            key: p.key,
-            newValue: frozen,
-          });
-        } else {
-          ret.push({
-            op: 'change',
-            key: p.key,
-            oldValue: existing,
-            newValue: frozen,
-          });
-        }
         break;
       }
       case 'update': {
@@ -72,21 +79,8 @@ export async function apply(
           addToEntries(p.merge);
         }
         const frozen = deepFreeze(Object.fromEntries(entries));
+        pushChangeOrAdd(p.key, existing, frozen);
         await dbWrite.put(lc, p.key, frozen);
-        if (existing === undefined) {
-          ret.push({
-            op: 'add',
-            key: p.key,
-            newValue: frozen,
-          });
-        } else {
-          ret.push({
-            op: 'change',
-            key: p.key,
-            oldValue: existing,
-            newValue: frozen,
-          });
-        }
 
         break;
       }
