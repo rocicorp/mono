@@ -37,6 +37,10 @@
           {
             "group": ["**/mod.ts"],
             "message": "Don't import from barrel files. Import from the specific module instead."
+          },
+          {
+            "group": ["**/*.test.ts", "**/*.test.tsx"],
+            "message": "Do not import from test files."
           }
         ],
         "paths": [
