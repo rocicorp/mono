@@ -2247,7 +2247,7 @@ test('kvStore option', async () => {
       }),
     });
 
-    // Call persist to ensure that IDB etc is ready.
+    // Use persist as a way to ensure we have read the data out of IDB.
     await r.persist();
 
     const idIsAView = r.query.e.where('id', '=', 'a').materialize();
@@ -2255,11 +2255,11 @@ test('kvStore option', async () => {
     expect(allDataView.data).deep.equal(expectedValue);
 
     await r.mutate.e.insert({id: 'a', value: 1});
-    await tickAFewTimes(clock);
 
     expect(idIsAView.data).deep.equal([{id: 'a', value: 1}]);
     // Wait for persist to finish
-    await tickAFewTimes(clock, 2000);
+    await r.persist();
+
     await r.close();
     expect(spy.called).equal(expectedIDBOpenCalled, 'IDB existed!');
 
