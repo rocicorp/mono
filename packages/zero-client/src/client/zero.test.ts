@@ -58,7 +58,6 @@ import {
   RUN_LOOP_INTERVAL_MS,
 } from './zero.ts';
 
-let realSetTimeout: typeof setTimeout;
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
 
@@ -68,7 +67,6 @@ let fetchStub: sinon.SinonStub<
 >;
 
 beforeEach(() => {
-  realSetTimeout = setTimeout;
   clock = sinon.useFakeTimers();
   clock.setSystemTime(startTime);
   sinon.replace(
@@ -2219,19 +2217,6 @@ suite('Invalid Downstream message', () => {
   }
 });
 
-async function tryNTimesAsync(n: number, fn: () => Promise<void>) {
-  for (let i = 0; ; ) {
-    try {
-      await fn();
-      return;
-    } catch (e) {
-      if (++i === n) {
-        throw e;
-      }
-    }
-  }
-}
-
 test('kvStore option', async () => {
   const spy = sinon.spy(IDBFactory.prototype, 'open');
 
@@ -2261,16 +2246,14 @@ test('kvStore option', async () => {
         ],
       }),
     });
+
+    // Call persist to ensure that IDB etc is ready.
+    await r.persist();
+
     const idIsAView = r.query.e.where('id', '=', 'a').materialize();
     const allDataView = r.query.e.materialize();
+    expect(allDataView.data).deep.equal(expectedValue);
 
-    // Firefox is flaky... it takes longer time than Chromium and WebKit.
-    // We therefore give it a few times to pass the expectation.
-    await tryNTimesAsync(10, async () => {
-      await tickAFewTimes(clock);
-      await new Promise(resolve => realSetTimeout(resolve, 50));
-      expect(allDataView.data).deep.equal(expectedValue);
-    });
     await r.mutate.e.insert({id: 'a', value: 1});
     await tickAFewTimes(clock);
 

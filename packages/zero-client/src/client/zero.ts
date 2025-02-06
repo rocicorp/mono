@@ -246,11 +246,11 @@ export interface ReplicacheInternalAPI {
 
 const internalReplicacheImplMap = new WeakMap<object, ReplicacheImpl>();
 
-export function getInternalReplicacheImplForTesting<
-  MD extends MutatorDefs,
-  S extends Schema,
->(z: Zero<S>): ReplicacheImpl<MD> {
-  return must(internalReplicacheImplMap.get(z)) as ReplicacheImpl<MD>;
+export function getInternalReplicacheImplForTesting(
+  z: object,
+): ReplicacheImpl<MutatorDefs> {
+  assert(TESTING);
+  return must(internalReplicacheImplMap.get(z));
 }
 
 export class Zero<
