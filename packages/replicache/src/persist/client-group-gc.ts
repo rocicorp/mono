@@ -37,6 +37,9 @@ export function initClientGroupGC(
 
 /**
  * This removes client groups that have no clients and no pending mutations.
+ * If {@linkcode enableMutationRecovery} is true, it will keep client groups with
+ * pending mutations. If it is false, it will remove client groups even when they
+ * have pending mutations.
  */
 export function gcClientGroups(
   dagStore: Store,
