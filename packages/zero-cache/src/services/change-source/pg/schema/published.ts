@@ -5,6 +5,12 @@ import * as v from '../../../../../../shared/src/valita.ts';
 import {publishedIndexSpec, publishedTableSpec} from '../../../../db/specs.ts';
 
 export function publishedTableQuery(publications: string[]) {
+  // Notes:
+  // * There's a bug in PG15 in which generated columns are incorrectly
+  //   included in pg_publication_tables.attnames, (even though the generated
+  //   column values are not be included in the replication stream).
+  //   The WHERE condition `attgenerated = ''` fixes this by explicitly excluding
+  //   generated columns from the list.
   return `
 WITH published_columns AS (SELECT 
   pc.oid::int8 AS "oid",
@@ -33,7 +39,7 @@ JOIN pg_publication_tables as pb ON
   attname = ANY(pb.attnames)
 LEFT JOIN pg_constraint pk ON pk.contype = 'p' AND pk.connamespace = relnamespace AND pk.conrelid = attrelid
 LEFT JOIN pg_attrdef pd ON pd.adrelid = attrelid AND pd.adnum = attnum
-WHERE pb.pubname IN (${literal(publications)})
+WHERE pb.pubname IN (${literal(publications)}) AND attgenerated = ''
 ORDER BY nspname, pc.relname),
 
 tables AS (SELECT json_build_object(
