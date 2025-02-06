@@ -58,7 +58,6 @@ import {
   RUN_LOOP_INTERVAL_MS,
 } from './zero.ts';
 
-let realSetTimeout: typeof setTimeout;
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
 
@@ -68,7 +67,6 @@ let fetchStub: sinon.SinonStub<
 >;
 
 beforeEach(() => {
-  realSetTimeout = setTimeout;
   clock = sinon.useFakeTimers();
   clock.setSystemTime(startTime);
   sinon.replace(
@@ -2248,21 +2246,20 @@ test('kvStore option', async () => {
         ],
       }),
     });
+
+    // Use persist as a way to ensure we have read the data out of IDB.
+    await r.persist();
+
     const idIsAView = r.query.e.where('id', '=', 'a').materialize();
     const allDataView = r.query.e.materialize();
-
-    // Firefox is flaky... it takes longer time than Chromium and WebKit.
-    // We therefore give it a few times to pass the expectation.
-
-    await tickAFewTimes(clock);
-    await new Promise(resolve => realSetTimeout(resolve, 100));
     expect(allDataView.data).deep.equal(expectedValue);
+
     await r.mutate.e.insert({id: 'a', value: 1});
-    await tickAFewTimes(clock);
 
     expect(idIsAView.data).deep.equal([{id: 'a', value: 1}]);
     // Wait for persist to finish
-    await tickAFewTimes(clock, 2000);
+    await r.persist();
+
     await r.close();
     expect(spy.called).equal(expectedIDBOpenCalled, 'IDB existed!');
 
