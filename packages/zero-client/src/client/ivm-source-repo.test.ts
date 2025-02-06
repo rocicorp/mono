@@ -7,18 +7,17 @@ import {
   type Label,
   type Revision,
 } from '../../../zql/src/query/test/test-schemas.ts';
-import {initDB} from '../../../replicache/src/db/test-helpers.ts';
 import * as FormatVersion from '../../../replicache/src/format-version-enum.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
-import {TestStore} from '../../../replicache/src/dag/test-store.ts';
 import {SYNC_HEAD_NAME} from '../../../replicache/src/sync/sync-head-name.ts';
 import {newWriteLocal} from '../../../replicache/src/db/write.ts';
-import {mustGetHeadHash} from '../../../replicache/src/dag/store.ts';
+
 import {ENTITIES_KEY_PREFIX} from './keys.ts';
 import type {FrozenJSONValue} from '../../../replicache/src/frozen-json.ts';
 import type {Diff} from '../../../replicache/src/sync/patch.ts';
 import type {Node} from '../../../zql/src/ivm/data.ts';
+import {createDb} from './test/create-db.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 
 test('fork', () => {
   const main = new IVMSourceBranch({
@@ -107,56 +106,26 @@ test('fork', () => {
   `);
 });
 
-const lc = createSilentLogContext();
 let timestamp = 42;
-export async function createDb(
-  puts: Array<[string, Issue | Comment | Label | IssueLabel | Revision]>,
-) {
-  const clientID = 'client-id';
-  const dagStore = new TestStore();
-  await initDB(
-    await dagStore.write(),
-    SYNC_HEAD_NAME,
-    clientID,
-    {},
-    FormatVersion.Latest,
-  );
-  const dagWrite = await dagStore.write();
-  const w = await newWriteLocal(
-    await mustGetHeadHash(SYNC_HEAD_NAME, dagWrite),
-    'mutator_name',
-    JSON.stringify([]),
-    null,
-    dagWrite,
-    timestamp++,
-    clientID,
-    FormatVersion.Latest,
-  );
-  await Promise.all(
-    puts.map(([key, value]) =>
-      w.put(lc, key, value as unknown as FrozenJSONValue),
-    ),
-  );
-  const syncHash = await w.commit(SYNC_HEAD_NAME);
-
-  return {dagStore, syncHash};
-}
-
+const lc = createSilentLogContext();
 describe('advanceSyncHead', () => {
   test("sync head is initialized to match replicache's sync head", async () => {
     const repo = new IVMSourceRepo(schema.tables);
-    const {dagStore, syncHash} = await createDb([
+    const {dagStore, syncHash} = await createDb(
       [
-        `${ENTITIES_KEY_PREFIX}issue/sdf`,
-        {
-          id: 'sdf',
-          title: 'test',
-          description: 'test',
-          closed: false,
-          ownerId: null,
-        },
+        [
+          `${ENTITIES_KEY_PREFIX}issue/sdf`,
+          {
+            id: 'sdf',
+            title: 'test',
+            description: 'test',
+            closed: false,
+            ownerId: null,
+          },
+        ],
       ],
-    ]);
+      timestamp++,
+    );
     await repo.advanceSyncHead(dagStore, syncHash, []);
 
     expect([
@@ -181,18 +150,21 @@ describe('advanceSyncHead', () => {
 
   test('sync is advanced via diffs when already initialized', async () => {
     const repo = new IVMSourceRepo(schema.tables);
-    const {dagStore, syncHash} = await createDb([
+    const {dagStore, syncHash} = await createDb(
       [
-        `${ENTITIES_KEY_PREFIX}issue/sdf`,
-        {
-          id: 'sdf',
-          title: 'test',
-          description: 'test',
-          closed: false,
-          ownerId: null,
-        },
+        [
+          `${ENTITIES_KEY_PREFIX}issue/sdf`,
+          {
+            id: 'sdf',
+            title: 'test',
+            description: 'test',
+            closed: false,
+            ownerId: null,
+          },
+        ],
       ],
-    ]);
+      timestamp++,
+    );
 
     // initialize the sync head
     await repo.advanceSyncHead(dagStore, syncHash, []);
@@ -454,7 +426,7 @@ describe('advanceSyncHead', () => {
       // remove existing data
     ] satisfies DiffCase[])('$name', async ({initial, diffs, expected}) => {
       const repo = new IVMSourceRepo(schema.tables);
-      const {dagStore, syncHash} = await createDb(initial);
+      const {dagStore, syncHash} = await createDb(initial, timestamp++);
       await repo.advanceSyncHead(dagStore, syncHash, []);
 
       await repo.advanceSyncHead(dagStore, syncHash, diffs);

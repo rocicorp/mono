@@ -32,6 +32,14 @@ test('zero-cache --help', () => {
                                                    Note that this number must allow for at least one connection per                                  
                                                    sync worker, or zero-cache will fail to start. See num-sync-workers                               
                                                                                                                                                      
+     --push-url string                             optional                                                                                          
+       ZERO_PUSH_URL env                                                                                                                             
+                                                   The URL of the API server to which zero-cache will push mutations.                                
+                                                                                                                                                     
+     --push-api-key string                         optional                                                                                          
+       ZERO_PUSH_API_KEY env                                                                                                                         
+                                                   An optional secret used to authorize zero-cache to call the API server.                           
+                                                                                                                                                     
      --cvr-db string                               required                                                                                          
        ZERO_CVR_DB env                                                                                                                               
                                                    A separate Postgres database we use to store CVRs. CVRs (client view records)                     

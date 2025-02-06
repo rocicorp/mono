@@ -135,7 +135,10 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
   test.each([
     [
       'create table',
-      'CREATE TABLE zero.baz (id INT8 CONSTRAINT baz_pkey PRIMARY KEY);',
+      `CREATE TABLE zero.baz (
+        id INT8 CONSTRAINT baz_pkey PRIMARY KEY,
+        gen INT8 GENERATED ALWAYS AS (id + 1) STORED  -- Should be excluded
+       );`,
       [{tag: 'create-table'}, {tag: 'create-index'}],
       {['zero.baz']: []},
       [
