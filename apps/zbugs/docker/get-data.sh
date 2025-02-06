@@ -1,7 +1,7 @@
 #!/bin/bash
 
 set -e
-BASE_URL="https://rocinante-dev.s3.us-east-1.amazonaws.com/"
+BASE_URL="https://rocinante-dev.s3.us-east-1.amazonaws.com"
 FILES=(
     "comments_1.csv"
     "comments_2.csv"
