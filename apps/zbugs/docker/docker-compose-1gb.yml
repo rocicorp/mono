@@ -5,13 +5,12 @@ services:
       service: postgres_primary
     volumes:
       - zbugs_pgdata_upstream:/var/lib/postgresql/data
-      - ./github_upstream:/docker-entrypoint-initdb.d
-      - ./data/github:/data
+      - ./1gb_upstream:/docker-entrypoint-initdb.d
+      - ./data/1gb:/data
   postgres_replica:
     extends:
       file: docker-compose.base.yml
       service: postgres_replica
-
 volumes:
   zbugs_pgdata_sync:
     driver: local
