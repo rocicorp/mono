@@ -1,18 +1,18 @@
 import {describe, expect, test} from 'vitest';
+import type {LogConfig} from '../../../otel/src/log-options.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {Catch} from './catch.ts';
 import type {Change} from './change.ts';
-import {compareRowsTest} from './data.test.ts';
 import {
   generateWithOverlayInner,
   MemorySource,
   overlaysForConstraintForTest,
   overlaysForStartAtForTest,
 } from './memory-source.ts';
+import {compareRowsTest} from './test/compare-rows-test.ts';
 import {createSource} from './test/source-factory.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {LogConfig} from '../../../otel/src/log-options.ts';
 
 const lc = createSilentLogContext();
 const logConfig: LogConfig = {

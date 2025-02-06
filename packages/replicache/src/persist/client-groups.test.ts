@@ -1,12 +1,10 @@
 import {expect, test} from 'vitest';
 import type {Read, Store, Write} from '../dag/store.ts';
 import {TestStore} from '../dag/test-store.ts';
-import {type Hash, assertHash, fakeHash} from '../hash.ts';
+import {assertHash, fakeHash, type Hash} from '../hash.ts';
 import type {ClientGroupID} from '../sync/ids.ts';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.ts';
 import {
-  type ClientGroup,
-  type ClientGroupMap,
   clientGroupHasPendingMutations,
   deleteClientGroup,
   disableClientGroup,
@@ -16,37 +14,15 @@ import {
   setClientGroup,
   setClientGroups,
 } from './client-groups.ts';
+import {
+  makeClientGroup,
+  makeClientGroupMap,
+  type PartialClientGroup,
+} from './test-utils.ts';
 
 const headClientGroup1Hash = fakeHash('b1');
 const headClientGroup2Hash = fakeHash('b2');
 const headClientGroup3Hash = fakeHash('b3');
-
-type PartialClientGroup = Partial<ClientGroup> & Pick<ClientGroup, 'headHash'>;
-
-export function makeClientGroupMap(
-  partialClientGroups: Record<ClientGroupID, PartialClientGroup>,
-): ClientGroupMap {
-  const clientGroupMap = new Map();
-  for (const [clientGroupID, partialClientGroup] of Object.entries(
-    partialClientGroups,
-  )) {
-    clientGroupMap.set(clientGroupID, makeClientGroup(partialClientGroup));
-  }
-  return clientGroupMap;
-}
-
-export function makeClientGroup(
-  partialClientGroup: PartialClientGroup,
-): ClientGroup {
-  return {
-    mutatorNames: [],
-    indexes: {},
-    mutationIDs: {},
-    lastServerAckdMutationIDs: {},
-    disabled: false,
-    ...partialClientGroup,
-  };
-}
 
 test('getClientGroups with no existing ClientGroupMap in dag store', async () => {
   const dagStore = new TestStore();
