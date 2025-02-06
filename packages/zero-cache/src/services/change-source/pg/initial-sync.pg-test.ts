@@ -1124,10 +1124,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     {
       name: 'partitioned table',
       setupUpstreamQuery: `
-        CREATE TABLE giant(
-          id INTEGER,
-          PRIMARY KEY (id)
-        ) PARTITION BY HASH (id);
+        CREATE TABLE giant(id INTEGER PRIMARY KEY) PARTITION BY HASH (id);
         CREATE TABLE giant_default PARTITION OF giant
           FOR VALUES WITH (MODULUS 1, REMAINDER 0);
       `,
