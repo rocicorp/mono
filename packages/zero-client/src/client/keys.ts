@@ -45,3 +45,8 @@ export function toPrimaryKeyString(
   const idSegment = h128(str);
   return ENTITIES_KEY_PREFIX + tableName + '/' + idSegment;
 }
+
+export function sourceNameFromKey(key: string): string {
+  const slash = key.indexOf('/', ENTITIES_KEY_PREFIX.length);
+  return key.slice(ENTITIES_KEY_PREFIX.length, slash);
+}

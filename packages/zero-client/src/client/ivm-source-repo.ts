@@ -5,7 +5,7 @@ import type {Store} from '../../../replicache/src/dag/store.ts';
 import {withRead} from '../../../replicache/src/with-transactions.ts';
 import type {Hash} from '../../../replicache/src/hash.ts';
 import * as FormatVersion from '../../../replicache/src/format-version-enum.ts';
-import {ENTITIES_KEY_PREFIX} from './keys.ts';
+import {ENTITIES_KEY_PREFIX, sourceNameFromKey} from './keys.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Diff} from '../../../replicache/src/sync/patch.ts';
@@ -80,7 +80,7 @@ export class IVMSourceRepo {
           if (!entry[0].startsWith(ENTITIES_KEY_PREFIX)) {
             break;
           }
-          const name = nameFromKey(entry[0]);
+          const name = sourceNameFromKey(entry[0]);
           const source = must(syncSources.getSource(name));
           source.push({
             type: 'add',
@@ -101,7 +101,7 @@ export class IVMSourceRepo {
         if (!key.startsWith(ENTITIES_KEY_PREFIX)) {
           continue;
         }
-        const name = nameFromKey(key);
+        const name = sourceNameFromKey(key);
         const source = must(this.#sync.getSource(name));
         switch (patch.op) {
           case 'del':
@@ -130,11 +130,6 @@ export class IVMSourceRepo {
     // Set the branch which can be used for rebasing optimistic mutations.
     this.#rebase = must(this.#sync).fork();
   };
-}
-
-export function nameFromKey(key: string): string {
-  const slash = key.indexOf('/', ENTITIES_KEY_PREFIX.length);
-  return key.slice(ENTITIES_KEY_PREFIX.length, slash);
 }
 
 export class IVMSourceBranch {
