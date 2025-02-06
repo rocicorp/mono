@@ -11,14 +11,6 @@ import {
 } from '../../../replicache/src/with-transactions.ts';
 import type {DeleteClientsMessage} from '../../../zero-protocol/src/delete-clients.ts';
 
-// Delay checking for deleted clients after connecting to the server to not compete
-// with more important work.
-export const DELAY_SEND_AFTER_CONNECT = 2500;
-
-// TODO: Maybe should send this as part of initConnection? It would be good to
-// delete the clients before we send down the results of the queries in case
-// some of those queries should be deleted.
-
 /**
  * Replicache will tell us when it deletes clients from the persistent storage
  * due to GC. When this happens we tell the server about the deleted clients. We
@@ -29,46 +21,18 @@ export const DELAY_SEND_AFTER_CONNECT = 2500;
  * we remove those IDs from our local storage.
  */
 export class DeleteClientsManager {
-  #sendTimerID: ReturnType<typeof setTimeout> | undefined;
   readonly #send: (msg: DeleteClientsMessage) => void;
   readonly #lc: LogContext;
   readonly #dagStore: Store;
-  readonly #getConnectPromise: () => Promise<void>;
 
   constructor(
-    getConnectPromise: () => Promise<void>,
     send: (msg: DeleteClientsMessage) => void,
     dagStore: Store,
     lc: LogContext,
   ) {
-    this.#getConnectPromise = getConnectPromise;
     this.#send = send;
     this.#dagStore = dagStore;
     this.#lc = lc;
-    this.#listenToConnect();
-  }
-
-  #listenToConnect(): void {
-    this.#catch(this.#getConnectPromise().then(() => this.#onConnect()));
-  }
-
-  #onConnect(): void {
-    this.#lc.debug?.('DeleteClientsManager: onConnect');
-    this.#sendTimerID = setTimeout(() => {
-      this.#catch(this.sendDeletedClientsToServer());
-    }, DELAY_SEND_AFTER_CONNECT);
-  }
-
-  #catch(p: Promise<unknown>): void {
-    p.catch(e => {
-      this.#lc.error?.('Unexpected error', e);
-    });
-  }
-
-  handleDisconnect() {
-    this.#lc.debug?.('DeleteClientsManager: handleDisconnect');
-    clearTimeout(this.#sendTimerID);
-    this.#listenToConnect();
   }
 
   /**

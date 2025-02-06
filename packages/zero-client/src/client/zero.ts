@@ -537,7 +537,6 @@ export class Zero<
     this.#clientToServer = clientToServer(schema.tables);
 
     this.#deleteClientsManager = new DeleteClientsManager(
-      () => this.#connectResolver.promise,
       msg => this.#send(msg),
       rep.perdag,
       this.#lc,
@@ -1145,7 +1144,6 @@ export class Zero<
     this.#socket = undefined;
     this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
     this.#pokeHandler.handleDisconnect();
-    this.#deleteClientsManager.handleDisconnect();
   }
 
   #handlePokeStart(_lc: LogContext, pokeMessage: PokeStartMessage): void {

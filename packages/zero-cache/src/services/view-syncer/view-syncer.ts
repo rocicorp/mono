@@ -381,7 +381,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         ctx,
         initConnectionMessage,
         this.#handleInitConnection,
-        // this.#patchQueries,
         newClient,
       ).catch(e => newClient.fail(e));
 
@@ -416,7 +415,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     try {
       return await this.#runInLockForClient(ctx, msg, this.#deleteClients);
     } catch (e) {
-      return this.#lc.error?.('deleteClients failed', e);
+      this.#lc.error?.('deleteClients failed', e);
     }
   }
 
