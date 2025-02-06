@@ -1121,6 +1121,105 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         `_zero_public_${SHARD_ID}`,
       ],
     },
+    {
+      name: 'partitioned table',
+      setupUpstreamQuery: `
+        CREATE TABLE giant(
+          id INTEGER,
+          PRIMARY KEY (id)
+        ) PARTITION BY HASH (id);
+        CREATE TABLE giant_default PARTITION OF giant
+          FOR VALUES WITH (MODULUS 1, REMAINDER 0);
+      `,
+      published: {
+        [`zero_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
+        ['zero.schemaVersions']: ZERO_SCHEMA_VERSIONS_SPEC,
+        ['public.giant']: {
+          columns: {
+            id: {
+              pos: 1,
+              characterMaximumLength: null,
+              dataType: 'int4',
+              typeOID: 23,
+              notNull: true,
+              dflt: null,
+            },
+          },
+          oid: expect.any(Number),
+          name: 'giant',
+          primaryKey: ['id'],
+          schema: 'public',
+          publications: {[`_zero_public_${SHARD_ID}`]: {rowFilter: null}},
+        },
+      },
+      replicatedSchema: {
+        [`zero_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        ['giant']: {
+          columns: {
+            id: {
+              pos: 1,
+              characterMaximumLength: null,
+              dataType: 'int4|NOT_NULL',
+              notNull: false,
+              dflt: null,
+            },
+            ['_0_version']: {
+              pos: 2,
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              notNull: false,
+              dflt: null,
+            },
+          },
+          name: 'giant',
+        },
+      },
+      replicatedIndexes: [
+        {
+          columns: {id: 'ASC'},
+          name: 'giant_pkey',
+          schema: 'public',
+          tableName: 'giant',
+          unique: true,
+        },
+        {
+          columns: {lock: 'ASC'},
+          name: 'schemaVersions_pkey',
+          schema: 'zero',
+          tableName: 'schemaVersions',
+          unique: true,
+        },
+        {
+          columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+          },
+          name: 'clients_pkey',
+          schema: 'zero_initial_sync_test_id',
+          tableName: 'clients',
+          unique: true,
+        },
+      ],
+      upstream: {
+        ['giant_default']: [{id: 123}],
+      },
+      replicatedData: {
+        [`zero_${SHARD_ID}.clients`]: [],
+        giant: [{id: 123n}],
+        ['zero.schemaVersions']: [
+          {
+            lock: 1n,
+            minSupportedVersion: 1n,
+            maxSupportedVersion: 1n,
+            ['_0_version']: WATERMARK_REGEX,
+          },
+        ],
+      },
+      resultingPublications: [
+        `_zero_metadata_${SHARD_ID}`,
+        `_zero_public_${SHARD_ID}`,
+      ],
+    },
   ];
 
   let upstream: PostgresDB;

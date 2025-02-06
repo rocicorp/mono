@@ -196,7 +196,9 @@ export async function setupTablesAndReplication(
     // Note: For re-syncing, this publication is dropped in dropShard(), so an existence
     //       check is unnecessary.
     await tx`
-      CREATE PUBLICATION ${tx(defaultPublication)} FOR TABLES IN SCHEMA public`;
+      CREATE PUBLICATION ${tx(defaultPublication)} 
+        FOR TABLES IN SCHEMA public
+        WITH (publish_via_partition_root = true)`;
     allPublications.push(defaultPublication);
   }
 
