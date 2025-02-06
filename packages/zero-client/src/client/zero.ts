@@ -532,7 +532,7 @@ export class Zero<
     this.#deleteClientsManager = new DeleteClientsManager(
       () => this.#connectResolver.promise,
       msg => this.#send(msg),
-      rep.memdag,
+      rep.perdag,
       this.#lc,
     );
 

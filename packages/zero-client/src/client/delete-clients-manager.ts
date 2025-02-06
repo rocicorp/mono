@@ -1,20 +1,19 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Read, Store, Write} from '../../../replicache/src/dag/store.ts';
-import {deepFreeze} from '../../../replicache/src/frozen-json.ts';
-import type {Hash} from '../../../replicache/src/hash.ts';
+import type {Store} from '../../../replicache/src/dag/store.ts';
+import {
+  getDeletedClients,
+  setDeletedClients,
+} from '../../../replicache/src/deleted-clients.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {
   withRead,
   withWrite,
 } from '../../../replicache/src/with-transactions.ts';
-import * as v from '../../../shared/src/valita.ts';
 import type {DeleteClientsMessage} from '../../../zero-protocol/src/delete-clients.ts';
-
-const DELETED_CLIENTS_HEAD_NAME = 'deleted-clients';
 
 // Delay checking for deleted clients after connecting to the server to not compete
 // with more important work.
-const DELAY_SEND_AFTER_CONNECT = 2500;
+export const DELAY_SEND_AFTER_CONNECT = 2500;
 
 // TODO: Maybe should send this as part of initConnection? It would be good to
 // delete the clients before we send down the results of the queries in case
@@ -118,31 +117,3 @@ export class DeleteClientsManager {
     });
   }
 }
-
-const deletedClientsSchema = v.array(v.string());
-
-async function getDeletedClients(dagRead: Read): Promise<ClientID[]> {
-  const hash = await dagRead.getHead(DELETED_CLIENTS_HEAD_NAME);
-  if (hash === undefined) {
-    return [];
-  }
-  const chunk = await dagRead.mustGetChunk(hash);
-  return v.parse(chunk.data, deletedClientsSchema);
-}
-
-async function setDeletedClients(
-  dagWrite: Write,
-  deletedClients: ClientID[],
-): Promise<Hash> {
-  const chunkData = deepFreeze(deletedClients);
-  const chunk = dagWrite.createChunk(chunkData, []);
-  await dagWrite.putChunk(chunk);
-  await dagWrite.setHead(DELETED_CLIENTS_HEAD_NAME, chunk.hash);
-  return chunk.hash;
-}
-
-export {
-  DELAY_SEND_AFTER_CONNECT as DELAY_SEND_AFTER_CONNECT_FOR_TEST,
-  getDeletedClients as getDeletedClientsForTest,
-  setDeletedClients as setDeletedClientsForTest,
-};

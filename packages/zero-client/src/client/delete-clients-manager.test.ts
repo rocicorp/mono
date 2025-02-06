@@ -3,6 +3,10 @@ import {beforeEach, expect, test, vi, type Mock} from 'vitest';
 import type {Store} from '../../../replicache/src/dag/store.ts';
 import {TestStore} from '../../../replicache/src/dag/test-store.ts';
 import {
+  getDeletedClients,
+  setDeletedClients,
+} from '../../../replicache/src/deleted-clients.ts';
+import {
   withRead,
   withWrite,
 } from '../../../replicache/src/with-transactions.ts';
@@ -10,10 +14,8 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {promiseNever} from '../../../shared/src/resolved-promises.ts';
 import type {DeleteClientsMessage} from '../../../zero-protocol/src/delete-clients.ts';
 import {
-  DELAY_SEND_AFTER_CONNECT_FOR_TEST,
+  DELAY_SEND_AFTER_CONNECT,
   DeleteClientsManager,
-  getDeletedClientsForTest,
-  setDeletedClientsForTest,
 } from './delete-clients-manager.ts';
 
 let send: Mock<(msg: DeleteClientsMessage) => void>;
@@ -35,16 +37,13 @@ beforeEach(() => {
 test('onClientsDeleted', async () => {
   await manager.onClientsDeleted(['a', 'b']);
   expect(send).toBeCalledWith(['deleteClients', {clientIDs: ['a', 'b']}]);
-  expect(await withRead(dagStore, getDeletedClientsForTest)).toEqual([
-    'a',
-    'b',
-  ]);
+  expect(await withRead(dagStore, getDeletedClients)).toEqual(['a', 'b']);
 });
 
 test('sendDeletedClientsToServer', async () => {
   // sends whatever is in the store
   await withWrite(dagStore, dagWrite =>
-    setDeletedClientsForTest(dagWrite, ['c', 'd', 'e']),
+    setDeletedClients(dagWrite, ['c', 'd', 'e']),
   );
   await manager.sendDeletedClientsToServer();
   expect(send).toBeCalledWith(['deleteClients', {clientIDs: ['c', 'd', 'e']}]);
@@ -52,17 +51,17 @@ test('sendDeletedClientsToServer', async () => {
 
 test('clientsDeletedOnServer', async () => {
   await withWrite(dagStore, dagWrite =>
-    setDeletedClientsForTest(dagWrite, ['c', 'd', 'e']),
+    setDeletedClients(dagWrite, ['c', 'd', 'e']),
   );
   await manager.clientsDeletedOnServer(['c', 'd']);
-  expect(await withRead(dagStore, getDeletedClientsForTest)).toEqual(['e']);
+  expect(await withRead(dagStore, getDeletedClients)).toEqual(['e']);
 });
 
 test('send deleted clients on connect after a delay', async () => {
   let {promise, resolve} = resolver<void>();
   const manager = new DeleteClientsManager(() => promise, send, dagStore, lc);
   await withWrite(dagStore, dagWrite =>
-    setDeletedClientsForTest(dagWrite, ['a', 'b']),
+    setDeletedClients(dagWrite, ['a', 'b']),
   );
 
   expect(send).not.toBeCalled();
@@ -70,14 +69,14 @@ test('send deleted clients on connect after a delay', async () => {
   expect(send).not.toBeCalled();
   resolve();
   expect(send).not.toBeCalled();
-  await vi.advanceTimersByTimeAsync(DELAY_SEND_AFTER_CONNECT_FOR_TEST - 1);
+  await vi.advanceTimersByTimeAsync(DELAY_SEND_AFTER_CONNECT - 1);
   expect(send).not.toBeCalled();
   await vi.advanceTimersByTimeAsync(1);
   expect(send).toBeCalledWith(['deleteClients', {clientIDs: ['a', 'b']}]);
 
   // Disconnect and reconnect
   await withWrite(dagStore, dagWrite =>
-    setDeletedClientsForTest(dagWrite, ['c', 'd']),
+    setDeletedClients(dagWrite, ['c', 'd']),
   );
   send.mockClear();
   ({promise, resolve} = resolver<void>());
@@ -86,7 +85,7 @@ test('send deleted clients on connect after a delay', async () => {
   expect(send).not.toBeCalled();
   resolve();
   expect(send).not.toBeCalled();
-  await vi.advanceTimersByTimeAsync(DELAY_SEND_AFTER_CONNECT_FOR_TEST - 1);
+  await vi.advanceTimersByTimeAsync(DELAY_SEND_AFTER_CONNECT - 1);
   expect(send).not.toBeCalled();
   await vi.advanceTimersByTimeAsync(1);
   expect(send).toBeCalledWith(['deleteClients', {clientIDs: ['c', 'd']}]);
