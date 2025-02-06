@@ -4,13 +4,18 @@ import {deepFreeze} from './frozen-json.ts';
 import type {Hash} from './hash.ts';
 import type {ClientID} from './sync/ids.ts';
 
+/**
+ * We keep track of deleted clients in the {@linkcode DELETED_CLIENTS_HEAD_NAME}
+ * head.
+ */
 export const DELETED_CLIENTS_HEAD_NAME = 'deleted-clients';
 
 export async function setDeletedClients(
   dagWrite: Write,
   deletedClients: ClientID[],
 ): Promise<Hash> {
-  const chunkData = deepFreeze(deletedClients);
+  // sort and dedupe
+  const chunkData = deepFreeze([...new Set(deletedClients)].sort());
   const chunk = dagWrite.createChunk(chunkData, []);
   await dagWrite.putChunk(chunk);
   await dagWrite.setHead(DELETED_CLIENTS_HEAD_NAME, chunk.hash);

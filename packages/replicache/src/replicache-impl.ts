@@ -97,6 +97,7 @@ import {
 } from './subscriptions.ts';
 import * as HandlePullResponseResultEnum from './sync/handle-pull-response-result-type-enum.ts';
 import type {ClientGroupID, ClientID} from './sync/ids.ts';
+import type {Diff} from './sync/patch.ts';
 import {PullError} from './sync/pull-error.ts';
 import {beginPullV1, handlePullResponseV1, maybeEndPull} from './sync/pull.ts';
 import {push, PUSH_VERSION_DD31} from './sync/push.ts';
@@ -122,7 +123,6 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.ts';
-import type {Diff} from './sync/patch.ts';
 
 declare const TESTING: boolean;
 
@@ -414,9 +414,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       enableScheduledRefresh = true,
       enablePullAndPushInOpen = true,
       enableClientGroupForking = true,
-      onClientsDeleted = clientIDs => {
-        this.#lc.info?.('ClientIDs deleted', clientIDs);
-      },
+      onClientsDeleted = () => {},
     } = implOptions;
     this.auth = auth ?? '';
     this.pullURL = pullURL;

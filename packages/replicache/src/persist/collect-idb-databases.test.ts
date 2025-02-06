@@ -4,6 +4,7 @@ import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {assertNotUndefined} from '../../../shared/src/asserts.ts';
 import type {Store} from '../dag/store.ts';
 import {TestStore} from '../dag/test-store.ts';
+import {setDeletedClients} from '../deleted-clients.ts';
 import * as FormatVersion from '../format-version-enum.ts';
 import {fakeHash} from '../hash.ts';
 import {IDBStore} from '../kv/idb-store.ts';
@@ -38,7 +39,12 @@ describe('collectIDBDatabases', () => {
     clock.restore();
   });
 
-  type Entries = [IndexedDBDatabase, ClientMap, ClientGroupMap?][];
+  type Entries = [
+    IndexedDBDatabase,
+    ClientMap,
+    (ClientGroupMap | undefined)?,
+    (ClientID[] | undefined)?,
+  ][];
 
   const makeIndexedDBDatabase = ({
     name,
@@ -79,7 +85,7 @@ describe('collectIDBDatabases', () => {
       const store = new IDBDatabasesStore(_ => new TestMemStore());
       const dropStore = (name: string) => store.deleteDatabases([name]);
       const clientDagStores = new Map<IndexedDBName, Store>();
-      for (const [db, clients, clientGroups] of entries) {
+      for (const [db, clients, clientGroups, deletedClientIDs] of entries) {
         const dagStore = new TestStore();
         clientDagStores.set(db.name, dagStore);
 
@@ -87,9 +93,14 @@ describe('collectIDBDatabases', () => {
 
         await setClientsForTesting(clients, dagStore);
         if (clientGroups) {
-          await withWrite(dagStore, async tx => {
-            await setClientGroups(clientGroups, tx);
-          });
+          await withWrite(dagStore, dagWrite =>
+            setClientGroups(clientGroups, dagWrite),
+          );
+        }
+        if (deletedClientIDs) {
+          await withWrite(dagStore, dagWrite =>
+            setDeletedClients(dagWrite, deletedClientIDs),
+          );
         }
       }
 
@@ -616,6 +627,32 @@ describe('collectIDBDatabases', () => {
       expectedClientsDeleted: ['clientA1', 'clientB1'],
       enableMutationRecovery: false,
     });
+
+    {
+      const entries2: Entries = [
+        [entries[0][0], entries[0][1], entries[0][2], ['old-deleted-client-3']],
+        [
+          entries[1][0],
+          entries[1][1],
+          entries[1][2],
+          ['old-deleted-client-1', 'old-deleted-client-2'],
+        ],
+      ];
+      t({
+        name: 'two idb with one client in each, one client has pending mutations should call onClientIDsDeleted. Also has old deleted clients',
+        entries: entries2,
+        now: 5000,
+        expectedDatabases: [],
+        expectedClientsDeleted: [
+          'clientA1',
+          'clientB1',
+          'old-deleted-client-1',
+          'old-deleted-client-2',
+          'old-deleted-client-3',
+        ],
+        enableMutationRecovery: false,
+      });
+    }
   }
 });
 
