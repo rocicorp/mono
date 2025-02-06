@@ -94,7 +94,8 @@ describe('tables/published', () => {
         real_array REAL[],
         int_array INTEGER[],
         json_val JSONB,
-        day DAY_OF_WEEK
+        day DAY_OF_WEEK,
+        excluded INTEGER GENERATED ALWAYS AS (user_id + 1) STORED
       );
       CREATE PUBLICATION zero_data FOR TABLE test.users;
       `,
@@ -1460,6 +1461,9 @@ describe('tables/published', () => {
         );
         assert(c.expectedResult);
         expect(tables).toMatchObject(c.expectedResult);
+        for (const t of tables.tables) {
+          expect(t.columns.excluded).toBeUndefined();
+        }
       } catch (e) {
         if (c.expectedError) {
           expect(c.expectedError).toMatch(String(e));
