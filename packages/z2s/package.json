@@ -21,5 +21,8 @@
     "@databases/escape-identifier": "^1.0.3",
     "@databases/sql": "^3.3.0",
     "vitest": "^2.1.5"
+  },
+  "devDependencies": {
+    "@faker-js/faker": "^9.4.0"
   }
 }
