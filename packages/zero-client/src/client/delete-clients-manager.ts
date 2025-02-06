@@ -49,16 +49,20 @@ export class DeleteClientsManager {
   }
 
   #listenToConnect(): void {
-    this.#getConnectPromise()
-      .then(() => this.#onConnect())
-      .catch(() => {});
+    this.#catch(this.#getConnectPromise().then(() => this.#onConnect()));
   }
 
   #onConnect(): void {
     this.#lc.debug?.('DeleteClientsManager: onConnect');
     this.#sendTimerID = setTimeout(() => {
-      this.sendDeletedClientsToServer().catch(() => {});
+      this.#catch(this.sendDeletedClientsToServer());
     }, DELAY_SEND_AFTER_CONNECT);
+  }
+
+  #catch(p: Promise<unknown>): void {
+    p.catch(e => {
+      this.#lc.error?.('Unexpected error', e);
+    });
   }
 
   handleDisconnect() {
@@ -115,5 +119,9 @@ export class DeleteClientsManager {
       );
       await setDeletedClients(dagWrite, newDeletedClients);
     });
+  }
+
+  getDeletedClients(): Promise<ClientID[]> {
+    return withRead(this.#dagStore, getDeletedClients);
   }
 }

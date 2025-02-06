@@ -1,6 +1,7 @@
 import type {LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type {SinonFakeTimers} from 'sinon';
+import type {Store} from '../../../replicache/src/dag/store.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
@@ -79,6 +80,10 @@ export class TestZero<
     state: ConnectionState;
     resolve: (state: ConnectionState) => void;
   }> = new Set();
+
+  get perdag(): Store {
+    return getInternalReplicacheImplForTesting(this).perdag;
+  }
 
   get connectionState() {
     assert(TESTING);
@@ -207,7 +212,6 @@ export class TestZero<
   }
 
   persist(): Promise<void> {
-    assert(TESTING);
     return getInternalReplicacheImplForTesting(this).persist();
   }
 }
@@ -235,7 +239,7 @@ export function zeroForTest<
   const r = new TestZero({
     server: 'https://example.com/',
     // Make sure we do not reuse IDB instances between tests by default
-    userID: 'test-user-id-' + testZeroCounter++,
+    userID: options.userID ?? 'test-user-id-' + testZeroCounter++,
     auth: () => 'test-auth',
     schema,
     // We do not want any unexpected onUpdateNeeded calls in tests. If the test

@@ -21,6 +21,7 @@ export const connectedMessageSchema = v.tuple([
 
 const initConnectionBodySchema = v.object({
   desiredQueriesPatch: queriesPatchSchema,
+  deletedClients: v.array(v.string()).optional(),
 });
 
 export const initConnectionMessageSchema = v.tuple([

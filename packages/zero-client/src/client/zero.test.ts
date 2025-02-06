@@ -2,9 +2,11 @@ import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import * as sinon from 'sinon';
 import {afterEach, beforeEach, expect, suite, test} from 'vitest';
+import {setDeletedClients} from '../../../replicache/src/deleted-clients.ts';
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
 import type {PullRequest} from '../../../replicache/src/sync/pull.ts';
 import type {PushRequest} from '../../../replicache/src/sync/push.ts';
+import {withWrite} from '../../../replicache/src/with-transactions.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import * as valita from '../../../shared/src/valita.ts';
@@ -23,7 +25,6 @@ import {
   type Mutation,
   pushMessageSchema,
 } from '../../../zero-protocol/src/push.ts';
-import type {QueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
 import {
   createSchema,
@@ -35,6 +36,8 @@ import {
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import * as ConnectionState from './connection-state-enum.ts';
+import type {CustomMutatorDefs} from './custom.ts';
+import type {DeleteClientsManager} from './delete-clients-manager.ts';
 import type {WSString} from './http-string.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import type {QueryManager} from './query-manager.ts';
@@ -329,6 +332,10 @@ const mockQueryManager = {
   },
 } as unknown as QueryManager;
 
+const mockDeleteClientsManager = {
+  getDeletedClients: () => Promise.resolve(['old-deleted-client']),
+} as unknown as DeleteClientsManager;
+
 suite('createSocket', () => {
   const t = (
     socketURL: WSString,
@@ -345,9 +352,10 @@ suite('createSocket', () => {
     const schemaVersion = 3;
     test(expectedURL, async () => {
       sinon.stub(performance, 'now').returns(now);
-      const [mockSocket, queriesPatch] = (await createSocket(
+      const [mockSocket, queriesPatch, deletedClients] = await createSocket(
         mockRep,
         mockQueryManager,
+        mockDeleteClientsManager,
         socketURL,
         baseCookie,
         clientID,
@@ -361,16 +369,24 @@ suite('createSocket', () => {
         new LogContext('error', undefined, new TestLogSink()),
         1048 * 8,
         additionalConnectParams,
-      )) as unknown as [MockSocket, Map<string, QueriesPatchOp>];
+      );
       expect(`${mockSocket.url}`).equal(expectedURL);
       expect(mockSocket.protocol).equal(
-        encodeSecProtocols(['initConnection', {desiredQueriesPatch: []}], auth),
+        encodeSecProtocols(
+          [
+            'initConnection',
+            {desiredQueriesPatch: [], deletedClients: ['old-deleted-client']},
+          ],
+          auth,
+        ),
       );
       expect(queriesPatch).toEqual(new Map());
+      expect(deletedClients).toBeUndefined();
 
-      const [mockSocket2, queriesPatch2] = (await createSocket(
+      const [mockSocket2, queriesPatch2, deletedClients2] = await createSocket(
         mockRep,
         mockQueryManager,
+        mockDeleteClientsManager,
         socketURL,
         baseCookie,
         clientID,
@@ -384,11 +400,12 @@ suite('createSocket', () => {
         new LogContext('error', undefined, new TestLogSink()),
         0, // do not put any extra information into headers
         additionalConnectParams,
-      )) as unknown as [MockSocket, Map<string, QueriesPatchOp>];
+      );
       expect(`${mockSocket.url}`).equal(expectedURL);
       expect(mockSocket2.protocol).equal(encodeSecProtocols(undefined, auth));
       // if we did not encode queries into the sec-protocol header, we should not have a queriesPatch
       expect(queriesPatch2).toBeUndefined();
+      expect(deletedClients2).toEqual(['old-deleted-client']);
     });
   };
 
@@ -561,7 +578,40 @@ suite('initConnection', () => {
     mockSocket.onUpstream = msg => {
       expect(
         valita.parse(JSON.parse(msg), initConnectionMessageSchema),
-      ).toEqual(['initConnection', {desiredQueriesPatch: []}]);
+      ).toEqual([
+        'initConnection',
+        {
+          desiredQueriesPatch: [],
+        },
+      ]);
+      expect(r.connectionState).toEqual(ConnectionState.Connecting);
+    };
+
+    expect(mockSocket.messages.length).toEqual(0);
+    await r.triggerConnected();
+    expect(mockSocket.messages.length).toEqual(1);
+  });
+
+  test('sent when connected message received but before ConnectionState.Connected desired queries > maxHeaderLength, with deletedClients', async () => {
+    const r = await zeroForTestWithDeletedClients({
+      maxHeaderLength: 0,
+      deletedClients: ['a'],
+    });
+
+    const mockSocket = await r.socket;
+    mockSocket.onUpstream = msg => {
+      expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
+        .toMatchInlineSnapshot(`
+        [
+          "initConnection",
+          {
+            "deletedClients": [
+              "a",
+            ],
+            "desiredQueriesPatch": [],
+          },
+        ]
+      `);
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
     };
 
@@ -594,21 +644,106 @@ suite('initConnection', () => {
         decodeSecProtocols(mockSocket.protocol).initConnectionMessage,
         initConnectionMessageSchema,
       ),
-    ).toEqual([
-      'initConnection',
-      {
-        desiredQueriesPatch: [
-          {
-            ast: {
-              table: 'e',
-              orderBy: [['id', 'asc']],
-            } satisfies AST,
-            hash: '29j3x0l4bxthp',
-            op: 'put',
-          },
+    ).toMatchInlineSnapshot(`
+      [
+        "initConnection",
+        {
+          "desiredQueriesPatch": [
+            {
+              "ast": {
+                "orderBy": [
+                  [
+                    "id",
+                    "asc",
+                  ],
+                ],
+                "table": "e",
+              },
+              "hash": "29j3x0l4bxthp",
+              "op": "put",
+            },
+          ],
+        },
+      ]
+    `);
+
+    expect(mockSocket.messages.length).toEqual(0);
+    await r.triggerConnected();
+    expect(mockSocket.messages.length).toEqual(0);
+  });
+
+  async function zeroForTestWithDeletedClients<
+    const S extends Schema,
+    MD extends CustomMutatorDefs<S> = CustomMutatorDefs<S>,
+  >(
+    options: Partial<ZeroOptions<S, MD>> & {deletedClients: string[]},
+  ): Promise<TestZero<S, MD>> {
+    // We need to set the deleted clients before creating the zero instance but
+    // we use a random name for the user ID. So we create a zero instance with a
+    // random user ID, set the deleted clients, close it and then create a new
+    // zero instance with the same user ID.
+    const r0 = zeroForTest(options);
+    await withWrite(r0.perdag, dagWrite =>
+      setDeletedClients(dagWrite, options.deletedClients),
+    );
+    await r0.close();
+
+    return zeroForTest({
+      ...options,
+      userID: r0.userID,
+    });
+  }
+
+  test('sends desired queries patch in sec-protocol header with deletedClients', async () => {
+    const r = await zeroForTestWithDeletedClients({
+      schema: createSchema(1, {
+        tables: [
+          table('e')
+            .columns({
+              id: string(),
+              value: string(),
+            })
+            .primaryKey('id'),
         ],
-      },
-    ]);
+      }),
+      deletedClients: ['a'],
+    });
+
+    const view = r.query.e.materialize();
+    view.addListener(() => {});
+
+    const mockSocket = await r.socket;
+
+    expect(
+      valita.parse(
+        decodeSecProtocols(mockSocket.protocol).initConnectionMessage,
+        initConnectionMessageSchema,
+      ),
+    ).toMatchInlineSnapshot(`
+      [
+        "initConnection",
+        {
+          "deletedClients": [
+            "a",
+          ],
+          "desiredQueriesPatch": [
+            {
+              "ast": {
+                "orderBy": [
+                  [
+                    "id",
+                    "asc",
+                  ],
+                ],
+                "table": "e",
+              },
+              "hash": "29j3x0l4bxthp",
+              "op": "put",
+            },
+          ],
+        },
+      ]
+    `);
 
     expect(mockSocket.messages.length).toEqual(0);
     await r.triggerConnected();
@@ -632,23 +767,85 @@ suite('initConnection', () => {
     const mockSocket = await r.socket;
 
     mockSocket.onUpstream = msg => {
-      expect(
-        valita.parse(JSON.parse(msg), initConnectionMessageSchema),
-      ).toEqual([
-        'initConnection',
-        {
-          desiredQueriesPatch: [
-            {
-              ast: {
-                table: 'e',
-                orderBy: [['id', 'asc']],
-              } satisfies AST,
-              hash: '29j3x0l4bxthp',
-              op: 'put',
-            },
-          ],
-        },
-      ]);
+      expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
+        .toMatchInlineSnapshot(`
+        [
+          "initConnection",
+          {
+            "desiredQueriesPatch": [
+              {
+                "ast": {
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "e",
+                },
+                "hash": "29j3x0l4bxthp",
+                "op": "put",
+              },
+            ],
+          },
+        ]
+      `);
+
+      expect(r.connectionState).toEqual(ConnectionState.Connecting);
+    };
+
+    expect(mockSocket.messages.length).toEqual(0);
+    const view = r.query.e.materialize();
+    view.addListener(() => {});
+    await r.triggerConnected();
+    expect(mockSocket.messages.length).toEqual(1);
+  });
+
+  test('sends desired queries patch in `initConnectionMessage` when the patch is over maxHeaderLength with deleted clients', async () => {
+    const r = await zeroForTestWithDeletedClients({
+      maxHeaderLength: 0,
+      schema: createSchema(1, {
+        tables: [
+          table('e')
+            .columns({
+              id: string(),
+              value: string(),
+            })
+            .primaryKey('id'),
+        ],
+      }),
+      deletedClients: ['a'],
+    });
+    const mockSocket = await r.socket;
+
+    mockSocket.onUpstream = msg => {
+      expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
+        .toMatchInlineSnapshot(`
+        [
+          "initConnection",
+          {
+            "deletedClients": [
+              "a",
+            ],
+            "desiredQueriesPatch": [
+              {
+                "ast": {
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "e",
+                },
+                "hash": "29j3x0l4bxthp",
+                "op": "put",
+              },
+            ],
+          },
+        ]
+      `);
+
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
     };
 

@@ -15,14 +15,19 @@ import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
-import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {
   ChangeDesiredQueriesBody,
   ChangeDesiredQueriesMessage,
 } from '../../../../zero-protocol/src/change-desired-queries.ts';
-import type {InitConnectionMessage} from '../../../../zero-protocol/src/connect.ts';
-import type {DeleteClientsMessage} from '../../../../zero-protocol/src/delete-clients.ts';
+import type {
+  InitConnectionBody,
+  InitConnectionMessage,
+} from '../../../../zero-protocol/src/connect.ts';
+import type {
+  DeleteClientsBody,
+  DeleteClientsMessage,
+} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.ts';
@@ -375,13 +380,27 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       void this.#runInLockForClient(
         ctx,
         initConnectionMessage,
-        this.#patchQueries,
+        this.#handleInitConnection,
+        // this.#patchQueries,
         newClient,
       ).catch(e => newClient.fail(e));
 
       return downstream;
     });
   }
+
+  readonly #handleInitConnection = async (
+    lc: LogContext,
+    clientID: string,
+    body: InitConnectionBody,
+    cvr: CVRSnapshot,
+  ): Promise<void> => {
+    const {deletedClients} = body;
+    if (deletedClients) {
+      await this.#deleteClients(lc, clientID, {clientIDs: deletedClients}, cvr);
+    }
+    await this.#patchQueries(lc, clientID, body, cvr);
+  };
 
   async changeDesiredQueries(
     ctx: SyncContext,
@@ -395,21 +414,24 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     msg: DeleteClientsMessage,
   ): Promise<void> {
     try {
-      return await this.#runInLockForClient(
-        ctx,
-        msg,
-        (lc, _clientID, _body, _cvr) => {
-          lc.info?.('TODO: deleting clients');
-          // TODO: Implement deletion of clients
-          // Find all clients from the msg and delete them. Send back the IDs of the
-          // deleted clients to the client.
-          return promiseVoid;
-        },
-      );
+      return await this.#runInLockForClient(ctx, msg, this.#deleteClients);
     } catch (e) {
       return this.#lc.error?.('deleteClients failed', e);
     }
   }
+
+  // eslint-disable-next-line require-await
+  readonly #deleteClients = async (
+    lc: LogContext,
+    clientID: string,
+    {clientIDs}: DeleteClientsBody,
+    cvr: CVRSnapshot,
+  ): Promise<void> => {
+    lc.debug?.('deleting clients', clientIDs, clientID, cvr);
+    // TODO: Implement deletion of clients
+    // Find all clients from the msg and delete them. Send back the IDs of the
+    // deleted clients to the client.
+  };
 
   /**
    * Runs the given `fn` to process the `msg` from within the `#lock`,

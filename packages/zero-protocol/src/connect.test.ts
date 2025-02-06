@@ -8,23 +8,27 @@ test('encode/decodeSecProtocols round-trip', () => {
       fc.record({
         initConnectionMessage: fc.tuple(
           fc.constant<'initConnection'>('initConnection'),
-          fc.record({
-            desiredQueriesPatch: fc.array(
-              fc.oneof(
-                fc.record({
-                  op: fc.constant<'put'>('put'),
-                  hash: fc.string(),
-                  ast: fc.constant({
-                    table: 'table',
+          fc.record(
+            {
+              desiredQueriesPatch: fc.array(
+                fc.oneof(
+                  fc.record({
+                    op: fc.constant<'put'>('put'),
+                    hash: fc.string(),
+                    ast: fc.constant({
+                      table: 'table',
+                    }),
                   }),
-                }),
-                fc.record({
-                  op: fc.constant<'del'>('del'),
-                  hash: fc.string(),
-                }),
+                  fc.record({
+                    op: fc.constant<'del'>('del'),
+                    hash: fc.string(),
+                  }),
+                ),
               ),
-            ),
-          }),
+              deletedClients: fc.array(fc.string()),
+            },
+            {requiredKeys: ['desiredQueriesPatch']},
+          ),
         ),
         authToken: fc.option(
           fc.stringOf(
