@@ -8,7 +8,7 @@ import {
 } from './custom.ts';
 import {zeroForTest} from './test-utils.ts';
 import {nanoid} from '../util/nanoid.ts';
-import {createDb} from './ivm-source-repo.test.ts';
+import {createDb} from './test/create-db.ts';
 import {IVMSourceRepo} from './ivm-source-repo.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 import {must} from '../../../shared/src/must.ts';
@@ -175,7 +175,7 @@ test('custom mutators can query the local store during an optimistic mutation', 
 describe('rebasing custom mutators', () => {
   let repo: IVMSourceRepo;
   beforeEach(async () => {
-    const {dagStore, syncHash} = await createDb([]);
+    const {dagStore, syncHash} = await createDb([], 42);
     repo = new IVMSourceRepo(schema.tables);
     await repo.advanceSyncHead(dagStore, syncHash, []);
   });
