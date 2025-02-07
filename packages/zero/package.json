@@ -1,6 +1,6 @@
 {
   "name": "@rocicorp/zero",
-  "version": "0.13.2025020501",
+  "version": "0.14.2025020701",
   "scripts": {
     "build": "rm -rf out && npm run build-server && npm run build-client",
     "build-client": "tsc -p tsconfig.client.json && tsc-alias -p tsconfig.client.json && npx tsx tool/build.js",
@@ -45,7 +45,6 @@
     "js-xxhash": "^4.0.0",
     "json-custom-numbers": "^3.1.1",
     "kasi": "^1.1.0",
-    "magic-stopwatch": "^1.0.1",
     "nanoid": "^5.0.8",
     "pg": "^8.11.3",
     "pg-format": "npm:pg-format-fix@^1.0.5",

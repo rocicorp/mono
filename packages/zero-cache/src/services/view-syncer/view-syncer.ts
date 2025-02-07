@@ -3,7 +3,6 @@ import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type {JWTPayload} from 'jose';
-import {Stopwatch} from 'magic-stopwatch';
 import type {Row} from 'postgres';
 import {
   manualSpan,
@@ -918,8 +917,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     transformationHashToHash: Map<string, string>,
   ) {
     return startAsyncSpan(tracer, 'vs.#processChanges', async () => {
-      const stopwatch = new Stopwatch({type: 'date'});
       const start = Date.now();
+      let lapStart = start;
+      let totalProcessingTime = 0;
+
       const rows = new CustomKeyMap<RowID, RowUpdate>(rowIDString);
       let total = 0;
 
@@ -992,12 +993,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           }
 
           if (rows.size % TIME_SLICE_CHECK_SIZE === 0) {
-            const {elapsed} = stopwatch;
+            const elapsed = Date.now() - lapStart;
             if (elapsed > TIME_SLICE_MS) {
-              lc.debug?.(`yielding at ${rows.size} rows (${elapsed} ms)`);
-              stopwatch.stop(RECORD_LAP);
+              totalProcessingTime += elapsed;
               await yieldProcess();
-              stopwatch.start();
+              lapStart = Date.now();
             }
           }
         }
@@ -1007,8 +1007,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         span.setAttribute('totalRows', total);
       });
 
-      stopwatch.stop(RECORD_LAP);
-      return stopwatch.laps.reduce((total, lap) => total + lap.elapsed, 0);
+      // Add the time for the last lap.
+      totalProcessingTime += Date.now() - lapStart;
+      return totalProcessingTime;
     });
   }
 
@@ -1108,7 +1109,6 @@ const CURSOR_PAGE_SIZE = 10000;
 const TIME_SLICE_CHECK_SIZE = 500;
 // Yield the process after churning for > 500ms.
 const TIME_SLICE_MS = 500;
-const RECORD_LAP = true; // Readability for Stopwatch.stop(recordlap: boolean);
 
 function yieldProcess() {
   return new Promise(resolve => setTimeout(resolve, 0));
