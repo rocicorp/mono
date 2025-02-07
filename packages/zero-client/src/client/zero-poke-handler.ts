@@ -32,6 +32,7 @@ import {
 type PokeAccumulator = {
   readonly pokeStart: PokeStartBody;
   readonly parts: PokePartBody[];
+  readonly pokeEnd: PokeEndBody;
 };
 
 /**
@@ -48,7 +49,7 @@ export class PokeHandler {
   readonly #onPokeError: () => void;
   readonly #clientID: ClientID;
   readonly #lc: LogContext;
-  #receivingPoke: PokeAccumulator | undefined = undefined;
+  #receivingPoke: Omit<PokeAccumulator, 'pokeEnd'> | undefined = undefined;
   readonly #pokeBuffer: PokeAccumulator[] = [];
   #pokePlaybackLoopRunning = false;
   #lastRafPerfTimestamp = 0;
@@ -117,7 +118,7 @@ export class PokeHandler {
       this.#receivingPoke = undefined;
       return;
     }
-    this.#pokeBuffer.push(this.#receivingPoke);
+    this.#pokeBuffer.push({...this.#receivingPoke, pokeEnd});
     this.#receivingPoke = undefined;
     if (!this.#pokePlaybackLoopRunning) {
       this.#startPlaybackLoop();
@@ -207,7 +208,8 @@ export function mergePokes(
     return undefined;
   }
   const {baseCookie} = pokeBuffer[0].pokeStart;
-  const {cookie} = pokeBuffer[pokeBuffer.length - 1].pokeStart;
+  const lastPoke = pokeBuffer[pokeBuffer.length - 1];
+  const cookie = lastPoke.pokeEnd.cookie ?? lastPoke.pokeStart.cookie;
   const mergedPatch: PatchOperationInternal[] = [];
   const mergedLastMutationIDChanges: Record<string, number> = {};
 

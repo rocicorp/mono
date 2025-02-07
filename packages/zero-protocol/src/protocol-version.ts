@@ -12,7 +12,7 @@ import {assert} from '../../shared/src/asserts.ts';
  * release. The server (`zero-cache`) must be deployed before clients start
  * running the new code.
  */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 /**
  * The minimum protocol version supported by the server. The contract for
@@ -23,6 +23,7 @@ export const PROTOCOL_VERSION = 4;
  * from protocol versions before `MIN_SERVER_SUPPORTED_PROTOCOL_VERSION` are
  * closed with a `VersionNotSupported` error.
  */
+// TODO: Bump to 5 before returning responses with pokeEnd.cookie.
 export const MIN_SERVER_SUPPORTED_PROTOCOL_VERSION = 2;
 
 assert(MIN_SERVER_SUPPORTED_PROTOCOL_VERSION < PROTOCOL_VERSION);
