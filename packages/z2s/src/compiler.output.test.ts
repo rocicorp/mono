@@ -5,6 +5,7 @@ import {
   distinctFrom,
   limit,
   orderBy,
+  pullTablesForJunction,
   simple,
   valuePosition,
 } from './compiler.ts';
@@ -485,4 +486,31 @@ test('simple', () => {
       ],
     }
   `);
+});
+
+test('pull tables for junction', () => {
+  expect(
+    pullTablesForJunction({
+      correlation: {
+        parentField: ['id'],
+        childField: ['issue_id'],
+      },
+      subquery: {
+        table: 'issue_label',
+        alias: 'labels',
+        related: [
+          {
+            correlation: {
+              parentField: ['label_id'],
+              childField: ['id'],
+            },
+            subquery: {
+              table: 'label',
+              alias: 'labels',
+            },
+          },
+        ],
+      },
+    }),
+  ).toEqual(['issue_label', 'label']);
 });
