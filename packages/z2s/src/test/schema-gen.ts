@@ -6,6 +6,7 @@ import type {
   TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
 import type {Relationship} from '../../../zero-schema/src/table-schema.ts';
+import {generateUniqueValues, selectRandom, shuffle, type Rng} from './util.ts';
 
 const dbTypes = {
   string: ['text', 'varchar', 'char'],
@@ -13,8 +14,6 @@ const dbTypes = {
   boolean: ['bool'],
   json: ['jsonb', 'json'],
 } as const;
-
-type Rng = () => number;
 
 export function generateSchema(rng: Rng, faker: Faker): Schema {
   const tables = generateUniqueValues(
@@ -108,15 +107,6 @@ function generateRelationshipsForTable(
   return relationships;
 }
 
-function shuffle<T>(rng: Rng, array: T[]): T[] {
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
-}
-
 function generateColumn(name: string, rng: Rng): [string, SchemaValue] {
   return [
     name,
@@ -136,16 +126,4 @@ function generateColumn(name: string, rng: Rng): [string, SchemaValue] {
       optional: rng() < 0.5,
     },
   ];
-}
-
-function selectRandom<T>(rng: Rng, values: T[]): T {
-  return values[Math.floor(rng() * values.length)];
-}
-
-function generateUniqueValues<T>(generator: () => T, length: number): T[] {
-  const values = new Set<T>();
-  while (values.size < length) {
-    values.add(generator());
-  }
-  return Array.from(values);
 }
