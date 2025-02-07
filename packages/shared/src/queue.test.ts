@@ -176,4 +176,49 @@ describe('Queue', () => {
     expect(received).toEqual(['foo', 'bar']);
     expect(String(err)).toBe('Error: bonk');
   });
+
+  test('a consumer blocks until tasks are available', async () => {
+    const queue = new Queue<number>();
+    const promise = queue.dequeue().then(head => {
+      const tasks = queue.drain();
+      expect(head).toEqual(1);
+      expect(tasks).toEqual([]);
+    });
+    void queue.enqueue(1);
+    await promise;
+  });
+
+  test('drain will get all tasks that were accumulated in the prior tick', async () => {
+    const queue = new Queue<number>();
+    const promise = queue.dequeue().then(head => {
+      const tasks = queue.drain();
+      expect([head, ...tasks]).toEqual([1, 2, 3]);
+    });
+    void queue.enqueue(1);
+    void queue.enqueue(2);
+    void queue.enqueue(3);
+    await promise;
+  });
+
+  test('a consumer is called if tasks are already available', async () => {
+    const queue = new Queue<number>();
+    void queue.enqueue(1);
+    const promise = queue.dequeue().then(head => {
+      const tasks = queue.drain();
+      expect([head, ...tasks]).toEqual([1]);
+    });
+    await promise;
+  });
+
+  test('drain will get all tasks that were accumulated in the prior tick | 2', async () => {
+    const queue = new Queue<number>();
+    void queue.enqueue(1);
+    const promise = queue.dequeue().then(head => {
+      const tasks = queue.drain();
+      expect([head, ...tasks]).toEqual([1, 2, 3]);
+    });
+    void queue.enqueue(2);
+    void queue.enqueue(3);
+    await promise;
+  });
 });

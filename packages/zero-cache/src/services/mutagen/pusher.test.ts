@@ -1,54 +1,8 @@
 import {describe, expect, test, vi} from 'vitest';
-import {combinePushes, PusherService, Queue} from './pusher.ts';
+import {combinePushes, PusherService} from './pusher.ts';
 import type {Mutation, PushBody} from '../../../../zero-protocol/src/push.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {resolver} from '@rocicorp/resolver';
-
-describe('queue', () => {
-  test('a consumer blocks until tasks are available', async () => {
-    const queue = new Queue<number>();
-    const promise = queue.awaitTasks().then(() => {
-      const tasks = queue.drain();
-      expect(tasks).toEqual([1]);
-    });
-    queue.enqueue(1);
-    await promise;
-  });
-
-  test('drain will get all tasks that were accumulated in the prior tick', async () => {
-    const queue = new Queue<number>();
-    const promise = queue.awaitTasks().then(() => {
-      const tasks = queue.drain();
-      expect(tasks).toEqual([1, 2, 3]);
-    });
-    queue.enqueue(1);
-    queue.enqueue(2);
-    queue.enqueue(3);
-    await promise;
-  });
-
-  test('a consumer is called if tasks are already available', async () => {
-    const queue = new Queue<number>();
-    queue.enqueue(1);
-    const promise = queue.awaitTasks().then(() => {
-      const tasks = queue.drain();
-      expect(tasks).toEqual([1]);
-    });
-    await promise;
-  });
-
-  test('drain will get all tasks that were accumulated in the prior tick | 2', async () => {
-    const queue = new Queue<number>();
-    queue.enqueue(1);
-    const promise = queue.awaitTasks().then(() => {
-      const tasks = queue.drain();
-      expect(tasks).toEqual([1, 2, 3]);
-    });
-    queue.enqueue(2);
-    queue.enqueue(3);
-    await promise;
-  });
-});
 
 describe('combine pushes', () => {
   test('empty array', () => {
@@ -117,7 +71,7 @@ describe('combine pushes', () => {
   });
 
   test('stop', () => {
-    const [pushes, terminate] = combinePushes(['stop']);
+    const [pushes, terminate] = combinePushes([undefined]);
     expect(pushes).toEqual([]);
     expect(terminate).toBe(true);
   });
@@ -132,7 +86,7 @@ describe('combine pushes', () => {
         push: makePush(1),
         jwt: 'a',
       },
-      'stop',
+      undefined,
     ]);
     expect(pushes).toHaveLength(1);
     expect(terminate).toBe(true);
@@ -144,7 +98,7 @@ describe('combine pushes', () => {
         push: makePush(1),
         jwt: 'a',
       },
-      'stop',
+      undefined,
       {
         push: makePush(1),
         jwt: 'a',
