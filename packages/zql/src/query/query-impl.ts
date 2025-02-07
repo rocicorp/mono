@@ -41,6 +41,7 @@ import type {
 import type {TypedView} from './typed-view.ts';
 
 type AnyQuery = Query<Schema, string, any>;
+export const astForTestingSymbol = Symbol();
 
 export function newQuery<
   TSchema extends Schema,
@@ -115,6 +116,11 @@ export abstract class AbstractQuery<
 
   get format(): Format {
     return this.#format;
+  }
+
+  // Not part of Query or QueryInternal interface
+  get [astForTestingSymbol](): AST {
+    return this.#ast;
   }
 
   hash(): string {
@@ -538,7 +544,6 @@ export abstract class AbstractQuery<
   };
 }
 
-export const astForTestingSymbol = Symbol();
 export const completedAstSymbol = Symbol();
 
 export class QueryImpl<
@@ -547,7 +552,6 @@ export class QueryImpl<
   TReturn = PullRow<TTable, TSchema>,
 > extends AbstractQuery<TSchema, TTable, TReturn> {
   readonly #delegate: QueryDelegate;
-  readonly #ast: AST;
 
   constructor(
     delegate: QueryDelegate,
@@ -558,15 +562,9 @@ export class QueryImpl<
   ) {
     super(schema, tableName, ast, format);
     this.#delegate = delegate;
-    this.#ast = ast;
   }
 
   protected readonly _system = 'client';
-
-  // Not part of Query or QueryInternal interface
-  get [astForTestingSymbol](): AST {
-    return this.#ast;
-  }
 
   get [completedAstSymbol](): AST {
     return this._completeAst();
