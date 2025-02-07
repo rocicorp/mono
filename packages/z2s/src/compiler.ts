@@ -2,6 +2,7 @@ import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import type {
   CorrelatedSubqueryCondition,
+  Correlation,
   Ordering,
   ValuePosition,
 } from '../../zero-protocol/src/ast.ts';
@@ -104,9 +105,9 @@ function relationshipSubquery(
 
 export function pullTablesForJunction(
   relationship: CorrelatedSubquery,
-  tables: string[] = [],
+  tables: [string, Correlation][] = [],
 ) {
-  tables.push(relationship.subquery.table);
+  tables.push([relationship.subquery.table, relationship.correlation]);
   assert(
     relationship.subquery.related?.length || 0 <= 1,
     'Too many related tables for a junction edge',
@@ -115,6 +116,37 @@ export function pullTablesForJunction(
     pullTablesForJunction(subRelationship, tables);
   }
   return tables;
+}
+
+export function makeJunctionJoin(relationship: CorrelatedSubquery) {
+  const participatingTables = pullTablesForJunction(relationship);
+  const ret: SQLQuery[] = [];
+
+  function alias(index: number) {
+    if (index === 0) {
+      return participatingTables[0][0];
+    }
+    return `table_${index}`;
+  }
+
+  for (const [table, _correlation] of participatingTables) {
+    if (ret.length === 0) {
+      ret.push(sql.ident(table));
+      continue;
+    }
+    ret.push(
+      sql` JOIN ${sql.ident(table)} as ${sql.ident(
+        alias(ret.length),
+      )} ON ${correlate(
+        alias(ret.length - 1),
+        participatingTables[ret.length][1].parentField,
+        alias(ret.length),
+        participatingTables[ret.length][1].childField,
+      )}`,
+    );
+  }
+
+  return [sql.join(ret, ''), alias(ret.length - 1)] as const;
 }
 
 export function where(

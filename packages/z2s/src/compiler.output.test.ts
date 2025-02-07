@@ -4,6 +4,7 @@ import {
   correlate,
   distinctFrom,
   limit,
+  makeJunctionJoin,
   orderBy,
   pullTablesForJunction,
   simple,
@@ -512,5 +513,64 @@ test('pull tables for junction', () => {
         ],
       },
     }),
-  ).toEqual(['issue_label', 'label']);
+  ).toMatchInlineSnapshot(`
+    [
+      [
+        "issue_label",
+        {
+          "childField": [
+            "issue_id",
+          ],
+          "parentField": [
+            "id",
+          ],
+        },
+      ],
+      [
+        "label",
+        {
+          "childField": [
+            "id",
+          ],
+          "parentField": [
+            "label_id",
+          ],
+        },
+      ],
+    ]
+  `);
+});
+
+test('make junction join', () => {
+  expect(
+    formatPg(
+      makeJunctionJoin({
+        correlation: {
+          parentField: ['id'],
+          childField: ['issue_id'],
+        },
+        subquery: {
+          table: 'issue_label',
+          alias: 'labels',
+          related: [
+            {
+              correlation: {
+                parentField: ['label_id'],
+                childField: ['id'],
+              },
+              subquery: {
+                table: 'label',
+                alias: 'labels',
+              },
+            },
+          ],
+        },
+      })[0],
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": ""issue_label" JOIN "label" as "table_1" ON "issue_label"."label_id" = "table_1"."id"",
+      "values": [],
+    }
+  `);
 });
