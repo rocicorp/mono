@@ -640,10 +640,10 @@ describe('view-syncer/cvr', () => {
       `);
 
     expect(
-      updater.putDesiredQueries('fooClient', {
-        fourHash: {table: 'users'},
-        threeHash: {table: 'comments'},
-      }),
+      updater.putDesiredQueries('fooClient', [
+        {hash: 'fourHash', ast: {table: 'users'}},
+        {hash: 'threeHash', ast: {table: 'comments'}},
+      ]),
     ).toMatchInlineSnapshot(`
         [
           {
@@ -681,10 +681,10 @@ describe('view-syncer/cvr', () => {
 
     // This adds a new barClient with desired queries.
     expect(
-      updater.putDesiredQueries('barClient', {
-        oneHash: {table: 'issues'},
-        threeHash: {table: 'comments'},
-      }),
+      updater.putDesiredQueries('barClient', [
+        {hash: 'oneHash', ast: {table: 'issues'}},
+        {hash: 'threeHash', ast: {table: 'comments'}},
+      ]),
     ).toMatchInlineSnapshot(`
           [
             {
@@ -732,7 +732,7 @@ describe('view-syncer/cvr', () => {
         `);
 
     // Adds a new client with no desired queries.
-    expect(updater.putDesiredQueries('bonkClient', {})).toMatchInlineSnapshot(
+    expect(updater.putDesiredQueries('bonkClient', [])).toMatchInlineSnapshot(
       `
                 [
                   {
@@ -1027,9 +1027,9 @@ describe('view-syncer/cvr', () => {
     // desired query update statement is an UPSERT.
     const updater2 = new CVRConfigDrivenUpdater(cvrStore2, reloaded, SHARD_ID);
     expect(
-      updater2.putDesiredQueries('fooClient', {
-        oneHash: {table: 'issues'},
-      }),
+      updater2.putDesiredQueries('fooClient', [
+        {hash: 'oneHash', ast: {table: 'issues'}},
+      ]),
     ).toMatchInlineSnapshot(`
       [
         {
@@ -1114,7 +1114,9 @@ describe('view-syncer/cvr', () => {
 
     // Same desired query set. Nothing should change except last active time.
     expect(
-      updater.putDesiredQueries('fooClient', {oneHash: {table: 'issues'}}),
+      updater.putDesiredQueries('fooClient', [
+        {hash: 'oneHash', ast: {table: 'issues'}},
+      ]),
     ).toMatchInlineSnapshot(`[]`);
 
     // Same last active day (no index change), but different hour.

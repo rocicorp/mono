@@ -478,11 +478,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         for (const patch of desiredQueriesPatch) {
           switch (patch.op) {
             case 'put':
-              patches.push(
-                ...updater.putDesiredQueries(clientID, {
-                  [patch.hash]: patch.ast,
-                }),
-              );
+              patches.push(...updater.putDesiredQueries(clientID, [patch]));
               break;
             case 'del':
               patches.push(
