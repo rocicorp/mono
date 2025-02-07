@@ -2,6 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {compareUTF8} from 'compare-utf8';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
+import {must} from '../../../../shared/src/must.ts';
 import {
   difference,
   intersection,
@@ -215,11 +216,11 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
   putDesiredQueries(
     clientID: string,
-    queries: {[id: string]: AST},
+    queries: Readonly<{hash: string; ast: AST}>[],
   ): PatchToVersion[] {
     const {client, patches} = this.#ensureClient(clientID);
     const current = new Set(client.desiredQueryIDs);
-    const additional = new Set(Object.keys(queries));
+    const additional = new Set(queries.map(({hash}) => hash));
     const needed = difference(additional, current);
     if (needed.size === 0) {
       return patches;
@@ -228,7 +229,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     client.desiredQueryIDs = [...union(current, needed)].sort(compareUTF8);
 
     for (const id of needed) {
-      const ast = queries[id];
+      const {ast} = must(queries.find(({hash}) => hash === id));
       const query = this._cvr.queries[id] ?? {id, ast, desiredBy: {}};
       assertNotInternal(query);
 
