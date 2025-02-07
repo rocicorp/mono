@@ -4,7 +4,7 @@ import type {Service} from '../service.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import {must} from '../../../../shared/src/must.ts';
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from '../../../../shared/src/asserts.ts';
+import {Queue} from '../../../../shared/src/queue.ts';
 
 /**
  * Receives push messages from zero-client and forwards
@@ -37,7 +37,7 @@ export class PusherService implements Service {
   }
 
   enqueuePush(push: PushBody, jwt: string | undefined) {
-    this.#queue.enqueue({push, jwt});
+    void this.#queue.enqueue({push, jwt});
   }
 
   run(): Promise<void> {
@@ -81,9 +81,9 @@ class Pusher {
 
   async run() {
     for (;;) {
-      await this.#queue.awaitTasks();
-      const tasks = this.#queue.drain();
-      const [pushes, terminate] = combinePushes(tasks);
+      const task = await this.#queue.dequeue();
+      const rest = this.#queue.drain();
+      const [pushes, terminate] = combinePushes([task, ...rest]);
       for (const push of pushes) {
         await this.#processPush(push);
       }
@@ -147,12 +147,12 @@ class Pusher {
  * create less fragmentation in the case where mutations among clients are interleaved.
  */
 export function combinePushes(
-  entries: readonly PusherEntryOrStop[],
+  entries: readonly (PusherEntryOrStop | undefined)[],
 ): [PusherEntry[], boolean] {
   const ret: PusherEntry[] = [];
 
   for (const entry of entries) {
-    if (entry === 'stop') {
+    if (entry === 'stop' || entry === undefined) {
       return [ret, true] as const;
     }
 
@@ -170,56 +170,4 @@ export function combinePushes(
   }
 
   return [ret, false] as const;
-}
-
-/**
- * A queue that allows draining all tasks which have accumulated.
- * A queue instance must only be used by a single producer and a single
- * consumer.
- *
- * Exported for testing.
- */
-export class Queue<T> {
-  #tasks: T[];
-  #resolveWaiter: (() => void) | undefined;
-
-  constructor() {
-    this.#tasks = [];
-  }
-
-  enqueue(entry: T): void {
-    this.#tasks.push(entry);
-    if (this.#resolveWaiter) {
-      const resolveWaiter = this.#resolveWaiter;
-      this.#resolveWaiter = undefined;
-      resolveWaiter();
-    }
-  }
-
-  /**
-   * Wait for tasks to be available.
-   */
-  awaitTasks(): Promise<void> {
-    if (this.#tasks.length > 0) {
-      return Promise.resolve();
-    }
-
-    return new Promise(resolve => {
-      assert(
-        this.#resolveWaiter === undefined,
-        'cannot await tasks if already waiting',
-      );
-      this.#resolveWaiter = resolve;
-    });
-  }
-
-  /**
-   * Get all tasks which have accumulated
-   * since the last call to `drain`.
-   */
-  drain(): T[] {
-    const ret = this.#tasks;
-    this.#tasks = [];
-    return ret;
-  }
 }
