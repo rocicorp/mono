@@ -77,16 +77,21 @@ function relationshipSubquery(
   format: Format | undefined,
   parentTable: string,
 ) {
-  // if (relationship.hidden) {
-  //   // join to traverse. Only emit rows of the next thing.
-  //   // get the final alias
-  //   // get all the tables to join
-  //   // SELECT agg FROM (SELECT finalTableAlias.* FROM table as t1 JOIN table2 as t2 ON x JOIN table3 ON y)
-  //   const allTables = pullTablesForJunction(relationship);
-  //   sql`(
-  //     SELECT
-  //   )`;
-  // }
+  if (relationship.hidden) {
+    const [join, lastAlias] = makeJunctionJoin(relationship);
+    return sql`(
+      SELECT array_agg(row_to_json(${sql.ident(
+        `inner_${relationship.subquery.alias}`,
+      )})) FROM (SELECT ${sql.ident(
+        lastAlias,
+      )}.* FROM ${join} WHERE ${correlate(
+        parentTable,
+        relationship.correlation.parentField,
+        relationship.subquery.table,
+        relationship.correlation.childField,
+      )}) ${sql.ident(`inner_${relationship.subquery.alias}`)}
+    ) as ${sql.ident(relationship.subquery.alias)}`;
+  }
   return sql`(
     SELECT array_agg(row_to_json(${sql.ident(
       `inner_${relationship.subquery.alias}`,

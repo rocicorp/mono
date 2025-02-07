@@ -1,6 +1,7 @@
 import {expect, test} from 'vitest';
 import {
   any,
+  compile,
   correlate,
   distinctFrom,
   limit,
@@ -570,6 +571,77 @@ test('make junction join', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": ""issue_label" JOIN "label" as "table_1" ON "issue_label"."label_id" = "table_1"."id"",
+      "values": [],
+    }
+  `);
+});
+
+test('related thru junction edge', () => {
+  expect(
+    formatPg(
+      compile({
+        table: 'issue',
+        related: [
+          {
+            correlation: {
+              parentField: ['id'],
+              childField: ['issue_id'],
+            },
+            hidden: true,
+            subquery: {
+              table: 'issue_label',
+              alias: 'labels',
+              related: [
+                {
+                  correlation: {
+                    parentField: ['label_id'],
+                    childField: ['id'],
+                  },
+                  subquery: {
+                    table: 'label',
+                    alias: 'labels',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT (
+          SELECT array_agg(row_to_json("inner_labels")) FROM (SELECT "table_1".* FROM "issue_label" JOIN "label" as "table_1" ON "issue_label"."label_id" = "table_1"."id" WHERE "issue"."id" = "issue_label"."issue_id") "inner_labels"
+        ) as "labels",* FROM "issue"",
+      "values": [],
+    }
+  `);
+});
+
+test('related w/o junction edge', () => {
+  expect(
+    formatPg(
+      compile({
+        table: 'issue',
+        related: [
+          {
+            correlation: {
+              parentField: ['owner_id'],
+              childField: ['id'],
+            },
+            subquery: {
+              table: 'user',
+              alias: 'owner',
+            },
+          },
+        ],
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT (
+        SELECT array_agg(row_to_json("inner_owner")) FROM (SELECT * FROM "user"  WHERE ("issue"."owner_id" = "user"."id")  ) "inner_owner"
+      ) as "owner",* FROM "issue"",
       "values": [],
     }
   `);
