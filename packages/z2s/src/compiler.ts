@@ -68,7 +68,11 @@ export function related(
   parentTable: string,
 ): SQLQuery[] {
   return relationships.map(relationship =>
-    relationshipSubquery(relationship, format, parentTable),
+    relationshipSubquery(
+      relationship,
+      format?.relationships[must(relationship.subquery.alias)],
+      parentTable,
+    ),
   );
 }
 
@@ -80,7 +84,9 @@ function relationshipSubquery(
   if (relationship.hidden) {
     const [join, lastAlias] = makeJunctionJoin(relationship);
     return sql`(
-      SELECT array_agg(row_to_json(${sql.ident(
+      SELECT ${
+        format?.singular ? sql`` : sql`array_agg`
+      }(row_to_json(${sql.ident(
         `inner_${relationship.subquery.alias}`,
       )})) FROM (SELECT ${sql.ident(
         lastAlias,
@@ -93,11 +99,11 @@ function relationshipSubquery(
     ) as ${sql.ident(relationship.subquery.alias)}`;
   }
   return sql`(
-    SELECT array_agg(row_to_json(${sql.ident(
+    SELECT ${format?.singular ? sql`` : sql`array_agg`}(row_to_json(${sql.ident(
       `inner_${relationship.subquery.alias}`,
     )})) FROM (${select(
       relationship.subquery,
-      format?.relationships?.[must(relationship.subquery.alias)],
+      format,
       correlate(
         parentTable,
         relationship.correlation.parentField,

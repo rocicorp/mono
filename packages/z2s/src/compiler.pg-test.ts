@@ -1,3 +1,4 @@
+import './test/nullish.ts';
 import {beforeAll} from 'vitest';
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
@@ -213,6 +214,10 @@ function ast(q: Query<Schema, keyof Schema['tables']>) {
   return (q as QueryImpl<Schema, keyof Schema['tables']>)[astForTestingSymbol];
 }
 
+function format(q: Query<Schema, keyof Schema['tables']>) {
+  return (q as QueryImpl<Schema, keyof Schema['tables']>).format;
+}
+
 function noBigint(row: Record<string, unknown>) {
   if ('createdAt' in row) {
     return {
@@ -268,25 +273,43 @@ describe('compiling ZQL to SQL', () => {
     expect(query.run()).toEqual(pgResult);
   });
 
-  // TODO: we need to hide junction edges for the PG compiled form
-  // before these will pass
-  test.fails('related tables', async () => {
-    const query = issueQuery.related('owner').related('labels');
-    const sqlQuery = formatPg(compile(ast(query)));
+  test('1 to 1 foreign key relationship', async () => {
+    const query = issueQuery.related('owner');
+    const sqlQuery = formatPg(compile(ast(query), format(query)));
     const pgResult = await pg.unsafe(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(query.run()).toEqual(pgResult);
+    expect(query.run()).toEqualNullish(pgResult);
   });
 
-  test.fails('nested related with where clauses', async () => {
+  test('1 to many foreign key relationship', async () => {
+    const query = issueQuery.related('comments');
+    const sqlQuery = formatPg(compile(ast(query), format(query)));
+    const pgResult = await pg.unsafe(
+      sqlQuery.text,
+      sqlQuery.values as JSONValue[],
+    );
+    expect(query.run()).toEqualNullish(pgResult);
+  });
+
+  test.fails('junction relationship', async () => {
+    const query = issueQuery.related('labels');
+    const sqlQuery = formatPg(compile(ast(query), format(query)));
+    const pgResult = await pg.unsafe(
+      sqlQuery.text,
+      sqlQuery.values as JSONValue[],
+    );
+    expect(query.run()).toEqualNullish(pgResult);
+  });
+
+  test('nested related with where clauses', async () => {
     const query = issueQuery
       .where('closed', '=', false)
       .related('comments', q =>
         q.where('createdAt', '>', 1000).related('author'),
       );
-    const sqlQuery = formatPg(compile(ast(query)));
+    const sqlQuery = formatPg(compile(ast(query), format(query)));
     const pgResult = await pg.unsafe(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
