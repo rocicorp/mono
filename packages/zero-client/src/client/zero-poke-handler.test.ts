@@ -1311,6 +1311,9 @@ test('mergePokes with all optionals defined', () => {
             ],
           },
         ],
+        pokeEnd: {
+          pokeID: 'poke1',
+        },
       },
       {
         pokeStart: {
@@ -1346,6 +1349,9 @@ test('mergePokes with all optionals defined', () => {
             ],
           },
         ],
+        pokeEnd: {
+          pokeID: 'poke2',
+        },
       },
     ],
     schema,
@@ -1505,6 +1511,9 @@ test('mergePokes sparse', () => {
             },
           },
         ],
+        pokeEnd: {
+          pokeID: 'poke1',
+        },
       },
       {
         pokeStart: {
@@ -1533,6 +1542,9 @@ test('mergePokes sparse', () => {
             ],
           },
         ],
+        pokeEnd: {
+          pokeID: 'poke2',
+        },
       },
     ],
     schema,
@@ -1601,6 +1613,64 @@ test('mergePokes sparse', () => {
   });
 });
 
+test('mergePokes with cookie revisions', () => {
+  expect(
+    mergePokes(
+      [
+        {
+          pokeStart: {
+            pokeID: 'poke1',
+            baseCookie: '3',
+            cookie: '5',
+            schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
+          },
+          parts: [
+            {
+              pokeID: 'poke1',
+              lastMutationIDChanges: {c1: 1, c2: 2},
+            },
+          ],
+          pokeEnd: {
+            pokeID: 'poke1',
+            cookie: '3', // Never mind, back to 3
+          },
+        },
+        {
+          pokeStart: {
+            pokeID: 'poke2',
+            baseCookie: '3',
+            cookie: '7',
+            schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
+          },
+          parts: [
+            {
+              pokeID: 'poke2',
+              lastMutationIDChanges: {c4: 3},
+            },
+          ],
+          pokeEnd: {
+            pokeID: 'poke2',
+            cookie: '6', // Not 7, but 6.
+          },
+        },
+      ],
+      schema,
+      serverToClient(schema.tables),
+    ),
+  ).toEqual({
+    baseCookie: '3',
+    pullResponse: {
+      cookie: '6',
+      lastMutationIDChanges: {
+        c1: 1,
+        c2: 2,
+        c4: 3,
+      },
+      patch: [],
+    },
+  });
+});
+
 test('mergePokes throws error on cookie gaps', () => {
   expect(() => {
     mergePokes(
@@ -1618,6 +1688,9 @@ test('mergePokes throws error on cookie gaps', () => {
               lastMutationIDChanges: {c1: 1, c2: 2},
             },
           ],
+          pokeEnd: {
+            pokeID: 'poke1',
+          },
         },
         {
           pokeStart: {
@@ -1632,6 +1705,9 @@ test('mergePokes throws error on cookie gaps', () => {
               lastMutationIDChanges: {c4: 3},
             },
           ],
+          pokeEnd: {
+            pokeID: 'poke2',
+          },
         },
       ],
       schema,

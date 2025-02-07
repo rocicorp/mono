@@ -67,6 +67,10 @@ export const pokePartBodySchema = v.object({
 
 export const pokeEndBodySchema = v.object({
   pokeID: v.string(),
+  // If present, this should be the cookie stored with the client,
+  // instead of the cookie presented in pokeStart.
+  // TODO: Consider making this required and removing it from pokeStart.
+  cookie: versionSchema.optional(),
   // If `true`, the poke with id `pokeID` should be discarded without
   // applying it.
   cancel: v.boolean().optional(),
