@@ -32,7 +32,7 @@ import {
 export type RowUpdate = {
   version?: string; // Undefined for an unref.
   contents?: JSONObject; // Undefined for an unref.
-  refCounts: {[hash: string]: number}; // Counts are negative when a row is unrefed.
+  refCounts: RefCounts; // Counts are negative when a row is unrefed.
 };
 
 /** Internally used mutable CVR type. */
@@ -205,8 +205,14 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
   putDesiredQueries(
     clientID: string,
-    queries: Readonly<{hash: string; ast: AST}>[],
+    queries: Readonly<{
+      hash: string;
+      ast: AST;
+      ttl?: number | undefined;
+    }>[],
+    _now: number,
   ): PatchToVersion[] {
+    // TODO: What if TTL changes of an existing query? We need to update the expiresAt as needed.
     const patches: PatchToVersion[] = [];
     const client = this.#ensureClient(clientID);
     const current = new Set(client.desiredQueryIDs);
@@ -219,8 +225,16 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     client.desiredQueryIDs = [...union(current, needed)].sort(compareUTF8);
 
     for (const id of needed) {
-      const {ast} = must(queries.find(({hash}) => hash === id));
-      const query = this._cvr.queries[id] ?? {id, ast, desiredBy: {}};
+      const {ast, ttl} = must(queries.find(({hash}) => hash === id));
+
+      const q: QueryRecord | undefined = this._cvr.queries[id];
+
+      const query: QueryRecord = q ?? {
+        id,
+        ast,
+        desiredBy: {},
+        ttl,
+      };
       assertNotInternal(query);
 
       query.desiredBy[clientID] = newVersion;

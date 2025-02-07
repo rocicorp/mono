@@ -3,7 +3,7 @@ import {deepClone} from '../../shared/src/deep-clone.ts';
 import type {Immutable} from '../../shared/src/immutable.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import type {AdvancedQuery} from '../../zql/src/query/query-internal.ts';
+import type {AdvancedQuery} from '../../zql/src/query/advanced-query.ts';
 import type {HumanReadable, Query} from '../../zql/src/query/query.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 import {useZero} from './use-zero.tsx';
@@ -17,20 +17,56 @@ export type QueryResult<TReturn> = readonly [
   QueryResultDetails,
 ];
 
+export type UseQueryOptions = {
+  enabled?: boolean | undefined;
+  /**
+   * Time to live. This determines how long to cache the results of this query.
+   * If undefined (or 0) the query will be cached as long as it is not removed and
+   * there is enough space
+   */
+  ttl?: number | undefined;
+};
+
 export function useQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 >(
-  q: Query<TSchema, TTable, TReturn>,
-  enable: boolean = true,
+  query: Query<TSchema, TTable, TReturn>,
+  enable?: boolean,
+): QueryResult<TReturn>;
+export function useQuery<
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+>(
+  query: Query<TSchema, TTable, TReturn>,
+  options?: UseQueryOptions,
+): QueryResult<TReturn>;
+export function useQuery<
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+>(
+  query: Query<TSchema, TTable, TReturn>,
+  enableOrOptions?: boolean | UseQueryOptions,
 ): QueryResult<TReturn> {
+  let enabled = true;
+  let ttl: number | undefined;
+  if (typeof enableOrOptions === 'boolean') {
+    enabled = enableOrOptions;
+  } else if (enableOrOptions) {
+    ({enabled = true, ttl} = enableOrOptions);
+  }
+
+  let advancedQuery = query as AdvancedQuery<TSchema, TTable, TReturn>;
+
+  if (ttl !== undefined) {
+    advancedQuery = advancedQuery.withTTL(ttl);
+  }
+
   const z = useZero();
-  const view = viewStore.getView(
-    z.clientID,
-    q as AdvancedQuery<TSchema, TTable, TReturn>,
-    enable,
-  );
+  const view = viewStore.getView(z.clientID, advancedQuery, enabled);
   // https://react.dev/reference/react/useSyncExternalStore
   return useSyncExternalStore(
     view.subscribeReactInternals,

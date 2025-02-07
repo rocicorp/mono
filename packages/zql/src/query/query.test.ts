@@ -17,9 +17,9 @@ import {
   type Opaque,
   type TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
+import type {AdvancedQuery} from './advanced-query.ts';
 import type {ExpressionFactory} from './expression.ts';
 import {staticParam} from './query-impl.ts';
-import type {AdvancedQuery} from './query-internal.ts';
 import {type Query, type Row} from './query.ts';
 
 const mockQuery = {

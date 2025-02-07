@@ -21,6 +21,13 @@ import type {ReadTransaction} from './replicache-types.ts';
 
 type QueryHash = string;
 
+type QueryEntry = {
+  normalized: AST;
+  count: number;
+  gotCallbacks: GotCallback[];
+  ttl: number | undefined;
+};
+
 /**
  * Tracks what queries the client is currently subscribed to on the server.
  * Sends `changeDesiredQueries` message to server when this changes.
@@ -30,10 +37,7 @@ export class QueryManager {
   readonly #clientID: ClientID;
   readonly #clientToServer: NameMapper;
   readonly #send: (change: ChangeDesiredQueriesMessage) => void;
-  readonly #queries: Map<
-    QueryHash,
-    {normalized: AST; count: number; gotCallbacks: GotCallback[]}
-  > = new Map();
+  readonly #queries: Map<QueryHash, QueryEntry> = new Map();
   readonly #recentQueriesMaxSize: number;
   readonly #recentQueries: Set<string> = new Set();
   readonly #gotQueries: Set<string> = new Set();
@@ -109,9 +113,14 @@ export class QueryManager {
         patch.set(hash, {op: 'del', hash});
       }
     }
-    for (const [hash, {normalized}] of this.#queries) {
+    for (const [hash, {normalized, ttl}] of this.#queries) {
       if (!existingQueryHashes.has(hash)) {
-        patch.set(hash, {op: 'put', hash, ast: normalized});
+        patch.set(hash, {
+          op: 'put',
+          hash,
+          ast: normalized,
+          ttl,
+        });
       }
     }
 
@@ -135,7 +144,11 @@ export class QueryManager {
     return patch;
   }
 
-  add(ast: AST, gotCallback?: GotCallback | undefined): () => void {
+  add(
+    ast: AST,
+    ttl: number | undefined,
+    gotCallback?: GotCallback | undefined,
+  ): () => void {
     const normalized = normalizeAST(ast);
     const astHash = hashOfAST(normalized);
     let entry = this.#queries.get(astHash);
@@ -146,14 +159,34 @@ export class QueryManager {
         normalized: serverAST,
         count: 1,
         gotCallbacks: gotCallback === undefined ? [] : [gotCallback],
+        ttl,
       };
       this.#queries.set(astHash, entry);
       this.#send([
         'changeDesiredQueries',
-        {desiredQueriesPatch: [{op: 'put', hash: astHash, ast: serverAST}]},
+        {
+          desiredQueriesPatch: [
+            {op: 'put', hash: astHash, ast: serverAST, ttl},
+          ],
+        },
       ]);
     } else {
       ++entry.count;
+
+      // If the query already exists and the new ttl is larger than the old one
+      // we send a changeDesiredQueries message to the server to update the ttl.
+      if (ttl !== undefined && (entry.ttl === undefined || ttl > entry.ttl)) {
+        entry.ttl = ttl;
+        this.#send([
+          'changeDesiredQueries',
+          {
+            desiredQueriesPatch: [
+              {op: 'put', hash: astHash, ast: entry.normalized, ttl},
+            ],
+          },
+        ]);
+      }
+
       if (gotCallback) {
         entry.gotCallbacks.push(gotCallback);
       }

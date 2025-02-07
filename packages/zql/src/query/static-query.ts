@@ -10,7 +10,9 @@ export function staticQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
 >(schema: TSchema, tableName: TTable): Query<TSchema, TTable> {
-  return new StaticQuery<TSchema, TTable>(schema, tableName);
+  return new StaticQuery<TSchema, TTable>(schema, tableName, {
+    table: tableName,
+  });
 }
 
 /**
@@ -22,15 +24,6 @@ export class StaticQuery<
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
 > extends AbstractQuery<TSchema, TTable, TReturn> {
-  constructor(
-    schema: TSchema,
-    tableName: TTable,
-    ast: AST = {table: tableName},
-    format?: Format | undefined,
-  ) {
-    super(schema, tableName, ast, format);
-  }
-
   expressionBuilder() {
     return new ExpressionBuilder(this._exists);
   }
@@ -45,9 +38,10 @@ export class StaticQuery<
     schema: TSchema,
     tableName: TTable,
     ast: AST,
+    ttl: number | undefined,
     format: Format | undefined,
-  ): Query<TSchema, TTable, TReturn> {
-    return new StaticQuery(schema, tableName, ast, format);
+  ): StaticQuery<TSchema, TTable, TReturn> {
+    return new StaticQuery(schema, tableName, ast, ttl, format);
   }
 
   get ast() {

@@ -16,6 +16,10 @@ import type {PostgresDB} from '../../types/pg.ts';
 import {rowIDString, type RowID} from '../../types/row-key.ts';
 import {CVRStore, OwnershipError} from './cvr-store.ts';
 import {
+  setInitialState as setInitialStateShared,
+  type DBState,
+} from './cvr-test-util.ts';
+import {
   CVRQueryDrivenUpdater,
   type CVRSnapshot,
   type RowUpdate,
@@ -23,7 +27,26 @@ import {
 import {setupCVRTables, type RowsRow} from './schema/cvr.ts';
 import type {CVRVersion} from './schema/types.ts';
 
+function setInitialState(
+  db: PostgresDB,
+  state: Partial<DBState>,
+): Promise<void> {
+  return setInitialStateShared('cvr_sdf', db, state);
+}
+
 const SHARD_ID = 'sdf';
+
+const ROW_KEY1 = {id: '123'};
+
+const ROW_KEY2 = {id: '321'};
+
+function seconds(n: number) {
+  return n * 1000;
+}
+
+function minutes(n: number) {
+  return seconds(n * 60);
+}
 
 describe('view-syncer/cvr-store', () => {
   const lc = createSilentLogContext();
@@ -713,5 +736,208 @@ describe('view-syncer/cvr-store', () => {
     expect(await db`SELECT COUNT(*) FROM cvr_sdf.rows`).toEqual([
       {count: 1035n},
     ]);
+  });
+
+  test('getExpiredQueriesCandidates', async () => {
+    const now = Date.UTC(2025, 2, 14);
+    const initialState: DBState = {
+      instances: [],
+      clients: [],
+      queries: [
+        {
+          clientGroupID: CVR_ID,
+          queryHash: 'twoHash',
+          clientAST: {table: 'issues'},
+          transformationHash: null,
+          transformationVersion: null,
+          patchVersion: null,
+          internal: null,
+          deleted: null,
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: minutes(5),
+        },
+      ],
+      desires: [
+        {
+          clientGroupID: CVR_ID,
+          clientID: 'fooClient',
+          queryHash: 'twoHash',
+          patchVersion: '1a9:01',
+          deleted: null,
+        },
+      ],
+      rows: [],
+    };
+
+    // await setInitialState(db, initialState);
+
+    expect(await db`SELECT * FROM cvr_sdf.queries`).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientAST": {
+            "table": "issues",
+          },
+          "clientGroupID": "my-cvr",
+          "deleted": null,
+          "expiresAt": null,
+          "inactivatedAt": null,
+          "internal": null,
+          "patchVersion": "01",
+          "queryHash": "foo",
+          "transformationHash": "foo-transformed",
+          "transformationVersion": "01",
+          "ttl": null,
+        },
+      ]
+    `);
+
+    const cvrStore = new CVRStore(
+      lc,
+      db,
+      SHARD_ID,
+      'my-task',
+      CVR_ID,
+      ON_FAILURE,
+    );
+    // const cvr = await cvrStore.load(lc, LAST_CONNECT);
+
+    cvrStore.putQuery({
+      ast: {table: 'issues'},
+      desiredBy: {},
+      patchVersion: {stateVersion: '00', minorVersion: 1},
+      id: 'twoHash',
+      ttl: minutes(5),
+    });
+    await cvrStore.flush(
+      {stateVersion: '03', minorVersion: 0},
+      {stateVersion: '03', minorVersion: 1},
+      true,
+      now,
+      now,
+    );
+
+    expect(await db`SELECT * FROM cvr_sdf.queries`).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientAST": {
+            "table": "issues",
+          },
+          "clientGroupID": "my-cvr",
+          "deleted": null,
+          "expiresAt": null,
+          "inactivatedAt": null,
+          "internal": null,
+          "patchVersion": "01",
+          "queryHash": "foo",
+          "transformationHash": "foo-transformed",
+          "transformationVersion": "01",
+          "ttl": null,
+        },
+        {
+          "clientAST": {
+            "table": "issues",
+          },
+          "clientGroupID": "my-cvr",
+          "deleted": false,
+          "expiresAt": null,
+          "inactivatedAt": null,
+          "internal": null,
+          "patchVersion": "00:01",
+          "queryHash": "twoHash",
+          "transformationHash": null,
+          "transformationVersion": null,
+          "ttl": 300000,
+        },
+      ]
+    `);
+
+    expect(await cvrStore.getExpiredQueriesCandidates()).toEqual([]);
+
+    cvrStore.markQueryAsInactive({id: 'twoHash'}, now);
+
+    await cvrStore.flush(
+      {stateVersion: '03'},
+      {stateVersion: '03', minorVersion: 1},
+      true,
+      now,
+      now,
+    );
+
+    expect(await db`SELECT * FROM cvr_sdf.queries`).toEqual([
+      expect.objectContaining({
+        queryHash: 'foo',
+        expiresAt: null,
+        ttl: null,
+        inactivatedAt: null,
+      }),
+      expect.objectContaining({
+        queryHash: 'twoHash',
+        expiresAt: now + minutes(5),
+        ttl: minutes(5),
+        inactivatedAt: now,
+      }),
+    ]);
+
+    expect(await cvrStore.getExpiredQueriesCandidates()).toEqual([
+      expect.objectContaining({
+        queryHash: 'twoHash',
+        expiresAt: now + minutes(5),
+        ttl: minutes(5),
+        inactivatedAt: now,
+      }),
+    ]);
+
+    // TODO: Add more queries so we can cover all cases.
+
+    // expect(await db`SELECT * FROM cvr_sdf.queries`).toMatchInlineSnapshot(`
+    //   Result [
+    //     {
+    //       "clientAST": {
+    //         "table": "issues",
+    //       },
+    //       "clientGroupID": "my-cvr",
+    //       "deleted": null,
+    //       "expiresAt": null,
+    //       "inactivatedAt": null,
+    //       "internal": null,
+    //       "patchVersion": "01",
+    //       "queryHash": "foo",
+    //       "transformationHash": "foo-transformed",
+    //       "transformationVersion": "01",
+    //       "ttl": null,
+    //     },
+    //     {
+    //       "clientAST": {
+    //         "table": "issues",
+    //       },
+    //       "clientGroupID": "abc123",
+    //       "deleted": null,
+    //       "expiresAt": null,
+    //       "inactivatedAt": null,
+    //       "internal": null,
+    //       "patchVersion": null,
+    //       "queryHash": "oneHash",
+    //       "transformationHash": null,
+    //       "transformationVersion": null,
+    //       "ttl": null,
+    //     },
+    //     {
+    //       "clientAST": {
+    //         "table": "issues",
+    //       },
+    //       "clientGroupID": "abc123",
+    //       "deleted": null,
+    //       "expiresAt": null,
+    //       "inactivatedAt": null,
+    //       "internal": null,
+    //       "patchVersion": null,
+    //       "queryHash": "twoHash",
+    //       "transformationHash": null,
+    //       "transformationVersion": null,
+    //       "ttl": 300000,
+    //     },
+    //   ]
+    // `);
   });
 });

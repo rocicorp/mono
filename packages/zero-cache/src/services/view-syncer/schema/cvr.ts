@@ -101,6 +101,9 @@ export type QueriesRow = {
   transformationVersion: string | null;
   internal: boolean | null;
   deleted: boolean | null;
+  ttl: number | null;
+  inactivatedAt: number | null;
+  expiresAt: number | null;
 };
 
 function createQueriesTable(shardID: string) {
@@ -114,6 +117,9 @@ CREATE TABLE ${schema(shardID)}.queries (
   "transformationVersion" TEXT,
   "internal"              BOOL,  -- If true, no need to track / send patches
   "deleted"               BOOL,  -- put vs del "got" query
+  "ttl"                   INTEGER, -- NULL for no TTL
+  "inactivatedAt"       TIMESTAMPTZ, -- The time this query was inactivated, NULL for active queries
+  "expiresAt"             TIMESTAMPTZ, -- ttl + inactivatedAt
 
   PRIMARY KEY ("clientGroupID", "queryHash"),
 
@@ -125,6 +131,14 @@ CREATE TABLE ${schema(shardID)}.queries (
 -- For catchup patches.
 CREATE INDEX queries_patch_version 
   ON ${schema(shardID)}.queries ("patchVersion" NULLS FIRST);
+
+-- For TTL logic
+CREATE INDEX queries_index_expires_at ON ${schema(
+    shardID,
+  )}.queries ("expiresAt" NULLS LAST);
+CREATE INDEX queries_index_inactivated_at ON ${schema(
+    shardID,
+  )}.queries ("inactivatedAt" NULLS LAST);
 `;
 }
 

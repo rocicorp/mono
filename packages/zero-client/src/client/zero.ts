@@ -548,7 +548,7 @@ export class Zero<
 
     this.#zeroContext = new ZeroContext(
       this.#ivmSources.main,
-      (ast, gotCallback) => this.#queryManager.add(ast, gotCallback),
+      (ast, ttl, gotCallback) => this.#queryManager.add(ast, ttl, gotCallback),
       batchViewUpdates,
     );
 

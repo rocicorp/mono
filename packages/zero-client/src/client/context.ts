@@ -15,6 +15,7 @@ import {ENTITIES_KEY_PREFIX, sourceNameFromKey} from './keys.ts';
 
 export type AddQuery = (
   ast: AST,
+  ttl: number | undefined,
   gotCallback?: GotCallback | undefined,
 ) => () => void;
 
@@ -49,8 +50,12 @@ export class ZeroContext implements QueryDelegate {
     return this.#mainSources.getSource(name);
   }
 
-  addServerQuery(ast: AST, gotCallback?: GotCallback | undefined) {
-    return this.#addQuery(ast, gotCallback);
+  addServerQuery(
+    ast: AST,
+    ttl: number | undefined,
+    gotCallback?: GotCallback | undefined,
+  ) {
+    return this.#addQuery(ast, ttl, gotCallback);
   }
 
   createStorage(): Storage {

@@ -36,3 +36,5 @@ const rowPatchOpSchema = v.union(
 
 export const rowsPatchSchema = v.array(rowPatchOpSchema);
 export type RowPatchOp = v.Infer<typeof rowPatchOpSchema>;
+export type PutOp = v.Infer<typeof putOpSchema>;
+export type DelOp = v.Infer<typeof delOpSchema>;

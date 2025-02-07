@@ -1,4 +1,4 @@
-import {describe, expect, test, vi} from 'vitest';
+import {beforeEach, describe, expect, test, vi, type Mock} from 'vitest';
 import type {IndexKey} from '../../../replicache/src/db/index.ts';
 import {
   makeScanResult,
@@ -14,8 +14,10 @@ import {
   type ReadTransaction,
 } from '../../../replicache/src/transactions.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import * as v from '../../../shared/src/valita.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
+import {putOpSchema} from '../../../zero-protocol/src/queries-patch.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import {toGotQueriesKey} from './keys.ts';
 import {QueryManager} from './query-manager.ts';
@@ -38,7 +40,7 @@ test('add', () => {
     table: 'issue',
     orderBy: [['id', 'asc']],
   };
-  queryManager.add(ast);
+  queryManager.add(ast, undefined);
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
     'changeDesiredQueries',
@@ -52,12 +54,13 @@ test('add', () => {
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
+          ttl: undefined,
         },
       ],
     },
   ]);
 
-  queryManager.add(ast);
+  queryManager.add(ast, undefined);
   expect(send).toBeCalledTimes(1);
 });
 
@@ -124,7 +127,7 @@ test('add renamed fields', () => {
     },
   };
 
-  queryManager.add(ast);
+  queryManager.add(ast, undefined);
   expect(send).toBeCalledTimes(1);
   expect(send.mock.calls[0][0]).toMatchInlineSnapshot(`
     [
@@ -222,6 +225,7 @@ test('add renamed fields', () => {
             },
             "hash": "2courpv3kf7et",
             "op": "put",
+            "ttl": undefined,
           },
         ],
       },
@@ -244,7 +248,7 @@ test('remove, recent queries max size 0', () => {
     orderBy: [['id', 'asc']],
   };
 
-  const remove1 = queryManager.add(ast);
+  const remove1 = queryManager.add(ast, undefined);
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
     'changeDesiredQueries',
@@ -258,12 +262,13 @@ test('remove, recent queries max size 0', () => {
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
+          ttl: undefined,
         },
       ],
     },
   ]);
 
-  const remove2 = queryManager.add(ast);
+  const remove2 = queryManager.add(ast, undefined);
   expect(send).toBeCalledTimes(1);
 
   remove1();
@@ -316,7 +321,7 @@ test('remove, max recent queries size 2', () => {
     orderBy: [['id', 'desc']],
   };
 
-  const remove1Ast1 = queryManager.add(ast1);
+  const remove1Ast1 = queryManager.add(ast1, undefined);
   expect(send).toBeCalledTimes(1);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -330,15 +335,16 @@ test('remove, max recent queries size 2', () => {
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
+          ttl: undefined,
         },
       ],
     },
   ]);
 
-  const remove2Ast1 = queryManager.add(ast1);
+  const remove2Ast1 = queryManager.add(ast1, undefined);
   expect(send).toBeCalledTimes(1);
 
-  const removeAst2 = queryManager.add(ast2);
+  const removeAst2 = queryManager.add(ast2, undefined);
   expect(send).toBeCalledTimes(2);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -352,12 +358,13 @@ test('remove, max recent queries size 2', () => {
             where: undefined,
             orderBy: [['id', 'desc']],
           } satisfies AST,
+          ttl: undefined,
         },
       ],
     },
   ]);
 
-  const removeAst3 = queryManager.add(ast3);
+  const removeAst3 = queryManager.add(ast3, undefined);
   expect(send).toBeCalledTimes(3);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -371,12 +378,13 @@ test('remove, max recent queries size 2', () => {
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
+          ttl: undefined,
         },
       ],
     },
   ]);
 
-  const removeAst4 = queryManager.add(ast4);
+  const removeAst4 = queryManager.add(ast4, undefined);
   expect(send).toBeCalledTimes(4);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -390,6 +398,7 @@ test('remove, max recent queries size 2', () => {
             where: undefined,
             orderBy: [['id', 'desc']],
           } satisfies AST,
+          ttl: undefined,
         },
       ],
     },
@@ -462,7 +471,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
     orderBy: [['id', 'desc']],
   };
 
-  const remove1Ast1 = queryManager.add(ast1);
+  const remove1Ast1 = queryManager.add(ast1, undefined);
   expect(send).toBeCalledTimes(1);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -476,12 +485,13 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
+          ttl: undefined,
         },
       ],
     },
   ]);
 
-  const removeAst2 = queryManager.add(ast2);
+  const removeAst2 = queryManager.add(ast2, undefined);
   expect(send).toBeCalledTimes(2);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -495,12 +505,13 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
             where: undefined,
             orderBy: [['id', 'desc']],
           } satisfies AST,
+          ttl: undefined,
         },
       ],
     },
   ]);
 
-  const removeAst3 = queryManager.add(ast3);
+  const removeAst3 = queryManager.add(ast3, undefined);
   expect(send).toBeCalledTimes(3);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -514,12 +525,13 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
+          ttl: undefined,
         },
       ],
     },
   ]);
 
-  const removeAst4 = queryManager.add(ast4);
+  const removeAst4 = queryManager.add(ast4, undefined);
   expect(send).toBeCalledTimes(4);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -533,6 +545,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
             where: undefined,
             orderBy: [['id', 'desc']],
           } satisfies AST,
+          ttl: undefined,
         },
       ],
     },
@@ -541,7 +554,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
   remove1Ast1();
   expect(send).toBeCalledTimes(4);
 
-  const remove2Ast1 = queryManager.add(ast1);
+  const remove2Ast1 = queryManager.add(ast1, undefined);
   expect(send).toBeCalledTimes(4);
 
   removeAst2();
@@ -630,102 +643,296 @@ class TestTransaction implements ReadTransaction {
   }
 }
 
-test('getQueriesPatch', async () => {
-  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
-  const maxRecentQueriesSize = 0;
-  const queryManager = new QueryManager(
-    'client1',
-    schema.tables,
-    send,
-    () => () => {},
-    maxRecentQueriesSize,
-  );
-  // hash: 12hwg3ihkijhm
-  const ast1: AST = {
-    table: 'issue',
-    orderBy: [['id', 'asc']],
-  };
-  queryManager.add(ast1);
-  // hash 1hydj1t7t5yv4
-  const ast2: AST = {
-    table: 'issue',
-    orderBy: [['id', 'desc']],
-  };
-  queryManager.add(ast2);
+describe('getQueriesPatch', () => {
+  test('basics', async () => {
+    const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+    const maxRecentQueriesSize = 0;
+    const queryManager = new QueryManager(
+      'client1',
+      schema.tables,
+      send,
+      () => () => {},
+      maxRecentQueriesSize,
+    );
+    // hash: 12hwg3ihkijhm
+    const ast1: AST = {
+      table: 'issue',
+      orderBy: [['id', 'asc']],
+    };
+    queryManager.add(ast1, undefined);
+    // hash 1hydj1t7t5yv4
+    const ast2: AST = {
+      table: 'issue',
+      orderBy: [['id', 'desc']],
+    };
+    queryManager.add(ast2, undefined);
 
-  const testReadTransaction = new TestTransaction();
-  testReadTransaction.scanEntries = [
-    ['d/client1/12hwg3ihkijhm', 'unused'],
-    ['d/client1/shouldBeDeleted', 'unused'],
-  ];
+    const testReadTransaction = new TestTransaction();
+    testReadTransaction.scanEntries = [
+      ['d/client1/12hwg3ihkijhm', 'unused'],
+      ['d/client1/shouldBeDeleted', 'unused'],
+    ];
 
-  const patch = await queryManager.getQueriesPatch(testReadTransaction);
-  expect(patch).toEqual(
-    new Map(
-      [
-        {
-          op: 'del',
-          hash: 'shouldBeDeleted',
-        },
-        {
-          op: 'put',
-          hash: '1hydj1t7t5yv4',
-          ast: {
-            table: 'issues',
-            orderBy: [['id', 'desc']],
-          } satisfies AST,
-        },
-      ].map(x => [x.hash, x] as const),
-    ),
-  );
-  expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
-});
+    const patch = await queryManager.getQueriesPatch(testReadTransaction);
+    expect(patch).toEqual(
+      new Map(
+        [
+          {
+            op: 'del',
+            hash: 'shouldBeDeleted',
+          },
+          {
+            op: 'put',
+            hash: '1hydj1t7t5yv4',
+            ast: {
+              table: 'issues',
+              orderBy: [['id', 'desc']],
+            } satisfies AST,
+            ttl: undefined,
+          },
+        ].map(x => [x.hash, x] as const),
+      ),
+    );
+    expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
+  });
 
-test('getQueriesPatch includes recent queries in desired', async () => {
-  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
-  const maxRecentQueriesSize = 2;
-  const queryManager = new QueryManager(
-    'client1',
-    schema.tables,
-    send,
-    () => () => {},
-    maxRecentQueriesSize,
-  );
-  const ast1: AST = {
-    table: 'issue',
-    orderBy: [['id', 'asc']],
-  };
-  const remove1 = queryManager.add(ast1);
-  const ast2: AST = {
-    table: 'issue',
-    orderBy: [['id', 'desc']],
-  };
-  const remove2 = queryManager.add(ast2);
-  const ast3: AST = {
-    table: 'user',
-    orderBy: [['id', 'asc']],
-  };
-  const remove3 = queryManager.add(ast3);
-  const ast4: AST = {
-    table: 'user',
-    orderBy: [['id', 'desc']],
-  };
-  const remove4 = queryManager.add(ast4);
-  remove1();
-  remove2();
-  remove3();
-  remove4();
+  describe('add a second query with same hash', () => {
+    let send: Mock<(arg: ChangeDesiredQueriesMessage) => void>;
+    let queryManager: QueryManager;
 
-  // ast1 and ast2 are actually removed since maxRecentQueriesSize is 2
+    beforeEach(() => {
+      send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+      const maxRecentQueriesSize = 0;
+      queryManager = new QueryManager(
+        'client1',
+        schema.tables,
+        send,
+        () => () => {},
+        maxRecentQueriesSize,
+      );
+    });
 
-  const testReadTransaction = new TestTransaction();
-  testReadTransaction.scanEntries = [
-    ['d/client1/12hwg3ihkijhm', 'unused'],
-    ['d/client1/shouldBeDeleted', 'unused'],
-  ];
+    async function add(ttl: number | undefined) {
+      // hash 1hydj1t7t5yv4
+      const ast: AST = {
+        table: 'issue',
+        orderBy: [['id', 'desc']],
+      };
+      queryManager.add(ast, ttl);
 
-  const patch = await queryManager.getQueriesPatch(testReadTransaction);
-  expect(patch).toMatchInlineSnapshot(`
+      const testReadTransaction = new TestTransaction();
+      testReadTransaction.scanEntries = [];
+      const patch = await queryManager.getQueriesPatch(testReadTransaction);
+      expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
+      const op = patch.get('1hydj1t7t5yv4');
+      v.assert(op, putOpSchema);
+      return op.ttl;
+    }
+
+    test('with first having a ttl', async () => {
+      expect(await add(1000)).toBe(1000);
+      expect(send).toBeCalledTimes(1);
+      expect(send.mock.calls[0]).toMatchInlineSnapshot(`
+        [
+          [
+            "changeDesiredQueries",
+            {
+              "desiredQueriesPatch": [
+                {
+                  "ast": {
+                    "alias": undefined,
+                    "limit": undefined,
+                    "orderBy": [
+                      [
+                        "id",
+                        "desc",
+                      ],
+                    ],
+                    "related": undefined,
+                    "schema": undefined,
+                    "start": undefined,
+                    "table": "issues",
+                    "where": undefined,
+                  },
+                  "hash": "1hydj1t7t5yv4",
+                  "op": "put",
+                  "ttl": 1000,
+                },
+              ],
+            },
+          ],
+        ]
+      `);
+
+      send.mockClear();
+      expect(await add(2000)).toBe(2000);
+      expect(send).toBeCalledTimes(1);
+      expect(send.mock.calls[0]).toMatchInlineSnapshot(`
+        [
+          [
+            "changeDesiredQueries",
+            {
+              "desiredQueriesPatch": [
+                {
+                  "ast": {
+                    "alias": undefined,
+                    "limit": undefined,
+                    "orderBy": [
+                      [
+                        "id",
+                        "desc",
+                      ],
+                    ],
+                    "related": undefined,
+                    "schema": undefined,
+                    "start": undefined,
+                    "table": "issues",
+                    "where": undefined,
+                  },
+                  "hash": "1hydj1t7t5yv4",
+                  "op": "put",
+                  "ttl": 2000,
+                },
+              ],
+            },
+          ],
+        ]
+      `);
+
+      send.mockClear();
+      expect(await add(500)).toBe(2000);
+      expect(send).toBeCalledTimes(0);
+
+      send.mockClear();
+      expect(await add(undefined)).toBe(2000);
+      expect(send).toBeCalledTimes(0);
+    });
+
+    test('with first NOT having a ttl', async () => {
+      expect(await add(undefined)).toBe(undefined);
+      expect(send).toBeCalledTimes(1);
+      expect(send.mock.calls[0]).toMatchInlineSnapshot(`
+        [
+          [
+            "changeDesiredQueries",
+            {
+              "desiredQueriesPatch": [
+                {
+                  "ast": {
+                    "alias": undefined,
+                    "limit": undefined,
+                    "orderBy": [
+                      [
+                        "id",
+                        "desc",
+                      ],
+                    ],
+                    "related": undefined,
+                    "schema": undefined,
+                    "start": undefined,
+                    "table": "issues",
+                    "where": undefined,
+                  },
+                  "hash": "1hydj1t7t5yv4",
+                  "op": "put",
+                  "ttl": undefined,
+                },
+              ],
+            },
+          ],
+        ]
+      `);
+
+      send.mockClear();
+      expect(await add(undefined)).toBe(undefined);
+      expect(send).toBeCalledTimes(0);
+
+      send.mockClear();
+      expect(await add(1000)).toBe(1000);
+      expect(send).toBeCalledTimes(1);
+      expect(send.mock.calls[0]).toMatchInlineSnapshot(`
+        [
+          [
+            "changeDesiredQueries",
+            {
+              "desiredQueriesPatch": [
+                {
+                  "ast": {
+                    "alias": undefined,
+                    "limit": undefined,
+                    "orderBy": [
+                      [
+                        "id",
+                        "desc",
+                      ],
+                    ],
+                    "related": undefined,
+                    "schema": undefined,
+                    "start": undefined,
+                    "table": "issues",
+                    "where": undefined,
+                  },
+                  "hash": "1hydj1t7t5yv4",
+                  "op": "put",
+                  "ttl": 1000,
+                },
+              ],
+            },
+          ],
+        ]
+      `);
+
+      send.mockClear();
+      expect(await add(undefined)).toBe(1000);
+      expect(send).toBeCalledTimes(0);
+    });
+  });
+
+  test('getQueriesPatch includes recent queries in desired', async () => {
+    const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+    const maxRecentQueriesSize = 2;
+    const queryManager = new QueryManager(
+      'client1',
+      schema.tables,
+      send,
+      () => () => {},
+      maxRecentQueriesSize,
+    );
+    const ast1: AST = {
+      table: 'issue',
+      orderBy: [['id', 'asc']],
+    };
+    const remove1 = queryManager.add(ast1, undefined);
+    const ast2: AST = {
+      table: 'issue',
+      orderBy: [['id', 'desc']],
+    };
+    const remove2 = queryManager.add(ast2, undefined);
+    const ast3: AST = {
+      table: 'user',
+      orderBy: [['id', 'asc']],
+    };
+    const remove3 = queryManager.add(ast3, undefined);
+    const ast4: AST = {
+      table: 'user',
+      orderBy: [['id', 'desc']],
+    };
+    const remove4 = queryManager.add(ast4, undefined);
+    remove1();
+    remove2();
+    remove3();
+    remove4();
+
+    // ast1 and ast2 are actually removed since maxRecentQueriesSize is 2
+
+    const testReadTransaction = new TestTransaction();
+    testReadTransaction.scanEntries = [
+      ['d/client1/12hwg3ihkijhm', 'unused'],
+      ['d/client1/shouldBeDeleted', 'unused'],
+    ];
+
+    const patch = await queryManager.getQueriesPatch(testReadTransaction);
+    expect(patch).toMatchInlineSnapshot(`
     Map {
       "12hwg3ihkijhm" => {
         "hash": "12hwg3ihkijhm",
@@ -753,6 +960,7 @@ test('getQueriesPatch includes recent queries in desired', async () => {
         },
         "hash": "3c5d3uiyypuxu",
         "op": "put",
+        "ttl": undefined,
       },
       "2q7cds8pild5w" => {
         "ast": {
@@ -772,10 +980,12 @@ test('getQueriesPatch includes recent queries in desired', async () => {
         },
         "hash": "2q7cds8pild5w",
         "op": "put",
+        "ttl": undefined,
       },
     }
   `);
-  expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
+    expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
+  });
 });
 
 test('gotCallback, query already got', () => {
@@ -806,8 +1016,8 @@ test('gotCallback, query already got', () => {
     orderBy: [['id', 'asc']],
   };
 
-  const gotCalback1 = vi.fn<(got: boolean) => void>();
-  queryManager.add(ast, gotCalback1);
+  const gotCallback1 = vi.fn<(got: boolean) => void>();
+  queryManager.add(ast, 11, gotCallback1);
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
     'changeDesiredQueries',
@@ -826,19 +1036,20 @@ test('gotCallback, query already got', () => {
             limit: undefined,
             schema: undefined,
           } satisfies AST,
+          ttl: 11,
         },
       ],
     },
   ]);
 
-  expect(gotCalback1).nthCalledWith(1, true);
+  expect(gotCallback1).nthCalledWith(1, true);
 
-  const gotCalback2 = vi.fn<(got: boolean) => void>();
-  queryManager.add(ast, gotCalback2);
+  const gotCallback2 = vi.fn<(got: boolean) => void>();
+  queryManager.add(ast, 0, gotCallback2);
   expect(send).toBeCalledTimes(1);
 
-  expect(gotCalback2).nthCalledWith(1, true);
-  expect(gotCalback1).toBeCalledTimes(1);
+  expect(gotCallback2).nthCalledWith(1, true);
+  expect(gotCallback1).toBeCalledTimes(1);
 });
 
 test('gotCallback, query got after add', () => {
@@ -861,8 +1072,8 @@ test('gotCallback, query got after add', () => {
     orderBy: [['id', 'asc']],
   };
 
-  const gotCalback1 = vi.fn<(got: boolean) => void>();
-  queryManager.add(ast, gotCalback1);
+  const gotCallback1 = vi.fn<(got: boolean) => void>();
+  queryManager.add(ast, 789, gotCallback1);
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
     'changeDesiredQueries',
@@ -881,12 +1092,13 @@ test('gotCallback, query got after add', () => {
             limit: undefined,
             schema: undefined,
           } satisfies AST,
+          ttl: 789,
         },
       ],
     },
   ]);
 
-  expect(gotCalback1).nthCalledWith(1, false);
+  expect(gotCallback1).nthCalledWith(1, false);
 
   watchCallback([
     {
@@ -896,7 +1108,7 @@ test('gotCallback, query got after add', () => {
     },
   ]);
 
-  expect(gotCalback1).nthCalledWith(2, true);
+  expect(gotCallback1).nthCalledWith(2, true);
 });
 
 test('gotCallback, query got after add then removed', () => {
@@ -919,8 +1131,8 @@ test('gotCallback, query got after add then removed', () => {
     orderBy: [['id', 'asc']],
   };
 
-  const gotCalback1 = vi.fn<(got: boolean) => void>();
-  queryManager.add(ast, gotCalback1);
+  const gotCallback1 = vi.fn<(got: boolean) => void>();
+  queryManager.add(ast, 456, gotCallback1);
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
     'changeDesiredQueries',
@@ -939,12 +1151,13 @@ test('gotCallback, query got after add then removed', () => {
             limit: undefined,
             schema: undefined,
           } satisfies AST,
+          ttl: 456,
         },
       ],
     },
   ]);
 
-  expect(gotCalback1).nthCalledWith(1, false);
+  expect(gotCallback1).nthCalledWith(1, false);
 
   watchCallback([
     {
@@ -954,7 +1167,7 @@ test('gotCallback, query got after add then removed', () => {
     },
   ]);
 
-  expect(gotCalback1).nthCalledWith(2, true);
+  expect(gotCallback1).nthCalledWith(2, true);
 
   watchCallback([
     {
@@ -964,7 +1177,7 @@ test('gotCallback, query got after add then removed', () => {
     },
   ]);
 
-  expect(gotCalback1).nthCalledWith(3, false);
+  expect(gotCallback1).nthCalledWith(3, false);
 });
 
 test('gotCallback, query got after subscription removed', () => {
@@ -987,8 +1200,8 @@ test('gotCallback, query got after subscription removed', () => {
     orderBy: [['id', 'asc']],
   };
 
-  const gotCalback1 = vi.fn<(got: boolean) => void>();
-  const remove = queryManager.add(ast, gotCalback1);
+  const gotCallback1 = vi.fn<(got: boolean) => void>();
+  const remove = queryManager.add(ast, 123, gotCallback1);
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
     'changeDesiredQueries',
@@ -1007,16 +1220,17 @@ test('gotCallback, query got after subscription removed', () => {
             limit: undefined,
             schema: undefined,
           } satisfies AST,
+          ttl: 123,
         },
       ],
     },
   ]);
 
-  expect(gotCalback1).nthCalledWith(1, false);
+  expect(gotCallback1).nthCalledWith(1, false);
 
   remove();
 
-  expect(gotCalback1).toBeCalledTimes(1);
+  expect(gotCallback1).toBeCalledTimes(1);
   watchCallback([
     {
       op: 'add',
@@ -1025,7 +1239,7 @@ test('gotCallback, query got after subscription removed', () => {
     },
   ]);
 
-  expect(gotCalback1).toBeCalledTimes(1);
+  expect(gotCallback1).toBeCalledTimes(1);
 });
 
 const normalizingFields = {
@@ -1051,10 +1265,13 @@ describe('queriesPatch with lastPatch', () => {
       maxRecentQueriesSize,
     );
 
-    queryManager.add({
-      table: 'issue',
-      orderBy: [['id', 'asc']],
-    });
+    queryManager.add(
+      {
+        table: 'issue',
+        orderBy: [['id', 'asc']],
+      },
+      undefined,
+    );
     const testReadTransaction = new TestTransaction();
     const patch = await queryManager.getQueriesPatch(testReadTransaction);
     expect([...patch.values()]).toEqual([
@@ -1066,6 +1283,7 @@ describe('queriesPatch with lastPatch', () => {
         },
         hash: '12hwg3ihkijhm',
         op: 'put',
+        ttl: undefined,
       },
     ]);
   });
@@ -1082,10 +1300,13 @@ describe('queriesPatch with lastPatch', () => {
       0,
     );
 
-    const clean = queryManager.add({
-      table: 'issue',
-      orderBy: [['id', 'asc']],
-    });
+    const clean = queryManager.add(
+      {
+        table: 'issue',
+        orderBy: [['id', 'asc']],
+      },
+      undefined,
+    );
     const testReadTransaction = new TestTransaction();
 
     // patch and lastPatch are the same
@@ -1101,6 +1322,7 @@ describe('queriesPatch with lastPatch', () => {
             },
             hash: '12hwg3ihkijhm',
             op: 'put',
+            ttl: undefined,
           },
         ],
       ]),
@@ -1121,6 +1343,7 @@ describe('queriesPatch with lastPatch', () => {
             },
             hash: '12hwg3ihkijhm',
             op: 'put',
+            ttl: undefined,
           },
         ],
       ]),

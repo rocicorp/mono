@@ -593,11 +593,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         lc.debug?.(`applying ${desiredQueriesPatch.length} query patches`);
         // cvr = ... For #syncQueryPipelineSet().
         cvr = await this.#updatePatchesForDesiredQueries(lc, cvr, updater => {
+          const now = Date.now();
           const patches: PatchToVersion[] = [];
           for (const patch of desiredQueriesPatch) {
             switch (patch.op) {
               case 'put':
-                patches.push(...updater.putDesiredQueries(clientID, [patch]));
+                patches.push(
+                  ...updater.putDesiredQueries(clientID, [patch], now),
+                );
                 break;
               case 'del':
                 patches.push(
@@ -612,6 +615,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           return patches;
         });
       }
+
+      // If too large maybe prune here? (or in #syncQueryPipelineSet)
 
       if (this.#pipelinesSynced) {
         await this.#syncQueryPipelineSet(lc, cvr);
@@ -693,6 +698,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    * This must be called from within the #lock.
    */
   #syncQueryPipelineSet(lc: LogContext, cvr: CVRSnapshot) {
+    // this is for changes to the desired queries
+
     return startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet', async () => {
       assert(this.#pipelines.initialized());
 
@@ -757,6 +764,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           `CVR@${versionString(cvrVersion)}" does not match DB@${dbVersion}`,
         );
       }
+
+      // prune old
     });
   }
 
@@ -838,6 +847,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       for (const patch of await updater.deleteUnreferencedRows(lc)) {
         pokers.forEach(poker => poker.addPatch(patch));
       }
+
+      // Prune here?
 
       // Commit the changes and update the CVR snapshot.
       this.#cvr = (
@@ -1146,6 +1157,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       // Signal clients to commit.
       pokers.forEach(poker => poker.end(finalVersion));
+
+      // prune
+      // send to addRemoveQueries
 
       lc.info?.(`finished processing advancement (${Date.now() - start} ms)`);
       return 'success';

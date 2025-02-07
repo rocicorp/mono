@@ -1245,6 +1245,7 @@ test('mergePokes with all optionals defined', () => {
                     table: 'issues',
                     orderBy: [['issue_id', 'asc']],
                   },
+                  ttl: 0,
                 },
               ],
             },
@@ -1256,6 +1257,7 @@ test('mergePokes with all optionals defined', () => {
                   table: 'issues',
                   orderBy: [['issue_id', 'asc']],
                 },
+                ttl: 0,
               },
             ],
             rowsPatch: [
@@ -1287,6 +1289,7 @@ test('mergePokes with all optionals defined', () => {
                     table: 'labels',
                     orderBy: [['label_id', 'asc']],
                   },
+                  ttl: 0,
                 },
               ],
             },
@@ -1298,6 +1301,7 @@ test('mergePokes with all optionals defined', () => {
                   table: 'labels',
                   orderBy: [['label_id', 'asc']],
                 },
+                ttl: 0,
               },
             ],
             rowsPatch: [
@@ -1450,6 +1454,7 @@ test('mergePokes sparse', () => {
                   table: 'issues',
                   orderBy: [['issue_id', 'asc']],
                 },
+                ttl: 0,
               },
             ],
             rowsPatch: [
@@ -1480,6 +1485,7 @@ test('mergePokes sparse', () => {
                     table: 'labels',
                     orderBy: [['label_id', 'asc']],
                   },
+                  ttl: 0,
                 },
               ],
             },

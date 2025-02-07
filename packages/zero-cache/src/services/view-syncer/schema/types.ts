@@ -173,9 +173,31 @@ export const clientQueryRecordSchema = baseQueryRecordSchema.extend({
   // the queryID was added to their desired query set (i.e. individual `patchVersion`s).
   desiredBy: v.record(cvrVersionSchema),
 
-  // TODO: Iron this out.
-  // estimatedBytes: v.number(),
-  // lru information?
+  /*
+   * This is the time the query became inactive. If the query is active, this
+   * field is absent (or undefined). This is used to determine when the query
+   * should be considered expired. This is a Unix timestamp in milliseconds.
+   */
+  inactivatedAt: v.number().optional(),
+
+  /**
+   * The Time To Live. If absent/undefined, the query is considered to have no
+   * expiration. The expiration time is set when the query becomes inactive and
+   * needs to be updated/reset when the query becomes active again or another
+   * query with the same hash but with a higher TTL is registered.
+   */
+  // TODO: Make sure we update the TTL as needed
+  ttl: v.number().optional(),
+
+  /**
+   * Used with {@linkcode ttl} to determine when the query should be considered
+   * expired. This is a Unix timestamp in milliseconds. This is only used on the
+   * server side to determine when to remove the query from the view.
+   *
+   * The client only works with {@linkcode ttl} and does not need to know about
+   * this field.
+   */
+  expiresAt: v.number().optional(),
 });
 
 export type ClientQueryRecord = v.Infer<typeof clientQueryRecordSchema>;

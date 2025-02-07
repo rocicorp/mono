@@ -609,6 +609,41 @@ describe('view-syncer/service', () => {
     });
   });
 
+  test('adds desired queries from initConnectionMessage with ttl', async () => {
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl: 123456789},
+    ]);
+    await nextPoke(client);
+
+    const cvrStore = new CVRStore(
+      lc,
+      cvrDB,
+      SHARD_ID,
+      TASK_ID,
+      serviceID,
+      ON_FAILURE,
+    );
+    const cvr = await cvrStore.load(lc, Date.now());
+    expect(cvr).toMatchObject({
+      clients: {
+        foo: {
+          desiredQueryIDs: ['query-hash1'],
+          id: 'foo',
+          patchVersion: {stateVersion: '00', minorVersion: 1},
+        },
+      },
+      id: '9876',
+      queries: {
+        'query-hash1': {
+          ast: ISSUES_QUERY,
+          desiredBy: {foo: {stateVersion: '00', minorVersion: 1}},
+          id: 'query-hash1',
+        },
+      },
+      version: {stateVersion: '00', minorVersion: 1},
+    });
+  });
+
   test('responds to changeDesiredQueries patch', async () => {
     connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},

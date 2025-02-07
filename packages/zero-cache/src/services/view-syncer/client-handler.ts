@@ -15,7 +15,7 @@ import type {
   PokeStartBody,
 } from '../../../../zero-protocol/src/poke.ts';
 import {primaryKeyValueRecordSchema} from '../../../../zero-protocol/src/primary-key.ts';
-import type {RowPatchOp} from '../../../../zero-protocol/src/row-patch.ts';
+import type {DelOp, PutOp} from '../../../../zero-protocol/src/row-patch.ts';
 import type {JSONObject} from '../../types/bigint-json.ts';
 import {getLogLevel} from '../../types/error-for-client.ts';
 import {
@@ -50,6 +50,7 @@ export type DeleteRowPatch = {
 };
 
 export type RowPatch = PutRowPatch | DeleteRowPatch;
+
 export type ConfigPatch = DelQueryPatch | (PutQueryPatch & {ast: AST});
 
 export type Patch = ConfigPatch | RowPatch;
@@ -184,6 +185,8 @@ export class ClientHandler {
       }
     };
 
+    // const deltas: Map<string, number> = new Map();
+
     const addPatch = (patchToVersion: PatchToVersion) => {
       const {patch, toVersion} = patchToVersion;
       if (cmpVersions(toVersion, this.#baseVersion) <= 0) {
@@ -209,7 +212,14 @@ export class ClientHandler {
           if (patch.id.table === this.#zeroClientsTable) {
             this.#updateLMIDs((body.lastMutationIDChanges ??= {}), patch);
           } else {
-            (body.rowsPatch ??= []).push(makeRowPatch(patch));
+            // TODO: Keep track of number of rows per query.
+            const rowPatch = makeRowPatch(patch);
+            const delta = rowPatch.op === 'put' ? 1 : -1;
+            // deltas.set(hash, (deltas.get(hash) ?? 0) - 1);
+            lc.debug?.(
+              `row patch: ${patch.id.table} ${patch.id.rowKey} ${delta}`,
+            );
+            (body.rowsPatch ??= []).push(rowPatch);
           }
           break;
         default:
@@ -305,7 +315,7 @@ const lmidRowSchema = v.object({
   lastMutationID: v.number(), // Actually returned as a bigint, but converted by ensureSafeJSON().
 });
 
-function makeRowPatch(patch: RowPatch): RowPatchOp {
+function makeRowPatch(patch: RowPatch): PutOp | DelOp {
   const {
     op,
     id: {table: tableName, rowKey: id},

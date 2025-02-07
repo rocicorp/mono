@@ -1,5 +1,7 @@
 import {describe, expect, test} from 'vitest';
+import type {LogConfig} from '../../../otel/src/log-options.ts';
 import {deepClone} from '../../../shared/src/deep-clone.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
 import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
 import {
@@ -8,12 +10,10 @@ import {
 } from '../../../zero-schema/src/builder/schema-builder.ts';
 import {number, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {createSource} from '../ivm/test/source-factory.ts';
+import type {AdvancedQuery} from './advanced-query.ts';
 import {newQuery, type QueryDelegate, QueryImpl} from './query-impl.ts';
-import type {AdvancedQuery} from './query-internal.ts';
 import {QueryDelegateImpl} from './test/query-delegate.ts';
 import {schema} from './test/test-schemas.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {LogConfig} from '../../../otel/src/log-options.ts';
 
 /**
  * Some basic manual tests to get us started.

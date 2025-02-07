@@ -1,10 +1,17 @@
 import * as v from '../../shared/src/valita.ts';
 import {astSchema} from './ast.ts';
 
-const putOpSchema = v.object({
+export const putOpSchema = v.object({
   op: v.literal('put'),
   hash: v.string(),
   ast: astSchema,
+  /**
+   * Time To Live. Over the wire this is a duration in ms. If this is left out
+   * there is no ttl. The time is not very exact and should be taken as a hint.
+   * The server will remove desired queries that are no longer alive, but it
+   * may take a little longer than the ttl.
+   */
+  ttl: v.number().optional(),
 });
 
 const delOpSchema = v.object({

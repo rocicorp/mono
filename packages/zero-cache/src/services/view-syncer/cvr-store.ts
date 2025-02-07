@@ -34,12 +34,10 @@ import {
   rowsRowToRowRecord,
 } from './schema/cvr.ts';
 import {
-  type ClientQueryRecord,
   type ClientRecord,
   cmpVersions,
   type CVRVersion,
   EMPTY_CVR_VERSION,
-  type InternalQueryRecord,
   type NullableCVRVersion,
   type QueryPatch,
   type QueryRecord,
@@ -283,7 +281,7 @@ class RowRecordCache {
     afterVersion: NullableCVRVersion,
     upToCVR: CVRSnapshot,
     current: CVRVersion,
-    excludeQueryHashes: string[] = [],
+    excludeQueryHashes: string[],
   ): AsyncGenerator<RowsRow[], void, undefined> {
     if (cmpVersions(afterVersion, upToCVR.version) >= 0) {
       return;
@@ -324,7 +322,7 @@ class RowRecordCache {
         return {query};
       });
 
-      yield* query.cursor(10000);
+      yield* query.cursor(10_000);
     } finally {
       reader.setDone();
     }
@@ -412,21 +410,24 @@ function asQuery(row: QueriesRow): QueryRecord {
   const maybeVersion = (s: string | null) =>
     s === null ? undefined : versionFromString(s);
   return row.internal
-    ? ({
+    ? {
         id: row.queryHash,
         ast,
         transformationHash: row.transformationHash ?? undefined,
         transformationVersion: maybeVersion(row.transformationVersion),
         internal: true,
-      } satisfies InternalQueryRecord)
-    : ({
+      }
+    : {
         id: row.queryHash,
         ast,
         patchVersion: maybeVersion(row.patchVersion),
         desiredBy: {},
         transformationHash: row.transformationHash ?? undefined,
         transformationVersion: maybeVersion(row.transformationVersion),
-      } satisfies ClientQueryRecord);
+        ttl: row.ttl ?? undefined,
+        inactivatedAt: row.inactivatedAt ?? undefined,
+        expiresAt: row.expiresAt ?? undefined,
+      };
 }
 
 // The time to wait between load attempts.
@@ -611,8 +612,7 @@ export class CVRStore {
     }
 
     for (const row of queryRows) {
-      const query = asQuery(row);
-      cvr.queries[row.queryHash] = query;
+      cvr.queries[row.queryHash] = asQuery(row);
     }
 
     for (const row of desiresRows) {
@@ -714,12 +714,29 @@ export class CVRStore {
     });
   }
 
+  markQueryAsInactive(queryPatch: Pick<QueryPatch, 'id'>, now: number): void {
+    const nowSeconds = now / 1000;
+    this.#writes.add({
+      stats: {queries: 1},
+      write: tx => tx`UPDATE ${this.#cvr('queries')} SET 
+        "inactivatedAt" = TO_TIMESTAMP(${nowSeconds}),
+        "expiresAt" = ttl * interval'1ms' + TO_TIMESTAMP(${nowSeconds})
+        WHERE "clientGroupID" = ${this.#id} AND "queryHash" = ${queryPatch.id}`,
+    });
+  }
+
+  getExpiredQueriesCandidates(): PendingQuery<QueriesRow[]> {
+    return this.#db<QueriesRow[]>`SELECT * FROM ${this.#cvr('queries')}
+      WHERE "clientGroupID" = ${this.#id} AND "inactivatedAt" IS NOT NULL
+      ORDER BY "expiresAt" ASC, "inactivatedAt" ASC`;
+  }
+
   putQuery(query: QueryRecord): void {
     const maybeVersionString = (v: CVRVersion | undefined) =>
       v ? versionString(v) : null;
 
     const change: QueriesRow = query.internal
-      ? {
+      ? ({
           clientGroupID: this.#id,
           queryHash: query.id,
           clientAST: query.ast,
@@ -730,8 +747,11 @@ export class CVRStore {
           ),
           internal: true,
           deleted: false, // put vs del "got" query
-        }
-      : {
+          ttl: null,
+          inactivatedAt: null,
+          expiresAt: null,
+        } satisfies QueriesRow)
+      : ({
           clientGroupID: this.#id,
           queryHash: query.id,
           clientAST: query.ast,
@@ -742,7 +762,10 @@ export class CVRStore {
           ),
           internal: null,
           deleted: false, // put vs del "got" query
-        };
+          ttl: query.ttl ?? null,
+          inactivatedAt: null,
+          expiresAt: null,
+        } satisfies QueriesRow);
     this.#writes.add({
       stats: {queries: 1},
       write: tx => tx`INSERT INTO ${this.#cvr('queries')} ${tx(change)}

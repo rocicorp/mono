@@ -54,8 +54,13 @@ export class QueryDelegateImpl implements QueryDelegate {
       listener();
     }
   }
-  addServerQuery(ast: AST, gotCallback?: GotCallback | undefined): () => void {
+  addServerQuery(
+    ast: AST,
+    _ttl: number,
+    gotCallback?: GotCallback | undefined,
+  ): () => void {
     this.addedServerQueries.push(ast);
+
     this.gotCallbacks.push(gotCallback);
     if (this.synchronouslyCallNextGotCallback) {
       this.synchronouslyCallNextGotCallback = false;

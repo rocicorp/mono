@@ -7,5 +7,5 @@ export {
   type ViewChange,
 } from '../../zql/src/ivm/view-apply-change.ts';
 export type {Entry, Format, View, ViewFactory} from '../../zql/src/ivm/view.ts';
-export type {AdvancedQuery} from '../../zql/src/query/query-internal.ts';
+export type {AdvancedQuery} from '../../zql/src/query/advanced-query.ts';
 export type {HumanReadable, Query} from '../../zql/src/query/query.ts';
