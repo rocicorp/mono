@@ -61,6 +61,9 @@ export default {
       name: 'chromium',
       screenshotFailures: false,
     },
+    deps: {
+      inline: true, // Bundle dependencies inline
+    },
     typecheck: {
       enabled: false,
     },
