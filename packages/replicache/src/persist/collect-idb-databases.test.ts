@@ -12,7 +12,6 @@ import {TestMemStore} from '../kv/test-mem-store.ts';
 import {getKVStoreProvider} from '../replicache.ts';
 import type {ClientID} from '../sync/ids.ts';
 import {withWrite} from '../with-transactions.ts';
-import {makeClientGroupMap} from './client-groups.test.ts';
 import {type ClientGroupMap, setClientGroups} from './client-groups.ts';
 import {makeClientMap, setClientsForTesting} from './clients-test-helpers.ts';
 import type {ClientMap, OnClientsDeleted} from './clients.ts';
@@ -26,6 +25,7 @@ import {
   type IndexedDBDatabase,
   type IndexedDBName,
 } from './idb-databases-store.ts';
+import {makeClientGroupMap} from './test-utils.ts';
 
 describe('collectIDBDatabases', () => {
   let clock: SinonFakeTimers;

@@ -1,15 +1,8 @@
 import {expect, test} from 'vitest';
 import {stringCompare} from '../../shared/src/string-compare.ts';
 import {asyncIterableToArray} from './async-iterable-to-array.ts';
+import {makeAsyncIterable} from './make-async-iterable.ts';
 import {mergeAsyncIterables} from './merge-async-iterables.ts';
-
-export async function* makeAsyncIterable<V>(
-  values: Iterable<V>,
-): AsyncIterable<V> {
-  for (const value of values) {
-    yield value;
-  }
-}
 
 test('mergeAsyncIterables', async () => {
   const numCompare = (a: number, b: number) => a - b;
