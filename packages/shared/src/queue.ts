@@ -93,6 +93,31 @@ export class Queue<T> {
   }
 
   /**
+   * Drains the entire queue.
+   *
+   * Usage example:
+   * ```ts
+   * // A consumer that, when awoken, drains
+   * // all entries in the queue in order to
+   * // proces them in a batch.
+   * for (;;) {
+   *   const value = await queue.dequeue();
+   *   const rest = queue.drain();
+   * }
+   * ```
+   */
+  drain(): (T | undefined)[] {
+    const ret: (T | undefined)[] = [];
+    for (const p of this.#produced) {
+      ret.push(p.value);
+      p.consumed();
+    }
+    this.#produced.length = 0;
+
+    return ret;
+  }
+
+  /**
    * @returns The instantaneous number of outstanding values waiting to be
    *          dequeued. Note that if a value was enqueued while a consumer
    *          was waiting (with `await dequeue()`), the value is immediately
