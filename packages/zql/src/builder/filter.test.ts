@@ -5,7 +5,7 @@ import type {
   SimpleOperator,
 } from '../../../zero-protocol/src/ast.ts';
 import {createPredicate} from './filter.ts';
-import {cases} from './like.test.ts';
+import {cases} from './like-test-cases.ts';
 
 test('basics', () => {
   // nulls and undefined are false in all conditions except IS NULL and IS NOT NULL
