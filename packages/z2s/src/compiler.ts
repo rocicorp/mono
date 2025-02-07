@@ -1,4 +1,5 @@
 import {assert} from '../../shared/src/asserts.ts';
+import {must} from '../../shared/src/must.ts';
 import type {
   CorrelatedSubqueryCondition,
   Ordering,
@@ -10,6 +11,7 @@ import {
   type CorrelatedSubquery,
   type SimpleCondition,
 } from '../../zero-protocol/src/ast.ts';
+import type {Format} from '../../zql/src/ivm/view.ts';
 import {sql} from './sql.ts';
 import type {SQLQuery} from '@databases/sql';
 
@@ -20,12 +22,16 @@ import type {SQLQuery} from '@databases/sql';
  * - IN is changed to ANY to allow binding array literals
  * - subqueries are aggregated using PG's `array_agg` and `row_to_json` functions
  */
-export function compile(ast: AST) {
-  return select(ast, undefined);
+export function compile(ast: AST, format?: Format | undefined) {
+  return select(ast, format, undefined);
 }
 
-export function select(ast: AST, correlation: SQLQuery | undefined) {
-  const selectionSet = related(ast.related ?? [], ast.table);
+export function select(
+  ast: AST,
+  format: Format | undefined,
+  correlation: SQLQuery | undefined,
+) {
+  const selectionSet = related(ast.related ?? [], format, ast.table);
   selectionSet.push(sql.__dangerous__rawValue('*'));
   return sql`SELECT ${sql.join(selectionSet, ',')} FROM ${sql.ident(
     ast.table,
@@ -33,7 +39,7 @@ export function select(ast: AST, correlation: SQLQuery | undefined) {
     correlation
       ? sql`${ast.where ? sql`AND` : sql`WHERE`} (${correlation})`
       : sql``
-  } ${orderBy(ast.orderBy)} ${limit(ast.limit)}`;
+  } ${orderBy(ast.orderBy)} ${format?.singular ? limit(1) : limit(ast.limit)}`;
 }
 
 export function orderBy(orderBy: Ordering | undefined): SQLQuery {
@@ -57,14 +63,35 @@ export function limit(limit: number | undefined): SQLQuery {
 
 export function related(
   relationships: readonly CorrelatedSubquery[],
+  format: Format | undefined,
   parentTable: string,
 ): SQLQuery[] {
-  return relationships.map(
-    relationship => sql`(
+  return relationships.map(relationship =>
+    relationshipSubquery(relationship, format, parentTable),
+  );
+}
+
+function relationshipSubquery(
+  relationship: CorrelatedSubquery,
+  format: Format | undefined,
+  parentTable: string,
+) {
+  // if (relationship.hidden) {
+  //   // join to traverse. Only emit rows of the next thing.
+  //   // get the final alias
+  //   // get all the tables to join
+  //   // SELECT agg FROM (SELECT finalTableAlias.* FROM table as t1 JOIN table2 as t2 ON x JOIN table3 ON y)
+  //   const allTables = pullTablesForJunction(relationship);
+  //   sql`(
+  //     SELECT
+  //   )`;
+  // }
+  return sql`(
     SELECT array_agg(row_to_json(${sql.ident(
       `inner_${relationship.subquery.alias}`,
     )})) FROM (${select(
       relationship.subquery,
+      format?.relationships?.[must(relationship.subquery.alias)],
       correlate(
         parentTable,
         relationship.correlation.parentField,
@@ -72,8 +99,22 @@ export function related(
         relationship.correlation.childField,
       ),
     )}) ${sql.ident(`inner_${relationship.subquery.alias}`)}
-  ) as ${sql.ident(relationship.subquery.alias)}`,
+  ) as ${sql.ident(relationship.subquery.alias)}`;
+}
+
+export function pullTablesForJunction(
+  relationship: CorrelatedSubquery,
+  tables: string[] = [],
+) {
+  tables.push(relationship.subquery.table);
+  assert(
+    relationship.subquery.related?.length || 0 <= 1,
+    'Too many related tables for a junction edge',
   );
+  for (const subRelationship of relationship.subquery.related ?? []) {
+    pullTablesForJunction(subRelationship, tables);
+  }
+  return tables;
 }
 
 export function where(
@@ -159,6 +200,7 @@ export function exists(
     case 'EXISTS':
       return sql`EXISTS (${select(
         condition.related.subquery,
+        undefined,
         correlate(
           parentTable,
           condition.related.correlation.parentField,
@@ -167,7 +209,11 @@ export function exists(
         ),
       )})`;
     case 'NOT EXISTS':
-      return sql`NOT EXISTS (${select(condition.related.subquery, undefined)})`;
+      return sql`NOT EXISTS (${select(
+        condition.related.subquery,
+        undefined,
+        undefined,
+      )})`;
   }
 }
 
