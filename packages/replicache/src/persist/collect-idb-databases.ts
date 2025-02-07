@@ -4,6 +4,7 @@ import type {MaybePromise} from '../../../shared/src/types.ts';
 import {initBgIntervalProcess} from '../bg-interval.ts';
 import {StoreImpl} from '../dag/store-impl.ts';
 import type {Store} from '../dag/store.ts';
+import {getDeletedClients} from '../deleted-clients.ts';
 import * as FormatVersion from '../format-version-enum.ts';
 import {assertHash, newRandomHash} from '../hash.ts';
 import {IDBStore} from '../kv/idb-store.ts';
@@ -117,7 +118,7 @@ export async function collectIDBDatabases(
   }
 
   if (clientIDsToRemove.length) {
-    onClientsDeleted(clientIDsToRemove);
+    onClientsDeleted([...new Set(clientIDsToRemove)].sort());
   }
 }
 
@@ -318,6 +319,8 @@ function canDatabaseBeCollectedAndGetDeletedClientIDs(
     }
 
     const clients = await getClients(read);
-    return [true, [...clients.keys()]];
+    const oldDeletedClients = await getDeletedClients(read);
+    // Deduping and sorting is done when calling the callback
+    return [true, [...clients.keys(), ...oldDeletedClients]];
   });
 }

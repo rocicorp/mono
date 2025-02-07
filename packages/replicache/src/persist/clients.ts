@@ -43,7 +43,6 @@ import {makeClientID} from './make-client-id.ts';
 type FormatVersion = Enum<typeof FormatVersion>;
 
 export type ClientMap = ReadonlyMap<ClientID, ClientV5 | ClientV6>;
-export type ClientMapDD31 = ReadonlyMap<ClientID, ClientV5 | ClientV6>;
 
 const clientV5Schema = valita.readonlyObject({
   heartbeatTimestampMs: valita.number(),

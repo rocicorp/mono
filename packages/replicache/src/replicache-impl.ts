@@ -414,9 +414,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       enableScheduledRefresh = true,
       enablePullAndPushInOpen = true,
       enableClientGroupForking = true,
-      onClientsDeleted = clientIDs => {
-        this.#lc.info?.('ClientIDs deleted', clientIDs);
-      },
+      onClientsDeleted = () => {},
     } = implOptions;
     this.auth = auth ?? '';
     this.pullURL = pullURL;

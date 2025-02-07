@@ -58,6 +58,7 @@ import type {
 } from '../../../zero-protocol/src/push.ts';
 import {CRUD_MUTATION_NAME, mapCRUD} from '../../../zero-protocol/src/push.ts';
 import type {QueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
+import type {Upstream} from '../../../zero-protocol/src/up.ts';
 import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
 import {nullableVersionSchema} from '../../../zero-protocol/src/version.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
@@ -84,6 +85,7 @@ import {
   type MakeCustomMutatorInterfaces,
   makeReplicacheMutator,
 } from './custom.ts';
+import {DeleteClientsManager} from './delete-clients-manager.ts';
 import {shouldEnableAnalytics} from './enable-analytics.ts';
 import {
   type HTTPString,
@@ -272,6 +274,7 @@ export class Zero<
   readonly #queryManager: QueryManager;
   readonly #ivmSources: IVMSourceRepo;
   readonly #clientToServer: NameMapper;
+  readonly #deleteClientsManager: DeleteClientsManager;
 
   /**
    * The queries we sent when inside the sec-protocol header when establishing a connection.
@@ -283,6 +286,13 @@ export class Zero<
    * and an `initConnection` message must be sent to the server after receiving the `connected` message.
    */
   #initConnectionQueries: Map<string, QueriesPatchOp> | undefined;
+
+  /**
+   * We try to send the deleted clients as part of the sec-protocol header. If we can't
+   * because the header would get to long we keep track of the deleted clients and send
+   * them after the connection is established.
+   */
+  #deletedClients: string[] | undefined;
 
   #lastMutationIDSent: {clientID: string; id: number} =
     NULL_LAST_MUTATION_ID_SENT;
@@ -452,6 +462,8 @@ export class Zero<
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
       enableMutationRecovery: false,
+      onClientsDeleted: clientIDs =>
+        this.#deleteClientsManager.onClientsDeleted(clientIDs),
     };
 
     const rep = new ReplicacheImpl(replicacheOptions, replicacheImplOptions);
@@ -524,6 +536,12 @@ export class Zero<
     );
     this.#clientToServer = clientToServer(schema.tables);
 
+    this.#deleteClientsManager = new DeleteClientsManager(
+      msg => this.#send(msg),
+      rep.perdag,
+      this.#lc,
+    );
+
     this.#zeroContext = new ZeroContext(
       this.#ivmSources.main,
       (ast, gotCallback) => this.#queryManager.add(ast, gotCallback),
@@ -585,6 +603,10 @@ export class Zero<
   }
 
   #sendChangeDesiredQueries(msg: ChangeDesiredQueriesMessage): void {
+    this.#send(msg);
+  }
+
+  #send(msg: Upstream): void {
     if (this.#socket && this.#connectionState === ConnectionState.Connected) {
       send(this.#socket, msg);
     }
@@ -763,6 +785,11 @@ export class Zero<
         // we ignore warming messages
         break;
 
+      case 'deleteClients':
+        return this.#deleteClientsManager.clientsDeletedOnServer(
+          downMessage[1].clientIDs,
+        );
+
       default:
         msgType satisfies never;
         rejectInvalidMessage();
@@ -840,7 +867,7 @@ export class Zero<
   async #handleConnectedMessage(
     lc: LogContext,
     connectedMessage: ConnectedMessage,
-  ) {
+  ): Promise<void> {
     const now = Date.now();
     const [, connectBody] = connectedMessage;
     lc = addWebSocketIDToLogContext(connectBody.wsid, lc);
@@ -856,8 +883,8 @@ export class Zero<
     const proceedingConnectErrorCount = this.#connectErrorCount;
     this.#connectErrorCount = 0;
 
-    let timeToConnectMs = undefined;
-    let connectMsgLatencyMs = undefined;
+    let timeToConnectMs: number | undefined;
+    let connectMsgLatencyMs: number | undefined;
     if (this.#connectStart === undefined) {
       lc.error?.(
         'Got connected message but connect start time is undefined. This should not happen.',
@@ -871,7 +898,7 @@ export class Zero<
           : undefined;
       this.#connectStart = undefined;
     }
-    let totalTimeToConnectMs = undefined;
+    let totalTimeToConnectMs: number | undefined;
     if (this.#totalToConnectStart === undefined) {
       lc.error?.(
         'Got connected message but total to connect start time is undefined. This should not happen.',
@@ -894,13 +921,23 @@ export class Zero<
     this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
 
     lc.debug?.('Resolving connect resolver');
-    assert(this.#socket);
-
+    const socket = must(this.#socket);
     const queriesPatch = await this.#rep.query(tx =>
       this.#queryManager.getQueriesPatch(tx, this.#initConnectionQueries),
     );
+
+    const maybeSendDeletedClients = () => {
+      if (this.#deletedClients) {
+        if (this.#deletedClients.length > 0) {
+          send(socket, ['deleteClients', {clientIDs: this.#deletedClients}]);
+        }
+        this.#deletedClients = undefined;
+      }
+    };
+
     if (queriesPatch.size > 0 && this.#initConnectionQueries !== undefined) {
-      send(this.#socket, [
+      maybeSendDeletedClients();
+      send(socket, [
         'changeDesiredQueries',
         {
           desiredQueriesPatch: [...queriesPatch.values()],
@@ -909,14 +946,21 @@ export class Zero<
     } else if (this.#initConnectionQueries === undefined) {
       // if #initConnectionQueries was undefined that means we never
       // sent `initConnection` to the server inside the sec-protocol header.
-      send(this.#socket, [
+      send(socket, [
         'initConnection',
         {
           desiredQueriesPatch: [...queriesPatch.values()],
+          deletedClients:
+            this.#deletedClients && this.#deletedClients.length > 0
+              ? this.#deletedClients
+              : undefined,
         },
       ]);
+      this.#deletedClients = undefined;
     }
     this.#initConnectionQueries = undefined;
+
+    maybeSendDeletedClients();
 
     this.#setConnectionState(ConnectionState.Connected);
     this.#connectResolver.resolve();
@@ -988,9 +1032,10 @@ export class Zero<
     // signal.aborted cannot be true here because we checked for `this.closed` above.
     this.#closeAbortController.signal.addEventListener('abort', abortHandler);
 
-    const [ws, initConnectionQueries] = await createSocket(
+    const [ws, initConnectionQueries, deletedClients] = await createSocket(
       this.#rep,
       this.#queryManager,
+      this.#deleteClientsManager,
       toWSString(this.#server),
       this.#connectCookie,
       this.clientID,
@@ -1011,6 +1056,7 @@ export class Zero<
     }
 
     this.#initConnectionQueries = initConnectionQueries;
+    this.#deletedClients = deletedClients;
     ws.addEventListener('message', this.#onMessage);
     ws.addEventListener('open', this.#onOpen);
     ws.addEventListener('close', this.#onClose);
@@ -1649,6 +1695,7 @@ export class Zero<
 export async function createSocket(
   rep: ReplicacheImpl,
   queryManager: QueryManager,
+  deleteClientsManager: DeleteClientsManager,
   socketOrigin: WSString,
   baseCookie: NullableVersion,
   clientID: string,
@@ -1662,7 +1709,9 @@ export async function createSocket(
   lc: LogContext,
   maxHeaderLength = 1024 * 8,
   additionalConnectParams?: Record<string, string> | undefined,
-): Promise<[WebSocket, Map<string, QueriesPatchOp> | undefined]> {
+): Promise<
+  [WebSocket, Map<string, QueriesPatchOp> | undefined, ClientID[] | undefined]
+> {
   const url = new URL(
     appendPath(socketOrigin, `/sync/v${PROTOCOL_VERSION}/connect`),
   );
@@ -1696,16 +1745,26 @@ export async function createSocket(
   // instead.  encodeURIComponent to ensure it only contains chars allowed
   // for a `protocol`.
   const WS = mustGetBrowserGlobal('WebSocket');
-  let queriesPatch: Map<string, QueriesPatchOp> | undefined = await rep.query(
-    tx => queryManager.getQueriesPatch(tx),
-  );
+  const queriesPatchP = rep.query(tx => queryManager.getQueriesPatch(tx));
+  let deletedClients: ClientID[] | undefined =
+    await deleteClientsManager.getDeletedClients();
+  let queriesPatch: Map<string, QueriesPatchOp> | undefined =
+    await queriesPatchP;
   let secProtocol = encodeSecProtocols(
-    ['initConnection', {desiredQueriesPatch: [...queriesPatch.values()]}],
+    [
+      'initConnection',
+      {
+        desiredQueriesPatch: [...queriesPatch.values()],
+        deletedClients: deletedClients.length > 0 ? deletedClients : undefined,
+      },
+    ],
     auth,
   );
   if (secProtocol.length > maxHeaderLength) {
     secProtocol = encodeSecProtocols(undefined, auth);
     queriesPatch = undefined;
+  } else {
+    deletedClients = undefined;
   }
   return [
     new WS(
@@ -1714,6 +1773,7 @@ export async function createSocket(
       secProtocol,
     ),
     queriesPatch,
+    deletedClients,
   ];
 }
 

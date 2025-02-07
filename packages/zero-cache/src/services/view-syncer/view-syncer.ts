@@ -19,7 +19,14 @@ import type {
   ChangeDesiredQueriesBody,
   ChangeDesiredQueriesMessage,
 } from '../../../../zero-protocol/src/change-desired-queries.ts';
-import type {InitConnectionMessage} from '../../../../zero-protocol/src/connect.ts';
+import type {
+  InitConnectionBody,
+  InitConnectionMessage,
+} from '../../../../zero-protocol/src/connect.ts';
+import type {
+  DeleteClientsBody,
+  DeleteClientsMessage,
+} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.ts';
@@ -85,6 +92,8 @@ export interface ViewSyncer {
     ctx: SyncContext,
     msg: ChangeDesiredQueriesMessage,
   ): Promise<void>;
+
+  deleteClients(ctx: SyncContext, msg: DeleteClientsMessage): Promise<void>;
 }
 
 const DEFAULT_KEEPALIVE_MS = 5_000;
@@ -370,7 +379,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       void this.#runInLockForClient(
         ctx,
         initConnectionMessage,
-        this.#patchQueries,
+        this.#handleInitConnection,
         newClient,
       ).catch(e => newClient.fail(e));
 
@@ -378,12 +387,49 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     });
   }
 
+  readonly #handleInitConnection = async (
+    lc: LogContext,
+    clientID: string,
+    body: InitConnectionBody,
+    cvr: CVRSnapshot,
+  ): Promise<void> => {
+    const {deletedClients} = body;
+    if (deletedClients) {
+      await this.#deleteClients(lc, clientID, {clientIDs: deletedClients}, cvr);
+    }
+    await this.#patchQueries(lc, clientID, body, cvr);
+  };
+
   async changeDesiredQueries(
     ctx: SyncContext,
     msg: ChangeDesiredQueriesMessage,
   ): Promise<void> {
     await this.#runInLockForClient(ctx, msg, this.#patchQueries);
   }
+
+  async deleteClients(
+    ctx: SyncContext,
+    msg: DeleteClientsMessage,
+  ): Promise<void> {
+    try {
+      return await this.#runInLockForClient(ctx, msg, this.#deleteClients);
+    } catch (e) {
+      this.#lc.error?.('deleteClients failed', e);
+    }
+  }
+
+  // eslint-disable-next-line require-await
+  readonly #deleteClients = async (
+    lc: LogContext,
+    clientID: string,
+    {clientIDs}: DeleteClientsBody,
+    cvr: CVRSnapshot,
+  ): Promise<void> => {
+    lc.debug?.('deleting clients', clientIDs, clientID, cvr);
+    // TODO: Implement deletion of clients
+    // Find all clients from the msg and delete them. Send back the IDs of the
+    // deleted clients to the client.
+  };
 
   /**
    * Runs the given `fn` to process the `msg` from within the `#lock`,
