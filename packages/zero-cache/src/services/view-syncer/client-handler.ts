@@ -64,7 +64,7 @@ export type PatchToVersion = {
 export interface PokeHandler {
   addPatch(patch: PatchToVersion): void;
   cancel(): void;
-  end(): void;
+  end(finalVersion: CVRVersion): void;
 }
 
 const NOOP: PokeHandler = {
@@ -78,7 +78,7 @@ const NOOP: PokeHandler = {
 const PART_COUNT_FLUSH_THRESHOLD = 100;
 
 /**
- * Handles a single {@link ViewSyncer.sync()} connection.
+ * Handles a single `ViewSyncer` connection.
  */
 export class ClientHandler {
   readonly #clientGroupID: string;
@@ -88,6 +88,7 @@ export class ClientHandler {
   readonly #lc: LogContext;
   readonly #pokes: Subscription<Downstream>;
   #baseVersion: NullableCVRVersion;
+  readonly #protocolVersion: number;
   readonly #schemaVersion: number;
 
   constructor(
@@ -97,6 +98,7 @@ export class ClientHandler {
     wsID: string,
     shardID: string,
     baseCookie: string | null,
+    protocolVersion: number,
     schemaVersion: number,
     pokes: Subscription<Downstream>,
   ) {
@@ -107,11 +109,17 @@ export class ClientHandler {
     this.#lc = lc;
     this.#pokes = pokes;
     this.#baseVersion = cookieToVersion(baseCookie);
+    this.#protocolVersion = protocolVersion;
     this.#schemaVersion = schemaVersion;
   }
 
   version(): NullableCVRVersion {
     return this.#baseVersion;
+  }
+
+  supportsRevisedCookieProtocol() {
+    // https://github.com/rocicorp/mono/pull/3735
+    return this.#protocolVersion >= 5;
   }
 
   fail(e: unknown) {
@@ -128,10 +136,10 @@ export class ClientHandler {
   }
 
   startPoke(
-    finalVersion: CVRVersion,
+    tentativeVersion: CVRVersion,
     schemaVersions?: SchemaVersions, // absent for config-only pokes
   ): PokeHandler {
-    const pokeID = versionToCookie(finalVersion);
+    const pokeID = versionToCookie(tentativeVersion);
     const lc = this.#lc.withContext('pokeID', pokeID);
 
     if (schemaVersions) {
@@ -146,24 +154,30 @@ export class ClientHandler {
       }
     }
 
-    if (cmpVersions(this.#baseVersion, finalVersion) >= 0) {
+    if (cmpVersions(this.#baseVersion, tentativeVersion) >= 0) {
       lc.info?.(`already caught up, not sending poke.`);
       return NOOP;
     }
 
     const baseCookie = versionToNullableCookie(this.#baseVersion);
-    const cookie = versionToCookie(finalVersion);
+    const cookie = versionToCookie(tentativeVersion);
     lc.info?.(`starting poke from ${baseCookie} to ${cookie}`);
 
     const pokeStart: PokeStartBody = {pokeID, baseCookie, cookie};
     if (schemaVersions) {
       pokeStart.schemaVersions = schemaVersions;
     }
-    this.#pokes.push(['pokeStart', pokeStart]);
 
+    let pokeStarted = false;
     let body: PokePartBody | undefined;
     let partCount = 0;
-    const ensureBody = () => (body ??= {pokeID});
+    const ensureBody = () => {
+      if (!pokeStarted) {
+        this.#pokes.push(['pokeStart', pokeStart]);
+        pokeStarted = true;
+      }
+      return (body ??= {pokeID});
+    };
     const flushBody = () => {
       if (body) {
         this.#pokes.push(['pokePart', body]);
@@ -222,12 +236,24 @@ export class ClientHandler {
       },
 
       cancel: () => {
-        this.#pokes.push(['pokeEnd', {pokeID, cancel: true}]);
+        if (pokeStarted) {
+          this.#pokes.push(['pokeEnd', {pokeID, cancel: true}]);
+        }
       },
 
-      end: () => {
+      end: (finalVersion: CVRVersion) => {
+        const cookie = versionToCookie(finalVersion);
+        if (!pokeStarted) {
+          if (cmpVersions(this.#baseVersion, finalVersion) === 0) {
+            return; // Nothing changed and nothing was sent.
+          }
+          this.#pokes.push(['pokeStart', {...pokeStart, cookie}]);
+        }
         flushBody();
-        this.#pokes.push(['pokeEnd', {pokeID}]);
+        this.#pokes.push([
+          'pokeEnd',
+          this.supportsRevisedCookieProtocol() ? {pokeID, cookie} : {pokeID},
+        ]);
         this.#baseVersion = finalVersion;
       },
     };
@@ -312,4 +338,13 @@ export function ensureSafeJSON(row: JSONObject): SafeJSONObject {
     .map(([k, v]) => [k, Number(v)]);
 
   return modified.length ? {...row, ...Object.fromEntries(modified)} : row;
+}
+
+export function revisedCookieProtocolSupportedByAll(clients: ClientHandler[]) {
+  for (const c of clients) {
+    if (!c.supportsRevisedCookieProtocol()) {
+      return false;
+    }
+  }
+  return true;
 }

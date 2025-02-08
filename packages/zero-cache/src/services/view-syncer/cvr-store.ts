@@ -706,6 +706,16 @@ export class CVRStore {
     });
   }
 
+  #setLastActive(lastActive: number) {
+    this.#writes.add({
+      stats: {instances: 1},
+      write: tx => tx`
+        UPDATE ${this.#cvr('instances')} SET ${tx({lastActive})}
+          WHERE "clientGroupID" = ${this.#id}
+        `,
+    });
+  }
+
   markQueryAsDeleted(version: CVRVersion, queryPatch: QueryPatch): void {
     this.#writes.add({
       stats: {queries: 1},
@@ -955,8 +965,10 @@ export class CVRStore {
   async #flush(
     expectedCurrentVersion: CVRVersion,
     newVersion: CVRVersion,
+    skipNoopFlushes: boolean,
     lastConnectTime: number,
-  ): Promise<CVRFlushStats> {
+    lastActive: number,
+  ): Promise<CVRFlushStats | null> {
     const stats: CVRFlushStats = {
       instances: 0,
       queries: 0,
@@ -986,6 +998,15 @@ export class CVRStore {
         }
       }
     }
+    if (
+      skipNoopFlushes &&
+      this.#pendingRowRecordUpdates.size === 0 &&
+      this.#writes.size === 0
+    ) {
+      return null;
+    }
+    this.#setLastActive(lastActive);
+
     const rowsFlushed = await this.#db.begin(async tx => {
       const pipelined: Promise<unknown>[] = [
         // #checkVersionAndOwnership() executes a `SELECT ... FOR UPDATE`
@@ -1044,13 +1065,17 @@ export class CVRStore {
   async flush(
     expectedCurrentVersion: CVRVersion,
     newVersion: CVRVersion,
+    skipNoopFlushes: boolean,
     lastConnectTime: number,
-  ): Promise<CVRFlushStats> {
+    lastActive: number,
+  ): Promise<CVRFlushStats | null> {
     try {
       return await this.#flush(
         expectedCurrentVersion,
         newVersion,
+        skipNoopFlushes,
         lastConnectTime,
+        lastActive,
       );
     } catch (e) {
       // Clear cached state if an error (e.g. ConcurrentModificationException) is encountered.
