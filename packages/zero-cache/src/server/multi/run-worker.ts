@@ -1,5 +1,6 @@
 import 'dotenv/config'; // Imports ENV variables from .env
 import {assert} from '../../../../shared/src/asserts.ts';
+import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import {ProcessManager, runUntilKilled} from '../../services/life-cycle.ts';
 import type {Service} from '../../services/service.ts';
 import {childWorker, type Worker} from '../../types/processes.ts';
@@ -18,13 +19,16 @@ export async function runWorker(
   const lc = createLogContext(config, {worker: 'main'});
   const processes = new ProcessManager(lc, parent ?? process);
 
-  const {port, changeStreamerPort = port + 1} = config;
+  const {serverVersion, port, changeStreamerPort = port + 1} = config;
   let {taskID} = config;
   if (!taskID) {
     taskID = await getTaskID(lc);
     baseEnv['ZERO_TASK_ID'] = taskID;
   }
-  lc.info?.(`starting task ${taskID}`);
+  lc.info?.(
+    `starting server${!serverVersion ? '' : `@${serverVersion}`} ` +
+      `protocolVersion=${PROTOCOL_VERSION}, taskID=${taskID}`,
+  );
 
   const multiMode = config.tenants.length;
   if (!multiMode) {

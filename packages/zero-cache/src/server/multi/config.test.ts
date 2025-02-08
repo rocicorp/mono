@@ -487,6 +487,10 @@ test('zero-cache --help', () => {
                                                    to reduce the amount of heap memory used during initial sync (e.g. for tables                     
                                                    with large rows).                                                                                 
                                                                                                                                                      
+     --server-version string                       optional                                                                                          
+       ZERO_SERVER_VERSION env                                                                                                                       
+                                                   The version string outputted to logs when the server starts up.                                   
+                                                                                                                                                     
      --tenants-json string                         optional                                                                                          
        ZERO_TENANTS_JSON env                                                                                                                         
                                                    JSON encoding of per-tenant configs for running the server in multi-tenant mode:                  
