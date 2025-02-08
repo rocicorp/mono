@@ -135,15 +135,15 @@ export class CVRUpdater {
       lastActive,
     );
 
-    if (flushed) {
-      lc.debug?.(
-        `flushed cvr@${versionString(this._cvr.version)} ` +
-          `${JSON.stringify(flushed)} in (${Date.now() - start} ms)`,
-      );
-      this._cvr.lastActive = lastActive;
-      return {cvr: this._cvr, flushed};
+    if (!flushed) {
+      return {cvr: this._orig, flushed: false};
     }
-    return {cvr: this._orig, flushed: false};
+    lc.debug?.(
+      `flushed cvr@${versionString(this._cvr.version)} ` +
+        `${JSON.stringify(flushed)} in (${Date.now() - start} ms)`,
+    );
+    this._cvr.lastActive = lastActive;
+    return {cvr: this._cvr, flushed};
   }
 }
 
