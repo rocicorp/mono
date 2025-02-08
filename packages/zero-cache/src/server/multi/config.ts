@@ -11,6 +11,11 @@ const ENV_VAR_PREFIX = 'ZERO_';
 export const multiConfigSchema = {
   ...zeroOptions,
 
+  serverVersion: {
+    type: v.string().optional(),
+    desc: [`The version string outputted to logs when the server starts up.`],
+  },
+
   tenantsJSON: {
     type: v.string().optional(),
     desc: [
