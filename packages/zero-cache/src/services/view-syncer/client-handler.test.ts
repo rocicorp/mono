@@ -7,6 +7,7 @@ import type {
   PokePartMessage,
   PokeStartMessage,
 } from '../../../../zero-protocol/src/poke.ts';
+import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {JSONObject} from '../../types/bigint-json.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import {Subscription} from '../../types/subscription.ts';
@@ -15,7 +16,96 @@ import {ClientHandler, ensureSafeJSON, type Patch} from './client-handler.ts';
 const SHARD_ID = 'xyz';
 
 describe('view-syncer/client-handler', () => {
-  test('poke handler', () => {
+  const lc = createSilentLogContext();
+
+  test('no-op and canceled pokes', () => {
+    const poke1Version = {stateVersion: '123'};
+    const poke2Version = {stateVersion: '125'};
+    const poke3Version = {stateVersion: '127'};
+    const poke4Version = {stateVersion: '129'};
+
+    const received: Downstream[] = [];
+    // Subscriptions that dump unconsumed pokes to `received`
+    const subscription = Subscription.create<Downstream>({
+      cleanup: msgs => received.push(...msgs),
+    });
+
+    const schemaVersion = 1;
+    const schemaVersions = {minSupportedVersion: 1, maxSupportedVersion: 1};
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD_ID,
+      '121',
+      PROTOCOL_VERSION,
+      schemaVersion,
+      subscription,
+    );
+
+    // One poke advances from 121 => 123.
+    let poker = handler.startPoke(poke1Version, schemaVersions);
+    poker.end(poke1Version);
+
+    // The second poke starts the advancement to 125 but then reverts to 123.
+    poker = handler.startPoke(poke2Version, schemaVersions);
+    poker.end(poke1Version);
+
+    // The third poke gets canceled.
+    poker = handler.startPoke(poke3Version, schemaVersions);
+    poker.cancel();
+
+    // The fourth poke advances to 129.
+    poker = handler.startPoke(poke4Version, schemaVersions);
+    poker.end(poke4Version);
+
+    subscription.cancel(); // Drains any pushed messages to received.
+
+    // Only the first and last pokes should have been received.
+    expect(received).toEqual([
+      [
+        'pokeStart',
+        {
+          baseCookie: '121',
+          cookie: '123',
+          pokeID: '123',
+          schemaVersions: {
+            maxSupportedVersion: 1,
+            minSupportedVersion: 1,
+          },
+        },
+      ],
+      [
+        'pokeEnd',
+        {
+          cookie: '123',
+          pokeID: '123',
+        },
+      ],
+      [
+        'pokeStart',
+        {
+          baseCookie: '123',
+          cookie: '129',
+          pokeID: '129',
+          schemaVersions: {
+            maxSupportedVersion: 1,
+            minSupportedVersion: 1,
+          },
+        },
+      ],
+      [
+        'pokeEnd',
+        {
+          cookie: '129',
+          pokeID: '129',
+        },
+      ],
+    ]);
+  });
+
+  test('poke handler for multiple clients', () => {
     const poke1Version = {stateVersion: '121'};
     const poke2Version = {stateVersion: '123'};
 
@@ -27,7 +117,6 @@ describe('view-syncer/client-handler', () => {
       }),
     );
 
-    const lc = createSilentLogContext();
     const schemaVersion = 1;
     const schemaVersions = {minSupportedVersion: 1, maxSupportedVersion: 1};
     const handlers = [
@@ -39,6 +128,7 @@ describe('view-syncer/client-handler', () => {
         'ws1',
         SHARD_ID,
         '121',
+        PROTOCOL_VERSION,
         schemaVersion,
         subscriptions[0],
       ),
@@ -50,6 +140,7 @@ describe('view-syncer/client-handler', () => {
         'ws2',
         SHARD_ID,
         '120:01',
+        PROTOCOL_VERSION,
         schemaVersion,
         subscriptions[1],
       ),
@@ -61,6 +152,7 @@ describe('view-syncer/client-handler', () => {
         'ws3',
         SHARD_ID,
         '11z',
+        PROTOCOL_VERSION,
         schemaVersion,
         subscriptions[2],
       ),
@@ -186,7 +278,7 @@ describe('view-syncer/client-handler', () => {
         },
       });
 
-      poker.end();
+      poker.end(poke1Version);
     }
 
     // Now send another (empty) poke with everyone at the same baseCookie.
@@ -194,7 +286,7 @@ describe('view-syncer/client-handler', () => {
       client.startPoke(poke2Version, schemaVersions),
     );
     for (const poker of pokers) {
-      poker.end();
+      poker.end(poke2Version);
     }
 
     // Cancel the subscriptions to collect the unconsumed messages.
@@ -206,7 +298,7 @@ describe('view-syncer/client-handler', () => {
         'pokeStart',
         {pokeID: '123', baseCookie: '121', cookie: '123', schemaVersions},
       ] satisfies PokeStartMessage,
-      ['pokeEnd', {pokeID: '123'}] satisfies PokeEndMessage,
+      ['pokeEnd', {pokeID: '123', cookie: '123'}] satisfies PokeEndMessage,
     ]);
 
     // Client 2 is a bit behind.
@@ -241,14 +333,14 @@ describe('view-syncer/client-handler', () => {
           ],
         },
       ] satisfies PokePartMessage,
-      ['pokeEnd', {pokeID: '121'}] satisfies PokeEndMessage,
+      ['pokeEnd', {pokeID: '121', cookie: '121'}] satisfies PokeEndMessage,
 
       // Second poke
       [
         'pokeStart',
         {pokeID: '123', baseCookie: '121', cookie: '123', schemaVersions},
       ] satisfies PokeStartMessage,
-      ['pokeEnd', {pokeID: '123'}] satisfies PokeEndMessage,
+      ['pokeEnd', {pokeID: '123', cookie: '123'}] satisfies PokeEndMessage,
     ]);
 
     // Client 3 is more behind.
@@ -294,14 +386,14 @@ describe('view-syncer/client-handler', () => {
           ],
         },
       ] satisfies PokePartMessage,
-      ['pokeEnd', {pokeID: '121'}] satisfies PokeEndMessage,
+      ['pokeEnd', {pokeID: '121', cookie: '121'}] satisfies PokeEndMessage,
 
       // Second poke
       [
         'pokeStart',
         {pokeID: '123', baseCookie: '121', cookie: '123', schemaVersions},
       ] satisfies PokeStartMessage,
-      ['pokeEnd', {pokeID: '123'}] satisfies PokeEndMessage,
+      ['pokeEnd', {pokeID: '123', cookie: '123'}] satisfies PokeEndMessage,
     ]);
   });
 
@@ -325,6 +417,7 @@ describe('view-syncer/client-handler', () => {
       'ws1',
       SHARD_ID,
       '120',
+      PROTOCOL_VERSION,
       schemaVersion,
       subscription,
     );
@@ -337,7 +430,7 @@ describe('view-syncer/client-handler', () => {
       toVersion: {stateVersion: '121'},
       patch: {type: 'client', op: 'put', id: 'foo'},
     });
-    poker.end();
+    poker.end({stateVersion: '121'});
 
     subscription.cancel();
 
@@ -391,6 +484,7 @@ describe('view-syncer/client-handler', () => {
         'ws1',
         SHARD_ID,
         '121',
+        PROTOCOL_VERSION,
         schemaVersion,
         downstream,
       );

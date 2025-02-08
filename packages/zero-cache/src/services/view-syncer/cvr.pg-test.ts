@@ -182,6 +182,7 @@ describe('view-syncer/cvr', () => {
     const flushed = (
       await new CVRUpdater(pgStore, cvr, cvr.replicaVersion).flush(
         lc,
+        true,
         LAST_CONNECT,
         Date.UTC(2024, 3, 20),
       )
@@ -310,7 +311,7 @@ describe('view-syncer/cvr', () => {
     });
   });
 
-  test('update active time', async () => {
+  test('no update', async () => {
     const initialState: DBState = {
       instances: [
         {
@@ -364,22 +365,13 @@ describe('view-syncer/cvr', () => {
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
     const updater = new CVRUpdater(cvrStore, cvr, cvr.replicaVersion);
 
-    const {cvr: updated, stats} = await updater.flush(
+    const {cvr: updated, flushed} = await updater.flush(
       lc,
+      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 24),
     );
-    expect(stats).toMatchInlineSnapshot(`
-      {
-        "clients": 0,
-        "desires": 0,
-        "instances": 1,
-        "queries": 0,
-        "rows": 0,
-        "rowsDeferred": 0,
-        "statements": 2,
-      }
-    `);
+    expect(flushed).toBe(false);
 
     expect(cvr).toEqual({
       id: 'abc123',
@@ -404,10 +396,7 @@ describe('view-syncer/cvr', () => {
       },
     } satisfies CVRSnapshot);
 
-    expect(updated).toEqual({
-      ...cvr,
-      lastActive: 1713916800000,
-    } satisfies CVRSnapshot);
+    expect(updated).toEqual(cvr);
 
     // Verify round tripping.
     const cvrStore2 = new CVRStore(
@@ -426,7 +415,7 @@ describe('view-syncer/cvr', () => {
       instances: [
         {
           ...initialState.instances[0],
-          lastActive: Date.UTC(2024, 3, 24),
+          lastActive: Date.UTC(2024, 3, 23),
           owner: 'my-task',
           grantedAt: 1709251200000,
         },
@@ -466,7 +455,12 @@ describe('view-syncer/cvr', () => {
     await db`UPDATE cvr_jkl.instances SET version = '1a9:03' WHERE "clientGroupID" = 'abc123'`;
 
     await expect(
-      updater.flush(lc, LAST_CONNECT, Date.UTC(2024, 4, 19)),
+      updater.flush(
+        lc,
+        false, // force flush to trigger detection
+        LAST_CONNECT,
+        Date.UTC(2024, 4, 19),
+      ),
     ).rejects.toThrow(ConcurrentModificationException);
 
     // The last active time should not have been modified.
@@ -512,7 +506,12 @@ describe('view-syncer/cvr', () => {
     WHERE "clientGroupID" = 'abc123'`;
 
     await expect(
-      updater.flush(lc, LAST_CONNECT, Date.UTC(2024, 4, 19)),
+      updater.flush(
+        lc,
+        false, // force flush to trigger detection
+        LAST_CONNECT,
+        Date.UTC(2024, 4, 19),
+      ),
     ).rejects.toThrow(OwnershipError);
 
     // The last active time should not have been modified.
@@ -766,13 +765,14 @@ describe('view-syncer/cvr', () => {
                   ]
                 `);
 
-    const {cvr: updated, stats} = await updater.flush(
+    const {cvr: updated, flushed} = await updater.flush(
       lc,
+      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 24),
     );
 
-    expect(stats).toMatchInlineSnapshot(`
+    expect(flushed).toMatchInlineSnapshot(`
       {
         "clients": 4,
         "desires": 6,
@@ -1052,6 +1052,7 @@ describe('view-syncer/cvr', () => {
 
     const {cvr: updated2} = await updater2.flush(
       lc,
+      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 24, 1),
     );
@@ -1120,27 +1121,15 @@ describe('view-syncer/cvr', () => {
     ).toMatchInlineSnapshot(`[]`);
 
     // Same last active day (no index change), but different hour.
-    const {cvr: updated, stats} = await updater.flush(
+    const {cvr: updated, flushed} = await updater.flush(
       lc,
+      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
-    expect(stats).toMatchInlineSnapshot(`
-      {
-        "clients": 0,
-        "desires": 0,
-        "instances": 1,
-        "queries": 0,
-        "rows": 0,
-        "rowsDeferred": 0,
-        "statements": 2,
-      }
-    `);
+    expect(flushed).toBe(false);
 
-    expect(updated).toEqual({
-      ...cvr,
-      lastActive: 1713834000000,
-    } satisfies CVRSnapshot);
+    expect(updated).toEqual(cvr);
 
     // Verify round tripping.
     const doCVRStore2 = new CVRStore(
@@ -1159,7 +1148,7 @@ describe('view-syncer/cvr', () => {
       instances: [
         {
           ...initialState.instances[0],
-          lastActive: Date.UTC(2024, 3, 23, 1),
+          lastActive: Date.UTC(2024, 3, 23),
           owner: 'my-task',
           grantedAt: 1709251200000,
         },
@@ -1428,12 +1417,13 @@ describe('view-syncer/cvr', () => {
     expect(await updater.deleteUnreferencedRows()).toEqual([]);
 
     // Same last active day (no index change), but different hour.
-    const {cvr: updated, stats} = await updater.flush(
+    const {cvr: updated, flushed} = await updater.flush(
       lc,
+      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
-    expect(stats).toMatchInlineSnapshot(`
+    expect(flushed).toMatchInlineSnapshot(`
         {
           "clients": 0,
           "desires": 0,
@@ -1864,12 +1854,13 @@ describe('view-syncer/cvr', () => {
     ] satisfies PatchToVersion[]);
 
     // Same last active day (no index change), but different hour.
-    let {cvr: updated, stats} = await updater.flush(
+    let {cvr: updated, flushed} = await updater.flush(
       lc,
+      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
-    expect(stats).toMatchInlineSnapshot(`
+    expect(flushed).toMatchInlineSnapshot(`
         {
           "clients": 0,
           "desires": 0,
@@ -2107,12 +2098,13 @@ describe('view-syncer/cvr', () => {
     expect(newVersion).toEqual({stateVersion: '1ba', minorVersion: 2});
     expect(queryPatches).toHaveLength(0);
 
-    ({cvr: updated, stats} = await updater.flush(
+    ({cvr: updated, flushed} = await updater.flush(
       lc,
+      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 2),
     ));
-    expect(stats).toMatchInlineSnapshot(`
+    expect(flushed).toMatchInlineSnapshot(`
       {
         "clients": 0,
         "desires": 0,
@@ -2424,12 +2416,13 @@ describe('view-syncer/cvr', () => {
     ] satisfies PatchToVersion[]);
 
     // Same last active day (no index change), but different hour.
-    const {cvr: updated, stats} = await updater.flush(
+    const {cvr: updated, flushed} = await updater.flush(
       lc,
+      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
-    expect(stats).toMatchInlineSnapshot(`
+    expect(flushed).toMatchInlineSnapshot(`
       {
         "clients": 0,
         "desires": 0,
@@ -2863,12 +2856,13 @@ describe('view-syncer/cvr', () => {
 
     // Same last active day (no index change), but different hour.
     // Note: Must flush before generating config patches.
-    const {cvr: updated, stats} = await updater.flush(
+    const {cvr: updated, flushed} = await updater.flush(
       lc,
+      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
-    expect(stats).toMatchInlineSnapshot(`
+    expect(flushed).toMatchInlineSnapshot(`
       {
         "clients": 0,
         "desires": 0,
@@ -3376,23 +3370,13 @@ describe('view-syncer/cvr', () => {
 
     expect(await updater.deleteUnreferencedRows()).toEqual([]);
 
-    // Only the last active time should change.
-    const {cvr: updated, stats} = await updater.flush(
+    const {cvr: updated, flushed} = await updater.flush(
       lc,
+      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
-    expect(stats).toMatchInlineSnapshot(`
-      {
-        "clients": 0,
-        "desires": 0,
-        "instances": 1,
-        "queries": 0,
-        "rows": 0,
-        "rowsDeferred": 0,
-        "statements": 2,
-      }
-    `);
+    expect(flushed).toBe(false);
 
     expect(
       await cvrStore.catchupConfigPatches(
@@ -3506,10 +3490,7 @@ describe('view-syncer/cvr', () => {
       ]
     `);
 
-    expect(updated).toEqual({
-      ...cvr,
-      lastActive: 1713834000000,
-    } satisfies CVRSnapshot);
+    expect(updated).toEqual(cvr);
 
     // Verify round tripping.
     const doCVRStore2 = new CVRStore(
@@ -3733,12 +3714,13 @@ describe('view-syncer/cvr', () => {
       },
     ] satisfies PatchToVersion[]);
 
-    const {cvr: updated, stats} = await updater.flush(
+    const {cvr: updated, flushed} = await updater.flush(
       lc,
+      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
-    expect(stats).toMatchInlineSnapshot(`
+    expect(flushed).toMatchInlineSnapshot(`
       {
         "clients": 0,
         "desires": 0,
@@ -3955,12 +3937,13 @@ describe('view-syncer/cvr', () => {
     ] satisfies PatchToVersion[]);
 
     // Same last active day (no index change), but different hour.
-    const {cvr: updated, stats} = await updater.flush(
+    const {cvr: updated, flushed} = await updater.flush(
       lc,
+      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
-    expect(stats).toMatchInlineSnapshot(`
+    expect(flushed).toMatchInlineSnapshot(`
       {
         "clients": 0,
         "desires": 0,

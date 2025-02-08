@@ -756,16 +756,6 @@ describe('integration', {timeout: 30000}, () => {
         ]);
       }
 
-      // One canceled poke
-      expect(await downstream.dequeue()).toMatchObject([
-        'pokeStart',
-        {pokeID: WATERMARK_REGEX},
-      ]);
-      expect(await downstream.dequeue()).toMatchObject([
-        'pokeEnd',
-        {pokeID: WATERMARK_REGEX, cancel: true},
-      ]);
-
       expect(await downstream.dequeue()).toMatchObject([
         'pokeStart',
         {pokeID: WATERMARK_REGEX},
@@ -834,19 +824,18 @@ describe('integration', {timeout: 30000}, () => {
         ]);
       }
 
-      // For now, these no-op pokes indicate that the schema change was
-      // processed but not patches resulted.
-      // TODO: Get rid of empty pokes.
-      for (let i = 0; i < 2; i++) {
-        expect(await downstream.dequeue()).toMatchObject([
-          'pokeStart',
-          {pokeID: WATERMARK_REGEX},
-        ]);
-        expect(await downstream.dequeue()).toMatchObject([
-          'pokeEnd',
-          {pokeID: WATERMARK_REGEX},
-        ]);
-      }
+      // A rare case of a no-op poke happens when the advancement resets the
+      // pipelines, bumping the CVR to the current state version. This conveniently
+      // allows the integration test to correctly wait for the schema change to
+      // take effect.
+      expect(await downstream.dequeue()).toMatchObject([
+        'pokeStart',
+        {pokeID: WATERMARK_REGEX},
+      ]);
+      expect(await downstream.dequeue()).toMatchObject([
+        'pokeEnd',
+        {pokeID: WATERMARK_REGEX},
+      ]);
 
       // Now that nopk has a unique index, add a query to retrieve the data.
       ws.send(

@@ -10,6 +10,7 @@ import type {
   PokePartBody,
   PokeStartBody,
 } from '../../../../zero-protocol/src/poke.ts';
+import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {QueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.ts';
 import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
@@ -471,10 +472,11 @@ describe('view-syncer/service', () => {
   let nextPoke: (client: Queue<Downstream>) => Promise<Downstream[]>;
   let expectNoPokes: (client: Queue<Downstream>) => Promise<void>;
 
-  const SYNC_CONTEXT = {
+  const SYNC_CONTEXT: SyncContext = {
     clientID: 'foo',
     wsID: 'ws1',
     baseCookie: null,
+    protocolVersion: PROTOCOL_VERSION,
     schemaVersion: 2,
     tokenData: undefined,
   };
@@ -672,6 +674,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
+            "cookie": "00:01",
             "pokeID": "00:01",
           },
         ],
@@ -787,6 +790,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
+            "cookie": "01",
             "pokeID": "01",
           },
         ],
@@ -942,6 +946,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
+            "cookie": "00:01",
             "pokeID": "00:01",
           },
         ],
@@ -1089,6 +1094,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
+            "cookie": "01",
             "pokeID": "01",
           },
         ],
@@ -1247,6 +1253,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
+            "cookie": "00:01",
             "pokeID": "00:01",
           },
         ],
@@ -1291,7 +1298,7 @@ describe('view-syncer/service', () => {
     });
   });
 
-  test('process successful advancement', async () => {
+  test('process advancements', async () => {
     const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
       {op: 'put', hash: 'query-hash2', ast: ISSUES_QUERY2},
@@ -1368,6 +1375,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
+            "cookie": "00:01",
             "pokeID": "00:01",
           },
         ],
@@ -1390,6 +1398,18 @@ describe('view-syncer/service', () => {
       ]
     `);
 
+    // Perform an unrelated transaction that does not affect any queries.
+    // This should not result in a poke.
+    replicator.processTransaction(
+      '101',
+      messages.insert('users', {
+        id: '103',
+        name: 'Dude',
+      }),
+    );
+    stateChanges.push({state: 'version-ready'});
+
+    // Then, a relevant change should bump the client from '01' directly to '123'.
     replicator.processTransaction(
       '123',
       messages.update('issues', {
@@ -1447,6 +1467,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
+            "cookie": "123",
             "pokeID": "123",
           },
         ],
@@ -1542,31 +1563,6 @@ describe('view-syncer/service', () => {
 
     stateChanges.push({state: 'version-ready'});
 
-    // One canceled poke.
-    expect(await nextPoke(client)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": "123",
-            "cookie": "124",
-            "pokeID": "124",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "cancel": true,
-            "pokeID": "124",
-          },
-        ],
-      ]
-    `);
-
     // Then a poke that deletes issues rows in the CVR.
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
       [
@@ -1621,6 +1617,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
+            "cookie": "124",
             "pokeID": "124",
           },
         ],
@@ -1765,6 +1762,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
+            "cookie": "00:01",
             "pokeID": "00:01",
           },
         ],
@@ -1837,6 +1835,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
+            "cookie": "00:02",
             "pokeID": "00:02",
           },
         ],
@@ -1946,6 +1945,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
+            "cookie": "123",
             "pokeID": "123",
           },
         ],
@@ -2016,6 +2016,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
+            "cookie": "00:01",
             "pokeID": "00:01",
           },
         ],
@@ -2039,31 +2040,6 @@ describe('view-syncer/service', () => {
     );
 
     stateChanges.push({state: 'version-ready'});
-
-    // The poke that encountered the schema change should be canceled.
-    expect(await nextPoke(client)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": "01",
-            "cookie": "07",
-            "pokeID": "07",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "cancel": true,
-            "pokeID": "07",
-          },
-        ],
-      ]
-    `);
 
     // The "newColumn" should be arrive in the nextPoke.
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
@@ -2143,6 +2119,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
+            "cookie": "07",
             "pokeID": "07",
           },
         ],
@@ -2213,6 +2190,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
+            "cookie": "00:01",
             "pokeID": "00:01",
           },
         ],
@@ -2272,6 +2250,7 @@ describe('view-syncer/service', () => {
         clientID: 'bar',
         wsID: '9382',
         baseCookie: preAdvancement.cookie,
+        protocolVersion: PROTOCOL_VERSION,
         schemaVersion: 2,
         tokenData: undefined,
       },
@@ -2369,6 +2348,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
+            "cookie": "123:01",
             "pokeID": "123:01",
           },
         ],
@@ -2436,6 +2416,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
+            "cookie": "123:01",
             "pokeID": "123:01",
           },
         ],
@@ -2658,6 +2639,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
+            "cookie": "123:01",
             "pokeID": "123:01",
           },
         ],
@@ -2681,7 +2663,7 @@ describe('view-syncer/service', () => {
       await cvrStore.load(lc, Date.now()),
       '07',
       REPLICA_VERSION,
-    ).flush(lc, Date.now());
+    ).flush(lc, true, Date.now(), Date.now());
 
     // Connect the client.
     const client = connect(SYNC_CONTEXT, [
@@ -2828,6 +2810,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
+            "cookie": "07:02",
             "pokeID": "07:02",
           },
         ],
@@ -2849,7 +2832,7 @@ describe('view-syncer/service', () => {
       await cvrStore.load(lc, Date.now()),
       '07',
       '1' + REPLICA_VERSION, // CVR is at a newer replica version.
-    ).flush(lc, Date.now());
+    ).flush(lc, true, Date.now(), Date.now());
 
     // Connect the client.
     const client = connect(SYNC_CONTEXT, [
@@ -2905,7 +2888,7 @@ describe('view-syncer/service', () => {
       await cvrStore.load(lc, Date.now()),
       '07',
       REPLICA_VERSION,
-    ).flush(lc, Date.now());
+    ).flush(lc, true, Date.now(), Date.now());
 
     // Connect the client with a base cookie from the future.
     const client = connect({...SYNC_CONTEXT, baseCookie: '08'}, [
@@ -3035,6 +3018,7 @@ describe('view-syncer/service', () => {
         [
           "pokeEnd",
           {
+            "cookie": "123",
             "pokeID": "123",
           },
         ],
@@ -3055,10 +3039,11 @@ describe('permissions', () => {
   let vs: ViewSyncerService;
   let viewSyncerDone: Promise<void>;
 
-  const SYNC_CONTEXT = {
+  const SYNC_CONTEXT: SyncContext = {
     clientID: 'foo',
     wsID: 'ws1',
     baseCookie: null,
+    protocolVersion: PROTOCOL_VERSION,
     schemaVersion: 2,
     tokenData: {
       raw: '',
@@ -3150,6 +3135,7 @@ describe('permissions', () => {
         [
           "pokeEnd",
           {
+            "cookie": "01",
             "pokeID": "01",
           },
         ],
@@ -3354,6 +3340,7 @@ describe('permissions', () => {
         [
           "pokeEnd",
           {
+            "cookie": "01:02",
             "pokeID": "01:02",
           },
         ],
@@ -3409,6 +3396,7 @@ describe('permissions', () => {
         [
           "pokeEnd",
           {
+            "cookie": "01",
             "pokeID": "01",
           },
         ],
@@ -3493,6 +3481,7 @@ describe('permissions', () => {
         [
           "pokeEnd",
           {
+            "cookie": "01",
             "pokeID": "01",
           },
         ],

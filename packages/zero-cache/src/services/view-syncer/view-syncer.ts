@@ -42,6 +42,7 @@ import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication-state.t
 import type {ActivityBasedService} from '../service.ts';
 import {
   ClientHandler,
+  revisedCookieProtocolSupportedByAll,
   type PatchToVersion,
   type PokeHandler,
   type RowPatch,
@@ -76,6 +77,7 @@ export type SyncContext = {
   readonly clientID: string;
   readonly wsID: string;
   readonly baseCookie: string | null;
+  readonly protocolVersion: number;
   readonly schemaVersion: number;
   readonly tokenData: TokenData | undefined;
 };
@@ -341,7 +343,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ): Source<Downstream> {
     return startSpan(tracer, 'vs.initConnection', () => {
       this.#lastConnectTime = Date.now();
-      const {clientID, wsID, baseCookie, schemaVersion, tokenData} = ctx;
+      const {
+        clientID,
+        wsID,
+        baseCookie,
+        protocolVersion,
+        schemaVersion,
+        tokenData,
+      } = ctx;
       this.#authData = pickToken(this.#authData, tokenData?.decoded);
 
       const lc = this.#lc
@@ -365,6 +374,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         wsID,
         this.#shardID,
         baseCookie,
+        protocolVersion,
         schemaVersion,
         downstream,
       );
@@ -537,7 +547,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           }
         }
 
-        this.#cvr = (await updater.flush(lc, this.#lastConnectTime)).cvr;
+        this.#cvr = (await updater.flush(lc, true, this.#lastConnectTime)).cvr;
 
         if (cmpVersions(cvr.version, this.#cvr.version) < 0) {
           // Send pokes to catch up clients that are up to date.
@@ -550,7 +560,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           for (const patch of patches) {
             pokers.forEach(poker => poker.addPatch(patch));
           }
-          pokers.forEach(poker => poker.end());
+          pokers.forEach(poker => poker.end(newCVR.version));
         }
 
         cvr = this.#cvr; // For #syncQueryPipelineSet().
@@ -740,7 +750,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         addQueries,
         removeQueries,
       );
-      const pokers = this.#getClients().map(c =>
+      const clients = this.#getClients();
+      const pokers = clients.map(c =>
         c.startPoke(newVersion, this.#pipelines.currentSchemaVersions()),
       );
       for (const patch of queryPatches) {
@@ -784,19 +795,26 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       // Commit the changes and update the CVR snapshot.
-      this.#cvr = (await updater.flush(lc, this.#lastConnectTime)).cvr;
+      this.#cvr = (
+        await updater.flush(
+          lc,
+          revisedCookieProtocolSupportedByAll(clients),
+          this.#lastConnectTime,
+        )
+      ).cvr;
+      const finalVersion = this.#cvr.version;
 
       // Before ending the poke, catch up clients that were behind the old CVR.
       await this.#catchupClients(
         lc,
         cvr,
-        this.#cvr.version,
+        finalVersion,
         addQueries.map(q => q.id),
         pokers,
       );
 
       // Signal clients to commit.
-      pokers.forEach(poker => poker.end());
+      pokers.forEach(poker => poker.end(finalVersion));
 
       const wallTime = Date.now() - start;
       lc.info?.(
@@ -899,7 +917,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       if (!usePokers) {
-        pokers.forEach(poker => poker.end());
+        pokers.forEach(poker => poker.end(cvr.version));
       }
     });
   }
@@ -1038,6 +1056,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // Only poke clients that are at the cvr.version. New clients that
       // are behind need to first be caught up when their initConnection
       // message is processed (and #syncQueryPipelines is called).
+      const clients = this.#getClients(cvr.version);
       const pokers = this.#getClients(cvr.version).map(c =>
         c.startPoke(
           updater.updatedVersion(),
@@ -1071,10 +1090,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       // Commit the changes and update the CVR snapshot.
-      this.#cvr = (await updater.flush(lc, this.#lastConnectTime)).cvr;
+      this.#cvr = (
+        await updater.flush(
+          lc,
+          revisedCookieProtocolSupportedByAll(clients),
+          this.#lastConnectTime,
+        )
+      ).cvr;
+      const finalVersion = this.#cvr.version;
 
       // Signal clients to commit.
-      pokers.forEach(poker => poker.end());
+      pokers.forEach(poker => poker.end(finalVersion));
 
       lc.info?.(`finished processing advancement (${Date.now() - start} ms)`);
       return 'success';

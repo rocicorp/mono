@@ -116,37 +116,34 @@ export class CVRUpdater {
     return this._cvr.version;
   }
 
-  #setLastActive(now = Date.now()) {
-    this._cvr.lastActive = now;
-    this._cvrStore.putInstance(this._cvr);
-  }
-
   async flush(
     lc: LogContext,
+    skipNoopFlushes: boolean,
     lastConnectTime: number,
     lastActive = Date.now(),
   ): Promise<{
     cvr: CVRSnapshot;
-    stats: CVRFlushStats;
+    flushed: CVRFlushStats | false;
   }> {
     const start = Date.now();
 
-    this.#setLastActive(lastActive);
-    const stats = await this._cvrStore.flush(
+    const flushed = await this._cvrStore.flush(
       this._orig.version,
       this._cvr.version,
+      skipNoopFlushes,
       lastConnectTime,
+      lastActive,
     );
 
-    lc.debug?.(
-      `flushed cvr@${versionString(this._cvr.version)} ${JSON.stringify(
-        stats,
-      )} in (${Date.now() - start} ms)`,
-    );
-    return {
-      cvr: this._cvr,
-      stats,
-    };
+    if (flushed) {
+      lc.debug?.(
+        `flushed cvr@${versionString(this._cvr.version)} ` +
+          `${JSON.stringify(flushed)} in (${Date.now() - start} ms)`,
+      );
+      this._cvr.lastActive = lastActive;
+      return {cvr: this._cvr, flushed};
+    }
+    return {cvr: this._orig, flushed: false};
   }
 }
 
@@ -284,9 +281,14 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     ];
   }
 
-  flush(lc: LogContext, lastConnectTime: number, lastActive = Date.now()) {
+  flush(
+    lc: LogContext,
+    skipNoopFlushes: boolean,
+    lastConnectTime: number,
+    lastActive = Date.now(),
+  ) {
     // TODO: Add cleanup of no-longer-desired got queries and constituent rows.
-    return super.flush(lc, lastConnectTime, lastActive);
+    return super.flush(lc, skipNoopFlushes, lastConnectTime, lastActive);
   }
 }
 
