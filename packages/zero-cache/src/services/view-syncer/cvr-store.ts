@@ -709,12 +709,10 @@ export class CVRStore {
   #setLastActive(lastActive: number) {
     this.#writes.add({
       stats: {instances: 1},
-      write: tx => {
-        return tx`
+      write: tx => tx`
         UPDATE ${this.#cvr('instances')} SET ${tx({lastActive})}
           WHERE "clientGroupID" = ${this.#id}
-        `;
-      },
+        `,
     });
   }
 
@@ -1002,7 +1000,7 @@ export class CVRStore {
     }
     if (
       skipNoopFlushes &&
-      this.#pendingRowRecordUpdates.size == 0 &&
+      this.#pendingRowRecordUpdates.size === 0 &&
       this.#writes.size === 0
     ) {
       return null;
