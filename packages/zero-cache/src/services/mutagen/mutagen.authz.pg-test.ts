@@ -21,11 +21,11 @@ import {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
 import type {Row} from '../../../../zql/src/query/query.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {WriteAuthorizerImpl} from '../../auth/write-authorizer.ts';
+import type {LogConfig, ZeroConfig} from '../../config/zero-config.ts';
 import {testDBs} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {zeroSchema} from './mutagen-test-shared.ts';
 import {processMutation} from './mutagen.ts';
-import type {LogConfig, ZeroConfig} from '../../config/zero-config.ts';
 
 const logConfig: LogConfig = {
   format: 'text',
@@ -306,7 +306,6 @@ beforeEach(async () => {
   authorizer = new WriteAuthorizerImpl(
     lc,
     zeroConfig,
-    schema,
     permissionsConfig,
     replica,
     SHARD_ID,

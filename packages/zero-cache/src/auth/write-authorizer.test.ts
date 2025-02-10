@@ -5,12 +5,10 @@ import type {
   InsertOp,
   UpdateOp,
 } from '../../../zero-protocol/src/push.ts';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import type {Rule} from '../../../zero-schema/src/compiled-permissions.ts';
 import {Database} from '../../../zqlite/src/db.ts';
-import {WriteAuthorizerImpl} from './write-authorizer.ts';
 import type {LogConfig, ZeroConfig} from '../config/zero-config.ts';
+import {WriteAuthorizerImpl} from './write-authorizer.ts';
 
 const lc = createSilentLogContext();
 const logConfig: LogConfig = {
@@ -49,17 +47,6 @@ const allowIfAIsSubject = [
   },
 ] satisfies Rule;
 
-const schema = createSchema(1, {
-  tables: [
-    table('foo')
-      .columns({
-        id: string(),
-        a: string(),
-      })
-      .primaryKey('id'),
-  ],
-});
-
 let replica: Database;
 beforeEach(() => {
   replica = new Database(lc, ':memory:');
@@ -75,7 +62,6 @@ describe('normalize ops', () => {
     const authorizer = new WriteAuthorizerImpl(
       lc,
       zeroConfig,
-      schema,
       {},
       replica,
       'cg',
@@ -101,7 +87,6 @@ describe('normalize ops', () => {
     const authorizer = new WriteAuthorizerImpl(
       lc,
       zeroConfig,
-      schema,
       {},
       replica,
       'cg',
@@ -130,7 +115,6 @@ describe('pre & post mutation', () => {
     const authorizer = new WriteAuthorizerImpl(
       lc,
       zeroConfig,
-      schema,
       {
         foo: {
           row: {
@@ -162,7 +146,6 @@ describe('pre & post mutation', () => {
     const authorizer = new WriteAuthorizerImpl(
       lc,
       zeroConfig,
-      schema,
       {
         foo: {
           row: {
@@ -194,7 +177,6 @@ describe('pre & post mutation', () => {
     const authorizer = new WriteAuthorizerImpl(
       lc,
       zeroConfig,
-      schema,
       {
         foo: {
           row: {
@@ -228,7 +210,6 @@ describe('pre & post mutation', () => {
     const authorizer = new WriteAuthorizerImpl(
       lc,
       zeroConfig,
-      schema,
       {
         foo: {
           row: {

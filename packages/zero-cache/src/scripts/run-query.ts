@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
-import 'dotenv/config';
 import chalk from 'chalk';
+import 'dotenv/config';
 
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
@@ -21,7 +21,6 @@ import {getSchema} from '../auth/load-schema.ts';
 import {getDebugConfig, type LogConfig} from '../config/zero-config.ts';
 
 const config = getDebugConfig();
-const schemaAndPermissions = await getSchema(config);
 runtimeDebugFlags.trackRowsVended = true;
 
 const lc = createSilentLogContext();
@@ -32,7 +31,8 @@ const logConfig: LogConfig = {
   slowRowThreshold: 0,
 };
 
-const db = new Database(createSilentLogContext(), config.replicaFile);
+const db = new Database(lc, config.replicaFile);
+const schema = getSchema(lc, db);
 const sources = new Map<string, TableSource>();
 const host: QueryDelegate = {
   getSource: (name: string) => {
@@ -46,8 +46,8 @@ const host: QueryDelegate = {
       '',
       db,
       name,
-      schemaAndPermissions.schema.tables[name].columns,
-      schemaAndPermissions.schema.tables[name].primaryKey,
+      schema.tables[name].columns,
+      schema.tables[name].primaryKey,
     );
 
     sources.set(name, source);
@@ -95,9 +95,9 @@ function runQuery(queryString: string): [number, number] {
   let q: any;
   const z = {
     query: Object.fromEntries(
-      Object.entries(schemaAndPermissions.schema.tables).map(([name]) => [
+      Object.entries(schema.tables).map(([name]) => [
         name,
-        newQuery(host, schemaAndPermissions.schema, name),
+        newQuery(host, schema, name),
       ]),
     ),
   };

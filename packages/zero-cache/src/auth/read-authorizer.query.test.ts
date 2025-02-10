@@ -39,9 +39,9 @@ import {
 import type {Query, Row} from '../../../zql/src/query/query.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
+import type {LogConfig, ZeroConfig} from '../config/zero-config.ts';
 import {transformQuery} from './read-authorizer.ts';
 import {WriteAuthorizerImpl} from './write-authorizer.ts';
-import type {LogConfig, ZeroConfig} from '../config/zero-config.ts';
 
 const logConfig: LogConfig = {
   format: 'text',
@@ -533,7 +533,6 @@ beforeEach(() => {
   writeAuthorizer = new WriteAuthorizerImpl(
     lc,
     zeroConfig,
-    schema,
     permissions,
     replica,
     'cg',
