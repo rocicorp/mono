@@ -76,8 +76,13 @@ function gcClients(
       return clients;
     }
     await setClients(newClients, dagWrite);
-    const normalized = await addDeletedClients(dagWrite, deletedClients);
-    onClientsDeleted(normalized);
+    const {clientIDs, clientGroupIDs} = await addDeletedClients(
+      dagWrite,
+      deletedClients,
+      // gcClients does not delete client groups
+      [],
+    );
+    onClientsDeleted(clientIDs, clientGroupIDs);
     return newClients;
   });
 }

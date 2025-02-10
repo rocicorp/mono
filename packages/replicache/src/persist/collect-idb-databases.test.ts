@@ -11,7 +11,7 @@ import {IDBStore} from '../kv/idb-store.ts';
 import {hasMemStore} from '../kv/mem-store.ts';
 import {TestMemStore} from '../kv/test-mem-store.ts';
 import {getKVStoreProvider} from '../replicache.ts';
-import type {ClientID} from '../sync/ids.ts';
+import type {ClientGroupID, ClientID} from '../sync/ids.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
 import {type ClientGroupMap, setClientGroups} from './client-groups.ts';
 import {makeClientMap, setClientsForTesting} from './clients-test-helpers.ts';
@@ -44,6 +44,7 @@ describe('collectIDBDatabases', () => {
     ClientMap,
     (ClientGroupMap | undefined)?,
     (ClientID[] | undefined)?,
+    (ClientGroupID[] | undefined)?,
   ][];
 
   const makeIndexedDBDatabase = ({
@@ -72,6 +73,7 @@ describe('collectIDBDatabases', () => {
     now,
     expectedDatabases,
     expectedClientsDeleted = [],
+    expectedClientGroupsDeleted = [],
     enableMutationRecovery = true,
   }: {
     name: string;
@@ -79,13 +81,20 @@ describe('collectIDBDatabases', () => {
     now: number;
     expectedDatabases: string[];
     expectedClientsDeleted?: ClientID[] | undefined;
+    expectedClientGroupsDeleted?: ClientGroupID[] | undefined;
     enableMutationRecovery?: boolean | undefined;
   }) => {
     test(name + ' > time ' + now, async () => {
       const store = new IDBDatabasesStore(_ => new TestMemStore());
       const dropStore = (name: string) => store.deleteDatabases([name]);
       const clientDagStores = new Map<IndexedDBName, Store>();
-      for (const [db, clients, clientGroups, deletedClientIDs] of entries) {
+      for (const [
+        db,
+        clients,
+        clientGroups,
+        deletedClientIDs,
+        deletedClientGroupIDs,
+      ] of entries) {
         const dagStore = new TestStore();
         clientDagStores.set(db.name, dagStore);
 
@@ -97,9 +106,13 @@ describe('collectIDBDatabases', () => {
             setClientGroups(clientGroups, dagWrite),
           );
         }
-        if (deletedClientIDs) {
+        if (deletedClientIDs || deletedClientGroupIDs) {
           await withWrite(dagStore, dagWrite =>
-            setDeletedClients(dagWrite, deletedClientIDs),
+            setDeletedClients(
+              dagWrite,
+              deletedClientIDs ?? [],
+              deletedClientGroupIDs ?? [],
+            ),
           );
         }
       }
@@ -128,10 +141,14 @@ describe('collectIDBDatabases', () => {
         expectedDatabases,
       );
 
-      if (expectedClientsDeleted.length > 0) {
+      if (
+        expectedClientsDeleted.length > 0 ||
+        expectedClientGroupsDeleted.length > 0
+      ) {
         expect(onClientsDeleted).toHaveBeenCalledOnce();
         expect(onClientsDeleted).toHaveBeenLastCalledWith(
           expectedClientsDeleted,
+          expectedClientGroupsDeleted,
         );
       } else {
         expect(onClientsDeleted).not.toHaveBeenCalledOnce();
@@ -143,7 +160,10 @@ describe('collectIDBDatabases', () => {
           const dagStore = newDagStore(name);
           expect(
             await withRead(dagStore, read => getDeletedClients(read)),
-          ).toEqual(expectedClientsDeleted);
+          ).toEqual({
+            clientIDs: expectedClientsDeleted,
+            clientGroupIDs: expectedClientGroupsDeleted,
+          });
         }
       }
     });
@@ -171,6 +191,7 @@ describe('collectIDBDatabases', () => {
       now: 1000,
       expectedDatabases: [],
       expectedClientsDeleted: ['clientA1'],
+      expectedClientGroupsDeleted: ['make-client-group-id'],
     });
     t({
       name: 'one idb, one client',
@@ -178,6 +199,7 @@ describe('collectIDBDatabases', () => {
       now: 2000,
       expectedDatabases: [],
       expectedClientsDeleted: ['clientA1'],
+      expectedClientGroupsDeleted: ['make-client-group-id'],
     });
   }
 
@@ -214,6 +236,7 @@ describe('collectIDBDatabases', () => {
       now: 1000,
       expectedDatabases: ['b'],
       expectedClientsDeleted: ['clientA1'],
+      expectedClientGroupsDeleted: ['make-client-group-id'],
     });
     t({
       name: 'two idb, one client in each',
@@ -221,6 +244,7 @@ describe('collectIDBDatabases', () => {
       now: 2000,
       expectedDatabases: [],
       expectedClientsDeleted: ['clientA1', 'clientB1'],
+      expectedClientGroupsDeleted: ['make-client-group-id'],
     });
   }
 
@@ -232,10 +256,12 @@ describe('collectIDBDatabases', () => {
           clientA1: {
             headHash: fakeHash('a1'),
             heartbeatTimestampMs: 0,
+            clientGroupID: 'clientGroupA1',
           },
           clientA2: {
             headHash: fakeHash('a2'),
             heartbeatTimestampMs: 2000,
+            clientGroupID: 'clientGroupA2',
           },
         }),
       ],
@@ -245,6 +271,7 @@ describe('collectIDBDatabases', () => {
           clientB1: {
             headHash: fakeHash('b1'),
             heartbeatTimestampMs: 1000,
+            clientGroupID: 'clientGroupB1',
           },
         }),
       ],
@@ -267,6 +294,7 @@ describe('collectIDBDatabases', () => {
       now: 2000,
       expectedDatabases: ['a'],
       expectedClientsDeleted: ['clientB1'],
+      expectedClientGroupsDeleted: ['clientGroupB1'],
     });
     t({
       name: 'two idb, three clients',
@@ -274,6 +302,11 @@ describe('collectIDBDatabases', () => {
       now: 3000,
       expectedDatabases: [],
       expectedClientsDeleted: ['clientA1', 'clientA2', 'clientB1'],
+      expectedClientGroupsDeleted: [
+        'clientGroupA1',
+        'clientGroupA2',
+        'clientGroupB1',
+      ],
     });
   }
 
@@ -285,11 +318,16 @@ describe('collectIDBDatabases', () => {
           clientA1: {
             headHash: fakeHash('a1'),
             heartbeatTimestampMs: 1000,
+            clientGroupID: 'clientGroupA1',
           },
           clientA2: {
             headHash: fakeHash('a2'),
             heartbeatTimestampMs: 3000,
+            clientGroupID: 'clientGroupA1',
           },
+        }),
+        makeClientGroupMap({
+          clientGroupA1: {headHash: fakeHash('a1')},
         }),
       ],
       [
@@ -298,10 +336,12 @@ describe('collectIDBDatabases', () => {
           clientB1: {
             headHash: fakeHash('b1'),
             heartbeatTimestampMs: 2000,
+            clientGroupID: 'clientGroupB1',
           },
           clientB2: {
             headHash: fakeHash('b2'),
             heartbeatTimestampMs: 4000,
+            clientGroupID: 'clientGroupB1',
           },
         }),
       ],
@@ -330,6 +370,7 @@ describe('collectIDBDatabases', () => {
       now: 4000,
       expectedDatabases: ['b'],
       expectedClientsDeleted: ['clientA1', 'clientA2'],
+      expectedClientGroupsDeleted: ['clientGroupA1'],
     });
     t({
       name: 'two idb, four clients',
@@ -337,6 +378,7 @@ describe('collectIDBDatabases', () => {
       now: 5000,
       expectedDatabases: [],
       expectedClientsDeleted: ['clientA1', 'clientA2', 'clientB1', 'clientB2'],
+      expectedClientGroupsDeleted: ['clientGroupA1', 'clientGroupB1'],
     });
   }
 
@@ -442,6 +484,7 @@ describe('collectIDBDatabases', () => {
       enableMutationRecovery: false,
       expectedDatabases: [],
       expectedClientsDeleted: ['clientA1'],
+      expectedClientGroupsDeleted: ['clientGroupA1'],
     });
   }
 
@@ -476,6 +519,7 @@ describe('collectIDBDatabases', () => {
       now: 5000,
       expectedDatabases: [],
       expectedClientsDeleted: ['clientA1'],
+      expectedClientGroupsDeleted: ['clientGroupA1'],
     });
   }
 
@@ -517,6 +561,7 @@ describe('collectIDBDatabases', () => {
       now: 5000,
       expectedDatabases: [],
       expectedClientsDeleted: ['clientA1', 'clientA2'],
+      expectedClientGroupsDeleted: ['clientGroupA1'],
     });
   }
 
@@ -572,6 +617,7 @@ describe('collectIDBDatabases', () => {
       now: 5000,
       expectedDatabases: [],
       expectedClientsDeleted: ['clientA1', 'clientB1'],
+      expectedClientGroupsDeleted: ['clientGroupA1', 'clientGroupB1'],
     });
   }
 
@@ -627,6 +673,7 @@ describe('collectIDBDatabases', () => {
       now: 5000,
       expectedDatabases: ['a'],
       expectedClientsDeleted: ['clientB1'],
+      expectedClientGroupsDeleted: ['clientGroupB1'],
     });
 
     t({
@@ -635,6 +682,7 @@ describe('collectIDBDatabases', () => {
       now: 5000,
       expectedDatabases: [],
       expectedClientsDeleted: ['clientA1', 'clientB1'],
+      expectedClientGroupsDeleted: ['clientGroupA1', 'clientGroupB1'],
       enableMutationRecovery: false,
     });
 
@@ -660,6 +708,7 @@ describe('collectIDBDatabases', () => {
           'old-deleted-client-2',
           'old-deleted-client-3',
         ],
+        expectedClientGroupsDeleted: ['clientGroupA1', 'clientGroupB1'],
         enableMutationRecovery: false,
       });
     }

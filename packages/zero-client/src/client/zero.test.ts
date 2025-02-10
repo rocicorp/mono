@@ -4,6 +4,10 @@ import * as sinon from 'sinon';
 import {afterEach, beforeEach, expect, suite, test} from 'vitest';
 import {setDeletedClients} from '../../../replicache/src/deleted-clients.ts';
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
+import type {
+  ClientGroupID,
+  ClientID,
+} from '../../../replicache/src/sync/ids.ts';
 import type {PullRequest} from '../../../replicache/src/sync/pull.ts';
 import type {PushRequest} from '../../../replicache/src/sync/push.ts';
 import {withWrite} from '../../../replicache/src/with-transactions.ts';
@@ -333,7 +337,10 @@ const mockQueryManager = {
 } as unknown as QueryManager;
 
 const mockDeleteClientsManager = {
-  getDeletedClients: () => Promise.resolve(['old-deleted-client']),
+  getDeletedClients: () =>
+    Promise.resolve({
+      clientIDs: ['old-deleted-client'],
+    }),
 } as unknown as DeleteClientsManager;
 
 suite('createSocket', () => {
@@ -375,7 +382,10 @@ suite('createSocket', () => {
         encodeSecProtocols(
           [
             'initConnection',
-            {desiredQueriesPatch: [], deletedClients: ['old-deleted-client']},
+            {
+              desiredQueriesPatch: [],
+              deleted: {clientIDs: ['old-deleted-client']},
+            },
           ],
           auth,
         ),
@@ -405,7 +415,7 @@ suite('createSocket', () => {
       expect(mockSocket2.protocol).equal(encodeSecProtocols(undefined, auth));
       // if we did not encode queries into the sec-protocol header, we should not have a queriesPatch
       expect(queriesPatch2).toBeUndefined();
-      expect(deletedClients2).toEqual(['old-deleted-client']);
+      expect(deletedClients2?.clientIDs).toEqual(['old-deleted-client']);
     });
   };
 
@@ -602,16 +612,48 @@ suite('initConnection', () => {
     mockSocket.onUpstream = msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
-        [
-          "initConnection",
-          {
-            "deletedClients": [
-              "a",
-            ],
-            "desiredQueriesPatch": [],
-          },
-        ]
-      `);
+          [
+            "initConnection",
+            {
+              "deleted": {
+                "clientIDs": [
+                  "a",
+                ],
+              },
+              "desiredQueriesPatch": [],
+            },
+          ]
+        `);
+      expect(r.connectionState).toEqual(ConnectionState.Connecting);
+    };
+
+    expect(mockSocket.messages.length).toEqual(0);
+    await r.triggerConnected();
+    expect(mockSocket.messages.length).toEqual(1);
+  });
+
+  test('sent when connected message received but before ConnectionState.Connected desired queries > maxHeaderLength, with deletedClientGroups', async () => {
+    const r = await zeroForTestWithDeletedClients({
+      maxHeaderLength: 0,
+      deletedClientGroups: ['a'],
+    });
+
+    const mockSocket = await r.socket;
+    mockSocket.onUpstream = msg => {
+      expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
+        .toMatchInlineSnapshot(`
+          [
+            "initConnection",
+            {
+              "deleted": {
+                "clientGroupIDs": [
+                  "a",
+                ],
+              },
+              "desiredQueriesPatch": [],
+            },
+          ]
+        `);
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
     };
 
@@ -676,7 +718,10 @@ suite('initConnection', () => {
     const S extends Schema,
     MD extends CustomMutatorDefs<S> = CustomMutatorDefs<S>,
   >(
-    options: Partial<ZeroOptions<S, MD>> & {deletedClients: string[]},
+    options: Partial<ZeroOptions<S, MD>> & {
+      deletedClients?: ClientID[] | undefined;
+      deletedClientGroups?: ClientGroupID[] | undefined;
+    },
   ): Promise<TestZero<S, MD>> {
     // We need to set the deleted clients before creating the zero instance but
     // we use a random name for the user ID. So we create a zero instance with a
@@ -684,7 +729,11 @@ suite('initConnection', () => {
     // zero instance with the same user ID.
     const r0 = zeroForTest(options);
     await withWrite(r0.perdag, dagWrite =>
-      setDeletedClients(dagWrite, options.deletedClients),
+      setDeletedClients(
+        dagWrite,
+        options.deletedClients ?? [],
+        options.deletedClientGroups ?? [],
+      ),
     );
     await r0.close();
 
@@ -723,9 +772,11 @@ suite('initConnection', () => {
       [
         "initConnection",
         {
-          "deletedClients": [
-            "a",
-          ],
+          "deleted": {
+            "clientIDs": [
+              "a",
+            ],
+          },
           "desiredQueriesPatch": [
             {
               "ast": {
@@ -769,27 +820,27 @@ suite('initConnection', () => {
     mockSocket.onUpstream = msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
-        [
-          "initConnection",
-          {
-            "desiredQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
+          [
+            "initConnection",
+            {
+              "desiredQueriesPatch": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
                     ],
-                  ],
-                  "table": "e",
+                    "table": "e",
+                  },
+                  "hash": "29j3x0l4bxthp",
+                  "op": "put",
                 },
-                "hash": "29j3x0l4bxthp",
-                "op": "put",
-              },
-            ],
-          },
-        ]
-      `);
+              ],
+            },
+          ]
+        `);
 
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
     };
@@ -821,30 +872,32 @@ suite('initConnection', () => {
     mockSocket.onUpstream = msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
-        [
-          "initConnection",
-          {
-            "deletedClients": [
-              "a",
-            ],
-            "desiredQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "e",
-                },
-                "hash": "29j3x0l4bxthp",
-                "op": "put",
+          [
+            "initConnection",
+            {
+              "deleted": {
+                "clientIDs": [
+                  "a",
+                ],
               },
-            ],
-          },
-        ]
-      `);
+              "desiredQueriesPatch": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "e",
+                  },
+                  "hash": "29j3x0l4bxthp",
+                  "op": "put",
+                },
+              ],
+            },
+          ]
+        `);
 
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
     };

@@ -15,7 +15,7 @@ import {IDBStore} from '../kv/idb-store.ts';
 import type {DropStore, StoreProvider} from '../kv/store.ts';
 import {createLogContext} from '../log-options.ts';
 import {getKVStoreProvider} from '../replicache.ts';
-import type {ClientID} from '../sync/ids.ts';
+import type {ClientGroupID, ClientID} from '../sync/ids.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
 import {
   clientGroupHasPendingMutations,
@@ -106,10 +106,15 @@ export async function collectIDBDatabases(
   const dbNamesToRemove: string[] = [];
   const dbNamesToKeep: string[] = [];
   const clientIDsToRemove: ClientID[] = [];
-  for (const [dbName, [canCollect, clientIDs]] of collectResults) {
+  const clientGroupIDsToRemove: ClientGroupID[] = [];
+  for (const [
+    dbName,
+    [canCollect, clientIDs, clientGroupIDs],
+  ] of collectResults) {
     if (canCollect) {
       dbNamesToRemove.push(dbName);
       clientIDsToRemove.push(...clientIDs);
+      clientGroupIDsToRemove.push(...clientGroupIDs);
     } else {
       dbNamesToKeep.push(dbName);
     }
@@ -124,18 +129,27 @@ export async function collectIDBDatabases(
     throw errors[0];
   }
 
-  if (clientIDsToRemove.length) {
+  if (clientIDsToRemove.length || clientGroupIDsToRemove.length) {
     // Add the deleted clients to all the dbs that survived the collection.
-    const toRemoveIncludingOld: ClientID[] = clientIDsToRemove;
+    const newClientIDsToRemove: ClientID[] = clientIDsToRemove;
+    const newClientGroupIDsToRemove: ClientGroupID[] = clientGroupIDsToRemove;
     for (const name of dbNamesToKeep) {
       await withWrite(newDagStore(name), async dagWrite => {
-        toRemoveIncludingOld.push(
-          ...(await addDeletedClients(dagWrite, clientIDsToRemove)),
+        const {clientIDs, clientGroupIDs} = await addDeletedClients(
+          dagWrite,
+          clientIDsToRemove,
+          clientGroupIDsToRemove,
         );
+
+        newClientIDsToRemove.push(...clientIDs);
+        newClientGroupIDsToRemove.push(...clientGroupIDs);
       });
     }
     // normalize and dedupe
-    onClientsDeleted(normalize(toRemoveIncludingOld));
+    onClientsDeleted(
+      normalize(newClientIDsToRemove),
+      normalize(newClientGroupIDsToRemove),
+    );
   }
 }
 
@@ -192,7 +206,12 @@ function gatherDatabaseInfoForCollect(
   enableMutationRecovery: boolean,
   newDagStore: typeof defaultNewDagStore,
 ): MaybePromise<
-  [canCollect: false] | [canCollect: true, deletedClientIDs: ClientID[]]
+  | [canCollect: false]
+  | [
+      canCollect: true,
+      deletedClientIDs: ClientID[],
+      deletedClientGroupIDs: ClientGroupID[],
+    ]
 > {
   if (db.replicacheFormatVersion > FormatVersion.Latest) {
     return [false];
@@ -321,7 +340,12 @@ function canDatabaseBeCollectedAndGetDeletedClientIDs(
   enableMutationRecovery: boolean,
   perdag: Store,
 ): Promise<
-  [canCollect: false] | [canCollect: true, deletedClientIDs: ClientID[]]
+  | [canCollect: false]
+  | [
+      canCollect: true,
+      deletedClientIDs: ClientID[],
+      deletedClientGroupIDs: ClientGroupID[],
+    ]
 > {
   return withRead(perdag, async read => {
     // If mutation recovery is disabled we do not care if there are pending
@@ -336,8 +360,14 @@ function canDatabaseBeCollectedAndGetDeletedClientIDs(
     }
 
     const clients = await getClients(read);
-    const oldDeletedClients = await getDeletedClients(read);
-    // Deduping and sorting is done when calling the callback
-    return [true, [...clients.keys(), ...oldDeletedClients]];
+    const {clientIDs, clientGroupIDs} = await getDeletedClients(read);
+    const newClientIDs: ClientID[] = [...clientIDs];
+    const newClientGroupIDs: ClientGroupID[] = [...clientGroupIDs];
+    for (const [clientID, client] of clients) {
+      newClientIDs.push(clientID);
+      newClientGroupIDs.push(client.clientGroupID);
+    }
+    // Deduping and sorting is done when storing
+    return [true, newClientIDs, newClientGroupIDs];
   });
 }

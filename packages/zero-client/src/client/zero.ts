@@ -30,9 +30,11 @@ import {must} from '../../../shared/src/must.ts';
 import {navigator} from '../../../shared/src/navigator.ts';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
 import * as valita from '../../../shared/src/valita.ts';
+import type {Writable} from '../../../shared/src/writable.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
+import type {DeleteClientsBody} from '../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {downstreamSchema} from '../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
@@ -288,11 +290,12 @@ export class Zero<
   #initConnectionQueries: Map<string, QueriesPatchOp> | undefined;
 
   /**
-   * We try to send the deleted clients as part of the sec-protocol header. If we can't
-   * because the header would get to long we keep track of the deleted clients and send
-   * them after the connection is established.
+   * We try to send the deleted clients and (client groups) as part of the
+   * sec-protocol header. If we can't because the header would get too large we
+   * keep track of the deleted clients and send them after the connection is
+   * established.
    */
-  #deletedClients: string[] | undefined;
+  #deletedClients: DeleteClientsBody | undefined;
 
   #lastMutationIDSent: {clientID: string; id: number} =
     NULL_LAST_MUTATION_ID_SENT;
@@ -462,8 +465,8 @@ export class Zero<
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
       enableMutationRecovery: false,
-      onClientsDeleted: clientIDs =>
-        this.#deleteClientsManager.onClientsDeleted(clientIDs),
+      onClientsDeleted: (clientIDs, clientGroupIDs) =>
+        this.#deleteClientsManager.onClientsDeleted(clientIDs, clientGroupIDs),
     };
 
     const rep = new ReplicacheImpl(replicacheOptions, replicacheImplOptions);
@@ -787,7 +790,7 @@ export class Zero<
 
       case 'deleteClients':
         return this.#deleteClientsManager.clientsDeletedOnServer(
-          downMessage[1].clientIDs,
+          downMessage[1],
         );
 
       default:
@@ -926,11 +929,13 @@ export class Zero<
       this.#queryManager.getQueriesPatch(tx, this.#initConnectionQueries),
     );
 
+    const hasDeletedClients = () =>
+      skipEmptyArray(this.#deletedClients?.clientIDs) ||
+      skipEmptyArray(this.#deletedClients?.clientGroupIDs);
+
     const maybeSendDeletedClients = () => {
-      if (this.#deletedClients) {
-        if (this.#deletedClients.length > 0) {
-          send(socket, ['deleteClients', {clientIDs: this.#deletedClients}]);
-        }
+      if (hasDeletedClients()) {
+        send(socket, ['deleteClients', this.#deletedClients!]);
         this.#deletedClients = undefined;
       }
     };
@@ -950,10 +955,7 @@ export class Zero<
         'initConnection',
         {
           desiredQueriesPatch: [...queriesPatch.values()],
-          deletedClients:
-            this.#deletedClients && this.#deletedClients.length > 0
-              ? this.#deletedClients
-              : undefined,
+          deleted: skipEmptyDeletedClients(this.#deletedClients),
         },
       ]);
       this.#deletedClients = undefined;
@@ -1710,7 +1712,11 @@ export async function createSocket(
   maxHeaderLength = 1024 * 8,
   additionalConnectParams?: Record<string, string> | undefined,
 ): Promise<
-  [WebSocket, Map<string, QueriesPatchOp> | undefined, ClientID[] | undefined]
+  [
+    WebSocket,
+    Map<string, QueriesPatchOp> | undefined,
+    DeleteClientsBody | undefined,
+  ]
 > {
   const url = new URL(
     appendPath(socketOrigin, `/sync/v${PROTOCOL_VERSION}/connect`),
@@ -1746,16 +1752,17 @@ export async function createSocket(
   // for a `protocol`.
   const WS = mustGetBrowserGlobal('WebSocket');
   const queriesPatchP = rep.query(tx => queryManager.getQueriesPatch(tx));
-  let deletedClients: ClientID[] | undefined =
+  let deletedClients: DeleteClientsBody | undefined =
     await deleteClientsManager.getDeletedClients();
   let queriesPatch: Map<string, QueriesPatchOp> | undefined =
     await queriesPatchP;
+
   let secProtocol = encodeSecProtocols(
     [
       'initConnection',
       {
         desiredQueriesPatch: [...queriesPatch.values()],
-        deletedClients: deletedClients.length > 0 ? deletedClients : undefined,
+        deleted: skipEmptyDeletedClients(deletedClients),
       },
     ],
     auth,
@@ -1773,8 +1780,33 @@ export async function createSocket(
       secProtocol,
     ),
     queriesPatch,
-    deletedClients,
+    skipEmptyDeletedClients(deletedClients),
   ];
+}
+
+function skipEmptyArray<T>(
+  arr: readonly T[] | undefined,
+): readonly T[] | undefined {
+  return arr && arr.length > 0 ? arr : undefined;
+}
+
+function skipEmptyDeletedClients(
+  deletedClients: DeleteClientsBody | undefined,
+): DeleteClientsBody | undefined {
+  if (!deletedClients) {
+    return undefined;
+  }
+  const {clientIDs, clientGroupIDs} = deletedClients;
+  if (
+    (!clientIDs || clientIDs.length === 0) &&
+    (!clientGroupIDs || clientGroupIDs.length === 0)
+  ) {
+    return undefined;
+  }
+  const data: Writable<DeleteClientsBody> = {};
+  data.clientIDs = skipEmptyArray(clientIDs);
+  data.clientGroupIDs = skipEmptyArray(clientGroupIDs);
+  return data;
 }
 
 /**

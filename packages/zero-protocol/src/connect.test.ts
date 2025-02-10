@@ -25,7 +25,13 @@ test('encode/decodeSecProtocols round-trip', () => {
                   }),
                 ),
               ),
-              deletedClients: fc.array(fc.string()),
+              deleted: fc.record(
+                {
+                  clientIDs: fc.array(fc.string()),
+                  clientGroupIDs: fc.array(fc.string()),
+                },
+                {requiredKeys: []},
+              ),
             },
             {requiredKeys: ['desiredQueriesPatch']},
           ),
