@@ -4,6 +4,7 @@ import {afterEach, beforeEach, expect, test, vi} from 'vitest';
 import {assertNotUndefined} from '../../../shared/src/asserts.ts';
 import type {Read} from '../dag/store.ts';
 import {TestStore} from '../dag/test-store.ts';
+import {getDeletedClients, removeDeletedClients} from '../deleted-clients.ts';
 import {newRandomHash} from '../hash.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
 import {
@@ -108,14 +109,16 @@ test('initClientGC starts 5 min interval that collects clients that have been in
   expect(onClientsDeleted).toHaveBeenCalledWith(['client2']);
   onClientsDeleted.mockClear();
 
+  expect(await withRead(dagStore, getDeletedClients)).toEqual(['client2']);
+
   // Update client4's heartbeat to now
-  const client4WUpdatedHeartbeat = {
+  const client4UpdatedHeartbeat = {
     ...client4,
     heartbeatTimestampMs: clock.now,
   };
 
   await withWrite(dagStore, async dagWrite => {
-    await setClient('client4', client4WUpdatedHeartbeat, dagWrite);
+    await setClient('client4', client4UpdatedHeartbeat, dagWrite);
   });
 
   await clock.tickAsync(5 * MINUTES);
@@ -128,12 +131,18 @@ test('initClientGC starts 5 min interval that collects clients that have been in
     const readClientMap = await getClients(read);
     expect(Object.fromEntries(readClientMap)).to.deep.equal({
       client1,
-      client4: client4WUpdatedHeartbeat,
+      client4: client4UpdatedHeartbeat,
     });
   });
   expect(onClientsDeleted).toHaveBeenCalledTimes(1);
-  expect(onClientsDeleted).toHaveBeenCalledWith(['client3']);
+  // 'client2' is still in the deleted clients list
+  expect(onClientsDeleted).toHaveBeenCalledWith(['client2', 'client3']);
   onClientsDeleted.mockClear();
+
+  // Clear client2 from deleted clients list
+  await withWrite(dagStore, dagWrite =>
+    removeDeletedClients(dagWrite, ['client2']),
+  );
 
   clock.tick(24 * HOURS - 5 * MINUTES * 2 + 1);
   await clock.tickAsync(5 * MINUTES);
@@ -147,6 +156,7 @@ test('initClientGC starts 5 min interval that collects clients that have been in
       client1,
     });
   });
+
   expect(onClientsDeleted).toHaveBeenCalledTimes(1);
-  expect(onClientsDeleted).toHaveBeenCalledWith(['client4']);
+  expect(onClientsDeleted).toHaveBeenCalledWith(['client3', 'client4']);
 });

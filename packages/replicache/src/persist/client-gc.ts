@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {initBgIntervalProcess} from '../bg-interval.ts';
 import type {Store} from '../dag/store.ts';
+import {addDeletedClients} from '../deleted-clients.ts';
 import type {ClientID} from '../sync/ids.ts';
 import {withWrite} from '../with-transactions.ts';
 import type {Client, OnClientsDeleted} from './clients.ts';
@@ -75,7 +76,8 @@ function gcClients(
       return clients;
     }
     await setClients(newClients, dagWrite);
-    onClientsDeleted(deletedClients);
+    const normalized = await addDeletedClients(dagWrite, deletedClients);
+    onClientsDeleted(normalized);
     return newClients;
   });
 }
