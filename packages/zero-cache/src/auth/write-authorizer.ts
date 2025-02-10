@@ -13,6 +13,7 @@ import {
   primaryKeyValueSchema,
   type PrimaryKeyValue,
 } from '../../../zero-protocol/src/primary-key.ts';
+import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import type {
   CRUDOp,
   DeleteOp,
@@ -84,7 +85,10 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     this.#lc = lc.withContext('class', 'WriteAuthorizerImpl');
     this.#logConfig = config.log;
     this.#schema = getSchema(this.#lc, replica);
-    this.#permissionsConfig = permissions ?? {};
+    this.#permissionsConfig = permissions ?? {
+      protocolVersion: PROTOCOL_VERSION,
+      tables: {},
+    };
     this.#replica = replica;
     const tmpDir = config.storageDBTmpDir ?? tmpdir();
     const writeAuthzStorage = DatabaseStorage.create(
@@ -288,7 +292,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     authData: JWTPayload | undefined,
     op: ActionOpMap[A],
   ) {
-    const rules = this.#permissionsConfig[op.tableName];
+    const rules = this.#permissionsConfig.tables[op.tableName];
     if (rules?.row === undefined && rules?.cell === undefined) {
       return true;
     }

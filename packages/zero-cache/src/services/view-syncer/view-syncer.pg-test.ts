@@ -286,7 +286,12 @@ const permissions: PermissionsConfig | undefined = await definePermissions<
   },
 }));
 
-async function setup(permissions: PermissionsConfig = {}) {
+async function setup(
+  permissions: PermissionsConfig = {
+    protocolVersion: PROTOCOL_VERSION,
+    tables: {},
+  },
+) {
   const lc = createSilentLogContext();
   const storageDB = new Database(lc, ':memory:');
   storageDB.prepare(CREATE_STORAGE_TABLE).run();

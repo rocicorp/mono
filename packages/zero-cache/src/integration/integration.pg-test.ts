@@ -22,6 +22,8 @@ import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/chang
 import type {InitConnectionMessage} from '../../../zero-protocol/src/connect.ts';
 import type {PokeStartMessage} from '../../../zero-protocol/src/poke.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.ts';
 import type {ChangeStreamMessage} from '../services/change-source/protocol/current/downstream.ts';
 import {
   changeSourceUpstreamSchema,
@@ -284,13 +286,16 @@ describe('integration', {timeout: 30000}, () => {
   let customDownstream: Promise<Sink<ChangeStreamMessage>>;
 
   const SCHEMA = {
-    permissions: {},
+    permissions: {
+      protocolVersion: PROTOCOL_VERSION,
+      tables: {},
+    } satisfies PermissionsConfig,
     schema: {
       version: 1,
       tables: {},
       relationships: {},
-    },
-  } as const;
+    } satisfies Schema,
+  };
 
   const mockExit = vi
     .spyOn(process, 'exit')

@@ -61,7 +61,7 @@ function transformQueryInternal(
   query: AST,
   permissionRules: PermissionsConfig,
 ): AST | undefined {
-  const rowSelectRules = permissionRules[query.table]?.row?.select;
+  const rowSelectRules = permissionRules.tables[query.table]?.row?.select;
 
   if (rowSelectRules && rowSelectRules.length === 0) {
     // The table cannot be read, ever. Nuke the query since

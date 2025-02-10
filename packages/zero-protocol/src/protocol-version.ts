@@ -15,7 +15,8 @@ import {assert} from '../../shared/src/asserts.ts';
 export const PROTOCOL_VERSION = 5;
 
 /**
- * The minimum protocol version supported by the server. The contract for
+ * The minimum server-supported sync protocol version (i.e. the version
+ * declared in the "/sync/v{#}/connect" URL). The contract for
  * backwards compatibility is that a `zero-cache` supports the current
  * `PROTOCOL_VERSION` and at least the previous one (i.e. `PROTOCOL_VERSION - 1`)
  * if not earlier ones as well. This corresponds to supporting clients running
@@ -24,6 +25,16 @@ export const PROTOCOL_VERSION = 5;
  * closed with a `VersionNotSupported` error.
  */
 // TODO: Bump to 5 before returning responses with pokeEnd.cookie.
-export const MIN_SERVER_SUPPORTED_PROTOCOL_VERSION = 2;
+export const MIN_SERVER_SUPPORTED_SYNC_PROTOCOL = 2;
 
-assert(MIN_SERVER_SUPPORTED_PROTOCOL_VERSION < PROTOCOL_VERSION);
+assert(MIN_SERVER_SUPPORTED_SYNC_PROTOCOL < PROTOCOL_VERSION);
+
+/**
+ * The minimum server-supported upstream permissions protocol version
+ * (i.e. the `protocolVersion` stored with the compiled permissions JSON).
+ * This should correspond to the last time the AST definition was
+ * changed in a backwards-incompatible way.
+ */
+export const MIN_SERVER_SUPPORTED_PERMISSIONS_PROTOCOL = 4;
+
+assert(MIN_SERVER_SUPPORTED_PERMISSIONS_PROTOCOL < PROTOCOL_VERSION);

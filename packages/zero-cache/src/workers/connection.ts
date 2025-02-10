@@ -14,7 +14,7 @@ import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
 import {type ErrorBody} from '../../../zero-protocol/src/error.ts';
 import type {PongMessage} from '../../../zero-protocol/src/pong.ts';
 import {
-  MIN_SERVER_SUPPORTED_PROTOCOL_VERSION,
+  MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
   PROTOCOL_VERSION,
 } from '../../../zero-protocol/src/protocol-version.ts';
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
@@ -111,7 +111,7 @@ export class Connection {
   init() {
     if (
       this.#protocolVersion > PROTOCOL_VERSION ||
-      this.#protocolVersion < MIN_SERVER_SUPPORTED_PROTOCOL_VERSION
+      this.#protocolVersion < MIN_SERVER_SUPPORTED_SYNC_PROTOCOL
     ) {
       this.#closeWithError({
         kind: ErrorKind.VersionNotSupported,

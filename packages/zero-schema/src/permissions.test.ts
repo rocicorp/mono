@@ -50,49 +50,12 @@ test('permission rules create query ASTs', async () => {
 
   expect(config).toMatchInlineSnapshot(`
     {
-      "users": {
-        "cell": undefined,
-        "row": {
-          "delete": [
-            [
-              "allow",
-              {
-                "left": {
-                  "anchor": "authData",
-                  "field": "role",
-                  "type": "static",
-                },
-                "op": "=",
-                "right": {
-                  "type": "literal",
-                  "value": "admin",
-                },
-                "type": "simple",
-              },
-            ],
-          ],
-          "insert": [
-            [
-              "allow",
-              {
-                "left": {
-                  "anchor": "authData",
-                  "field": "role",
-                  "type": "static",
-                },
-                "op": "=",
-                "right": {
-                  "type": "literal",
-                  "value": "admin",
-                },
-                "type": "simple",
-              },
-            ],
-          ],
-          "select": undefined,
-          "update": {
-            "postMutation": undefined,
-            "preMutation": [
+      "protocolVersion": 5,
+      "tables": {
+        "users": {
+          "cell": undefined,
+          "row": {
+            "delete": [
               [
                 "allow",
                 {
@@ -110,6 +73,46 @@ test('permission rules create query ASTs', async () => {
                 },
               ],
             ],
+            "insert": [
+              [
+                "allow",
+                {
+                  "left": {
+                    "anchor": "authData",
+                    "field": "role",
+                    "type": "static",
+                  },
+                  "op": "=",
+                  "right": {
+                    "type": "literal",
+                    "value": "admin",
+                  },
+                  "type": "simple",
+                },
+              ],
+            ],
+            "select": undefined,
+            "update": {
+              "postMutation": undefined,
+              "preMutation": [
+                [
+                  "allow",
+                  {
+                    "left": {
+                      "anchor": "authData",
+                      "field": "role",
+                      "type": "static",
+                    },
+                    "op": "=",
+                    "right": {
+                      "type": "literal",
+                      "value": "admin",
+                    },
+                    "type": "simple",
+                  },
+                ],
+              ],
+            },
           },
         },
       },
@@ -157,149 +160,152 @@ test('nested parameters', async () => {
 
   expect(config).toMatchInlineSnapshot(`
     {
-      "users": {
-        "cell": undefined,
-        "row": {
-          "delete": [
-            [
-              "allow",
-              {
-                "conditions": [
-                  {
-                    "left": {
-                      "anchor": "authData",
-                      "field": "role",
-                      "type": "static",
-                    },
-                    "op": "=",
-                    "right": {
-                      "type": "literal",
-                      "value": "admin",
-                    },
-                    "type": "simple",
-                  },
-                  {
-                    "left": {
-                      "anchor": "authData",
-                      "field": [
-                        "attributes",
-                        "role",
-                      ],
-                      "type": "static",
-                    },
-                    "op": "=",
-                    "right": {
-                      "type": "literal",
-                      "value": "admin",
-                    },
-                    "type": "simple",
-                  },
-                ],
-                "type": "or",
-              },
-            ],
-          ],
-          "insert": [
-            [
-              "allow",
-              {
-                "conditions": [
-                  {
-                    "left": {
-                      "anchor": "authData",
-                      "field": "role",
-                      "type": "static",
-                    },
-                    "op": "=",
-                    "right": {
-                      "type": "literal",
-                      "value": "admin",
-                    },
-                    "type": "simple",
-                  },
-                  {
-                    "left": {
-                      "anchor": "authData",
-                      "field": [
-                        "attributes",
-                        "role",
-                      ],
-                      "type": "static",
-                    },
-                    "op": "=",
-                    "right": {
-                      "type": "literal",
-                      "value": "admin",
-                    },
-                    "type": "simple",
-                  },
-                ],
-                "type": "or",
-              },
-            ],
-          ],
-          "select": [
-            [
-              "allow",
-              {
-                "conditions": [
-                  {
-                    "left": {
-                      "anchor": "authData",
-                      "field": "role",
-                      "type": "static",
-                    },
-                    "op": "=",
-                    "right": {
-                      "type": "literal",
-                      "value": "admin",
-                    },
-                    "type": "simple",
-                  },
-                  {
-                    "left": {
-                      "anchor": "authData",
-                      "field": [
-                        "attributes",
-                        "role",
-                      ],
-                      "type": "static",
-                    },
-                    "op": "=",
-                    "right": {
-                      "type": "literal",
-                      "value": "admin",
-                    },
-                    "type": "simple",
-                  },
-                ],
-                "type": "or",
-              },
-            ],
-          ],
-          "update": {
-            "postMutation": undefined,
-            "preMutation": [
+      "protocolVersion": 5,
+      "tables": {
+        "users": {
+          "cell": undefined,
+          "row": {
+            "delete": [
               [
                 "allow",
                 {
-                  "left": {
-                    "name": "user_id",
-                    "type": "column",
-                  },
-                  "op": "=",
-                  "right": {
-                    "anchor": "authData",
-                    "field": [
-                      "attributes",
-                      "id",
-                    ],
-                    "type": "static",
-                  },
-                  "type": "simple",
+                  "conditions": [
+                    {
+                      "left": {
+                        "anchor": "authData",
+                        "field": "role",
+                        "type": "static",
+                      },
+                      "op": "=",
+                      "right": {
+                        "type": "literal",
+                        "value": "admin",
+                      },
+                      "type": "simple",
+                    },
+                    {
+                      "left": {
+                        "anchor": "authData",
+                        "field": [
+                          "attributes",
+                          "role",
+                        ],
+                        "type": "static",
+                      },
+                      "op": "=",
+                      "right": {
+                        "type": "literal",
+                        "value": "admin",
+                      },
+                      "type": "simple",
+                    },
+                  ],
+                  "type": "or",
                 },
               ],
             ],
+            "insert": [
+              [
+                "allow",
+                {
+                  "conditions": [
+                    {
+                      "left": {
+                        "anchor": "authData",
+                        "field": "role",
+                        "type": "static",
+                      },
+                      "op": "=",
+                      "right": {
+                        "type": "literal",
+                        "value": "admin",
+                      },
+                      "type": "simple",
+                    },
+                    {
+                      "left": {
+                        "anchor": "authData",
+                        "field": [
+                          "attributes",
+                          "role",
+                        ],
+                        "type": "static",
+                      },
+                      "op": "=",
+                      "right": {
+                        "type": "literal",
+                        "value": "admin",
+                      },
+                      "type": "simple",
+                    },
+                  ],
+                  "type": "or",
+                },
+              ],
+            ],
+            "select": [
+              [
+                "allow",
+                {
+                  "conditions": [
+                    {
+                      "left": {
+                        "anchor": "authData",
+                        "field": "role",
+                        "type": "static",
+                      },
+                      "op": "=",
+                      "right": {
+                        "type": "literal",
+                        "value": "admin",
+                      },
+                      "type": "simple",
+                    },
+                    {
+                      "left": {
+                        "anchor": "authData",
+                        "field": [
+                          "attributes",
+                          "role",
+                        ],
+                        "type": "static",
+                      },
+                      "op": "=",
+                      "right": {
+                        "type": "literal",
+                        "value": "admin",
+                      },
+                      "type": "simple",
+                    },
+                  ],
+                  "type": "or",
+                },
+              ],
+            ],
+            "update": {
+              "postMutation": undefined,
+              "preMutation": [
+                [
+                  "allow",
+                  {
+                    "left": {
+                      "name": "user_id",
+                      "type": "column",
+                    },
+                    "op": "=",
+                    "right": {
+                      "anchor": "authData",
+                      "field": [
+                        "attributes",
+                        "id",
+                      ],
+                      "type": "static",
+                    },
+                    "type": "simple",
+                  },
+                ],
+              ],
+            },
           },
         },
       },
