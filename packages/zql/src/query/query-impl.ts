@@ -581,6 +581,7 @@ export class QueryImpl<
 
   materialize<T>(factory?: ViewFactory<TSchema, TTable, TReturn, T>): T {
     const ast = this._completeAst();
+    console.log(JSON.stringify(ast, undefined, 2));
     const queryCompleteResolver = resolver<true>();
     let queryGot = false;
     const removeServerQuery = this.#delegate.addServerQuery(ast, got => {

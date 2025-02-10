@@ -1199,6 +1199,85 @@ test('where exists', () => {
   expect(materialized.data).toEqual([]);
 });
 
+test('duplicative where exists', () => {
+  const queryDelegate = new QueryDelegateImpl();
+  const issueSource = must(queryDelegate.getSource('issue'));
+  const labelSource = must(queryDelegate.getSource('label'));
+  const issueLabelSource = must(queryDelegate.getSource('issueLabel'));
+  issueSource.push({
+    type: 'add',
+    row: {
+      id: '0001',
+      title: 'issue 1',
+      description: 'description 1',
+      closed: false,
+      ownerId: '0001',
+    },
+  });
+  issueSource.push({
+    type: 'add',
+    row: {
+      id: '0002',
+      title: 'issue 2',
+      description: 'description 2',
+      closed: true,
+      ownerId: '0002',
+    },
+  });
+  labelSource.push({
+    type: 'add',
+    row: {
+      id: '0001',
+      name: 'bug',
+    },
+  });
+
+  const materialized = newQuery(queryDelegate, schema, 'issue')
+    .where('closed', true)
+    .whereExists('labels', q => q.where('name', 'bug'))
+    .whereExists('labels', q => q.where('name', 'bug'))
+    .related('labels')
+    .materialize();
+
+  expect(materialized.data).toEqual([]);
+
+  issueLabelSource.push({
+    type: 'add',
+    row: {
+      issueId: '0002',
+      labelId: '0001',
+    },
+  });
+
+  expect(materialized.data).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": true,
+        "description": "description 2",
+        "id": "0002",
+        "labels": [
+          {
+            "id": "0001",
+            "name": "bug",
+          },
+        ],
+        "ownerId": "0002",
+        "title": "issue 2",
+      },
+    ]
+  `);
+
+  issueLabelSource.push({
+    type: 'remove',
+    row: {
+      issueId: '0002',
+      labelId: '0001',
+    },
+  });
+
+  expect(materialized.data).toEqual([]);
+});
+
 test('where exists before where, see https://bugs.rocicorp.dev/issue/3417', () => {
   const queryDelegate = new QueryDelegateImpl();
   const issueSource = must(queryDelegate.getSource('issue'));

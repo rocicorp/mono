@@ -274,6 +274,8 @@ export class Exists implements Operator {
     }
 
     const relationship = node.relationships[this.#relationshipName];
+    console.log(this.#relationshipName);
+    console.log(Object.keys(node.relationships));
     assert(relationship);
     let size = 0;
     for (const _relatedNode of relationship()) {
