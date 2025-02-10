@@ -526,6 +526,7 @@ test('pull tables for junction', () => {
             "id",
           ],
         },
+        undefined,
       ],
       [
         "label",
@@ -537,6 +538,7 @@ test('pull tables for junction', () => {
             "label_id",
           ],
         },
+        undefined,
       ],
     ]
   `);
@@ -611,7 +613,7 @@ test('related thru junction edge', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": "SELECT (
-          SELECT array_agg(row_to_json("inner_labels")) FROM (SELECT "table_1".* FROM "issue_label" JOIN "label" as "table_1" ON "issue_label"."label_id" = "table_1"."id" WHERE "issue"."id" = "issue_label"."issue_id") "inner_labels"
+          SELECT COALESCE(array_agg(row_to_json("inner_labels")) , ARRAY[]::json[]) FROM (SELECT "table_1".* FROM "issue_label" JOIN "label" as "table_1" ON "issue_label"."label_id" = "table_1"."id" WHERE ("issue"."id" = "issue_label"."issue_id")    ) "inner_labels"
         ) as "labels",* FROM "issue"",
       "values": [],
     }
