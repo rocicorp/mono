@@ -27,10 +27,9 @@ beforeEach(() => {
   };
 });
 
-test('onClientsDeleted', async () => {
-  await manager.onClientsDeleted(['a', 'b']);
+test('onClientsDeleted', () => {
+  manager.onClientsDeleted(['a', 'b']);
   expect(send).toBeCalledWith(['deleteClients', {clientIDs: ['a', 'b']}]);
-  expect(await withRead(dagStore, getDeletedClients)).toEqual(['a', 'b']);
 });
 
 test('clientsDeletedOnServer', async () => {

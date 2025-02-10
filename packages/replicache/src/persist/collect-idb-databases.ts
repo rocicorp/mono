@@ -4,7 +4,11 @@ import type {MaybePromise} from '../../../shared/src/types.ts';
 import {initBgIntervalProcess} from '../bg-interval.ts';
 import {StoreImpl} from '../dag/store-impl.ts';
 import type {Store} from '../dag/store.ts';
-import {getDeletedClients} from '../deleted-clients.ts';
+import {
+  addDeletedClients,
+  getDeletedClients,
+  normalize,
+} from '../deleted-clients.ts';
 import * as FormatVersion from '../format-version-enum.ts';
 import {assertHash, newRandomHash} from '../hash.ts';
 import {IDBStore} from '../kv/idb-store.ts';
@@ -12,7 +16,7 @@ import type {DropStore, StoreProvider} from '../kv/store.ts';
 import {createLogContext} from '../log-options.ts';
 import {getKVStoreProvider} from '../replicache.ts';
 import type {ClientID} from '../sync/ids.ts';
-import {withRead} from '../with-transactions.ts';
+import {withRead, withWrite} from '../with-transactions.ts';
 import {
   clientGroupHasPendingMutations,
   getClientGroups,
@@ -100,11 +104,14 @@ export async function collectIDBDatabases(
   );
 
   const dbNamesToRemove: string[] = [];
+  const dbNamesToKeep: string[] = [];
   const clientIDsToRemove: ClientID[] = [];
   for (const [dbName, [canCollect, clientIDs]] of collectResults) {
     if (canCollect) {
       dbNamesToRemove.push(dbName);
       clientIDsToRemove.push(...clientIDs);
+    } else {
+      dbNamesToKeep.push(dbName);
     }
   }
 
@@ -118,7 +125,17 @@ export async function collectIDBDatabases(
   }
 
   if (clientIDsToRemove.length) {
-    onClientsDeleted([...new Set(clientIDsToRemove)].sort());
+    // Add the deleted clients to all the dbs that survived the collection.
+    const toRemoveIncludingOld: ClientID[] = clientIDsToRemove;
+    for (const name of dbNamesToKeep) {
+      await withWrite(newDagStore(name), async dagWrite => {
+        toRemoveIncludingOld.push(
+          ...(await addDeletedClients(dagWrite, clientIDsToRemove)),
+        );
+      });
+    }
+    // normalize and dedupe
+    onClientsDeleted(normalize(toRemoveIncludingOld));
   }
 }
 

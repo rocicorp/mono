@@ -4,7 +4,7 @@ import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {assertNotUndefined} from '../../../shared/src/asserts.ts';
 import type {Store} from '../dag/store.ts';
 import {TestStore} from '../dag/test-store.ts';
-import {setDeletedClients} from '../deleted-clients.ts';
+import {getDeletedClients, setDeletedClients} from '../deleted-clients.ts';
 import * as FormatVersion from '../format-version-enum.ts';
 import {fakeHash} from '../hash.ts';
 import {IDBStore} from '../kv/idb-store.ts';
@@ -12,7 +12,7 @@ import {hasMemStore} from '../kv/mem-store.ts';
 import {TestMemStore} from '../kv/test-mem-store.ts';
 import {getKVStoreProvider} from '../replicache.ts';
 import type {ClientID} from '../sync/ids.ts';
-import {withWrite} from '../with-transactions.ts';
+import {withRead, withWrite} from '../with-transactions.ts';
 import {type ClientGroupMap, setClientGroups} from './client-groups.ts';
 import {makeClientMap, setClientsForTesting} from './clients-test-helpers.ts';
 import type {ClientMap, OnClientsDeleted} from './clients.ts';
@@ -135,6 +135,16 @@ describe('collectIDBDatabases', () => {
         );
       } else {
         expect(onClientsDeleted).not.toHaveBeenCalledOnce();
+      }
+
+      // Make sure that all remaining databases have correct deleted clients head.
+      if (expectedDatabases.length > 0) {
+        for (const name of expectedDatabases) {
+          const dagStore = newDagStore(name);
+          expect(
+            await withRead(dagStore, read => getDeletedClients(read)),
+          ).toEqual(expectedClientsDeleted);
+        }
       }
     });
   };
