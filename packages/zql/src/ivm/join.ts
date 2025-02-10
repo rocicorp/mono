@@ -76,11 +76,11 @@ export class Join implements Input {
     const childSchema = child.getSchema();
     this.#schema = {
       ...parentSchema,
-      isHidden: hidden,
       relationships: {
         ...parentSchema.relationships,
         [relationshipName]: {
           ...childSchema,
+          isHidden: hidden,
           system,
         },
       },

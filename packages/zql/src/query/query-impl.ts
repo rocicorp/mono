@@ -268,6 +268,7 @@ export abstract class AbstractQuery<
                 parentField: firstRelation.sourceField,
                 childField: firstRelation.destField,
               },
+              hidden: true,
               subquery: {
                 table: junctionSchema,
                 alias: relationship,
@@ -282,7 +283,6 @@ export abstract class AbstractQuery<
                       parentField: secondRelation.sourceField,
                       childField: secondRelation.destField,
                     },
-                    hidden: true,
                     subquery: addPrimaryKeysToAst(
                       this.#schema.tables[destSchema],
                       sq.#ast,
