@@ -150,7 +150,15 @@ export class Join implements Input {
         });
         break;
       case 'child':
-        this.#output.push(change);
+        this.#output.push({
+          type: 'child',
+          node: this.#processParentNode(
+            change.node.row,
+            change.node.relationships,
+            'fetch',
+          ),
+          child: change.child,
+        });
         break;
       case 'edit': {
         // When an edit comes in we need to:
