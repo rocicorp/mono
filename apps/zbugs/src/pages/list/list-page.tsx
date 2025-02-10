@@ -93,6 +93,8 @@ export function ListPage({onReady}: {onReady: () => void}) {
     q = q.whereExists('labels', q => q.where('name', label));
   }
 
+  q = q.limit(200);
+
   const [issues, issuesResult] = useQuery(q);
   if (issues.length > 0 || issuesResult.type === 'complete') {
     onReady();

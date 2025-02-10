@@ -60,7 +60,9 @@ export function preload(z: Zero<Schema>) {
 
   const baseIssueQuery = z.query.issue
     .related('labels')
-    .related('viewState', q => q.where('userID', z.userID));
+    .related('viewState', q => q.where('userID', z.userID))
+    .orderBy('modified', 'desc')
+    .limit(200);
 
   const {cleanup, complete} = baseIssueQuery.preload();
   complete.then(() => {
