@@ -12,7 +12,7 @@ import {computeZqlSpecs} from '../db/lite-tables.ts';
 let loadedPermissions: Promise<{permissions: PermissionsConfig}> | undefined;
 
 export function getPermissions(
-  config: ZeroConfig,
+  config: Pick<ZeroConfig, 'schema'>,
 ): Promise<{permissions: PermissionsConfig}> {
   if (loadedPermissions) {
     return loadedPermissions;
