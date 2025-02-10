@@ -39,13 +39,12 @@ let artistQuery: Query<Schema, 'artist'>;
 let customerQuery: Query<Schema, 'customer'>;
 let employeeQuery: Query<Schema, 'employee'>;
 let genreQuery: Query<Schema, 'genre'>;
+let invoiceQuery: Query<Schema, 'invoice'>;
+let invoiceLineQuery: Query<Schema, 'invoice_line'>;
 let mediaTypeQuery: Query<Schema, 'media_type'>;
 let playlistQuery: Query<Schema, 'playlist'>;
 let playlistTrackQuery: Query<Schema, 'playlist_track'>;
-// TODO: buggy tables
-// let invoiceQuery: Query<Schema, 'invoice'>;
-// let invoiceLineQuery: Query<Schema, 'invoice_line'>;
-// let trackQuery: Query<Schema, 'track'>;
+let trackQuery: Query<Schema, 'track'>;
 
 const lc = createSilentLogContext();
 const logConfig: LogConfig = {
@@ -67,12 +66,12 @@ beforeAll(async () => {
   customerQuery = newQuery(queryDelegate, schema, 'customer');
   employeeQuery = newQuery(queryDelegate, schema, 'employee');
   genreQuery = newQuery(queryDelegate, schema, 'genre');
-  // invoiceQuery = newQuery(queryDelegate, schema, 'invoice');
-  // invoiceLineQuery = newQuery(queryDelegate, schema, 'invoice_line');
+  invoiceQuery = newQuery(queryDelegate, schema, 'invoice');
+  invoiceLineQuery = newQuery(queryDelegate, schema, 'invoice_line');
   mediaTypeQuery = newQuery(queryDelegate, schema, 'media_type');
   playlistQuery = newQuery(queryDelegate, schema, 'playlist');
   playlistTrackQuery = newQuery(queryDelegate, schema, 'playlist_track');
-  // trackQuery = newQuery(queryDelegate, schema, 'track');
+  trackQuery = newQuery(queryDelegate, schema, 'track');
 });
 
 describe('basic select', () => {
@@ -82,12 +81,12 @@ describe('basic select', () => {
     ['customer', () => customerQuery],
     ['employee', () => employeeQuery],
     ['genre', () => genreQuery],
-    // ['invoice', () => invoiceQuery], --> total is showing up as a string
-    // ['invoice_line', () => invoiceLineQuery], --> numeric columns are showing up as strings
+    ['invoice', () => invoiceQuery],
+    ['invoice_line', () => invoiceLineQuery],
     ['media_type', () => mediaTypeQuery],
     ['playlist', () => playlistQuery],
     ['playlist_track', () => playlistTrackQuery],
-    // ['track', () => trackQuery], --> numeric columns are showing up as strings
+    ['track', () => trackQuery],
   ])('select * from %s', async (_table, q) => {
     const query = q();
     const pgResult = await runZqlAsSql(pg, query);
