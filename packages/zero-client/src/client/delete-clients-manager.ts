@@ -3,6 +3,7 @@ import type {Store} from '../../../replicache/src/dag/store.ts';
 import {
   getDeletedClients,
   removeDeletedClients,
+  type DeletedClients,
 } from '../../../replicache/src/deleted-clients.ts';
 import type {
   ClientGroupID,
@@ -59,17 +60,12 @@ export class DeleteClientsManager {
    * the clients that might have been deleted locally since the last connection.
    */
   async sendDeletedClientsToServer(): Promise<void> {
-    const {clientIDs, clientGroupIDs} = await withRead(
-      this.#dagStore,
-      dagRead => getDeletedClients(dagRead),
+    const deleted = await withRead(this.#dagStore, dagRead =>
+      getDeletedClients(dagRead),
     );
-    if (clientIDs.length > 0) {
-      this.#send(['deleteClients', {clientIDs, clientGroupIDs}]);
-      this.#lc.debug?.(
-        'DeletedClientsManager, send:',
-        clientIDs,
-        clientGroupIDs,
-      );
+    if (deleted.clientIDs.length > 0 || deleted.clientGroupIDs.length > 0) {
+      this.#send(['deleteClients', deleted]);
+      this.#lc.debug?.('DeletedClientsManager, send:', deleted);
     }
   }
 
@@ -90,10 +86,7 @@ export class DeleteClientsManager {
     return promiseVoid;
   }
 
-  getDeletedClients(): Promise<{
-    clientIDs: readonly ClientID[];
-    clientGroupIDs: readonly ClientGroupID[];
-  }> {
+  getDeletedClients(): Promise<DeletedClients> {
     return withRead(this.#dagStore, getDeletedClients);
   }
 }
