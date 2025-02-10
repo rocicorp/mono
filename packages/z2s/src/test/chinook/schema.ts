@@ -129,11 +129,16 @@ const track = table('track')
   .primaryKey('track_id');
 
 // Relationships
-const albumRelationships = relationships(album, ({one}) => ({
+const albumRelationships = relationships(album, ({one, many}) => ({
   artist: one({
     sourceField: ['artist_id'],
     destField: ['artist_id'],
     destSchema: artist,
+  }),
+  tracks: many({
+    sourceField: ['album_id'],
+    destField: ['album_id'],
+    destSchema: track,
   }),
 }));
 
@@ -153,11 +158,16 @@ const employeeRelationships = relationships(employee, ({one}) => ({
   }),
 }));
 
-const invoiceRelationships = relationships(invoice, ({one}) => ({
+const invoiceRelationships = relationships(invoice, ({one, many}) => ({
   customer: one({
     sourceField: ['customer_id'],
     destField: ['customer_id'],
     destSchema: customer,
+  }),
+  lines: many({
+    sourceField: ['invoice_id'],
+    destField: ['invoice_id'],
+    destSchema: invoice_line,
   }),
 }));
 

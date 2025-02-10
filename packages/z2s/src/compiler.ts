@@ -33,7 +33,7 @@ export function select(
   correlation: SQLQuery | undefined,
 ) {
   const selectionSet = related(ast.related ?? [], format, ast.table);
-  selectionSet.push(sql.__dangerous__rawValue('*'));
+  selectionSet.push(sql`*`);
   return sql`SELECT ${sql.join(selectionSet, ',')} FROM ${sql.ident(
     ast.table,
   )} ${ast.where ? sql`WHERE ${where(ast.where, ast.table)}` : sql``} ${
@@ -82,20 +82,27 @@ function relationshipSubquery(
   parentTable: string,
 ) {
   if (relationship.hidden) {
-    const [join, lastAlias] = makeJunctionJoin(relationship);
+    const [join, lastAlias, lastLimit] = makeJunctionJoin(relationship);
     return sql`(
       SELECT ${
-        format?.singular ? sql`` : sql`array_agg`
-      }(row_to_json(${sql.ident(
-        `inner_${relationship.subquery.alias}`,
-      )})) FROM (SELECT ${sql.ident(
-        lastAlias,
-      )}.* FROM ${join} WHERE ${correlate(
+        format?.singular ? sql`` : sql`COALESCE(array_agg`
+      }(row_to_json(${sql.ident(`inner_${relationship.subquery.alias}`)})) ${
+        format?.singular ? sql`` : sql`, ARRAY[]::json[])`
+      } FROM (SELECT ${sql.ident(lastAlias)}.* FROM ${join} WHERE (${correlate(
         parentTable,
         relationship.correlation.parentField,
         relationship.subquery.table,
         relationship.correlation.childField,
-      )}) ${sql.ident(`inner_${relationship.subquery.alias}`)}
+      )}) ${
+        relationship.subquery.where
+          ? sql`AND ${where(
+              relationship.subquery.where,
+              relationship.subquery.table,
+            )}`
+          : sql``
+      } ${orderBy(relationship.subquery.orderBy)} ${
+        format?.singular ? limit(1) : limit(lastLimit)
+      } ) ${sql.ident(`inner_${relationship.subquery.alias}`)}
     ) as ${sql.ident(relationship.subquery.alias)}`;
   }
   return sql`(
@@ -116,9 +123,13 @@ function relationshipSubquery(
 
 export function pullTablesForJunction(
   relationship: CorrelatedSubquery,
-  tables: [string, Correlation][] = [],
+  tables: [string, Correlation, number | undefined][] = [],
 ) {
-  tables.push([relationship.subquery.table, relationship.correlation]);
+  tables.push([
+    relationship.subquery.table,
+    relationship.correlation,
+    relationship.subquery.limit,
+  ]);
   assert(
     relationship.subquery.related?.length || 0 <= 1,
     'Too many related tables for a junction edge',
@@ -129,7 +140,9 @@ export function pullTablesForJunction(
   return tables;
 }
 
-export function makeJunctionJoin(relationship: CorrelatedSubquery) {
+export function makeJunctionJoin(
+  relationship: CorrelatedSubquery,
+): [join: SQLQuery, lastAlis: string, lastLimit: number | undefined] {
   const participatingTables = pullTablesForJunction(relationship);
   const ret: SQLQuery[] = [];
 
@@ -157,7 +170,11 @@ export function makeJunctionJoin(relationship: CorrelatedSubquery) {
     );
   }
 
-  return [sql.join(ret, ''), alias(ret.length - 1)] as const;
+  return [
+    sql.join(ret, ''),
+    alias(ret.length - 1),
+    participatingTables[participatingTables.length - 1][2],
+  ] as const;
 }
 
 export function where(
