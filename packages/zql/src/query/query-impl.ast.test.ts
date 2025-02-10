@@ -226,6 +226,7 @@ describe('building the AST', () => {
                 "id",
               ],
             },
+            "hidden": true,
             "subquery": {
               "alias": "labels",
               "orderBy": [
@@ -248,7 +249,6 @@ describe('building the AST', () => {
                       "labelId",
                     ],
                   },
-                  "hidden": true,
                   "subquery": {
                     "alias": "labels",
                     "orderBy": [
@@ -325,6 +325,7 @@ describe('building the AST', () => {
                             "id",
                           ],
                         },
+                        "hidden": true,
                         "subquery": {
                           "alias": "labels",
                           "orderBy": [
@@ -347,7 +348,6 @@ describe('building the AST', () => {
                                   "labelId",
                                 ],
                               },
-                              "hidden": true,
                               "subquery": {
                                 "alias": "labels",
                                 "orderBy": [
@@ -441,6 +441,7 @@ describe('building the AST', () => {
                 "id",
               ],
             },
+            "hidden": true,
             "subquery": {
               "alias": "labels",
               "orderBy": [
@@ -463,7 +464,6 @@ describe('building the AST', () => {
                       "labelId",
                     ],
                   },
-                  "hidden": true,
                   "subquery": {
                     "alias": "labels",
                     "orderBy": [

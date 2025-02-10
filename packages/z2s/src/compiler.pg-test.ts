@@ -293,7 +293,7 @@ describe('compiling ZQL to SQL', () => {
     expect(query.run()).toEqualNullish(pgResult);
   });
 
-  test.fails('junction relationship', async () => {
+  test('junction relationship', async () => {
     const query = issueQuery.related('labels');
     const sqlQuery = formatPg(compile(ast(query), format(query)));
     const pgResult = await pg.unsafe(
@@ -317,7 +317,7 @@ describe('compiling ZQL to SQL', () => {
     expect(query.run()).toEqual(pgResult);
   });
 
-  test.fails('complex query combining multiple features', async () => {
+  test('complex query combining multiple features', async () => {
     const query = issueQuery
       .where('closed', '=', false)
       .whereExists('labels', q => q.where('name', 'IN', ['Label 1', 'Label 2']))
@@ -326,7 +326,7 @@ describe('compiling ZQL to SQL', () => {
         q.orderBy('createdAt', 'desc').limit(3).related('author'),
       )
       .orderBy('title', 'asc');
-    const sqlQuery = formatPg(compile(ast(query)));
+    const sqlQuery = formatPg(compile(ast(query), format(query)));
     const pgResult = await pg.unsafe(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],

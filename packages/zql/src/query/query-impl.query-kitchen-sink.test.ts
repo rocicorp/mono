@@ -416,6 +416,7 @@ describe('kitchen sink query', () => {
                   "id",
                 ],
               },
+              "hidden": true,
               "subquery": {
                 "alias": "labels",
                 "orderBy": [
@@ -438,7 +439,6 @@ describe('kitchen sink query', () => {
                         "labelId",
                       ],
                     },
-                    "hidden": true,
                     "subquery": {
                       "alias": "labels",
                       "orderBy": [
