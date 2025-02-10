@@ -1632,13 +1632,13 @@ test('mergePokes with cookie revisions', () => {
           ],
           pokeEnd: {
             pokeID: 'poke1',
-            cookie: '3', // Never mind, back to 3
+            cookie: '4', // Not 5, but 4.
           },
         },
         {
           pokeStart: {
             pokeID: 'poke2',
-            baseCookie: '3',
+            baseCookie: '4',
             cookie: '7',
             schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
           },
