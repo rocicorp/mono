@@ -248,6 +248,13 @@ export class ClientHandler {
             return; // Nothing changed and nothing was sent.
           }
           this.#pokes.push(['pokeStart', {...pokeStart, cookie}]);
+        } else if (cmpVersions(this.#baseVersion, finalVersion) >= 0) {
+          // Sanity check: If the poke was started, the finalVersion
+          // must be > #baseVersion.
+          throw new Error(
+            `Patches were sent but finalVersion ${finalVersion} is ` +
+              `not greater than baseVersion ${this.#baseVersion}`,
+          );
         }
         flushBody();
         this.#pokes.push([
