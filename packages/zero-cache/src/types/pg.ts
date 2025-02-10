@@ -21,8 +21,13 @@ const builtinsINT8ARRAY = 1016; // No definition in builtins for int8[]
 
 /** Registers types for the 'pg' library used by `pg-logical-replication`. */
 export function registerPostgresTypeParsers() {
-  setTypeParser(builtins.INT8, val => BigInt(val));
-  setTypeParser(builtinsINT8ARRAY, val => array.parse(val, val => BigInt(val)));
+  setTypeParser(builtins.INT8, BigInt);
+  setTypeParser(builtinsINT8ARRAY, val => array.parse(val, BigInt));
+
+  // Returns a `js` number which can lose precision for large numbers.
+  // JS number is 53 bits so this should generally not occur.
+  // An API will be provided for users to override this type.
+  setTypeParser(builtins.NUMERIC, Number);
 
   // For pg-logical-replication we convert timestamps directly to microseconds
   // to facilitate serializing them in the Change stream.
