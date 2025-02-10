@@ -14,7 +14,7 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
-import {getSchema} from '../auth/load-schema.ts';
+import {getPermissions} from '../auth/load-schema.ts';
 import {getZeroConfig} from '../config/zero-config.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {MutagenService} from '../services/mutagen/mutagen.ts';
@@ -71,7 +71,7 @@ export default async function runWorker(
   assert(args.length > 0, `replicator mode not specified`);
   const fileMode = v.parse(args[0], replicaFileModeSchema);
 
-  const {schema, permissions} = await getSchema(config);
+  const {permissions} = await getPermissions(config);
   assert(config.cvr.maxConnsPerWorker);
   assert(config.upstream.maxConnsPerWorker);
 
@@ -138,7 +138,6 @@ export default async function runWorker(
       id,
       upstreamDB,
       config,
-      schema,
       permissions,
     );
 

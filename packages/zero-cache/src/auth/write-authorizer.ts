@@ -30,9 +30,9 @@ import {
   bindStaticParameters,
   buildPipeline,
 } from '../../../zql/src/builder/builder.ts';
-import {StaticQuery, staticQuery} from '../../../zql/src/query/static-query.ts';
 import {dnf} from '../../../zql/src/query/dnf.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
+import {StaticQuery, staticQuery} from '../../../zql/src/query/static-query.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {compile, sql} from '../../../zqlite/src/internal/sql.ts';
 import {
@@ -45,6 +45,7 @@ import type {LiteAndZqlSpec} from '../db/specs.ts';
 import {StatementRunner} from '../db/statements.ts';
 import {DatabaseStorage} from '../services/view-syncer/database-storage.ts';
 import {mapLiteDataTypeToZqlSchemaValue} from '../types/lite.ts';
+import {getSchema} from './load-schema.ts';
 
 type Phase = 'preMutation' | 'postMutation';
 
@@ -75,7 +76,6 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   constructor(
     lc: LogContext,
     config: ZeroConfig,
-    schema: Schema,
     permissions: PermissionsConfig | undefined,
     replica: Database,
     cgID: string,
@@ -83,7 +83,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     this.#clientGroupID = cgID;
     this.#lc = lc.withContext('class', 'WriteAuthorizerImpl');
     this.#logConfig = config.log;
-    this.#schema = schema;
+    this.#schema = getSchema(this.#lc, replica);
     this.#permissionsConfig = permissions ?? {};
     this.#replica = replica;
     const tmpDir = config.storageDBTmpDir ?? tmpdir();
