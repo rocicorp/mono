@@ -1328,7 +1328,7 @@ test('exists junction', () => {
   `);
 });
 
-test.only('duplicative exists junction', () => {
+test('duplicative exists junction', () => {
   const {sources, getSource} = testSources();
   const sink = new Catch(
     buildPipeline(
