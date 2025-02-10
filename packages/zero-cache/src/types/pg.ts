@@ -138,6 +138,15 @@ export const postgresTypeConfig = () => ({
         (x instanceof Date ? x : new Date(x)).toISOString(),
       parse: dateToUTCMidnight,
     },
+    // Returns a `js` number which can lose precision for large numbers.
+    // JS number is 53 bits so this should generally not occur.
+    // An API will be provided for users to override this type.
+    numeric: {
+      to: 1700,
+      from: [1700],
+      serialize: (x: number) => x,
+      parse: (x: string | number) => Number(x),
+    },
   },
 });
 
