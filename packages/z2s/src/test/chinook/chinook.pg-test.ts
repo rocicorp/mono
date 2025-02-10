@@ -16,7 +16,7 @@ import type {PostgresDB} from '../../../../zero-cache/src/types/pg.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {writeChinook} from './get-deps.ts';
 import {
-  astForTestingSymbol,
+  completedAstSymbol,
   newQuery,
   QueryImpl,
   type QueryDelegate,
@@ -41,10 +41,10 @@ let employeeQuery: Query<Schema, 'employee'>;
 let genreQuery: Query<Schema, 'genre'>;
 let mediaTypeQuery: Query<Schema, 'media_type'>;
 let playlistQuery: Query<Schema, 'playlist'>;
+let playlistTrackQuery: Query<Schema, 'playlist_track'>;
 // TODO: buggy tables
-// let _invoiceQuery: Query<Schema, 'invoice'>;
-// let _invoiceLineQuery: Query<Schema, 'invoice_line'>;
-// let playlistTrackQuery: Query<Schema, 'playlist_track'>;
+// let invoiceQuery: Query<Schema, 'invoice'>;
+// let invoiceLineQuery: Query<Schema, 'invoice_line'>;
 // let trackQuery: Query<Schema, 'track'>;
 
 const lc = createSilentLogContext();
@@ -71,7 +71,7 @@ beforeAll(async () => {
   // invoiceLineQuery = newQuery(queryDelegate, schema, 'invoice_line');
   mediaTypeQuery = newQuery(queryDelegate, schema, 'media_type');
   playlistQuery = newQuery(queryDelegate, schema, 'playlist');
-  // playlistTrackQuery = newQuery(queryDelegate, schema, 'playlist_track');
+  playlistTrackQuery = newQuery(queryDelegate, schema, 'playlist_track');
   // trackQuery = newQuery(queryDelegate, schema, 'track');
 });
 
@@ -86,12 +86,15 @@ describe('basic select', () => {
     // ['invoice_line', () => invoiceLineQuery], --> numeric columns are showing up as strings
     ['media_type', () => mediaTypeQuery],
     ['playlist', () => playlistQuery],
-    // ['playlist_track', () => playlistTrackQuery], --> this is not sorting correctly between zql and pg
+    ['playlist_track', () => playlistTrackQuery],
     // ['track', () => trackQuery], --> numeric columns are showing up as strings
   ])('select * from %s', async (_table, q) => {
     const query = q();
     const pgResult = await runZqlAsSql(pg, query);
     const zqlResult = query.run();
+    // In failure output:
+    // `-` is PG
+    // `+` is ZQL
     expect(zqlResult).toEqual(pgResult);
   });
 });
@@ -105,7 +108,7 @@ function runZqlAsSql(
 }
 
 function ast(q: Query<Schema, keyof Schema['tables']>) {
-  return (q as QueryImpl<Schema, keyof Schema['tables']>)[astForTestingSymbol];
+  return (q as QueryImpl<Schema, keyof Schema['tables']>)[completedAstSymbol];
 }
 
 function format(q: Query<Schema, keyof Schema['tables']>) {

@@ -9,7 +9,7 @@ import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {formatSqlite, sql} from './sql.ts';
 import {type Query} from '../../zql/src/query/query.ts';
 import {
-  astForTestingSymbol,
+  completedAstSymbol,
   newQuery,
   QueryImpl,
 } from '../../zql/src/query/query-impl.ts';
@@ -211,7 +211,7 @@ beforeAll(async () => {
 });
 
 function ast(q: Query<Schema, keyof Schema['tables']>) {
-  return (q as QueryImpl<Schema, keyof Schema['tables']>)[astForTestingSymbol];
+  return (q as QueryImpl<Schema, keyof Schema['tables']>)[completedAstSymbol];
 }
 
 function format(q: Query<Schema, keyof Schema['tables']>) {
