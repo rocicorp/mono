@@ -30,7 +30,7 @@ import {
   type ClientID,
   clientGroupIDSchema,
 } from '../sync/ids.ts';
-import {withWriteNoImplicitCommit} from '../with-transactions.ts';
+import {withWrite} from '../with-transactions.ts';
 import {
   type ClientGroup,
   getClientGroup,
@@ -231,7 +231,7 @@ export function initClientV6(
   formatVersion: FormatVersion,
   enableClientGroupForking: boolean,
 ): Promise<InitClientV6Result> {
-  return withWriteNoImplicitCommit(perdag, async dagWrite => {
+  return withWrite(perdag, async dagWrite => {
     async function setClientsAndClientGroupAndCommit(
       basisHash: Hash | null,
       cookieJSON: FrozenCookie,
@@ -276,8 +276,6 @@ export function initClientV6(
         setClientGroup(newClientGroupID, clientGroup, dagWrite),
       ]);
 
-      await dagWrite.commit();
-
       return [newClient, chunk.hash, newClients, true];
     }
 
@@ -298,7 +296,6 @@ export function initClientV6(
       const newClients = new Map(clients).set(newClientID, newClient);
       await setClients(newClients, dagWrite);
 
-      await dagWrite.commit();
       return [newClient, headHash, newClients, false];
     }
 
