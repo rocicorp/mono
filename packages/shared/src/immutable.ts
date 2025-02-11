@@ -5,7 +5,7 @@ type Primitive = undefined | null | boolean | string | number | symbol | bigint;
  */
 export type Immutable<T> = T extends Primitive
   ? T
-  : T extends Array<infer U>
+  : T extends ReadonlyArray<infer U>
   ? ImmutableArray<U>
   : ImmutableObject<T>;
 // This does not deal with Maps or Sets (or Date or RegExp or ...).
