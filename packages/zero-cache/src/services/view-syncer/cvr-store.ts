@@ -18,7 +18,6 @@ import {astSchema} from '../../../../zero-protocol/src/ast.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
-import type {JSONValue} from '../../types/bigint-json.ts';
 import {ErrorForClient, ErrorWithLevel} from '../../types/error-for-client.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
 import {rowIDString} from '../../types/row-key.ts';
@@ -50,8 +49,6 @@ import {
   versionString,
   versionToNullableCookie,
 } from './schema/types.ts';
-
-type NotNull<T> = T extends null ? never : T;
 
 export type CVRFlushStats = {
   instances: number;
@@ -410,17 +407,7 @@ class RowRecordCache {
   }
 }
 
-type QueryRow = {
-  queryHash: string;
-  clientAST: NotNull<JSONValue>;
-  patchVersion: string | null;
-  transformationHash: string | null;
-  transformationVersion: string | null;
-  internal: boolean | null;
-  deleted: boolean | null;
-};
-
-function asQuery(row: QueryRow): QueryRecord {
+function asQuery(row: QueriesRow): QueryRecord {
   const ast = astSchema.parse(row.clientAST);
   const maybeVersion = (s: string | null) =>
     s === null ? undefined : versionFromString(s);
@@ -561,7 +548,7 @@ export class CVRStore {
         tx<Pick<ClientsRow, 'clientID' | 'patchVersion'>[]>`
         SELECT "clientID", "patchVersion" FROM ${this.#cvr('clients')}
            WHERE "clientGroupID" = ${id}`,
-        tx<QueryRow[]>`
+        tx<QueriesRow[]>`
         SELECT * FROM ${this.#cvr('queries')} 
           WHERE "clientGroupID" = ${id} AND (deleted IS NULL OR deleted = FALSE)`,
         tx<DesiresRow[]>`SELECT * FROM ${this.#cvr('desires')}
