@@ -303,7 +303,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
               )}
             </div>
           ) : (
-            <span>{title}</span>
+            <span className="list-view-title">{title}</span>
           )}
           {issuesResult.type === 'complete' || issues.length > 0 ? (
             <span className="issue-count">{issues.length}</span>
