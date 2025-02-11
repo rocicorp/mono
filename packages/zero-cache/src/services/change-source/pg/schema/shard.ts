@@ -54,7 +54,24 @@ export const GLOBAL_SETUP = `
 
   INSERT INTO zero."schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion")
     VALUES (true, 1, 1) ON CONFLICT DO NOTHING;
+
+  CREATE TABLE IF NOT EXISTS zero.permissions (
+    "permissions" JSONB,
+    "hash"        TEXT GENERATED ALWAYS AS (md5(permissions::text)) STORED,
+
+    -- Ensure that there is only a single row in the table.
+    -- Application code can be agnostic to this column, and
+    -- simply invoke UPDATE statements on the version columns.
+    "lock" BOOL PRIMARY KEY DEFAULT true,
+    CONSTRAINT zero_permissions_single_row_constraint CHECK (lock)
+  );
+
+  INSERT INTO zero.permissions (permissions) VALUES (NULL) ON CONFLICT DO NOTHING;
 `;
+
+export async function ensureGlobalTables(db: PostgresDB) {
+  await db.unsafe(GLOBAL_SETUP);
+}
 
 function shardSetup(shardID: string, publications: string[]): string {
   const sharded = append(shardID);

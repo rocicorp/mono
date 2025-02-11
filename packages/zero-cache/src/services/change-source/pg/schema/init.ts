@@ -10,6 +10,7 @@ import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
 import type {ShardConfig} from '../shard-config.ts';
 import {
   dropShard,
+  ensureGlobalTables,
   setupTablesAndReplication,
   unescapedSchema,
 } from './shard.ts';
@@ -60,6 +61,8 @@ async function runShardMigrations(
       },
       minSafeVersion: 3,
     },
+    // The zero.permissions table was added to the global zero shard.
+    4: {migrateSchema: (_, tx) => ensureGlobalTables(tx)},
   };
 
   await runSchemaMigrations(
