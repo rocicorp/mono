@@ -34,7 +34,8 @@ export const APP_PUBLICATION_PREFIX = 'zero_';
 export const INTERNAL_PUBLICATION_PREFIX = '_zero_';
 
 const DEFAULT_PUBLICATION_PREFIX = INTERNAL_PUBLICATION_PREFIX + 'public_';
-const METADATA_PUBLICATION_PREFIX = INTERNAL_PUBLICATION_PREFIX + 'metadata_';
+export const METADATA_PUBLICATION_PREFIX =
+  INTERNAL_PUBLICATION_PREFIX + 'metadata_';
 
 // The GLOBAL_SETUP must be idempotent as it can be run multiple times for different shards.
 // Exported for testing.
@@ -57,7 +58,7 @@ export const GLOBAL_SETUP = `
 
   CREATE TABLE IF NOT EXISTS zero.permissions (
     "permissions" JSONB,
-    "hash"        TEXT GENERATED ALWAYS AS (md5(permissions::text)) STORED,
+    "hash"        TEXT,
 
     -- Ensure that there is only a single row in the table.
     -- Application code can be agnostic to this column, and
@@ -65,6 +66,19 @@ export const GLOBAL_SETUP = `
     "lock" BOOL PRIMARY KEY DEFAULT true,
     CONSTRAINT zero_permissions_single_row_constraint CHECK (lock)
   );
+
+  CREATE OR REPLACE FUNCTION zero.set_permissions_hash()
+  RETURNS TRIGGER AS $$
+  BEGIN
+      NEW.hash = md5(NEW.permissions::text);
+      RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+
+  CREATE OR REPLACE TRIGGER on_set_permissions 
+    BEFORE INSERT OR UPDATE ON zero.permissions
+    FOR EACH ROW
+    EXECUTE FUNCTION zero.set_permissions_hash();
 
   INSERT INTO zero.permissions (permissions) VALUES (NULL) ON CONFLICT DO NOTHING;
 `;
@@ -94,7 +108,7 @@ function shardSetup(shardID: string, publications: string[]): string {
   );
 
   CREATE PUBLICATION ${id(metadataPublication)}
-    FOR TABLE zero."schemaVersions", TABLE ${schema}."clients";
+    FOR TABLE zero."schemaVersions", zero."permissions", TABLE ${schema}."clients";
 
   CREATE TABLE ${schema}."shardConfig" (
     "publications"  TEXT[] NOT NULL,
