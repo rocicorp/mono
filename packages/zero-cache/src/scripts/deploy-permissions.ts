@@ -3,6 +3,7 @@ import 'dotenv/config';
 import {writeFile} from 'node:fs/promises';
 import {basename, dirname, join, relative, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {literal} from 'pg-format';
 import {tsImport} from 'tsx/esm/api';
 import {parseOptions} from '../../../shared/src/options.ts';
 import * as v from '../../../shared/src/valita.ts';
@@ -42,16 +43,20 @@ const options = {
     file: {
       type: v.string().optional(),
       desc: [
-        `If specified, outputs the permissions JSON to a file. The`,
-        `contents must be manually deployed to the upstream database, e.g.:`,
-        ``,
-        `{bold UPDATE zero.permissions SET permissions = \\{json\\}}`,
+        `Outputs the permissions to a file with the requested {bold output-format}.`,
       ],
     },
 
-    pretty: {
-      type: v.boolean().optional(),
-      desc: [`Formats the JSON with indentation.`],
+    format: {
+      type: v.union(v.literal('sql'), v.literal('json')).default('sql'),
+      desc: [
+        `The desired format of the output file.`,
+        ``,
+        `A {bold sql} file can be executed via "psql -f <file.sql>", or "\\\\i <file.sql>"`,
+        `from within the psql console, or copied and pasted into a migration script.`,
+        ``,
+        `The {bold json} format is available for general debugging.`,
+      ],
     },
   },
 };
@@ -140,15 +145,32 @@ async function deployPermissions(
   }
 }
 
+async function writePermissionsFile(
+  lc: LogContext,
+  perms: PermissionsConfig,
+  file: string,
+  format: 'sql' | 'json',
+) {
+  const contents =
+    format === 'sql'
+      ? `UPDATE zero.permissions SET permissions = ${literal(
+          JSON.stringify(perms),
+        )};`
+      : JSON.stringify(perms, null, 2);
+  await writeFile(file, contents);
+  lc.info?.(`Wrote permissions ${format} to ${config.output.file}`);
+}
+
 const lc = new LogContext('debug', {}, consoleLogSink);
 
 const permissions = await loadPermissions(lc, config.schema);
 if (config.output.file) {
-  await writeFile(
+  await writePermissionsFile(
+    lc,
+    permissions,
     config.output.file,
-    JSON.stringify(permissions, null, config.output.pretty ? 2 : 0),
+    config.output.format,
   );
-  lc.info?.(`Wrote permissions JSON to ${config.output.file}`);
 } else if (config.upstream.db) {
   await deployPermissions(lc, config.upstream.db, permissions);
 } else {
