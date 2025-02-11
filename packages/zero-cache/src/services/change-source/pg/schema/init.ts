@@ -70,6 +70,8 @@ async function runShardMigrations(
 
         const pub = METADATA_PUBLICATION_PREFIX + shard.id;
         await tx`ALTER PUBLICATION ${id(pub)} ADD TABLE zero.permissions`;
+        // Touch the row to replicate the existing contents.
+        await tx`UPDATE zero.permissions SET permissions = permissions`;
       },
     },
   };
