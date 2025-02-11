@@ -403,9 +403,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     body: InitConnectionBody,
     cvr: CVRSnapshot,
   ): Promise<void> => {
-    const {deletedClients} = body;
-    if (deletedClients) {
-      await this.#deleteClients(lc, clientID, {clientIDs: deletedClients}, cvr);
+    const {deleted} = body;
+    if (deleted && (deleted.clientIDs || deleted.clientGroupIDs)) {
+      await this.#deleteClients(lc, clientID, deleted, cvr);
     }
     await this.#patchQueries(lc, clientID, body, cvr);
   };
@@ -432,10 +432,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #deleteClients = async (
     lc: LogContext,
     clientID: string,
-    {clientIDs}: DeleteClientsBody,
+    {clientIDs, clientGroupIDs}: DeleteClientsBody,
     cvr: CVRSnapshot,
   ): Promise<void> => {
-    lc.debug?.('deleting clients', clientIDs, clientID, cvr);
+    lc.debug?.('deleting clients', clientIDs, clientGroupIDs, clientID, cvr);
     // TODO: Implement deletion of clients
     // Find all clients from the msg and delete them. Send back the IDs of the
     // deleted clients to the client.

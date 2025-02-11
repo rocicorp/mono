@@ -593,7 +593,13 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       this.#lc,
       signal,
     );
-    initClientGroupGC(this.perdag, enableMutationRecovery, this.#lc, signal);
+    initClientGroupGC(
+      this.perdag,
+      enableMutationRecovery,
+      onClientsDeleted,
+      this.#lc,
+      signal,
+    );
     initNewClientChannel(
       this.name,
       this.idbName,

@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {type SinonFakeTimers, useFakeTimers} from 'sinon';
-import {afterEach, beforeEach, expect, test} from 'vitest';
+import {afterEach, beforeEach, expect, test, vi} from 'vitest';
 import {assertNotUndefined} from '../../../shared/src/asserts.ts';
 import type {Read} from '../dag/store.ts';
 import {TestStore} from '../dag/test-store.ts';
@@ -15,6 +15,7 @@ import {
   setClientGroups,
 } from './client-groups.ts';
 import {makeClientV6, setClientsForTesting} from './clients-test-helpers.ts';
+import type {OnClientsDeleted} from './clients.ts';
 
 let clock: SinonFakeTimers;
 const START_TIME = 0;
@@ -108,9 +109,11 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
 
   const enableMutationRecovery = true;
   const controller = new AbortController();
+  const onClientsDeleted = vi.fn<OnClientsDeleted>();
   initClientGroupGC(
     dagStore,
     enableMutationRecovery,
+    onClientsDeleted,
     new LogContext(),
     controller.signal,
   );
@@ -130,6 +133,9 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
     'client-group-1': clientGroup1,
     'client-group-2': clientGroup2,
   });
+
+  expect(onClientsDeleted).toHaveBeenCalledTimes(1);
+  expect(onClientsDeleted).toHaveBeenCalledWith([], ['client-group-3']);
 
   // Delete client1
   await setClientsForTesting(
@@ -276,10 +282,12 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
   );
 
   const enableMutationRecovery = false;
+  const onClientsDeleted = vi.fn<OnClientsDeleted>();
   const controller = new AbortController();
   initClientGroupGC(
     dagStore,
     enableMutationRecovery,
+    onClientsDeleted,
     new LogContext(),
     controller.signal,
   );

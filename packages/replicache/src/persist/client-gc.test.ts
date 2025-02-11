@@ -106,10 +106,13 @@ test('initClientGC starts 5 min interval that collects clients that have been in
     });
   });
   expect(onClientsDeleted).toHaveBeenCalledTimes(1);
-  expect(onClientsDeleted).toHaveBeenCalledWith(['client2']);
+  expect(onClientsDeleted).toHaveBeenCalledWith(['client2'], []);
   onClientsDeleted.mockClear();
 
-  expect(await withRead(dagStore, getDeletedClients)).toEqual(['client2']);
+  expect(await withRead(dagStore, getDeletedClients)).toEqual({
+    clientIDs: ['client2'],
+    clientGroupIDs: [],
+  });
 
   // Update client4's heartbeat to now
   const client4UpdatedHeartbeat = {
@@ -136,12 +139,12 @@ test('initClientGC starts 5 min interval that collects clients that have been in
   });
   expect(onClientsDeleted).toHaveBeenCalledTimes(1);
   // 'client2' is still in the deleted clients list
-  expect(onClientsDeleted).toHaveBeenCalledWith(['client2', 'client3']);
+  expect(onClientsDeleted).toHaveBeenCalledWith(['client2', 'client3'], []);
   onClientsDeleted.mockClear();
 
   // Clear client2 from deleted clients list
   await withWrite(dagStore, dagWrite =>
-    removeDeletedClients(dagWrite, ['client2']),
+    removeDeletedClients(dagWrite, ['client2'], []),
   );
 
   clock.tick(24 * HOURS - 5 * MINUTES * 2 + 1);
@@ -158,5 +161,5 @@ test('initClientGC starts 5 min interval that collects clients that have been in
   });
 
   expect(onClientsDeleted).toHaveBeenCalledTimes(1);
-  expect(onClientsDeleted).toHaveBeenCalledWith(['client3', 'client4']);
+  expect(onClientsDeleted).toHaveBeenCalledWith(['client3', 'client4'], []);
 });

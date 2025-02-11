@@ -3,13 +3,21 @@ import type {Store} from '../../../replicache/src/dag/store.ts';
 import {
   getDeletedClients,
   removeDeletedClients,
+  type DeletedClients,
 } from '../../../replicache/src/deleted-clients.ts';
-import type {ClientID} from '../../../replicache/src/sync/ids.ts';
+import type {
+  ClientGroupID,
+  ClientID,
+} from '../../../replicache/src/sync/ids.ts';
 import {
   withRead,
   withWrite,
 } from '../../../replicache/src/with-transactions.ts';
-import type {DeleteClientsMessage} from '../../../zero-protocol/src/delete-clients.ts';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import type {
+  DeleteClientsBody,
+  DeleteClientsMessage,
+} from '../../../zero-protocol/src/delete-clients.ts';
 
 /**
  * Replicache will tell us when it deletes clients from the persistent storage
@@ -39,9 +47,12 @@ export class DeleteClientsManager {
    * This gets called by Replicache when it deletes clients from the persistent
    * storage.
    */
-  onClientsDeleted(clientIDs: ClientID[]): void {
+  onClientsDeleted(
+    clientIDs: readonly ClientID[],
+    clientGroupIDs: readonly ClientGroupID[],
+  ): void {
     this.#lc.debug?.('DeletedClientsManager, send:', clientIDs);
-    this.#send(['deleteClients', {clientIDs}]);
+    this.#send(['deleteClients', {clientIDs, clientGroupIDs}]);
   }
 
   /**
@@ -49,12 +60,12 @@ export class DeleteClientsManager {
    * the clients that might have been deleted locally since the last connection.
    */
   async sendDeletedClientsToServer(): Promise<void> {
-    const deletedClients = await withRead(this.#dagStore, dagRead =>
+    const deleted = await withRead(this.#dagStore, dagRead =>
       getDeletedClients(dagRead),
     );
-    if (deletedClients.length > 0) {
-      this.#send(['deleteClients', {clientIDs: deletedClients}]);
-      this.#lc.debug?.('DeletedClientsManager, send:', deletedClients);
+    if (deleted.clientIDs.length > 0 || deleted.clientGroupIDs.length > 0) {
+      this.#send(['deleteClients', deleted]);
+      this.#lc.debug?.('DeletedClientsManager, send:', deleted);
     }
   }
 
@@ -62,16 +73,20 @@ export class DeleteClientsManager {
    * This is called as a response to the server telling us which clients it
    * actually deleted.
    */
-  clientsDeletedOnServer(clientIDs: ClientID[]): Promise<void> {
-    // Get the deleted clients from the dag and remove the ones from the server.
-    // then write them back to the dag.
-    return withWrite(this.#dagStore, async dagWrite => {
-      this.#lc.debug?.('clientsDeletedOnServer:', clientIDs);
-      await removeDeletedClients(dagWrite, clientIDs);
-    });
+  clientsDeletedOnServer(deletedClients: DeleteClientsBody): Promise<void> {
+    const {clientIDs = [], clientGroupIDs = []} = deletedClients;
+    if (clientIDs.length > 0 || clientGroupIDs.length > 0) {
+      // Get the deleted clients from the dag and remove the ones from the server.
+      // then write them back to the dag.
+      return withWrite(this.#dagStore, async dagWrite => {
+        this.#lc.debug?.('clientsDeletedOnServer:', clientIDs, clientGroupIDs);
+        await removeDeletedClients(dagWrite, clientIDs, clientGroupIDs);
+      });
+    }
+    return promiseVoid;
   }
 
-  getDeletedClients(): Promise<ClientID[]> {
+  getDeletedClients(): Promise<DeletedClients> {
     return withRead(this.#dagStore, getDeletedClients);
   }
 }

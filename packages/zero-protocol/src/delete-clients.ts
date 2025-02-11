@@ -1,8 +1,11 @@
 import * as v from '../../shared/src/valita.ts';
 
-const deleteClientsBodySchema = v.object({
-  clientIDs: v.array(v.string()),
-});
+export const deleteClientsBodySchema = v.union(
+  v.readonlyObject({
+    clientIDs: v.readonlyArray(v.string()).optional(),
+    clientGroupIDs: v.readonlyArray(v.string()).optional(),
+  }),
+);
 
 export const deleteClientsMessageSchema = v.tuple([
   v.literal('deleteClients'),

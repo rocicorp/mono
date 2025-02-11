@@ -28,14 +28,20 @@ beforeEach(() => {
 });
 
 test('onClientsDeleted', () => {
-  manager.onClientsDeleted(['a', 'b']);
-  expect(send).toBeCalledWith(['deleteClients', {clientIDs: ['a', 'b']}]);
+  manager.onClientsDeleted(['a', 'b'], []);
+  expect(send).toBeCalledWith([
+    'deleteClients',
+    {clientIDs: ['a', 'b'], clientGroupIDs: []},
+  ]);
 });
 
 test('clientsDeletedOnServer', async () => {
   await withWrite(dagStore, dagWrite =>
-    setDeletedClients(dagWrite, ['c', 'd', 'e']),
+    setDeletedClients(dagWrite, ['c', 'd', 'e'], []),
   );
-  await manager.clientsDeletedOnServer(['c', 'd']);
-  expect(await withRead(dagStore, getDeletedClients)).toEqual(['e']);
+  await manager.clientsDeletedOnServer({clientIDs: ['c', 'd']});
+  expect(await withRead(dagStore, getDeletedClients)).toEqual({
+    clientIDs: ['e'],
+    clientGroupIDs: [],
+  });
 });

@@ -534,4 +534,7 @@ export async function setClients(
 /**
  * Callback function for when Replicache has deleted one or more clients.
  */
-export type OnClientsDeleted = (clientIDs: ClientID[]) => void;
+export type OnClientsDeleted = (
+  clientIDs: readonly ClientID[],
+  clientGroupIDs: readonly ClientGroupID[],
+) => void;

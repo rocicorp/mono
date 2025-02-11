@@ -1,14 +1,15 @@
 import type {LogContext} from '@rocicorp/logger';
 import {initBgIntervalProcess} from '../bg-interval.ts';
 import type {Store} from '../dag/store.ts';
+import type {ClientGroupID} from '../sync/ids.ts';
 import {withWrite} from '../with-transactions.ts';
 import {
-  type ClientGroupMap,
   clientGroupHasPendingMutations,
   getClientGroups,
   setClientGroups,
+  type ClientGroupMap,
 } from './client-groups.ts';
-import {getClients} from './clients.ts';
+import {getClients, type OnClientsDeleted} from './clients.ts';
 
 const GC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -20,13 +21,18 @@ export function getLatestGCUpdate(): Promise<ClientGroupMap> | undefined {
 export function initClientGroupGC(
   dagStore: Store,
   enableMutationRecovery: boolean,
+  onClientsDeleted: OnClientsDeleted,
   lc: LogContext,
   signal: AbortSignal,
 ): void {
   initBgIntervalProcess(
     'ClientGroupGC',
     () => {
-      latestGCUpdate = gcClientGroups(dagStore, enableMutationRecovery);
+      latestGCUpdate = gcClientGroups(
+        dagStore,
+        enableMutationRecovery,
+        onClientsDeleted,
+      );
       return latestGCUpdate;
     },
     () => GC_INTERVAL_MS,
@@ -44,6 +50,7 @@ export function initClientGroupGC(
 export function gcClientGroups(
   dagStore: Store,
   enableMutationRecovery: boolean,
+  onClientsDeleted: OnClientsDeleted,
 ): Promise<ClientGroupMap> {
   return withWrite(dagStore, async tx => {
     const clients = await getClients(tx);
@@ -52,15 +59,19 @@ export function gcClientGroups(
       clientGroupIDs.add(client.clientGroupID);
     }
     const clientGroups = new Map();
+    const removeClientGroups: Set<ClientGroupID> = new Set();
     for (const [clientGroupID, clientGroup] of await getClientGroups(tx)) {
       if (
         clientGroupIDs.has(clientGroupID) ||
         (enableMutationRecovery && clientGroupHasPendingMutations(clientGroup))
       ) {
         clientGroups.set(clientGroupID, clientGroup);
+      } else {
+        removeClientGroups.add(clientGroupID);
       }
     }
     await setClientGroups(clientGroups, tx);
+    onClientsDeleted([], [...removeClientGroups].sort());
     return clientGroups;
   });
 }
