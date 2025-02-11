@@ -11,7 +11,7 @@ import {installWebSocketHandoff} from './websocket-handoff.ts';
 // servicing requests on the same domain as the application.
 const CONNECT_URL_PATTERN = new UrlPattern('(/:base)/sync/v:version/connect');
 
-export class SyncDispatcher extends HttpService {
+export class Dispatcher extends HttpService {
   readonly id = 'dispatcher';
   readonly #taskID: string;
   readonly #syncers: Worker[];

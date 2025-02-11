@@ -4,7 +4,7 @@ import path from 'node:path';
 import {must} from '../../../shared/src/must.ts';
 import {getZeroConfig} from '../config/zero-config.ts';
 import {getSubscriberContext} from '../services/change-streamer/change-streamer-http.ts';
-import {SyncDispatcher} from '../services/dispatcher/sync-dispatcher.ts';
+import {Dispatcher} from '../services/dispatcher/dispatcher.ts';
 import {installWebSocketHandoff} from '../services/dispatcher/websocket-handoff.ts';
 import {
   exitAfter,
@@ -159,7 +159,7 @@ export default async function runWorker(
   const {port} = config;
 
   if (numSyncers) {
-    mainServices.push(new SyncDispatcher(lc, taskID, parent, syncers, {port}));
+    mainServices.push(new Dispatcher(lc, taskID, parent, syncers, {port}));
   } else if (changeStreamer && parent) {
     // When running as the replication-manager, the dispatcher process
     // hands off websockets from the main (tenant) dispatcher to the
