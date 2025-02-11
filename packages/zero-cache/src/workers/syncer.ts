@@ -24,6 +24,7 @@ import type {Worker} from '../types/processes.ts';
 import {Subscription} from '../types/subscription.ts';
 import {Connection, sendError} from './connection.ts';
 import {createNotifierFrom, subscribeTo} from './replicator.ts';
+import {SyncerWsMessageHandler} from './syncer-ws-message-handler.ts';
 
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;
@@ -102,16 +103,20 @@ export class Syncer implements SingletonService {
 
     const connection = new Connection(
       this.#lc,
-      auth !== undefined && decodedToken !== undefined
-        ? {
-            raw: auth,
-            decoded: decodedToken,
-          }
-        : undefined,
-      this.#viewSyncers.getService(clientGroupID),
-      this.#mutagens.getService(clientGroupID),
       params,
       ws,
+      new SyncerWsMessageHandler(
+        this.#lc,
+        params,
+        auth !== undefined && decodedToken !== undefined
+          ? {
+              raw: auth,
+              decoded: decodedToken,
+            }
+          : undefined,
+        this.#viewSyncers.getService(clientGroupID),
+        this.#mutagens.getService(clientGroupID),
+      ),
       () => {
         if (this.#connections.get(clientID) === connection) {
           this.#connections.delete(clientID);

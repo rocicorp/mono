@@ -1,12 +1,6 @@
-import {trace} from '@opentelemetry/api';
-import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
-import type {JWTPayload} from 'jose';
 import type {CloseEvent, Data, ErrorEvent} from 'ws';
 import WebSocket from 'ws';
-import {startAsyncSpan, startSpan} from '../../../otel/src/span.ts';
-import {version} from '../../../otel/src/version.ts';
-import {unreachable} from '../../../shared/src/asserts.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
@@ -17,18 +11,32 @@ import {
   MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
   PROTOCOL_VERSION,
 } from '../../../zero-protocol/src/protocol-version.ts';
-import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
+import {upstreamSchema, type Upstream} from '../../../zero-protocol/src/up.ts';
 import type {ConnectParams} from '../services/dispatcher/connect-params.ts';
-import type {Mutagen} from '../services/mutagen/mutagen.ts';
-import type {
-  SyncContext,
-  TokenData,
-  ViewSyncer,
-} from '../services/view-syncer/view-syncer.ts';
 import {findErrorForClient, getLogLevel} from '../types/error-for-client.ts';
 import type {Source} from '../types/streams.ts';
+import {assert} from '../../../shared/src/asserts.ts';
 
-const tracer = trace.getTracer('syncer-ws-server', version);
+export type HandlerResult =
+  | {
+      type: 'ok';
+    }
+  | {
+      type: 'fatal';
+      error: ErrorBody;
+    }
+  | {
+      type: 'transient';
+      errors: ErrorBody[];
+    }
+  | {
+      type: 'stream';
+      stream: Source<Downstream>;
+    };
+
+export interface MessageHandler {
+  handleMessage(msg: Upstream): Promise<HandlerResult>;
+}
 
 /**
  * Represents a connection between the client and server.
@@ -42,59 +50,33 @@ export class Connection {
   readonly #ws: WebSocket;
   readonly #wsID: string;
   readonly #protocolVersion: number;
-  readonly #clientGroupID: string;
-  readonly #syncContext: SyncContext;
   readonly #lc: LogContext;
   readonly #onClose: () => void;
-
-  readonly #viewSyncer: ViewSyncer;
-  readonly #mutagen: Mutagen;
-  readonly #mutationLock = new Lock();
-  readonly #authData: JWTPayload | undefined;
+  readonly #messageHandler: MessageHandler;
 
   #outboundStream: Source<Downstream> | undefined;
   #closed = false;
 
   constructor(
     lc: LogContext,
-    tokenData: TokenData | undefined,
-    viewSyncer: ViewSyncer,
-    mutagen: Mutagen,
     connectParams: ConnectParams,
     ws: WebSocket,
+    messageHandler: MessageHandler,
     onClose: () => void,
   ) {
-    const {
-      clientGroupID,
-      clientID,
-      wsID,
-      baseCookie,
-      protocolVersion,
-      schemaVersion,
-    } = connectParams;
+    const {clientGroupID, clientID, wsID, protocolVersion} = connectParams;
+    this.#messageHandler = messageHandler;
 
     this.#ws = ws;
-    this.#authData = tokenData?.decoded;
     this.#wsID = wsID;
     this.#protocolVersion = protocolVersion;
-    this.#clientGroupID = clientGroupID;
-    this.#syncContext = {
-      clientID,
-      wsID,
-      baseCookie,
-      protocolVersion,
-      schemaVersion,
-      tokenData,
-    };
+
     this.#lc = lc
       .withContext('connection')
       .withContext('clientID', clientID)
       .withContext('clientGroupID', clientGroupID)
       .withContext('wsID', wsID);
     this.#onClose = onClose;
-
-    this.#viewSyncer = viewSyncer;
-    this.#mutagen = mutagen;
 
     this.#ws.addEventListener('message', this.#handleMessage);
     this.#ws.addEventListener('close', this.#handleClose);
@@ -155,9 +137,7 @@ export class Connection {
   }
 
   #handleMessage = async (event: {data: Data}) => {
-    const lc = this.#lc;
     const data = event.data.toString();
-    const viewSyncer = this.#viewSyncer;
     if (this.#closed) {
       this.#lc.debug?.('Ignoring message received after closed', data);
       return;
@@ -175,67 +155,34 @@ export class Connection {
       );
       return;
     }
+
     try {
       const msgType = msg[0];
-      switch (msgType) {
-        case 'ping':
-          this.send(['pong', {}] satisfies PongMessage);
+      if (msgType === 'ping') {
+        this.send(['pong', {}] satisfies PongMessage);
+        return;
+      }
+      const result = await this.#messageHandler.handleMessage(msg);
+      switch (result.type) {
+        case 'fatal':
+          this.#closeWithError(result.error);
           break;
-        case 'push': {
-          await startAsyncSpan(tracer, 'connection.push', async () => {
-            const {clientGroupID, mutations, schemaVersion} = msg[1];
-            if (clientGroupID !== this.#clientGroupID) {
-              this.#closeWithError({
-                kind: ErrorKind.InvalidPush,
-                message:
-                  `clientGroupID in mutation "${clientGroupID}" does not match ` +
-                  `clientGroupID of connection "${this.#clientGroupID}`,
-              });
-            }
-            // Hold a connection-level lock while processing mutations so that:
-            // 1. Mutations are processed in the order in which they are received and
-            // 2. A single view syncer connection cannot hog multiple upstream connections.
-            await this.#mutationLock.withLock(async () => {
-              for (const mutation of mutations) {
-                const maybeError = await this.#mutagen.processMutation(
-                  mutation,
-                  this.#authData,
-                  schemaVersion,
-                );
-                if (maybeError !== undefined) {
-                  this.sendError({kind: maybeError[0], message: maybeError[1]});
-                }
-              }
-            });
-          });
+        case 'ok':
+          break;
+        case 'stream': {
+          assert(
+            this.#outboundStream === undefined,
+            'Outbound stream already set for this connection!',
+          );
+          this.#outboundStream = result.stream;
+          void this.#proxyOutbound(result.stream);
           break;
         }
-        case 'pull':
-          lc.error?.('TODO: implement pull');
-          break;
-        case 'changeDesiredQueries':
-          await startAsyncSpan(tracer, 'connection.changeDesiredQueries', () =>
-            viewSyncer.changeDesiredQueries(this.#syncContext, msg),
-          );
-          break;
-        case 'deleteClients':
-          await startAsyncSpan(tracer, 'connection.deleteClients', () =>
-            viewSyncer.deleteClients(this.#syncContext, msg),
-          );
-          break;
-          break;
-        case 'initConnection': {
-          // TODO (mlaw): tell mutagens about the new token too
-          this.#outboundStream = startSpan(
-            tracer,
-            'connection.initConnection',
-            () => viewSyncer.initConnection(this.#syncContext, msg),
-          );
-          void this.#proxyOutbound(this.#outboundStream);
-          break;
+        case 'transient': {
+          for (const error of result.errors) {
+            this.sendError(error);
+          }
         }
-        default:
-          unreachable(msgType);
       }
     } catch (e) {
       this.#closeWithThrown(e);
