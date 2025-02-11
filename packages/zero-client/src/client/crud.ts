@@ -8,7 +8,6 @@ import {
   CRUD_MUTATION_NAME,
   type CRUDMutationArg,
   type CRUDOp,
-  type CRUDOpKind,
   type DeleteOp,
   type InsertOp,
   type UpdateOp,
@@ -110,43 +109,22 @@ export function makeCRUDMutate<const S extends Schema>(
   repMutate: ZeroCRUDMutate,
 ): {mutate: DBMutator<S>; mutateBatch: BatchMutator<S>} {
   const {[CRUD_MUTATION_NAME]: zeroCRUD} = repMutate;
-  let inBatch = false;
 
   const mutateBatch = async <R>(body: (m: DBMutator<S>) => R): Promise<R> => {
-    if (inBatch) {
-      throw new Error('Cannot call mutate inside a batch');
+    const ops: CRUDOp[] = [];
+    const m = {} as Record<string, unknown>;
+    for (const name of Object.keys(schema.tables)) {
+      m[name] = makeBatchCRUDMutate(name, schema, ops);
     }
-    inBatch = true;
 
-    try {
-      const ops: CRUDOp[] = [];
-      const m = {} as Record<string, unknown>;
-      for (const name of Object.keys(schema.tables)) {
-        m[name] = makeBatchCRUDMutate(name, schema, ops);
-      }
-
-      const rv = await body(m as DBMutator<S>);
-      await zeroCRUD({ops});
-      return rv;
-    } finally {
-      inBatch = false;
-    }
-  };
-
-  const assertNotInBatch = (tableName: string, op: CRUDOpKind) => {
-    if (inBatch) {
-      throw new Error(`Cannot call mutate.${tableName}.${op} inside a batch`);
-    }
+    const rv = await body(m as DBMutator<S>);
+    await zeroCRUD({ops});
+    return rv;
   };
 
   const mutate: Record<string, TableMutator<TableSchema>> = {};
   for (const [name, tableSchema] of Object.entries(schema.tables)) {
-    mutate[name] = makeEntityCRUDMutate(
-      name,
-      tableSchema.primaryKey,
-      zeroCRUD,
-      assertNotInBatch,
-    );
+    mutate[name] = makeEntityCRUDMutate(name, tableSchema.primaryKey, zeroCRUD);
   }
   return {
     mutate: mutate as DBMutator<S>,
@@ -162,11 +140,9 @@ function makeEntityCRUDMutate<S extends TableSchema>(
   tableName: string,
   primaryKey: S['primaryKey'],
   zeroCRUD: CRUDMutate,
-  assertNotInBatch: (tableName: string, op: CRUDOpKind) => void,
 ): TableMutator<S> {
   return {
     insert: (value: InsertValue<S>) => {
-      assertNotInBatch(tableName, 'insert');
       const op: InsertOp = {
         op: 'insert',
         tableName,
@@ -176,7 +152,6 @@ function makeEntityCRUDMutate<S extends TableSchema>(
       return zeroCRUD({ops: [op]});
     },
     upsert: (value: UpsertValue<S>) => {
-      assertNotInBatch(tableName, 'upsert');
       const op: UpsertOp = {
         op: 'upsert',
         tableName,
@@ -186,7 +161,6 @@ function makeEntityCRUDMutate<S extends TableSchema>(
       return zeroCRUD({ops: [op]});
     },
     update: (value: UpdateValue<S>) => {
-      assertNotInBatch(tableName, 'update');
       const op: UpdateOp = {
         op: 'update',
         tableName,
@@ -196,7 +170,6 @@ function makeEntityCRUDMutate<S extends TableSchema>(
       return zeroCRUD({ops: [op]});
     },
     delete: (id: DeleteID<S>) => {
-      assertNotInBatch(tableName, 'delete');
       const op: DeleteOp = {
         op: 'delete',
         tableName,

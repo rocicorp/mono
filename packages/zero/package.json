@@ -1,10 +1,10 @@
 {
   "name": "@rocicorp/zero",
-  "version": "0.14.2025021001",
+  "version": "0.14.2025021100",
   "scripts": {
     "build": "rm -rf out && npm run build-server && npm run build-client",
     "build-client": "tsc -p tsconfig.client.json && tsc-alias -p tsconfig.client.json && npx tsx tool/build.js",
-    "build-server": "tsc -p tsconfig.server.json && tsc-alias -p tsconfig.server.json && chmod +x out/zero/src/cli.js out/zero/src/build-schema.js out/zero/src/zero-cache-dev.js",
+    "build-server": "tsc -p tsconfig.server.json && tsc-alias -p tsconfig.server.json && chmod +x out/zero/src/cli.js out/zero/src/build-schema.js out/zero/src/deploy-permissions.js out/zero/src/zero-cache-dev.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "check-types": "tsc",
@@ -99,7 +99,8 @@
   "bin": {
     "zero-build-schema": "./out/zero/src/build-schema.js",
     "zero-cache": "./out/zero/src/cli.js",
-    "zero-cache-dev": "./out/zero/src/zero-cache-dev.js"
+    "zero-cache-dev": "./out/zero/src/zero-cache-dev.js",
+    "zero-deploy-permissions": "./out/zero/src/deploy-permissions.js"
   },
   "engines": {
     "node": ">=20"

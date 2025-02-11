@@ -3,6 +3,8 @@ import chalk from 'chalk';
 import 'dotenv/config';
 
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {parseOptions} from '../../../shared/src/options.ts';
+import * as v from '../../../shared/src/valita.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {buildPipeline} from '../../../zql/src/builder/builder.ts';
 import {Catch} from '../../../zql/src/ivm/catch.ts';
@@ -18,9 +20,34 @@ import {
 } from '../../../zqlite/src/runtime-debug.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import {getSchema} from '../auth/load-schema.ts';
-import {getDebugConfig, type LogConfig} from '../config/zero-config.ts';
+import {
+  ZERO_ENV_VAR_PREFIX,
+  zeroOptions,
+  type LogConfig,
+} from '../config/zero-config.ts';
 
-const config = getDebugConfig();
+const options = {
+  replicaFile: zeroOptions.replicaFile,
+  debug: {
+    ast: {
+      type: v.string().optional(),
+      desc: ['AST for the query to be transformed or timed.'],
+    },
+    query: {
+      type: v.string().optional(),
+      desc: [
+        `Query to be timed in the form of: z.query.table.where(...).related(...).etc`,
+      ],
+    },
+  },
+};
+
+const config = parseOptions(
+  options,
+  process.argv.slice(2),
+  ZERO_ENV_VAR_PREFIX,
+);
+
 runtimeDebugFlags.trackRowsVended = true;
 
 const lc = createSilentLogContext();

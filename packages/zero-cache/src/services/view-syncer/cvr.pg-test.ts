@@ -1,6 +1,7 @@
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {unreachable} from '../../../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {sleep} from '../../../../shared/src/sleep.ts';
 import {testDBs} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {PatchToVersion} from './client-handler.ts';
@@ -409,6 +410,9 @@ describe('view-syncer/cvr', () => {
     );
     const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(updated);
+
+    // Let the takeover write that's fired during load to reach PG.
+    await sleep(100);
 
     await expectState(db, {
       ...initialState,
@@ -1142,6 +1146,9 @@ describe('view-syncer/cvr', () => {
     );
     const reloaded = await doCVRStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(updated);
+
+    // Let the takeover write that's fired during load to reach PG.
+    await sleep(100);
 
     await expectState(db, {
       ...initialState,
