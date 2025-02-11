@@ -8,6 +8,7 @@ import {
 import {expectTablesToMatch, initDB, testDBs} from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
 import {initShardSchema, updateShardSchema} from './init.ts';
+import {METADATA_PUBLICATION_PREFIX} from './shard.ts';
 
 const SHARD_ID = 'shard_schema_test_id';
 
@@ -112,6 +113,25 @@ describe('change-streamer/pg/schema/init', () => {
         ['zero.schemaVersions']: [
           {minSupportedVersion: 2, maxSupportedVersion: 3},
         ],
+      },
+    },
+    {
+      name: '3 to 4',
+      upstreamSetup: `
+          CREATE SCHEMA IF NOT EXISTS zero;
+          CREATE TABLE zero."schemaVersions" 
+            ("lock" BOOL PRIMARY KEY, "minSupportedVersion" INT4, "maxSupportedVersion" INT4);
+          INSERT INTO zero."schemaVersions" 
+            ("lock", "minSupportedVersion", "maxSupportedVersion") VALUES (true, 2, 3);
+          CREATE PUBLICATION ${METADATA_PUBLICATION_PREFIX}${SHARD_ID} FOR TABLE zero."schemaVersions";
+        `,
+      existingVersionHistory: {
+        minSafeVersion: 1,
+        dataVersion: 3,
+        schemaVersion: 3,
+      },
+      upstreamPostState: {
+        [`zero_${SHARD_ID}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
       },
     },
   ];
