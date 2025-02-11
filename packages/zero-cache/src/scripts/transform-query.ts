@@ -8,10 +8,8 @@ import * as v from '../../../shared/src/valita.ts';
 import {transformAndHashQuery} from '../auth/read-authorizer.ts';
 import {ZERO_ENV_VAR_PREFIX, zeroOptions} from '../config/zero-config.ts';
 import {pgClient} from '../types/pg.ts';
-import {
-  deployPermissionsOptions,
-  loadPermissions,
-} from './deploy-permissions.ts';
+import {deployPermissionsOptions} from './deploy-permissions-options.ts';
+import {loadPermissions} from './deploy-permissions.ts';
 
 const options = {
   cvr: zeroOptions.cvr,
