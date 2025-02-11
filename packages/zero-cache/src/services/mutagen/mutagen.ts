@@ -19,7 +19,6 @@ import {
   type UpdateOp,
   type UpsertOp,
 } from '../../../../zero-protocol/src/push.ts';
-import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {
   WriteAuthorizerImpl,
@@ -65,7 +64,6 @@ export class MutagenService implements Mutagen, Service {
     clientGroupID: string,
     upstream: PostgresDB,
     config: ZeroConfig,
-    permissions: PermissionsConfig,
   ) {
     this.id = clientGroupID;
     this.#lc = lc;
@@ -77,7 +75,6 @@ export class MutagenService implements Mutagen, Service {
     this.#writeAuthorizer = new WriteAuthorizerImpl(
       this.#lc,
       config,
-      permissions,
       this.#replica,
       clientGroupID,
     );

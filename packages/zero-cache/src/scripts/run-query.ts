@@ -19,7 +19,7 @@ import {
   runtimeDebugStats,
 } from '../../../zqlite/src/runtime-debug.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
-import {getSchema} from '../auth/load-schema.ts';
+import {getSchema} from '../auth/load-permissions.ts';
 import {
   ZERO_ENV_VAR_PREFIX,
   zeroOptions,

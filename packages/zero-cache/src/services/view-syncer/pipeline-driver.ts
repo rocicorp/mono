@@ -14,14 +14,18 @@ import {
   runtimeDebugStats,
 } from '../../../../zqlite/src/runtime-debug.ts';
 import {TableSource} from '../../../../zqlite/src/table-source.ts';
+import {
+  loadPermissions,
+  type LoadedPermissions,
+} from '../../auth/load-permissions.ts';
+import type {LogConfig} from '../../config/zero-config.ts';
 import {computeZqlSpecs} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../db/specs.ts';
 import type {RowKey} from '../../types/row-key.ts';
 import type {SchemaVersions} from '../../types/schema-versions.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 import type {ClientGroupStorage} from './database-storage.ts';
-import {type SnapshotDiff, Snapshotter} from './snapshotter.ts';
-import type {LogConfig} from '../../config/zero-config.ts';
+import {Snapshotter, type SnapshotDiff} from './snapshotter.ts';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -129,6 +133,14 @@ export class PipelineDriver {
   currentSchemaVersions(): SchemaVersions {
     assert(this.initialized(), 'Not yet initialized');
     return this.#snapshotter.current().schemaVersions;
+  }
+
+  /**
+   * Returns the current upstream zero.permissions, or `null` if none are defined.
+   */
+  currentPermissions(): LoadedPermissions {
+    assert(this.initialized(), 'Not yet initialized');
+    return loadPermissions(this.#lc, this.#snapshotter.current().db);
   }
 
   advanceWithoutDiff(): string {

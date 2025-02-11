@@ -26,7 +26,7 @@ export type TransformedAndHashed =
  */
 export function transformAndHashQuery(
   query: AST,
-  permissionRules: PermissionsConfig,
+  permissionRules: PermissionsConfig | null,
   authData: JWTPayload | undefined,
 ): TransformedAndHashed {
   const transformed = transformQuery(query, permissionRules, authData);
@@ -46,9 +46,14 @@ export function transformAndHashQuery(
  */
 export function transformQuery(
   query: AST,
-  permissionRules: PermissionsConfig,
+  permissionRules: PermissionsConfig | null,
   authData: JWTPayload | undefined,
 ): AST | undefined {
+  if (permissionRules === null) {
+    // Undefined permissions means allow all.
+    // TODO: Make defined permissions default to deny all.
+    return query;
+  }
   const queryWithPermissions = transformQueryInternal(query, permissionRules);
   return queryWithPermissions !== undefined
     ? bindStaticParameters(queryWithPermissions, {

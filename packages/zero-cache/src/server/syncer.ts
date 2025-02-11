@@ -14,7 +14,6 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
-import {getPermissions} from '../auth/load-schema.ts';
 import {getZeroConfig} from '../config/zero-config.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {MutagenService} from '../services/mutagen/mutagen.ts';
@@ -39,7 +38,7 @@ function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
 }
 
-export default async function runWorker(
+export default function runWorker(
   parent: Worker,
   env: NodeJS.ProcessEnv,
   ...args: string[]
@@ -71,7 +70,6 @@ export default async function runWorker(
   assert(args.length > 0, `replicator mode not specified`);
   const fileMode = v.parse(args[0], replicaFileModeSchema);
 
-  const {permissions} = await getPermissions(config);
   assert(config.cvr.maxConnsPerWorker);
   assert(config.upstream.maxConnsPerWorker);
 
@@ -127,7 +125,6 @@ export default async function runWorker(
       ),
       sub,
       drainCoordinator,
-      permissions,
     );
   };
 
@@ -138,7 +135,6 @@ export default async function runWorker(
       id,
       upstreamDB,
       config,
-      permissions,
     );
 
   const syncer = new Syncer(

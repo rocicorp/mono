@@ -6,6 +6,7 @@ import path from 'node:path';
 import {pid} from 'node:process';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
+import {must} from '../../../shared/src/must.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {Condition} from '../../../zero-protocol/src/ast.ts';
@@ -13,7 +14,6 @@ import {
   primaryKeyValueSchema,
   type PrimaryKeyValue,
 } from '../../../zero-protocol/src/primary-key.ts';
-import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import type {
   CRUDOp,
   DeleteOp,
@@ -22,10 +22,7 @@ import type {
   UpsertOp,
 } from '../../../zero-protocol/src/push.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import type {
-  PermissionsConfig,
-  Policy,
-} from '../../../zero-schema/src/compiled-permissions.ts';
+import type {Policy} from '../../../zero-schema/src/compiled-permissions.ts';
 import type {BuilderDelegate} from '../../../zql/src/builder/builder.ts';
 import {
   bindStaticParameters,
@@ -46,7 +43,11 @@ import type {LiteAndZqlSpec} from '../db/specs.ts';
 import {StatementRunner} from '../db/statements.ts';
 import {DatabaseStorage} from '../services/view-syncer/database-storage.ts';
 import {mapLiteDataTypeToZqlSchemaValue} from '../types/lite.ts';
-import {getSchema} from './load-schema.ts';
+import {
+  getSchema,
+  reloadPermissionsIfChanged,
+  type LoadedPermissions,
+} from './load-permissions.ts';
 
 type Phase = 'preMutation' | 'postMutation';
 
@@ -64,7 +65,6 @@ export interface WriteAuthorizer {
 
 export class WriteAuthorizerImpl implements WriteAuthorizer {
   readonly #schema: Schema;
-  readonly #permissionsConfig: PermissionsConfig;
   readonly #replica: Database;
   readonly #builderDelegate: BuilderDelegate;
   readonly #tableSpecs: Map<string, LiteAndZqlSpec>;
@@ -74,10 +74,11 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   readonly #clientGroupID: string;
   readonly #logConfig: LogConfig;
 
+  #loadedPermissions: LoadedPermissions | null = null;
+
   constructor(
     lc: LogContext,
     config: ZeroConfig,
-    permissions: PermissionsConfig | undefined,
     replica: Database,
     cgID: string,
   ) {
@@ -85,10 +86,6 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     this.#lc = lc.withContext('class', 'WriteAuthorizerImpl');
     this.#logConfig = config.log;
     this.#schema = getSchema(this.#lc, replica);
-    this.#permissionsConfig = permissions ?? {
-      protocolVersion: PROTOCOL_VERSION,
-      tables: {},
-    };
     this.#replica = replica;
     const tmpDir = config.storageDBTmpDir ?? tmpdir();
     const writeAuthzStorage = DatabaseStorage.create(
@@ -108,6 +105,14 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     authData: JWTPayload | undefined,
     ops: Exclude<CRUDOp, UpsertOp>[],
   ) {
+    // Check the permissions hash on every write, reloading and re-parsing the
+    // permissions object if the hash has changed.
+    this.#loadedPermissions = reloadPermissionsIfChanged(
+      this.#lc,
+      this.#statementRunner,
+      this.#loadedPermissions,
+    ).permissions;
+
     for (const op of ops) {
       switch (op.op) {
         case 'insert':
@@ -292,7 +297,9 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     authData: JWTPayload | undefined,
     op: ActionOpMap[A],
   ) {
-    const rules = this.#permissionsConfig.tables[op.tableName];
+    const rules = must(this.#loadedPermissions).permissions?.tables[
+      op.tableName
+    ];
     if (rules?.row === undefined && rules?.cell === undefined) {
       return true;
     }
