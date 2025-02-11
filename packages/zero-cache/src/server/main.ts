@@ -147,6 +147,10 @@ export default async function runWorker(
     }
     syncers.forEach(syncer => handleSubscriptionsFrom(lc, syncer, notifier));
   }
+  let mutator: Worker | undefined;
+  if (config.push.url !== undefined) {
+    mutator = loadWorker('./server/mutator.ts', 'supporting', 'mutator');
+  }
 
   lc.info?.('waiting for workers to be ready ...');
   if ((await orTimeout(processes.allWorkersReady(), 60_000)) === 'timed-out') {
@@ -159,7 +163,9 @@ export default async function runWorker(
   const {port} = config;
 
   if (numSyncers) {
-    mainServices.push(new Dispatcher(lc, taskID, parent, syncers, {port}));
+    mainServices.push(
+      new Dispatcher(lc, taskID, parent, syncers, mutator, {port}),
+    );
   } else if (changeStreamer && parent) {
     // When running as the replication-manager, the dispatcher process
     // hands off websockets from the main (tenant) dispatcher to the
