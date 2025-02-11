@@ -11,9 +11,9 @@ import {
   ZERO_ENV_VAR_PREFIX,
   zeroOptions,
 } from '../../zero-cache/src/config/zero-config.ts';
-import {buildSchemaOptions} from '../../zero-schema/src/build-schema-options.ts';
+import {deployPermissionsOptions} from '../../zero-cache/src/scripts/permissions.ts';
 
-const buildSchemaScript = 'zero-build-schema';
+const deployPermissionsScript = 'zero-deploy-permissions';
 const zeroCacheScript = 'zero-cache';
 
 function killProcess(childProcess: ChildProcess | undefined) {
@@ -39,11 +39,8 @@ function logError(msg: string) {
 async function main() {
   const {config} = parseOptionsAdvanced(
     {
+      ...deployPermissionsOptions,
       ...zeroOptions,
-      schema: {
-        ...zeroOptions.schema,
-        ...buildSchemaOptions.schema,
-      },
     },
     process.argv.slice(2),
     ZERO_ENV_VAR_PREFIX,
@@ -52,13 +49,13 @@ async function main() {
   );
 
   const {unknown: zeroCacheArgs} = parseOptionsAdvanced(
-    buildSchemaOptions,
+    deployPermissionsOptions,
     process.argv.slice(2),
     ZERO_ENV_VAR_PREFIX,
     true,
   );
 
-  const {unknown: buildSchemaArgs} = parseOptionsAdvanced(
+  const {unknown: deployPermissionsArgs} = parseOptionsAdvanced(
     zeroOptions,
     process.argv.slice(2),
     ZERO_ENV_VAR_PREFIX,
@@ -67,61 +64,72 @@ async function main() {
 
   const {path} = config.schema;
 
-  let schemaProcess: ChildProcess | undefined;
+  let permissionsProcess: ChildProcess | undefined;
   let zeroCacheProcess: ChildProcess | undefined;
 
   // Ensure child processes are killed when the main process exits
   process.on('exit', () => {
-    schemaProcess?.kill('SIGQUIT');
+    permissionsProcess?.kill('SIGQUIT');
     zeroCacheProcess?.kill('SIGQUIT');
   });
 
-  async function buildSchemaAndStartZeroCache() {
-    schemaProcess?.removeAllListeners('exit');
+  async function deployPermissions(): Promise<boolean> {
+    permissionsProcess?.removeAllListeners('exit');
+    await killProcess(permissionsProcess);
+    permissionsProcess = undefined;
+
+    log(`Running ${deployPermissionsScript}.`);
+    permissionsProcess = spawn(
+      deployPermissionsScript,
+      deployPermissionsArgs ?? [],
+      {
+        stdio: 'inherit',
+        shell: true,
+      },
+    );
+
+    const {promise: code, resolve} = resolver<number>();
+    permissionsProcess.on('exit', resolve);
+    if ((await code) === 0) {
+      log(`${deployPermissionsScript} completed successfully.`);
+      return true;
+    }
+    logError(
+      `Errors in ${path} must be fixed before zero-cache can be started.`,
+    );
+    return false;
+  }
+
+  async function deployPermissionsAndStartZeroCache() {
     zeroCacheProcess?.removeAllListeners('exit');
-    await killProcess(schemaProcess);
-    schemaProcess = undefined;
     await killProcess(zeroCacheProcess);
     zeroCacheProcess = undefined;
 
-    log(`Running ${buildSchemaScript}.`);
-    schemaProcess = spawn(buildSchemaScript, buildSchemaArgs ?? [], {
-      stdio: 'inherit',
-      shell: true,
-    });
-
-    schemaProcess.on('exit', (code: number) => {
-      if (code === 0) {
-        log(`${buildSchemaScript} completed successfully.`);
-        log(
-          `Running ${zeroCacheScript} at\n\n\thttp://localhost:${config.port}\n`,
-        );
-        zeroCacheProcess = spawn(zeroCacheScript, zeroCacheArgs || [], {
-          env: {
-            // Set some low defaults so as to use fewer resources and not trip up,
-            // e.g. developers sharing a database.
-            ['ZERO_NUM_SYNC_WORKERS']: '3',
-            ['ZERO_CVR_MAX_CONNS']: '6',
-            ['ZERO_UPSTREAM_MAX_CONNS']: '6',
-            // But let the developer override any of these dev defaults.
-            ...process.env,
-          },
-          stdio: 'inherit',
-          shell: true,
-        });
-        zeroCacheProcess.on('exit', () => {
-          logError(`${zeroCacheScript} exited. Exiting.`);
-          process.exit(-1);
-        });
-      } else {
-        logError(
-          `Errors in ${path} must be fixed before zero-cache can be started.`,
-        );
-      }
-    });
+    if (await deployPermissions()) {
+      log(
+        `Running ${zeroCacheScript} at\n\n\thttp://localhost:${config.port}\n`,
+      );
+      zeroCacheProcess = spawn(zeroCacheScript, zeroCacheArgs || [], {
+        env: {
+          // Set some low defaults so as to use fewer resources and not trip up,
+          // e.g. developers sharing a database.
+          ['ZERO_NUM_SYNC_WORKERS']: '3',
+          ['ZERO_CVR_MAX_CONNS']: '6',
+          ['ZERO_UPSTREAM_MAX_CONNS']: '6',
+          // But let the developer override any of these dev defaults.
+          ...process.env,
+        },
+        stdio: 'inherit',
+        shell: true,
+      });
+      zeroCacheProcess.on('exit', () => {
+        logError(`${zeroCacheScript} exited. Exiting.`);
+        process.exit(-1);
+      });
+    }
   }
 
-  await buildSchemaAndStartZeroCache();
+  await deployPermissionsAndStartZeroCache();
 
   // Watch for file changes
   const watcher = watch(path, {
@@ -130,7 +138,7 @@ async function main() {
   });
   const onFileChange = async () => {
     log(`Detected ${path} change.`);
-    await buildSchemaAndStartZeroCache();
+    await deployPermissions();
   };
   watcher.on('add', onFileChange);
   watcher.on('change', onFileChange);

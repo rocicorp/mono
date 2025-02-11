@@ -1,4 +1,5 @@
 import {beforeEach, describe, expect, test} from 'vitest';
+import {h128} from '../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import type {
@@ -6,7 +7,10 @@ import type {
   InsertOp,
   UpdateOp,
 } from '../../../zero-protocol/src/push.ts';
-import type {Rule} from '../../../zero-schema/src/compiled-permissions.ts';
+import type {
+  PermissionsConfig,
+  Rule,
+} from '../../../zero-schema/src/compiled-permissions.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {LogConfig, ZeroConfig} from '../config/zero-config.ts';
 import {WriteAuthorizerImpl} from './write-authorizer.ts';
@@ -49,24 +53,33 @@ const allowIfAIsSubject = [
 ] satisfies Rule;
 
 let replica: Database;
+
 beforeEach(() => {
   replica = new Database(lc, ':memory:');
-  replica.exec(/*sql*/ `CREATE TABLE foo (id TEXT PRIMARY KEY, a TEXT, b TEXT_NOT_SUPPORTED);
-      INSERT INTO foo (id, a) VALUES ('1', 'a');`);
+  replica.exec(/*sql*/ `
+    CREATE TABLE foo (id TEXT PRIMARY KEY, a TEXT, b TEXT_NOT_SUPPORTED);
+    INSERT INTO foo (id, a) VALUES ('1', 'a');
+    CREATE TABLE "zero.permissions" (permissions JSON, hash TEXT);
+    INSERT INTO "zero.permissions" (permissions) VALUES (NULL);
+    `);
 });
+
+function setPermissions(permissions: PermissionsConfig) {
+  const json = JSON.stringify(permissions);
+  replica
+    .prepare(
+      /* sql */ `
+    UPDATE "zero.permissions" SET permissions = ?, hash = ?`,
+    )
+    .run(json, h128(json).toString(16));
+}
 
 describe('normalize ops', () => {
   // upserts are converted to inserts/updates correctly
   // upsert where row exists
   // upsert where row does not exist
   test('upsert converted to update if row exists', () => {
-    const authorizer = new WriteAuthorizerImpl(
-      lc,
-      zeroConfig,
-      undefined,
-      replica,
-      'cg',
-    );
+    const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
     const normalized = authorizer.normalizeOps([
       {
         op: 'upsert',
@@ -85,13 +98,7 @@ describe('normalize ops', () => {
     ]);
   });
   test('upsert converted to insert if row does not exist', () => {
-    const authorizer = new WriteAuthorizerImpl(
-      lc,
-      zeroConfig,
-      undefined,
-      replica,
-      'cg',
-    );
+    const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
     const normalized = authorizer.normalizeOps([
       {
         op: 'upsert',
@@ -113,22 +120,18 @@ describe('normalize ops', () => {
 
 describe('pre & post mutation', () => {
   test('delete is run pre-mutation', () => {
-    const authorizer = new WriteAuthorizerImpl(
-      lc,
-      zeroConfig,
-      {
-        protocolVersion: PROTOCOL_VERSION,
-        tables: {
-          foo: {
-            row: {
-              delete: [allowIfSubject],
-            },
+    setPermissions({
+      protocolVersion: PROTOCOL_VERSION,
+      tables: {
+        foo: {
+          row: {
+            delete: [allowIfSubject],
           },
         },
       },
-      replica,
-      'cg',
-    );
+    });
+
+    const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
 
     const op: DeleteOp = {
       op: 'delete',
@@ -147,22 +150,18 @@ describe('pre & post mutation', () => {
   });
 
   test('insert is run post-mutation', () => {
-    const authorizer = new WriteAuthorizerImpl(
-      lc,
-      zeroConfig,
-      {
-        protocolVersion: PROTOCOL_VERSION,
-        tables: {
-          foo: {
-            row: {
-              insert: [allowIfSubject],
-            },
+    setPermissions({
+      protocolVersion: PROTOCOL_VERSION,
+      tables: {
+        foo: {
+          row: {
+            insert: [allowIfSubject],
           },
         },
       },
-      replica,
-      'cg',
-    );
+    });
+
+    const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
 
     const op: InsertOp = {
       op: 'insert',
@@ -181,24 +180,20 @@ describe('pre & post mutation', () => {
   });
 
   test('update is run pre-mutation when specified', () => {
-    const authorizer = new WriteAuthorizerImpl(
-      lc,
-      zeroConfig,
-      {
-        protocolVersion: PROTOCOL_VERSION,
-        tables: {
-          foo: {
-            row: {
-              update: {
-                preMutation: [allowIfSubject],
-              },
+    setPermissions({
+      protocolVersion: PROTOCOL_VERSION,
+      tables: {
+        foo: {
+          row: {
+            update: {
+              preMutation: [allowIfSubject],
             },
           },
         },
       },
-      replica,
-      'cg',
-    );
+    });
+
+    const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
 
     const op: UpdateOp = {
       op: 'update',
@@ -217,24 +212,20 @@ describe('pre & post mutation', () => {
   });
 
   test('update is run post-mutation when specified', () => {
-    const authorizer = new WriteAuthorizerImpl(
-      lc,
-      zeroConfig,
-      {
-        protocolVersion: PROTOCOL_VERSION,
-        tables: {
-          foo: {
-            row: {
-              update: {
-                postMutation: [allowIfAIsSubject],
-              },
+    setPermissions({
+      protocolVersion: PROTOCOL_VERSION,
+      tables: {
+        foo: {
+          row: {
+            update: {
+              postMutation: [allowIfAIsSubject],
             },
           },
         },
       },
-      replica,
-      'cg',
-    );
+    });
+
+    const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
 
     const op: UpdateOp = {
       op: 'update',

@@ -31,6 +31,13 @@ describe('view-syncer/snapshotter', () => {
     db.pragma('journal_mode = WAL2');
     db.exec(
       `
+        CREATE TABLE "zero.permissions" (
+          "lock"        INT PRIMARY KEY,
+          "permissions" JSON,
+          "hash"        TEXT,
+          _0_version    TEXT NOT NULL
+        );
+        INSERT INTO "zero.permissions" ("lock", "_0_version") VALUES (1, '01');
         CREATE TABLE "zero.schemaVersions" (
           "lock"                INT PRIMARY KEY,
           "minSupportedVersion" INTEGER,
@@ -103,6 +110,7 @@ describe('view-syncer/snapshotter', () => {
     issues: 'id',
     users: 'id',
     comments: 'id',
+    ['zero.permissions']: 'lock',
   });
 
   const zeroMessages = new ReplicationMessages(
@@ -419,6 +427,28 @@ describe('view-syncer/snapshotter', () => {
     expect(version).toBe('01');
 
     replicator.processTransaction('07', messages.truncate('users'));
+
+    const diff = s.advance(tableSpecs);
+    expect(diff.prev.version).toBe('01');
+    expect(diff.curr.version).toBe('07');
+    expect(diff.changes).toBe(1);
+
+    expect(() => [...diff]).toThrowError(ResetPipelinesSignal);
+  });
+
+  test('permissions change', () => {
+    const {version} = s.current();
+
+    expect(version).toBe('01');
+
+    replicator.processTransaction(
+      '07',
+      messages.update('zero.permissions', {
+        lock: 1,
+        permissions: '{"protocolVersion":1}',
+        hash: '12345',
+      }),
+    );
 
     const diff = s.advance(tableSpecs);
     expect(diff.prev.version).toBe('01');

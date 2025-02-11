@@ -401,6 +401,15 @@ class Diff implements SnapshotDiff {
               continue;
             }
 
+            if (
+              table === 'zero.permissions' &&
+              prevValue.permissions !== nextValue.permissions
+            ) {
+              throw new ResetPipelinesSignal(
+                `zero.permissions have changed ${prevValue.hash} => ${nextValue.hash}`,
+              );
+            }
+
             // Modify the values in place when converting to ZQL rows
             // This is safe since we're the first node in the iterator chain.
             if (prevValue) {

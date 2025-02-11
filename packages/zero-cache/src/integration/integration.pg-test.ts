@@ -22,8 +22,6 @@ import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/chang
 import type {InitConnectionMessage} from '../../../zero-protocol/src/connect.ts';
 import type {PokeStartMessage} from '../../../zero-protocol/src/poke.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import type {PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.ts';
 import type {ChangeStreamMessage} from '../services/change-source/protocol/current/downstream.ts';
 import {
   changeSourceUpstreamSchema,
@@ -326,18 +324,6 @@ describe('integration', {timeout: 30000}, () => {
   let customChangeSourceURI: string;
   let customDownstream: Promise<Sink<ChangeStreamMessage>>;
 
-  const SCHEMA = {
-    permissions: {
-      protocolVersion: PROTOCOL_VERSION,
-      tables: {},
-    } satisfies PermissionsConfig,
-    schema: {
-      version: 1,
-      tables: {},
-      relationships: {},
-    } satisfies Schema,
-  };
-
   const mockExit = vi
     .spyOn(process, 'exit')
     .mockImplementation(() => void 0 as never);
@@ -401,7 +387,6 @@ describe('integration', {timeout: 30000}, () => {
       ['ZERO_SHARD_PUBLICATIONS']: 'zero_all',
       ['ZERO_CHANGE_DB']: getConnectionURI(changeDB),
       ['ZERO_REPLICA_FILE']: replicaDbFile.path,
-      ['ZERO_SCHEMA_JSON']: JSON.stringify(SCHEMA),
       ['ZERO_NUM_SYNC_WORKERS']: '1',
     };
   }, 30000);

@@ -1,6 +1,5 @@
 /* eslint-disable */
 /// <reference path="./.sst/platform/config.d.ts" />
-import { readFileSync } from "fs";
 // Load .env file
 require("dotenv").config();
 
@@ -14,26 +13,6 @@ export default $config({
     };
   },
   async run() {
-    const loadSchemaJson = () => {
-      if (process.env.ZERO_SCHEMA_JSON) {
-        return process.env.ZERO_SCHEMA_JSON;
-      }
-
-      try {
-        const schema = readFileSync("zero-schema.json", "utf8");
-        // Parse and stringify to ensure single line
-        return JSON.stringify(JSON.parse(schema));
-      } catch (error) {
-        const e = error as Error;
-        console.error(`Failed to read schema file: ${e.message}`);
-        throw new Error(
-          "Schema must be provided via ZERO_SCHEMA_JSON env var or zero-schema.json file",
-        );
-      }
-    };
-
-    const schemaJson = loadSchemaJson();
-
     // S3 Bucket
     const replicationBucket = new sst.aws.Bucket(`replication-bucket`, {
       public: false,
@@ -68,7 +47,6 @@ export default $config({
       ZERO_AUTH_SECRET: process.env.ZERO_AUTH_SECRET!,
       AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID!,
       AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY!,
-      ZERO_SCHEMA_JSON: schemaJson,
       ZERO_LOG_FORMAT: "json",
       ZERO_REPLICA_FILE: "sync-replica.db",
       ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup`,

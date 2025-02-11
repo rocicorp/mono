@@ -2,6 +2,7 @@
 /* eslint-disable arrow-body-style */
 import {beforeEach, describe, expect, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
+import {h128} from '../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {
@@ -478,6 +479,14 @@ function toDbType(type: ValueType) {
 let writeAuthorizer: WriteAuthorizerImpl;
 beforeEach(() => {
   replica = new Database(lc, ':memory:');
+  replica.exec(`
+    CREATE TABLE "zero.permissions" (permissions JSON, hash TEXT);
+  `);
+  const permsJSON = JSON.stringify(permissions);
+  replica
+    .prepare(`INSERT INTO "zero.permissions" (permissions, hash) VALUES (?, ?)`)
+    .run(permsJSON, h128(permsJSON).toString(16));
+
   const sources = new Map<string, Source>();
   queryDelegate = {
     getSource: (name: string) => {
@@ -530,13 +539,7 @@ beforeEach(() => {
     must(queryDelegate.getSource(table.name));
   }
 
-  writeAuthorizer = new WriteAuthorizerImpl(
-    lc,
-    zeroConfig,
-    permissions,
-    replica,
-    'cg',
-  );
+  writeAuthorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
 });
 const lc = createSilentLogContext();
 
