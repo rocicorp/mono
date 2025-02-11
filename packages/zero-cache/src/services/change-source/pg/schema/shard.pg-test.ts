@@ -42,6 +42,7 @@ describe('change-source/pg', () => {
     ]);
 
     await expectTables(db, {
+      ['zero.permissions']: [{lock: true, permissions: null, hash: null}],
       ['zero.schemaVersions']: [
         {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
       ],
@@ -87,6 +88,7 @@ describe('change-source/pg', () => {
     ]);
 
     await expectTables(db, {
+      ['zero.permissions']: [{lock: true, permissions: null, hash: null}],
       ['zero.schemaVersions']: [
         {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
       ],
@@ -122,6 +124,7 @@ describe('change-source/pg', () => {
     ]);
 
     await expectTables(db, {
+      ['zero.permissions']: [{lock: true, permissions: null, hash: null}],
       ['zero.schemaVersions']: [
         {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
       ],
@@ -158,6 +161,7 @@ describe('change-source/pg', () => {
     ]);
 
     await expectTables(db, {
+      ['zero.permissions']: [{lock: true, permissions: null, hash: null}],
       ['zero.schemaVersions']: [
         {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
       ],
@@ -224,6 +228,7 @@ describe('change-source/pg', () => {
     ]);
 
     await expectTables(db, {
+      ['zero.permissions']: [{lock: true, permissions: null, hash: null}],
       ['zero.schemaVersions']: [
         {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
       ],
@@ -262,6 +267,7 @@ describe('change-source/pg', () => {
     ]);
 
     await expectTables(db, {
+      ['zero.permissions']: [{lock: true, permissions: null, hash: null}],
       ['zero.schemaVersions']: [
         {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
       ],

@@ -13,8 +13,8 @@ const SHARD_ID = 'shard_schema_test_id';
 
 // Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
-  dataVersion: 3,
-  schemaVersion: 3,
+  dataVersion: 4,
+  schemaVersion: 4,
   minSafeVersion: 1,
   lock: 'v',
 } as const;

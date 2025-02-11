@@ -160,6 +160,35 @@ describe('change-source/custom', () => {
       [
         'data',
         {
+          tag: 'create-table',
+          spec: {
+            schema: 'zero',
+            name: 'permissions',
+            primaryKey: ['lock'],
+            columns: {
+              lock: {pos: 0, dataType: 'bool', notNull: true},
+              permissions: {pos: 1, dataType: 'json'},
+              hash: {pos: 2, dataType: 'text'},
+            },
+          },
+        },
+      ],
+      [
+        'data',
+        {
+          tag: 'create-index',
+          spec: {
+            name: 'zero_permissions_key',
+            schema: 'zero',
+            tableName: 'permissions',
+            columns: {lock: 'ASC'},
+            unique: true,
+          },
+        },
+      ],
+      [
+        'data',
+        {
           tag: 'insert',
           relation: {
             schema: 'zero',

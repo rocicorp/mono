@@ -205,6 +205,10 @@ function getRequiredTables(
       lastMutationID: {type: 'number'},
       userID: {type: 'string'},
     },
+    [`zero.permissions`]: {
+      permissions: {type: 'json'},
+      hash: {type: 'string'},
+    },
     [`zero.schemaVersions`]: {
       minSupportedVersion: {type: 'number'},
       maxSupportedVersion: {type: 'number'},
