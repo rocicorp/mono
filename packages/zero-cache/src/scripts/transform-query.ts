@@ -8,8 +8,7 @@ import * as v from '../../../shared/src/valita.ts';
 import {transformAndHashQuery} from '../auth/read-authorizer.ts';
 import {ZERO_ENV_VAR_PREFIX, zeroOptions} from '../config/zero-config.ts';
 import {pgClient} from '../types/pg.ts';
-import {deployPermissionsOptions} from './deploy-permissions-options.ts';
-import {loadPermissions} from './deploy-permissions.ts';
+import {deployPermissionsOptions, loadPermissions} from './permissions.ts';
 
 const options = {
   cvr: zeroOptions.cvr,
@@ -29,7 +28,7 @@ const config = parseOptions(
 );
 
 const lc = new LogContext('debug', {}, consoleLogSink);
-const permissions = await loadPermissions(lc, config.schema);
+const permissions = await loadPermissions(lc, config.schema.path);
 
 const cvrDB = pgClient(
   new LogContext('debug', undefined, consoleLogSink),
