@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/naming-convention */
 /**
  * Test suite that
  * 1. Downloads the chinook dataset
@@ -32,19 +33,38 @@ import type {JSONValue} from '../../../../shared/src/json.ts';
 let pg: PostgresDB;
 let sqlite: Database;
 let queryDelegate: QueryDelegate;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyQuery = Query<any, any, any>;
 
 type Schema = typeof schema;
-let albumQuery: Query<Schema, 'album'>;
-let artistQuery: Query<Schema, 'artist'>;
-let customerQuery: Query<Schema, 'customer'>;
-let employeeQuery: Query<Schema, 'employee'>;
-let genreQuery: Query<Schema, 'genre'>;
-let invoiceQuery: Query<Schema, 'invoice'>;
-let invoiceLineQuery: Query<Schema, 'invoice_line'>;
-let mediaTypeQuery: Query<Schema, 'media_type'>;
-let playlistQuery: Query<Schema, 'playlist'>;
-let playlistTrackQuery: Query<Schema, 'playlist_track'>;
-let trackQuery: Query<Schema, 'track'>;
+const queries: {
+  album: Query<Schema, 'album'>;
+  artist: Query<Schema, 'artist'>;
+  customer: Query<Schema, 'customer'>;
+  employee: Query<Schema, 'employee'>;
+  genre: Query<Schema, 'genre'>;
+  media_type: Query<Schema, 'media_type'>;
+  playlist: Query<Schema, 'playlist'>;
+  playlist_track: Query<Schema, 'playlist_track'>;
+  invoice: Query<Schema, 'invoice'>;
+  invoice_line: Query<Schema, 'invoice_line'>;
+  track: Query<Schema, 'track'>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+} = {
+  album: null,
+  artist: null,
+  customer: null,
+  employee: null,
+  genre: null,
+  media_type: null,
+  playlist: null,
+  playlist_track: null,
+  invoice: null,
+  invoice_line: null,
+  track: null,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+} as any;
+const tables = Object.keys(queries) as (keyof typeof queries)[];
 
 const lc = createSilentLogContext();
 const logConfig: LogConfig = {
@@ -61,42 +81,77 @@ beforeAll(async () => {
 
   queryDelegate = newQueryDelegate(lc, logConfig, sqlite, schema);
 
-  albumQuery = newQuery(queryDelegate, schema, 'album');
-  artistQuery = newQuery(queryDelegate, schema, 'artist');
-  customerQuery = newQuery(queryDelegate, schema, 'customer');
-  employeeQuery = newQuery(queryDelegate, schema, 'employee');
-  genreQuery = newQuery(queryDelegate, schema, 'genre');
-  invoiceQuery = newQuery(queryDelegate, schema, 'invoice');
-  invoiceLineQuery = newQuery(queryDelegate, schema, 'invoice_line');
-  mediaTypeQuery = newQuery(queryDelegate, schema, 'media_type');
-  playlistQuery = newQuery(queryDelegate, schema, 'playlist');
-  playlistTrackQuery = newQuery(queryDelegate, schema, 'playlist_track');
-  trackQuery = newQuery(queryDelegate, schema, 'track');
+  queries.album = newQuery(queryDelegate, schema, 'album');
+  queries.artist = newQuery(queryDelegate, schema, 'artist');
+  queries.customer = newQuery(queryDelegate, schema, 'customer');
+  queries.employee = newQuery(queryDelegate, schema, 'employee');
+  queries.genre = newQuery(queryDelegate, schema, 'genre');
+  queries.invoice = newQuery(queryDelegate, schema, 'invoice');
+  queries.invoice_line = newQuery(queryDelegate, schema, 'invoice_line');
+  queries.media_type = newQuery(queryDelegate, schema, 'media_type');
+  queries.playlist = newQuery(queryDelegate, schema, 'playlist');
+  queries.playlist_track = newQuery(queryDelegate, schema, 'playlist_track');
+  queries.track = newQuery(queryDelegate, schema, 'track');
 });
 
 describe('basic select', () => {
-  test.each([
-    ['album', () => albumQuery],
-    ['artist', () => artistQuery],
-    ['customer', () => customerQuery],
-    ['employee', () => employeeQuery],
-    ['genre', () => genreQuery],
-    ['invoice', () => invoiceQuery],
-    ['invoice_line', () => invoiceLineQuery],
-    ['media_type', () => mediaTypeQuery],
-    ['playlist', () => playlistQuery],
-    ['playlist_track', () => playlistTrackQuery],
-    ['track', () => trackQuery],
-  ])('select * from %s', async (_table, q) => {
-    const query = q();
-    const pgResult = await runZqlAsSql(pg, query);
-    const zqlResult = query.run();
-    // In failure output:
-    // `-` is PG
-    // `+` is ZQL
-    expect(zqlResult).toEqual(pgResult);
+  test.each(tables.map(table => [table]))('select * from %s', async table => {
+    await checkZqlAndSql(pg, queries[table]);
+  });
+
+  test.each(tables.map(table => [table]))(
+    'select * from %s limit 100',
+    async table => {
+      await checkZqlAndSql(pg, queries[table].limit(100));
+    },
+  );
+});
+
+describe('1 level related', () => {
+  test.each(tables.map(table => [table]))('%s w/ related', async table => {
+    const brokenRelationships = [
+      // Bad type conversion. We need to convert types when doing JSON aggregation
+      // as `postgresTypeConfig` does.
+      'supportRep',
+      'reportsTo',
+    ];
+    const query = queries[table] as AnyQuery;
+    const relationships = Object.keys(
+      (schema.relationships as Record<string, Record<string, unknown>>)[
+        table
+      ] ?? {},
+    );
+
+    for (const r of relationships) {
+      if (brokenRelationships.includes(r)) {
+        continue;
+      }
+      await checkZqlAndSql(pg, query.related(r));
+    }
+
+    // Junction edges do not correctly handle limits
+    // in ZQL 😬
+    const brokenLimits = ['tracks'];
+    for (const r of relationships) {
+      if (brokenRelationships.includes(r) || brokenLimits.includes(r)) {
+        continue;
+      }
+      await checkZqlAndSql(pg, query.related(r, q => q.limit(100)).limit(100));
+    }
   });
 });
+
+async function checkZqlAndSql(
+  pg: PostgresDB,
+  query: Query<Schema, keyof Schema['tables']>,
+) {
+  const pgResult = await runZqlAsSql(pg, query);
+  const zqlResult = query.run();
+  // In failure output:
+  // `-` is PG
+  // `+` is ZQL
+  expect(zqlResult).toEqual(pgResult);
+}
 
 function runZqlAsSql(
   pg: PostgresDB,
