@@ -354,6 +354,11 @@ textarea.autoResize {
   margin: 0;
   display: flex;
   align-items: center;
+
+  .list-view-title {
+    position: relative;
+    top: -4px;
+  }
 }
 
 .list-view-header.search-mode {
@@ -415,6 +420,8 @@ textarea.autoResize {
   padding: 0.25rem 0.5rem;
   vertical-align: middle;
   margin-left: 1rem;
+  position: relative;
+  top: -2px;
 }
 
 /* Filtering */
