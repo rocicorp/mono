@@ -16,7 +16,7 @@ import {ZERO_ENV_VAR_PREFIX, zeroOptions} from '../config/zero-config.ts';
 import {ensureGlobalTables} from '../services/change-source/pg/schema/shard.ts';
 import {pgClient, type PostgresDB} from '../types/pg.ts';
 
-export const deployOptions = {
+export const deployPermissionsOptions = {
   schema: {
     path: {
       type: v.string().default('schema.ts'),
@@ -62,7 +62,7 @@ export const deployOptions = {
 };
 
 const config = parseOptions(
-  deployOptions,
+  deployPermissionsOptions,
   process.argv.slice(2),
   ZERO_ENV_VAR_PREFIX,
 );
@@ -176,5 +176,5 @@ if (config.output.file) {
 } else {
   lc.error?.(`No --output-file or --upstream-db specified`);
   // Shows the usage text.
-  parseOptions(deployOptions, ['--help'], ZERO_ENV_VAR_PREFIX);
+  parseOptions(deployPermissionsOptions, ['--help'], ZERO_ENV_VAR_PREFIX);
 }
