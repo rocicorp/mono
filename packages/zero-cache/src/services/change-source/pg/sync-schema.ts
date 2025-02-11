@@ -25,11 +25,11 @@ export async function initSyncSchema(
 
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     // There's no incremental migration from v1. Just reset the replica.
-    3: {
+    4: {
       migrateSchema: () => {
         throw new AutoResetSignal('upgrading replica to new schema');
       },
-      minSafeVersion: 3,
+      minSafeVersion: 4,
     },
   };
 

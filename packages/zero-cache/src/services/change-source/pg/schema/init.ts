@@ -10,8 +10,6 @@ import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
 import type {ShardConfig} from '../shard-config.ts';
 import {
   dropShard,
-  ensureGlobalTables,
-  METADATA_PUBLICATION_PREFIX,
   setupTablesAndReplication,
   unescapedSchema,
 } from './shard.ts';
@@ -56,22 +54,11 @@ async function runShardMigrations(
   };
 
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
-    3: {
+    4: {
       migrateSchema: () => {
         throw new AutoResetSignal('resetting to upgrade shard schema');
       },
-      minSafeVersion: 3,
-    },
-    // The zero.permissions table was added to the global zero shard.
-    4: {
-      migrateSchema: async (_, tx) => {
-        await ensureGlobalTables(tx);
-
-        const pub = METADATA_PUBLICATION_PREFIX + shard.id;
-        await tx`ALTER PUBLICATION ${tx(pub)} ADD TABLE zero.permissions`;
-        // Touch the row to replicate the existing contents.
-        await tx`UPDATE zero.permissions SET permissions = permissions`;
-      },
+      minSafeVersion: 4,
     },
   };
 

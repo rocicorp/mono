@@ -49,7 +49,7 @@ export default $config({
       AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY!,
       ZERO_LOG_FORMAT: "json",
       ZERO_REPLICA_FILE: "sync-replica.db",
-      ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup`,
+      ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250211-00`,
       ZERO_IMAGE_URL: process.env.ZERO_IMAGE_URL!,
     };
 
