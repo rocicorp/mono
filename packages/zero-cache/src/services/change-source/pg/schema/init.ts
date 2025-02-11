@@ -6,11 +6,13 @@ import {
   type Migration,
 } from '../../../../db/migration.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
+import {id} from '../../../../types/sql.ts';
 import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
 import type {ShardConfig} from '../shard-config.ts';
 import {
   dropShard,
   ensureGlobalTables,
+  METADATA_PUBLICATION_PREFIX,
   setupTablesAndReplication,
   unescapedSchema,
 } from './shard.ts';
@@ -47,10 +49,10 @@ export async function updateShardSchema(
 async function runShardMigrations(
   lc: LogContext,
   db: PostgresDB,
-  shardConfig: ShardConfig,
+  shard: ShardConfig,
 ): Promise<void> {
   const setupMigration: Migration = {
-    migrateSchema: (lc, tx) => setupTablesAndReplication(lc, tx, shardConfig),
+    migrateSchema: (lc, tx) => setupTablesAndReplication(lc, tx, shard),
     minSafeVersion: 1,
   };
 
@@ -62,13 +64,20 @@ async function runShardMigrations(
       minSafeVersion: 3,
     },
     // The zero.permissions table was added to the global zero shard.
-    4: {migrateSchema: (_, tx) => ensureGlobalTables(tx)},
+    4: {
+      migrateSchema: async (_, tx) => {
+        await ensureGlobalTables(tx);
+
+        const pub = METADATA_PUBLICATION_PREFIX + shard.id;
+        await tx`ALTER PUBLICATION ${id(pub)} ADD TABLE zero.permissions`;
+      },
+    },
   };
 
   await runSchemaMigrations(
     lc,
-    `upstream-shard-${shardConfig.id}`,
-    unescapedSchema(shardConfig.id),
+    `upstream-shard-${shard.id}`,
+    unescapedSchema(shard.id),
     db,
     setupMigration,
     schemaVersionMigrationMap,

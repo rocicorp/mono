@@ -290,6 +290,18 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
       tag: 'insert',
       relation: {
         schema: 'zero',
+        name: 'permissions',
+        keyColumns: ['lock'],
+      },
+      new: {lock: true, permissions: null, hash: null},
+    },
+  ],
+  [
+    'data',
+    {
+      tag: 'insert',
+      relation: {
+        schema: 'zero',
         name: 'schemaVersions',
         keyColumns: ['lock'],
       },
