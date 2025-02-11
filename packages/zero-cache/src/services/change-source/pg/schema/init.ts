@@ -6,7 +6,6 @@ import {
   type Migration,
 } from '../../../../db/migration.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
-import {id} from '../../../../types/sql.ts';
 import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
 import type {ShardConfig} from '../shard-config.ts';
 import {
@@ -69,7 +68,7 @@ async function runShardMigrations(
         await ensureGlobalTables(tx);
 
         const pub = METADATA_PUBLICATION_PREFIX + shard.id;
-        await tx`ALTER PUBLICATION ${id(pub)} ADD TABLE zero.permissions`;
+        await tx`ALTER PUBLICATION ${tx(pub)} ADD TABLE zero.permissions`;
         // Touch the row to replicate the existing contents.
         await tx`UPDATE zero.permissions SET permissions = permissions`;
       },
