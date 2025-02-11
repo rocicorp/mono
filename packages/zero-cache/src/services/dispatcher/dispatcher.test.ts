@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {parseSyncPath} from './sync-dispatcher.ts';
+import {parseSyncPath} from './dispatcher.ts';
 
 test.each([
   ['/sync/v1/connect', {version: '1'}],
