@@ -1,5 +1,6 @@
 import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import type {
   DeleteOp,
   InsertOp,
@@ -62,7 +63,7 @@ describe('normalize ops', () => {
     const authorizer = new WriteAuthorizerImpl(
       lc,
       zeroConfig,
-      {},
+      undefined,
       replica,
       'cg',
     );
@@ -87,7 +88,7 @@ describe('normalize ops', () => {
     const authorizer = new WriteAuthorizerImpl(
       lc,
       zeroConfig,
-      {},
+      undefined,
       replica,
       'cg',
     );
@@ -116,9 +117,12 @@ describe('pre & post mutation', () => {
       lc,
       zeroConfig,
       {
-        foo: {
-          row: {
-            delete: [allowIfSubject],
+        protocolVersion: PROTOCOL_VERSION,
+        tables: {
+          foo: {
+            row: {
+              delete: [allowIfSubject],
+            },
           },
         },
       },
@@ -147,9 +151,12 @@ describe('pre & post mutation', () => {
       lc,
       zeroConfig,
       {
-        foo: {
-          row: {
-            insert: [allowIfSubject],
+        protocolVersion: PROTOCOL_VERSION,
+        tables: {
+          foo: {
+            row: {
+              insert: [allowIfSubject],
+            },
           },
         },
       },
@@ -178,10 +185,13 @@ describe('pre & post mutation', () => {
       lc,
       zeroConfig,
       {
-        foo: {
-          row: {
-            update: {
-              preMutation: [allowIfSubject],
+        protocolVersion: PROTOCOL_VERSION,
+        tables: {
+          foo: {
+            row: {
+              update: {
+                preMutation: [allowIfSubject],
+              },
             },
           },
         },
@@ -211,10 +221,13 @@ describe('pre & post mutation', () => {
       lc,
       zeroConfig,
       {
-        foo: {
-          row: {
-            update: {
-              postMutation: [allowIfAIsSubject],
+        protocolVersion: PROTOCOL_VERSION,
+        tables: {
+          foo: {
+            row: {
+              update: {
+                postMutation: [allowIfAIsSubject],
+              },
             },
           },
         },

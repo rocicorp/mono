@@ -1328,6 +1328,215 @@ test('exists junction', () => {
   `);
 });
 
+test('duplicative exists junction', () => {
+  const {sources, getSource} = testSources();
+  const sink = new Catch(
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        limit: 2,
+        where: {
+          type: 'and',
+          conditions: [
+            {
+              type: 'correlatedSubquery',
+              related: {
+                system: 'client',
+                correlation: {parentField: ['id'], childField: ['userID']},
+                subquery: {
+                  table: 'userStates',
+                  alias: 'zsubq_userStates',
+                  orderBy: [
+                    ['userID', 'asc'],
+                    ['stateCode', 'asc'],
+                  ],
+                },
+              },
+              op: 'EXISTS',
+            },
+            {
+              type: 'correlatedSubquery',
+              related: {
+                system: 'client',
+                correlation: {parentField: ['id'], childField: ['userID']},
+                subquery: {
+                  table: 'userStates',
+                  alias: 'zsubq_userStates',
+                  orderBy: [
+                    ['userID', 'asc'],
+                    ['stateCode', 'asc'],
+                  ],
+                },
+              },
+              op: 'EXISTS',
+            },
+          ],
+        },
+      },
+      {
+        getSource,
+        createStorage: () => new MemoryStorage(),
+      },
+    ),
+  );
+
+  expect(sink.fetch()).toMatchInlineSnapshot(`
+    [
+      {
+        "relationships": {
+          "zsubq_userStates_0": [
+            {
+              "relationships": {},
+              "row": {
+                "stateCode": "HI",
+                "userID": 1,
+              },
+            },
+          ],
+          "zsubq_userStates_1": [
+            {
+              "relationships": {},
+              "row": {
+                "stateCode": "HI",
+                "userID": 1,
+              },
+            },
+          ],
+        },
+        "row": {
+          "id": 1,
+          "name": "aaron",
+          "recruiterID": null,
+        },
+      },
+      {
+        "relationships": {
+          "zsubq_userStates_0": [
+            {
+              "relationships": {},
+              "row": {
+                "stateCode": "AZ",
+                "userID": 3,
+              },
+            },
+            {
+              "relationships": {},
+              "row": {
+                "stateCode": "CA",
+                "userID": 3,
+              },
+            },
+          ],
+          "zsubq_userStates_1": [
+            {
+              "relationships": {},
+              "row": {
+                "stateCode": "AZ",
+                "userID": 3,
+              },
+            },
+            {
+              "relationships": {},
+              "row": {
+                "stateCode": "CA",
+                "userID": 3,
+              },
+            },
+          ],
+        },
+        "row": {
+          "id": 3,
+          "name": "greg",
+          "recruiterID": 1,
+        },
+      },
+    ]
+  `);
+
+  // erik moves to hawaii
+  sources.userStates.push({type: 'add', row: {userID: 2, stateCode: 'HI'}});
+
+  expect(sink.pushes).toMatchInlineSnapshot(`
+    [
+      {
+        "node": {
+          "relationships": {
+            "zsubq_userStates_0": [
+              {
+                "relationships": {},
+                "row": {
+                  "stateCode": "AZ",
+                  "userID": 3,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "stateCode": "CA",
+                  "userID": 3,
+                },
+              },
+            ],
+            "zsubq_userStates_1": [
+              {
+                "relationships": {},
+                "row": {
+                  "stateCode": "AZ",
+                  "userID": 3,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "stateCode": "CA",
+                  "userID": 3,
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": 3,
+            "name": "greg",
+            "recruiterID": 1,
+          },
+        },
+        "type": "remove",
+      },
+      {
+        "node": {
+          "relationships": {
+            "zsubq_userStates_0": [
+              {
+                "relationships": {},
+                "row": {
+                  "stateCode": "HI",
+                  "userID": 2,
+                },
+              },
+            ],
+            "zsubq_userStates_1": [
+              {
+                "relationships": {},
+                "row": {
+                  "stateCode": "HI",
+                  "userID": 2,
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": 2,
+            "name": "erik",
+            "recruiterID": 1,
+          },
+        },
+        "type": "add",
+      },
+    ]
+  `);
+});
+
 test('exists junction with limit, remove row after limit, and last row', () => {
   const {sources, getSource} = testSources();
   const sink = new Catch(
