@@ -3084,49 +3084,44 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
       ],
     }),
   });
-  const commentView = z.query.comment.materialize();
   const issueView = z.query.issue.materialize();
 
-  await expect(
-    z.mutateBatch(async m => {
-      await m.issue.insert({id: 'a', title: 'A'});
-      await z.mutate.issue.insert({id: 'b', title: 'B'});
-    }),
-  ).rejects.toThrow('Cannot call mutate.issue.insert inside a batch');
+  await z.mutateBatch(async m => {
+    // This works even with the nested await because what batch is doing is
+    // gathering up the mutations as data. No transaction is actually opened
+    // until the callback returns.
+    await m.issue.insert({id: 'a', title: 'A'});
+    await z.mutate.issue.insert({id: 'b', title: 'B'});
+  });
 
-  // make sure that we did not update the issue collection.
-  expect(issueView.data).toEqual([]);
-
-  await z.mutate.comment.insert({id: 'a', text: 'A', issueID: 'a'});
-  expect(commentView.data).toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
-
-  await expect(
-    z.mutateBatch(async () => {
-      await z.mutate.comment.update({id: 'a', text: 'A2'});
-    }),
-  ).rejects.toThrow('Cannot call mutate.comment.update inside a batch');
-  // make sure that we did not update the comment collection.
-  expect(commentView.data).toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
+  expect(issueView.data).toEqual([
+    {
+      id: 'a',
+      title: 'A',
+    },
+    {
+      id: 'b',
+      title: 'B',
+    },
+  ]);
 
   await expect(
     z.mutateBatch(async () => {
-      await z.mutate.comment.upsert({id: 'a', text: 'A2', issueID: 'a'});
+      // Because this mutate happens before the batch mutation even starts, it
+      // still ends up applied.
+      await z.mutate.issue.delete({id: 'a'});
+      throw new Error('bonk');
     }),
-  ).rejects.toThrow('Cannot call mutate.comment.upsert inside a batch');
-  // make sure that we did not update the comment collection.
-  expect(commentView.data).toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
+  ).rejects.toThrow('bonk');
 
-  await expect(
-    z.mutateBatch(async () => {
-      await z.mutate.comment.delete({id: 'a'});
-    }),
-  ).rejects.toThrow('Cannot call mutate.comment.delete inside a batch');
-  // make sure that we did not delete the comment row
-  expect(commentView.data).toEqual([{id: 'a', text: 'A', issueID: 'a'}]);
+  expect(issueView.data).toEqual([{id: 'b', title: 'B'}]);
 
-  await expect(
-    z.mutateBatch(async () => {
-      await z.mutateBatch(() => {});
-    }),
-  ).rejects.toThrow('Cannot call mutate inside a batch');
+  await z.mutateBatch(async m => {
+    await m.issue.insert({id: 'c', title: 'C'});
+    await z.mutateBatch(async n => {
+      await n.issue.delete({id: 'b'});
+    });
+  });
+
+  expect(issueView.data).toEqual([{id: 'c', title: 'C'}]);
 });
