@@ -1,6 +1,7 @@
 import {must} from '../../../shared/src/must.ts';
 import {getZeroConfig} from '../config/zero-config.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
+import {PusherService} from '../services/mutagen/pusher.ts';
 import {
   parentWorker,
   singleProcessMode,
@@ -17,8 +18,14 @@ function runWorker(
   const config = getZeroConfig(env, args.slice(1));
   const lc = createLogContext(config, {worker: 'mutator'});
 
-  // TODO: create `PusherFactory`
-  return runUntilKilled(lc, parent, new Mutator());
+  const pusherFactory = (id: string) =>
+    new PusherService(
+      lc.withContext('clientGroupID', id),
+      id,
+      must(config.push.url),
+      config.push.apiKey,
+    );
+  return runUntilKilled(lc, parent, new Mutator(lc, pusherFactory, parent));
 }
 
 if (!singleProcessMode()) {
