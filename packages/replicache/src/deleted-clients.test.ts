@@ -7,7 +7,7 @@ import {
 import {deepFreeze} from './frozen-json.ts';
 import {withRead, withWrite} from './with-transactions.ts';
 
-describe('legacy format should also work', async () => {
+describe('legacy format should also work', () => {
   const dagStore = new TestStore();
 
   test.each([
