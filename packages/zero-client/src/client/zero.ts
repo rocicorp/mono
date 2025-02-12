@@ -81,12 +81,7 @@ import {
   makeCRUDMutate,
   makeCRUDMutator,
 } from './crud.ts';
-import {
-  type CustomMutatorDefs,
-  type CustomMutatorImpl,
-  type MakeCustomMutatorInterfaces,
-  makeReplicacheMutator,
-} from './custom.ts';
+import {makeReplicacheMutator} from './custom.ts';
 import {DeleteClientsManager} from './delete-clients-manager.ts';
 import {shouldEnableAnalytics} from './enable-analytics.ts';
 import {
@@ -128,6 +123,11 @@ import {
 import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
+import type {
+  CustomMutatorDefs,
+  CustomMutatorImpl,
+  MakeCustomMutatorInterfaces,
+} from '../../../zql/src/mutate/custom.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;

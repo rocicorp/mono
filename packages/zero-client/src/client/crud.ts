@@ -1,4 +1,3 @@
-import type {Expand} from '../../../shared/src/expand.ts';
 import type {ReadonlyJSONObject} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
@@ -14,44 +13,16 @@ import {
   type UpsertOp,
 } from '../../../zero-protocol/src/push.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import type {
-  SchemaValueToTSType,
-  TableSchema,
-} from '../../../zero-schema/src/table-schema.ts';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {IVMSourceBranch} from './ivm-source-repo.ts';
 import {toPrimaryKeyString} from './keys.ts';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.ts';
-
-export type InsertValue<S extends TableSchema> = Expand<
-  PrimaryKeyFields<S> & {
-    [K in keyof S['columns'] as S['columns'][K] extends {optional: true}
-      ? K
-      : never]?: SchemaValueToTSType<S['columns'][K]> | undefined;
-  } & {
-    [K in keyof S['columns'] as S['columns'][K] extends {optional: true}
-      ? never
-      : K]: SchemaValueToTSType<S['columns'][K]>;
-  }
->;
-
-export type UpsertValue<S extends TableSchema> = InsertValue<S>;
-
-export type UpdateValue<S extends TableSchema> = Expand<
-  PrimaryKeyFields<S> & {
-    [K in keyof S['columns']]?:
-      | SchemaValueToTSType<S['columns'][K]>
-      | undefined;
-  }
->;
-
-export type DeleteID<S extends TableSchema> = Expand<PrimaryKeyFields<S>>;
-
-type PrimaryKeyFields<S extends TableSchema> = {
-  [K in Extract<
-    S['primaryKey'][number],
-    keyof S['columns']
-  >]: SchemaValueToTSType<S['columns'][K]>;
-};
+import type {
+  InsertValue,
+  UpdateValue,
+  UpsertValue,
+  DeleteID,
+} from '../../../zql/src/mutate/custom.ts';
 
 /**
  * This is the type of the generated mutate.<name>.<verb> function.
