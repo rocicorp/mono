@@ -53,6 +53,14 @@ export const deployPermissionsOptions = {
       ],
     },
   },
+
+  force: {
+    type: v.boolean().default(false),
+    desc: [
+      `Deploy to upstream even if validation fails. Use at your own risk.`,
+    ],
+    alias: 'f',
+  },
 };
 
 export async function loadPermissions(

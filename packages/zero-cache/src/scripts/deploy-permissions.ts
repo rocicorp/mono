@@ -3,9 +3,21 @@ import 'dotenv/config';
 import {writeFile} from 'node:fs/promises';
 import {literal} from 'pg-format';
 import {parseOptions} from '../../../shared/src/options.ts';
-import {type PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.ts';
+import {mapCondition} from '../../../zero-protocol/src/ast.ts';
+import {
+  type AssetPermissions,
+  type PermissionsConfig,
+  type Rule,
+} from '../../../zero-schema/src/compiled-permissions.ts';
+import {validator} from '../../../zero-schema/src/name-mapper.ts';
 import {ZERO_ENV_VAR_PREFIX} from '../config/zero-config.ts';
-import {ensureGlobalTables} from '../services/change-source/pg/schema/shard.ts';
+import {getPublicationInfo} from '../services/change-source/pg/schema/published.ts';
+import {
+  APP_PUBLICATION_PREFIX,
+  ensureGlobalTables,
+  INTERNAL_PUBLICATION_PREFIX,
+} from '../services/change-source/pg/schema/shard.ts';
+import {liteTableName} from '../types/names.ts';
 import {pgClient, type PostgresDB} from '../types/pg.ts';
 import {deployPermissionsOptions, loadPermissions} from './permissions.ts';
 
@@ -15,27 +27,76 @@ const config = parseOptions(
   ZERO_ENV_VAR_PREFIX,
 );
 
+const lc = new LogContext('debug', {}, consoleLogSink);
+
 async function validatePermissions(
-  _lc: LogContext,
-  _db: PostgresDB,
-  _permissions: PermissionsConfig,
+  db: PostgresDB,
+  permissions: PermissionsConfig,
 ) {
-  // TODO: Validate that the permissions rules match the upstream table / column names.
+  const pubnames = await db.unsafe<{pubname: string}[]>(`
+  SELECT pubname FROM pg_publication 
+    WHERE pubname LIKE '${APP_PUBLICATION_PREFIX}%'
+       OR pubname LIKE '${INTERNAL_PUBLICATION_PREFIX}%'`);
+  if (pubnames.length === 0) {
+    failWithMessage(
+      `zero-cache has not yet initialized the upstream database.\n` +
+        `Unable to validate permissions.`,
+    );
+  }
+  const {tables} = await getPublicationInfo(
+    db,
+    pubnames.map(p => p.pubname),
+  );
+  const tablesToColumns = new Map(
+    tables.map(t => [liteTableName(t), Object.keys(t.columns)]),
+  );
+  const validate = validator(tablesToColumns);
+  try {
+    for (const [table, perms] of Object.entries(permissions.tables)) {
+      const validateRule = ([_, cond]: Rule) => {
+        mapCondition(cond, table, validate);
+      };
+      const validateAsset = (asset: AssetPermissions | undefined) => {
+        asset?.select?.forEach(validateRule);
+        asset?.delete?.forEach(validateRule);
+        asset?.insert?.forEach(validateRule);
+        asset?.update?.preMutation?.forEach(validateRule);
+        asset?.update?.postMutation?.forEach(validateRule);
+      };
+      validateAsset(perms.row);
+      if (perms.cell) {
+        Object.values(perms.cell).forEach(validateAsset);
+      }
+    }
+  } catch (e) {
+    failWithMessage(String(e));
+  }
+  lc.debug?.(`Validated permissions rules`);
+}
+
+function failWithMessage(msg: string) {
+  lc.error?.(msg);
+  lc.info?.('\nUse --force to deploy at your own risk.\n');
+  process.exit(-1);
 }
 
 async function deployPermissions(
-  lc: LogContext,
   upstreamURI: string,
   permissions: PermissionsConfig,
+  force: boolean,
 ) {
   const db = pgClient(lc, upstreamURI);
   try {
-    await validatePermissions(lc, db, permissions);
     await ensureGlobalTables(db);
 
-    lc.info?.(`Deploying permissions to upstream@${db.options.host}`);
-
     const {hash, changed} = await db.begin(async tx => {
+      if (force) {
+        lc.warn?.(`--force specified. Skipping validation.`);
+      } else {
+        await validatePermissions(tx, permissions);
+      }
+
+      lc.info?.(`Deploying permissions to upstream@${db.options.host}`);
       const [{hash: beforeHash}] = await tx<{hash: string}[]>`
         SELECT hash from zero.permissions`;
       const [{hash}] = await tx<{hash: string}[]>`
@@ -54,7 +115,6 @@ async function deployPermissions(
 }
 
 async function writePermissionsFile(
-  lc: LogContext,
   perms: PermissionsConfig,
   file: string,
   format: 'sql' | 'json',
@@ -69,18 +129,15 @@ async function writePermissionsFile(
   lc.info?.(`Wrote permissions ${format} to ${config.output.file}`);
 }
 
-const lc = new LogContext('debug', {}, consoleLogSink);
-
 const permissions = await loadPermissions(lc, config.schema.path);
 if (config.output.file) {
   await writePermissionsFile(
-    lc,
     permissions,
     config.output.file,
     config.output.format,
   );
 } else if (config.upstream.db) {
-  await deployPermissions(lc, config.upstream.db, permissions);
+  await deployPermissions(config.upstream.db, permissions, config.force);
 } else {
   lc.error?.(`No --output-file or --upstream-db specified`);
   // Shows the usage text.

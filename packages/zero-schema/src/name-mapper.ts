@@ -56,6 +56,27 @@ function createMapperFrom(
   return new NameMapper(mapping);
 }
 
+/**
+ * Returns an "identity" NameMapper that simply serves the purpose
+ * of validating that all table and column names conform to the
+ * specified `tablesToColumns` map.
+ */
+export function validator(tablesToColumns: Map<string, string[]>): NameMapper {
+  const identity = new Map(
+    [...tablesToColumns.entries()].map(([tableName, columns]) => {
+      return [
+        tableName,
+        {
+          tableName,
+          columns: Object.fromEntries(columns.map(c => [c, c])),
+          allColumnsSame: true,
+        },
+      ];
+    }),
+  );
+  return new NameMapper(identity);
+}
+
 export class NameMapper {
   readonly #tables = new Map<string, DestNames>();
 
