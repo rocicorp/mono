@@ -40,7 +40,6 @@ import {
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import * as ConnectionState from './connection-state-enum.ts';
-import type {CustomMutatorDefs} from './custom.ts';
 import type {DeleteClientsManager} from './delete-clients-manager.ts';
 import type {WSString} from './http-string.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';
@@ -64,6 +63,7 @@ import {
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
 } from './zero.ts';
+import type {CustomMutatorDefs} from '../../../zql/src/mutate/custom.ts';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;

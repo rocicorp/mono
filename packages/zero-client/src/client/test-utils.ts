@@ -25,7 +25,6 @@ import type {
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import * as ConnectionState from './connection-state-enum.ts';
-import type {CustomMutatorDefs} from './custom.ts';
 import type {LogOptions} from './log-options.ts';
 import type {ZeroOptions} from './options.ts';
 import {
@@ -36,6 +35,7 @@ import {
   getInternalReplicacheImplForTesting,
   onSetConnectionStateSymbol,
 } from './zero.ts';
+import type {CustomMutatorDefs} from '../../../zql/src/mutate/custom.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type ErrorKind = Enum<typeof ErrorKind>;

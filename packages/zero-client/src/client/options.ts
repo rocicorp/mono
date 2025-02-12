@@ -2,7 +2,7 @@ import type {LogLevel} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import type {CustomMutatorDefs} from './custom.ts';
+import type {CustomMutatorDefs} from '../../../zql/src/mutate/custom.ts';
 
 /**
  * Configuration for {@linkcode Zero}.
