@@ -364,6 +364,8 @@ textarea.autoResize {
 
 .list-view-header.search-mode {
   margin: -5px;
+  position: relative;
+  top: -3px;
 }
 
 .sort-control-container {
