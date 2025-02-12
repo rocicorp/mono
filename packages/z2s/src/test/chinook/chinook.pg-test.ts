@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/naming-convention */
 /**
  * Test suite that
@@ -29,15 +30,17 @@ import type {Query} from '../../../../zql/src/query/query.ts';
 import {formatPg} from '../../sql.ts';
 import {compile} from '../../compiler.ts';
 import type {JSONValue} from '../../../../shared/src/json.ts';
+import {MemorySource} from '../../../../zql/src/ivm/memory-source.ts';
+import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../../zql/src/query/test/query-delegate.ts';
 
 let pg: PostgresDB;
 let sqlite: Database;
-let queryDelegate: QueryDelegate;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let zqliteQueryDelegate: QueryDelegate;
+let memoryQueryDelegate: QueryDelegate;
 type AnyQuery = Query<any, any, any>;
 
 type Schema = typeof schema;
-const queries: {
+type Queries = {
   album: Query<Schema, 'album'>;
   artist: Query<Schema, 'artist'>;
   customer: Query<Schema, 'customer'>;
@@ -49,8 +52,8 @@ const queries: {
   invoice: Query<Schema, 'invoice'>;
   invoice_line: Query<Schema, 'invoice_line'>;
   track: Query<Schema, 'track'>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-} = {
+};
+const zqliteQueries: Queries = {
   album: null,
   artist: null,
   customer: null,
@@ -62,9 +65,9 @@ const queries: {
   invoice: null,
   invoice_line: null,
   track: null,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } as any;
-const tables = Object.keys(queries) as (keyof typeof queries)[];
+const memoryQueries: Queries = {...zqliteQueries} as any;
+const tables = Object.keys(zqliteQueries) as (keyof typeof zqliteQueries)[];
 
 const lc = createSilentLogContext();
 const logConfig: LogConfig = {
@@ -74,35 +77,57 @@ const logConfig: LogConfig = {
   slowRowThreshold: 0,
 };
 
+function makeMemorySources() {
+  return Object.fromEntries(
+    Object.entries(schema.tables).map(([key, tableSchema]) => [
+      key,
+      new MemorySource(
+        tableSchema.name,
+        tableSchema.columns,
+        tableSchema.primaryKey,
+      ),
+    ]),
+  );
+}
+
 beforeAll(async () => {
   pg = await testDBs.create('compiler');
   sqlite = new Database(lc, ':memory:');
+  const memorySources = makeMemorySources();
   await writeChinook(pg, sqlite);
 
-  queryDelegate = newQueryDelegate(lc, logConfig, sqlite, schema);
+  zqliteQueryDelegate = newQueryDelegate(lc, logConfig, sqlite, schema);
+  memoryQueryDelegate = new TestMemoryQueryDelegate(memorySources);
 
-  queries.album = newQuery(queryDelegate, schema, 'album');
-  queries.artist = newQuery(queryDelegate, schema, 'artist');
-  queries.customer = newQuery(queryDelegate, schema, 'customer');
-  queries.employee = newQuery(queryDelegate, schema, 'employee');
-  queries.genre = newQuery(queryDelegate, schema, 'genre');
-  queries.invoice = newQuery(queryDelegate, schema, 'invoice');
-  queries.invoice_line = newQuery(queryDelegate, schema, 'invoice_line');
-  queries.media_type = newQuery(queryDelegate, schema, 'media_type');
-  queries.playlist = newQuery(queryDelegate, schema, 'playlist');
-  queries.playlist_track = newQuery(queryDelegate, schema, 'playlist_track');
-  queries.track = newQuery(queryDelegate, schema, 'track');
+  tables.forEach(table => {
+    zqliteQueries[table] = newQuery(zqliteQueryDelegate, schema, table) as any;
+    memoryQueries[table] = newQuery(memoryQueryDelegate, schema, table) as any;
+  });
+
+  tables.forEach(table => {
+    const rows = zqliteQueries[table].run();
+    for (const row of rows) {
+      memorySources[table].push({
+        type: 'add',
+        row,
+      });
+    }
+  });
 });
 
 describe('basic select', () => {
   test.each(tables.map(table => [table]))('select * from %s', async table => {
-    await checkZqlAndSql(pg, queries[table]);
+    await checkZqlAndSql(pg, zqliteQueries[table], memoryQueries[table]);
   });
 
   test.each(tables.map(table => [table]))(
     'select * from %s limit 100',
     async table => {
-      await checkZqlAndSql(pg, queries[table].limit(100));
+      await checkZqlAndSql(
+        pg,
+        zqliteQueries[table].limit(100),
+        memoryQueries[table].limit(100),
+      );
     },
   );
 });
@@ -115,7 +140,8 @@ describe('1 level related', () => {
       'supportRep',
       'reportsTo',
     ];
-    const query = queries[table] as AnyQuery;
+    const zqliteQuery = zqliteQueries[table] as AnyQuery;
+    const memoryQuery = memoryQueries[table] as AnyQuery;
     const relationships = Object.keys(
       (schema.relationships as Record<string, Record<string, unknown>>)[
         table
@@ -126,7 +152,7 @@ describe('1 level related', () => {
       if (brokenRelationships.includes(r)) {
         continue;
       }
-      await checkZqlAndSql(pg, query.related(r));
+      await checkZqlAndSql(pg, zqliteQuery.related(r), memoryQuery.related(r));
     }
 
     // Junction edges do not correctly handle limits
@@ -136,21 +162,28 @@ describe('1 level related', () => {
       if (brokenRelationships.includes(r) || brokenLimits.includes(r)) {
         continue;
       }
-      await checkZqlAndSql(pg, query.related(r, q => q.limit(100)).limit(100));
+      await checkZqlAndSql(
+        pg,
+        zqliteQuery.related(r, q => q.limit(100)).limit(100),
+        memoryQuery.related(r, q => q.limit(100)).limit(100),
+      );
     }
   });
 });
 
 async function checkZqlAndSql(
   pg: PostgresDB,
-  query: Query<Schema, keyof Schema['tables']>,
+  zqliteQuery: Query<Schema, keyof Schema['tables']>,
+  memoryQuery: Query<Schema, keyof Schema['tables']>,
 ) {
-  const pgResult = await runZqlAsSql(pg, query);
-  const zqlResult = query.run();
+  const pgResult = await runZqlAsSql(pg, zqliteQuery);
+  const zqliteResult = zqliteQuery.run();
+  const zqlMemResult = memoryQuery.run();
   // In failure output:
   // `-` is PG
-  // `+` is ZQL
-  expect(zqlResult).toEqual(pgResult);
+  // `+` is ZQLite
+  expect(zqliteResult).toEqual(pgResult);
+  expect(zqliteResult).toEqual(zqlMemResult);
 }
 
 function runZqlAsSql(

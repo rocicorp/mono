@@ -77,6 +77,10 @@ type Schema = typeof schema;
 
 let issueQuery: Query<Schema, 'issue'>;
 
+/**
+ * NOTE: More comprehensive tests are being added to `test/chinook`.
+ * These test will likely be deprecated.
+ */
 beforeAll(async () => {
   pg = await testDBs.create('compiler');
   await pg.unsafe(createTableSQL);
