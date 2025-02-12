@@ -100,11 +100,10 @@ const mutationIDSchema = v.object({
 });
 
 const appErrorSchema = v.object({
-  type: v.literal('app'),
-  error: v.string(),
+  error: v.literal('app'),
+  details: v.string(),
 });
 const zeroErrorSchema = v.object({
-  type: v.literal('zero'),
   error: v.literal('ooo-mutation'),
 });
 
@@ -147,6 +146,7 @@ export type Mutation = v.Infer<typeof mutationSchema>;
 export type PushBody = v.Infer<typeof pushBodySchema>;
 export type PushMessage = v.Infer<typeof pushMessageSchema>;
 export type PushResponse = v.Infer<typeof pushResponseSchema>;
+export type MutationResponse = v.Infer<typeof mutationResponseSchema>;
 
 export function mapCRUD(
   arg: CRUDMutationArg,

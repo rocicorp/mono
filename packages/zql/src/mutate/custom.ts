@@ -1,3 +1,4 @@
+import {assert} from '../../../shared/src/asserts.ts';
 import type {Expand} from '../../../shared/src/expand.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
@@ -99,3 +100,13 @@ export type UpdateValue<S extends TableSchema> = Expand<
       | undefined;
   }
 >;
+
+export function customMutatorKey(namespace: string, name: string) {
+  assert(!namespace.includes('|'), 'mutator namespaces must not include a |');
+  assert(!name.includes('|'), 'mutator names must not include a |');
+  return `${namespace}|${name}`;
+}
+
+export function splitMutatorKey(key: string) {
+  return key.split('|') as [string, string];
+}

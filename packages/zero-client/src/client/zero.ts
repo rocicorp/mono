@@ -128,6 +128,7 @@ import type {
   CustomMutatorImpl,
   MakeCustomMutatorInterfaces,
 } from './custom.ts';
+import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -1839,7 +1840,3 @@ class TimedOutError extends Error {
 }
 
 class CloseError extends Error {}
-
-function customMutatorKey(namespace: string, name: string) {
-  return `${namespace}.${name}`;
-}

@@ -1,5 +1,6 @@
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {TransactionBase} from '../../zql/src/mutate/custom.ts';
+import type {MaybePromise} from '../../shared/src/types.ts';
 
 export interface ZeroTransaction<S extends Schema, TDBTransaction>
   extends TransactionBase<S> {
@@ -8,7 +9,7 @@ export interface ZeroTransaction<S extends Schema, TDBTransaction>
   readonly dbTransaction: TDBTransaction;
 }
 
-interface Row {
+export interface Row {
   [column: string]: unknown;
 }
 
@@ -16,14 +17,14 @@ interface Row {
  * A function that returns a connection to the database which
  * will be used by custom mutators.
  */
-export type ConnectionProvider<TWrappedTransaction> = () => Promise<
-  DbConnection<TWrappedTransaction>
+export type ConnectionProvider<TWrappedTransaction> = () => MaybePromise<
+  DBConnection<TWrappedTransaction>
 >;
 
-export interface DbConnection<TWrappedTransaction> extends Queryable {
-  transaction: (
-    cb: (tx: DBTransaction<TWrappedTransaction>) => Promise<void>,
-  ) => void;
+export interface DBConnection<TWrappedTransaction> extends Queryable {
+  transaction: <T>(
+    cb: (tx: DBTransaction<TWrappedTransaction>) => Promise<T>,
+  ) => Promise<T>;
 }
 
 export interface DBTransaction<T> extends Queryable {
@@ -31,5 +32,5 @@ export interface DBTransaction<T> extends Queryable {
 }
 
 interface Queryable {
-  query: (query: string, args: unknown[]) => Promise<Row>;
+  query: (query: string, args: unknown[]) => Promise<Iterable<Row>>;
 }
