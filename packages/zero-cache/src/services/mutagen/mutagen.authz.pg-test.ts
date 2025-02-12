@@ -1,4 +1,5 @@
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {h128} from '../../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
 import {
@@ -42,6 +43,12 @@ const CG_ID = 'abc';
 const TEST_SCHEMA_VERSION = 1;
 
 const sqlSchema = /* sql */ `
+CREATE TABLE "zero.permissions" (
+  permissions JSON,
+  hash TEXT
+);
+INSERT INTO "zero.permissions" (permissions) VALUES (NULL);
+
 CREATE TABLE "user" (
   id text PRIMARY KEY,
   role text
@@ -303,13 +310,13 @@ beforeEach(async () => {
   await createUpstreamTables(upstream);
   replica = new Database(lc, ':memory:');
   createReplicaTables(replica);
-  authorizer = new WriteAuthorizerImpl(
-    lc,
-    zeroConfig,
-    permissionsConfig,
-    replica,
-    SHARD_ID,
-  );
+
+  const perms = JSON.stringify(permissionsConfig);
+  replica
+    .prepare(`UPDATE "zero.permissions" SET permissions = ?, hash = ?`)
+    .run(perms, h128(perms).toString(16));
+
+  authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, SHARD_ID);
   lmid = 0;
 });
 

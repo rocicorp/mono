@@ -61,11 +61,6 @@ jobs:
           docker buildx create --use
           docker buildx inspect --bootstrap
           docker buildx build --platform linux/amd64 --build-arg ZERO_VERSION=rocicorp-zero-*.tgz -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE_ZERO_CACHE:${{ env.SHA }} -f ./Dockerfile --push .
-      - name: Generate Schema
-        # TODO: Remove this when upstream permissions are rolled out.
-        run: |
-          cd packages/zero
-          npx tsx src/build-schema.ts --schema-path ../../apps/zbugs/schema.ts --schema-output ../../prod/sst/zero-schema.json
       - name: Deploy SST app
         env:
           ZERO_UPSTREAM_DB: ${{ secrets.PROD_ZERO_UPSTREAM_DB }}

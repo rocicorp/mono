@@ -1,4 +1,5 @@
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {h128} from '../../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
@@ -286,12 +287,7 @@ const permissions: PermissionsConfig | undefined = await definePermissions<
   },
 }));
 
-async function setup(
-  permissions: PermissionsConfig = {
-    protocolVersion: PROTOCOL_VERSION,
-    tables: {},
-  },
-) {
+async function setup(permissions?: PermissionsConfig) {
   const lc = createSilentLogContext();
   const storageDB = new Database(lc, ':memory:');
   storageDB.prepare(CREATE_STORAGE_TABLE).run();
@@ -317,6 +313,12 @@ async function setup(
     "minSupportedVersion" INT,
     "maxSupportedVersion" INT,
     _0_version            TEXT NOT NULL
+  );
+  CREATE TABLE "zero.permissions" (
+    "lock"        INT PRIMARY KEY,
+    "permissions" JSON,
+    "hash"        TEXT,
+    _0_version    TEXT NOT NULL
   );
   CREATE TABLE issues (
     id text PRIMARY KEY,
@@ -353,7 +355,9 @@ async function setup(
   INSERT INTO "zero_abc.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
     VALUES ('9876', 'foo', 42, '01');
   INSERT INTO "zero.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
-    VALUES (1, 2, 3, '01');  
+    VALUES (1, 2, 3, '01'); 
+  INSERT INTO "zero.permissions" ("lock", "permissions", "hash", _0_version)
+    VALUES (1, NULL, NULL, '01');
 
   INSERT INTO users (id, name, _0_version) VALUES ('100', 'Alice', '01');
   INSERT INTO users (id, name, _0_version) VALUES ('101', 'Bob', '01');
@@ -398,8 +402,13 @@ async function setup(
     ),
     stateChanges,
     drainCoordinator,
-    permissions,
   );
+  if (permissions) {
+    const json = JSON.stringify(permissions);
+    replica
+      .prepare(`UPDATE "zero.permissions" SET permissions = ?, hash = ?`)
+      .run(json, h128(json).toString(16));
+  }
   const viewSyncerDone = vs.run();
 
   function connect(ctx: SyncContext, desiredQueriesPatch: QueriesPatch) {
@@ -457,6 +466,19 @@ async function setup(
   };
 }
 
+const messages = new ReplicationMessages({
+  issues: 'id',
+  users: 'id',
+  issueLabels: ['issueID', 'labelID'],
+});
+const zeroMessages = new ReplicationMessages(
+  {
+    schemaVersions: 'lock',
+    permissions: 'lock',
+  },
+  'zero',
+);
+
 describe('view-syncer/service', () => {
   let storageDB: Database;
   let replicaDbFile: DbFile;
@@ -485,16 +507,6 @@ describe('view-syncer/service', () => {
     schemaVersion: 2,
     tokenData: undefined,
   };
-
-  const messages = new ReplicationMessages({
-    issues: 'id',
-    users: 'id',
-    issueLabels: ['issueID', 'labelID'],
-  });
-  const zeroMessages = new ReplicationMessages(
-    {schemaVersions: 'lock'},
-    'zero',
-  );
 
   beforeEach(async () => {
     ({
@@ -3043,6 +3055,7 @@ describe('permissions', () => {
   let cvrDB: PostgresDB;
   let vs: ViewSyncerService;
   let viewSyncerDone: Promise<void>;
+  let replicator: FakeReplicator;
 
   const SYNC_CONTEXT: SyncContext = {
     clientID: 'foo',
@@ -3065,6 +3078,7 @@ describe('permissions', () => {
       viewSyncerDone,
       cvrDB,
       replicaDbFile,
+      replicator,
     } = await setup(permissions));
   });
 
@@ -3075,7 +3089,7 @@ describe('permissions', () => {
     replicaDbFile.delete();
   });
 
-  test('client with no role followed by client with admin role', async () => {
+  test('client with user role followed by client with admin role', async () => {
     const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
@@ -3347,6 +3361,178 @@ describe('permissions', () => {
           {
             "cookie": "01:02",
             "pokeID": "01:02",
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('upstream permissions change', async () => {
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+    // the user is not logged in as admin and so cannot see any issues.
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "00:01",
+            "cookie": "01",
+            "pokeID": "01",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "gotQueriesPatch": [
+              {
+                "ast": {
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "issues",
+                  "where": {
+                    "left": {
+                      "name": "id",
+                      "type": "column",
+                    },
+                    "op": "IN",
+                    "right": {
+                      "type": "literal",
+                      "value": [
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                      ],
+                    },
+                    "type": "simple",
+                  },
+                },
+                "hash": "query-hash1",
+                "op": "put",
+              },
+            ],
+            "lastMutationIDChanges": {
+              "foo": 42,
+            },
+            "pokeID": "01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cookie": "01",
+            "pokeID": "01",
+          },
+        ],
+      ]
+    `);
+
+    // Open permissions
+    const relaxed: PermissionsConfig = {
+      protocolVersion: PROTOCOL_VERSION,
+      tables: {
+        issues: {},
+        comments: {},
+      },
+    };
+    replicator.processTransaction(
+      '05',
+      zeroMessages.update('permissions', {
+        lock: 1,
+        permissions: relaxed,
+        hash: h128(JSON.stringify(relaxed)).toString(16),
+      }),
+    );
+    stateChanges.push({state: 'version-ready'});
+
+    // Newly visible rows are poked.
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "01",
+            "cookie": "05",
+            "pokeID": "05",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "pokeID": "05",
+            "rowsPatch": [
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 9007199254740991,
+                  "id": "1",
+                  "json": null,
+                  "owner": "100",
+                  "parent": null,
+                  "title": "parent issue foo",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": -9007199254740991,
+                  "id": "2",
+                  "json": null,
+                  "owner": "101",
+                  "parent": null,
+                  "title": "parent issue bar",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 123,
+                  "id": "3",
+                  "json": null,
+                  "owner": "102",
+                  "parent": "1",
+                  "title": "foo",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 100,
+                  "id": "4",
+                  "json": null,
+                  "owner": "101",
+                  "parent": "2",
+                  "title": "bar",
+                },
+              },
+            ],
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cookie": "05",
+            "pokeID": "05",
           },
         ],
       ]

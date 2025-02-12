@@ -57,6 +57,40 @@ const ZERO_SCHEMA_VERSIONS_SPEC: PublishedTableSpec = {
   schema: 'zero',
 } as const;
 
+const ZERO_PERMISSIONS_SPEC: PublishedTableSpec = {
+  columns: {
+    permissions: {
+      characterMaximumLength: null,
+      dataType: 'jsonb',
+      typeOID: 3802,
+      dflt: null,
+      notNull: false,
+      pos: 1,
+    },
+    hash: {
+      characterMaximumLength: null,
+      dataType: 'text',
+      typeOID: 25,
+      dflt: null,
+      notNull: false,
+      pos: 2,
+    },
+    lock: {
+      characterMaximumLength: null,
+      dataType: 'bool',
+      typeOID: 16,
+      dflt: 'true',
+      notNull: true,
+      pos: 3,
+    },
+  },
+  oid: expect.any(Number),
+  name: 'permissions',
+  primaryKey: ['lock'],
+  publications: {[`_zero_metadata_${SHARD_ID}`]: {rowFilter: null}},
+  schema: 'zero',
+} as const;
+
 const ZERO_CLIENTS_SPEC: PublishedTableSpec = {
   columns: {
     clientGroupID: {
@@ -126,6 +160,33 @@ const REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC: LiteTableSpec = {
   name: 'zero.schemaVersions',
 } as const;
 
+const REPLICATED_ZERO_PERMISSIONS_SPEC: LiteTableSpec = {
+  columns: {
+    permissions: {
+      characterMaximumLength: null,
+      dataType: 'jsonb',
+      dflt: null,
+      notNull: false,
+      pos: 1,
+    },
+    hash: {
+      characterMaximumLength: null,
+      dataType: 'TEXT',
+      dflt: null,
+      notNull: false,
+      pos: 2,
+    },
+    lock: {
+      characterMaximumLength: null,
+      dataType: 'bool|NOT_NULL',
+      dflt: null,
+      notNull: false,
+      pos: 3,
+    },
+  },
+  name: 'zero.permissions',
+} as const;
+
 const REPLICATED_ZERO_CLIENTS_SPEC: LiteTableSpec = {
   columns: {
     clientGroupID: {
@@ -181,13 +242,22 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       name: 'empty DB',
       published: {
         [`zero_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
+        ['zero.permissions']: ZERO_PERMISSIONS_SPEC,
         ['zero.schemaVersions']: ZERO_SCHEMA_VERSIONS_SPEC,
       },
       replicatedSchema: {
         [`zero_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        ['zero.permissions']: REPLICATED_ZERO_PERMISSIONS_SPEC,
         ['zero.schemaVersions']: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
       },
       replicatedIndexes: [
+        {
+          columns: {lock: 'ASC'},
+          name: 'permissions_pkey',
+          schema: 'zero',
+          tableName: 'permissions',
+          unique: true,
+        },
         {
           columns: {lock: 'ASC'},
           name: 'schemaVersions_pkey',
@@ -231,13 +301,22 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       `,
       published: {
         [`zero_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
+        ['zero.permissions']: ZERO_PERMISSIONS_SPEC,
         ['zero.schemaVersions']: ZERO_SCHEMA_VERSIONS_SPEC,
       },
       replicatedSchema: {
         [`zero_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        ['zero.permissions']: REPLICATED_ZERO_PERMISSIONS_SPEC,
         ['zero.schemaVersions']: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
       },
       replicatedIndexes: [
+        {
+          columns: {lock: 'ASC'},
+          name: 'permissions_pkey',
+          schema: 'zero',
+          tableName: 'permissions',
+          unique: true,
+        },
         {
           columns: {lock: 'ASC'},
           name: 'schemaVersions_pkey',
@@ -299,6 +378,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       `,
       published: {
         [`zero_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
+        ['zero.permissions']: ZERO_PERMISSIONS_SPEC,
         ['zero.schemaVersions']: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.issues']: {
           columns: {
@@ -590,6 +670,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         },
         {
           columns: {lock: 'ASC'},
+          name: 'permissions_pkey',
+          schema: 'zero',
+          tableName: 'permissions',
+          unique: true,
+        },
+        {
+          columns: {lock: 'ASC'},
           name: 'schemaVersions_pkey',
           schema: 'zero',
           tableName: 'schemaVersions',
@@ -734,6 +821,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       requestedPublications: ['zero_custom'],
       published: {
         [`zero_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
+        ['zero.permissions']: ZERO_PERMISSIONS_SPEC,
         ['zero.schemaVersions']: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.users']: {
           columns: {
@@ -764,6 +852,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       },
       replicatedSchema: {
         [`zero_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        ['zero.permissions']: REPLICATED_ZERO_PERMISSIONS_SPEC,
         ['zero.schemaVersions']: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
         ['users']: {
           columns: {
@@ -799,6 +888,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'users_pkey',
           schema: 'public',
           tableName: 'users',
+          unique: true,
+        },
+        {
+          columns: {lock: 'ASC'},
+          name: 'permissions_pkey',
+          schema: 'zero',
+          tableName: 'permissions',
           unique: true,
         },
         {
@@ -861,6 +957,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       requestedPublications: ['zero_custom', 'zero_custom2'],
       published: {
         [`zero_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
+        ['zero.permissions']: ZERO_PERMISSIONS_SPEC,
         ['zero.schemaVersions']: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.users']: {
           columns: {
@@ -894,6 +991,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       },
       replicatedSchema: {
         [`zero_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        ['zero.permissions']: REPLICATED_ZERO_PERMISSIONS_SPEC,
         ['zero.schemaVersions']: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
         ['users']: {
           columns: {
@@ -929,6 +1027,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'users_pkey',
           schema: 'public',
           tableName: 'users',
+          unique: true,
+        },
+        {
+          columns: {lock: 'ASC'},
+          name: 'permissions_pkey',
+          schema: 'zero',
+          tableName: 'permissions',
           unique: true,
         },
         {
@@ -999,6 +1104,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       `,
       published: {
         [`zero_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
+        ['zero.permissions']: ZERO_PERMISSIONS_SPEC,
         ['zero.schemaVersions']: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.issues']: {
           columns: {
@@ -1122,6 +1228,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         },
         {
           columns: {lock: 'ASC'},
+          name: 'permissions_pkey',
+          schema: 'zero',
+          tableName: 'permissions',
+          unique: true,
+        },
+        {
+          columns: {lock: 'ASC'},
           name: 'schemaVersions_pkey',
           schema: 'zero',
           tableName: 'schemaVersions',
@@ -1152,6 +1265,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       `,
       published: {
         [`zero_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
+        ['zero.permissions']: ZERO_PERMISSIONS_SPEC,
         ['zero.schemaVersions']: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.giant']: {
           columns: {
@@ -1173,6 +1287,8 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       },
       replicatedSchema: {
         [`zero_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        ['zero.permissions']: REPLICATED_ZERO_PERMISSIONS_SPEC,
+        ['zero.schemaVersions']: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
         ['giant']: {
           columns: {
             id: {
@@ -1199,6 +1315,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'giant_pkey',
           schema: 'public',
           tableName: 'giant',
+          unique: true,
+        },
+        {
+          columns: {lock: 'ASC'},
+          name: 'permissions_pkey',
+          schema: 'zero',
+          tableName: 'permissions',
           unique: true,
         },
         {

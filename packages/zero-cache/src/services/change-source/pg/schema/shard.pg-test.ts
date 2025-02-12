@@ -37,6 +37,7 @@ describe('change-source/pg', () => {
 
     expect(await publications()).toEqual([
       [`_zero_metadata_0`, 'zero', 'schemaVersions', null],
+      [`_zero_metadata_0`, 'zero', 'permissions', null],
       [`_zero_metadata_0`, `zero_0`, 'clients', null],
       ['_zero_public_0', null, null, null],
     ]);
@@ -83,6 +84,7 @@ describe('change-source/pg', () => {
 
     expect(await publications()).toEqual([
       [`_zero_metadata_0`, 'zero', 'schemaVersions', null],
+      [`_zero_metadata_0`, 'zero', 'permissions', null],
       [`_zero_metadata_0`, `zero_0`, 'clients', null],
       ['_zero_public_0', 'public', 'join_table', null],
     ]);
@@ -119,6 +121,7 @@ describe('change-source/pg', () => {
 
     expect(await publications()).toEqual([
       [`_zero_metadata_'has quotes'`, 'zero', 'schemaVersions', null],
+      [`_zero_metadata_'has quotes'`, 'zero', 'permissions', null],
       [`_zero_metadata_'has quotes'`, `zero_'has quotes'`, 'clients', null],
       [`_zero_public_'has quotes'`, null, null, null],
     ]);
@@ -153,8 +156,10 @@ describe('change-source/pg', () => {
 
     expect(await publications()).toEqual([
       [`_zero_metadata_0`, 'zero', 'schemaVersions', null],
+      [`_zero_metadata_0`, 'zero', 'permissions', null],
       [`_zero_metadata_0`, `zero_0`, 'clients', null],
       [`_zero_metadata_1`, 'zero', 'schemaVersions', null],
+      [`_zero_metadata_1`, 'zero', 'permissions', null],
       [`_zero_metadata_1`, `zero_1`, 'clients', null],
       ['_zero_public_0', null, null, null],
       ['_zero_public_1', null, null, null],
@@ -222,6 +227,7 @@ describe('change-source/pg', () => {
 
     expect(await publications()).toEqual([
       [`_zero_metadata_A`, 'zero', 'schemaVersions', null],
+      [`_zero_metadata_A`, 'zero', 'permissions', null],
       [`_zero_metadata_A`, `zero_A`, 'clients', null],
       ['zero_bar', 'far', 'bar', null],
       ['zero_foo', 'public', 'foo', '(id > 1000)'],
@@ -262,6 +268,7 @@ describe('change-source/pg', () => {
 
     expect(await publications()).toEqual([
       [`_zero_metadata_supaneon`, 'zero', 'schemaVersions', null],
+      [`_zero_metadata_supaneon`, 'zero', 'permissions', null],
       [`_zero_metadata_supaneon`, `zero_supaneon`, 'clients', null],
       ['zero_foo', 'public', 'foo', null],
     ]);
@@ -298,6 +305,56 @@ describe('change-source/pg', () => {
     `);
 
     expect(await db`SELECT evtname from pg_event_trigger`.values()).toEqual([]);
+  });
+
+  test('permissions hash trigger', async () => {
+    await db.begin(tx =>
+      setupTablesAndReplication(lc, tx, {id: '0', publications: []}),
+    );
+    await db`UPDATE zero.permissions SET permissions = ${{
+      protocolVersion: 4,
+      tables: {},
+    }}`;
+    expect(await db`SELECT hash FROM zero.permissions`).toMatchInlineSnapshot(`
+      Result [
+        {
+          "hash": "c4123f42e73be1bc169466fc8f68b2be",
+        },
+      ]
+    `);
+    await db`UPDATE zero.permissions SET permissions = NULL`;
+    expect(await db`SELECT hash FROM zero.permissions`).toMatchInlineSnapshot(`
+      Result [
+        {
+          "hash": null,
+        },
+      ]
+    `);
+    await db`UPDATE zero.permissions SET permissions = ${{
+      protocolVersion: 5,
+      tables: {},
+    }}`;
+    expect(await db`SELECT hash FROM zero.permissions`).toMatchInlineSnapshot(`
+      Result [
+        {
+          "hash": "2b4b5e005563ffe3f2f92cec64d21610",
+        },
+      ]
+    `);
+    await db`DELETE FROM zero.permissions`;
+    await db`INSERT INTO zero.permissions ${db({
+      permissions: {
+        protocolVersion: 4,
+        tables: {},
+      },
+    })}`;
+    expect(await db`SELECT hash FROM zero.permissions`).toMatchInlineSnapshot(`
+      Result [
+        {
+          "hash": "c4123f42e73be1bc169466fc8f68b2be",
+        },
+      ]
+    `);
   });
 
   type InvalidUpstreamCase = {

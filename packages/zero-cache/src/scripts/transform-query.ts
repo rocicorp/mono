@@ -5,14 +5,14 @@ import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {must} from '../../../shared/src/must.ts';
 import {parseOptions} from '../../../shared/src/options.ts';
 import * as v from '../../../shared/src/valita.ts';
-import {getPermissions} from '../auth/load-schema.ts';
 import {transformAndHashQuery} from '../auth/read-authorizer.ts';
 import {ZERO_ENV_VAR_PREFIX, zeroOptions} from '../config/zero-config.ts';
 import {pgClient} from '../types/pg.ts';
+import {deployPermissionsOptions, loadPermissions} from './permissions.ts';
 
 const options = {
   cvr: zeroOptions.cvr,
-  schema: zeroOptions.schema,
+  schema: deployPermissionsOptions.schema,
   debug: {
     hash: {
       type: v.string().optional(),
@@ -27,7 +27,8 @@ const config = parseOptions(
   ZERO_ENV_VAR_PREFIX,
 );
 
-const schema = await getPermissions(config);
+const lc = new LogContext('debug', {}, consoleLogSink);
+const permissions = await loadPermissions(lc, config.schema.path);
 
 const cvrDB = pgClient(
   new LogContext('debug', undefined, consoleLogSink),
@@ -39,9 +40,9 @@ const rows =
     config.debug.hash,
   )} limit 1;`;
 
-console.log(
+lc.info?.(
   JSON.stringify(
-    transformAndHashQuery(rows[0].clientAST, schema.permissions, {}).query,
+    transformAndHashQuery(rows[0].clientAST, permissions, {}).query,
   ),
 );
 

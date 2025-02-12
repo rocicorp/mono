@@ -10,7 +10,6 @@ import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
 import type {ShardConfig} from '../shard-config.ts';
 import {
   dropShard,
-  ensureGlobalTables,
   setupTablesAndReplication,
   unescapedSchema,
 } from './shard.ts';
@@ -47,28 +46,26 @@ export async function updateShardSchema(
 async function runShardMigrations(
   lc: LogContext,
   db: PostgresDB,
-  shardConfig: ShardConfig,
+  shard: ShardConfig,
 ): Promise<void> {
   const setupMigration: Migration = {
-    migrateSchema: (lc, tx) => setupTablesAndReplication(lc, tx, shardConfig),
+    migrateSchema: (lc, tx) => setupTablesAndReplication(lc, tx, shard),
     minSafeVersion: 1,
   };
 
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
-    3: {
+    4: {
       migrateSchema: () => {
         throw new AutoResetSignal('resetting to upgrade shard schema');
       },
-      minSafeVersion: 3,
+      minSafeVersion: 4,
     },
-    // The zero.permissions table was added to the global zero shard.
-    4: {migrateSchema: (_, tx) => ensureGlobalTables(tx)},
   };
 
   await runSchemaMigrations(
     lc,
-    `upstream-shard-${shardConfig.id}`,
-    unescapedSchema(shardConfig.id),
+    `upstream-shard-${shard.id}`,
+    unescapedSchema(shard.id),
     db,
     setupMigration,
     schemaVersionMigrationMap,

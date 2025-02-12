@@ -29,7 +29,7 @@ import type {
 } from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
-import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.ts';
+import type {LoadedPermissions} from '../../auth/load-permissions.ts';
 import {transformAndHashQuery} from '../../auth/read-authorizer.ts';
 import {stringify} from '../../types/bigint-json.ts';
 import {ErrorForClient, getLogLevel} from '../../types/error-for-client.ts';
@@ -124,11 +124,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #lock = new Lock();
   readonly #cvrStore: CVRStore;
   readonly #stopped = resolver();
-  readonly #permissions: PermissionsConfig;
 
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
   #authData: JWTPayload | undefined;
+  #permissions: LoadedPermissions | null = null; // Guaranteed if #pipelinesSynced.
 
   constructor(
     lc: LogContext,
@@ -139,7 +139,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     pipelineDriver: PipelineDriver,
     versionChanges: Subscription<ReplicaState>,
     drainCoordinator: DrainCoordinator,
-    permissions: PermissionsConfig,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
   ) {
     this.id = clientGroupID;
@@ -159,7 +158,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // loop will then await #cvrStore.flushed() which rejects if necessary.
       () => this.#stateChanges.cancel(),
     );
-    this.#permissions = permissions;
 
     // Wait for the first connection to init.
     this.keepalive();
@@ -237,6 +235,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
           // stateVersion is at or beyond CVR version for the first time.
           lc.info?.(`init pipelines@${version} (cvr@${cvrVer})`);
+          this.#permissions = this.#pipelines.currentPermissions();
           this.#hydrateUnchangedQueries(lc, cvr);
           await this.#syncQueryPipelineSet(lc, cvr);
           this.#pipelinesSynced = true;
@@ -609,7 +608,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         continue; // No longer desired.
       }
       const {query: transformedAst, hash: newTransformationHash} =
-        transformAndHashQuery(ast, this.#permissions, this.#authData);
+        transformAndHashQuery(
+          ast,
+          must(this.#permissions).permissions,
+          this.#authData,
+        );
       assert(
         transformedAst !== undefined && newTransformationHash !== undefined,
         'This query may not be run because the table it reads is not readable. Table: ' +
@@ -655,7 +658,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const serverQueries = Object.entries(cvr.queries).map(([id, q]) => {
         const {query, hash: transformationHash} = transformAndHashQuery(
           q.ast,
-          this.#permissions,
+          must(this.#permissions).permissions,
           this.#authData,
         );
         assert(

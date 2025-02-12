@@ -79,9 +79,6 @@ test('parse options', () => {
         },
         "port": 4848,
         "push": {},
-        "schema": {
-          "file": "zero-schema.json",
-        },
         "shard": {
           "id": "0",
           "publications": [],
@@ -140,7 +137,6 @@ test('parse options', () => {
         "ZERO_LOG_SLOW_ROW_THRESHOLD": "2",
         "ZERO_PER_USER_MUTATION_LIMIT_WINDOW_MS": "60000",
         "ZERO_PORT": "4848",
-        "ZERO_SCHEMA_FILE": "zero-schema.json",
         "ZERO_SHARD_ID": "0",
         "ZERO_SHARD_PUBLICATIONS": "",
         "ZERO_TENANTS_JSON": "{"tenants":[{"id":"ten-boo","host":"Normalize.ME","path":"tenboo","env":{"ZERO_REPLICA_FILE":"tenboo.db","ZERO_CVR_DB":"foo","ZERO_CHANGE_DB":"foo","ZERO_SHARD_ID":"foo"}},{"id":"ten_bar","path":"/tenbar","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_CVR_DB":"bar","ZERO_CHANGE_DB":"bar","ZERO_SHARD_ID":"bar"}},{"id":"tenbaz-123","path":"/tenbaz","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_UPSTREAM_DB":"overridden","ZERO_CVR_DB":"baz","ZERO_CHANGE_DB":"baz","ZERO_SHARD_ID":"foo"}}]}",
@@ -311,16 +307,6 @@ test('zero-cache --help', () => {
                                                    File path to the SQLite replica that zero-cache maintains.                                        
                                                    This can be lost, but if it is, zero-cache will have to re-replicate next                         
                                                    time it starts up.                                                                                
-                                                                                                                                                     
-     --schema-file string                          default: "zero-schema.json"                                                                       
-       ZERO_SCHEMA_FILE env                                                                                                                          
-                                                   File path to the JSON schema file that defines the database structure                             
-                                                   and access control rules.                                                                         
-                                                                                                                                                     
-     --schema-json string                          optional                                                                                          
-       ZERO_SCHEMA_JSON env                                                                                                                          
-                                                   The JSON schema as a string, containing the same database structure                               
-                                                   and access control rules as would be in the schema file.                                          
                                                                                                                                                      
      --log-level debug,info,warn,error             default: "info"                                                                                   
        ZERO_LOG_LEVEL env                                                                                                                            
