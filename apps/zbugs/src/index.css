@@ -115,6 +115,7 @@ textarea.autoResize {
 }
 
 .logo-link-container {
+  cursor: pointer;
   padding: 0.229rem 0;
   flex: 0 0 auto;
 }
@@ -614,10 +615,16 @@ textarea.autoResize {
 }
 
 .issue-detail {
+  margin-top: 0.28125rem;
   padding-right: 16rem;
 }
 
+.issue-breadcrumb {
+  margin-top: 0.15625rem;
+}
+
 .issue-sidebar {
+  margin-top: 0.59375rem;
   position: fixed;
   top: 2rem;
   right: 2rem;
