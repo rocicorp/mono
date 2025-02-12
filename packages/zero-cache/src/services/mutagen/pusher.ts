@@ -6,6 +6,10 @@ import {must} from '../../../../shared/src/must.ts';
 import type {LogContext} from '@rocicorp/logger';
 import {Queue} from '../../../../shared/src/queue.ts';
 
+export interface Pusher {
+  enqueuePush(push: PushBody, jwt: string | undefined): void;
+}
+
 /**
  * Receives push messages from zero-client and forwards
  * them the the user's API server.
@@ -21,7 +25,7 @@ import {Queue} from '../../../../shared/src/queue.ts';
  */
 export class PusherService implements Service {
   readonly id: string;
-  readonly #pusher: Pusher;
+  readonly #pusher: PushWorker;
   readonly #queue: Queue<PusherEntryOrStop>;
   #stopped: Promise<void> | undefined;
 
@@ -32,7 +36,7 @@ export class PusherService implements Service {
     apiKey: string | undefined,
   ) {
     this.#queue = new Queue();
-    this.#pusher = new Pusher(lc, pushUrl, apiKey, this.#queue);
+    this.#pusher = new PushWorker(lc, pushUrl, apiKey, this.#queue);
     this.id = clientGroupID;
   }
 
@@ -61,7 +65,7 @@ type PusherEntryOrStop = PusherEntry | 'stop';
  * Awaits items in the queue then drains and sends them all
  * to the user's API server.
  */
-class Pusher {
+class PushWorker {
   readonly #pushURL: string;
   readonly #apiKey: string | undefined;
   readonly #queue: Queue<PusherEntryOrStop>;

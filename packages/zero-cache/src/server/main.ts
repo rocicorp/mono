@@ -33,6 +33,7 @@ import {
   subscribeTo,
 } from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
+const clientConnectionBifurcated = false;
 
 export default async function runWorker(
   parent: Worker | null,
@@ -148,7 +149,7 @@ export default async function runWorker(
     syncers.forEach(syncer => handleSubscriptionsFrom(lc, syncer, notifier));
   }
   let mutator: Worker | undefined;
-  if (config.push.url !== undefined) {
+  if (config.push.url !== undefined && clientConnectionBifurcated) {
     mutator = loadWorker('./server/mutator.ts', 'supporting', 'mutator');
   }
 

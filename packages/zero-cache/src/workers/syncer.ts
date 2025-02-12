@@ -24,6 +24,7 @@ import type {Worker} from '../types/processes.ts';
 import {Subscription} from '../types/subscription.ts';
 import {Connection, sendError} from './connection.ts';
 import {createNotifierFrom, subscribeTo} from './replicator.ts';
+import type {Pusher} from '../services/mutagen/pusher.ts';
 
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;
@@ -41,6 +42,7 @@ export class Syncer implements SingletonService {
   readonly #lc: LogContext;
   readonly #viewSyncers: ServiceRunner<ViewSyncer & ActivityBasedService>;
   readonly #mutagens: ServiceRunner<Mutagen & Service>;
+  readonly #pushers: ServiceRunner<Pusher & Service> | undefined;
   readonly #connections = new Map<string, Connection>();
   readonly #drainCoordinator = new DrainCoordinator();
   readonly #parent: Worker;
@@ -57,6 +59,7 @@ export class Syncer implements SingletonService {
       drainCoordinator: DrainCoordinator,
     ) => ViewSyncer & ActivityBasedService,
     mutagenFactory: (id: string) => Mutagen & Service,
+    pusherFactory: ((id: string) => Pusher & Service) | undefined,
     parent: Worker,
   ) {
     this.#authConfig = config.auth;
@@ -72,6 +75,9 @@ export class Syncer implements SingletonService {
       v => v.keepalive(),
     );
     this.#mutagens = new ServiceRunner(lc, mutagenFactory);
+    if (pusherFactory) {
+      this.#pushers = new ServiceRunner(lc, pusherFactory);
+    }
     this.#parent = parent;
     this.#wss = new WebSocketServer({noServer: true});
 
@@ -110,6 +116,7 @@ export class Syncer implements SingletonService {
         : undefined,
       this.#viewSyncers.getService(clientGroupID),
       this.#mutagens.getService(clientGroupID),
+      this.#pushers?.getService(clientGroupID),
       params,
       ws,
       () => {
