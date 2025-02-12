@@ -27,6 +27,7 @@ import type {
 } from '../services/view-syncer/view-syncer.ts';
 import {findErrorForClient, getLogLevel} from '../types/error-for-client.ts';
 import type {Source} from '../types/streams.ts';
+import type {Pusher} from '../services/mutagen/pusher.ts';
 
 const tracer = trace.getTracer('syncer-ws-server', version);
 
@@ -46,6 +47,8 @@ export class Connection {
   readonly #syncContext: SyncContext;
   readonly #lc: LogContext;
   readonly #onClose: () => void;
+  readonly #pusher: Pusher | undefined;
+  readonly #token: string | undefined;
 
   readonly #viewSyncer: ViewSyncer;
   readonly #mutagen: Mutagen;
@@ -60,6 +63,7 @@ export class Connection {
     tokenData: TokenData | undefined,
     viewSyncer: ViewSyncer,
     mutagen: Mutagen,
+    pusher: Pusher | undefined,
     connectParams: ConnectParams,
     ws: WebSocket,
     onClose: () => void,
@@ -75,6 +79,7 @@ export class Connection {
 
     this.#ws = ws;
     this.#authData = tokenData?.decoded;
+    this.#token = tokenData?.raw;
     this.#wsID = wsID;
     this.#protocolVersion = protocolVersion;
     this.#clientGroupID = clientGroupID;
@@ -94,6 +99,7 @@ export class Connection {
     this.#onClose = onClose;
 
     this.#viewSyncer = viewSyncer;
+    this.#pusher = pusher;
     this.#mutagen = mutagen;
 
     this.#ws.addEventListener('message', this.#handleMessage);
@@ -192,6 +198,15 @@ export class Connection {
                   `clientGroupID of connection "${this.#clientGroupID}`,
               });
             }
+
+            if (this.#pusher) {
+              this.#pusher.enqueuePush(msg[1], this.#token);
+              // We do not call mutagen since if a pusher is set
+              // the precludes crud mutators.
+              // We'll be removing crud mutators when we release custom mutators.
+              return;
+            }
+
             // Hold a connection-level lock while processing mutations so that:
             // 1. Mutations are processed in the order in which they are received and
             // 2. A single view syncer connection cannot hog multiple upstream connections.
