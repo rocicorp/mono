@@ -94,9 +94,7 @@ async function main() {
       log(`${deployPermissionsScript} completed successfully.`);
       return true;
     }
-    logError(
-      `Errors in ${path} must be fixed before zero-cache can be started.`,
-    );
+    logError(`Failed to deploy permissions from ${path}.`);
     return false;
   }
 
