@@ -63,16 +63,14 @@ function createMapperFrom(
  */
 export function validator(tablesToColumns: Map<string, string[]>): NameMapper {
   const identity = new Map(
-    [...tablesToColumns.entries()].map(([tableName, columns]) => {
-      return [
+    [...tablesToColumns.entries()].map(([tableName, columns]) => [
+      tableName,
+      {
         tableName,
-        {
-          tableName,
-          columns: Object.fromEntries(columns.map(c => [c, c])),
-          allColumnsSame: true,
-        },
-      ];
-    }),
+        columns: Object.fromEntries(columns.map(c => [c, c])),
+        allColumnsSame: true,
+      },
+    ]),
   );
   return new NameMapper(identity);
 }
