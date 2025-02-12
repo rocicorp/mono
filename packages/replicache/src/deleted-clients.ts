@@ -14,6 +14,10 @@ export const deletedClientsSchema = v.readonlyObject({
   clientGroupIDs: v.readonlyArray(v.string()),
 });
 
+// Before 11facd03a88b95667d1f171610548de5984dd928 this was an array of strings.
+// We need to allow reading that format.
+const legacyDeletedClientsSchema = v.readonlyArray(v.string());
+
 export type DeletedClients = v.Infer<typeof deletedClientsSchema>;
 
 export async function setDeletedClients(
@@ -42,6 +46,13 @@ export async function getDeletedClients(
     return {clientIDs: [], clientGroupIDs: []};
   }
   const chunk = await dagRead.mustGetChunk(hash);
+
+  // Try legacy schema
+  const res = v.test(chunk.data, legacyDeletedClientsSchema);
+  if (res.ok) {
+    return {clientIDs: res.value, clientGroupIDs: []};
+  }
+
   return v.parse(chunk.data, deletedClientsSchema);
 }
 
