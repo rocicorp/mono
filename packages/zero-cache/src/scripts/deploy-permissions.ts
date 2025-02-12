@@ -43,6 +43,9 @@ async function validatePermissions(
         `Unable to validate permissions.`,
     );
   }
+
+  lc.info?.('Validating permissions against upstream table and column names.');
+
   const {tables} = await getPublicationInfo(
     db,
     pubnames.map(p => p.pubname),
@@ -71,7 +74,6 @@ async function validatePermissions(
   } catch (e) {
     failWithMessage(String(e));
   }
-  lc.debug?.(`Validated permissions rules`);
 }
 
 function failWithMessage(msg: string) {
