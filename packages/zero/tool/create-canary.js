@@ -109,10 +109,9 @@ console.log(`Releasing from branch: ${buildBranch}`);
 
 try {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zero-build-'));
-  // In order to merge the tag on the release branch back into main, we have to
-  // have the shared history so alas a shallow clone won't do it in that case.
-  // Only do the deep clone in this case though since in the common case we can
-  // do releases way faster with a shallow clone.
+  // In order to be able to check out the release branch we have to do a full
+  // clone. Only do the deep clone in this case though since in the common case
+  // we can do releases way faster with a shallow clone.
   const shallow = buildBranch === 'main' ? '--depth 1' : '';
   execute(`git clone ${shallow} git@github.com:rocicorp/mono.git ${tempDir}`);
   process.chdir(tempDir);
@@ -131,8 +130,6 @@ try {
   currentPackageData.version = nextCanaryVersion;
 
   const tagName = `zero/v${nextCanaryVersion}`;
-  const workBranchName = `release_zero/v${nextCanaryVersion}`;
-  execute(`git checkout -b ${workBranchName} HEAD`);
 
   writePackageData(ZERO_PACKAGE_JSON_PATH, currentPackageData);
 
@@ -160,17 +157,17 @@ try {
   execute(`git tag ${tagName}`);
   execute(`git push origin ${tagName}`);
 
-  if (buildBranch !== 'main') {
-    execute(`git push origin HEAD:${buildBranch}`);
-  }
-
-  execute(`git checkout main`);
+  execute(`git checkout ${buildBranch}`);
   execute(`git pull`);
   execute(`git merge ${tagName}`);
-  execute(`git push origin main`);
+  execute(`git push origin ${buildBranch}`);
 
   execute(`git checkout ${tagName}`);
+
+  // For some insane reason npm requires to publish with a tag, even though you are
+  // allowed to subsequently remove it.
   execute('npm publish --tag=canary', {cwd: basePath('packages', 'zero')});
+  execute(`npm dist-tag rm @rocicorp/zero@${nextCanaryVersion} canary`);
 
   try {
     // Check if our specific multiarch builder exists
@@ -197,7 +194,6 @@ try {
     --platform linux/amd64,linux/arm64 \
     --build-arg=ZERO_VERSION=${nextCanaryVersion} \
     -t rocicorp/zero:${nextCanaryVersion} \
-    -t rocicorp/zero:canary \
     --push .`,
         {cwd: basePath('packages', 'zero')},
       );
@@ -216,20 +212,18 @@ try {
   console.log(``);
   console.log(`🎉 Success!`);
   console.log(``);
+  console.log(`* Published @rocicorp/zero@${nextCanaryVersion} to npm.`);
+  console.log(`* Created Docker image rocicorp/zero:${nextCanaryVersion}.`);
   console.log(
-    `* Published @rocicorp/zero@${nextCanaryVersion} to npm with tag '@canary'.`,
+    `* Pushed Git tag ${tagName} to origin and merged with ${buildBranch}.`,
   );
-  console.log(
-    `* Created Docker image rocicorp/zero:${nextCanaryVersion} and set tag @canary.`,
-  );
-  console.log(`* Pushed Git tag ${tagName} to origin and merged with main.`);
   console.log(``);
   console.log(``);
   console.log(`Next steps:`);
   console.log(``);
   console.log('* Run `git pull` in your checkout to pull the tag.');
-  console.log('* Test apps by installing @canary npm release.');
-  console.log('* When ready, use `npm dist-tags` to switch release to main.');
+  console.log(`* Test apps by installing new version.`);
+  console.log('* When ready, use `npm dist-tags` to switch release to latest.');
   console.log(``);
 } catch (error) {
   console.error(`Error during execution: ${error}`);
