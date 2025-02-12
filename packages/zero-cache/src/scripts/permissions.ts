@@ -56,9 +56,7 @@ export const deployPermissionsOptions = {
 
   force: {
     type: v.boolean().default(false),
-    desc: [
-      `Deploy to upstream even if validation fails. Use at your own risk.`,
-    ],
+    desc: [`Deploy to upstream without validation. Use at your own risk.`],
     alias: 'f',
   },
 };
