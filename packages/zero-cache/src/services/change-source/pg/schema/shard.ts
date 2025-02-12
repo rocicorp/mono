@@ -197,9 +197,9 @@ export async function setupTablesAndReplication(
 ) {
   // Validate requested publications.
   for (const pub of publications) {
-    // TODO: We can consider relaxing this now that we use per-shard
-    // triggers rather than global prefix-based triggers. We should
-    // probably still disallow the INTERNAL_PUBLICATION_PREFIX though.
+    // Note: Having all publications follow a naming convention facilitates
+    //       looking up all zero publications, e.g. for cross-shard logic
+    //       such as permissions validation.
     if (!pub.startsWith(APP_PUBLICATION_PREFIX)) {
       throw new Error(
         `Publication ${pub} does not start with ${APP_PUBLICATION_PREFIX}`,
