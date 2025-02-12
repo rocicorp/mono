@@ -114,7 +114,7 @@ Pull large data set from s3
 ./get-data.sh
 ```
 
-Start docker with correct files to merge
+Start docker 1gb compose file
 
 ```bash
 docker compose -f ./docker-compose-1gb.yml up
