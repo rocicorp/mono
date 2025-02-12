@@ -36,13 +36,14 @@ const cvrDB = pgClient(
 );
 
 const rows =
-  await cvrDB`select "clientAST" from "cvr"."queries" where "queryHash" = ${must(
+  await cvrDB`select "clientAST", "internal" from "cvr"."queries" where "queryHash" = ${must(
     config.debug.hash,
   )} limit 1;`;
 
 lc.info?.(
   JSON.stringify(
-    transformAndHashQuery(rows[0].clientAST, permissions, {}).query,
+    transformAndHashQuery(rows[0].clientAST, permissions, {}, rows[0].internal)
+      .query,
   ),
 );
 

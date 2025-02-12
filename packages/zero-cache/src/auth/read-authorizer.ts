@@ -28,8 +28,11 @@ export function transformAndHashQuery(
   query: AST,
   permissionRules: PermissionsConfig | null,
   authData: JWTPayload | undefined,
+  internalQuery: boolean | null | undefined,
 ): TransformedAndHashed {
-  const transformed = transformQuery(query, permissionRules, authData);
+  const transformed = internalQuery
+    ? query // application permissions do not apply to internal queries
+    : transformQuery(query, permissionRules, authData);
   return transformed
     ? {
         query: transformed,

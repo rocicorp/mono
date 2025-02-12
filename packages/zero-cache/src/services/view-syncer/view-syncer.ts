@@ -612,6 +612,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           ast,
           must(this.#permissions).permissions,
           this.#authData,
+          query.internal,
         );
       assert(
         transformedAst !== undefined && newTransformationHash !== undefined,
@@ -660,6 +661,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           q.ast,
           must(this.#permissions).permissions,
           this.#authData,
+          q.internal,
         );
         assert(
           query !== undefined && transformationHash !== undefined,
