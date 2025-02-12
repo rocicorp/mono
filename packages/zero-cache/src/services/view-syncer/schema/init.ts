@@ -8,26 +8,12 @@ import {
 import type {PostgresDB} from '../../../types/pg.ts';
 import {createRowsVersionTable, cvrSchema, setupCVRTables} from './cvr.ts';
 
-async function migrateFromLegacySchema(
-  lc: LogContext,
-  db: PostgresDB,
-  newSchema: string,
-) {
-  const result = await db`SELECT * FROM pg_namespace WHERE nspname = 'cvr'`;
-  if (result.length > 0) {
-    lc.info?.(`Migrating cvr to ${newSchema}`);
-    await db`ALTER SCHEMA cvr RENAME TO ${db(newSchema)}`;
-  }
-}
-
 export async function initViewSyncerSchema(
   log: LogContext,
   db: PostgresDB,
   shardID: string,
 ): Promise<void> {
   const schema = cvrSchema(shardID);
-
-  await migrateFromLegacySchema(log, db, schema);
 
   const setupMigration: Migration = {
     migrateSchema: (lc, tx) => setupCVRTables(lc, tx, shardID),
