@@ -94,6 +94,46 @@ export const pushBodySchema = v.object({
 
 export const pushMessageSchema = v.tuple([v.literal('push'), pushBodySchema]);
 
+const mutationIDSchema = v.object({
+  id: v.number(),
+  clientID: v.string(),
+});
+
+const appErrorSchema = v.object({
+  type: v.literal('app'),
+  error: v.string(),
+});
+const zeroErrorSchema = v.object({
+  type: v.literal('zero'),
+  error: v.literal('ooo-mutation'),
+});
+
+const mutationOkSchema = v.object({});
+const mutationErrorSchema = v.union(appErrorSchema, zeroErrorSchema);
+const mutationResultSchema = v.union(mutationOkSchema, mutationErrorSchema);
+const mutationResponseSchema = v.object({
+  id: mutationIDSchema,
+  result: mutationResultSchema,
+});
+
+const pushOkSchema = v.object({
+  mutations: v.array(mutationResponseSchema),
+});
+
+const unsupportedPushVersionSchema = v.object({
+  error: v.literal('unsupported-push-version'),
+});
+const unsupportedSchemaVersionSchema = v.object({
+  error: v.literal('unsupported-schema-version'),
+});
+
+const pushErrorSchema = v.union(
+  unsupportedPushVersionSchema,
+  unsupportedSchemaVersionSchema,
+);
+
+export const pushResponseSchema = v.union(pushOkSchema, pushErrorSchema);
+
 export type InsertOp = v.Infer<typeof insertOpSchema>;
 export type UpsertOp = v.Infer<typeof upsertOpSchema>;
 export type UpdateOp = v.Infer<typeof updateOpSchema>;
@@ -106,6 +146,7 @@ export type CustomMutation = v.Infer<typeof customMutationSchema>;
 export type Mutation = v.Infer<typeof mutationSchema>;
 export type PushBody = v.Infer<typeof pushBodySchema>;
 export type PushMessage = v.Infer<typeof pushMessageSchema>;
+export type PushResponse = v.Infer<typeof pushResponseSchema>;
 
 export function mapCRUD(
   arg: CRUDMutationArg,

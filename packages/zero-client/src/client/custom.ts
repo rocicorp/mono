@@ -10,17 +10,75 @@ import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {ZeroContext} from './context.ts';
 import type {
-  CustomMutatorImpl,
   DeleteID,
   InsertValue,
   SchemaCRUD,
   SchemaQuery,
   TableCRUD,
-  Transaction,
-  TransactionReason,
+  TransactionBase,
   UpdateValue,
   UpsertValue,
 } from '../../../zql/src/mutate/custom.ts';
+
+/**
+ * An instance of this is passed to custom mutator implementations and
+ * allows reading and writing to the database and IVM at the head
+ * at which the mutator is being applied.
+ */
+export interface Transaction<S extends Schema> extends TransactionBase<S> {
+  readonly location: 'client';
+  readonly reason: 'optimistic' | 'rebase';
+}
+
+/**
+ * The shape which a user's custom mutator definitions must conform to.
+ */
+export type CustomMutatorDefs<S extends Schema> = {
+  readonly [Table in keyof S['tables']]?: {
+    readonly [key: string]: CustomMutatorImpl<S>;
+  };
+} & {
+  // The user is not required to associate mutators with tables.
+  // Maybe that have some other arbitrary way to namespace.
+  [namespace: string]: {
+    [key: string]: CustomMutatorImpl<S>;
+  };
+};
+
+export type CustomMutatorImpl<S extends Schema> = (
+  tx: Transaction<S>,
+  // TODO: many args. See commit: 52657c2f934b4a458d628ea77e56ce92b61eb3c6 which did have many args.
+  // The issue being that it will be a protocol change to support varargs.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  args: any,
+) => Promise<void>;
+
+/**
+ * The shape exposed on the `Zero.mutate` instance.
+ * The signature of a custom mutator takes a `transaction` as its first arg
+ * but the user does not provide this arg when calling the mutator.
+ *
+ * This utility strips the `tx` arg from the user's custom mutator signatures.
+ */
+export type MakeCustomMutatorInterfaces<
+  S extends Schema,
+  MD extends CustomMutatorDefs<S>,
+> = {
+  readonly [Table in keyof MD]: {
+    readonly [P in keyof MD[Table]]: MakeCustomMutatorInterface<
+      S,
+      MD[Table][P]
+    >;
+  };
+};
+
+export type MakeCustomMutatorInterface<
+  S extends Schema,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  F,
+> = F extends (tx: Transaction<S>, ...args: infer Args) => Promise<void>
+  ? (...args: Args) => Promise<void>
+  : never;
 
 export class TransactionImpl implements Transaction<Schema> {
   constructor(
@@ -50,7 +108,8 @@ export class TransactionImpl implements Transaction<Schema> {
 
   readonly clientID: ClientID;
   readonly mutationID: number;
-  readonly reason: TransactionReason;
+  readonly reason: 'optimistic' | 'rebase';
+  readonly location = 'client';
   readonly mutate: SchemaCRUD<Schema>;
   readonly query: SchemaQuery<Schema>;
 }

@@ -63,7 +63,7 @@ import {
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
 } from './zero.ts';
-import type {CustomMutatorDefs} from '../../../zql/src/mutate/custom.ts';
+import type {CustomMutatorDefs} from './custom.ts';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;

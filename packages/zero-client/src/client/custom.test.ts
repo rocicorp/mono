@@ -1,17 +1,17 @@
 import {beforeEach, describe, expect, expectTypeOf, test} from 'vitest';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
-import {TransactionImpl} from './custom.ts';
+import {
+  TransactionImpl,
+  type CustomMutatorDefs,
+  type MakeCustomMutatorInterfaces,
+  type Transaction,
+} from './custom.ts';
 import {zeroForTest} from './test-utils.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {createDb} from './test/create-db.ts';
 import {IVMSourceRepo} from './ivm-source-repo.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 import {must} from '../../../shared/src/must.ts';
-import type {
-  CustomMutatorDefs,
-  MakeCustomMutatorInterfaces,
-  Transaction,
-} from '../../../zql/src/mutate/custom.ts';
 type Schema = typeof schema;
 
 test('argument types are preserved on the generated mutator interface', () => {
@@ -50,16 +50,16 @@ test('argument types are preserved on the generated mutator interface', () => {
   type MutatorsInterface = MakeCustomMutatorInterfaces<Schema, typeof mutators>;
   expectTypeOf<MutatorsInterface>().toEqualTypeOf<{
     readonly issue: {
-      readonly setTitle: (args: {id: string; title: string}) => void;
+      readonly setTitle: (args: {id: string; title: string}) => Promise<void>;
       readonly setProps: (args: {
         id: string;
         title: string;
         status: 'closed' | 'open';
         assignee: string;
-      }) => void;
+      }) => Promise<void>;
     };
     readonly nonTableNamespace: {
-      readonly doThing: (args: {arg1: string; arg2: number}) => void;
+      readonly doThing: (args: {arg1: string; arg2: number}) => Promise<void>;
     };
   }>();
 });

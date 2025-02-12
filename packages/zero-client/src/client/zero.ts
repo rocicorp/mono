@@ -127,7 +127,7 @@ import type {
   CustomMutatorDefs,
   CustomMutatorImpl,
   MakeCustomMutatorInterfaces,
-} from '../../../zql/src/mutate/custom.ts';
+} from './custom.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
