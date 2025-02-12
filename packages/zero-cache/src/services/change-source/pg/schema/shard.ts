@@ -87,7 +87,17 @@ export async function ensureGlobalTables(db: PostgresDB) {
   await db.unsafe(GLOBAL_SETUP);
 }
 
-function shardSetup(shardID: string, publications: string[]): string {
+export function getClientsTableDefinition(schema: string) {
+  return `CREATE TABLE ${schema}."clients" (
+    "clientGroupID"  TEXT NOT NULL,
+    "clientID"       TEXT NOT NULL,
+    "lastMutationID" BIGINT NOT NULL,
+    "userID"         TEXT,
+    PRIMARY KEY("clientGroupID", "clientID")
+  );`;
+}
+
+export function shardSetup(shardID: string, publications: string[]): string {
   const sharded = append(shardID);
   const schema = schemaFor(shardID);
 
@@ -99,13 +109,7 @@ function shardSetup(shardID: string, publications: string[]): string {
   return `
   CREATE SCHEMA IF NOT EXISTS ${schema};
 
-  CREATE TABLE ${schema}."clients" (
-    "clientGroupID"  TEXT NOT NULL,
-    "clientID"       TEXT NOT NULL,
-    "lastMutationID" BIGINT NOT NULL,
-    "userID"         TEXT,
-    PRIMARY KEY("clientGroupID", "clientID")
-  );
+  ${getClientsTableDefinition(schema)}
 
   CREATE PUBLICATION ${id(metadataPublication)}
     FOR TABLE zero."schemaVersions", zero."permissions", TABLE ${schema}."clients";
