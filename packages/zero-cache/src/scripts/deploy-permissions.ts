@@ -38,10 +38,15 @@ async function validatePermissions(
     WHERE pubname LIKE '${APP_PUBLICATION_PREFIX}%'
        OR pubname LIKE '${INTERNAL_PUBLICATION_PREFIX}%'`);
   if (pubnames.length === 0) {
-    failWithMessage(
+    // If zero-cache has not yet initialized the upstream publications,
+    // we can't validate the permissions against what's been published.
+    // This can happen while bootstrapping / initializing a new stack.
+    // In this case we deploy permissions without validate.
+    lc.info?.(
       `zero-cache has not yet initialized the upstream database.\n` +
-        `Unable to validate permissions.`,
+        `Deploying permissions without validating against published tables/columns.`,
     );
+    return;
   }
 
   lc.info?.('Validating permissions against upstream table and column names.');
