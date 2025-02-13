@@ -35,7 +35,7 @@ import {
   getInternalReplicacheImplForTesting,
   onSetConnectionStateSymbol,
 } from './zero.ts';
-import type {CustomMutatorDefs} from '../../../zql/src/mutate/custom.ts';
+import type {CustomMutatorDefs} from './custom.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type ErrorKind = Enum<typeof ErrorKind>;
