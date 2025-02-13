@@ -180,8 +180,8 @@ export default $config({
     viewSyncer.url.apply((url) => {
       console.info(`Finished deploying view-syncers to ${url}`);
       execSync(
-        `cd ../../packages/zero && ` +
-          `npx zero-deploy-permissions --schema-path ../../apps/zbugs/schema.ts`,
+        `npx zero-deploy-permissions --schema-path ../../apps/zbugs/schema.ts`,
+        { cwd: "../../packages/zero/" },
       );
     });
   },
