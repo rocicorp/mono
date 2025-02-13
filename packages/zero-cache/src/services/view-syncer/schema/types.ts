@@ -14,7 +14,6 @@ export const cvrVersionSchema = v.object({
    * `stateVersion`, and incremented for configuration changes that affect the contents
    * of the CVR such as:
    *
-   * * client set changes
    * * query set changes
    * * query transformation changes (which may happen for changes
    *   in server-side logic or authorization policies)
@@ -98,7 +97,7 @@ const cvrRecordSchema = v.object({
   patchVersion: cvrVersionSchema,
 });
 
-export const clientRecordSchema = cvrRecordSchema.extend({
+export const clientRecordSchema = v.object({
   /** The client ID, of which there can be multiple for a client group view. */
   id: v.string(),
 
@@ -207,7 +206,7 @@ export const rowRecordSchema = cvrRecordSchema.extend({
 export type RowRecord = v.Infer<typeof rowRecordSchema>;
 
 export const patchSchema = v.object({
-  type: v.union(v.literal('client'), v.literal('row'), v.literal('query')),
+  type: v.union(v.literal('row'), v.literal('query')),
   op: v.union(v.literal('put'), v.literal('del')),
 });
 
@@ -243,14 +242,7 @@ export type QueryPatch = v.Infer<typeof queryPatchSchema>;
 export type PutQueryPatch = QueryPatch & {op: 'put'};
 export type DelQueryPatch = QueryPatch & {op: 'del'};
 
-export const clientPatchSchema = patchSchema.extend({
-  type: v.literal('client'),
-  id: v.string(),
-});
-
-export type ClientPatch = v.Infer<typeof clientPatchSchema>;
-
-export const metadataPatchSchema = v.union(clientPatchSchema, queryPatchSchema);
+export const metadataPatchSchema = queryPatchSchema;
 
 export type MetadataPatch = v.Infer<typeof metadataPatchSchema>;
 

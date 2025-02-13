@@ -35,7 +35,6 @@ import {
 } from './schema/cvr.ts';
 import {
   type ClientQueryRecord,
-  type ClientRecord,
   cmpVersions,
   type CVRVersion,
   EMPTY_CVR_VERSION,
@@ -545,8 +544,8 @@ export class CVRStore {
             LEFT JOIN ${this.#cvr('rowsVersion')} AS rows 
             ON cvr."clientGroupID" = rows."clientGroupID"
             WHERE cvr."clientGroupID" = ${id}`,
-        tx<Pick<ClientsRow, 'clientID' | 'patchVersion'>[]>`
-        SELECT "clientID", "patchVersion" FROM ${this.#cvr('clients')}
+        tx<Pick<ClientsRow, 'clientID'>[]>`
+        SELECT "clientID" FROM ${this.#cvr('clients')}
            WHERE "clientGroupID" = ${id}`,
         tx<QueriesRow[]>`
         SELECT * FROM ${this.#cvr('queries')} 
@@ -604,10 +603,8 @@ export class CVRStore {
     }
 
     for (const row of clientsRows) {
-      const version = versionFromString(row.patchVersion);
       cvr.clients[row.clientID] = {
         id: row.clientID,
-        patchVersion: version,
         desiredQueryIDs: [],
       };
     }
@@ -779,22 +776,10 @@ export class CVRStore {
     });
   }
 
-  updateClientPatchVersion(clientID: string, patchVersion: CVRVersion): void {
-    this.#writes.add({
-      stats: {clients: 1},
-      write: tx => tx`UPDATE ${this.#cvr('clients')}
-      SET "patchVersion" = ${versionString(patchVersion)}
-      WHERE "clientGroupID" = ${this.#id} AND "clientID" = ${clientID}`,
-    });
-  }
-
-  insertClient(client: ClientRecord): void {
+  insertClient(client: {id: string}): void {
     const change: ClientsRow = {
       clientGroupID: this.#id,
       clientID: client.id,
-      patchVersion: versionString(client.patchVersion),
-      // TODO(arv): deleted is never set to true
-      deleted: false,
     };
 
     this.#writes.add({
@@ -864,25 +849,19 @@ export class CVRStore {
         checkVersion(tx, this.#schema, this.#id, current),
       );
 
-      const [allDesires, clientRows, queryRows] = await reader.processReadTask(
-        tx =>
-          Promise.all([
-            tx<DesiresRow[]>`
+      const [allDesires, queryRows] = await reader.processReadTask(tx =>
+        Promise.all([
+          tx<DesiresRow[]>`
       SELECT * FROM ${this.#cvr('desires')}
         WHERE "clientGroupID" = ${this.#id}
         AND "patchVersion" > ${start}
         AND "patchVersion" <= ${end}`,
-            tx<ClientsRow[]>`
-      SELECT * FROM ${this.#cvr('clients')}
-        WHERE "clientGroupID" = ${this.#id}
-        AND "patchVersion" > ${start}
-        AND "patchVersion" <= ${end}`,
-            tx<Pick<QueriesRow, 'deleted' | 'queryHash' | 'patchVersion'>[]>`
+          tx<Pick<QueriesRow, 'deleted' | 'queryHash' | 'patchVersion'>[]>`
       SELECT deleted, "queryHash", "patchVersion" FROM ${this.#cvr('queries')}
         WHERE "clientGroupID" = ${this.#id}
         AND "patchVersion" > ${start}
         AND "patchVersion" <= ${end}`,
-          ]),
+        ]),
       );
 
       const ast = (id: string) => must(upToCVR.queries[id]).ast;
@@ -896,14 +875,6 @@ export class CVRStore {
         const v = row.patchVersion;
         assert(v);
         patches.push({patch, toVersion: versionFromString(v)});
-      }
-      for (const row of clientRows) {
-        const patch: Patch = {
-          type: 'client',
-          op: row.deleted ? 'del' : 'put',
-          id: row.clientID,
-        };
-        patches.push({patch, toVersion: versionFromString(row.patchVersion)});
       }
       for (const row of allDesires) {
         const {clientID, queryHash: id} = row;

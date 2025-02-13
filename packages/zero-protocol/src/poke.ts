@@ -1,5 +1,4 @@
 import * as v from '../../shared/src/valita.ts';
-import {clientsPatchSchema} from './clients-patch.ts';
 import {queriesPatchSchema} from './queries-patch.ts';
 import {rowsPatchSchema} from './row-patch.ts';
 import {nullableVersionSchema, versionSchema} from './version.ts';
@@ -53,9 +52,6 @@ export const pokePartBodySchema = v.object({
   pokeID: v.string(),
   // Changes to last mutation id by client id.
   lastMutationIDChanges: v.record(v.number()).optional(),
-  // Patches to the set of "alive" clients (according to server) belonging to
-  // this client group.
-  clientsPatch: clientsPatchSchema.optional(),
   // Patches to the desired query sets by client id.
   desiredQueriesPatches: v.record(queriesPatchSchema).optional(),
   // Patches to the set of queries for which entities are sync'd in

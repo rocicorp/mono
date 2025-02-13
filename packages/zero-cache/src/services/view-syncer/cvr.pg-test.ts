@@ -238,8 +238,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: false,
         },
       ],
       queries: [
@@ -286,7 +284,6 @@ describe('view-syncer/cvr', () => {
         fooClient: {
           id: 'fooClient',
           desiredQueryIDs: ['oneHash'],
-          patchVersion: {stateVersion: '1a9', minorVersion: 1},
         },
       },
       queries: {
@@ -326,8 +323,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: false,
         },
       ],
       queries: [
@@ -383,7 +378,6 @@ describe('view-syncer/cvr', () => {
         fooClient: {
           id: 'fooClient',
           desiredQueryIDs: ['oneHash'],
-          patchVersion: {stateVersion: '1a9', minorVersion: 1},
         },
       },
       queries: {
@@ -538,14 +532,10 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'dooClient',
-          patchVersion: '1a8',
-          deleted: false,
         },
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: false,
         },
       ],
       queries: [
@@ -598,12 +588,10 @@ describe('view-syncer/cvr', () => {
         dooClient: {
           id: 'dooClient',
           desiredQueryIDs: ['oneHash'],
-          patchVersion: {stateVersion: '1a8'},
         },
         fooClient: {
           id: 'fooClient',
           desiredQueryIDs: ['oneHash'],
-          patchVersion: {stateVersion: '1a9', minorVersion: 1},
         },
       },
       queries: {
@@ -689,68 +677,43 @@ describe('view-syncer/cvr', () => {
         {hash: 'threeHash', ast: {table: 'comments'}},
       ]),
     ).toMatchInlineSnapshot(`
-          [
-            {
-              "patch": {
-                "id": "barClient",
-                "op": "put",
-                "type": "client",
-              },
-              "toVersion": {
-                "minorVersion": 1,
-                "stateVersion": "1aa",
-              },
+      [
+        {
+          "patch": {
+            "ast": {
+              "table": "issues",
             },
-            {
-              "patch": {
-                "ast": {
-                  "table": "issues",
-                },
-                "clientID": "barClient",
-                "id": "oneHash",
-                "op": "put",
-                "type": "query",
-              },
-              "toVersion": {
-                "minorVersion": 1,
-                "stateVersion": "1aa",
-              },
+            "clientID": "barClient",
+            "id": "oneHash",
+            "op": "put",
+            "type": "query",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1aa",
+          },
+        },
+        {
+          "patch": {
+            "ast": {
+              "table": "comments",
             },
-            {
-              "patch": {
-                "ast": {
-                  "table": "comments",
-                },
-                "clientID": "barClient",
-                "id": "threeHash",
-                "op": "put",
-                "type": "query",
-              },
-              "toVersion": {
-                "minorVersion": 1,
-                "stateVersion": "1aa",
-              },
-            },
-          ]
-        `);
+            "clientID": "barClient",
+            "id": "threeHash",
+            "op": "put",
+            "type": "query",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1aa",
+          },
+        },
+      ]
+    `);
 
     // Adds a new client with no desired queries.
     expect(updater.putDesiredQueries('bonkClient', [])).toMatchInlineSnapshot(
-      `
-                [
-                  {
-                    "patch": {
-                      "id": "bonkClient",
-                      "op": "put",
-                      "type": "client",
-                    },
-                    "toVersion": {
-                      "minorVersion": 1,
-                      "stateVersion": "1aa",
-                    },
-                  },
-                ]
-              `,
+      `[]`,
     );
     expect(updater.clearDesiredQueries('dooClient')).toMatchInlineSnapshot(`
                   [
@@ -778,13 +741,13 @@ describe('view-syncer/cvr', () => {
 
     expect(flushed).toMatchInlineSnapshot(`
       {
-        "clients": 4,
+        "clients": 2,
         "desires": 6,
         "instances": 2,
         "queries": 7,
         "rows": 0,
         "rowsDeferred": 0,
-        "statements": 20,
+        "statements": 18,
       }
     `);
     expect(updated).toEqual({
@@ -796,22 +759,18 @@ describe('view-syncer/cvr', () => {
         barClient: {
           id: 'barClient',
           desiredQueryIDs: ['oneHash', 'threeHash'],
-          patchVersion: {stateVersion: '1aa', minorVersion: 1},
         },
         bonkClient: {
           id: 'bonkClient',
           desiredQueryIDs: [],
-          patchVersion: {stateVersion: '1aa', minorVersion: 1},
         },
         dooClient: {
           desiredQueryIDs: [],
           id: 'dooClient',
-          patchVersion: {stateVersion: '1a8'},
         },
         fooClient: {
           id: 'fooClient',
           desiredQueryIDs: ['fourHash', 'threeHash'],
-          patchVersion: {stateVersion: '1a9', minorVersion: 1},
         },
       },
       queries: {
@@ -878,26 +837,18 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          deleted: false,
-          patchVersion: '1a9:01',
         },
         {
           clientGroupID: 'abc123',
           clientID: 'barClient',
-          deleted: false,
-          patchVersion: '1aa:01',
         },
         {
           clientGroupID: 'abc123',
           clientID: 'bonkClient',
-          deleted: false,
-          patchVersion: '1aa:01',
         },
         {
           clientGroupID: 'abc123',
           clientID: 'dooClient',
-          deleted: false,
-          patchVersion: '1a8',
         },
       ],
       queries: [
@@ -1077,8 +1028,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: false,
         },
       ],
       queries: [
@@ -1195,8 +1144,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: null,
         },
       ],
       queries: [
@@ -1463,17 +1410,6 @@ describe('view-syncer/cvr', () => {
         },
         {
           "patch": {
-            "id": "fooClient",
-            "op": "put",
-            "type": "client",
-          },
-          "toVersion": {
-            "minorVersion": 1,
-            "stateVersion": "1a9",
-          },
-        },
-        {
-          "patch": {
             "ast": {
               "table": "issues",
             },
@@ -1554,8 +1490,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          deleted: null,
-          patchVersion: '1a9:01',
         },
       ],
       queries: [
@@ -1678,8 +1612,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: null,
         },
       ],
       queries: [
@@ -1910,17 +1842,6 @@ describe('view-syncer/cvr', () => {
           },
           "toVersion": {
             "stateVersion": "19z",
-          },
-        },
-        {
-          "patch": {
-            "id": "fooClient",
-            "op": "put",
-            "type": "client",
-          },
-          "toVersion": {
-            "minorVersion": 1,
-            "stateVersion": "1a9",
           },
         },
         {
@@ -2195,8 +2116,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: null,
         },
       ],
       queries: [
@@ -2486,17 +2405,6 @@ describe('view-syncer/cvr', () => {
           },
           "toVersion": {
             "stateVersion": "19z",
-          },
-        },
-        {
-          "patch": {
-            "id": "fooClient",
-            "op": "put",
-            "type": "client",
-          },
-          "toVersion": {
-            "minorVersion": 1,
-            "stateVersion": "1a9",
           },
         },
         {
@@ -3091,8 +2999,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: false,
         },
       ],
       queries: [
@@ -3225,10 +3131,6 @@ describe('view-syncer/cvr', () => {
               "twoHash",
             ],
             "id": "fooClient",
-            "patchVersion": {
-              "minorVersion": 1,
-              "stateVersion": "1a9",
-            },
           },
         },
         "id": "abc123",
@@ -3434,17 +3336,6 @@ describe('view-syncer/cvr', () => {
         },
         {
           "patch": {
-            "id": "fooClient",
-            "op": "put",
-            "type": "client",
-          },
-          "toVersion": {
-            "minorVersion": 1,
-            "stateVersion": "1a9",
-          },
-        },
-        {
-          "patch": {
             "ast": {
               "table": "issues",
             },
@@ -3538,8 +3429,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: null,
         },
       ],
       queries: [
@@ -3844,8 +3733,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: null,
         },
       ],
       queries: [
@@ -3989,8 +3876,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: null,
         },
       ],
       queries: [

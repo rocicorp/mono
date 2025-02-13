@@ -553,7 +553,6 @@ describe('view-syncer/service', () => {
         foo: {
           desiredQueryIDs: ['query-hash1'],
           id: 'foo',
-          patchVersion: {stateVersion: '00', minorVersion: 1},
         },
       },
       id: '9876',
@@ -608,7 +607,6 @@ describe('view-syncer/service', () => {
         foo: {
           desiredQueryIDs: ['query-hash2'],
           id: 'foo',
-          patchVersion: {stateVersion: '00', minorVersion: 1},
         },
       },
       id: '9876',
@@ -645,12 +643,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "foo": [
                 {
@@ -904,12 +896,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "foo": [
                 {
@@ -1224,12 +1210,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "foo": [
                 {
@@ -1333,12 +1313,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "foo": [
                 {
@@ -1733,12 +1707,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "foo": [
                 {
@@ -1806,12 +1774,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "bar",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "bar": [
                 {
@@ -1987,12 +1949,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "foo": [
                 {
@@ -2161,12 +2117,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "foo": [
                 {
@@ -2298,12 +2248,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "bar",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "bar": [
                 {
@@ -2387,12 +2331,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "bar",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "bar": [
                 {
@@ -2494,16 +2432,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-              {
-                "clientID": "bar",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "bar": [
                 {
@@ -2732,12 +2660,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "foo": [
                 {
@@ -3192,16 +3114,6 @@ describe('permissions', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-              {
-                "clientID": "bar",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "bar": [
                 {

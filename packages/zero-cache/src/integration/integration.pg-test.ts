@@ -612,7 +612,6 @@ describe('integration', {timeout: 30000}, () => {
         'pokePart',
         {
           pokeID: '00:01',
-          clientsPatch: [{op: 'put', clientID: 'def'}],
           desiredQueriesPatches: {
             def: [{op: 'put', hash: 'query-hash1', ast: FOO_QUERY}],
           },

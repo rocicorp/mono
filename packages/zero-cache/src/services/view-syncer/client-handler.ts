@@ -23,7 +23,6 @@ import {
 import type {Subscription} from '../../types/subscription.ts';
 import {unescapedSchema as schema} from '../change-source/pg/schema/shard.ts';
 import {
-  type ClientPatch,
   cmpVersions,
   cookieToVersion,
   type CVRVersion,
@@ -49,10 +48,7 @@ export type DeleteRowPatch = {
 };
 
 export type RowPatch = PutRowPatch | DeleteRowPatch;
-export type ConfigPatch =
-  | ClientPatch
-  | DelQueryPatch
-  | (PutQueryPatch & {ast: AST});
+export type ConfigPatch = DelQueryPatch | (PutQueryPatch & {ast: AST});
 
 export type Patch = ConfigPatch | RowPatch;
 
@@ -195,9 +191,6 @@ export class ClientHandler {
 
       const {type, op} = patch;
       switch (type) {
-        case 'client':
-          (body.clientsPatch ??= []).push({op, clientID: patch.id});
-          break;
         case 'query': {
           const patches = patch.clientID
             ? ((body.desiredQueriesPatches ??= {})[patch.clientID] ??= [])

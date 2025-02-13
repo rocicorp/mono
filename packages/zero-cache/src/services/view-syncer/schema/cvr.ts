@@ -57,8 +57,6 @@ export function compareInstancesRows(a: InstancesRow, b: InstancesRow) {
 export type ClientsRow = {
   clientGroupID: string;
   clientID: string;
-  patchVersion: string;
-  deleted: boolean | null;
 };
 
 function createClientsTable(shardID: string) {
@@ -66,8 +64,6 @@ function createClientsTable(shardID: string) {
 CREATE TABLE ${schema(shardID)}.clients (
   "clientGroupID"      TEXT,
   "clientID"           TEXT,
-  "patchVersion"       TEXT NOT NULL,  -- Version at which added or deleted
-  deleted              BOOL,           -- put vs del client patch
 
   PRIMARY KEY ("clientGroupID", "clientID"),
 
@@ -75,10 +71,6 @@ CREATE TABLE ${schema(shardID)}.clients (
     FOREIGN KEY("clientGroupID")
     REFERENCES ${schema(shardID)}.instances("clientGroupID")
 );
-
--- For catchup patches.
-CREATE INDEX client_patch_version
-  ON ${schema(shardID)}.clients ("patchVersion");
 `;
 }
 export function compareClientsRows(a: ClientsRow, b: ClientsRow) {
