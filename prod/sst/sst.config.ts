@@ -1,11 +1,7 @@
 /* eslint-disable */
 /// <reference path="./.sst/platform/config.d.ts" />
-
-import { execSync } from "child_process";
-
 // Load .env file
 require("dotenv").config();
-
 export default $config({
   app(input) {
     return {
@@ -13,6 +9,7 @@ export default $config({
       removal: input?.stage === "production" ? "retain" : "remove",
       home: "aws",
       region: process.env.AWS_REGION || "us-east-1",
+      providers: { command: "1.0.2" },
     };
   },
   async run() {
@@ -20,12 +17,10 @@ export default $config({
     const replicationBucket = new sst.aws.Bucket(`replication-bucket`, {
       public: false,
     });
-
     // VPC Configuration
     const vpc = new sst.aws.Vpc(`vpc`, {
       az: 2,
     });
-
     // ECS Cluster
     const cluster = new sst.aws.Cluster(`cluster`, {
       vpc,
@@ -40,7 +35,6 @@ export default $config({
         },
       },
     });
-
     // Common environment variables
     const commonEnv = {
       AWS_REGION: process.env.AWS_REGION!,
@@ -55,7 +49,6 @@ export default $config({
       ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250211-00`,
       ZERO_IMAGE_URL: process.env.ZERO_IMAGE_URL!,
     };
-
     // Replication Manager Service
     const replicationManager = cluster.addService(`replication-manager`, {
       cpu: "2 vCPU",
@@ -101,7 +94,6 @@ export default $config({
         },
       },
     });
-
     // View Syncer Service
     const viewSyncer = cluster.addService(`view-syncer`, {
       cpu: "8 vCPU",
@@ -178,16 +170,15 @@ export default $config({
       wait: true,
     });
 
-    // Deploy permissions after the view-syncer has been fully deployed.
-    $resolve(viewSyncer.nodes.service).apply(() => {
-      console.info(`Finished deploying view-syncers`);
-      execSync(
-        `npx zero-deploy-permissions --schema-path ../../apps/zbugs/schema.ts`,
-        {
-          cwd: "../../packages/zero/",
-          stdio: "inherit",
-        },
-      );
-    });
+    new command.local.Command(
+      "zero-deploy-permissions",
+      {
+        dir: "../../packages/zero/",
+        create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/schema.ts`,
+      },
+      {
+        dependsOn: viewSyncer,
+      },
+    );
   },
 });
