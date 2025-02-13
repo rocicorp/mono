@@ -176,8 +176,8 @@ export default $config({
     new command.local.Command(
       "zero-deploy-permissions",
       {
-        // Pulumi operates with cwd at the repo root.
-        dir: join(process.cwd(), "packages/zero/"),
+        // Pulumi operates with cwd at the package root.
+        dir: join(process.cwd(), "../../packages/zero/"),
         create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/schema.ts`,
       },
       {
