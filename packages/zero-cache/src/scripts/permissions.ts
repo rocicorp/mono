@@ -24,13 +24,14 @@ export const deployPermissionsOptions = {
 
   upstream: {
     db: {
-      ...zeroOptions.upstream.db,
       type: v.string().optional(),
       desc: [
         `The upstream Postgres database to deploy permissions to.`,
         `This is ignored if an {bold output-file} is specified.`,
       ],
     },
+
+    type: zeroOptions.upstream.type,
   },
 
   output: {
