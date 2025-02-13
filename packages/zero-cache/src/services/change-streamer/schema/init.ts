@@ -56,9 +56,18 @@ export async function initChangeStreamerSchema(
     },
   };
 
+  const migrateV3ToV4 = {
+    migrateSchema: async (_: LogContext, db: PostgresTransaction) => {
+      await db`
+      ALTER TABLE ${db(schema)}."changeLog" ALTER "change" TYPE JSON;
+      `;
+    },
+  };
+
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     2: {migrateSchema: migrateV1toV2},
     3: migrateV2ToV3,
+    4: migrateV3ToV4,
   };
 
   await runSchemaMigrations(

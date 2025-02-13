@@ -36,6 +36,9 @@ import {stream, type Sink} from '../types/streams.ts';
 // Adjust to debug.
 const LOG_LEVEL: LogLevel = 'error';
 
+// Note: The NULL unicode character \u0000 is specifically used to verify
+//       end-to-end JSON compatibility. In particular, any intermediate
+//       JSONB storage of row contents would not be able to handle it.
 const INITIAL_PG_SETUP = `
       CREATE TABLE foo(
         id TEXT PRIMARY KEY, 
@@ -51,7 +54,7 @@ const INITIAL_PG_SETUP = `
           'bar',
           'baz',
           true,
-          '{"foo":"bar"}',
+          '{"foo":"bar\\u0000"}',
           'true',
           '123',
           '"string"');
@@ -114,7 +117,7 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
         id: 'bar',
         ['far_id']: 'baz',
         b: true,
-        j1: {foo: 'bar'},
+        j1: {foo: 'bar\u0000'},
         j2: true,
         j3: 123,
         j4: 'string',
@@ -641,7 +644,7 @@ describe('integration', {timeout: 30000}, () => {
                 id: 'bar',
                 ['far_id']: 'baz',
                 b: true,
-                j1: {foo: 'bar'},
+                j1: {foo: 'bar\u0000'},
                 j2: true,
                 j3: 123,
                 j4: 'string',
@@ -730,7 +733,7 @@ describe('integration', {timeout: 30000}, () => {
                 ['far_id']: 'not_baz',
                 id: 'bar',
                 j1: {
-                  foo: 'bar',
+                  foo: 'bar\u0000',
                 },
                 j2: true,
                 j3: 123,
