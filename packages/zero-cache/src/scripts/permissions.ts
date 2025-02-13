@@ -69,6 +69,9 @@ export async function loadPermissions(
   lc: LogContext,
   schemaPath: string,
 ): Promise<PermissionsConfig> {
+  const typeModuleErrorMessage = () =>
+    `\n\nYou may need to add \` "type": "module" \` to the package.json file for ${schemaPath}.\n`;
+
   lc.info?.(`Loading permissions from ${schemaPath}`);
   const dir = dirname(fileURLToPath(import.meta.url));
   const absoluteSchemaPath = resolve(schemaPath);
@@ -85,14 +88,19 @@ export async function loadPermissions(
   try {
     module = await tsImport(relativePath, import.meta.url);
   } catch (e) {
-    lc.error?.(`Failed to load zero schema from ${absoluteSchemaPath}:`, e);
-    process.exit(1);
+    lc.error?.(
+      `Failed to load zero schema from ${absoluteSchemaPath}` +
+        typeModuleErrorMessage(),
+    );
+    throw e;
   }
 
   if (!isSchemaConfig(module)) {
-    throw new Error(
-      `Schema file ${schemaPath} must export [schema] and [permissions].`,
+    lc.error?.(
+      `Schema file ${schemaPath} must export [schema] and [permissions].` +
+        typeModuleErrorMessage(),
     );
+    process.exit(1);
   }
   try {
     const schemaConfig = module;
@@ -100,7 +108,7 @@ export async function loadPermissions(
       await (schemaConfig.permissions as unknown as Promise<unknown>);
     return v.parse(perms, permissionsConfigSchema);
   } catch (e) {
-    lc.error?.(`Failed to parse Permissions object`, e);
-    process.exit(1);
+    lc.error?.(`Failed to parse Permissions object`);
+    throw e;
   }
 }
