@@ -43,14 +43,17 @@ export const deployPermissionsOptions = {
     },
 
     format: {
-      type: v.union(v.literal('sql'), v.literal('json')).default('sql'),
+      type: v
+        .union(v.literal('sql'), v.literal('json'), v.literal('pretty'))
+        .default('sql'),
       desc: [
         `The desired format of the output file.`,
         ``,
         `A {bold sql} file can be executed via "psql -f <file.sql>", or "\\\\i <file.sql>"`,
         `from within the psql console, or copied and pasted into a migration script.`,
         ``,
-        `The {bold json} format is available for general debugging.`,
+        `The {bold json} and {bold pretty} formats are available for non-pg backends`,
+        `and general debugging.`,
       ],
     },
   },
