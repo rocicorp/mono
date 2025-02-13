@@ -47,15 +47,16 @@ jobs:
       - name: Install dependencies
         run: |
           npm run build-ci
+      - name: Get Git SHA
+        id: git-sha
+        run: echo "SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
       - name: Create package tarball
         run: |
           cd packages/zero
           npm pack
-          echo "ZERO_VERSION=$(ls rocicorp-zero-*.tgz)" >> $GITHUB_ENV
-          cp rocicorp-zero-*.tgz ./pkgs/
-      - name: Get Git SHA
-        id: git-sha
-        run: echo "SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          ZERO_TARBALL="$(ls rocicorp-zero-*.tgz | xargs -- basename -s .tgz)+${{ env.SHA }}.tgz"
+          mv rocicorp-zero-*.tgz ./pkgs/$ZERO_TARBALL
+          echo "ZERO_VERSION=$ZERO_TARBALL" >> $GITHUB_ENV
       - name: Build and push Docker image
         run: |
           cd packages/zero
