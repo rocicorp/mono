@@ -23,7 +23,11 @@ export function createLogContext(
     ...context,
     pid,
   };
-  return new LogContext(log.level, ctx, createLogSink(log));
+  const lc = new LogContext(log.level, ctx, createLogSink(log));
+  // Emit a blank line to absorb random ANSI control code garbage that
+  // for some reason gets prepended to the first log line in CloudWatch.
+  lc.info?.('');
+  return lc;
 }
 
 const consoleJsonLogSink: LogSink = {
