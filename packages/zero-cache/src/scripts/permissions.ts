@@ -70,7 +70,7 @@ export async function loadPermissions(
   schemaPath: string,
 ): Promise<PermissionsConfig> {
   const typeModuleErrorMessage = () =>
-    `\n\nYou may need to add \` "type": "module" \` the package.json file for ${schemaPath}.\n`;
+    `\n\nYou may need to add \` "type": "module" \` to the package.json file for ${schemaPath}.\n`;
 
   lc.info?.(`Loading permissions from ${schemaPath}`);
   const dir = dirname(fileURLToPath(import.meta.url));
