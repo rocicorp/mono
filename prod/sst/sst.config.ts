@@ -179,11 +179,14 @@ export default $config({
     });
 
     // Deploy permissions after the view-syncer has been fully deployed.
-    viewSyncer.nodes.taskDefinition.apply(() => {
+    $resolve(viewSyncer.nodes.service).apply(() => {
       console.info(`Finished deploying view-syncers`);
       execSync(
         `npx zero-deploy-permissions --schema-path ../../apps/zbugs/schema.ts`,
-        { cwd: "../../packages/zero/" },
+        {
+          cwd: "../../packages/zero/",
+          stdio: "inherit",
+        },
       );
     });
   },
