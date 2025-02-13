@@ -29,11 +29,14 @@ export type ChangeLogEntry = {
 };
 
 function createChangeLogTable(shardID: string) {
+  // Note: The "change" column used to be JSONB, but that was problematic in that
+  // it does not handle the NULL unicode character.
+  // https://vladimir.varank.in/notes/2021/01/you-dont-insert-unicode-null-character-as-postgres-jsonb/
   return `
   CREATE TABLE ${schema(shardID)}."changeLog" (
     watermark  TEXT,
     pos        INT8,
-    change     JSONB NOT NULL,
+    change     JSON NOT NULL,
     precommit  TEXT,  -- Only exists on commit entries. Purely for debugging.
     PRIMARY KEY (watermark, pos)
   );
