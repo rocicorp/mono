@@ -51,6 +51,7 @@ jobs:
         run: |
           cd packages/zero
           npm pack
+          echo "ZERO_VERSION=$(ls rocicorp-zero-*.tgz)" >> $GITHUB_ENV
           cp rocicorp-zero-*.tgz ./pkgs/
       - name: Get Git SHA
         id: git-sha
@@ -60,7 +61,7 @@ jobs:
           cd packages/zero
           docker buildx create --use
           docker buildx inspect --bootstrap
-          docker buildx build --platform linux/amd64 --build-arg ZERO_VERSION=rocicorp-zero-*.tgz -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE_ZERO_CACHE:${{ env.SHA }} -f ./Dockerfile --push .
+          docker buildx build --platform linux/amd64 --build-arg ZERO_VERSION=${{ env.ZERO_VERSION }} -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE_ZERO_CACHE:${{ env.SHA }} -f ./Dockerfile --push .
       - name: Deploy SST app
         env:
           ZERO_UPSTREAM_DB: ${{ secrets.PROD_ZERO_UPSTREAM_DB }}
