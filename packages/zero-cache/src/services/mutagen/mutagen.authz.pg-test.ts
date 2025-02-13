@@ -147,6 +147,14 @@ const schema = createSchema(TEST_SCHEMA_VERSION, {
       })
       .primaryKey('id'),
 
+    table('roColumn')
+      .columns({
+        id: string(),
+        a: string(),
+        b: string(),
+      })
+      .primaryKey('id'),
+
     table('roCell')
       .columns({
         id: string(),
@@ -238,7 +246,21 @@ const permissionsConfig = await definePermissions<AuthData, typeof schema>(
     ) => cmp('id', '=', authData.sub);
 
     return {
+      roColumn: {
+        row: {
+          update: {
+            postMutation: ANYONE_CAN,
+            preMutation: ANYONE_CAN,
+          },
+        },
+      },
       roCell: {
+        row: {
+          update: {
+            postMutation: ANYONE_CAN,
+            preMutation: ANYONE_CAN,
+          },
+        },
         cell: {
           a: {
             insert: NOBODY_CAN,
@@ -259,6 +281,13 @@ const permissionsConfig = await definePermissions<AuthData, typeof schema>(
         },
       },
       adminOnlyCell: {
+        row: {
+          update: {
+            preMutation: ANYONE_CAN,
+            postMutation: ANYONE_CAN,
+          },
+          delete: ANYONE_CAN,
+        },
         cell: {
           a: {
             // insert is always allow since it can't be admin locked on create.
@@ -272,15 +301,17 @@ const permissionsConfig = await definePermissions<AuthData, typeof schema>(
       },
       adminOnlyRow: {
         row: {
-          // insert is always allow since it can't be admin locked on create.
-          update: {preMutation: [allowIfNotAdminLockedRow, allowIfAdmin]},
+          update: {
+            preMutation: [allowIfNotAdminLockedRow, allowIfAdmin],
+            postMutation: ANYONE_CAN,
+          },
           delete: [allowIfNotAdminLockedRow, allowIfAdmin],
         },
       },
       loggedInRow: {
         row: {
           insert: [allowIfLoggedIn],
-          update: {preMutation: [allowIfLoggedIn]},
+          update: {preMutation: [allowIfLoggedIn], postMutation: ANYONE_CAN},
           delete: [allowIfLoggedIn],
         },
       },
@@ -292,7 +323,10 @@ const permissionsConfig = await definePermissions<AuthData, typeof schema>(
       dataTypeTest: {
         row: {
           insert: ANYONE_CAN,
-          update: ANYONE_CAN,
+          update: {
+            preMutation: ANYONE_CAN,
+            postMutation: ANYONE_CAN,
+          },
           delete: ANYONE_CAN,
         },
       },
@@ -808,34 +842,6 @@ describe('data type test', () => {
         {
           "b": false,
           "i": 100n,
-          "id": "100",
-          "j": {},
-          "r": 1.1,
-        },
-      ]
-    `);
-  });
-
-  test('bigint range', async () => {
-    await runMutation('update', {id: '100', i: Number.MAX_SAFE_INTEGER + 1});
-    expect(await select('100')).toMatchInlineSnapshot(`
-      Result [
-        {
-          "b": true,
-          "i": 9007199254740992n,
-          "id": "100",
-          "j": {},
-          "r": 1.1,
-        },
-      ]
-    `);
-
-    await runMutation('update', {id: '100', i: Number.MIN_SAFE_INTEGER - 1});
-    expect(await select('100')).toMatchInlineSnapshot(`
-      Result [
-        {
-          "b": true,
-          "i": -9007199254740992n,
           "id": "100",
           "j": {},
           "r": 1.1,

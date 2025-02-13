@@ -32,9 +32,46 @@ import {DbFile} from '../test/lite.ts';
 import type {PostgresDB} from '../types/pg.ts';
 import {childWorker, type Worker} from '../types/processes.ts';
 import {stream, type Sink} from '../types/streams.ts';
+import {
+  ANYONE_CAN_DO_ANYTHING,
+  definePermissions,
+} from '../../../zero-schema/src/permissions.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import {h128} from '../../../shared/src/hash.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
 
 // Adjust to debug.
-const LOG_LEVEL: LogLevel = 'error';
+const LOG_LEVEL: LogLevel = 'debug';
+
+const foo = table('foo')
+  .columns({
+    id: string(),
+  })
+  .primaryKey('id');
+
+const bar = table('boo.far')
+  .columns({
+    id: string(),
+  })
+  .primaryKey('id');
+
+const nopk = table('nopk')
+  .columns({
+    id: string(),
+    val: string(),
+  })
+  .primaryKey('id');
+
+const schema = createSchema(1, {
+  tables: [foo, bar, nopk],
+});
+
+const permissions = await definePermissions(schema, () => ({
+  'foo': ANYONE_CAN_DO_ANYTHING,
+  'boo.far': ANYONE_CAN_DO_ANYTHING,
+  'nopk': ANYONE_CAN_DO_ANYTHING,
+}));
 
 // Note: The NULL unicode character \u0000 is specifically used to verify
 //       end-to-end JSON compatibility. In particular, any intermediate
@@ -67,7 +104,17 @@ const INITIAL_PG_SETUP = `
       INSERT INTO nopk(id, val) VALUES ('foo', 'bar');
 
       CREATE PUBLICATION zero_all FOR TABLE foo, TABLE boo.far, TABLE nopk;
-`;
+
+      CREATE SCHEMA zero;
+
+      CREATE TABLE zero.permissions (
+        permissions JSON,
+        hash TEXT
+      );
+      INSERT INTO zero.permissions (permissions, hash) VALUES ('${JSON.stringify(
+        permissions,
+      )}', '${h128(JSON.stringify(permissions)).toString(16)}');
+      `;
 
 // Keep this in sync with the INITIAL_PG_SETUP
 const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
@@ -294,7 +341,11 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
         name: 'permissions',
         keyColumns: ['lock'],
       },
-      new: {lock: true, permissions: null, hash: null},
+      new: {
+        lock: true,
+        permissions: permissions as unknown as JSONValue,
+        hash: h128(JSON.stringify(permissions)).toString(),
+      },
     },
   ],
   [

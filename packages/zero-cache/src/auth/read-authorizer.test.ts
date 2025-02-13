@@ -4,7 +4,10 @@ import {relationships} from '../../../zero-schema/src/builder/relationship-build
 import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
-import {definePermissions} from '../../../zero-schema/src/permissions.ts';
+import {
+  ANYONE_CAN,
+  definePermissions,
+} from '../../../zero-schema/src/permissions.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
 import {
   astForTestingSymbol,
@@ -14,14 +17,35 @@ import {
 } from '../../../zql/src/query/query-impl.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {transformQuery} from './read-authorizer.ts';
+import {consoleLogSink, LogContext} from '@rocicorp/logger';
 
 const mockDelegate = {} as QueryDelegate;
+
+const lc = new LogContext('debug', {}, consoleLogSink);
 
 function ast(q: Query<ZeroSchema, string>) {
   return (q as QueryImpl<ZeroSchema, string>)[astForTestingSymbol];
 }
 
 const unreadable = table('unreadable')
+  .columns({
+    id: string(),
+  })
+  .primaryKey('id');
+
+const unreadable2 = table('unreadable2')
+  .columns({
+    id: string(),
+  })
+  .primaryKey('id');
+
+const unreadable3 = table('unreadable3')
+  .columns({
+    id: string(),
+  })
+  .primaryKey('id');
+
+const unreadable4 = table('unreadable4')
   .columns({
     id: string(),
   })
@@ -91,7 +115,15 @@ const adminReadableRelationships = relationships(adminReadable, connect => ({
 }));
 
 const schema = createSchema(1, {
-  tables: [unreadable, readable, adminReadable, readableThruUnreadable],
+  tables: [
+    unreadable,
+    unreadable2,
+    unreadable3,
+    unreadable4,
+    readable,
+    adminReadable,
+    readableThruUnreadable,
+  ],
   relationships: [
     readableThruUnreadableRelationships,
     readableRelationships,
@@ -112,7 +144,16 @@ const authData: AuthData = {
 };
 const permissionRules = must(
   await definePermissions<AuthData, Schema>(schema, () => ({
-    unreadable: {
+    readable: {
+      row: {
+        select: ANYONE_CAN,
+      },
+    },
+    unreadable2: {},
+    unreadable3: {
+      row: {},
+    },
+    unreadable4: {
       row: {
         select: [],
       },
@@ -141,28 +182,63 @@ const permissionRules = must(
 );
 
 describe('unreadable tables', () => {
-  test('nuke top level queries', () => {
-    const query = newQuery(mockDelegate, schema, 'unreadable');
-    // If a top-level query tries to query a table that cannot be read,
-    // that query is set to `undefined`.
-    expect(transformQuery(ast(query), permissionRules, authData)).toBe(
-      undefined,
-    );
-    expect(transformQuery(ast(query), permissionRules, undefined)).toBe(
-      undefined,
-    );
+  const unreadables: Array<keyof Schema['tables']> = [
+    'unreadable',
+    'unreadable2',
+    'unreadable3',
+    'unreadable4',
+  ];
+  test('top-level', () => {
+    for (const tableName of unreadables) {
+      const query = newQuery(mockDelegate, schema, tableName);
+      expect(
+        transformQuery(lc, ast(query), permissionRules, authData),
+      ).toStrictEqual({
+        related: undefined,
+        table: tableName,
+        where: {
+          type: 'or',
+          conditions: [],
+        },
+      });
+    }
   });
 
-  test('nuke `related` queries', () => {
+  test('related', () => {
     const query = newQuery(mockDelegate, schema, 'readable')
       .related('unreadable')
       .related('readable');
 
-    // any related calls to unreadable tables are removed.
-    expect(transformQuery(ast(query), permissionRules, authData))
+    expect(transformQuery(lc, ast(query), permissionRules, authData))
       .toMatchInlineSnapshot(`
         {
           "related": [
+            {
+              "correlation": {
+                "childField": [
+                  "id",
+                ],
+                "parentField": [
+                  "unreadableId",
+                ],
+              },
+              "subquery": {
+                "alias": "unreadable",
+                "orderBy": [
+                  [
+                    "id",
+                    "asc",
+                  ],
+                ],
+                "related": undefined,
+                "table": "unreadable",
+                "where": {
+                  "conditions": [],
+                  "type": "or",
+                },
+              },
+              "system": "client",
+            },
             {
               "correlation": {
                 "childField": [
@@ -182,19 +258,51 @@ describe('unreadable tables', () => {
                 ],
                 "related": undefined,
                 "table": "readable",
-                "where": undefined,
+                "where": {
+                  "conditions": [],
+                  "type": "and",
+                },
               },
               "system": "client",
             },
           ],
           "table": "readable",
-          "where": undefined,
+          "where": {
+            "conditions": [],
+            "type": "and",
+          },
         }
       `);
-    expect(transformQuery(ast(query), permissionRules, undefined))
+    expect(transformQuery(lc, ast(query), permissionRules, undefined))
       .toMatchInlineSnapshot(`
         {
           "related": [
+            {
+              "correlation": {
+                "childField": [
+                  "id",
+                ],
+                "parentField": [
+                  "unreadableId",
+                ],
+              },
+              "subquery": {
+                "alias": "unreadable",
+                "orderBy": [
+                  [
+                    "id",
+                    "asc",
+                  ],
+                ],
+                "related": undefined,
+                "table": "unreadable",
+                "where": {
+                  "conditions": [],
+                  "type": "or",
+                },
+              },
+              "system": "client",
+            },
             {
               "correlation": {
                 "childField": [
@@ -214,19 +322,26 @@ describe('unreadable tables', () => {
                 ],
                 "related": undefined,
                 "table": "readable",
-                "where": undefined,
+                "where": {
+                  "conditions": [],
+                  "type": "and",
+                },
               },
               "system": "client",
             },
           ],
           "table": "readable",
-          "where": undefined,
+          "where": {
+            "conditions": [],
+            "type": "and",
+          },
         }
       `);
 
     // no matter how nested
     expect(
       transformQuery(
+        lc,
         ast(
           newQuery(mockDelegate, schema, 'readable').related('readable', q =>
             q.related('readable', q => q.related('unreadable')),
@@ -273,26 +388,63 @@ describe('unreadable tables', () => {
                         "asc",
                       ],
                     ],
-                    "related": [],
+                    "related": [
+                      {
+                        "correlation": {
+                          "childField": [
+                            "id",
+                          ],
+                          "parentField": [
+                            "unreadableId",
+                          ],
+                        },
+                        "subquery": {
+                          "alias": "unreadable",
+                          "orderBy": [
+                            [
+                              "id",
+                              "asc",
+                            ],
+                          ],
+                          "related": undefined,
+                          "table": "unreadable",
+                          "where": {
+                            "conditions": [],
+                            "type": "or",
+                          },
+                        },
+                        "system": "client",
+                      },
+                    ],
                     "table": "readable",
-                    "where": undefined,
+                    "where": {
+                      "conditions": [],
+                      "type": "and",
+                    },
                   },
                   "system": "client",
                 },
               ],
               "table": "readable",
-              "where": undefined,
+              "where": {
+                "conditions": [],
+                "type": "and",
+              },
             },
             "system": "client",
           },
         ],
         "table": "readable",
-        "where": undefined,
+        "where": {
+          "conditions": [],
+          "type": "and",
+        },
       }
     `);
 
     expect(
       transformQuery(
+        lc,
         ast(
           newQuery(mockDelegate, schema, 'readable').related('readable', q =>
             q.related('readable', q => q.related('unreadable')),
@@ -339,36 +491,102 @@ describe('unreadable tables', () => {
                         "asc",
                       ],
                     ],
-                    "related": [],
+                    "related": [
+                      {
+                        "correlation": {
+                          "childField": [
+                            "id",
+                          ],
+                          "parentField": [
+                            "unreadableId",
+                          ],
+                        },
+                        "subquery": {
+                          "alias": "unreadable",
+                          "orderBy": [
+                            [
+                              "id",
+                              "asc",
+                            ],
+                          ],
+                          "related": undefined,
+                          "table": "unreadable",
+                          "where": {
+                            "conditions": [],
+                            "type": "or",
+                          },
+                        },
+                        "system": "client",
+                      },
+                    ],
                     "table": "readable",
-                    "where": undefined,
+                    "where": {
+                      "conditions": [],
+                      "type": "and",
+                    },
                   },
                   "system": "client",
                 },
               ],
               "table": "readable",
-              "where": undefined,
+              "where": {
+                "conditions": [],
+                "type": "and",
+              },
             },
             "system": "client",
           },
         ],
         "table": "readable",
-        "where": undefined,
+        "where": {
+          "conditions": [],
+          "type": "and",
+        },
       }
     `);
 
-    // also nukes those tables with empty row policies
     expect(
       transformQuery(
+        lc,
         ast(newQuery(mockDelegate, schema, 'readable').related('unreadable')),
         permissionRules,
         authData,
       ),
     ).toMatchInlineSnapshot(`
       {
-        "related": [],
+        "related": [
+          {
+            "correlation": {
+              "childField": [
+                "id",
+              ],
+              "parentField": [
+                "unreadableId",
+              ],
+            },
+            "subquery": {
+              "alias": "unreadable",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "related": undefined,
+              "table": "unreadable",
+              "where": {
+                "conditions": [],
+                "type": "or",
+              },
+            },
+            "system": "client",
+          },
+        ],
         "table": "readable",
-        "where": undefined,
+        "where": {
+          "conditions": [],
+          "type": "and",
+        },
       }
     `);
   });
@@ -379,223 +597,99 @@ describe('unreadable tables', () => {
     );
 
     // `unreadable` should be replaced by `false` condition.
-    expect(transformQuery(ast(query), permissionRules, undefined))
+    expect(transformQuery(lc, ast(query), permissionRules, undefined))
       .toMatchInlineSnapshot(`
-      {
-        "related": undefined,
-        "table": "readable",
-        "where": {
-          "left": {
-            "type": "literal",
-            "value": true,
+        {
+          "related": undefined,
+          "table": "readable",
+          "where": {
+            "conditions": [
+              {
+                "op": "EXISTS",
+                "related": {
+                  "correlation": {
+                    "childField": [
+                      "id",
+                    ],
+                    "parentField": [
+                      "unreadableId",
+                    ],
+                  },
+                  "subquery": {
+                    "alias": "zsubq_unreadable",
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "related": undefined,
+                    "table": "unreadable",
+                    "where": {
+                      "conditions": [],
+                      "type": "or",
+                    },
+                  },
+                  "system": "client",
+                },
+                "type": "correlatedSubquery",
+              },
+            ],
+            "type": "and",
           },
-          "op": "=",
-          "right": {
-            "type": "literal",
-            "value": false,
-          },
-          "type": "simple",
-        },
-      }
-    `);
-    expect(transformQuery(ast(query), permissionRules, authData))
+        }
+      `);
+    expect(transformQuery(lc, ast(query), permissionRules, authData))
       .toMatchInlineSnapshot(`
-      {
-        "related": undefined,
-        "table": "readable",
-        "where": {
-          "left": {
-            "type": "literal",
-            "value": true,
+        {
+          "related": undefined,
+          "table": "readable",
+          "where": {
+            "conditions": [
+              {
+                "op": "EXISTS",
+                "related": {
+                  "correlation": {
+                    "childField": [
+                      "id",
+                    ],
+                    "parentField": [
+                      "unreadableId",
+                    ],
+                  },
+                  "subquery": {
+                    "alias": "zsubq_unreadable",
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "related": undefined,
+                    "table": "unreadable",
+                    "where": {
+                      "conditions": [],
+                      "type": "or",
+                    },
+                  },
+                  "system": "client",
+                },
+                "type": "correlatedSubquery",
+              },
+            ],
+            "type": "and",
           },
-          "op": "=",
-          "right": {
-            "type": "literal",
-            "value": false,
-          },
-          "type": "simple",
-        },
-      }
-    `);
+        }
+      `);
 
     // unreadable whereNotExists should be replaced by a `true` condition
     expect(
       transformQuery(
+        lc,
         ast(
           newQuery(mockDelegate, schema, 'readable').where(({not, exists}) =>
             not(exists('unreadable')),
           ),
-        ),
-        permissionRules,
-        authData,
-      ),
-    ).toMatchInlineSnapshot(`
-      {
-        "related": undefined,
-        "table": "readable",
-        "where": {
-          "left": {
-            "type": "literal",
-            "value": true,
-          },
-          "op": "=",
-          "right": {
-            "type": "literal",
-            "value": true,
-          },
-          "type": "simple",
-        },
-      }
-    `);
-    expect(
-      transformQuery(
-        ast(
-          newQuery(mockDelegate, schema, 'readable').where(({not, exists}) =>
-            not(exists('unreadable')),
-          ),
-        ),
-        permissionRules,
-        undefined,
-      ),
-    ).toMatchInlineSnapshot(`
-      {
-        "related": undefined,
-        "table": "readable",
-        "where": {
-          "left": {
-            "type": "literal",
-            "value": true,
-          },
-          "op": "=",
-          "right": {
-            "type": "literal",
-            "value": true,
-          },
-          "type": "simple",
-        },
-      }
-    `);
-
-    // works no matter how nested
-    expect(
-      transformQuery(
-        ast(
-          newQuery(mockDelegate, schema, 'readable').whereExists(
-            'readable',
-            q => q.whereExists('unreadable', q => q.where('id', '1')),
-          ),
-        ),
-        permissionRules,
-        authData,
-      ),
-    ).toMatchInlineSnapshot(`
-      {
-        "related": undefined,
-        "table": "readable",
-        "where": {
-          "op": "EXISTS",
-          "related": {
-            "correlation": {
-              "childField": [
-                "id",
-              ],
-              "parentField": [
-                "readableId",
-              ],
-            },
-            "subquery": {
-              "alias": "zsubq_readable",
-              "orderBy": [
-                [
-                  "id",
-                  "asc",
-                ],
-              ],
-              "related": undefined,
-              "table": "readable",
-              "where": {
-                "left": {
-                  "type": "literal",
-                  "value": true,
-                },
-                "op": "=",
-                "right": {
-                  "type": "literal",
-                  "value": false,
-                },
-                "type": "simple",
-              },
-            },
-            "system": "client",
-          },
-          "type": "correlatedSubquery",
-        },
-      }
-    `);
-
-    expect(
-      transformQuery(
-        ast(
-          newQuery(mockDelegate, schema, 'readable').whereExists(
-            'readable',
-            q => q.whereExists('unreadable', q => q.where('id', '1')),
-          ),
-        ),
-        permissionRules,
-        undefined,
-      ),
-    ).toMatchInlineSnapshot(`
-      {
-        "related": undefined,
-        "table": "readable",
-        "where": {
-          "op": "EXISTS",
-          "related": {
-            "correlation": {
-              "childField": [
-                "id",
-              ],
-              "parentField": [
-                "readableId",
-              ],
-            },
-            "subquery": {
-              "alias": "zsubq_readable",
-              "orderBy": [
-                [
-                  "id",
-                  "asc",
-                ],
-              ],
-              "related": undefined,
-              "table": "readable",
-              "where": {
-                "left": {
-                  "type": "literal",
-                  "value": true,
-                },
-                "op": "=",
-                "right": {
-                  "type": "literal",
-                  "value": false,
-                },
-                "type": "simple",
-              },
-            },
-            "system": "client",
-          },
-          "type": "correlatedSubquery",
-        },
-      }
-    `);
-
-    // having siblings doesn't break it
-    expect(
-      transformQuery(
-        ast(
-          newQuery(mockDelegate, schema, 'readable')
-            .where(({not, exists}) => not(exists('unreadable')))
-            .whereExists('readable'),
         ),
         permissionRules,
         authData,
@@ -607,17 +701,112 @@ describe('unreadable tables', () => {
         "where": {
           "conditions": [
             {
-              "left": {
-                "type": "literal",
-                "value": true,
+              "op": "NOT EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": [
+                    "id",
+                  ],
+                  "parentField": [
+                    "unreadableId",
+                  ],
+                },
+                "subquery": {
+                  "alias": "zsubq_unreadable",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "related": undefined,
+                  "table": "unreadable",
+                  "where": {
+                    "conditions": [],
+                    "type": "or",
+                  },
+                },
+                "system": "client",
               },
-              "op": "=",
-              "right": {
-                "type": "literal",
-                "value": true,
-              },
-              "type": "simple",
+              "type": "correlatedSubquery",
             },
+          ],
+          "type": "and",
+        },
+      }
+    `);
+    expect(
+      transformQuery(
+        lc,
+        ast(
+          newQuery(mockDelegate, schema, 'readable').where(({not, exists}) =>
+            not(exists('unreadable')),
+          ),
+        ),
+        permissionRules,
+        undefined,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "related": undefined,
+        "table": "readable",
+        "where": {
+          "conditions": [
+            {
+              "op": "NOT EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": [
+                    "id",
+                  ],
+                  "parentField": [
+                    "unreadableId",
+                  ],
+                },
+                "subquery": {
+                  "alias": "zsubq_unreadable",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "related": undefined,
+                  "table": "unreadable",
+                  "where": {
+                    "conditions": [],
+                    "type": "or",
+                  },
+                },
+                "system": "client",
+              },
+              "type": "correlatedSubquery",
+            },
+          ],
+          "type": "and",
+        },
+      }
+    `);
+
+    // works no matter how nested
+    expect(
+      transformQuery(
+        lc,
+        ast(
+          newQuery(mockDelegate, schema, 'readable').whereExists(
+            'readable',
+            q => q.whereExists('unreadable', q => q.where('id', '1')),
+          ),
+        ),
+        permissionRules,
+        authData,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "related": undefined,
+        "table": "readable",
+        "where": {
+          "conditions": [
             {
               "op": "EXISTS",
               "related": {
@@ -639,7 +828,41 @@ describe('unreadable tables', () => {
                   ],
                   "related": undefined,
                   "table": "readable",
-                  "where": undefined,
+                  "where": {
+                    "conditions": [
+                      {
+                        "op": "EXISTS",
+                        "related": {
+                          "correlation": {
+                            "childField": [
+                              "id",
+                            ],
+                            "parentField": [
+                              "unreadableId",
+                            ],
+                          },
+                          "subquery": {
+                            "alias": "zsubq_unreadable",
+                            "orderBy": [
+                              [
+                                "id",
+                                "asc",
+                              ],
+                            ],
+                            "related": undefined,
+                            "table": "unreadable",
+                            "where": {
+                              "conditions": [],
+                              "type": "or",
+                            },
+                          },
+                          "system": "client",
+                        },
+                        "type": "correlatedSubquery",
+                      },
+                    ],
+                    "type": "and",
+                  },
                 },
                 "system": "client",
               },
@@ -653,10 +876,12 @@ describe('unreadable tables', () => {
 
     expect(
       transformQuery(
+        lc,
         ast(
-          newQuery(mockDelegate, schema, 'readable')
-            .where(({not, exists}) => not(exists('unreadable')))
-            .whereExists('readable'),
+          newQuery(mockDelegate, schema, 'readable').whereExists(
+            'readable',
+            q => q.whereExists('unreadable', q => q.where('id', '1')),
+          ),
         ),
         permissionRules,
         undefined,
@@ -668,16 +893,119 @@ describe('unreadable tables', () => {
         "where": {
           "conditions": [
             {
-              "left": {
-                "type": "literal",
-                "value": true,
+              "op": "EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": [
+                    "id",
+                  ],
+                  "parentField": [
+                    "readableId",
+                  ],
+                },
+                "subquery": {
+                  "alias": "zsubq_readable",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "related": undefined,
+                  "table": "readable",
+                  "where": {
+                    "conditions": [
+                      {
+                        "op": "EXISTS",
+                        "related": {
+                          "correlation": {
+                            "childField": [
+                              "id",
+                            ],
+                            "parentField": [
+                              "unreadableId",
+                            ],
+                          },
+                          "subquery": {
+                            "alias": "zsubq_unreadable",
+                            "orderBy": [
+                              [
+                                "id",
+                                "asc",
+                              ],
+                            ],
+                            "related": undefined,
+                            "table": "unreadable",
+                            "where": {
+                              "conditions": [],
+                              "type": "or",
+                            },
+                          },
+                          "system": "client",
+                        },
+                        "type": "correlatedSubquery",
+                      },
+                    ],
+                    "type": "and",
+                  },
+                },
+                "system": "client",
               },
-              "op": "=",
-              "right": {
-                "type": "literal",
-                "value": true,
+              "type": "correlatedSubquery",
+            },
+          ],
+          "type": "and",
+        },
+      }
+    `);
+
+    // having siblings doesn't break it
+    expect(
+      transformQuery(
+        lc,
+        ast(
+          newQuery(mockDelegate, schema, 'readable')
+            .where(({not, exists}) => not(exists('unreadable')))
+            .whereExists('readable'),
+        ),
+        permissionRules,
+        authData,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "related": undefined,
+        "table": "readable",
+        "where": {
+          "conditions": [
+            {
+              "op": "NOT EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": [
+                    "id",
+                  ],
+                  "parentField": [
+                    "unreadableId",
+                  ],
+                },
+                "subquery": {
+                  "alias": "zsubq_unreadable",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "related": undefined,
+                  "table": "unreadable",
+                  "where": {
+                    "conditions": [],
+                    "type": "or",
+                  },
+                },
+                "system": "client",
               },
-              "type": "simple",
+              "type": "correlatedSubquery",
             },
             {
               "op": "EXISTS",
@@ -700,7 +1028,93 @@ describe('unreadable tables', () => {
                   ],
                   "related": undefined,
                   "table": "readable",
-                  "where": undefined,
+                  "where": {
+                    "conditions": [],
+                    "type": "and",
+                  },
+                },
+                "system": "client",
+              },
+              "type": "correlatedSubquery",
+            },
+          ],
+          "type": "and",
+        },
+      }
+    `);
+
+    expect(
+      transformQuery(
+        lc,
+        ast(
+          newQuery(mockDelegate, schema, 'readable')
+            .where(({not, exists}) => not(exists('unreadable')))
+            .whereExists('readable'),
+        ),
+        permissionRules,
+        undefined,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "related": undefined,
+        "table": "readable",
+        "where": {
+          "conditions": [
+            {
+              "op": "NOT EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": [
+                    "id",
+                  ],
+                  "parentField": [
+                    "unreadableId",
+                  ],
+                },
+                "subquery": {
+                  "alias": "zsubq_unreadable",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "related": undefined,
+                  "table": "unreadable",
+                  "where": {
+                    "conditions": [],
+                    "type": "or",
+                  },
+                },
+                "system": "client",
+              },
+              "type": "correlatedSubquery",
+            },
+            {
+              "op": "EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": [
+                    "id",
+                  ],
+                  "parentField": [
+                    "readableId",
+                  ],
+                },
+                "subquery": {
+                  "alias": "zsubq_readable",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "related": undefined,
+                  "table": "readable",
+                  "where": {
+                    "conditions": [],
+                    "type": "and",
+                  },
                 },
                 "system": "client",
               },
@@ -717,6 +1131,7 @@ describe('unreadable tables', () => {
 test('exists rules in permissions are tagged as the permissions system', () => {
   expect(
     transformQuery(
+      lc,
       ast(newQuery(mockDelegate, schema, 'readableThruUnreadable')),
       permissionRules,
       undefined,
@@ -760,6 +1175,7 @@ test('exists rules in permissions are tagged as the permissions system', () => {
 
   expect(
     transformQuery(
+      lc,
       ast(
         newQuery(mockDelegate, schema, 'readable').related(
           'readableThruUnreadable',
@@ -825,68 +1241,19 @@ test('exists rules in permissions are tagged as the permissions system', () => {
         },
       ],
       "table": "readable",
-      "where": undefined,
+      "where": {
+        "conditions": [],
+        "type": "and",
+      },
     }
   `);
-});
-
-describe('tables with no read policies', () => {
-  function checkWithAndWithoutAuthData(
-    cb: (authData: AuthData | undefined) => void,
-  ) {
-    cb(authData);
-    cb(undefined);
-  }
-  test('top level query is unmodified', () => {
-    checkWithAndWithoutAuthData(authData => {
-      const query = newQuery(mockDelegate, schema, 'readable');
-      expect(transformQuery(ast(query), permissionRules, authData)).toEqual(
-        ast(query),
-      );
-    });
-  });
-  test('related queries are unmodified', () => {
-    checkWithAndWithoutAuthData(authData => {
-      let query = newQuery(mockDelegate, schema, 'readable').related(
-        'readable',
-      );
-      expect(transformQuery(ast(query), permissionRules, authData)).toEqual(
-        ast(query),
-      );
-
-      query = newQuery(mockDelegate, schema, 'readable').related(
-        'readable',
-        q => q.related('readable'),
-      );
-      expect(transformQuery(ast(query), permissionRules, authData)).toEqual(
-        ast(query),
-      );
-    });
-  });
-  test('subqueries in conditions are unmodified', () => {
-    checkWithAndWithoutAuthData(authData => {
-      let query = newQuery(mockDelegate, schema, 'readable').whereExists(
-        'readable',
-      );
-      expect(transformQuery(ast(query), permissionRules, authData)).toEqual(
-        ast(query),
-      );
-
-      query = newQuery(mockDelegate, schema, 'readable').whereExists(
-        'readable',
-        q => q.whereExists('readable'),
-      );
-      expect(transformQuery(ast(query), permissionRules, authData)).toEqual(
-        ast(query),
-      );
-    });
-  });
 });
 
 describe('admin readable', () => {
   test('relationships have the rules applied', () => {
     expect(
       transformQuery(
+        lc,
         ast(
           newQuery(mockDelegate, schema, 'adminReadable')
             .related('self1')
@@ -987,6 +1354,7 @@ describe('admin readable', () => {
     // all levels of the query have the admin policy applied while preserving existing `wheres`
     expect(
       transformQuery(
+        lc,
         ast(
           newQuery(mockDelegate, schema, 'adminReadable')
             .related('self1', q => q.where('id', '1'))
@@ -1193,6 +1561,7 @@ describe('admin readable', () => {
   test('exists have the rules applied', () => {
     expect(
       transformQuery(
+        lc,
         ast(
           newQuery(mockDelegate, schema, 'adminReadable').whereExists('self1'),
         ),
@@ -1263,6 +1632,7 @@ describe('admin readable', () => {
 
     expect(
       transformQuery(
+        lc,
         ast(
           newQuery(mockDelegate, schema, 'adminReadable').whereExists(
             'self1',
@@ -1353,6 +1723,7 @@ describe('admin readable', () => {
 
     expect(
       transformQuery(
+        lc,
         ast(
           newQuery(mockDelegate, schema, 'adminReadable').whereExists(
             'self1',

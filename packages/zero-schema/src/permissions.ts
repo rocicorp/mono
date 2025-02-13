@@ -16,8 +16,22 @@ import type {
 } from './compiled-permissions.ts';
 import {clientToServer, NameMapper} from './name-mapper.ts';
 
-export const ANYONE_CAN = undefined;
+export const ANYONE_CAN = [
+  (_: unknown, eb: ExpressionBuilder<Schema, never>) => eb.and(),
+];
+export const ANYONE_CAN_DO_ANYTHING = {
+  row: {
+    select: ANYONE_CAN,
+    insert: ANYONE_CAN,
+    update: {
+      preMutation: ANYONE_CAN,
+      postMutation: ANYONE_CAN,
+    },
+    delete: ANYONE_CAN,
+  },
+};
 export const NOBODY_CAN = [];
+
 export type Anchor = 'authData' | 'preMutationRow';
 
 export type Queries<TSchema extends Schema> = {

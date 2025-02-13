@@ -21,7 +21,11 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import {definePermissions} from '../../../zero-schema/src/permissions.ts';
+import {
+  ANYONE_CAN,
+  ANYONE_CAN_DO_ANYTHING,
+  definePermissions,
+} from '../../../zero-schema/src/permissions.ts';
 import type {ValueType} from '../../../zero-schema/src/table-schema.ts';
 import {
   bindStaticParameters,
@@ -43,6 +47,7 @@ import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {LogConfig, ZeroConfig} from '../config/zero-config.ts';
 import {transformQuery} from './read-authorizer.ts';
 import {WriteAuthorizerImpl} from './write-authorizer.ts';
+import {LogContext} from '@rocicorp/logger';
 
 const logConfig: LogConfig = {
   format: 'text',
@@ -381,12 +386,7 @@ const permissions = must(
     return {
       user: {
         row: {
-          select: undefined,
-          insert: [],
-          update: {
-            preMutation: [],
-          },
-          delete: [],
+          select: ANYONE_CAN,
         },
       },
       issue: {
@@ -407,8 +407,8 @@ const permissions = must(
             ],
             // TODO (mlaw): how can we ensure the creatorId is not changed?
             // We need to pass the OLD row to the postMutation rule.
+            postMutation: ANYONE_CAN,
           },
-          delete: [],
           select: [canSeeIssue],
         },
       },
@@ -424,6 +424,7 @@ const permissions = must(
           update: {
             preMutation: [isAdmin, isCommentCreator],
             // TODO (mlaw): ensure that the authorId is not changed
+            postMutation: ANYONE_CAN,
           },
           delete: [isAdmin, isCommentCreator],
           select: [canSeeComment],
@@ -437,9 +438,6 @@ const permissions = must(
             canWriteIssueLabelIfIssueCreator,
             canWriteIssueLabelIfIssueOwner,
           ],
-          update: {
-            preMutation: [],
-          },
           delete: [
             isAdmin,
             canWriteIssueLabelIfProjectMember,
@@ -448,8 +446,11 @@ const permissions = must(
           ],
         },
       },
+      project: ANYONE_CAN_DO_ANYTHING,
+      projectMember: ANYONE_CAN_DO_ANYTHING,
       viewState: {
         row: {
+          select: ANYONE_CAN,
           insert: [isViewStateOwner],
           update: {
             preMutation: [isViewStateOwner],
@@ -912,7 +913,7 @@ function runReadQueryWithPermissions(
   query: Query<ZeroSchema, string>,
 ) {
   const updatedAst = bindStaticParameters(
-    must(transformQuery(ast(query), permissions, authData)),
+    transformQuery(new LogContext('debug'), ast(query), permissions, authData),
     {
       authData,
       preMutationRow: undefined,
