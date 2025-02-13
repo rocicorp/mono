@@ -1,10 +1,7 @@
 import {beforeEach, describe, expect, test} from 'vitest';
 import {h128} from '../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {
-  MIN_SERVER_SUPPORTED_PERMISSIONS_PROTOCOL,
-  PROTOCOL_VERSION,
-} from '../../../zero-protocol/src/protocol-version.ts';
+import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import type {PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {StatementRunner} from '../db/statements.ts';
@@ -51,38 +48,12 @@ describe('auth/load-permissions', () => {
     `);
   });
 
-  test('permissions version ahead', () => {
-    setPermissions({
-      protocolVersion: PROTOCOL_VERSION + 1,
-      tables: {},
-    });
-    expect(() => loadPermissions(lc, db)).toThrowErrorMatchingInlineSnapshot(
-      `
-      [Error: This server supports Permissions protocol versions v4 through v5 and cannot read v6.
-      Please deploy the latest server.]
-    `,
-    );
-  });
-
-  test('permissions version behind', () => {
-    setPermissions({
-      protocolVersion: MIN_SERVER_SUPPORTED_PERMISSIONS_PROTOCOL - 1,
-      tables: {},
-    });
-    expect(() => loadPermissions(lc, db)).toThrowErrorMatchingInlineSnapshot(
-      `
-      [Error: This server supports Permissions protocol versions v4 through v5 and no longer supports v3.
-      Run 'npx zero-deploy-permissions' to deploy Permissions in the latest format.]
-    `,
-    );
-  });
-
   test('invalid permissions', () => {
     setPermissions(`{"protocolVersion": 108}`);
     expect(() => loadPermissions(lc, db)).toThrowErrorMatchingInlineSnapshot(
       `
-      [Error: This server supports Permissions protocol versions v4 through v5.
-      Could not parse upstream permissions at v108]
+      [Error: Could not parse upstream permissions: '{"protocolVersion": 108}...'.
+      This may happen if Permissions with a new internal format are deployed before the supporting server has been fully rolled out.]
     `,
     );
   });
@@ -91,8 +62,8 @@ describe('auth/load-permissions', () => {
     setPermissions(`I'm not JSON`);
     expect(() => loadPermissions(lc, db)).toThrowErrorMatchingInlineSnapshot(
       `
-      [Error: This server supports Permissions protocol versions v4 through v5.
-      Could not parse upstream permissions: I'm not JSON]
+      [Error: Could not parse upstream permissions: 'I'm not JSON...'.
+      This may happen if Permissions with a new internal format are deployed before the supporting server has been fully rolled out.]
     `,
     );
   });

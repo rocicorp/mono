@@ -1,9 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
 import * as v from '../../../shared/src/valita.ts';
-import {
-  MIN_SERVER_SUPPORTED_PERMISSIONS_PROTOCOL,
-  PROTOCOL_VERSION,
-} from '../../../zero-protocol/src/protocol-version.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   permissionsConfigSchema,
@@ -18,10 +14,6 @@ export type LoadedPermissions = {
   permissions: PermissionsConfig | null;
   hash: string | null;
 };
-
-const errorPreamble =
-  `This server supports Permissions protocol versions v` +
-  `${MIN_SERVER_SUPPORTED_PERMISSIONS_PROTOCOL} through v${PROTOCOL_VERSION}`;
 
 export function loadPermissions(
   lc: LogContext,
@@ -45,24 +37,13 @@ export function loadPermissions(
     obj = JSON.parse(permissions);
     parsed = v.parse(obj, permissionsConfigSchema);
   } catch (e) {
+    // TODO: Plumb the --server-version and include in error message.
     throw new Error(
-      `${errorPreamble}.\nCould not parse upstream permissions${
-        obj ? ` at v${obj.protocolVersion}` : `: ${permissions}`
-      }`,
+      `Could not parse upstream permissions: ` +
+        `'${String(permissions).substring(0, 100)}...'.\n` +
+        `This may happen if Permissions with a new internal format are ` +
+        `deployed before the supporting server has been fully rolled out.`,
       {cause: e},
-    );
-  }
-  if (parsed.protocolVersion > PROTOCOL_VERSION) {
-    throw new Error(
-      `${errorPreamble} and cannot read ` +
-        `v${parsed.protocolVersion}.\nPlease deploy the latest server.`,
-    );
-  }
-  if (parsed.protocolVersion < MIN_SERVER_SUPPORTED_PERMISSIONS_PROTOCOL) {
-    throw new Error(
-      `${errorPreamble} and no longer supports ` +
-        `v${parsed.protocolVersion}.\nRun 'npx zero-deploy-permissions' ` +
-        `to deploy Permissions in the latest format.`,
     );
   }
   lc.debug?.(`Loaded permissions (hash: ${hash})`);
