@@ -73,7 +73,7 @@ export async function initViewSyncerSchema(
 
   const migrateV6ToV7: Migration = {
     migrateSchema: async (_, tx) => {
-      await tx`DROP INDEX client_patch_version`;
+      await tx`DROP INDEX IF EXISTS client_patch_version`;
       await tx`ALTER TABLE ${tx(schema)}.clients DROP COLUMN deleted`;
       await tx`ALTER TABLE ${tx(schema)}.clients DROP COLUMN "patchVersion"`;
     },
