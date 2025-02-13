@@ -52,7 +52,7 @@ describe('auth/load-permissions', () => {
     setPermissions(`{"protocolVersion": 108}`);
     expect(() => loadPermissions(lc, db)).toThrowErrorMatchingInlineSnapshot(
       `
-      [Error: Could not parse upstream permissions: '{"protocolVersion": 108}...'.
+      [Error: Could not parse upstream permissions: '{"protocolVersion": 108}'.
       This may happen if Permissions with a new internal format are deployed before the supporting server has been fully rolled out.]
     `,
     );
@@ -62,7 +62,17 @@ describe('auth/load-permissions', () => {
     setPermissions(`I'm not JSON`);
     expect(() => loadPermissions(lc, db)).toThrowErrorMatchingInlineSnapshot(
       `
-      [Error: Could not parse upstream permissions: 'I'm not JSON...'.
+      [Error: Could not parse upstream permissions: 'I'm not JSON'.
+      This may happen if Permissions with a new internal format are deployed before the supporting server has been fully rolled out.]
+    `,
+    );
+  });
+
+  test('invalid long permissions', () => {
+    setPermissions(`{"protocolVersion": 108, "foo":"ba${'a'.repeat(1000)}r"}`);
+    expect(() => loadPermissions(lc, db)).toThrowErrorMatchingInlineSnapshot(
+      `
+      [Error: Could not parse upstream permissions: '{"protocolVersion": 108, "foo":"baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...'.
       This may happen if Permissions with a new internal format are deployed before the supporting server has been fully rolled out.]
     `,
     );

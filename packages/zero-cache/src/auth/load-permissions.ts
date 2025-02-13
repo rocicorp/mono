@@ -9,6 +9,7 @@ import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {Database} from '../../../zqlite/src/db.ts';
 import {computeZqlSpecs} from '../db/lite-tables.ts';
 import type {StatementRunner} from '../db/statements.ts';
+import {elide} from '../types/strings.ts';
 
 export type LoadedPermissions = {
   permissions: PermissionsConfig | null;
@@ -40,7 +41,7 @@ export function loadPermissions(
     // TODO: Plumb the --server-version and include in error message.
     throw new Error(
       `Could not parse upstream permissions: ` +
-        `'${String(permissions).substring(0, 100)}...'.\n` +
+        `'${elide(String(permissions), 100)}'.\n` +
         `This may happen if Permissions with a new internal format are ` +
         `deployed before the supporting server has been fully rolled out.`,
       {cause: e},
