@@ -1,5 +1,8 @@
 /* eslint-disable */
 /// <reference path="./.sst/platform/config.d.ts" />
+
+import { execSync } from "child_process";
+
 // Load .env file
 require("dotenv").config();
 
@@ -100,7 +103,7 @@ export default $config({
     });
 
     // View Syncer Service
-    cluster.addService(`view-syncer`, {
+    const viewSyncer = cluster.addService(`view-syncer`, {
       cpu: "8 vCPU",
       memory: "16 GB",
       image: commonEnv.ZERO_IMAGE_URL,
@@ -171,6 +174,15 @@ export default $config({
           maxCapacity: 10,
         },
       },
+    });
+
+    // Deploy permissions after the view-syncer has been fully deployed.
+    viewSyncer.url.apply((url) => {
+      console.info(`Finished deploying view-syncers to ${url}`);
+      execSync(
+        `pushd ../../packages/zero && ` +
+          `npx zero-deploy-permissions --schema-path ../../apps/zbugs/schema.ts`,
+      );
     });
   },
 });
