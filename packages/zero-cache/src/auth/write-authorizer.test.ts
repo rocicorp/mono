@@ -1,7 +1,6 @@
 import {beforeEach, describe, expect, test} from 'vitest';
 import {h128} from '../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import type {
   DeleteOp,
   InsertOp,
@@ -121,7 +120,6 @@ describe('normalize ops', () => {
 describe('pre & post mutation', () => {
   test('delete is run pre-mutation', () => {
     setPermissions({
-      protocolVersion: PROTOCOL_VERSION,
       tables: {
         foo: {
           row: {
@@ -151,7 +149,6 @@ describe('pre & post mutation', () => {
 
   test('insert is run post-mutation', () => {
     setPermissions({
-      protocolVersion: PROTOCOL_VERSION,
       tables: {
         foo: {
           row: {
@@ -181,7 +178,6 @@ describe('pre & post mutation', () => {
 
   test('update is run pre-mutation when specified', () => {
     setPermissions({
-      protocolVersion: PROTOCOL_VERSION,
       tables: {
         foo: {
           row: {
@@ -213,7 +209,6 @@ describe('pre & post mutation', () => {
 
   test('update is run post-mutation when specified', () => {
     setPermissions({
-      protocolVersion: PROTOCOL_VERSION,
       tables: {
         foo: {
           row: {

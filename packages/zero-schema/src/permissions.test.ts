@@ -50,7 +50,6 @@ test('permission rules create query ASTs', async () => {
 
   expect(config).toMatchInlineSnapshot(`
     {
-      "protocolVersion": 5,
       "tables": {
         "users": {
           "cell": undefined,
@@ -160,7 +159,6 @@ test('nested parameters', async () => {
 
   expect(config).toMatchInlineSnapshot(`
     {
-      "protocolVersion": 5,
       "tables": {
         "users": {
           "cell": undefined,

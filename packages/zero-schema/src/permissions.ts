@@ -5,7 +5,6 @@ import {
   type Condition,
   type Parameter,
 } from '../../zero-protocol/src/ast.ts';
-import {PROTOCOL_VERSION} from '../../zero-protocol/src/protocol-version.ts';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
 import {staticParam} from '../../zql/src/query/query-impl.ts';
 import type {Query} from '../../zql/src/query/query.ts';
@@ -95,10 +94,7 @@ function compilePermissions<TAuthDataShape, TSchema extends Schema>(
     return undefined;
   }
   const nameMapper = clientToServer(schema.tables);
-  const ret: CompiledPermissionsConfig = {
-    protocolVersion: PROTOCOL_VERSION,
-    tables: {},
-  };
+  const ret: CompiledPermissionsConfig = {tables: {}};
   for (const [tableName, tableConfig] of Object.entries(authz)) {
     const serverName = schema.tables[tableName].serverName ?? tableName;
     ret.tables[serverName] = {

@@ -1,7 +1,6 @@
 import {beforeEach, describe, expect, test} from 'vitest';
 import {h128} from '../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import type {PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {StatementRunner} from '../db/statements.ts';
@@ -33,15 +32,11 @@ describe('auth/load-permissions', () => {
   }
 
   test('loads supported permissions', () => {
-    setPermissions({
-      protocolVersion: PROTOCOL_VERSION,
-      tables: {},
-    });
+    setPermissions({tables: {}});
     expect(loadPermissions(lc, db)).toMatchInlineSnapshot(`
       {
-        "hash": "5798cf58470da01180f25d9ad4bdd92d",
+        "hash": "4fa6194de2f465d532971ce1b9b513e9",
         "permissions": {
-          "protocolVersion": 5,
           "tables": {},
         },
       }
@@ -49,10 +44,10 @@ describe('auth/load-permissions', () => {
   });
 
   test('invalid permissions', () => {
-    setPermissions(`{"protocolVersion": 108}`);
+    setPermissions(`{"tablez":{}}`);
     expect(() => loadPermissions(lc, db)).toThrowErrorMatchingInlineSnapshot(
       `
-      [Error: Could not parse upstream permissions: '{"protocolVersion": 108}'.
+      [Error: Could not parse upstream permissions: '{"tablez":{}}'.
       This may happen if Permissions with a new internal format are deployed before the supporting server has been fully rolled out.]
     `,
     );
@@ -69,10 +64,10 @@ describe('auth/load-permissions', () => {
   });
 
   test('invalid long permissions', () => {
-    setPermissions(`{"protocolVersion": 108, "foo":"ba${'a'.repeat(1000)}r"}`);
+    setPermissions(`{"baz": 108, "foo":"ba${'a'.repeat(1000)}r"}`);
     expect(() => loadPermissions(lc, db)).toThrowErrorMatchingInlineSnapshot(
       `
-      [Error: Could not parse upstream permissions: '{"protocolVersion": 108, "foo":"baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...'.
+      [Error: Could not parse upstream permissions: '{"baz": 108, "foo":"baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...'.
       This may happen if Permissions with a new internal format are deployed before the supporting server has been fully rolled out.]
     `,
     );

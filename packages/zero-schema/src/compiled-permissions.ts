@@ -21,8 +21,6 @@ const assetSchema = v.object({
 export type AssetPermissions = v.Infer<typeof assetSchema>;
 
 export const permissionsConfigSchema = v.object({
-  // TODO: Remove protocolVersion
-  protocolVersion: v.number().optional(),
   tables: v.record(
     v.object({
       row: assetSchema.optional(),

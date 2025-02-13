@@ -3441,7 +3441,6 @@ describe('permissions', () => {
 
     // Open permissions
     const relaxed: PermissionsConfig = {
-      protocolVersion: PROTOCOL_VERSION,
       tables: {
         issues: {},
         comments: {},

@@ -311,14 +311,11 @@ describe('change-source/pg', () => {
     await db.begin(tx =>
       setupTablesAndReplication(lc, tx, {id: '0', publications: []}),
     );
-    await db`UPDATE zero.permissions SET permissions = ${{
-      protocolVersion: 4,
-      tables: {},
-    }}`;
+    await db`UPDATE zero.permissions SET permissions = ${{tables: {foo: {}}}}`;
     expect(await db`SELECT hash FROM zero.permissions`).toMatchInlineSnapshot(`
       Result [
         {
-          "hash": "c4123f42e73be1bc169466fc8f68b2be",
+          "hash": "b2f6c5d807ae3b9536735f37302b3d82",
         },
       ]
     `);
@@ -330,28 +327,22 @@ describe('change-source/pg', () => {
         },
       ]
     `);
-    await db`UPDATE zero.permissions SET permissions = ${{
-      protocolVersion: 5,
-      tables: {},
-    }}`;
+    await db`UPDATE zero.permissions SET permissions = ${{tables: {bar: {}}}}`;
     expect(await db`SELECT hash FROM zero.permissions`).toMatchInlineSnapshot(`
       Result [
         {
-          "hash": "2b4b5e005563ffe3f2f92cec64d21610",
+          "hash": "9042ec772bb48666c9c497b6d7f59a3a",
         },
       ]
     `);
     await db`DELETE FROM zero.permissions`;
     await db`INSERT INTO zero.permissions ${db({
-      permissions: {
-        protocolVersion: 4,
-        tables: {},
-      },
+      permissions: {tables: {foo: {}}},
     })}`;
     expect(await db`SELECT hash FROM zero.permissions`).toMatchInlineSnapshot(`
       Result [
         {
-          "hash": "c4123f42e73be1bc169466fc8f68b2be",
+          "hash": "b2f6c5d807ae3b9536735f37302b3d82",
         },
       ]
     `);
