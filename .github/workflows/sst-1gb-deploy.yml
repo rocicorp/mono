@@ -79,6 +79,8 @@ jobs:
           AWS_REGION: ${{ vars.AWS_DEFAULT_REGION }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
           ZERO_IMAGE_URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_DEFAULT_REGION }}.amazonaws.com/${{ env.ECR_IMAGE_ZERO_CACHE }}:${{ env.SHA }}
+          DOMAIN_NAME: 'zbugs-sync-1gb.rocicorp.dev'
+          DOMAIN_CERT: 'arn:aws:acm:us-east-1:712907626835:certificate/5e41bbc3-1a8e-4af7-8ae7-e2282fd28116'
         run: |
           cd prod/sst
           npm install
