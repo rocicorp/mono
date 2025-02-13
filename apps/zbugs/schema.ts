@@ -1,4 +1,5 @@
 import {
+  ANYONE_CAN,
   boolean,
   createSchema,
   definePermissions,
@@ -306,6 +307,7 @@ export const permissions: ReturnType<typeof definePermissions> =
             preMutation: NOBODY_CAN,
           },
           delete: NOBODY_CAN,
+          select: ANYONE_CAN,
         },
       },
       issue: {
@@ -339,6 +341,7 @@ export const permissions: ReturnType<typeof definePermissions> =
             loggedInUserIsAdmin,
             and(canSeeComment, loggedInUserIsCreator),
           ],
+          select: ANYONE_CAN,
         },
       },
       label: {
@@ -348,6 +351,7 @@ export const permissions: ReturnType<typeof definePermissions> =
             preMutation: [loggedInUserIsAdmin],
           },
           delete: [loggedInUserIsAdmin],
+          select: ANYONE_CAN,
         },
       },
       viewState: {
@@ -358,6 +362,7 @@ export const permissions: ReturnType<typeof definePermissions> =
             postMutation: [allowIfUserIDMatchesLoggedInUser],
           },
           delete: NOBODY_CAN,
+          select: ANYONE_CAN,
         },
       },
       issueLabel: {
@@ -367,6 +372,7 @@ export const permissions: ReturnType<typeof definePermissions> =
             preMutation: NOBODY_CAN,
           },
           delete: [and(canSeeIssueLabel, allowIfAdminOrIssueCreator)],
+          select: ANYONE_CAN,
         },
       },
       emoji: {
@@ -380,6 +386,7 @@ export const permissions: ReturnType<typeof definePermissions> =
             postMutation: [and(canSeeEmoji, loggedInUserIsCreator)],
           },
           delete: [and(canSeeEmoji, loggedInUserIsCreator)],
+          select: ANYONE_CAN,
         },
       },
       userPref: {
@@ -390,6 +397,7 @@ export const permissions: ReturnType<typeof definePermissions> =
             postMutation: [allowIfUserIDMatchesLoggedInUser],
           },
           delete: [allowIfUserIDMatchesLoggedInUser],
+          select: [allowIfUserIDMatchesLoggedInUser],
         },
       },
     };

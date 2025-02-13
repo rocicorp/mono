@@ -60,6 +60,7 @@ export interface WriteAuthorizer {
     authData: JWTPayload | undefined,
     ops: Exclude<CRUDOp, UpsertOp>[],
   ): boolean;
+  reloadPermissions(): void;
   normalizeOps(ops: CRUDOp[]): Exclude<CRUDOp, UpsertOp>[];
 }
 
@@ -99,20 +100,21 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     };
     this.#tableSpecs = computeZqlSpecs(this.#lc, replica);
     this.#statementRunner = new StatementRunner(replica);
+    this.reloadPermissions();
+  }
+
+  reloadPermissions() {
+    this.#loadedPermissions = reloadPermissionsIfChanged(
+      this.#lc,
+      this.#statementRunner,
+      this.#loadedPermissions,
+    ).permissions;
   }
 
   canPreMutation(
     authData: JWTPayload | undefined,
     ops: Exclude<CRUDOp, UpsertOp>[],
   ) {
-    // Check the permissions hash on every write, reloading and re-parsing the
-    // permissions object if the hash has changed.
-    this.#loadedPermissions = reloadPermissionsIfChanged(
-      this.#lc,
-      this.#statementRunner,
-      this.#loadedPermissions,
-    ).permissions;
-
     for (const op of ops) {
       switch (op.op) {
         case 'insert':
@@ -149,7 +151,11 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
             });
             break;
           }
-          // TODO (mlaw): what if someone updates the same thing twice?
+          // TODO(mlaw): what if someone updates the same thing twice?
+          // TODO(aa): It seems like it will just work? source.push()
+          // is going to push the row into the table source, and then the
+          // next requirePreMutationRow will just return the row that was
+          // pushed in.
           case 'update': {
             source.push({
               type: 'edit',
@@ -300,12 +306,9 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     const rules = must(this.#loadedPermissions).permissions?.tables[
       op.tableName
     ];
-    if (rules?.row === undefined && rules?.cell === undefined) {
-      return true;
-    }
-
-    const rowPolicies = rules.row;
+    const rowPolicies = rules?.row;
     let rowQuery = staticQuery(this.#schema, op.tableName);
+
     op.primaryKey.forEach(pk => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       rowQuery = rowQuery.where(pk, '=', op.value[pk] as any);
@@ -314,27 +317,25 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     let applicableRowPolicy: Policy | undefined;
     switch (action) {
       case 'insert':
-        if (rowPolicies && rowPolicies.insert && phase === 'postMutation') {
-          applicableRowPolicy = rowPolicies.insert;
+        if (phase === 'postMutation') {
+          applicableRowPolicy = rowPolicies?.insert;
         }
         break;
       case 'update':
-        if (rowPolicies && rowPolicies.update) {
-          if (phase === 'preMutation') {
-            applicableRowPolicy = rowPolicies.update.preMutation;
-          } else if (phase === 'postMutation') {
-            applicableRowPolicy = rowPolicies.update.postMutation;
-          }
+        if (phase === 'preMutation') {
+          applicableRowPolicy = rowPolicies?.update?.preMutation;
+        } else if (phase === 'postMutation') {
+          applicableRowPolicy = rowPolicies?.update?.postMutation;
         }
         break;
       case 'delete':
-        if (rowPolicies && rowPolicies.delete && phase === 'preMutation') {
-          applicableRowPolicy = rowPolicies.delete;
+        if (phase === 'preMutation') {
+          applicableRowPolicy = rowPolicies?.delete;
         }
         break;
     }
 
-    const cellPolicies = rules.cell;
+    const cellPolicies = rules?.cell;
     const applicableCellPolicies: Policy[] = [];
     if (cellPolicies) {
       for (const [column, policy] of Object.entries(cellPolicies)) {
@@ -374,6 +375,13 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
         rowQuery,
       )
     ) {
+      this.#lc.warn?.(
+        `Permission check failed for ${JSON.stringify(
+          op,
+        )}, action ${action}, phase ${phase}, authData: ${JSON.stringify(
+          authData,
+        )}`,
+      );
       return false;
     }
 
@@ -427,13 +435,6 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     authData: JWTPayload | undefined,
     rowQuery: Query<Schema, string>,
   ) {
-    if (
-      applicableRowPolicy === undefined &&
-      applicableCellPolicies.length === 0
-    ) {
-      return true;
-    }
-
     if (!this.#passesPolicy(applicableRowPolicy, authData, rowQuery)) {
       return false;
     }
@@ -447,13 +448,17 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     return true;
   }
 
+  /**
+   * Defaults to *false* if the policy is empty. At least one rule has to pass
+   * for the policy to pass.
+   */
   #passesPolicy(
     policy: Policy | undefined,
     authData: JWTPayload | undefined,
     rowQuery: Query<Schema, string>,
   ) {
     if (policy === undefined) {
-      return true;
+      return false;
     }
     if (policy.length === 0) {
       return false;
@@ -494,7 +499,13 @@ function updateWhere(where: Condition | undefined, policy: Policy) {
     type: 'and',
     conditions: [
       where,
-      {type: 'or', conditions: policy.map(([, rule]) => rule)},
+      {
+        type: 'or',
+        conditions: policy.map(([action, rule]) => {
+          assert(action);
+          return rule;
+        }),
+      },
     ],
   });
 }

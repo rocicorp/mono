@@ -609,16 +609,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
       const {query: transformedAst, hash: newTransformationHash} =
         transformAndHashQuery(
+          lc,
           ast,
-          must(this.#permissions).permissions,
+          must(this.#permissions).permissions ?? {tables: {}},
           this.#authData,
           query.internal,
         );
-      assert(
-        transformedAst !== undefined && newTransformationHash !== undefined,
-        'This query may not be run because the table it reads is not readable. Table: ' +
-          ast.table,
-      );
       if (newTransformationHash !== transformationHash) {
         continue; // Query results may have changed.
       }
@@ -658,15 +654,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const transformationHashToHash = new Map<string, string>();
       const serverQueries = Object.entries(cvr.queries).map(([id, q]) => {
         const {query, hash: transformationHash} = transformAndHashQuery(
+          lc,
           q.ast,
-          must(this.#permissions).permissions,
+          must(this.#permissions).permissions ?? {tables: {}},
           this.#authData,
           q.internal,
-        );
-        assert(
-          query !== undefined && transformationHash !== undefined,
-          'This query may not be run because the table it reads is not readable. Table: ' +
-            q.ast.table,
         );
         transformationHashToHash.set(transformationHash, id);
         return {
