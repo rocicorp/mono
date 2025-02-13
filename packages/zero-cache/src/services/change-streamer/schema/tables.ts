@@ -166,9 +166,11 @@ export async function ensureReplicationConfig(
         throw new AutoResetSignal('reset required by replication stream');
       }
       lc.error?.(
-        '\n\n\nReset required but --auto-reset is not enabled.\n' +
-          'This can happen for upstream databases that do not support Event Triggers.\n' +
-          'To correct this, see https://zero.rocicorp.dev/docs/connecting-to-postgres#schema-changes\n\n\n',
+        '\n\n\n' +
+          'Reset required but --auto-reset is not enabled.\n' +
+          'This can happen for upstream databases that do not support event triggers.\n' +
+          'To correct this, see https://zero.rocicorp.dev/docs/connecting-to-postgres#schema-changes' +
+          '\n\n\n',
       );
     }
 
