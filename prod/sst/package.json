@@ -12,7 +12,7 @@
   "description": "",
   "dependencies": {
     "dotenv": "^16.4.7",
-    "sst": "3.6.7"
+    "sst": "3.8.9"
   },
   "devDependencies": {
     "@types/aws-lambda": "8.10.147",
