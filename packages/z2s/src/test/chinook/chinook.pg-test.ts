@@ -91,7 +91,7 @@ function makeMemorySources() {
 }
 
 beforeAll(async () => {
-  pg = await testDBs.create('compiler');
+  pg = await testDBs.create('chinook');
   sqlite = new Database(lc, ':memory:');
   const memorySources = makeMemorySources();
   await writeChinook(pg, sqlite);
