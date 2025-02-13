@@ -143,6 +143,11 @@ if (config.output.file) {
     config.output.file,
     config.output.format,
   );
+} else if (config.upstream.type !== 'pg') {
+  lc.warn?.(
+    `Permissions deployment is not supported for ${config.upstream.type} upstreams`,
+  );
+  process.exit(-1);
 } else if (config.upstream.db) {
   await deployPermissions(config.upstream.db, permissions, config.force);
 } else {

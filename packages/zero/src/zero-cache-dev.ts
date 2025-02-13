@@ -32,6 +32,10 @@ function log(msg: string) {
   console.log(chalk.green('> ' + msg));
 }
 
+function logWarn(msg: string) {
+  console.log(chalk.yellow('> ' + msg));
+}
+
 function logError(msg: string) {
   console.error(chalk.red('> ' + msg));
 }
@@ -74,6 +78,12 @@ async function main() {
   });
 
   async function deployPermissions(): Promise<boolean> {
+    if (config.upstream.type !== 'pg') {
+      logWarn(
+        `Skipping permissions deployment for ${config.upstream.type} upstream`,
+      );
+      return true;
+    }
     permissionsProcess?.removeAllListeners('exit');
     await killProcess(permissionsProcess);
     permissionsProcess = undefined;
