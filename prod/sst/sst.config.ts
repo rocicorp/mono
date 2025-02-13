@@ -3,8 +3,6 @@
 // Load .env file
 require("dotenv").config();
 
-import { join } from "node:path";
-
 export default $config({
   app(input) {
     return {
@@ -172,17 +170,5 @@ export default $config({
       // Make SST wait for health checks before considering the service "deployed".
       wait: true,
     });
-
-    new command.local.Command(
-      "zero-deploy-permissions",
-      {
-        // Pulumi operates with cwd at the package root.
-        dir: join(process.cwd(), "../../packages/zero/"),
-        create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/schema.ts`,
-      },
-      {
-        dependsOn: viewSyncer,
-      },
-    );
   },
 });
