@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {WebSocket} from 'ws';
+import {elide} from './strings.ts';
 
 // https://github.com/Luka967/websocket-close-codes
 export const PROTOCOL_ERROR = 1002;
@@ -16,19 +17,8 @@ export function closeWithError(
   const endpoint = ws.url ?? 'client';
   const errMsg = String(err);
   lc.warn?.(`closing connection to ${endpoint} with error`, errMsg);
-  ws.close(code, truncate(errMsg));
-}
 
-// close messages must be less than or equal to 123 bytes:
-// https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/close#reason
-function truncate(val: string, maxBytes = 123) {
-  const encoder = new TextEncoder();
-  if (encoder.encode(val).length <= maxBytes) {
-    return val;
-  }
-  val = val.substring(0, maxBytes - 3);
-  while (encoder.encode(val + '...').length > maxBytes) {
-    val = val.substring(0, val.length - 1);
-  }
-  return val + '...';
+  // close messages must be less than or equal to 123 bytes:
+  // https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/close#reason
+  ws.close(code, elide(errMsg, 123));
 }
