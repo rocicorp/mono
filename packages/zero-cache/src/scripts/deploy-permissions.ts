@@ -124,16 +124,16 @@ async function deployPermissions(
 async function writePermissionsFile(
   perms: PermissionsConfig,
   file: string,
-  format: 'sql' | 'json',
+  format: 'sql' | 'json' | 'pretty',
 ) {
   const contents =
     format === 'sql'
       ? `UPDATE zero.permissions SET permissions = ${literal(
           JSON.stringify(perms),
         )};`
-      : JSON.stringify(perms, null, 2);
+      : JSON.stringify(perms, null, format === 'pretty' ? 2 : 0);
   await writeFile(file, contents);
-  lc.info?.(`Wrote permissions ${format} to ${config.output.file}`);
+  lc.info?.(`Wrote ${format} permissions to ${config.output.file}`);
 }
 
 const permissions = await loadPermissions(lc, config.schema.path);
