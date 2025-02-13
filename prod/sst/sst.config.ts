@@ -174,11 +174,13 @@ export default $config({
           maxCapacity: 10,
         },
       },
+      // Make SST wait for health checks before considering the service "deployed".
+      wait: true,
     });
 
     // Deploy permissions after the view-syncer has been fully deployed.
-    viewSyncer.url.apply((url) => {
-      console.info(`Finished deploying view-syncers to ${url}`);
+    viewSyncer.nodes.taskDefinition.apply(() => {
+      console.info(`Finished deploying view-syncers`);
       execSync(
         `npx zero-deploy-permissions --schema-path ../../apps/zbugs/schema.ts`,
         { cwd: "../../packages/zero/" },
