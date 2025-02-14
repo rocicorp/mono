@@ -1,0 +1,30 @@
+{
+  "name": "zero-expo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "module": "true",
+  "scripts": {
+    "check-format": "prettier --check .",
+    "check-types": "tsc",
+    "check-types:watch": "tsc --watch",
+    "format": "prettier --write .",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "test": "vitest run",
+    "test:watch": "vitest watch"
+  },
+  "prettier": "@rocicorp/prettier-config",
+  "eslintConfig": {
+    "extends": "../../eslint-config.json"
+  },
+  "dependencies": {
+    "@rocicorp/resolver": "^1.0.2"
+  },
+  "devDependencies": {
+    "@rocicorp/eslint-config": "^0.7.0",
+    "@rocicorp/prettier-config": "^0.3.0"
+  },
+  "peerDependencies": {
+    "expo-sqlite": ">=14.0.0"
+  }
+}

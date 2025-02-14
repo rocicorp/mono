@@ -1,0 +1,26 @@
+{
+  "name": "zero-op-sqlite",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "module": "true",
+  "scripts": {
+    "check-types": "tsc",
+    "check-types:watch": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+  },
+  "peerDependencies": {
+    "@op-engineering/op-sqlite": ">=9.0.0"
+  },
+  "devDependencies": {
+    "@rocicorp/eslint-config": "^0.7.0",
+    "@rocicorp/prettier-config": "^0.3.0"
+  },
+  "eslintConfig": {
+    "extends": "../../eslint-config.json"
+  }
+}
