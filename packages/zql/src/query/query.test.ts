@@ -208,10 +208,12 @@ describe('types', () => {
   test('simple select with enums', () => {
     const query = mockQuery as unknown as Query<Schema, 'testWithEnums'>;
     expectTypeOf(query.run()).toMatchTypeOf<
-      ReadonlyArray<{
-        s: string;
-        e: 'open' | 'closed';
-      }>
+      Promise<
+        ReadonlyArray<{
+          s: string;
+          e: 'open' | 'closed';
+        }>
+      >
     >();
 
     const q2 = mockQuery as unknown as Query<Schema, 'schemaWithAdvancedTypes'>;
@@ -219,14 +221,16 @@ describe('types', () => {
     // @ts-expect-error - invalid enum value
     q2.where('e', 'bogus');
     expectTypeOf(q2.run()).toMatchTypeOf<
-      ReadonlyArray<{
-        s: string;
-        n: Timestamp;
-        b: boolean;
-        j: {foo: string; bar: boolean};
-        e: 'open' | 'closed';
-        otherId: IdOf<Schema['tables']['testWithEnums']>;
-      }>
+      Promise<
+        ReadonlyArray<{
+          s: string;
+          n: Timestamp;
+          b: boolean;
+          j: {foo: string; bar: boolean};
+          e: 'open' | 'closed';
+          otherId: IdOf<Schema['tables']['testWithEnums']>;
+        }>
+      >
     >();
 
     // @ts-expect-error - 'foo' is not an id of `SchemaWithEnums`
@@ -246,22 +250,24 @@ describe('types', () => {
 
     const query2 = query.related('self');
     expectTypeOf(query2.run()).toMatchTypeOf<
-      ReadonlyArray<{
-        s: string;
-        n: Timestamp;
-        b: boolean;
-        j: {foo: string; bar: boolean};
-        e: 'open' | 'closed';
-        otherId: IdOf<Schema['tables']['testWithEnums']>;
-        self: ReadonlyArray<{
+      Promise<
+        ReadonlyArray<{
           s: string;
           n: Timestamp;
           b: boolean;
           j: {foo: string; bar: boolean};
           e: 'open' | 'closed';
           otherId: IdOf<Schema['tables']['testWithEnums']>;
-        }>;
-      }>
+          self: ReadonlyArray<{
+            s: string;
+            n: Timestamp;
+            b: boolean;
+            j: {foo: string; bar: boolean};
+            e: 'open' | 'closed';
+            otherId: IdOf<Schema['tables']['testWithEnums']>;
+          }>;
+        }>
+      >
     >();
 
     // @ts-expect-error - missing enum value
@@ -322,10 +328,12 @@ describe('types', () => {
 
     const query2 = query.related('self');
     expectTypeOf(query2.run()).toMatchTypeOf<
-      ReadonlyArray<
-        Row<SchemaWithEnums> & {
-          self: ReadonlyArray<Row<SchemaWithEnums>>;
-        }
+      Promise<
+        ReadonlyArray<
+          Row<SchemaWithEnums> & {
+            self: ReadonlyArray<Row<SchemaWithEnums>>;
+          }
+        >
       >
     >();
   });
@@ -342,12 +350,14 @@ describe('types', () => {
   test('one', () => {
     const q1 = mockQuery as unknown as Query<Schema, 'test'>;
     expectTypeOf(q1.one().run()).toMatchTypeOf<
-      | {
-          readonly s: string;
-          readonly b: boolean;
-          readonly n: number;
-        }
-      | undefined
+      Promise<
+        | {
+            readonly s: string;
+            readonly b: boolean;
+            readonly n: number;
+          }
+        | undefined
+      >
     >();
 
     // eslint-disable-next-line @typescript-eslint/naming-convention

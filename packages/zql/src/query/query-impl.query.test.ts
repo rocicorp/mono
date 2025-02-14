@@ -617,7 +617,7 @@ describe('joins and filters', () => {
     });
   });
 
-  test('schema applied one', () => {
+  test('schema applied one', async () => {
     const queryDelegate = new QueryDelegateImpl();
     addData(queryDelegate);
 
@@ -625,7 +625,7 @@ describe('joins and filters', () => {
       .related('owner')
       .related('comments', q => q.related('author').related('revisions'))
       .where('id', '=', '0001');
-    const data = query.run();
+    const data = await query.run();
     expect(data).toMatchInlineSnapshot(`
       [
         {
@@ -708,7 +708,7 @@ test('non int limit', () => {
   }).toThrow('Limit must be an integer');
 });
 
-test('run', () => {
+test('run', async () => {
   const queryDelegate = new QueryDelegateImpl();
   addData(queryDelegate);
 
@@ -718,9 +718,9 @@ test('run', () => {
     'issue 1',
   );
 
-  const singleFilterRows = issueQuery1.run();
-  const doubleFilterRows = issueQuery1.where('closed', '=', false).run();
-  const doubleFilterWithNoResultsRows = issueQuery1
+  const singleFilterRows = await issueQuery1.run();
+  const doubleFilterRows = await issueQuery1.where('closed', '=', false).run();
+  const doubleFilterWithNoResultsRows = await issueQuery1
     .where('closed', '=', true)
     .run();
 
@@ -732,7 +732,7 @@ test('run', () => {
     .related('labels')
     .related('owner')
     .related('comments');
-  const rows = issueQuery2.run();
+  const rows = await issueQuery2.run();
   expect(rows).toMatchInlineSnapshot(`
     [
       {
@@ -834,11 +834,11 @@ test('view creation is wrapped in context.batchViewUpdates call', () => {
   expect(view).toBe(testView);
 });
 
-test('json columns are returned as JS objects', () => {
+test('json columns are returned as JS objects', async () => {
   const queryDelegate = new QueryDelegateImpl();
   addData(queryDelegate);
 
-  const rows = newQuery(queryDelegate, schema, 'user').run();
+  const rows = await newQuery(queryDelegate, schema, 'user').run();
   expect(rows).toEqual([
     {
       id: '0001',
@@ -860,11 +860,11 @@ test('json columns are returned as JS objects', () => {
   ]);
 });
 
-test('complex expression', () => {
+test('complex expression', async () => {
   const queryDelegate = new QueryDelegateImpl();
   addData(queryDelegate);
 
-  let rows = newQuery(queryDelegate, schema, 'issue')
+  let rows = await newQuery(queryDelegate, schema, 'issue')
     .where(({or, cmp}) =>
       or(cmp('title', '=', 'issue 1'), cmp('title', '=', 'issue 2')),
     )
@@ -889,7 +889,7 @@ test('complex expression', () => {
     ]
   `);
 
-  rows = newQuery(queryDelegate, schema, 'issue')
+  rows = await newQuery(queryDelegate, schema, 'issue')
     .where(({and, cmp, or}) =>
       and(
         cmp('ownerId', '=', '0001'),
@@ -911,11 +911,11 @@ test('complex expression', () => {
   `);
 });
 
-test('null compare', () => {
+test('null compare', async () => {
   const queryDelegate = new QueryDelegateImpl();
   addData(queryDelegate);
 
-  let rows = newQuery(queryDelegate, schema, 'issue')
+  let rows = await newQuery(queryDelegate, schema, 'issue')
     .where('ownerId', 'IS', null)
     .run();
 
@@ -929,7 +929,7 @@ test('null compare', () => {
     },
   ]);
 
-  rows = newQuery(queryDelegate, schema, 'issue')
+  rows = await newQuery(queryDelegate, schema, 'issue')
     .where('ownerId', 'IS NOT', null)
     .run();
 
@@ -951,17 +951,17 @@ test('null compare', () => {
   ]);
 });
 
-test('literal filter', () => {
+test('literal filter', async () => {
   const queryDelegate = new QueryDelegateImpl();
   addData(queryDelegate);
 
-  let rows = newQuery(queryDelegate, schema, 'issue')
+  let rows = await newQuery(queryDelegate, schema, 'issue')
     .where(({cmpLit}) => cmpLit(true, '=', false))
     .run();
 
   expect(rows).toEqual([]);
 
-  rows = newQuery(queryDelegate, schema, 'issue')
+  rows = await newQuery(queryDelegate, schema, 'issue')
     .where(({cmpLit}) => cmpLit(true, '=', true))
     .run();
 
@@ -990,7 +990,7 @@ test('literal filter', () => {
   ]);
 });
 
-test('join with compound keys', () => {
+test('join with compound keys', async () => {
   const b = table('b')
     .columns({
       id: number(),
@@ -1065,7 +1065,7 @@ test('join with compound keys', () => {
     });
   }
 
-  const rows = newQuery(queryDelegate, schema, 'a').related('b').run();
+  const rows = await newQuery(queryDelegate, schema, 'a').related('b').run();
 
   expect(rows).toMatchInlineSnapshot(`
     [
