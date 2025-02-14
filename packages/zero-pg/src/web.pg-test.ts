@@ -1,15 +1,12 @@
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import {beforeEach, describe, expect, test} from 'vitest';
-import type {
-  PostgresDB,
-  PostgresTransaction,
-} from '../../zero-cache/src/types/pg.ts';
+import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {getClientsTableDefinition} from '../../zero-cache/src/services/change-source/pg/schema/shard.ts';
-import type {DBConnection, DBTransaction, Row} from './db.ts';
-import type {JSONValue} from '../../shared/src/json.ts';
+
 import {PushProcessor} from './web.ts';
 import type {PushBody} from '../../zero-protocol/src/push.ts';
 import {customMutatorKey} from '../../zql/src/mutate/custom.ts';
+import {Connection} from './test/util.ts';
 
 let pg: PostgresDB;
 beforeEach(async () => {
@@ -227,32 +224,4 @@ async function checkClientsTable(
   expect(result).toEqual(
     expectedLmid === undefined ? [] : [{lastMutationID: BigInt(expectedLmid)}],
   );
-}
-
-class Connection implements DBConnection<PostgresTransaction> {
-  readonly #pg: PostgresDB;
-  constructor(pg: PostgresDB) {
-    this.#pg = pg;
-  }
-
-  query(sql: string, params: unknown[]): Promise<Row[]> {
-    return this.#pg.unsafe(sql, params as JSONValue[]);
-  }
-
-  transaction<T>(
-    fn: (tx: DBTransaction<PostgresTransaction>) => Promise<T>,
-  ): Promise<T> {
-    return pg.begin(pgTx => fn(new Transaction(pgTx))) as Promise<T>;
-  }
-}
-
-class Transaction implements DBTransaction<PostgresTransaction> {
-  readonly wrappedTransaction: PostgresTransaction;
-  constructor(pgTx: PostgresTransaction) {
-    this.wrappedTransaction = pgTx;
-  }
-
-  query(sql: string, params: unknown[]): Promise<Row[]> {
-    return this.wrappedTransaction.unsafe(sql, params as JSONValue[]);
-  }
 }
