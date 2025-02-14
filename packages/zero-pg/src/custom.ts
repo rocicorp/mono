@@ -210,15 +210,6 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
   };
 }
 
-export function makeSchemaQuery<S extends Schema>(
-  _schema: Schema,
-): (dbTransaction: DBTransaction<unknown>) => SchemaQuery<S> {
-  return (_dbTransaction: DBTransaction<unknown>) =>
-    // TODO: Implement this
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ({}) as any;
-}
-
 function serverName(x: {name: string; serverName?: string | undefined}) {
   return x.serverName ?? x.name;
 }
