@@ -18,6 +18,8 @@
   },
   "prettier": "@rocicorp/prettier-config",
   "dependencies": {
+    "@databases/escape-identifier": "^1.0.3",
+    "@databases/sql": "^3.3.0",
     "@rocicorp/logger": "^5.3.0",
     "vitest": "^2.1.5"
   }

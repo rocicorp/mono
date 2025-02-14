@@ -152,7 +152,7 @@ export class TableSource implements Source {
         compile(
           sql`INSERT INTO ${sql.ident(this.#table)} (${sql.join(
             Object.keys(this.#columns).map(c => sql.ident(c)),
-            sql`,`,
+            ', ',
           )}) VALUES (${sql.__dangerous__rawValue(
             new Array(Object.keys(this.#columns).length).fill('?').join(','),
           )})`,
@@ -162,7 +162,7 @@ export class TableSource implements Source {
         compile(
           sql`DELETE FROM ${sql.ident(this.#table)} WHERE ${sql.join(
             this.#primaryKey.map(k => sql`${sql.ident(k)}=?`),
-            sql` AND `,
+            ' AND ',
           )}`,
         ),
       ),
@@ -175,10 +175,10 @@ export class TableSource implements Source {
                   nonPrimaryKeys(this.#columns, this.#primaryKey).map(
                     c => sql`${sql.ident(c)}=?`,
                   ),
-                  sql`,`,
+                  ',',
                 )} WHERE ${sql.join(
                   this.#primaryKey.map(k => sql`${sql.ident(k)}=?`),
-                  sql` AND `,
+                  ' AND ',
                 )}`,
               ),
             )
@@ -189,7 +189,7 @@ export class TableSource implements Source {
             this.#table,
           )} WHERE ${sql.join(
             this.#primaryKey.map(k => sql`${sql.ident(k)}=?`),
-            sql` AND `,
+            ' AND ',
           )} LIMIT 1`,
         ),
       ),
