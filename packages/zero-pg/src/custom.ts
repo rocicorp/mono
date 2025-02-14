@@ -5,19 +5,12 @@ import type {
   SchemaCRUD,
   SchemaQuery,
   TableCRUD,
-  TransactionBase,
+  ServerTransaction,
+  ConnectionProvider,
+  DBTransaction,
 } from '../../zql/src/mutate/custom.ts';
-import type {ConnectionProvider, DBTransaction} from './db.ts';
 import {PushProcessor, type PushHandler} from './web.ts';
 import {formatPg, sql} from '../../z2s/src/sql.ts';
-
-export interface Transaction<S extends Schema, TWrappedTransaction>
-  extends TransactionBase<S> {
-  readonly location: 'server';
-  readonly reason: 'authoritative';
-  readonly dbTransaction: DBTransaction<TWrappedTransaction>;
-  readonly token: string | undefined;
-}
 
 export type CustomMutatorDefs<S extends Schema, TDBTransaction> = {
   readonly [Table in keyof S['tables']]?: {
@@ -30,7 +23,7 @@ export type CustomMutatorDefs<S extends Schema, TDBTransaction> = {
 };
 
 export type CustomMutatorImpl<S extends Schema, TDBTransaction> = (
-  tx: Transaction<S, TDBTransaction>,
+  tx: ServerTransaction<S, TDBTransaction>,
   args: ReadonlyJSONValue,
 ) => Promise<void>;
 
@@ -65,7 +58,7 @@ export function createPushHandler<
 }
 
 export class TransactionImpl<S extends Schema, TWrappedTransaction>
-  implements Transaction<S, TWrappedTransaction>
+  implements ServerTransaction<S, TWrappedTransaction>
 {
   readonly location = 'server';
   readonly reason = 'authoritative';

@@ -1,9 +1,13 @@
-import type {DBConnection, DBTransaction, Row} from '../db.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import type {
   PostgresDB,
   PostgresTransaction,
 } from '../../../zero-cache/src/types/pg.ts';
+import type {
+  DBConnection,
+  DBTransaction,
+  Row,
+} from '../../../zql/src/mutate/custom.ts';
 
 export class Connection implements DBConnection<PostgresTransaction> {
   readonly #pg: PostgresDB;

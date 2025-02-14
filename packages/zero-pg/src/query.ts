@@ -1,6 +1,5 @@
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import type {SchemaQuery} from '../../zql/src/mutate/custom.ts';
-import type {DBTransaction} from './db.ts';
+import type {DBTransaction, SchemaQuery} from '../../zql/src/mutate/custom.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {AbstractQuery} from '../../zql/src/query/query-impl.ts';

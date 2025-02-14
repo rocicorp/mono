@@ -6,7 +6,6 @@ import type {
   PushResponse,
 } from '../../zero-protocol/src/push.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import type {ConnectionProvider, DBConnection, DBTransaction} from './db.ts';
 import * as v from '../../shared/src/valita.ts';
 import {pushBodySchema} from '../../zero-protocol/src/push.ts';
 import {
@@ -19,6 +18,9 @@ import {LogContext} from '@rocicorp/logger';
 import {createLogContext} from './logging.ts';
 import {
   splitMutatorKey,
+  type ConnectionProvider,
+  type DBConnection,
+  type DBTransaction,
   type SchemaCRUD,
   type SchemaQuery,
 } from '../../zql/src/mutate/custom.ts';
