@@ -58,7 +58,7 @@ async function runShardMigrations(
       migrateSchema: () => {
         throw new AutoResetSignal('resetting to upgrade shard schema');
       },
-      minSafeVersion: 4,
+      minSafeVersion: 3,
     },
   };
 

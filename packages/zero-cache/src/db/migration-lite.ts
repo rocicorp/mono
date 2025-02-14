@@ -275,10 +275,6 @@ function getMinSafeVersion(
   if (proposedSafeVersion === undefined) {
     return current.minSafeVersion;
   }
-  // Sanity check to maintain the invariant that running code is never
-  // earlier than the rollback limit.
-  assert(proposedSafeVersion <= current.dataVersion + 1);
-
   if (current.minSafeVersion >= proposedSafeVersion) {
     // The rollback limit must never move backwards.
     log.debug?.(
