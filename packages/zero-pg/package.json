@@ -17,6 +17,5 @@
   "prettier": "@rocicorp/prettier-config",
   "dependencies": {
     "vitest": "^2.1.5"
-  },
-  "devDependencies": {}
+  }
 }
