@@ -14,6 +14,8 @@ import {
 } from 'vitest';
 import WebSocket from 'ws';
 import {assert} from '../../../shared/src/asserts.ts';
+import {h128} from '../../../shared/src/hash.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../shared/src/queue.ts';
 import {randInt} from '../../../shared/src/rand.ts';
@@ -22,6 +24,12 @@ import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/chang
 import type {InitConnectionMessage} from '../../../zero-protocol/src/connect.ts';
 import type {PokeStartMessage} from '../../../zero-protocol/src/poke.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import {
+  ANYONE_CAN_DO_ANYTHING,
+  definePermissions,
+} from '../../../zero-schema/src/permissions.ts';
 import type {ChangeStreamMessage} from '../services/change-source/protocol/current/downstream.ts';
 import {
   changeSourceUpstreamSchema,
@@ -32,17 +40,9 @@ import {DbFile} from '../test/lite.ts';
 import type {PostgresDB} from '../types/pg.ts';
 import {childWorker, type Worker} from '../types/processes.ts';
 import {stream, type Sink} from '../types/streams.ts';
-import {
-  ANYONE_CAN_DO_ANYTHING,
-  definePermissions,
-} from '../../../zero-schema/src/permissions.ts';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
-import {h128} from '../../../shared/src/hash.ts';
-import type {JSONValue} from '../../../shared/src/json.ts';
 
 // Adjust to debug.
-const LOG_LEVEL: LogLevel = 'debug';
+const LOG_LEVEL: LogLevel = 'error';
 
 const foo = table('foo')
   .columns({
