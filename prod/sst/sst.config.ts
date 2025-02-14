@@ -181,10 +181,11 @@ export default $config({
         // Pulumi operates with cwd at the package root.
         dir: join(process.cwd(), "../../packages/zero/"),
         create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/schema.ts`,
+        // Run the Command on every deploy ...
+        triggers: [Date.now()],
       },
-      {
-        dependsOn: viewSyncer,
-      },
+      // after the view-syncer is deployed.
+      { dependsOn: viewSyncer },
     );
   },
 });
