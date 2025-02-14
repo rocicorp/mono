@@ -155,6 +155,20 @@ describe('db/migration', () => {
       },
     },
     {
+      name: 'bump rollback limit past current version',
+      preSchema: {
+        dataVersion: 1,
+        schemaVersion: 1,
+        minSafeVersion: 0,
+      },
+      migrations: {11: {minSafeVersion: 11}},
+      postSchema: {
+        dataVersion: 11,
+        schemaVersion: 11,
+        minSafeVersion: 11,
+      },
+    },
+    {
       name: 'rollback limit bump does not move backwards',
       preSchema: {
         dataVersion: 10,
