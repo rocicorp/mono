@@ -254,7 +254,7 @@ export async function exitAfter(run: () => Promise<void>) {
   }
 }
 
-const DEFAULT_STOP_INTERVAL_MS = 15_000;
+const DEFAULT_STOP_INTERVAL_MS = 20_000;
 
 /**
  * The HeartbeatMonitor monitors the cadence heartbeats (e.g. "/keepalive"
@@ -288,11 +288,11 @@ export class HeartbeatMonitor {
         } second interval`,
         reqHeaders,
       );
-      // e.g. check every 5 seconds to see if it's been over 15 seconds
+      // e.g. check every 5 seconds to see if it's been over 20 seconds
       //      since the last heartbeat.
       this.#timer = setInterval(
         this.#checkStopInterval,
-        this.#stopInterval / 3,
+        this.#stopInterval / 4,
       );
     }
   }
