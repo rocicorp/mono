@@ -9,13 +9,16 @@
     "check-format": "prettier --check .",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "test": "vitest run",
+    "test:watch": "vitest watch"
   },
   "eslintConfig": {
     "extends": "../../eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config",
   "dependencies": {
+    "@rocicorp/logger": "^5.3.0",
     "vitest": "^2.1.5"
   }
 }
