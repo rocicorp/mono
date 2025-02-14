@@ -3,6 +3,8 @@
 // Load .env file
 require("dotenv").config();
 
+import { join } from "node:path";
+
 export default $config({
   app(input) {
     return {
@@ -167,8 +169,22 @@ export default $config({
           maxCapacity: 10,
         },
       },
-      // Make SST wait for health checks before considering the service "deployed".
-      wait: true,
+      // Set this to `true` to make SST wait for the view-syncer to be deployed
+      // before proceeding (to permissions deployment, etc.). This makes the deployment
+      // take a lot longer and is only necessary if there is an AST format change.
+      wait: false,
     });
+
+    new command.local.Command(
+      "zero-deploy-permissions",
+      {
+        // Pulumi operates with cwd at the package root.
+        dir: join(process.cwd(), "../../packages/zero/"),
+        create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/schema.ts`,
+      },
+      {
+        dependsOn: viewSyncer,
+      },
+    );
   },
 });

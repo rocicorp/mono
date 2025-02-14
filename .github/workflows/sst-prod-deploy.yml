@@ -80,7 +80,3 @@ jobs:
           cd prod/sst
           npm install
           npx sst deploy --stage production
-      - name: Deploy Permissions
-        run: |
-          cd packages/zero
-          npx tsx src/deploy-permissions.ts --schema-path ../../apps/zbugs/schema.ts --upstream-db ${{ secrets.PROD_ZERO_UPSTREAM_DB }}
