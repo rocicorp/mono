@@ -1,0 +1,3 @@
+[submodule "react-native-replicache"]
+	path = react-native-replicache
+	url = https://github.com/Braden1996/react-native-replicache.git
