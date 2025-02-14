@@ -11,7 +11,6 @@ import * as v from '../../shared/src/valita.ts';
 import {pushBodySchema} from '../../zero-protocol/src/push.ts';
 import {
   makeSchemaCRUD,
-  makeSchemaQuery,
   TransactionImpl,
   type CustomMutatorDefs,
 } from './custom.ts';
@@ -23,6 +22,7 @@ import {
   type SchemaCRUD,
   type SchemaQuery,
 } from '../../zql/src/mutate/custom.ts';
+import {makeSchemaQuery} from './query.ts';
 
 export type PushHandler = (
   headers: Headers,
