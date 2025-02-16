@@ -45,12 +45,12 @@ export type CustomMutatorDefs<S extends Schema> = {
   };
 };
 
-export type CustomMutatorImpl<S extends Schema> = (
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type CustomMutatorImpl<S extends Schema, TArgs = any> = (
   tx: Transaction<S>,
   // TODO: many args. See commit: 52657c2f934b4a458d628ea77e56ce92b61eb3c6 which did have many args.
   // The issue being that it will be a protocol change to support varargs.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  args: any,
+  args: TArgs,
 ) => Promise<void>;
 
 /**

@@ -1,4 +1,8 @@
 export type {Expand} from '../../shared/src/expand.ts';
+export type {
+  CustomMutatorDefs,
+  CustomMutatorImpl,
+} from '../../zero-client/src/client/custom.ts';
 export type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
 export type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 export type {
