@@ -83,7 +83,8 @@ export const GLOBAL_SETUP = `
   INSERT INTO zero.permissions (permissions) VALUES (NULL) ON CONFLICT DO NOTHING;
 `;
 
-export async function ensureGlobalTables(db: PostgresDB) {
+export async function ensureGlobalTables(lc: LogContext, db: PostgresDB) {
+  lc.info?.(`Ensuring global db setup.`);
   await db.unsafe(GLOBAL_SETUP);
 }
 
