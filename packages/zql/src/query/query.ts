@@ -45,7 +45,7 @@ export type GetFilterType<
   ? // We don't want to compare to null in where clauses because it causes
     // confusing results:
     // https://zero.rocicorp.dev/docs/reading-data#comparing-to-null
-    Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>[]
+    readonly Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>[]
   : Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>;
 
 export type AvailableRelationships<
