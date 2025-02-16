@@ -70,6 +70,7 @@ export type {
 } from '../../zero-schema/src/compiled-permissions.ts';
 export {
   ANYONE_CAN,
+  ANYONE_CAN_DO_ANYTHING,
   definePermissions,
   NOBODY_CAN,
 } from '../../zero-schema/src/permissions.ts';
