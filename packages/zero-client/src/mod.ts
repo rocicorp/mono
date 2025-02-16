@@ -93,6 +93,7 @@ export type {
 export type {Query, Row} from '../../zql/src/query/query.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 export type {DBMutator, TableMutator} from './client/crud.ts';
+export type {CustomMutatorDefs, CustomMutatorImpl} from './client/custom.ts';
 export type {
   DeleteID,
   InsertValue,
