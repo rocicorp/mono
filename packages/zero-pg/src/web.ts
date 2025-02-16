@@ -9,11 +9,20 @@ import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {ConnectionProvider, DBConnection, DBTransaction} from './db.ts';
 import * as v from '../../shared/src/valita.ts';
 import {pushBodySchema} from '../../zero-protocol/src/push.ts';
-import {TransactionImpl, type CustomMutatorDefs} from './custom.ts';
+import {
+  makeSchemaCRUD,
+  makeSchemaQuery,
+  TransactionImpl,
+  type CustomMutatorDefs,
+} from './custom.ts';
 import {first} from '../../shared/src/iterables.ts';
 import {LogContext} from '@rocicorp/logger';
 import {createLogContext} from './logging.ts';
-import {splitMutatorKey} from '../../zql/src/mutate/custom.ts';
+import {
+  splitMutatorKey,
+  type SchemaCRUD,
+  type SchemaQuery,
+} from '../../zql/src/mutate/custom.ts';
 
 export type PushHandler = (
   headers: Headers,
@@ -31,11 +40,12 @@ export class PushProcessor<
   TDBTransaction,
   MD extends CustomMutatorDefs<S, TDBTransaction>,
 > {
-  readonly #schema: S;
   readonly #dbConnectionProvider: ConnectionProvider<TDBTransaction>;
   readonly #customMutatorDefs: MD;
   readonly #lc: LogContext;
   readonly #shardID: string;
+  readonly #mutate: (dbTransaction: DBTransaction<unknown>) => SchemaCRUD<S>;
+  readonly #query: (dbTransaction: DBTransaction<unknown>) => SchemaQuery<S>;
 
   constructor(
     shardID: string,
@@ -44,10 +54,11 @@ export class PushProcessor<
     customMutatorDefs: MD,
   ) {
     this.#shardID = shardID;
-    this.#schema = schema;
     this.#dbConnectionProvider = dbConnectionProvider;
     this.#customMutatorDefs = customMutatorDefs;
     this.#lc = createLogContext('info');
+    this.#mutate = makeSchemaCRUD(schema);
+    this.#query = makeSchemaQuery(schema);
   }
 
   async process(
@@ -188,10 +199,11 @@ export class PushProcessor<
   ): Promise<void> {
     const zeroTx = new TransactionImpl(
       dbTx,
-      this.#schema,
       headers.authorization,
       m.clientID,
       m.id,
+      this.#mutate(dbTx),
+      this.#query(dbTx),
     );
 
     const [namespace, name] = splitMutatorKey(m.name);
