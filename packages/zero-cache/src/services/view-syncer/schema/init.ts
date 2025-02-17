@@ -71,15 +71,6 @@ export async function initViewSyncerSchema(
     },
   };
 
-  const migrateV6ToV7: Migration = {
-    migrateSchema: async (_, tx) => {
-      await tx`DROP INDEX IF EXISTS client_patch_version`;
-      await tx`ALTER TABLE ${tx(schema)}.clients DROP COLUMN deleted`;
-      await tx`ALTER TABLE ${tx(schema)}.clients DROP COLUMN "patchVersion"`;
-    },
-    minSafeVersion: 7,
-  };
-
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     2: migrateV1toV2,
     3: migrateV2ToV3,
@@ -88,7 +79,6 @@ export async function initViewSyncerSchema(
     // the logic that updates and checks the rowsVersion table in v3.
     5: {minSafeVersion: 3},
     6: migrateV5ToV6,
-    7: migrateV6ToV7,
   };
 
   await runSchemaMigrations(
