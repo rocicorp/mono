@@ -82,4 +82,6 @@ jobs:
 
       - name: Install Playwright Deps
         run: npx playwright install --with-deps
+      - name: Remove vite caches
+        run: rm -rf node_modules/.vite && rm -rf packages/*/node_modules/.vite
       - run: npm run test
