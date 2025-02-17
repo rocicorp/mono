@@ -609,9 +609,8 @@ describe('view-syncer/cvr', () => {
     const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
 
     // This removes and adds desired queries to the existing fooClient.
-    expect(
-      updater.deleteDesiredQueries('fooClient', ['oneHash', 'twoHash'], now),
-    ).toMatchInlineSnapshot(`
+    expect(updater.deleteDesiredQueries('fooClient', ['oneHash', 'twoHash']))
+      .toMatchInlineSnapshot(`
         [
           {
             "patch": {
@@ -721,24 +720,9 @@ describe('view-syncer/cvr', () => {
     expect(
       updater.putDesiredQueries('bonkClient', [], now),
     ).toMatchInlineSnapshot(
-      `
-                [
-                  {
-                    "patch": {
-                      "id": "bonkClient",
-                      "op": "put",
-                      "type": "client",
-                    },
-                    "toVersion": {
-                      "minorVersion": 1,
-                      "stateVersion": "1aa",
-                    },
-                  },
-                ]
-              `,
+      `[]`,
     );
-    expect(updater.clearDesiredQueries('dooClient', now))
-      .toMatchInlineSnapshot(`
+    expect(updater.clearDesiredQueries('dooClient')).toMatchInlineSnapshot(`
                   [
                     {
                       "patch": {
@@ -4155,6 +4139,9 @@ describe('view-syncer/cvr', () => {
           patchVersion: null,
           internal: null,
           deleted: null,
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
       ],
       desires: [
@@ -4271,10 +4258,13 @@ describe('view-syncer/cvr', () => {
                 "stateVersion": "1a9",
               },
             },
+            "expiresAt": undefined,
             "id": "oneHash",
+            "inactivatedAt": undefined,
             "patchVersion": undefined,
             "transformationHash": undefined,
             "transformationVersion": undefined,
+            "ttl": undefined,
           },
         },
         "replicaVersion": "120",
@@ -4345,11 +4335,14 @@ describe('view-syncer/cvr', () => {
             },
             "clientGroupID": "abc123",
             "deleted": false,
+            "expiresAt": null,
+            "inactivatedAt": null,
             "internal": null,
             "patchVersion": null,
             "queryHash": "oneHash",
             "transformationHash": null,
             "transformationVersion": null,
+            "ttl": null,
           },
         ],
         "rows": Result [
@@ -4431,6 +4424,9 @@ describe('view-syncer/cvr', () => {
           patchVersion: null,
           internal: null,
           deleted: null,
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
         {
           clientGroupID: 'def456',
@@ -4441,6 +4437,9 @@ describe('view-syncer/cvr', () => {
           patchVersion: null,
           internal: null,
           deleted: null,
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
       ],
       desires: [
@@ -4551,10 +4550,13 @@ describe('view-syncer/cvr', () => {
                 "stateVersion": "1a9",
               },
             },
+            "expiresAt": undefined,
             "id": "oneHash",
+            "inactivatedAt": undefined,
             "patchVersion": undefined,
             "transformationHash": undefined,
             "transformationVersion": undefined,
+            "ttl": undefined,
           },
         },
         "replicaVersion": "120",
@@ -4633,11 +4635,14 @@ describe('view-syncer/cvr', () => {
             },
             "clientGroupID": "abc123",
             "deleted": null,
+            "expiresAt": null,
+            "inactivatedAt": null,
             "internal": null,
             "patchVersion": null,
             "queryHash": "oneHash",
             "transformationHash": null,
             "transformationVersion": null,
+            "ttl": null,
           },
           {
             "clientAST": {
@@ -4645,11 +4650,14 @@ describe('view-syncer/cvr', () => {
             },
             "clientGroupID": "def456",
             "deleted": null,
+            "expiresAt": null,
+            "inactivatedAt": null,
             "internal": null,
             "patchVersion": null,
             "queryHash": "oneHash",
             "transformationHash": null,
             "transformationVersion": null,
+            "ttl": null,
           },
         ],
         "rows": Result [
@@ -4742,10 +4750,13 @@ describe('view-syncer/cvr', () => {
                 "stateVersion": "1a9",
               },
             },
+            "expiresAt": undefined,
             "id": "oneHash",
+            "inactivatedAt": undefined,
             "patchVersion": undefined,
             "transformationHash": undefined,
             "transformationVersion": undefined,
+            "ttl": undefined,
           },
         },
         "replicaVersion": "120",
@@ -4818,11 +4829,14 @@ describe('view-syncer/cvr', () => {
               },
               "clientGroupID": "abc123",
               "deleted": null,
+              "expiresAt": null,
+              "inactivatedAt": null,
               "internal": null,
               "patchVersion": null,
               "queryHash": "oneHash",
               "transformationHash": null,
               "transformationVersion": null,
+              "ttl": null,
             },
           ],
           "rows": Result [

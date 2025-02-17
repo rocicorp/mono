@@ -725,7 +725,7 @@ export class CVRStore {
     });
   }
 
-  getExpiredQueriesCandidates(): PendingQuery<QueriesRow[]> {
+  getInactiveQueries(): PendingQuery<QueriesRow[]> {
     return this.#db<QueriesRow[]>`SELECT * FROM ${this.#cvr('queries')}
       WHERE "clientGroupID" = ${this.#id} AND "inactivatedAt" IS NOT NULL
       ORDER BY "expiresAt" ASC, "inactivatedAt" ASC`;

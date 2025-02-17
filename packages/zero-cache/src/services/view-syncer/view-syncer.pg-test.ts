@@ -629,7 +629,6 @@ describe('view-syncer/service', () => {
         foo: {
           desiredQueryIDs: ['query-hash1'],
           id: 'foo',
-          patchVersion: {stateVersion: '00', minorVersion: 1},
         },
       },
       id: '9876',
