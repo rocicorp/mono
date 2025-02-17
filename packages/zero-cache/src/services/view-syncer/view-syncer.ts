@@ -484,6 +484,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
         if (clientGroupIDs) {
           for (const clientGroupID of clientGroupIDs) {
+            assert(clientGroupID !== this.id, 'cannot delete self');
             updater.deleteClientGroup(clientGroupID);
           }
         }

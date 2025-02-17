@@ -353,10 +353,6 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
   }
 
   deleteClientGroup(clientGroupID: string): void {
-    assert(
-      this._cvr.id !== clientGroupID,
-      'Cannot delete the client group from itself',
-    );
     this._cvrStore.deleteClientGroup(clientGroupID);
   }
 
