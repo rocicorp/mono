@@ -3955,4 +3955,747 @@ describe('view-syncer/cvr', () => {
       ],
     });
   });
+
+  test('deleteClient', async () => {
+    const initialState: DBState = {
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          version: '1aa',
+          replicaVersion: '120',
+          lastActive: Date.UTC(2024, 3, 23),
+        },
+      ],
+      clients: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'client-a',
+          patchVersion: '1aa',
+          deleted: null,
+        },
+        {
+          clientGroupID: 'abc123',
+          clientID: 'client-b',
+          patchVersion: '1aa',
+          deleted: null,
+        },
+        {
+          clientGroupID: 'abc123',
+          clientID: 'client-c',
+          patchVersion: '1aa',
+          deleted: null,
+        },
+      ],
+      queries: [
+        {
+          clientGroupID: 'abc123',
+          queryHash: 'oneHash',
+          clientAST: {table: 'issues'},
+          transformationHash: null,
+          transformationVersion: null,
+          patchVersion: null,
+          internal: null,
+          deleted: null,
+        },
+      ],
+      desires: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'client-a',
+          queryHash: 'oneHash',
+          patchVersion: '1a9:01',
+          deleted: null,
+        },
+        {
+          clientGroupID: 'abc123',
+          clientID: 'client-b',
+          queryHash: 'oneHash',
+          patchVersion: '1a9:01',
+          deleted: null,
+        },
+        {
+          clientGroupID: 'abc123',
+          clientID: 'client-c',
+          queryHash: 'oneHash',
+          patchVersion: '1a9:01',
+          deleted: null,
+        },
+      ],
+      rows: [
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY1,
+          rowVersion: '03',
+          refCounts: {oneHash: 3},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY2,
+          rowVersion: '03',
+          refCounts: {oneHash: 3},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+      ],
+    };
+
+    await setInitialState(db, initialState);
+
+    const cvrStore = new CVRStore(
+      lc,
+      db,
+      SHARD_ID,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
+    const cvr = await cvrStore.load(lc, LAST_CONNECT);
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
+
+    expect(updater.deleteClient('client-b')).toMatchInlineSnapshot(`
+      [
+        {
+          "patch": {
+            "clientID": "client-b",
+            "id": "oneHash",
+            "op": "del",
+            "type": "query",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1aa",
+          },
+        },
+      ]
+    `);
+
+    const {cvr: updated, flushed} = await updater.flush(
+      lc,
+      true,
+      LAST_CONNECT,
+      Date.UTC(2024, 3, 23, 1),
+    );
+    expect(updated).toMatchInlineSnapshot(`
+      {
+        "clients": {
+          "client-a": {
+            "desiredQueryIDs": [
+              "oneHash",
+            ],
+            "id": "client-a",
+          },
+          "client-c": {
+            "desiredQueryIDs": [
+              "oneHash",
+            ],
+            "id": "client-c",
+          },
+        },
+        "id": "abc123",
+        "lastActive": 1713834000000,
+        "queries": {
+          "oneHash": {
+            "ast": {
+              "table": "issues",
+            },
+            "desiredBy": {
+              "client-a": {
+                "minorVersion": 1,
+                "stateVersion": "1a9",
+              },
+              "client-c": {
+                "minorVersion": 1,
+                "stateVersion": "1a9",
+              },
+            },
+            "id": "oneHash",
+            "patchVersion": undefined,
+            "transformationHash": undefined,
+            "transformationVersion": undefined,
+          },
+        },
+        "replicaVersion": "120",
+        "version": {
+          "minorVersion": 1,
+          "stateVersion": "1aa",
+        },
+      }
+    `);
+    expect(flushed).toMatchInlineSnapshot(`
+      {
+        "clients": 1,
+        "desires": 2,
+        "instances": 2,
+        "queries": 1,
+        "rows": 0,
+        "rowsDeferred": 0,
+        "statements": 7,
+      }
+    `);
+
+    expect(await getAllState(db)).toMatchInlineSnapshot(`
+      {
+        "clients": Result [
+          {
+            "clientGroupID": "abc123",
+            "clientID": "client-a",
+            "deleted": null,
+            "patchVersion": "1aa",
+          },
+          {
+            "clientGroupID": "abc123",
+            "clientID": "client-c",
+            "deleted": null,
+            "patchVersion": "1aa",
+          },
+        ],
+        "desires": Result [
+          {
+            "clientGroupID": "abc123",
+            "clientID": "client-a",
+            "deleted": null,
+            "patchVersion": "1a9:01",
+            "queryHash": "oneHash",
+          },
+          {
+            "clientGroupID": "abc123",
+            "clientID": "client-c",
+            "deleted": null,
+            "patchVersion": "1a9:01",
+            "queryHash": "oneHash",
+          },
+        ],
+        "instances": Result [
+          {
+            "clientGroupID": "abc123",
+            "grantedAt": 1709251200000,
+            "lastActive": 1713834000000,
+            "owner": "my-task",
+            "replicaVersion": "120",
+            "version": "1aa:01",
+          },
+        ],
+        "queries": Result [
+          {
+            "clientAST": {
+              "table": "issues",
+            },
+            "clientGroupID": "abc123",
+            "deleted": false,
+            "internal": null,
+            "patchVersion": null,
+            "queryHash": "oneHash",
+            "transformationHash": null,
+            "transformationVersion": null,
+          },
+        ],
+        "rows": Result [
+          {
+            "clientGroupID": "abc123",
+            "patchVersion": "1a0",
+            "refCounts": {
+              "oneHash": 3,
+            },
+            "rowKey": {
+              "id": "123",
+            },
+            "rowVersion": "03",
+            "schema": "public",
+            "table": "issues",
+          },
+          {
+            "clientGroupID": "abc123",
+            "patchVersion": "1a0",
+            "refCounts": {
+              "oneHash": 3,
+            },
+            "rowKey": {
+              "id": "321",
+            },
+            "rowVersion": "03",
+            "schema": "public",
+            "table": "issues",
+          },
+        ],
+      }
+    `);
+  });
+
+  test('deleteClient from other group', async () => {
+    const initialState: DBState = {
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          version: '1aa',
+          replicaVersion: '120',
+          lastActive: Date.UTC(2024, 3, 23),
+        },
+
+        {
+          clientGroupID: 'def456',
+          version: '1aa',
+          replicaVersion: '120',
+          lastActive: Date.UTC(2024, 3, 23),
+        },
+      ],
+      clients: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'client-a',
+          patchVersion: '1aa',
+          deleted: null,
+        },
+        {
+          clientGroupID: 'def456',
+          clientID: 'client-b',
+          patchVersion: '1aa',
+          deleted: null,
+        },
+        {
+          clientGroupID: 'abc123',
+          clientID: 'client-c',
+          patchVersion: '1aa',
+          deleted: null,
+        },
+      ],
+      queries: [
+        {
+          clientGroupID: 'abc123',
+          queryHash: 'oneHash',
+          clientAST: {table: 'issues'},
+          transformationHash: null,
+          transformationVersion: null,
+          patchVersion: null,
+          internal: null,
+          deleted: null,
+        },
+        {
+          clientGroupID: 'def456',
+          queryHash: 'oneHash',
+          clientAST: {table: 'issues'},
+          transformationHash: null,
+          transformationVersion: null,
+          patchVersion: null,
+          internal: null,
+          deleted: null,
+        },
+      ],
+      desires: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'client-a',
+          queryHash: 'oneHash',
+          patchVersion: '1a9:01',
+          deleted: null,
+        },
+        {
+          clientGroupID: 'def456',
+          clientID: 'client-b',
+          queryHash: 'oneHash',
+          patchVersion: '1a9:01',
+          deleted: null,
+        },
+        {
+          clientGroupID: 'abc123',
+          clientID: 'client-c',
+          queryHash: 'oneHash',
+          patchVersion: '1a9:01',
+          deleted: null,
+        },
+      ],
+      rows: [
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY1,
+          rowVersion: '03',
+          refCounts: {oneHash: 2},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY2,
+          rowVersion: '03',
+          refCounts: {oneHash: 2},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'def456',
+          rowKey: ROW_KEY1,
+          rowVersion: '03',
+          refCounts: {oneHash: 1},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'def456',
+          rowKey: ROW_KEY2,
+          rowVersion: '03',
+          refCounts: {oneHash: 1},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+      ],
+    };
+
+    await setInitialState(db, initialState);
+
+    const cvrStore = new CVRStore(
+      lc,
+      db,
+      SHARD_ID,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
+    const cvr = await cvrStore.load(lc, LAST_CONNECT);
+
+    expect(cvr).toMatchInlineSnapshot(`
+      {
+        "clients": {
+          "client-a": {
+            "desiredQueryIDs": [
+              "oneHash",
+            ],
+            "id": "client-a",
+          },
+          "client-c": {
+            "desiredQueryIDs": [
+              "oneHash",
+            ],
+            "id": "client-c",
+          },
+        },
+        "id": "abc123",
+        "lastActive": 1713830400000,
+        "queries": {
+          "oneHash": {
+            "ast": {
+              "table": "issues",
+            },
+            "desiredBy": {
+              "client-a": {
+                "minorVersion": 1,
+                "stateVersion": "1a9",
+              },
+              "client-c": {
+                "minorVersion": 1,
+                "stateVersion": "1a9",
+              },
+            },
+            "id": "oneHash",
+            "patchVersion": undefined,
+            "transformationHash": undefined,
+            "transformationVersion": undefined,
+          },
+        },
+        "replicaVersion": "120",
+        "version": {
+          "stateVersion": "1aa",
+        },
+      }
+    `);
+
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
+
+    // No patches because client-b is from a different group.
+    expect(updater.deleteClient('client-b')).toEqual([]);
+
+    const {cvr: updated} = await updater.flush(
+      lc,
+      true,
+      LAST_CONNECT,
+      Date.UTC(2024, 3, 23, 1),
+    );
+
+    expect(await getAllState(db)).toMatchInlineSnapshot(`
+      {
+        "clients": Result [
+          {
+            "clientGroupID": "abc123",
+            "clientID": "client-a",
+            "deleted": null,
+            "patchVersion": "1aa",
+          },
+          {
+            "clientGroupID": "abc123",
+            "clientID": "client-c",
+            "deleted": null,
+            "patchVersion": "1aa",
+          },
+        ],
+        "desires": Result [
+          {
+            "clientGroupID": "abc123",
+            "clientID": "client-a",
+            "deleted": null,
+            "patchVersion": "1a9:01",
+            "queryHash": "oneHash",
+          },
+          {
+            "clientGroupID": "abc123",
+            "clientID": "client-c",
+            "deleted": null,
+            "patchVersion": "1a9:01",
+            "queryHash": "oneHash",
+          },
+        ],
+        "instances": Result [
+          {
+            "clientGroupID": "def456",
+            "grantedAt": null,
+            "lastActive": 1713830400000,
+            "owner": null,
+            "replicaVersion": "120",
+            "version": "1aa",
+          },
+          {
+            "clientGroupID": "abc123",
+            "grantedAt": 1709251200000,
+            "lastActive": 1713834000000,
+            "owner": "my-task",
+            "replicaVersion": "120",
+            "version": "1aa",
+          },
+        ],
+        "queries": Result [
+          {
+            "clientAST": {
+              "table": "issues",
+            },
+            "clientGroupID": "abc123",
+            "deleted": null,
+            "internal": null,
+            "patchVersion": null,
+            "queryHash": "oneHash",
+            "transformationHash": null,
+            "transformationVersion": null,
+          },
+          {
+            "clientAST": {
+              "table": "issues",
+            },
+            "clientGroupID": "def456",
+            "deleted": null,
+            "internal": null,
+            "patchVersion": null,
+            "queryHash": "oneHash",
+            "transformationHash": null,
+            "transformationVersion": null,
+          },
+        ],
+        "rows": Result [
+          {
+            "clientGroupID": "abc123",
+            "patchVersion": "1a0",
+            "refCounts": {
+              "oneHash": 2,
+            },
+            "rowKey": {
+              "id": "123",
+            },
+            "rowVersion": "03",
+            "schema": "public",
+            "table": "issues",
+          },
+          {
+            "clientGroupID": "abc123",
+            "patchVersion": "1a0",
+            "refCounts": {
+              "oneHash": 2,
+            },
+            "rowKey": {
+              "id": "321",
+            },
+            "rowVersion": "03",
+            "schema": "public",
+            "table": "issues",
+          },
+          {
+            "clientGroupID": "def456",
+            "patchVersion": "1a0",
+            "refCounts": {
+              "oneHash": 1,
+            },
+            "rowKey": {
+              "id": "123",
+            },
+            "rowVersion": "03",
+            "schema": "public",
+            "table": "issues",
+          },
+          {
+            "clientGroupID": "def456",
+            "patchVersion": "1a0",
+            "refCounts": {
+              "oneHash": 1,
+            },
+            "rowKey": {
+              "id": "321",
+            },
+            "rowVersion": "03",
+            "schema": "public",
+            "table": "issues",
+          },
+        ],
+      }
+    `);
+
+    expect(updated).toMatchInlineSnapshot(`
+      {
+        "clients": {
+          "client-a": {
+            "desiredQueryIDs": [
+              "oneHash",
+            ],
+            "id": "client-a",
+          },
+          "client-c": {
+            "desiredQueryIDs": [
+              "oneHash",
+            ],
+            "id": "client-c",
+          },
+        },
+        "id": "abc123",
+        "lastActive": 1713834000000,
+        "queries": {
+          "oneHash": {
+            "ast": {
+              "table": "issues",
+            },
+            "desiredBy": {
+              "client-a": {
+                "minorVersion": 1,
+                "stateVersion": "1a9",
+              },
+              "client-c": {
+                "minorVersion": 1,
+                "stateVersion": "1a9",
+              },
+            },
+            "id": "oneHash",
+            "patchVersion": undefined,
+            "transformationHash": undefined,
+            "transformationVersion": undefined,
+          },
+        },
+        "replicaVersion": "120",
+        "version": {
+          "stateVersion": "1aa",
+        },
+      }
+    `);
+
+    {
+      const cvr = await cvrStore.load(lc, LAST_CONNECT);
+      const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
+
+      updater.deleteClientGroup('def456');
+      const {cvr: updated2} = await updater.flush(
+        lc,
+        true,
+        LAST_CONNECT,
+        Date.UTC(2024, 3, 23, 1),
+      );
+
+      expect(updated2).toEqual(updated);
+
+      expect(await getAllState(db)).toMatchInlineSnapshot(`
+        {
+          "clients": Result [
+            {
+              "clientGroupID": "abc123",
+              "clientID": "client-a",
+              "deleted": null,
+              "patchVersion": "1aa",
+            },
+            {
+              "clientGroupID": "abc123",
+              "clientID": "client-c",
+              "deleted": null,
+              "patchVersion": "1aa",
+            },
+          ],
+          "desires": Result [
+            {
+              "clientGroupID": "abc123",
+              "clientID": "client-a",
+              "deleted": null,
+              "patchVersion": "1a9:01",
+              "queryHash": "oneHash",
+            },
+            {
+              "clientGroupID": "abc123",
+              "clientID": "client-c",
+              "deleted": null,
+              "patchVersion": "1a9:01",
+              "queryHash": "oneHash",
+            },
+          ],
+          "instances": Result [
+            {
+              "clientGroupID": "abc123",
+              "grantedAt": 1709251200000,
+              "lastActive": 1713834000000,
+              "owner": "my-task",
+              "replicaVersion": "120",
+              "version": "1aa",
+            },
+          ],
+          "queries": Result [
+            {
+              "clientAST": {
+                "table": "issues",
+              },
+              "clientGroupID": "abc123",
+              "deleted": null,
+              "internal": null,
+              "patchVersion": null,
+              "queryHash": "oneHash",
+              "transformationHash": null,
+              "transformationVersion": null,
+            },
+          ],
+          "rows": Result [
+            {
+              "clientGroupID": "abc123",
+              "patchVersion": "1a0",
+              "refCounts": {
+                "oneHash": 2,
+              },
+              "rowKey": {
+                "id": "123",
+              },
+              "rowVersion": "03",
+              "schema": "public",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "abc123",
+              "patchVersion": "1a0",
+              "refCounts": {
+                "oneHash": 2,
+              },
+              "rowKey": {
+                "id": "321",
+              },
+              "rowVersion": "03",
+              "schema": "public",
+              "table": "issues",
+            },
+          ],
+        }
+      `);
+    }
+  });
 });

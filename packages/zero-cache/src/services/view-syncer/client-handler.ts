@@ -5,8 +5,10 @@ import {
   type JSONObject as SafeJSONObject,
 } from '../../../../shared/src/json.ts';
 import * as v from '../../../../shared/src/valita.ts';
+import type {Writable} from '../../../../shared/src/writable.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {rowSchema} from '../../../../zero-protocol/src/data.ts';
+import type {DeleteClientsBody} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import type {
   PokePartBody,
@@ -82,7 +84,7 @@ export class ClientHandler {
   readonly wsID: string;
   readonly #zeroClientsTable: string;
   readonly #lc: LogContext;
-  readonly #pokes: Subscription<Downstream>;
+  readonly #downstream: Subscription<Downstream>;
   #baseVersion: NullableCVRVersion;
   readonly #protocolVersion: number;
   readonly #schemaVersion: number;
@@ -96,14 +98,14 @@ export class ClientHandler {
     baseCookie: string | null,
     protocolVersion: number,
     schemaVersion: number,
-    pokes: Subscription<Downstream>,
+    downstream: Subscription<Downstream>,
   ) {
     this.#clientGroupID = clientGroupID;
     this.clientID = clientID;
     this.wsID = wsID;
     this.#zeroClientsTable = `${schema(shardID)}.clients`;
     this.#lc = lc;
-    this.#pokes = pokes;
+    this.#downstream = downstream;
     this.#baseVersion = cookieToVersion(baseCookie);
     this.#protocolVersion = protocolVersion;
     this.#schemaVersion = schemaVersion;
@@ -123,12 +125,12 @@ export class ClientHandler {
       `view-syncer closing connection with error: ${String(e)}`,
       e,
     );
-    this.#pokes.fail(e instanceof Error ? e : new Error(String(e)));
+    this.#downstream.fail(e instanceof Error ? e : new Error(String(e)));
   }
 
   close(reason: string) {
     this.#lc.debug?.(`view-syncer closing connection: ${reason}`);
-    this.#pokes.cancel();
+    this.#downstream.cancel();
   }
 
   startPoke(
@@ -169,14 +171,14 @@ export class ClientHandler {
     let partCount = 0;
     const ensureBody = () => {
       if (!pokeStarted) {
-        this.#pokes.push(['pokeStart', pokeStart]);
+        this.#downstream.push(['pokeStart', pokeStart]);
         pokeStarted = true;
       }
       return (body ??= {pokeID});
     };
     const flushBody = () => {
       if (body) {
-        this.#pokes.push(['pokePart', body]);
+        this.#downstream.push(['pokePart', body]);
         body = undefined;
         partCount = 0;
       }
@@ -224,13 +226,13 @@ export class ClientHandler {
         try {
           addPatch(patchToVersion);
         } catch (e) {
-          this.#pokes.fail(e instanceof Error ? e : new Error(String(e)));
+          this.#downstream.fail(e instanceof Error ? e : new Error(String(e)));
         }
       },
 
       cancel: () => {
         if (pokeStarted) {
-          this.#pokes.push(['pokeEnd', {pokeID, cancel: true}]);
+          this.#downstream.push(['pokeEnd', {pokeID, cancel: true}]);
         }
       },
 
@@ -240,7 +242,7 @@ export class ClientHandler {
           if (cmpVersions(this.#baseVersion, finalVersion) === 0) {
             return; // Nothing changed and nothing was sent.
           }
-          this.#pokes.push(['pokeStart', {...pokeStart, cookie}]);
+          this.#downstream.push(['pokeStart', {...pokeStart, cookie}]);
         } else if (cmpVersions(this.#baseVersion, finalVersion) >= 0) {
           // Sanity check: If the poke was started, the finalVersion
           // must be > #baseVersion.
@@ -250,13 +252,27 @@ export class ClientHandler {
           );
         }
         flushBody();
-        this.#pokes.push([
+        this.#downstream.push([
           'pokeEnd',
           this.supportsRevisedCookieProtocol() ? {pokeID, cookie} : {pokeID},
         ]);
         this.#baseVersion = finalVersion;
       },
     };
+  }
+
+  sendDeleteClients(
+    deletedClientIDs: string[],
+    deletedClientGroupIDs: string[],
+  ): void {
+    const deleteClientsBody: Writable<DeleteClientsBody> = {};
+    if (deletedClientIDs.length > 0) {
+      deleteClientsBody.clientIDs = deletedClientIDs;
+    }
+    if (deletedClientGroupIDs.length > 0) {
+      deleteClientsBody.clientGroupIDs = deletedClientGroupIDs;
+    }
+    this.#downstream.push(['deleteClients', deleteClientsBody]);
   }
 
   #updateLMIDs(lmids: Record<string, number>, patch: RowPatch) {

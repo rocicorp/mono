@@ -1,5 +1,6 @@
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import {assert} from './asserts.ts';
+import {promiseVoid} from './resolved-promises.ts';
 
 /**
  * A Queue allows the consumers to await (possibly future) values,
@@ -19,7 +20,7 @@ export class Queue<T> {
     if (consumer) {
       consumer.resolver.resolve(value);
       clearTimeout(consumer.timeoutID);
-      return Promise.resolve();
+      return promiseVoid;
     }
     return this.#enqueueProduced(Promise.resolve(value), value);
   }
@@ -99,7 +100,7 @@ export class Queue<T> {
    * ```ts
    * // A consumer that, when awoken, drains
    * // all entries in the queue in order to
-   * // proces them in a batch.
+   * // process them in a batch.
    * for (;;) {
    *   const value = await queue.dequeue();
    *   const rest = queue.drain();

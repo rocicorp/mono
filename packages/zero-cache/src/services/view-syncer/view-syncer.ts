@@ -421,10 +421,42 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     msg: DeleteClientsMessage,
   ): Promise<void> {
     try {
-      return await this.#runInLockForClient(ctx, msg, this.#deleteClients);
+      await this.#runInLockForClient(ctx, msg, this.#deleteClients);
     } catch (e) {
       this.#lc.error?.('deleteClients failed', e);
     }
+  }
+
+  async updatePatchesForDesiredQueries(
+    lc: LogContext,
+    cvr: CVRSnapshot,
+    fn: (updater: CVRConfigDrivenUpdater) => PatchToVersion[],
+  ): Promise<CVRSnapshot> {
+    const updater = new CVRConfigDrivenUpdater(
+      this.#cvrStore,
+      cvr,
+      this.#shardID,
+    );
+
+    const patches = fn(updater);
+
+    this.#cvr = (await updater.flush(lc, true, this.#lastConnectTime)).cvr;
+
+    if (cmpVersions(cvr.version, this.#cvr.version) < 0) {
+      // Send pokes to catch up clients that are up to date.
+      // (Clients that are behind the cvr.version need to be caught up in
+      //  #syncQueryPipelineSet(), as row data may be needed for catchup)
+      const newCVR = this.#cvr;
+      const pokers = this.#getClients(cvr.version).map(c =>
+        c.startPoke(newCVR.version),
+      );
+      for (const patch of patches) {
+        pokers.forEach(poker => poker.addPatch(patch));
+      }
+      pokers.forEach(poker => poker.end(newCVR.version));
+    }
+
+    return this.#cvr;
   }
 
   // eslint-disable-next-line require-await
@@ -434,10 +466,45 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     {clientIDs, clientGroupIDs}: DeleteClientsBody,
     cvr: CVRSnapshot,
   ): Promise<void> => {
-    lc.debug?.('deleting clients', clientIDs, clientGroupIDs, clientID, cvr);
-    // TODO: Implement deletion of clients
-    // Find all clients from the msg and delete them. Send back the IDs of the
-    // deleted clients to the client.
+    const deletedClientIDs: string[] = [];
+    const deletedClientGroupIDs: string[] = [];
+
+    if (clientIDs?.length || clientGroupIDs?.length) {
+      // cvr = ... For #syncQueryPipelineSet().
+      cvr = await this.updatePatchesForDesiredQueries(lc, cvr, updater => {
+        const patches: PatchToVersion[] = [];
+        if (clientIDs) {
+          for (const cid of clientIDs) {
+            assert(cid !== clientID, 'cannot delete self');
+            const patchesDueToClient = updater.deleteClient(cid);
+            patches.push(...patchesDueToClient);
+            deletedClientIDs.push(cid);
+          }
+        }
+
+        if (clientGroupIDs) {
+          for (const clientGroupID of clientGroupIDs) {
+            updater.deleteClientGroup(clientGroupID);
+          }
+        }
+
+        return patches;
+      });
+    }
+
+    if (this.#pipelinesSynced) {
+      await this.#syncQueryPipelineSet(lc, cvr);
+    }
+
+    // Send 'deleteClients' to the clients.
+    if (deletedClientIDs.length || deletedClientGroupIDs.length) {
+      lc.debug?.('deleting clients', clientIDs, clientGroupIDs);
+
+      const clients = this.#getClients();
+      clients.forEach(c =>
+        c.sendDeleteClients(deletedClientIDs, deletedClientGroupIDs),
+      );
+    }
   };
 
   /**
@@ -523,46 +590,26 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // Apply requested patches.
       if (desiredQueriesPatch.length) {
         lc.debug?.(`applying ${desiredQueriesPatch.length} query patches`);
-        const updater = new CVRConfigDrivenUpdater(
-          this.#cvrStore,
-          cvr,
-          this.#shardID,
-        );
-
-        const patches: PatchToVersion[] = [];
-        for (const patch of desiredQueriesPatch) {
-          switch (patch.op) {
-            case 'put':
-              patches.push(...updater.putDesiredQueries(clientID, [patch]));
-              break;
-            case 'del':
-              patches.push(
-                ...updater.deleteDesiredQueries(clientID, [patch.hash]),
-              );
-              break;
-            case 'clear':
-              patches.push(...updater.clearDesiredQueries(clientID));
-              break;
+        // cvr = ... For #syncQueryPipelineSet().
+        cvr = await this.updatePatchesForDesiredQueries(lc, cvr, updater => {
+          const patches: PatchToVersion[] = [];
+          for (const patch of desiredQueriesPatch) {
+            switch (patch.op) {
+              case 'put':
+                patches.push(...updater.putDesiredQueries(clientID, [patch]));
+                break;
+              case 'del':
+                patches.push(
+                  ...updater.deleteDesiredQueries(clientID, [patch.hash]),
+                );
+                break;
+              case 'clear':
+                patches.push(...updater.clearDesiredQueries(clientID));
+                break;
+            }
           }
-        }
-
-        this.#cvr = (await updater.flush(lc, true, this.#lastConnectTime)).cvr;
-
-        if (cmpVersions(cvr.version, this.#cvr.version) < 0) {
-          // Send pokes to catch up clients that are up to date.
-          // (Clients that are behind the cvr.version need to be caught up in
-          //  #syncQueryPipelineSet(), as row data may be needed for catchup)
-          const newCVR = this.#cvr;
-          const pokers = this.#getClients(cvr.version).map(c =>
-            c.startPoke(newCVR.version),
-          );
-          for (const patch of patches) {
-            pokers.forEach(poker => poker.addPatch(patch));
-          }
-          pokers.forEach(poker => poker.end(newCVR.version));
-        }
-
-        cvr = this.#cvr; // For #syncQueryPipelineSet().
+          return patches;
+        });
       }
 
       if (this.#pipelinesSynced) {

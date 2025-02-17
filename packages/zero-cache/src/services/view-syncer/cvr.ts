@@ -271,6 +271,35 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     return this.deleteDesiredQueries(clientID, client.desiredQueryIDs);
   }
 
+  deleteClient(clientID: string): PatchToVersion[] {
+    // clientID might not be part of this client group but if it is, this delete
+    // may generate changes to the desired queries.
+
+    const client = this._cvr.clients[clientID];
+    if (!client) {
+      // Client is not part of this client group. We still delete all the
+      // relevant data in the CVR db since this client is not supposed to come
+      // back.
+      this._cvrStore.deleteClient(clientID);
+      return [];
+    }
+
+    // When a client is deleted we remove the desired queries and the client itself.
+    const patches = this.deleteDesiredQueries(clientID, client.desiredQueryIDs);
+    delete this._cvr.clients[clientID];
+    this._cvrStore.deleteClient(clientID);
+
+    return patches;
+  }
+
+  deleteClientGroup(clientGroupID: string): void {
+    assert(
+      this._cvr.id !== clientGroupID,
+      'Cannot delete the client group from itself',
+    );
+    this._cvrStore.deleteClientGroup(clientGroupID);
+  }
+
   flush(
     lc: LogContext,
     skipNoopFlushes: boolean,
@@ -672,4 +701,8 @@ function mergeRefCounts(
   }
 
   return Object.values(merged).some(v => v > 0) ? merged : null;
+}
+
+export function deleteClientGroupFromCVR(_clientGroupID: string) {
+  // TODO: Implement!
 }

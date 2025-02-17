@@ -34,6 +34,7 @@ import {testDBs} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
+import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
 import {initChangeLog} from '../replicator/schema/change-log.ts';
@@ -436,8 +437,11 @@ async function setup(permissions: PermissionsConfig | undefined) {
   }
   const viewSyncerDone = vs.run();
 
-  function connect(ctx: SyncContext, desiredQueriesPatch: QueriesPatch) {
-    const stream = vs.initConnection(ctx, [
+  function connectWithDownstreamAndConnectStream(
+    ctx: SyncContext,
+    desiredQueriesPatch: QueriesPatch,
+  ) {
+    const connectSource = vs.initConnection(ctx, [
       'initConnection',
       {desiredQueriesPatch},
     ]);
@@ -445,7 +449,7 @@ async function setup(permissions: PermissionsConfig | undefined) {
 
     void (async function () {
       try {
-        for await (const msg of stream) {
+        for await (const msg of connectSource) {
           await downstream.enqueue(msg);
         }
       } catch (e) {
@@ -453,7 +457,12 @@ async function setup(permissions: PermissionsConfig | undefined) {
       }
     })();
 
-    return downstream;
+    return {downstream, connectSource};
+  }
+
+  function connect(ctx: SyncContext, desiredQueriesPatch: QueriesPatch) {
+    return connectWithDownstreamAndConnectStream(ctx, desiredQueriesPatch)
+      .downstream;
   }
 
   async function nextPoke(client: Queue<Downstream>): Promise<Downstream[]> {
@@ -486,6 +495,7 @@ async function setup(permissions: PermissionsConfig | undefined) {
     viewSyncerDone,
     replicator,
     connect,
+    connectWithDownstreamAndConnectStream,
     nextPoke,
     expectNoPokes,
   };
@@ -521,6 +531,13 @@ describe('view-syncer/service', () => {
     ctx: SyncContext,
     desiredQueriesPatch: QueriesPatch,
   ) => Queue<Downstream>;
+  let connectWithDownstreamAndConnectStream: (
+    ctx: SyncContext,
+    desiredQueriesPatch: QueriesPatch,
+  ) => {
+    downstream: Queue<Downstream>;
+    connectSource: Source<Downstream>;
+  };
   let nextPoke: (client: Queue<Downstream>) => Promise<Downstream[]>;
   let expectNoPokes: (client: Queue<Downstream>) => Promise<void>;
 
@@ -546,6 +563,7 @@ describe('view-syncer/service', () => {
       viewSyncerDone,
       replicator,
       connect,
+      connectWithDownstreamAndConnectStream,
       nextPoke,
       expectNoPokes,
     } = await setup(permissionsAll));
@@ -898,6 +916,178 @@ describe('view-syncer/service', () => {
           "rowVersion": "01",
           "schema": "",
           "table": "issues",
+        },
+      ]
+    `);
+  });
+
+  test('delete client', async () => {
+    const {downstream: client1} = connectWithDownstreamAndConnectStream(
+      SYNC_CONTEXT,
+      [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
+    );
+
+    const {downstream: client2, connectSource: connectSource2} =
+      connectWithDownstreamAndConnectStream(
+        {...SYNC_CONTEXT, clientID: 'bar', wsID: 'ws2'},
+        [{op: 'put', hash: 'query-hash2', ast: USERS_QUERY}],
+      );
+
+    await nextPoke(client1);
+    await nextPoke(client2);
+
+    stateChanges.push({state: 'version-ready'});
+
+    await nextPoke(client1);
+    await nextPoke(client1);
+
+    await nextPoke(client2);
+    await nextPoke(client2);
+
+    expect(await cvrDB`SELECT * from cvr_abc.clients`).toMatchInlineSnapshot(
+      `
+      Result [
+        {
+          "clientGroupID": "9876",
+          "clientID": "foo",
+          "deleted": false,
+          "patchVersion": "00:01",
+        },
+        {
+          "clientGroupID": "9876",
+          "clientID": "bar",
+          "deleted": false,
+          "patchVersion": "00:02",
+        },
+      ]
+    `,
+    );
+
+    expect(await cvrDB`SELECT * from cvr_abc.desires`).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientGroupID": "9876",
+          "clientID": "foo",
+          "deleted": false,
+          "patchVersion": "00:01",
+          "queryHash": "query-hash1",
+        },
+        {
+          "clientGroupID": "9876",
+          "clientID": "bar",
+          "deleted": false,
+          "patchVersion": "00:02",
+          "queryHash": "query-hash2",
+        },
+      ]
+    `);
+
+    connectSource2.cancel();
+
+    await vs.deleteClients(SYNC_CONTEXT, [
+      'deleteClients',
+      {clientIDs: ['bar', 'no-such-client']},
+    ]);
+
+    expect(await nextPoke(client1)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "01",
+            "cookie": "01:01",
+            "pokeID": "01:01",
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "desiredQueriesPatches": {
+              "bar": [
+                {
+                  "hash": "query-hash2",
+                  "op": "del",
+                },
+              ],
+            },
+            "pokeID": "01:01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cookie": "01:01",
+            "pokeID": "01:01",
+          },
+        ],
+      ]
+    `);
+    expect(await nextPoke(client1)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "01:01",
+            "cookie": "01:02",
+            "pokeID": "01:02",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "gotQueriesPatch": [
+              {
+                "hash": "query-hash2",
+                "op": "del",
+              },
+            ],
+            "pokeID": "01:02",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cookie": "01:02",
+            "pokeID": "01:02",
+          },
+        ],
+      ]
+    `);
+
+    expect(await client1.dequeue()).toMatchInlineSnapshot(`
+      [
+        "deleteClients",
+        {
+          "clientIDs": [
+            "bar",
+            "no-such-client",
+          ],
+        },
+      ]
+    `);
+
+    expect(await cvrDB`SELECT * from cvr_abc.clients`).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientGroupID": "9876",
+          "clientID": "foo",
+          "deleted": false,
+          "patchVersion": "00:01",
+        },
+      ]
+    `);
+    expect(await cvrDB`SELECT * from cvr_abc.desires`).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientGroupID": "9876",
+          "clientID": "foo",
+          "deleted": false,
+          "patchVersion": "00:01",
+          "queryHash": "query-hash1",
         },
       ]
     `);
