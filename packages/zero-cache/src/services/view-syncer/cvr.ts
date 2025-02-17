@@ -293,10 +293,6 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
   }
 
   deleteClientGroup(clientGroupID: string): void {
-    assert(
-      this._cvr.id !== clientGroupID,
-      'Cannot delete the client group from itself',
-    );
     this._cvrStore.deleteClientGroup(clientGroupID);
   }
 
@@ -701,8 +697,4 @@ function mergeRefCounts(
   }
 
   return Object.values(merged).some(v => v > 0) ? merged : null;
-}
-
-export function deleteClientGroupFromCVR(_clientGroupID: string) {
-  // TODO: Implement!
 }
