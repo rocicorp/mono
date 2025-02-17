@@ -263,6 +263,8 @@ async function processMutationWithTx(
     }
   }
 
+  authorizer.reloadPermissions();
+
   if (!errorMode) {
     const {ops} = mutation.args[0];
     const normalizedOps = authorizer.normalizeOps(ops);

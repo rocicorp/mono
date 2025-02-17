@@ -63,7 +63,7 @@ import {
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
 } from './zero.ts';
-import type {CustomMutatorDefs} from '../../../zql/src/mutate/custom.ts';
+import type {CustomMutatorDefs} from './custom.ts';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
@@ -3067,7 +3067,7 @@ test('custom mutations get pushed', async () => {
             timestamp: 1678829450000,
             id: 1,
             clientID: z.clientID,
-            name: 'issues.foo',
+            name: 'issues|foo',
             args: [{foo: 42}],
           },
         ],
@@ -3086,7 +3086,7 @@ test('custom mutations get pushed', async () => {
             timestamp: 1678829450000,
             id: 2,
             clientID: z.clientID,
-            name: 'issues.foo',
+            name: 'issues|foo',
             args: [{foo: 43}],
           },
         ],
@@ -3105,7 +3105,7 @@ test('custom mutations get pushed', async () => {
             timestamp: 1678829450000,
             id: 3,
             clientID: z.clientID,
-            name: 'issues.foo',
+            name: 'issues|foo',
             args: [{foo: 44}],
           },
         ],

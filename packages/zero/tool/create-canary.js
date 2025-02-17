@@ -151,21 +151,16 @@ try {
   execute('git status');
   execute(`git commit -am "Bump version to ${nextCanaryVersion}"`);
 
+  // Do this first in case something landed on head in the meantime.
+  // We'll get a conflict here in this case.
+  execute(`git push origin HEAD:${buildBranch}`);
+
   // Push to git before npm so that if npm fails the versioning logic works correctly.
   // Also if npm push succeeds but docker fails we correctly record the tag that the
   // npm version was made
   execute(`git tag ${tagName}`);
   execute(`git push origin ${tagName}`);
 
-  execute(`git checkout ${buildBranch}`);
-  execute(`git pull`);
-  execute(`git merge ${tagName}`);
-  execute(`git push origin ${buildBranch}`);
-
-  execute(`git checkout ${tagName}`);
-
-  // For some insane reason npm requires to publish with a tag, even though you are
-  // allowed to subsequently remove it.
   execute('npm publish --tag=canary', {cwd: basePath('packages', 'zero')});
   execute(`npm dist-tag rm @rocicorp/zero@${nextCanaryVersion} canary`);
 

@@ -47,6 +47,30 @@ describe('jwk', async () => {
   commonTests({jwk: JSON.stringify(publicJwk)}, makeToken);
 });
 
+test('too many or too few options set', async () => {
+  await expect(verifyToken({}, '', {})).rejects.toThrowError('Exactly one of');
+  await expect(
+    verifyToken(
+      {
+        secret: 'abc',
+        jwk: 'def',
+      },
+      '',
+      {},
+    ),
+  ).rejects.toThrowError('Exactly one of');
+  await expect(
+    verifyToken(
+      {
+        secret: 'abc',
+        jwksUrl: 'def',
+      },
+      '',
+      {},
+    ),
+  ).rejects.toThrowError('Exactly one of');
+});
+
 function commonTests(
   config: AuthConfig,
   makeToken: (

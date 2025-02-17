@@ -1,7 +1,6 @@
 import {beforeEach, describe, expect, test} from 'vitest';
 import {h128} from '../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import type {
   DeleteOp,
   InsertOp,
@@ -118,40 +117,40 @@ describe('normalize ops', () => {
   });
 });
 
-describe('pre & post mutation', () => {
-  test('delete is run pre-mutation', () => {
+describe('default deny', () => {
+  test('deny', () => {
     setPermissions({
-      protocolVersion: PROTOCOL_VERSION,
-      tables: {
-        foo: {
-          row: {
-            delete: [allowIfSubject],
-          },
-        },
-      },
+      tables: {},
     });
 
     const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
 
-    const op: DeleteOp = {
-      op: 'delete',
-      primaryKey: ['id'],
-      tableName: 'foo',
-      value: {id: '1'},
-    };
+    expect(
+      authorizer.canPostMutation({sub: '2'}, [
+        {op: 'insert', primaryKey: ['id'], tableName: 'foo', value: {id: '2'}},
+      ]),
+    ).toBe(false);
 
-    expect(authorizer.canPreMutation({sub: '2'}, [op])).toBe(false);
-    // there is nothing to check post-mutation for delete so it will always pass post-mutation checks.
-    // post mutation checks are anded with pre-mutation checks so this is correct.
-    expect(authorizer.canPostMutation({sub: '2'}, [op])).toBe(true);
+    expect(
+      authorizer.canPreMutation({sub: '1'}, [
+        {op: 'update', primaryKey: ['id'], tableName: 'foo', value: {id: '1'}},
+      ]),
+    ).toBe(false);
+    expect(
+      authorizer.canPostMutation({sub: '1'}, [
+        {op: 'update', primaryKey: ['id'], tableName: 'foo', value: {id: '1'}},
+      ]),
+    ).toBe(false);
 
-    // this passes the rule since the subject is correct
-    expect(authorizer.canPreMutation({sub: '1'}, [op])).toBe(true);
+    expect(
+      authorizer.canPreMutation({sub: '1'}, [
+        {op: 'delete', primaryKey: ['id'], tableName: 'foo', value: {id: '1'}},
+      ]),
+    ).toBe(false);
   });
 
   test('insert is run post-mutation', () => {
     setPermissions({
-      protocolVersion: PROTOCOL_VERSION,
       tables: {
         foo: {
           row: {
@@ -181,7 +180,6 @@ describe('pre & post mutation', () => {
 
   test('update is run pre-mutation when specified', () => {
     setPermissions({
-      protocolVersion: PROTOCOL_VERSION,
       tables: {
         foo: {
           row: {
@@ -204,16 +202,14 @@ describe('pre & post mutation', () => {
 
     // subject is not correct and there is a pre-mutation rule
     expect(authorizer.canPreMutation({sub: '2'}, [op])).toBe(false);
-    // incorrect subject but no post-mutation rule so it is allowed
-    expect(authorizer.canPostMutation({sub: '2'}, [op])).toBe(true);
+    // no post-mutation rule, default to false
+    expect(authorizer.canPostMutation({sub: '2'}, [op])).toBe(false);
 
     expect(authorizer.canPreMutation({sub: '1'}, [op])).toBe(true);
-    expect(authorizer.canPostMutation({sub: '1'}, [op])).toBe(true);
   });
 
   test('update is run post-mutation when specified', () => {
     setPermissions({
-      protocolVersion: PROTOCOL_VERSION,
       tables: {
         foo: {
           row: {
@@ -234,8 +230,128 @@ describe('pre & post mutation', () => {
       value: {id: '1', a: 'b'},
     };
 
-    // no pre-mutation rule so allowed.
-    expect(authorizer.canPreMutation({sub: '2'}, [op])).toBe(true);
+    // no pre-mutation rule so disallowed.
+    expect(authorizer.canPreMutation({sub: '2'}, [op])).toBe(false);
+    // subject doesn't match
+    expect(authorizer.canPostMutation({sub: '2'}, [op])).toBe(false);
+    // subject does match the updated value of `a`
+    expect(authorizer.canPostMutation({sub: 'b'}, [op])).toBe(true);
+  });
+});
+
+describe('pre & post mutation', () => {
+  test('delete is run pre-mutation', () => {
+    setPermissions({
+      tables: {
+        foo: {
+          row: {
+            delete: [allowIfSubject],
+          },
+        },
+      },
+    });
+
+    const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
+
+    const op: DeleteOp = {
+      op: 'delete',
+      primaryKey: ['id'],
+      tableName: 'foo',
+      value: {id: '1'},
+    };
+
+    expect(authorizer.canPreMutation({sub: '2'}, [op])).toBe(false);
+    // there is nothing to check post-mutation for delete so it will always pass post-mutation checks.
+    // post mutation checks are anded with pre-mutation checks so this is correct.
+    expect(authorizer.canPostMutation({sub: '2'}, [op])).toBe(true);
+
+    // this passes the rule since the subject is correct
+    expect(authorizer.canPreMutation({sub: '1'}, [op])).toBe(true);
+  });
+
+  test('insert is run post-mutation', () => {
+    setPermissions({
+      tables: {
+        foo: {
+          row: {
+            insert: [allowIfSubject],
+          },
+        },
+      },
+    });
+
+    const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
+
+    const op: InsertOp = {
+      op: 'insert',
+      primaryKey: ['id'],
+      tableName: 'foo',
+      value: {id: '2', a: 'b'},
+    };
+
+    // insert does not run pre-mutation checks so it'll return true.
+    expect(authorizer.canPreMutation({sub: '1'}, [op])).toBe(true);
+    // insert checks are run post mutation.
+    expect(authorizer.canPostMutation({sub: '1'}, [op])).toBe(false);
+
+    // passes the rule since the subject is correct.
+    expect(authorizer.canPostMutation({sub: '2'}, [op])).toBe(true);
+  });
+
+  test('update is run pre-mutation when specified', () => {
+    setPermissions({
+      tables: {
+        foo: {
+          row: {
+            update: {
+              preMutation: [allowIfSubject],
+            },
+          },
+        },
+      },
+    });
+
+    const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
+
+    const op: UpdateOp = {
+      op: 'update',
+      primaryKey: ['id'],
+      tableName: 'foo',
+      value: {id: '1', a: 'b'},
+    };
+
+    // subject is not correct and there is a pre-mutation rule
+    expect(authorizer.canPreMutation({sub: '2'}, [op])).toBe(false);
+    // no post-mutation rule, default to false
+    expect(authorizer.canPostMutation({sub: '2'}, [op])).toBe(false);
+
+    expect(authorizer.canPreMutation({sub: '1'}, [op])).toBe(true);
+  });
+
+  test('update is run post-mutation when specified', () => {
+    setPermissions({
+      tables: {
+        foo: {
+          row: {
+            update: {
+              postMutation: [allowIfAIsSubject],
+            },
+          },
+        },
+      },
+    });
+
+    const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
+
+    const op: UpdateOp = {
+      op: 'update',
+      primaryKey: ['id'],
+      tableName: 'foo',
+      value: {id: '1', a: 'b'},
+    };
+
+    // no pre-mutation rule so disallowed.
+    expect(authorizer.canPreMutation({sub: '2'}, [op])).toBe(false);
     // subject doesn't match
     expect(authorizer.canPostMutation({sub: '2'}, [op])).toBe(false);
     // subject does match the updated value of `a`

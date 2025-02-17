@@ -29,11 +29,14 @@ export type ChangeLogEntry = {
 };
 
 function createChangeLogTable(shardID: string) {
+  // Note: The "change" column used to be JSONB, but that was problematic in that
+  // it does not handle the NULL unicode character.
+  // https://vladimir.varank.in/notes/2021/01/you-dont-insert-unicode-null-character-as-postgres-jsonb/
   return `
   CREATE TABLE ${schema(shardID)}."changeLog" (
     watermark  TEXT,
     pos        INT8,
-    change     JSONB NOT NULL,
+    change     JSON NOT NULL,
     precommit  TEXT,  -- Only exists on commit entries. Purely for debugging.
     PRIMARY KEY (watermark, pos)
   );
@@ -165,7 +168,13 @@ export async function ensureReplicationConfig(
       if (autoReset) {
         throw new AutoResetSignal('reset required by replication stream');
       }
-      lc.warn?.('reset required but auto-reset is disabled');
+      lc.error?.(
+        '\n\n\n' +
+          'Reset required but --auto-reset is not enabled.\n' +
+          'This can happen for upstream databases that do not support event triggers.\n' +
+          'To correct this, see https://zero.rocicorp.dev/docs/connecting-to-postgres#schema-changes' +
+          '\n\n\n',
+      );
     }
 
     return [];

@@ -29,7 +29,7 @@ export async function initSyncSchema(
       migrateSchema: () => {
         throw new AutoResetSignal('upgrading replica to new schema');
       },
-      minSafeVersion: 4,
+      minSafeVersion: 3,
     },
   };
 

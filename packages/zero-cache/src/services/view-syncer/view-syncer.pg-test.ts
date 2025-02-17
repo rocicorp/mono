@@ -22,7 +22,10 @@ import {
   table,
 } from '../../../../zero-schema/src/builder/table-builder.ts';
 import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.ts';
-import {definePermissions} from '../../../../zero-schema/src/permissions.ts';
+import {
+  ANYONE_CAN_DO_ANYTHING,
+  definePermissions,
+} from '../../../../zero-schema/src/permissions.ts';
 import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import type {LogConfig} from '../../config/zero-config.ts';
@@ -242,9 +245,21 @@ const comments = table('comments')
     text: string(),
   })
   .primaryKey('id');
+const issueLabels = table('issueLabels')
+  .columns({
+    issueID: string(),
+    labelID: string(),
+  })
+  .primaryKey('issueID', 'labelID');
+const labels = table('labels')
+  .columns({
+    id: string(),
+    name: string(),
+  })
+  .primaryKey('id');
 
 const schema = createSchema(1, {
-  tables: [issues, comments],
+  tables: [issues, comments, issueLabels, labels],
   relationships: [
     relationships(comments, connect => ({
       issue: connect.many({
@@ -266,28 +281,38 @@ const canSeeIssue = (
   authData: AuthData,
   eb: ExpressionBuilder<Schema, 'issues'>,
 ) => eb.cmpLit(authData.role, '=', 'admin');
-const permissions: PermissionsConfig | undefined = await definePermissions<
-  AuthData,
-  typeof schema
->(schema, () => ({
-  issues: {
-    row: {
-      select: [canSeeIssue],
+const permissions = await definePermissions<AuthData, typeof schema>(
+  schema,
+  () => ({
+    issues: {
+      row: {
+        select: [canSeeIssue],
+      },
     },
-  },
-  comments: {
-    row: {
-      select: [
-        (authData, eb: ExpressionBuilder<Schema, 'comments'>) =>
-          eb.exists('issue', iq =>
-            iq.where(({eb}) => canSeeIssue(authData, eb)),
-          ),
-      ],
+    comments: {
+      row: {
+        select: [
+          (authData, eb: ExpressionBuilder<Schema, 'comments'>) =>
+            eb.exists('issue', iq =>
+              iq.where(({eb}) => canSeeIssue(authData, eb)),
+            ),
+        ],
+      },
     },
-  },
-}));
+  }),
+);
 
-async function setup(permissions?: PermissionsConfig) {
+const permissionsAll = await definePermissions<AuthData, typeof schema>(
+  schema,
+  () => ({
+    issues: ANYONE_CAN_DO_ANYTHING,
+    comments: ANYONE_CAN_DO_ANYTHING,
+    issueLabels: ANYONE_CAN_DO_ANYTHING,
+    labels: ANYONE_CAN_DO_ANYTHING,
+  }),
+);
+
+async function setup(permissions: PermissionsConfig | undefined) {
   const lc = createSilentLogContext();
   const storageDB = new Database(lc, ':memory:');
   storageDB.prepare(CREATE_STORAGE_TABLE).run();
@@ -523,7 +548,7 @@ describe('view-syncer/service', () => {
       connect,
       nextPoke,
       expectNoPokes,
-    } = await setup());
+    } = await setup(permissionsAll));
   });
 
   afterEach(async () => {
@@ -3353,9 +3378,22 @@ describe('permissions', () => {
 
     // Open permissions
     const relaxed: PermissionsConfig = {
-      protocolVersion: PROTOCOL_VERSION,
       tables: {
-        issues: {},
+        issues: {
+          row: {
+            select: [
+              [
+                'allow',
+                {
+                  type: 'simple',
+                  left: {type: 'literal', value: true},
+                  op: '=',
+                  right: {type: 'literal', value: true},
+                },
+              ],
+            ],
+          },
+        },
         comments: {},
       },
     };

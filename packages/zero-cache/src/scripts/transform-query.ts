@@ -42,8 +42,13 @@ const rows =
 
 lc.info?.(
   JSON.stringify(
-    transformAndHashQuery(rows[0].clientAST, permissions, {}, rows[0].internal)
-      .query,
+    transformAndHashQuery(
+      lc,
+      rows[0].clientAST,
+      permissions,
+      {},
+      rows[0].internal,
+    ).query,
   ),
 );
 

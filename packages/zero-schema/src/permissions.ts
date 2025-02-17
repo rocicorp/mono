@@ -5,7 +5,6 @@ import {
   type Condition,
   type Parameter,
 } from '../../zero-protocol/src/ast.ts';
-import {PROTOCOL_VERSION} from '../../zero-protocol/src/protocol-version.ts';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
 import {staticParam} from '../../zql/src/query/query-impl.ts';
 import type {Query} from '../../zql/src/query/query.ts';
@@ -17,8 +16,22 @@ import type {
 } from './compiled-permissions.ts';
 import {clientToServer, NameMapper} from './name-mapper.ts';
 
-export const ANYONE_CAN = undefined;
+export const ANYONE_CAN = [
+  (_: unknown, eb: ExpressionBuilder<Schema, never>) => eb.and(),
+];
+export const ANYONE_CAN_DO_ANYTHING = {
+  row: {
+    select: ANYONE_CAN,
+    insert: ANYONE_CAN,
+    update: {
+      preMutation: ANYONE_CAN,
+      postMutation: ANYONE_CAN,
+    },
+    delete: ANYONE_CAN,
+  },
+};
 export const NOBODY_CAN = [];
+
 export type Anchor = 'authData' | 'preMutationRow';
 
 export type Queries<TSchema extends Schema> = {
@@ -95,10 +108,7 @@ function compilePermissions<TAuthDataShape, TSchema extends Schema>(
     return undefined;
   }
   const nameMapper = clientToServer(schema.tables);
-  const ret: CompiledPermissionsConfig = {
-    protocolVersion: PROTOCOL_VERSION,
-    tables: {},
-  };
+  const ret: CompiledPermissionsConfig = {tables: {}};
   for (const [tableName, tableConfig] of Object.entries(authz)) {
     const serverName = schema.tables[tableName].serverName ?? tableName;
     ret.tables[serverName] = {

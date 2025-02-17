@@ -445,7 +445,7 @@ describe('view-syncer/snapshotter', () => {
       '07',
       messages.update('zero.permissions', {
         lock: 1,
-        permissions: '{"protocolVersion":1}',
+        permissions: '{"tables":{}}',
         hash: '12345',
       }),
     );

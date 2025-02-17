@@ -3,6 +3,8 @@
 // Load .env file
 require("dotenv").config();
 
+import { join } from "node:path";
+
 export default $config({
   app(input) {
     return {
@@ -10,6 +12,7 @@ export default $config({
       removal: input?.stage === "production" ? "retain" : "remove",
       home: "aws",
       region: process.env.AWS_REGION || "us-east-1",
+      providers: { command: "1.0.2" },
     };
   },
   async run() {
@@ -17,12 +20,10 @@ export default $config({
     const replicationBucket = new sst.aws.Bucket(`replication-bucket`, {
       public: false,
     });
-
     // VPC Configuration
     const vpc = new sst.aws.Vpc(`vpc`, {
       az: 2,
     });
-
     // ECS Cluster
     const cluster = new sst.aws.Cluster(`cluster`, {
       vpc,
@@ -37,7 +38,6 @@ export default $config({
         },
       },
     });
-
     // Common environment variables
     const commonEnv = {
       AWS_REGION: process.env.AWS_REGION!,
@@ -52,7 +52,6 @@ export default $config({
       ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250211-00`,
       ZERO_IMAGE_URL: process.env.ZERO_IMAGE_URL!,
     };
-
     // Replication Manager Service
     const replicationManager = cluster.addService(`replication-manager`, {
       cpu: "2 vCPU",
@@ -98,9 +97,8 @@ export default $config({
         },
       },
     });
-
     // View Syncer Service
-    cluster.addService(`view-syncer`, {
+    const viewSyncer = cluster.addService(`view-syncer`, {
       cpu: "8 vCPU",
       memory: "16 GB",
       image: commonEnv.ZERO_IMAGE_URL,
@@ -171,6 +169,23 @@ export default $config({
           maxCapacity: 10,
         },
       },
+      // Set this to `true` to make SST wait for the view-syncer to be deployed
+      // before proceeding (to permissions deployment, etc.). This makes the deployment
+      // take a lot longer and is only necessary if there is an AST format change.
+      wait: false,
     });
+
+    new command.local.Command(
+      "zero-deploy-permissions",
+      {
+        // Pulumi operates with cwd at the package root.
+        dir: join(process.cwd(), "../../packages/zero/"),
+        create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/schema.ts`,
+        // Run the Command on every deploy ...
+        triggers: [Date.now()],
+      },
+      // after the view-syncer is deployed.
+      { dependsOn: viewSyncer },
+    );
   },
 });

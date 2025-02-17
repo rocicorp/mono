@@ -1,0 +1,26 @@
+{
+  "name": "zero-pg",
+  "description": "Library to help implement custom mutators in a user's API server when they are using Postgres as their database.",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "check-types": "tsc",
+    "check-types:watch": "tsc --watch",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "test": "vitest run",
+    "test:watch": "vitest watch"
+  },
+  "eslintConfig": {
+    "extends": "../../eslint-config.json"
+  },
+  "prettier": "@rocicorp/prettier-config",
+  "dependencies": {
+    "@databases/escape-identifier": "^1.0.3",
+    "@databases/sql": "^3.3.0",
+    "@rocicorp/logger": "^5.3.0",
+    "vitest": "^2.1.5"
+  }
+}

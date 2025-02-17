@@ -14,6 +14,8 @@ import {
 } from 'vitest';
 import WebSocket from 'ws';
 import {assert} from '../../../shared/src/asserts.ts';
+import {h128} from '../../../shared/src/hash.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../shared/src/queue.ts';
 import {randInt} from '../../../shared/src/rand.ts';
@@ -22,6 +24,12 @@ import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/chang
 import type {InitConnectionMessage} from '../../../zero-protocol/src/connect.ts';
 import type {PokeStartMessage} from '../../../zero-protocol/src/poke.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import {
+  ANYONE_CAN_DO_ANYTHING,
+  definePermissions,
+} from '../../../zero-schema/src/permissions.ts';
 import type {ChangeStreamMessage} from '../services/change-source/protocol/current/downstream.ts';
 import {
   changeSourceUpstreamSchema,
@@ -36,6 +44,38 @@ import {stream, type Sink} from '../types/streams.ts';
 // Adjust to debug.
 const LOG_LEVEL: LogLevel = 'error';
 
+const foo = table('foo')
+  .columns({
+    id: string(),
+  })
+  .primaryKey('id');
+
+const bar = table('boo.far')
+  .columns({
+    id: string(),
+  })
+  .primaryKey('id');
+
+const nopk = table('nopk')
+  .columns({
+    id: string(),
+    val: string(),
+  })
+  .primaryKey('id');
+
+const schema = createSchema(1, {
+  tables: [foo, bar, nopk],
+});
+
+const permissions = await definePermissions(schema, () => ({
+  'foo': ANYONE_CAN_DO_ANYTHING,
+  'boo.far': ANYONE_CAN_DO_ANYTHING,
+  'nopk': ANYONE_CAN_DO_ANYTHING,
+}));
+
+// Note: The NULL unicode character \u0000 is specifically used to verify
+//       end-to-end JSON compatibility. In particular, any intermediate
+//       JSONB storage of row contents would not be able to handle it.
 const INITIAL_PG_SETUP = `
       CREATE TABLE foo(
         id TEXT PRIMARY KEY, 
@@ -51,7 +91,7 @@ const INITIAL_PG_SETUP = `
           'bar',
           'baz',
           true,
-          '{"foo":"bar"}',
+          '{"foo":"bar\\u0000"}',
           'true',
           '123',
           '"string"');
@@ -64,7 +104,17 @@ const INITIAL_PG_SETUP = `
       INSERT INTO nopk(id, val) VALUES ('foo', 'bar');
 
       CREATE PUBLICATION zero_all FOR TABLE foo, TABLE boo.far, TABLE nopk;
-`;
+
+      CREATE SCHEMA zero;
+
+      CREATE TABLE zero.permissions (
+        permissions JSON,
+        hash TEXT
+      );
+      INSERT INTO zero.permissions (permissions, hash) VALUES ('${JSON.stringify(
+        permissions,
+      )}', '${h128(JSON.stringify(permissions)).toString(16)}');
+      `;
 
 // Keep this in sync with the INITIAL_PG_SETUP
 const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
@@ -114,7 +164,7 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
         id: 'bar',
         ['far_id']: 'baz',
         b: true,
-        j1: {foo: 'bar'},
+        j1: {foo: 'bar\u0000'},
         j2: true,
         j3: 123,
         j4: 'string',
@@ -291,7 +341,11 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
         name: 'permissions',
         keyColumns: ['lock'],
       },
-      new: {lock: true, permissions: null, hash: null},
+      new: {
+        lock: true,
+        permissions: permissions as unknown as JSONValue,
+        hash: h128(JSON.stringify(permissions)).toString(),
+      },
     },
   ],
   [
@@ -640,7 +694,7 @@ describe('integration', {timeout: 30000}, () => {
                 id: 'bar',
                 ['far_id']: 'baz',
                 b: true,
-                j1: {foo: 'bar'},
+                j1: {foo: 'bar\u0000'},
                 j2: true,
                 j3: 123,
                 j4: 'string',
@@ -729,7 +783,7 @@ describe('integration', {timeout: 30000}, () => {
                 ['far_id']: 'not_baz',
                 id: 'bar',
                 j1: {
-                  foo: 'bar',
+                  foo: 'bar\u0000',
                 },
                 j2: true,
                 j3: 123,

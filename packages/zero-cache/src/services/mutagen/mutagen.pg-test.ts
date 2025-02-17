@@ -22,7 +22,7 @@ class MockWriteAuthorizer implements WriteAuthorizer {
   canPreMutation() {
     return true;
   }
-
+  reloadPermissions(): void {}
   canPostMutation() {
     return true;
   }
