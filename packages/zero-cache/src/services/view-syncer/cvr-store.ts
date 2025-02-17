@@ -35,6 +35,7 @@ import {
 } from './schema/cvr.ts';
 import {
   type ClientQueryRecord,
+  type ClientRecord,
   cmpVersions,
   type CVRVersion,
   EMPTY_CVR_VERSION,
@@ -776,10 +777,17 @@ export class CVRStore {
     });
   }
 
-  insertClient(client: {id: string}): void {
+  /**
+   * @param patchVersion This is only needed to allow old view syncers to function.
+   */
+  insertClient(client: ClientRecord, patchVersion: CVRVersion): void {
     const change: ClientsRow = {
       clientGroupID: this.#id,
       clientID: client.id,
+
+      // Written so that exist clients that read do not fail.
+      patchVersion: versionString(patchVersion),
+      deleted: false,
     };
 
     this.#writes.add({
