@@ -437,32 +437,31 @@ async function setup(permissions: PermissionsConfig | undefined) {
   }
   const viewSyncerDone = vs.run();
 
-  function connectWithDownstreamAndConnectStream(
+  function connectWithQueueAndSource(
     ctx: SyncContext,
     desiredQueriesPatch: QueriesPatch,
-  ) {
-    const connectSource = vs.initConnection(ctx, [
+  ): {queue: Queue<Downstream>; source: Source<Downstream>} {
+    const source = vs.initConnection(ctx, [
       'initConnection',
       {desiredQueriesPatch},
     ]);
-    const downstream = new Queue<Downstream>();
+    const queue = new Queue<Downstream>();
 
     void (async function () {
       try {
-        for await (const msg of connectSource) {
-          await downstream.enqueue(msg);
+        for await (const msg of source) {
+          await queue.enqueue(msg);
         }
       } catch (e) {
-        await downstream.enqueueRejection(e);
+        await queue.enqueueRejection(e);
       }
     })();
 
-    return {downstream, connectSource};
+    return {queue, source};
   }
 
   function connect(ctx: SyncContext, desiredQueriesPatch: QueriesPatch) {
-    return connectWithDownstreamAndConnectStream(ctx, desiredQueriesPatch)
-      .downstream;
+    return connectWithQueueAndSource(ctx, desiredQueriesPatch).queue;
   }
 
   async function nextPoke(client: Queue<Downstream>): Promise<Downstream[]> {
@@ -495,7 +494,7 @@ async function setup(permissions: PermissionsConfig | undefined) {
     viewSyncerDone,
     replicator,
     connect,
-    connectWithDownstreamAndConnectStream,
+    connectWithQueueAndSource,
     nextPoke,
     expectNoPokes,
   };
@@ -531,12 +530,12 @@ describe('view-syncer/service', () => {
     ctx: SyncContext,
     desiredQueriesPatch: QueriesPatch,
   ) => Queue<Downstream>;
-  let connectWithDownstreamAndConnectStream: (
+  let connectWithQueueAndSource: (
     ctx: SyncContext,
     desiredQueriesPatch: QueriesPatch,
   ) => {
-    downstream: Queue<Downstream>;
-    connectSource: Source<Downstream>;
+    queue: Queue<Downstream>;
+    source: Source<Downstream>;
   };
   let nextPoke: (client: Queue<Downstream>) => Promise<Downstream[]>;
   let expectNoPokes: (client: Queue<Downstream>) => Promise<void>;
@@ -563,7 +562,7 @@ describe('view-syncer/service', () => {
       viewSyncerDone,
       replicator,
       connect,
-      connectWithDownstreamAndConnectStream,
+      connectWithQueueAndSource,
       nextPoke,
       expectNoPokes,
     } = await setup(permissionsAll));
@@ -922,16 +921,14 @@ describe('view-syncer/service', () => {
   });
 
   test('delete client', async () => {
-    const {downstream: client1} = connectWithDownstreamAndConnectStream(
-      SYNC_CONTEXT,
-      [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
-    );
+    const {queue: client1} = connectWithQueueAndSource(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
 
-    const {downstream: client2, connectSource: connectSource2} =
-      connectWithDownstreamAndConnectStream(
-        {...SYNC_CONTEXT, clientID: 'bar', wsID: 'ws2'},
-        [{op: 'put', hash: 'query-hash2', ast: USERS_QUERY}],
-      );
+    const {queue: client2, source: connectSource2} = connectWithQueueAndSource(
+      {...SYNC_CONTEXT, clientID: 'bar', wsID: 'ws2'},
+      [{op: 'put', hash: 'query-hash2', ast: USERS_QUERY}],
+    );
 
     await nextPoke(client1);
     await nextPoke(client2);
