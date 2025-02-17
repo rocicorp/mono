@@ -427,7 +427,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
   }
 
-  async updatePatchesForDesiredQueries(
+  async #updatePatchesForDesiredQueries(
     lc: LogContext,
     cvr: CVRSnapshot,
     fn: (updater: CVRConfigDrivenUpdater) => PatchToVersion[],
@@ -471,7 +471,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     if (clientIDs?.length || clientGroupIDs?.length) {
       // cvr = ... For #syncQueryPipelineSet().
-      cvr = await this.updatePatchesForDesiredQueries(lc, cvr, updater => {
+      cvr = await this.#updatePatchesForDesiredQueries(lc, cvr, updater => {
         const patches: PatchToVersion[] = [];
         if (clientIDs) {
           for (const cid of clientIDs) {
@@ -592,7 +592,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       if (desiredQueriesPatch.length) {
         lc.debug?.(`applying ${desiredQueriesPatch.length} query patches`);
         // cvr = ... For #syncQueryPipelineSet().
-        cvr = await this.updatePatchesForDesiredQueries(lc, cvr, updater => {
+        cvr = await this.#updatePatchesForDesiredQueries(lc, cvr, updater => {
           const patches: PatchToVersion[] = [];
           for (const patch of desiredQueriesPatch) {
             switch (patch.op) {
