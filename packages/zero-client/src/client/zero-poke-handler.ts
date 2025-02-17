@@ -9,7 +9,6 @@ import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {getBrowserGlobalMethod} from '../../../shared/src/browser-env.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import {mapAST} from '../../../zero-protocol/src/ast.ts';
-import type {ClientsPatchOp} from '../../../zero-protocol/src/clients-patch.ts';
 import type {
   PokeEndBody,
   PokePartBody,
@@ -23,7 +22,6 @@ import {
   type NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
 import {
-  toClientsKey,
   toDesiredQueriesKey,
   toGotQueriesKey,
   toPrimaryKeyString,
@@ -235,11 +233,6 @@ export function mergePokes(
           mergedLastMutationIDChanges[clientID] = lastMutationID;
         }
       }
-      if (pokePart.clientsPatch) {
-        mergedPatch.push(
-          ...pokePart.clientsPatch.map(clientsPatchOpToReplicachePatchOp),
-        );
-      }
       if (pokePart.desiredQueriesPatches) {
         for (const [clientID, queriesPatch] of Object.entries(
           pokePart.desiredQueriesPatches,
@@ -283,25 +276,6 @@ export function mergePokes(
       cookie,
     },
   };
-}
-
-function clientsPatchOpToReplicachePatchOp(op: ClientsPatchOp): PatchOperation {
-  switch (op.op) {
-    case 'clear':
-      return op;
-    case 'del':
-      return {
-        op: 'del',
-        key: toClientsKey(op.clientID),
-      };
-    case 'put':
-    default:
-      return {
-        op: 'put',
-        key: toClientsKey(op.clientID),
-        value: true,
-      };
-  }
 }
 
 function queryPatchOpToReplicachePatchOp(

@@ -4,14 +4,9 @@ import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {primaryKeyValueSchema} from '../../../zero-protocol/src/primary-key.ts';
 
-export const CLIENTS_KEY_PREFIX = 'c/';
-export const DESIRED_QUERIES_KEY_PREFIX = 'd/';
+const DESIRED_QUERIES_KEY_PREFIX = 'd/';
 export const GOT_QUERIES_KEY_PREFIX = 'g/';
 export const ENTITIES_KEY_PREFIX = 'e/';
-
-export function toClientsKey(clientID: string): string {
-  return CLIENTS_KEY_PREFIX + clientID;
-}
 
 export function toDesiredQueriesKey(clientID: string, hash: string): string {
   return DESIRED_QUERIES_KEY_PREFIX + clientID + '/' + hash;

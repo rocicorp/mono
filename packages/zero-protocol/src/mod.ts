@@ -1,6 +1,5 @@
 // TODO: Remove this file
 export * from './change-desired-queries.ts';
-export * from './clients-patch.ts';
 export * from './connect.ts';
 export * from './down.ts';
 export * from './error.ts';

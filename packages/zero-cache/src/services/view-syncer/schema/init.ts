@@ -63,10 +63,10 @@ export async function initViewSyncerSchema(
   const migrateV5ToV6: Migration = {
     migrateSchema: async (_, tx) => {
       await tx`
-      ALTER TABLE ${tx(schema)}."rows" 
+      ALTER TABLE ${tx(schema)}."rows"
         DROP CONSTRAINT fk_rows_client_group`;
       await tx`
-      ALTER TABLE ${tx(schema)}."rowsVersion" 
+      ALTER TABLE ${tx(schema)}."rowsVersion"
         DROP CONSTRAINT fk_rows_version_client_group`;
     },
   };

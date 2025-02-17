@@ -1236,7 +1236,6 @@ test('mergePokes with all optionals defined', () => {
           {
             pokeID: 'poke1',
             lastMutationIDChanges: {c1: 1, c2: 2},
-            clientsPatch: [{op: 'put', clientID: 'c2'}],
             desiredQueriesPatches: {
               c1: [
                 {
@@ -1279,7 +1278,6 @@ test('mergePokes with all optionals defined', () => {
           {
             pokeID: 'poke1',
             lastMutationIDChanges: {c2: 3, c3: 4},
-            clientsPatch: [{op: 'put', clientID: 'c3'}],
             desiredQueriesPatches: {
               c1: [
                 {
@@ -1326,10 +1324,6 @@ test('mergePokes with all optionals defined', () => {
           {
             pokeID: 'poke2',
             lastMutationIDChanges: {c4: 3},
-            clientsPatch: [
-              {op: 'del', clientID: 'c2'},
-              {op: 'put', clientID: 'c4'},
-            ],
             desiredQueriesPatches: {
               c1: [
                 {
@@ -1371,11 +1365,6 @@ test('mergePokes with all optionals defined', () => {
       patch: [
         {
           op: 'put',
-          key: 'c/c2',
-          value: true,
-        },
-        {
-          op: 'put',
           key: 'd/c1/h1',
           value: {
             table: 'issue',
@@ -1403,11 +1392,6 @@ test('mergePokes with all optionals defined', () => {
         },
         {
           op: 'put',
-          key: 'c/c3',
-          value: true,
-        },
-        {
-          op: 'put',
           key: 'd/c1/h2',
           value: {
             table: 'label',
@@ -1426,15 +1410,6 @@ test('mergePokes with all optionals defined', () => {
           op: 'put',
           key: 'e/issue/issue3',
           value: {id: 'issue3', title: 'baz1'},
-        },
-        {
-          op: 'del',
-          key: 'c/c2',
-        },
-        {
-          op: 'put',
-          key: 'c/c4',
-          value: true,
         },
         {
           op: 'del',
@@ -1496,7 +1471,6 @@ test('mergePokes sparse', () => {
 
           {
             pokeID: 'poke1',
-            clientsPatch: [{op: 'put', clientID: 'c3'}],
             desiredQueriesPatches: {
               c1: [
                 {
@@ -1525,10 +1499,6 @@ test('mergePokes sparse', () => {
         parts: [
           {
             pokeID: 'poke2',
-            clientsPatch: [
-              {op: 'del', clientID: 'c2'},
-              {op: 'put', clientID: 'c4'},
-            ],
             desiredQueriesPatches: {
               c1: [
                 {
@@ -1579,25 +1549,11 @@ test('mergePokes sparse', () => {
         },
         {
           op: 'put',
-          key: 'c/c3',
-          value: true,
-        },
-        {
-          op: 'put',
           key: 'd/c1/h2',
           value: {
             table: 'label',
             orderBy: [['id', 'asc']],
           },
-        },
-        {
-          op: 'del',
-          key: 'c/c2',
-        },
-        {
-          op: 'put',
-          key: 'c/c4',
-          value: true,
         },
         {
           op: 'del',
