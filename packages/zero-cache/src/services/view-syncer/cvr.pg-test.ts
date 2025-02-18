@@ -299,6 +299,9 @@ describe('view-syncer/cvr', () => {
           desiredBy: {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
+              expiresAt: null,
+              inactivatedAt: null,
+              ttl: null,
             },
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
@@ -400,7 +403,12 @@ describe('view-syncer/cvr', () => {
           ast: {table: 'issues'},
           transformationHash: 'twoHash',
           desiredBy: {
-            fooClient: {version: {stateVersion: '1a9', minorVersion: 1}},
+            fooClient: {
+              version: {stateVersion: '1a9', minorVersion: 1},
+              expiresAt: null,
+              inactivatedAt: null,
+              ttl: null,
+            },
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
         },
@@ -627,8 +635,18 @@ describe('view-syncer/cvr', () => {
           transformationHash: 'twoHash',
           transformationVersion: undefined,
           desiredBy: {
-            dooClient: {version: {stateVersion: '1a8'}},
-            fooClient: {version: {stateVersion: '1a9', minorVersion: 1}},
+            dooClient: {
+              version: {stateVersion: '1a8'},
+              expiresAt: null,
+              inactivatedAt: null,
+              ttl: null,
+            },
+            fooClient: {
+              version: {stateVersion: '1a9', minorVersion: 1},
+              expiresAt: null,
+              inactivatedAt: null,
+              ttl: null,
+            },
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
         },
@@ -830,7 +848,12 @@ describe('view-syncer/cvr', () => {
           transformationHash: 'twoHash',
           transformationVersion: undefined,
           desiredBy: {
-            barClient: {version: {stateVersion: '1aa', minorVersion: 1}},
+            barClient: {
+              version: {stateVersion: '1aa', minorVersion: 1},
+              expiresAt: null,
+              inactivatedAt: null,
+              ttl: null,
+            },
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
         },
@@ -838,15 +861,30 @@ describe('view-syncer/cvr', () => {
           id: 'threeHash',
           ast: {table: 'comments'},
           desiredBy: {
-            barClient: {version: {stateVersion: '1aa', minorVersion: 1}},
-            fooClient: {version: {stateVersion: '1aa', minorVersion: 1}},
+            barClient: {
+              version: {stateVersion: '1aa', minorVersion: 1},
+              expiresAt: null,
+              inactivatedAt: null,
+              ttl: null,
+            },
+            fooClient: {
+              version: {stateVersion: '1aa', minorVersion: 1},
+              expiresAt: null,
+              inactivatedAt: null,
+              ttl: null,
+            },
           },
         },
         fourHash: {
           id: 'fourHash',
           ast: {table: 'users'},
           desiredBy: {
-            fooClient: {version: {stateVersion: '1aa', minorVersion: 1}},
+            fooClient: {
+              version: {stateVersion: '1aa', minorVersion: 1},
+              expiresAt: null,
+              inactivatedAt: null,
+              ttl: null,
+            },
           },
         },
       },
@@ -1521,7 +1559,12 @@ describe('view-syncer/cvr', () => {
           id: 'oneHash',
           ast: {table: 'issues'},
           desiredBy: {
-            fooClient: {version: {stateVersion: '1a9', minorVersion: 1}},
+            fooClient: {
+              version: {stateVersion: '1a9', minorVersion: 1},
+              expiresAt: null,
+              inactivatedAt: null,
+              ttl: null,
+            },
           },
           transformationHash: 'serverOneHash',
           transformationVersion: {stateVersion: '1aa', minorVersion: 1},
@@ -1968,7 +2011,12 @@ describe('view-syncer/cvr', () => {
           id: 'oneHash',
           ast: {table: 'issues'},
           desiredBy: {
-            fooClient: {version: {stateVersion: '1a9', minorVersion: 1}},
+            fooClient: {
+              version: {stateVersion: '1a9', minorVersion: 1},
+              expiresAt: null,
+              inactivatedAt: null,
+              ttl: null,
+            },
           },
           transformationHash: 'serverTwoHash',
           transformationVersion: {stateVersion: '1ba', minorVersion: 1},
@@ -2561,7 +2609,12 @@ describe('view-syncer/cvr', () => {
           id: 'oneHash',
           ast: {table: 'issues'},
           desiredBy: {
-            fooClient: {version: {stateVersion: '1a9', minorVersion: 1}},
+            fooClient: {
+              version: {stateVersion: '1a9', minorVersion: 1},
+              expiresAt: null,
+              inactivatedAt: null,
+              ttl: null,
+            },
           },
           transformationHash: 'updatedServerOneHash',
           transformationVersion: newVersion,
@@ -2571,7 +2624,12 @@ describe('view-syncer/cvr', () => {
           id: 'twoHash',
           ast: {table: 'issues'},
           desiredBy: {
-            fooClient: {version: {stateVersion: '1a9', minorVersion: 1}},
+            fooClient: {
+              version: {stateVersion: '1a9', minorVersion: 1},
+              expiresAt: null,
+              inactivatedAt: null,
+              ttl: null,
+            },
           },
           transformationHash: 'updatedServerTwoHash',
           transformationVersion: newVersion,
@@ -3251,9 +3309,9 @@ describe('view-syncer/cvr', () => {
             },
             "desiredBy": {
               "fooClient": {
-                "expiresAt": undefined,
-                "inactivatedAt": undefined,
-                "ttl": undefined,
+                "expiresAt": null,
+                "inactivatedAt": null,
+                "ttl": null,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -3276,9 +3334,9 @@ describe('view-syncer/cvr', () => {
             },
             "desiredBy": {
               "fooClient": {
-                "expiresAt": undefined,
-                "inactivatedAt": undefined,
-                "ttl": undefined,
+                "expiresAt": null,
+                "inactivatedAt": null,
+                "ttl": null,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",

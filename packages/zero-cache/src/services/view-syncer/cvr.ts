@@ -219,12 +219,12 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     client.desiredQueryIDs = [...union(current, needed)].sort(compareUTF8);
 
     for (const id of needed) {
-      const {ast, ttl} = must(queries.find(({hash}) => hash === id));
+      const {ast, ttl = null} = must(queries.find(({hash}) => hash === id));
       const query = this._cvr.queries[id] ?? {id, ast, desiredBy: {}};
       assertNotInternal(query);
 
-      const expiresAt = undefined;
-      const inactivatedAt = undefined;
+      const expiresAt = null;
+      const inactivatedAt = null;
 
       query.desiredBy[clientID] = {
         expiresAt,
@@ -278,9 +278,9 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         query,
         client,
         true,
-        undefined,
-        undefined,
-        undefined,
+        null,
+        null,
+        null,
       );
       patches.push({
         toVersion: newVersion,
