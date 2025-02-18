@@ -20,6 +20,7 @@ import {assert} from '../../../../../shared/src/asserts.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import {must} from '../../../../../shared/src/must.ts';
 import {
+  equals,
   intersection,
   symmetricDifferences,
 } from '../../../../../shared/src/set-utils.ts';
@@ -803,7 +804,12 @@ export function relationDifferent(a: PublishedTableSpec, b: MessageRelation) {
     a.oid !== b.relationOid ||
     a.schema !== b.schema ||
     a.name !== b.name ||
-    !deepEqual(a.primaryKey, b.keyColumns)
+    // The MessageRelation's `keyColumns` field contains the columns in column
+    // declaration order, whereas the PublishedTableSpec's `primaryKey`
+    // contains the columns in primary key (i.e. index) order. Do an
+    // order-agnostic compare here since it is not possible to detect
+    // key-order changes from the MessageRelation message alone.
+    !equals(new Set(a.primaryKey), new Set(b.keyColumns))
   ) {
     return true;
   }
