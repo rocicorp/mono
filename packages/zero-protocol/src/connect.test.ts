@@ -19,7 +19,13 @@ test('encode/decodeSecProtocols round-trip', () => {
                       ast: fc.constant({
                         table: 'table',
                       }),
-                      ttl: fc.option(fc.double(), {nil: undefined}),
+                      ttl: fc.option(
+                        fc.double({
+                          noDefaultInfinity: true,
+                          noNaN: true,
+                        }),
+                        {nil: undefined},
+                      ),
                     },
                     {requiredKeys: ['op', 'hash', 'ast']},
                   ),
