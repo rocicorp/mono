@@ -4,7 +4,7 @@ import type {Store as KVStore} from './store.ts';
 
 export interface SQLResultSetRowList {
   length: number;
-  item(index: number): {value: string};
+  item(index: number): {value: string}; // TODO: confirm this is correct, this was typed as `any` in the original code
 }
 
 export abstract class SQLiteTransaction {
