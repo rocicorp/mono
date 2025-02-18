@@ -514,9 +514,9 @@ class ChangeMaker {
       case 'type':
         return []; // Nothing need be done for custom types.
       case 'origin':
-        // We do not set the `origin` option in the pgoutput parameters:
-        // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
-        throw new Error(`Unexpected ORIGIN message ${stringify(msg)}`);
+        // No need to detect replication loops since we are not a
+        // PG replication source.
+        return [];
       default:
         msg satisfies never;
         throw new Error(`Unexpected message type ${stringify(msg)}`);
