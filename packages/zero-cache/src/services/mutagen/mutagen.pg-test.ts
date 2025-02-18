@@ -47,6 +47,10 @@ async function createTables(db: PostgresDB) {
         col2 text,
         PRIMARY KEY(id)
       );
+      CREATE TABLE types (
+        id TEXT PRIMARY KEY,
+        num NUMERIC
+      );
       CREATE TABLE fk_ref (
         id text,
         ref text,
@@ -648,6 +652,59 @@ describe('processMutation', {timeout: 15000}, () => {
           clientGroupID: 'abc',
           clientID: '123',
           lastMutationID: 4n,
+          userID: null,
+        },
+      ],
+    });
+  });
+
+  test('data type handling', async () => {
+    await expectTables(db, {
+      types: [],
+      [`zero_${SHARD_ID}.clients`]: [],
+    });
+
+    const error = await processMutation(
+      lc,
+      undefined,
+      db,
+      SHARD_ID,
+      'abc',
+      {
+        type: MutationType.CRUD,
+        id: 1,
+        clientID: '123',
+        name: '_zero_crud',
+        args: [
+          {
+            ops: [
+              {
+                op: 'insert',
+                tableName: 'types',
+                primaryKey: ['id'],
+                value: {
+                  id: '1',
+                  num: 23.45,
+                },
+              },
+            ],
+          },
+        ],
+        timestamp: Date.now(),
+      },
+      mockWriteAuthorizer,
+      TEST_SCHEMA_VERSION,
+    );
+
+    expect(error).undefined;
+
+    await expectTables(db, {
+      types: [{id: '1', num: 23.45}],
+      [`zero_${SHARD_ID}.clients`]: [
+        {
+          clientGroupID: 'abc',
+          clientID: '123',
+          lastMutationID: 1n,
           userID: null,
         },
       ],

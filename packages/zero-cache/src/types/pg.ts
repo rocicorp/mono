@@ -149,7 +149,7 @@ export const postgresTypeConfig = () => ({
     numeric: {
       to: 1700,
       from: [1700],
-      serialize: (x: number) => x,
+      serialize: (x: number) => String(x), // pg expects a string
       parse: (x: string | number) => Number(x),
     },
   },
