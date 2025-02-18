@@ -1,4 +1,1 @@
-export {
-  createExpoSQLiteStore as createReplicacheExpoSQLiteKVStore,
-  ExpoSQLiteTransaction as ReplicacheExpoSQLiteTransaction,
-} from './store.ts';
+export {createExpoSQLiteStore, ExpoSQLiteTransaction} from './store.ts';
