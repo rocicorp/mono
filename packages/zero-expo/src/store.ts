@@ -1,14 +1,15 @@
 import * as SQLite from 'expo-sqlite';
 import {
   getCreateReplicacheSQLiteKVStore,
-  ReplicacheGenericSQLiteDatabaseManager,
-  ReplicacheGenericSQLiteTransaction,
-  type GenericSQLDatabase,
-  type GenericDatabaseManager,
-} from '../../replicache/src/kv/generic-store.ts';
+  SQLiteDatabaseManager,
+  type SQLDatabase,
+  SQLiteTransaction,
+  type GenericSQLiteDatabaseManager,
+} from '../../replicache/src/kv/sqlite-store.ts';
 import type {StoreProvider} from '../../replicache/src/kv/store.ts';
 
-export class ReplicacheExpoSQLiteTransaction extends ReplicacheGenericSQLiteTransaction {
+export class ExpoSQLiteTransaction extends SQLiteTransaction {
+  readonly #db: SQLite.SQLiteDatabase;
   #tx:
     | Parameters<
         Parameters<SQLite.SQLiteDatabase['withExclusiveTransactionAsync']>[0]
@@ -22,16 +23,16 @@ export class ReplicacheExpoSQLiteTransaction extends ReplicacheGenericSQLiteTran
   }>();
   #txEnded = false;
 
-  constructor(private readonly db: SQLite.SQLiteDatabase) {
+  constructor(db: SQLite.SQLiteDatabase) {
     super();
+    this.#db = db;
   }
-
   // expo-sqlite doesn't support readonly
-  public async start() {
-    return await new Promise<void>((resolve, reject) => {
+  start() {
+    return new Promise<void>((resolve, reject) => {
       let didResolve = false;
       try {
-        this.db.withExclusiveTransactionAsync(async tx => {
+        void this.#db.withExclusiveTransactionAsync(async tx => {
           didResolve = true;
           this.#tx = tx;
           resolve();
@@ -53,7 +54,7 @@ export class ReplicacheExpoSQLiteTransaction extends ReplicacheGenericSQLiteTran
     });
   }
 
-  public async execute(
+  async execute(
     sqlStatement: string,
     args?: (string | number | null)[] | undefined,
   ) {
@@ -72,16 +73,17 @@ export class ReplicacheExpoSQLiteTransaction extends ReplicacheGenericSQLiteTran
     return {item: (idx: number) => allRows[idx], length: allRows.length};
   }
 
-  public async commit() {
+  commit(): Promise<void> {
     // Transaction is committed automatically.
     this.#txCommitted = true;
     for (const resolver of this.#transactionCommittedSubscriptions) {
       resolver();
     }
     this.#transactionCommittedSubscriptions.clear();
+    return Promise.resolve();
   }
 
-  public waitForTransactionEnded() {
+  waitForTransactionEnded() {
     if (this.#txEnded) return;
     return new Promise<void>((resolve, reject) => {
       this.#transactionEndedSubscriptions.add({resolve, reject});
@@ -115,28 +117,26 @@ export class ReplicacheExpoSQLiteTransaction extends ReplicacheGenericSQLiteTran
   }
 }
 
-const genericDatabase: GenericDatabaseManager = {
+const genericDatabase: GenericSQLiteDatabaseManager = {
   open: async (name: string) => {
     const db = await SQLite.openDatabaseAsync(name);
 
-    const genericDb: GenericSQLDatabase = {
-      transaction: () => new ReplicacheExpoSQLiteTransaction(db),
+    const genericDb: SQLDatabase = {
+      transaction: () => new ExpoSQLiteTransaction(db),
       destroy: async () => {
         await db.closeAsync();
         await SQLite.deleteDatabaseAsync(name);
       },
-      close: async () => await db.closeAsync(),
+      close: () => db.closeAsync(),
     };
 
     return genericDb;
   },
 };
 
-const expoDbManagerInstance = new ReplicacheGenericSQLiteDatabaseManager(
-  genericDatabase,
-);
+const expoDbManagerInstance = new SQLiteDatabaseManager(genericDatabase);
 
-export const createReplicacheExpoSQLiteKVStore: StoreProvider = {
+export const createExpoSQLiteStore: StoreProvider = {
   create: getCreateReplicacheSQLiteKVStore(expoDbManagerInstance),
   drop: (name: string) => expoDbManagerInstance.destroy(name),
 };

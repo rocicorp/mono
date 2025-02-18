@@ -1,27 +1,22 @@
 {
-	"name": "zero-expo",
-	"version": "0.0.0",
-	"private": true,
-	"type": "module",
-	"module": "true",
-	"scripts": {
-		"check-types": "tsc",
-		"check-types:watch": "tsc --watch",
-		"test": "vitest run",
-		"test:watch": "vitest watch",
-		"format": "prettier --write .",
-		"check-format": "prettier --check .",
-		"lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
-	},
-	"peerDependencies": {
-		"react": "^18.3.1"
-	},
-	"dependencies": {
-		"expo-sqlite": "~15.1.2"
-	},
-	"devDependencies": {
-		"@types/react": "^18.3.18",
-		"react": "^18.3.1",
-		"zero-client": "0.0.0"
-	}
+  "name": "zero-expo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "module": "true",
+  "scripts": {
+    "check-types": "tsc",
+    "check-types:watch": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+  },
+  "peerDependencies": {
+    "expo": "*",
+    "expo-sqlite": ">=15.0.0",
+    "react": "*",
+    "react-native": "*"
+  }
 }
