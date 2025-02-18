@@ -162,6 +162,30 @@ export const internalQueryRecordSchema = baseQueryRecordSchema.extend({
 
 export type InternalQueryRecord = v.Infer<typeof internalQueryRecordSchema>;
 
+const clientLRUSchema = v.object({
+  /**
+   * The time to delete the query. This is the {@linkcode ttl} plus the {@linkcode inactivatedAt}.
+   */
+  expiresAt: v.number().optional(),
+
+  /**
+   * The time at which the query was last inactivated. If this undefined or
+   * missing then the query is active.
+   */
+  inactivatedAt: v.number().optional(),
+
+  /**
+   * TTL, time to live in milliseconds. If the query is not updated within this time.
+   * The time to live is the time after it has become inactive.
+   */
+  ttl: v.number().optional(),
+
+  /**
+   * The version at which the desired query info changed (i.e. individual `patchVersion`s).
+   */
+  version: cvrVersionSchema,
+});
+
 export const clientQueryRecordSchema = baseQueryRecordSchema.extend({
   internal: v.literal(false).optional(),
 
@@ -171,11 +195,7 @@ export const clientQueryRecordSchema = baseQueryRecordSchema.extend({
 
   // Maps each of the desiring client's IDs to the version at which
   // the queryID was added to their desired query set (i.e. individual `patchVersion`s).
-  desiredBy: v.record(cvrVersionSchema),
-
-  // TODO: Iron this out.
-  // estimatedBytes: v.number(),
-  // lru information?
+  desiredBy: v.record(clientLRUSchema),
 });
 
 export type ClientQueryRecord = v.Infer<typeof clientQueryRecordSchema>;

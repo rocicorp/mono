@@ -71,6 +71,23 @@ export async function initViewSyncerSchema(
     },
   };
 
+  const migrateV6ToV7: Migration = {
+    migrateSchema: async (_, tx) => {
+      await tx`ALTER TABLE ${tx(schema)}.desires ADD "expiresAt" TIMESTAMPTZ`;
+      await tx`ALTER TABLE ${tx(
+        schema,
+      )}.desires ADD "inactivatedAt" TIMESTAMPTZ`;
+      await tx`ALTER TABLE ${tx(schema)}.desires ADD "ttl" INTERVAL`;
+
+      await tx`CREATE INDEX desires_expires_at ON ${tx(
+        schema,
+      )}.desires ("expiresAt")`;
+      await tx`CREATE INDEX desires_inactivated_at ON ${tx(
+        schema,
+      )}.desires ("inactivatedAt")`;
+    },
+  };
+
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     2: migrateV1toV2,
     3: migrateV2ToV3,
@@ -79,6 +96,7 @@ export async function initViewSyncerSchema(
     // the logic that updates and checks the rowsVersion table in v3.
     5: {minSafeVersion: 3},
     6: migrateV5ToV6,
+    7: migrateV6ToV7,
   };
 
   await runSchemaMigrations(

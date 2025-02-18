@@ -277,7 +277,12 @@ export class CVRStore {
 
       const query = cvr.queries[row.queryHash];
       if (query && !query.internal) {
-        query.desiredBy[row.clientID] = versionFromString(row.patchVersion);
+        query.desiredBy[row.clientID] = {
+          expiresAt: row.expiresAt ?? undefined,
+          inactivatedAt: row.inactivatedAt ?? undefined,
+          ttl: row.ttl ?? undefined,
+          version: versionFromString(row.patchVersion),
+        };
       }
     }
     lc.debug?.(
@@ -452,13 +457,19 @@ export class CVRStore {
     query: {id: string},
     client: {id: string},
     deleted: boolean,
+    expiresAt: number | undefined,
+    inactivatedAt: number | undefined,
+    ttl: number | undefined,
   ): void {
     const change: DesiresRow = {
       clientGroupID: this.#id,
       clientID: client.id,
-      queryHash: query.id,
-      patchVersion: versionString(newVersion),
       deleted,
+      expiresAt: expiresAt ?? null,
+      inactivatedAt: inactivatedAt ?? null,
+      patchVersion: versionString(newVersion),
+      queryHash: query.id,
+      ttl: ttl ?? null,
     };
     this.#writes.add({
       stats: {desires: 1},

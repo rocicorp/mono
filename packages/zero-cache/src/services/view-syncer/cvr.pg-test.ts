@@ -261,6 +261,9 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: false,
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
       ],
       rows: [],
@@ -293,7 +296,11 @@ describe('view-syncer/cvr', () => {
           id: 'oneHash',
           ast: {table: 'issues'},
           transformationHash: 'twoHash',
-          desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
+          desiredBy: {
+            fooClient: {
+              version: {stateVersion: '1a9', minorVersion: 1},
+            },
+          },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
         },
       },
@@ -348,6 +355,9 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: false,
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
       ],
       rows: [],
@@ -389,7 +399,9 @@ describe('view-syncer/cvr', () => {
           id: 'oneHash',
           ast: {table: 'issues'},
           transformationHash: 'twoHash',
-          desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
+          desiredBy: {
+            fooClient: {version: {stateVersion: '1a9', minorVersion: 1}},
+          },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
         },
       },
@@ -565,6 +577,9 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a8',
           deleted: false,
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
         {
           clientGroupID: 'abc123',
@@ -572,6 +587,9 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: false,
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
       ],
       rows: [],
@@ -609,8 +627,8 @@ describe('view-syncer/cvr', () => {
           transformationHash: 'twoHash',
           transformationVersion: undefined,
           desiredBy: {
-            dooClient: {stateVersion: '1a8'},
-            fooClient: {stateVersion: '1a9', minorVersion: 1},
+            dooClient: {version: {stateVersion: '1a8'}},
+            fooClient: {version: {stateVersion: '1a9', minorVersion: 1}},
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
         },
@@ -640,8 +658,8 @@ describe('view-syncer/cvr', () => {
 
     expect(
       updater.putDesiredQueries('fooClient', [
-        {hash: 'fourHash', ast: {table: 'users'}},
-        {hash: 'threeHash', ast: {table: 'comments'}},
+        {hash: 'fourHash', ast: {table: 'users'}, ttl: undefined},
+        {hash: 'threeHash', ast: {table: 'comments'}, ttl: undefined},
       ]),
     ).toMatchInlineSnapshot(`
         [
@@ -681,8 +699,8 @@ describe('view-syncer/cvr', () => {
     // This adds a new barClient with desired queries.
     expect(
       updater.putDesiredQueries('barClient', [
-        {hash: 'oneHash', ast: {table: 'issues'}},
-        {hash: 'threeHash', ast: {table: 'comments'}},
+        {hash: 'oneHash', ast: {table: 'issues'}, ttl: undefined},
+        {hash: 'threeHash', ast: {table: 'comments'}, ttl: undefined},
       ]),
     ).toMatchInlineSnapshot(`
       [
@@ -811,21 +829,25 @@ describe('view-syncer/cvr', () => {
           ast: {table: 'issues'},
           transformationHash: 'twoHash',
           transformationVersion: undefined,
-          desiredBy: {barClient: {stateVersion: '1aa', minorVersion: 1}},
+          desiredBy: {
+            barClient: {version: {stateVersion: '1aa', minorVersion: 1}},
+          },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
         },
         threeHash: {
           id: 'threeHash',
           ast: {table: 'comments'},
           desiredBy: {
-            barClient: {stateVersion: '1aa', minorVersion: 1},
-            fooClient: {stateVersion: '1aa', minorVersion: 1},
+            barClient: {version: {stateVersion: '1aa', minorVersion: 1}},
+            fooClient: {version: {stateVersion: '1aa', minorVersion: 1}},
           },
         },
         fourHash: {
           id: 'fourHash',
           ast: {table: 'users'},
-          desiredBy: {fooClient: {stateVersion: '1aa', minorVersion: 1}},
+          desiredBy: {
+            fooClient: {version: {stateVersion: '1aa', minorVersion: 1}},
+          },
         },
       },
     } satisfies CVRSnapshot);
@@ -941,6 +963,9 @@ describe('view-syncer/cvr', () => {
           deleted: true,
           patchVersion: '1aa:01',
           queryHash: 'oneHash',
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
         {
           clientGroupID: 'abc123',
@@ -948,6 +973,9 @@ describe('view-syncer/cvr', () => {
           deleted: false,
           patchVersion: '1aa:01',
           queryHash: 'fourHash',
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
         {
           clientGroupID: 'abc123',
@@ -955,6 +983,9 @@ describe('view-syncer/cvr', () => {
           deleted: false,
           patchVersion: '1aa:01',
           queryHash: 'threeHash',
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
         {
           clientGroupID: 'abc123',
@@ -962,6 +993,9 @@ describe('view-syncer/cvr', () => {
           deleted: false,
           patchVersion: '1aa:01',
           queryHash: 'oneHash',
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
         {
           clientGroupID: 'abc123',
@@ -969,6 +1003,9 @@ describe('view-syncer/cvr', () => {
           deleted: false,
           patchVersion: '1aa:01',
           queryHash: 'threeHash',
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
         {
           clientGroupID: 'abc123',
@@ -976,6 +1013,9 @@ describe('view-syncer/cvr', () => {
           deleted: true,
           patchVersion: '1aa:01',
           queryHash: 'oneHash',
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
       ],
 
@@ -999,7 +1039,7 @@ describe('view-syncer/cvr', () => {
     const updater2 = new CVRConfigDrivenUpdater(cvrStore2, reloaded, SHARD_ID);
     expect(
       updater2.putDesiredQueries('fooClient', [
-        {hash: 'oneHash', ast: {table: 'issues'}},
+        {hash: 'oneHash', ast: {table: 'issues'}, ttl: undefined},
       ]),
     ).toMatchInlineSnapshot(`
       [
@@ -1067,6 +1107,9 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: false,
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
       ],
       rows: [],
@@ -1087,7 +1130,7 @@ describe('view-syncer/cvr', () => {
     // Same desired query set. Nothing should change except last active time.
     expect(
       updater.putDesiredQueries('fooClient', [
-        {hash: 'oneHash', ast: {table: 'issues'}},
+        {hash: 'oneHash', ast: {table: 'issues'}, ttl: undefined},
       ]),
     ).toMatchInlineSnapshot(`[]`);
 
@@ -1205,6 +1248,9 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: null,
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
       ],
       rows: [
@@ -1474,7 +1520,9 @@ describe('view-syncer/cvr', () => {
         oneHash: {
           id: 'oneHash',
           ast: {table: 'issues'},
-          desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
+          desiredBy: {
+            fooClient: {version: {stateVersion: '1a9', minorVersion: 1}},
+          },
           transformationHash: 'serverOneHash',
           transformationVersion: {stateVersion: '1aa', minorVersion: 1},
           patchVersion: {stateVersion: '1aa', minorVersion: 1},
@@ -1559,6 +1607,9 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           patchVersion: '1a9:01',
           queryHash: 'oneHash',
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
       ],
       rows: [
@@ -1677,6 +1728,9 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: null,
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
       ],
       rows: [
@@ -1913,7 +1967,9 @@ describe('view-syncer/cvr', () => {
         oneHash: {
           id: 'oneHash',
           ast: {table: 'issues'},
-          desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
+          desiredBy: {
+            fooClient: {version: {stateVersion: '1a9', minorVersion: 1}},
+          },
           transformationHash: 'serverTwoHash',
           transformationVersion: {stateVersion: '1ba', minorVersion: 1},
           patchVersion: {stateVersion: '1aa', minorVersion: 1},
@@ -1984,6 +2040,9 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           patchVersion: '1a9:01',
           queryHash: 'oneHash',
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
       ],
       rows: [
@@ -2193,6 +2252,9 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: null,
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
         {
           clientGroupID: 'abc123',
@@ -2200,6 +2262,9 @@ describe('view-syncer/cvr', () => {
           queryHash: 'twoHash',
           patchVersion: '1a9:01',
           deleted: null,
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
       ],
       rows: [
@@ -2495,7 +2560,9 @@ describe('view-syncer/cvr', () => {
         oneHash: {
           id: 'oneHash',
           ast: {table: 'issues'},
-          desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
+          desiredBy: {
+            fooClient: {version: {stateVersion: '1a9', minorVersion: 1}},
+          },
           transformationHash: 'updatedServerOneHash',
           transformationVersion: newVersion,
           patchVersion: {stateVersion: '1aa', minorVersion: 1},
@@ -2503,7 +2570,9 @@ describe('view-syncer/cvr', () => {
         twoHash: {
           id: 'twoHash',
           ast: {table: 'issues'},
-          desiredBy: {fooClient: {stateVersion: '1a9', minorVersion: 1}},
+          desiredBy: {
+            fooClient: {version: {stateVersion: '1a9', minorVersion: 1}},
+          },
           transformationHash: 'updatedServerTwoHash',
           transformationVersion: newVersion,
           patchVersion: {stateVersion: '1aa', minorVersion: 1},
@@ -2592,6 +2661,9 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           patchVersion: '1a9:01',
           queryHash: 'oneHash',
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
         {
           clientGroupID: 'abc123',
@@ -2599,6 +2671,9 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           patchVersion: '1a9:01',
           queryHash: 'twoHash',
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
       ],
       rows: [
@@ -3078,6 +3153,9 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: null,
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
         {
           clientGroupID: 'abc123',
@@ -3085,6 +3163,9 @@ describe('view-syncer/cvr', () => {
           queryHash: 'twoHash',
           patchVersion: '1a9:01',
           deleted: null,
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
       ],
       rows: [
@@ -3170,8 +3251,13 @@ describe('view-syncer/cvr', () => {
             },
             "desiredBy": {
               "fooClient": {
-                "minorVersion": 1,
-                "stateVersion": "1a9",
+                "expiresAt": undefined,
+                "inactivatedAt": undefined,
+                "ttl": undefined,
+                "version": {
+                  "minorVersion": 1,
+                  "stateVersion": "1a9",
+                },
               },
             },
             "id": "oneHash",
@@ -3190,8 +3276,13 @@ describe('view-syncer/cvr', () => {
             },
             "desiredBy": {
               "fooClient": {
-                "minorVersion": 1,
-                "stateVersion": "1a9",
+                "expiresAt": undefined,
+                "inactivatedAt": undefined,
+                "ttl": undefined,
+                "version": {
+                  "minorVersion": 1,
+                  "stateVersion": "1a9",
+                },
               },
             },
             "id": "twoHash",
@@ -3480,6 +3571,9 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: null,
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
       ],
       rows: [
@@ -3703,6 +3797,9 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           patchVersion: '1a9:01',
           queryHash: 'oneHash',
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
       ],
       rows: [
@@ -3786,6 +3883,9 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: null,
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
       ],
       rows: [
@@ -3931,6 +4031,9 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: null,
+          expiresAt: null,
+          inactivatedAt: null,
+          ttl: null,
         },
       ],
       rows: [

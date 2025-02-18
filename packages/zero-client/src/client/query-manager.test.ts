@@ -1,4 +1,4 @@
-import {describe, expect, test, vi} from 'vitest';
+import {beforeEach, describe, expect, test, vi, type Mock} from 'vitest';
 import type {IndexKey} from '../../../replicache/src/db/index.ts';
 import {
   makeScanResult,
@@ -14,8 +14,10 @@ import {
   type ReadTransaction,
 } from '../../../replicache/src/transactions.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import * as v from '../../../shared/src/valita.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
+import {putOpSchema} from '../../../zero-protocol/src/queries-patch.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import {toGotQueriesKey} from './keys.ts';
 import {QueryManager} from './query-manager.ts';
@@ -222,6 +224,7 @@ test('add renamed fields', () => {
             },
             "hash": "2courpv3kf7et",
             "op": "put",
+            "ttl": undefined,
           },
         ],
       },
@@ -630,152 +633,349 @@ class TestTransaction implements ReadTransaction {
   }
 }
 
-test('getQueriesPatch', async () => {
-  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
-  const maxRecentQueriesSize = 0;
-  const queryManager = new QueryManager(
-    'client1',
-    schema.tables,
-    send,
-    () => () => {},
-    maxRecentQueriesSize,
-  );
-  // hash: 12hwg3ihkijhm
-  const ast1: AST = {
-    table: 'issue',
-    orderBy: [['id', 'asc']],
-  };
-  queryManager.add(ast1);
-  // hash 1hydj1t7t5yv4
-  const ast2: AST = {
-    table: 'issue',
-    orderBy: [['id', 'desc']],
-  };
-  queryManager.add(ast2);
+describe('getQueriesPatch', () => {
+  test('basics', async () => {
+    const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+    const maxRecentQueriesSize = 0;
+    const queryManager = new QueryManager(
+      'client1',
+      schema.tables,
+      send,
+      () => () => {},
+      maxRecentQueriesSize,
+    );
+    // hash: 12hwg3ihkijhm
+    const ast1: AST = {
+      table: 'issue',
+      orderBy: [['id', 'asc']],
+    };
+    queryManager.add(ast1, undefined);
+    // hash 1hydj1t7t5yv4
+    const ast2: AST = {
+      table: 'issue',
+      orderBy: [['id', 'desc']],
+    };
+    queryManager.add(ast2, undefined);
 
-  const testReadTransaction = new TestTransaction();
-  testReadTransaction.scanEntries = [
-    ['d/client1/12hwg3ihkijhm', 'unused'],
-    ['d/client1/shouldBeDeleted', 'unused'],
-  ];
+    const testReadTransaction = new TestTransaction();
+    testReadTransaction.scanEntries = [
+      ['d/client1/12hwg3ihkijhm', 'unused'],
+      ['d/client1/shouldBeDeleted', 'unused'],
+    ];
 
-  const patch = await queryManager.getQueriesPatch(testReadTransaction);
-  expect(patch).toEqual(
-    new Map(
-      [
-        {
-          op: 'del',
-          hash: 'shouldBeDeleted',
-        },
-        {
-          op: 'put',
-          hash: '1hydj1t7t5yv4',
-          ast: {
-            table: 'issues',
-            orderBy: [['id', 'desc']],
-          } satisfies AST,
-        },
-      ].map(x => [x.hash, x] as const),
-    ),
-  );
-  expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
-});
+    const patch = await queryManager.getQueriesPatch(testReadTransaction);
+    expect(patch).toEqual(
+      new Map(
+        [
+          {
+            op: 'del',
+            hash: 'shouldBeDeleted',
+          },
+          {
+            op: 'put',
+            hash: '1hydj1t7t5yv4',
+            ast: {
+              table: 'issues',
+              orderBy: [['id', 'desc']],
+            } satisfies AST,
+            ttl: undefined,
+          },
+        ].map(x => [x.hash, x] as const),
+      ),
+    );
+    expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
+  });
 
-test('getQueriesPatch includes recent queries in desired', async () => {
-  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
-  const maxRecentQueriesSize = 2;
-  const queryManager = new QueryManager(
-    'client1',
-    schema.tables,
-    send,
-    () => () => {},
-    maxRecentQueriesSize,
-  );
-  const ast1: AST = {
-    table: 'issue',
-    orderBy: [['id', 'asc']],
-  };
-  const remove1 = queryManager.add(ast1);
-  const ast2: AST = {
-    table: 'issue',
-    orderBy: [['id', 'desc']],
-  };
-  const remove2 = queryManager.add(ast2);
-  const ast3: AST = {
-    table: 'user',
-    orderBy: [['id', 'asc']],
-  };
-  const remove3 = queryManager.add(ast3);
-  const ast4: AST = {
-    table: 'user',
-    orderBy: [['id', 'desc']],
-  };
-  const remove4 = queryManager.add(ast4);
-  remove1();
-  remove2();
-  remove3();
-  remove4();
+  describe('add a second query with same hash', () => {
+    let send: Mock<(arg: ChangeDesiredQueriesMessage) => void>;
+    let queryManager: QueryManager;
 
-  // ast1 and ast2 are actually removed since maxRecentQueriesSize is 2
+    beforeEach(() => {
+      send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+      const maxRecentQueriesSize = 0;
+      queryManager = new QueryManager(
+        'client1',
+        schema.tables,
+        send,
+        () => () => {},
+        maxRecentQueriesSize,
+      );
+    });
 
-  const testReadTransaction = new TestTransaction();
-  testReadTransaction.scanEntries = [
-    ['d/client1/12hwg3ihkijhm', 'unused'],
-    ['d/client1/shouldBeDeleted', 'unused'],
-  ];
+    async function add(ttl: number | undefined): Promise<number | undefined> {
+      // hash 1hydj1t7t5yv4
+      const ast: AST = {
+        table: 'issue',
+        orderBy: [['id', 'desc']],
+      };
+      queryManager.add(ast, ttl);
 
-  const patch = await queryManager.getQueriesPatch(testReadTransaction);
-  expect(patch).toMatchInlineSnapshot(`
-    Map {
-      "12hwg3ihkijhm" => {
-        "hash": "12hwg3ihkijhm",
-        "op": "del",
-      },
-      "shouldBeDeleted" => {
-        "hash": "shouldBeDeleted",
-        "op": "del",
-      },
-      "3c5d3uiyypuxu" => {
-        "ast": {
-          "alias": undefined,
-          "limit": undefined,
-          "orderBy": [
-            [
-              "id",
-              "asc",
-            ],
-          ],
-          "related": undefined,
-          "schema": undefined,
-          "start": undefined,
-          "table": "users",
-          "where": undefined,
-        },
-        "hash": "3c5d3uiyypuxu",
-        "op": "put",
-      },
-      "2q7cds8pild5w" => {
-        "ast": {
-          "alias": undefined,
-          "limit": undefined,
-          "orderBy": [
-            [
-              "id",
-              "desc",
-            ],
-          ],
-          "related": undefined,
-          "schema": undefined,
-          "start": undefined,
-          "table": "users",
-          "where": undefined,
-        },
-        "hash": "2q7cds8pild5w",
-        "op": "put",
-      },
+      const testReadTransaction = new TestTransaction();
+      testReadTransaction.scanEntries = [];
+      const patch = await queryManager.getQueriesPatch(testReadTransaction);
+      expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
+      const op = patch.get('1hydj1t7t5yv4');
+      v.assert(op, putOpSchema);
+      return op.ttl;
     }
-  `);
-  expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
+
+    test('with first having a ttl', async () => {
+      expect(await add(1000)).toBe(1000);
+      expect(send).toBeCalledTimes(1);
+      expect(send.mock.calls[0]).toMatchInlineSnapshot(`
+        [
+          [
+            "changeDesiredQueries",
+            {
+              "desiredQueriesPatch": [
+                {
+                  "ast": {
+                    "alias": undefined,
+                    "limit": undefined,
+                    "orderBy": [
+                      [
+                        "id",
+                        "desc",
+                      ],
+                    ],
+                    "related": undefined,
+                    "schema": undefined,
+                    "start": undefined,
+                    "table": "issues",
+                    "where": undefined,
+                  },
+                  "hash": "1hydj1t7t5yv4",
+                  "op": "put",
+                  "ttl": 1000,
+                },
+              ],
+            },
+          ],
+        ]
+      `);
+
+      send.mockClear();
+      expect(await add(2000)).toBe(2000);
+      expect(send).toBeCalledTimes(1);
+      expect(send.mock.calls[0]).toMatchInlineSnapshot(`
+        [
+          [
+            "changeDesiredQueries",
+            {
+              "desiredQueriesPatch": [
+                {
+                  "ast": {
+                    "alias": undefined,
+                    "limit": undefined,
+                    "orderBy": [
+                      [
+                        "id",
+                        "desc",
+                      ],
+                    ],
+                    "related": undefined,
+                    "schema": undefined,
+                    "start": undefined,
+                    "table": "issues",
+                    "where": undefined,
+                  },
+                  "hash": "1hydj1t7t5yv4",
+                  "op": "put",
+                  "ttl": 2000,
+                },
+              ],
+            },
+          ],
+        ]
+      `);
+
+      send.mockClear();
+      expect(await add(500)).toBe(2000);
+      expect(send).toBeCalledTimes(0);
+
+      send.mockClear();
+      expect(await add(undefined)).toBe(2000);
+      expect(send).toBeCalledTimes(0);
+    });
+
+    test('with first NOT having a ttl', async () => {
+      expect(await add(undefined)).toBe(undefined);
+      expect(send).toBeCalledTimes(1);
+      expect(send.mock.calls[0]).toMatchInlineSnapshot(`
+        [
+          [
+            "changeDesiredQueries",
+            {
+              "desiredQueriesPatch": [
+                {
+                  "ast": {
+                    "alias": undefined,
+                    "limit": undefined,
+                    "orderBy": [
+                      [
+                        "id",
+                        "desc",
+                      ],
+                    ],
+                    "related": undefined,
+                    "schema": undefined,
+                    "start": undefined,
+                    "table": "issues",
+                    "where": undefined,
+                  },
+                  "hash": "1hydj1t7t5yv4",
+                  "op": "put",
+                  "ttl": undefined,
+                },
+              ],
+            },
+          ],
+        ]
+      `);
+
+      send.mockClear();
+      expect(await add(undefined)).toBe(undefined);
+      expect(send).toBeCalledTimes(0);
+
+      send.mockClear();
+      expect(await add(1000)).toBe(1000);
+      expect(send).toBeCalledTimes(1);
+      expect(send.mock.calls[0]).toMatchInlineSnapshot(`
+        [
+          [
+            "changeDesiredQueries",
+            {
+              "desiredQueriesPatch": [
+                {
+                  "ast": {
+                    "alias": undefined,
+                    "limit": undefined,
+                    "orderBy": [
+                      [
+                        "id",
+                        "desc",
+                      ],
+                    ],
+                    "related": undefined,
+                    "schema": undefined,
+                    "start": undefined,
+                    "table": "issues",
+                    "where": undefined,
+                  },
+                  "hash": "1hydj1t7t5yv4",
+                  "op": "put",
+                  "ttl": 1000,
+                },
+              ],
+            },
+          ],
+        ]
+      `);
+
+      send.mockClear();
+      expect(await add(undefined)).toBe(1000);
+      expect(send).toBeCalledTimes(0);
+    });
+  });
+
+  test('getQueriesPatch includes recent queries in desired', async () => {
+    const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+    const maxRecentQueriesSize = 2;
+    const queryManager = new QueryManager(
+      'client1',
+      schema.tables,
+      send,
+      () => () => {},
+      maxRecentQueriesSize,
+    );
+    const ast1: AST = {
+      table: 'issue',
+      orderBy: [['id', 'asc']],
+    };
+    const remove1 = queryManager.add(ast1, undefined);
+    const ast2: AST = {
+      table: 'issue',
+      orderBy: [['id', 'desc']],
+    };
+    const remove2 = queryManager.add(ast2, undefined);
+    const ast3: AST = {
+      table: 'user',
+      orderBy: [['id', 'asc']],
+    };
+    const remove3 = queryManager.add(ast3, undefined);
+    const ast4: AST = {
+      table: 'user',
+      orderBy: [['id', 'desc']],
+    };
+    const remove4 = queryManager.add(ast4, undefined);
+    remove1();
+    remove2();
+    remove3();
+    remove4();
+
+    // ast1 and ast2 are actually removed since maxRecentQueriesSize is 2
+
+    const testReadTransaction = new TestTransaction();
+    testReadTransaction.scanEntries = [
+      ['d/client1/12hwg3ihkijhm', 'unused'],
+      ['d/client1/shouldBeDeleted', 'unused'],
+    ];
+
+    const patch = await queryManager.getQueriesPatch(testReadTransaction);
+    expect(patch).toMatchInlineSnapshot(`
+      Map {
+        "12hwg3ihkijhm" => {
+          "hash": "12hwg3ihkijhm",
+          "op": "del",
+        },
+        "shouldBeDeleted" => {
+          "hash": "shouldBeDeleted",
+          "op": "del",
+        },
+        "3c5d3uiyypuxu" => {
+          "ast": {
+            "alias": undefined,
+            "limit": undefined,
+            "orderBy": [
+              [
+                "id",
+                "asc",
+              ],
+            ],
+            "related": undefined,
+            "schema": undefined,
+            "start": undefined,
+            "table": "users",
+            "where": undefined,
+          },
+          "hash": "3c5d3uiyypuxu",
+          "op": "put",
+          "ttl": undefined,
+        },
+        "2q7cds8pild5w" => {
+          "ast": {
+            "alias": undefined,
+            "limit": undefined,
+            "orderBy": [
+              [
+                "id",
+                "desc",
+              ],
+            ],
+            "related": undefined,
+            "schema": undefined,
+            "start": undefined,
+            "table": "users",
+            "where": undefined,
+          },
+          "hash": "2q7cds8pild5w",
+          "op": "put",
+          "ttl": undefined,
+        },
+      }
+    `);
+    expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
+  });
 });
 
 test('gotCallback, query already got', () => {
@@ -806,8 +1006,9 @@ test('gotCallback, query already got', () => {
     orderBy: [['id', 'asc']],
   };
 
-  const gotCalback1 = vi.fn<(got: boolean) => void>();
-  queryManager.add(ast, gotCalback1);
+  const gotCallback1 = vi.fn<(got: boolean) => void>();
+  const ttl = 200;
+  queryManager.add(ast, ttl, gotCallback1);
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
     'changeDesiredQueries',
@@ -826,19 +1027,20 @@ test('gotCallback, query already got', () => {
             limit: undefined,
             schema: undefined,
           } satisfies AST,
+          ttl,
         },
       ],
     },
   ]);
 
-  expect(gotCalback1).nthCalledWith(1, true);
+  expect(gotCallback1).nthCalledWith(1, true);
 
-  const gotCalback2 = vi.fn<(got: boolean) => void>();
-  queryManager.add(ast, gotCalback2);
+  const gotCallback2 = vi.fn<(got: boolean) => void>();
+  queryManager.add(ast, ttl, gotCallback2);
   expect(send).toBeCalledTimes(1);
 
-  expect(gotCalback2).nthCalledWith(1, true);
-  expect(gotCalback1).toBeCalledTimes(1);
+  expect(gotCallback2).nthCalledWith(1, true);
+  expect(gotCallback1).toBeCalledTimes(1);
 });
 
 test('gotCallback, query got after add', () => {
@@ -862,7 +1064,8 @@ test('gotCallback, query got after add', () => {
   };
 
   const gotCalback1 = vi.fn<(got: boolean) => void>();
-  queryManager.add(ast, gotCalback1);
+  const ttl = undefined;
+  queryManager.add(ast, ttl, gotCalback1);
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
     'changeDesiredQueries',
@@ -881,6 +1084,7 @@ test('gotCallback, query got after add', () => {
             limit: undefined,
             schema: undefined,
           } satisfies AST,
+          ttl,
         },
       ],
     },
@@ -920,7 +1124,8 @@ test('gotCallback, query got after add then removed', () => {
   };
 
   const gotCalback1 = vi.fn<(got: boolean) => void>();
-  queryManager.add(ast, gotCalback1);
+  const ttl = 100;
+  queryManager.add(ast, ttl, gotCalback1);
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
     'changeDesiredQueries',
@@ -939,6 +1144,7 @@ test('gotCallback, query got after add then removed', () => {
             limit: undefined,
             schema: undefined,
           } satisfies AST,
+          ttl,
         },
       ],
     },
@@ -988,7 +1194,8 @@ test('gotCallback, query got after subscription removed', () => {
   };
 
   const gotCalback1 = vi.fn<(got: boolean) => void>();
-  const remove = queryManager.add(ast, gotCalback1);
+  const ttl = 50;
+  const remove = queryManager.add(ast, ttl, gotCalback1);
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
     'changeDesiredQueries',
@@ -1007,6 +1214,7 @@ test('gotCallback, query got after subscription removed', () => {
             limit: undefined,
             schema: undefined,
           } satisfies AST,
+          ttl,
         },
       ],
     },
@@ -1082,10 +1290,14 @@ describe('queriesPatch with lastPatch', () => {
       0,
     );
 
-    const clean = queryManager.add({
-      table: 'issue',
-      orderBy: [['id', 'asc']],
-    });
+    const clean = queryManager.add(
+      {
+        table: 'issue',
+        orderBy: [['id', 'asc']],
+      },
+      undefined,
+      undefined,
+    );
     const testReadTransaction = new TestTransaction();
 
     // patch and lastPatch are the same

@@ -584,7 +584,7 @@ describe('view-syncer/service', () => {
       queries: {
         'query-hash1': {
           ast: ISSUES_QUERY,
-          desiredBy: {foo: {stateVersion: '00', minorVersion: 1}},
+          desiredBy: {foo: {version: {stateVersion: '00', minorVersion: 1}}},
           id: 'query-hash1',
         },
       },
@@ -643,7 +643,7 @@ describe('view-syncer/service', () => {
         },
         'query-hash2': {
           ast: USERS_QUERY,
-          desiredBy: {foo: {stateVersion: '00', minorVersion: 2}},
+          desiredBy: {foo: {version: {stateVersion: '00', minorVersion: 2}}},
           id: 'query-hash2',
         },
       },

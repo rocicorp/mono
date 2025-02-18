@@ -142,6 +142,9 @@ export type DesiresRow = {
   queryHash: string;
   patchVersion: string;
   deleted: boolean | null;
+  ttl: number | null;
+  expiresAt: number | null;
+  inactivatedAt: number | null;
 };
 
 function createDesiresTable(shardID: string) {
@@ -152,6 +155,9 @@ CREATE TABLE ${schema(shardID)}.desires (
   "queryHash"          TEXT,
   "patchVersion"       TEXT NOT NULL,
   "deleted"            BOOL,  -- put vs del "desired" query
+  "ttl"                INTERVAL,  -- Time to live for this client
+  "expiresAt"          TIMESTAMPTZ,  -- Time at which this row expires
+  "inactivatedAt"      TIMESTAMPTZ,  -- Time at which this row was inactivated
 
   PRIMARY KEY ("clientGroupID", "clientID", "queryHash"),
 
@@ -172,6 +178,12 @@ CREATE TABLE ${schema(shardID)}.desires (
 -- For catchup patches.
 CREATE INDEX desires_patch_version
   ON ${schema(shardID)}.desires ("patchVersion");
+
+CREATE INDEX desires_expires_at
+  ON ${schema(shardID)}.desires ("expiresAt");
+
+CREATE INDEX desires_inactivated_at
+  ON ${schema(shardID)}.desires ("inactivatedAt");
 `;
 }
 
