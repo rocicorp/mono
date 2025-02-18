@@ -1,1 +1,2 @@
-export {createExpoSQLiteStore, ExpoSQLiteTransaction} from './store.ts';
+export {createExpoSQLiteStore} from './store.ts';
+export {ExpoSQLiteTransaction} from './transaction.ts';
