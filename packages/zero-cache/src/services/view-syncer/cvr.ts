@@ -307,7 +307,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   );
   readonly #replacedRows = new CustomKeyMap<RowID, boolean>(rowIDString);
 
-  #existingRows: Promise<RowRecord[]> | undefined = undefined;
+  #existingRows: Promise<Iterable<RowRecord>> | undefined = undefined;
 
   /**
    * @param stateVersion The `stateVersion` at which the queries were executed.
@@ -371,7 +371,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
   async #lookupRowsForExecutedAndRemovedQueries(
     lc: LogContext,
-  ): Promise<RowRecord[]> {
+  ): Promise<Iterable<RowRecord>> {
     const results = new CustomKeyMap<RowID, RowRecord>(rowIDString);
 
     if (this.#removedOrExecutedQueryIDs.size === 0) {
@@ -400,7 +400,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         ...this.#removedOrExecutedQueryIDs,
       ]}`,
     );
-    return [...results.values()];
+    return results.values();
   }
 
   /**
