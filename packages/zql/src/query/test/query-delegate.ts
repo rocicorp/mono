@@ -30,7 +30,7 @@ export class QueryDelegateImpl implements QueryDelegate {
   readonly #sources: Record<string, Source> = makeSources();
   readonly #commitListeners: Set<CommitListener> = new Set();
 
-  readonly addedServerQueries: AST[] = [];
+  readonly addedServerQueries: {ast: AST; ttl: number | undefined}[] = [];
   readonly gotCallbacks: (GotCallback | undefined)[] = [];
   synchronouslyCallNextGotCallback = false;
 
@@ -54,8 +54,12 @@ export class QueryDelegateImpl implements QueryDelegate {
       listener();
     }
   }
-  addServerQuery(ast: AST, gotCallback?: GotCallback | undefined): () => void {
-    this.addedServerQueries.push(ast);
+  addServerQuery(
+    ast: AST,
+    ttl?: number | undefined,
+    gotCallback?: GotCallback | undefined,
+  ): () => void {
+    this.addedServerQueries.push({ast, ttl});
     this.gotCallbacks.push(gotCallback);
     if (this.synchronouslyCallNextGotCallback) {
       this.synchronouslyCallNextGotCallback = false;
