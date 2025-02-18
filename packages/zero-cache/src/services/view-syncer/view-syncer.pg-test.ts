@@ -1,4 +1,4 @@
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {h128} from '../../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
@@ -550,6 +550,7 @@ describe('view-syncer/service', () => {
   };
 
   beforeEach(async () => {
+    vi.useFakeTimers();
     ({
       storageDB,
       replicaDbFile,
@@ -569,6 +570,7 @@ describe('view-syncer/service', () => {
   });
 
   afterEach(async () => {
+    vi.useRealTimers();
     await vs.stop();
     await viewSyncerDone;
     await testDBs.drop(cvrDB);

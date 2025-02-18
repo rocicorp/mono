@@ -603,8 +603,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
                 );
                 break;
               case 'del':
+                // This is no longer delete. It is used to mark a query as
+                // inactive. After that the eviction policy will take care of
+                // actually deleting it.
                 patches.push(
-                  ...updater.deleteDesiredQueries(clientID, [patch.hash]),
+                  ...updater.markQueryAsInactive(clientID, patch.hash),
                 );
                 break;
               case 'clear':
@@ -707,6 +710,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       // Convert queries to their transformed ast's and hashes
       const transformationHashToHash = new Map<string, string>();
+      const now = Date.now();
       const serverQueries = Object.entries(cvr.queries).map(([id, q]) => {
         const {query, hash: transformationHash} = transformAndHashQuery(
           lc,
@@ -716,22 +720,32 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           q.internal,
         );
         transformationHashToHash.set(transformationHash, id);
+
         return {
           id,
           // TODO(mlaw): follow up to handle the case where we statically determine
           // the query cannot be run and is `undefined`.
           ast: query,
           transformationHash,
-          desired: q.internal || Object.keys(q.desiredBy).length > 0,
+          // desired: q.internal || Object.keys(q.desiredBy).length > 0,
+          expired: !q.internal && q.expiresAt && q.expiresAt < now,
         };
       });
 
       const addQueries = serverQueries.filter(
-        q => q.desired && !hydratedQueries.has(q.transformationHash),
+        q => !q.expired && !hydratedQueries.has(q.transformationHash),
       );
-      const removeQueries = serverQueries.filter(q => !q.desired);
+      // TODO(arv): Check the desired value after inactivating a query. Does the
+      // current data model make sense? I think we can keep the concept but we
+      // can not remove if desired is false. Instead we need to remove based on
+      // expiration time and age if there is no more space.
+      const removeQueries = serverQueries.filter(q => q.expired);
+      //  const removeQueries = serverQueries.filter(q => q.
+
+      // TODO(arv): Add expired queries to removeQueries
+
       const desiredQueries = new Set(
-        serverQueries.filter(q => q.desired).map(q => q.transformationHash),
+        serverQueries.filter(q => !q.expired).map(q => q.transformationHash),
       );
       const unhydrateQueries = [...hydratedQueries].filter(
         transformationHash => !desiredQueries.has(transformationHash),
@@ -822,6 +836,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       const pipelines = this.#pipelines;
+
       function* generateRowChanges() {
         for (const q of addQueries) {
           lc.debug?.(`adding pipeline for query ${q.id}`, q.ast);

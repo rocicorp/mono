@@ -280,6 +280,36 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     return patches;
   }
 
+  markQueryAsInactive(clientID: string, hash: string): PatchToVersion[] {
+    const patches: PatchToVersion[] = [];
+    const client = this.#ensureClient(clientID);
+    const current = new Set(client.desiredQueryIDs);
+    const unwanted = new Set([hash]);
+    const remove = intersection(unwanted, current);
+    if (remove.size === 0) {
+      return patches;
+    }
+    const newVersion = this._ensureNewVersion();
+    client.desiredQueryIDs = [...difference(current, remove)].sort(compareUTF8);
+
+    for (const id of remove) {
+      const query = this._cvr.queries[id];
+      if (!query) {
+        continue; // Query itself has already been removed. Should not happen?
+      }
+      assertNotInternal(query);
+
+      delete query.desiredBy[clientID];
+      this._cvrStore.putQuery(query);
+      this._cvrStore.insertDesiredQuery(newVersion, query, client, true);
+      patches.push({
+        toVersion: newVersion,
+        patch: {type: 'query', op: 'del', id, clientID},
+      });
+    }
+    return patches;
+  }
+
   clearDesiredQueries(clientID: string): PatchToVersion[] {
     const client = this.#ensureClient(clientID);
     return this.deleteDesiredQueries(clientID, client.desiredQueryIDs);
@@ -346,7 +376,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   );
   readonly #replacedRows = new CustomKeyMap<RowID, boolean>(rowIDString);
 
-  #existingRows: Promise<RowRecord[]> | undefined = undefined;
+  #existingRows: Promise<Iterable<RowRecord>> | undefined = undefined;
 
   /**
    * @param stateVersion The `stateVersion` at which the queries were executed.
@@ -410,7 +440,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
   async #lookupRowsForExecutedAndRemovedQueries(
     lc: LogContext,
-  ): Promise<RowRecord[]> {
+  ): Promise<Iterable<RowRecord>> {
     const results = new CustomKeyMap<RowID, RowRecord>(rowIDString);
 
     if (this.#removedOrExecutedQueryIDs.size === 0) {
@@ -439,7 +469,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         ...this.#removedOrExecutedQueryIDs,
       ]}`,
     );
-    return [...results.values()];
+    return results.values();
   }
 
   /**
