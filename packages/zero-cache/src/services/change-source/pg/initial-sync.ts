@@ -331,7 +331,7 @@ async function copy(
   return totalRows;
 }
 
-async function runAfterIO(fn: () => void) {
+function runAfterIO(fn: () => void): Promise<void> {
   const {promise, resolve, reject} = resolver();
   setTimeout(() => {
     try {
