@@ -63,6 +63,7 @@ export async function runSchemaMigrations(
   setupMigration: Migration,
   incrementalMigrationMap: IncrementalMigrationMap,
 ): Promise<void> {
+  const start = Date.now();
   log = log.withContext(
     'initSchema',
     randInt(0, Number.MAX_SAFE_INTEGER).toString(36),
@@ -138,7 +139,11 @@ export async function runSchemaMigrations(
     }
 
     assert(versions.dataVersion === codeVersion);
-    log.info?.(`Running ${debugName} at schema v${codeVersion}`);
+    log.info?.(
+      `Running ${debugName} at schema v${codeVersion} (${
+        Date.now() - start
+      } ms)`,
+    );
   } catch (e) {
     log.error?.('Error in ensureSchemaMigrated', e);
     throw e;
