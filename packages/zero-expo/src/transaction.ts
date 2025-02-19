@@ -2,7 +2,6 @@ import * as SQLite from 'expo-sqlite';
 import {SQLiteTransaction} from '../../replicache/src/kv/sqlite-store.ts';
 
 export class ExpoSQLiteTransaction extends SQLiteTransaction {
-  readonly #db: SQLite.SQLiteDatabase;
   #tx:
     | Parameters<
         Parameters<SQLite.SQLiteDatabase['withExclusiveTransactionAsync']>[0]
@@ -16,16 +15,16 @@ export class ExpoSQLiteTransaction extends SQLiteTransaction {
   }>();
   #txEnded = false;
 
-  constructor(db: SQLite.SQLiteDatabase) {
+  // eslint-disable-next-line @typescript-eslint/parameter-properties
+  constructor(private readonly _db: SQLite.SQLiteDatabase) {
     super();
-    this.#db = db;
   }
   // expo-sqlite doesn't support readonly
   start() {
     return new Promise<void>((resolve, reject) => {
       let didResolve = false;
       try {
-        void this.#db.withExclusiveTransactionAsync(async tx => {
+        void this._db.withExclusiveTransactionAsync(async tx => {
           didResolve = true;
           this.#tx = tx;
           resolve();

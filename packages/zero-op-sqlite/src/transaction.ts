@@ -14,18 +14,17 @@ export class OPSQLiteTransaction extends SQLiteTransaction {
   }>();
   #txEnded = false;
 
-  // TODO: where is the type for OPSQLiteConnection?
   // eslint-disable-next-line @typescript-eslint/parameter-properties
-  constructor(private readonly _db: OPSQLite.OPSQLiteConnection) {
+  constructor(private readonly _db: ReturnType<typeof OPSQLite.open>) {
     super();
   }
 
   // op-sqlite doesn't support readonly
-  start() {
-    return new Promise<void>((resolve, reject) => {
+  async start() {
+    await new Promise<void>((resolve, reject) => {
       let didResolve = false;
       try {
-        this._db.transaction(async tx => {
+        void this._db.transaction(async tx => {
           didResolve = true;
           this.#tx = tx;
           resolve();
@@ -35,7 +34,7 @@ export class OPSQLiteTransaction extends SQLiteTransaction {
             // Lets artificially keep it open until we commit.
             await this.#waitForTransactionCommitted();
             this.#setTransactionEnded(false);
-          } catch {
+          } catch (error) {
             this.#setTransactionEnded(true);
           }
         });
