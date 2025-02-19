@@ -58,6 +58,7 @@ import {
 import {DrainCoordinator} from './drain-coordinator.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
 import {initViewSyncerSchema} from './schema/init.ts';
+import type {ClientQueryRecord} from './schema/types.ts';
 import {Snapshotter} from './snapshotter.ts';
 import {pickToken, type SyncContext, ViewSyncerService} from './view-syncer.ts';
 
@@ -664,7 +665,7 @@ describe('view-syncer/service', () => {
           ast: ISSUES_QUERY,
           desiredBy: {
             foo: {
-              inactivatedAt: expect.closeTo(inactivatedAt, 10),
+              inactivatedAt: expect.any(Number),
               ttl: undefined,
               version: {minorVersion: 2, stateVersion: '00'},
             },
@@ -679,6 +680,14 @@ describe('view-syncer/service', () => {
       },
       version: {stateVersion: '00', minorVersion: 2},
     });
+    expect(
+      (cvr.queries['query-hash1'] as ClientQueryRecord).desiredBy.foo
+        .inactivatedAt,
+    ).toBeGreaterThanOrEqual(inactivatedAt);
+    expect(
+      (cvr.queries['query-hash1'] as ClientQueryRecord).desiredBy.foo
+        .inactivatedAt,
+    ).toBeLessThanOrEqual(inactivatedAt + 10);
   });
 
   test('initial hydration', async () => {
