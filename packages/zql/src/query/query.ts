@@ -10,10 +10,11 @@ import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {TypedView} from './typed-view.ts';
 
 type Selector<E extends TableSchema> = keyof E['columns'];
-export type NoJsonSelector<T extends TableSchema> = Exclude<
-  Selector<T>,
-  JsonSelectors<T>
->;
+export type NoJsonSelector<T extends TableSchema, Op extends Operator = Operator> = 
+  // Allow json selectors when using IS or IS NOT operators
+  Op extends 'IS' | 'IS NOT' 
+    ? Selector<T>
+    : Exclude<Selector<T>, JsonSelectors<T>>;
 type JsonSelectors<E extends TableSchema> = {
   [K in keyof E['columns']]: E['columns'][K] extends {type: 'json'} ? K : never;
 }[keyof E['columns']];
@@ -143,7 +144,7 @@ export interface Query<
   >;
 
   where<
-    TSelector extends NoJsonSelector<PullTableSchema<TTable, TSchema>>,
+    TSelector extends NoJsonSelector<PullTableSchema<TTable, TSchema>, TOperator>,
     TOperator extends Operator,
   >(
     field: TSelector,
