@@ -143,8 +143,9 @@ export type DesiresRow = {
   patchVersion: string;
   deleted: boolean | null;
   ttl: number | null;
-  expiresAt: number | null;
   inactivatedAt: number | null;
+  /** @deprecated */
+  expiresAt?: number | null;
 };
 
 function createDesiresTable(shardID: string) {
@@ -156,7 +157,7 @@ CREATE TABLE ${schema(shardID)}.desires (
   "patchVersion"       TEXT NOT NULL,
   "deleted"            BOOL,  -- put vs del "desired" query
   "ttl"                INTERVAL,  -- Time to live for this client
-  "expiresAt"          TIMESTAMPTZ,  -- Time at which this row expires
+  "expiresAt"          TIMESTAMPTZ,  -- DEPRECATED Time at which this row expires
   "inactivatedAt"      TIMESTAMPTZ,  -- Time at which this row was inactivated
 
   PRIMARY KEY ("clientGroupID", "clientID", "queryHash"),

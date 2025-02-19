@@ -202,7 +202,15 @@ export class CVRStore {
         tx<QueriesRow[]>`
         SELECT * FROM ${this.#cvr('queries')} 
           WHERE "clientGroupID" = ${id} AND (deleted IS NULL OR deleted = FALSE)`,
-        tx<DesiresRow[]>`SELECT * FROM ${this.#cvr('desires')}
+        tx<DesiresRow[]>`SELECT 
+          "clientGroupID",
+          "clientID",
+          "queryHash",
+          "patchVersion",
+          "deleted",
+          EXTRACT(EPOCH FROM "ttl") * 1000 AS "ttl",
+          "inactivatedAt"
+          FROM ${this.#cvr('desires')}
           WHERE "clientGroupID" = ${id} AND (deleted IS NULL OR deleted = FALSE)`,
       ]);
 
@@ -278,9 +286,8 @@ export class CVRStore {
       const query = cvr.queries[row.queryHash];
       if (query && !query.internal) {
         query.desiredBy[row.clientID] = {
-          expiresAt: row.expiresAt,
-          inactivatedAt: row.inactivatedAt,
-          ttl: row.ttl,
+          inactivatedAt: row.inactivatedAt ?? undefined,
+          ttl: row.ttl ?? undefined,
           version: versionFromString(row.patchVersion),
         };
       }
@@ -457,19 +464,17 @@ export class CVRStore {
     query: {id: string},
     client: {id: string},
     deleted: boolean,
-    expiresAt: number | null,
-    inactivatedAt: number | null,
-    ttl: number | null,
+    inactivatedAt: number | undefined,
+    ttl: number | undefined,
   ): void {
     const change: DesiresRow = {
       clientGroupID: this.#id,
       clientID: client.id,
       deleted,
-      expiresAt,
-      inactivatedAt,
+      inactivatedAt: inactivatedAt ?? null,
       patchVersion: versionString(newVersion),
       queryHash: query.id,
-      ttl,
+      ttl: ttl ?? null,
     };
     this.#writes.add({
       stats: {desires: 1},
