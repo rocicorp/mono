@@ -163,22 +163,20 @@ export const internalQueryRecordSchema = baseQueryRecordSchema.extend({
 export type InternalQueryRecord = v.Infer<typeof internalQueryRecordSchema>;
 
 const clientLRUSchema = v.object({
-  /**
-   * The time to delete the query. This is the {@linkcode ttl} plus the {@linkcode inactivatedAt}.
-   */
-  expiresAt: v.number().nullable(),
+  // /** @deprecated */
+  expiresAt: v.number().nullable().optional(),
 
   /**
    * The time at which the query was last inactivated. If this undefined or
    * missing then the query is active.
    */
-  inactivatedAt: v.number().nullable(),
+  inactivatedAt: v.number().nullable().optional(),
 
   /**
    * TTL, time to live in milliseconds. If the query is not updated within this time.
    * The time to live is the time after it has become inactive.
    */
-  ttl: v.number().nullable(),
+  ttl: v.number().nullable().optional(),
 
   /**
    * The version at which the desired query info changed (i.e. individual `patchVersion`s).
