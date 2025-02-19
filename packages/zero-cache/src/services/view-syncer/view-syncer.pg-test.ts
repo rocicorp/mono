@@ -625,6 +625,7 @@ describe('view-syncer/service', () => {
       },
     ]);
 
+    const inactivatedAt = Date.now();
     // Change the set of queries.
     await vs.changeDesiredQueries(SYNC_CONTEXT, [
       'changeDesiredQueries',
@@ -648,7 +649,7 @@ describe('view-syncer/service', () => {
     expect(cvr).toMatchObject({
       clients: {
         foo: {
-          desiredQueryIDs: ['query-hash2'],
+          desiredQueryIDs: ['query-hash2', 'query-hash1'],
           id: 'foo',
         },
       },
@@ -658,6 +659,17 @@ describe('view-syncer/service', () => {
           ast: EXPECTED_LMIDS_AST,
           internal: true,
           id: 'lmids',
+        },
+        'query-hash1': {
+          ast: ISSUES_QUERY,
+          desiredBy: {
+            foo: {
+              inactivatedAt: expect.closeTo(inactivatedAt, 10),
+              ttl: undefined,
+              version: {minorVersion: 2, stateVersion: '00'},
+            },
+          },
+          id: 'query-hash1',
         },
         'query-hash2': {
           ast: USERS_QUERY,
