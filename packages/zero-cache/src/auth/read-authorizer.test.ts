@@ -1,4 +1,5 @@
 import {describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
 import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
 import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
@@ -17,11 +18,10 @@ import {
 } from '../../../zql/src/query/query-impl.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {transformQuery} from './read-authorizer.ts';
-import {consoleLogSink, LogContext} from '@rocicorp/logger';
 
 const mockDelegate = {} as QueryDelegate;
 
-const lc = new LogContext('debug', {}, consoleLogSink);
+const lc = createSilentLogContext();
 
 function ast(q: Query<ZeroSchema, string>) {
   return (q as QueryImpl<ZeroSchema, string>)[astForTestingSymbol];

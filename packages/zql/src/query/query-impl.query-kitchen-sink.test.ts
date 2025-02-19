@@ -324,180 +324,183 @@ describe('kitchen sink query', () => {
     expect(queryDelegate.addedServerQueries).toMatchInlineSnapshot(`
       [
         {
-          "limit": 6,
-          "orderBy": [
-            [
-              "title",
-              "asc",
+          "ast": {
+            "limit": 6,
+            "orderBy": [
+              [
+                "title",
+                "asc",
+              ],
+              [
+                "id",
+                "asc",
+              ],
             ],
-            [
-              "id",
-              "asc",
-            ],
-          ],
-          "related": [
-            {
-              "correlation": {
-                "childField": [
-                  "id",
-                ],
-                "parentField": [
-                  "ownerId",
-                ],
-              },
-              "subquery": {
-                "alias": "owner",
-                "orderBy": [
-                  [
+            "related": [
+              {
+                "correlation": {
+                  "childField": [
                     "id",
-                    "asc",
                   ],
-                ],
-                "table": "user",
-              },
-              "system": "client",
-            },
-            {
-              "correlation": {
-                "childField": [
-                  "issueId",
-                ],
-                "parentField": [
-                  "id",
-                ],
-              },
-              "subquery": {
-                "alias": "comments",
-                "limit": 2,
-                "orderBy": [
-                  [
-                    "createdAt",
-                    "desc",
+                  "parentField": [
+                    "ownerId",
                   ],
-                  [
-                    "id",
-                    "asc",
+                },
+                "subquery": {
+                  "alias": "owner",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
                   ],
-                ],
-                "related": [
-                  {
-                    "correlation": {
-                      "childField": [
-                        "commentId",
-                      ],
-                      "parentField": [
-                        "id",
-                      ],
-                    },
-                    "subquery": {
-                      "alias": "revisions",
-                      "limit": 1,
-                      "orderBy": [
-                        [
-                          "id",
-                          "desc",
-                        ],
-                      ],
-                      "table": "revision",
-                    },
-                    "system": "client",
-                  },
-                ],
-                "table": "comment",
+                  "table": "user",
+                },
+                "system": "client",
               },
-              "system": "client",
-            },
-            {
-              "correlation": {
-                "childField": [
-                  "issueId",
-                ],
-                "parentField": [
-                  "id",
-                ],
-              },
-              "hidden": true,
-              "subquery": {
-                "alias": "labels",
-                "orderBy": [
-                  [
+              {
+                "correlation": {
+                  "childField": [
                     "issueId",
-                    "asc",
                   ],
-                  [
-                    "labelId",
-                    "asc",
+                  "parentField": [
+                    "id",
                   ],
-                ],
-                "related": [
-                  {
-                    "correlation": {
-                      "childField": [
-                        "id",
-                      ],
-                      "parentField": [
-                        "labelId",
-                      ],
-                    },
-                    "subquery": {
-                      "alias": "labels",
-                      "orderBy": [
-                        [
-                          "id",
-                          "asc",
+                },
+                "subquery": {
+                  "alias": "comments",
+                  "limit": 2,
+                  "orderBy": [
+                    [
+                      "createdAt",
+                      "desc",
+                    ],
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "related": [
+                    {
+                      "correlation": {
+                        "childField": [
+                          "commentId",
                         ],
-                      ],
-                      "table": "label",
+                        "parentField": [
+                          "id",
+                        ],
+                      },
+                      "subquery": {
+                        "alias": "revisions",
+                        "limit": 1,
+                        "orderBy": [
+                          [
+                            "id",
+                            "desc",
+                          ],
+                        ],
+                        "table": "revision",
+                      },
+                      "system": "client",
                     },
-                    "system": "client",
-                  },
-                ],
-                "table": "issueLabel",
-              },
-              "system": "client",
-            },
-          ],
-          "start": {
-            "exclusive": true,
-            "row": {
-              "id": "101",
-              "title": "Issue 1",
-            },
-          },
-          "table": "issue",
-          "where": {
-            "conditions": [
-              {
-                "left": {
-                  "name": "ownerId",
-                  "type": "column",
+                  ],
+                  "table": "comment",
                 },
-                "op": "IN",
-                "right": {
-                  "type": "literal",
-                  "value": [
-                    "001",
-                    "002",
-                    "003",
+                "system": "client",
+              },
+              {
+                "correlation": {
+                  "childField": [
+                    "issueId",
+                  ],
+                  "parentField": [
+                    "id",
                   ],
                 },
-                "type": "simple",
-              },
-              {
-                "left": {
-                  "name": "closed",
-                  "type": "column",
+                "hidden": true,
+                "subquery": {
+                  "alias": "labels",
+                  "orderBy": [
+                    [
+                      "issueId",
+                      "asc",
+                    ],
+                    [
+                      "labelId",
+                      "asc",
+                    ],
+                  ],
+                  "related": [
+                    {
+                      "correlation": {
+                        "childField": [
+                          "id",
+                        ],
+                        "parentField": [
+                          "labelId",
+                        ],
+                      },
+                      "subquery": {
+                        "alias": "labels",
+                        "orderBy": [
+                          [
+                            "id",
+                            "asc",
+                          ],
+                        ],
+                        "table": "label",
+                      },
+                      "system": "client",
+                    },
+                  ],
+                  "table": "issueLabel",
                 },
-                "op": "=",
-                "right": {
-                  "type": "literal",
-                  "value": false,
-                },
-                "type": "simple",
+                "system": "client",
               },
             ],
-            "type": "and",
+            "start": {
+              "exclusive": true,
+              "row": {
+                "id": "101",
+                "title": "Issue 1",
+              },
+            },
+            "table": "issue",
+            "where": {
+              "conditions": [
+                {
+                  "left": {
+                    "name": "ownerId",
+                    "type": "column",
+                  },
+                  "op": "IN",
+                  "right": {
+                    "type": "literal",
+                    "value": [
+                      "001",
+                      "002",
+                      "003",
+                    ],
+                  },
+                  "type": "simple",
+                },
+                {
+                  "left": {
+                    "name": "closed",
+                    "type": "column",
+                  },
+                  "op": "=",
+                  "right": {
+                    "type": "literal",
+                    "value": false,
+                  },
+                  "type": "simple",
+                },
+              ],
+              "type": "and",
+            },
           },
+          "ttl": undefined,
         },
       ]
     `);

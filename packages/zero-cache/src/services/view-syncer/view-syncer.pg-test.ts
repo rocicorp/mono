@@ -8,6 +8,7 @@ import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import type {ErrorBody} from '../../../../zero-protocol/src/error.ts';
 import type {
+  PokeEndBody,
   PokePartBody,
   PokeStartBody,
 } from '../../../../zero-protocol/src/poke.ts';
@@ -34,6 +35,7 @@ import {testDBs} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
+import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
 import {initChangeLog} from '../replicator/schema/change-log.ts';
@@ -436,24 +438,31 @@ async function setup(permissions: PermissionsConfig | undefined) {
   }
   const viewSyncerDone = vs.run();
 
-  function connect(ctx: SyncContext, desiredQueriesPatch: QueriesPatch) {
-    const stream = vs.initConnection(ctx, [
+  function connectWithQueueAndSource(
+    ctx: SyncContext,
+    desiredQueriesPatch: QueriesPatch,
+  ): {queue: Queue<Downstream>; source: Source<Downstream>} {
+    const source = vs.initConnection(ctx, [
       'initConnection',
       {desiredQueriesPatch},
     ]);
-    const downstream = new Queue<Downstream>();
+    const queue = new Queue<Downstream>();
 
     void (async function () {
       try {
-        for await (const msg of stream) {
-          await downstream.enqueue(msg);
+        for await (const msg of source) {
+          await queue.enqueue(msg);
         }
       } catch (e) {
-        await downstream.enqueueRejection(e);
+        await queue.enqueueRejection(e);
       }
     })();
 
-    return downstream;
+    return {queue, source};
+  }
+
+  function connect(ctx: SyncContext, desiredQueriesPatch: QueriesPatch) {
+    return connectWithQueueAndSource(ctx, desiredQueriesPatch).queue;
   }
 
   async function nextPoke(client: Queue<Downstream>): Promise<Downstream[]> {
@@ -486,6 +495,7 @@ async function setup(permissions: PermissionsConfig | undefined) {
     viewSyncerDone,
     replicator,
     connect,
+    connectWithQueueAndSource,
     nextPoke,
     expectNoPokes,
   };
@@ -521,6 +531,13 @@ describe('view-syncer/service', () => {
     ctx: SyncContext,
     desiredQueriesPatch: QueriesPatch,
   ) => Queue<Downstream>;
+  let connectWithQueueAndSource: (
+    ctx: SyncContext,
+    desiredQueriesPatch: QueriesPatch,
+  ) => {
+    queue: Queue<Downstream>;
+    source: Source<Downstream>;
+  };
   let nextPoke: (client: Queue<Downstream>) => Promise<Downstream[]>;
   let expectNoPokes: (client: Queue<Downstream>) => Promise<void>;
 
@@ -546,6 +563,7 @@ describe('view-syncer/service', () => {
       viewSyncerDone,
       replicator,
       connect,
+      connectWithQueueAndSource,
       nextPoke,
       expectNoPokes,
     } = await setup(permissionsAll));
@@ -578,14 +596,13 @@ describe('view-syncer/service', () => {
         foo: {
           desiredQueryIDs: ['query-hash1'],
           id: 'foo',
-          patchVersion: {stateVersion: '00', minorVersion: 1},
         },
       },
       id: '9876',
       queries: {
         'query-hash1': {
           ast: ISSUES_QUERY,
-          desiredBy: {foo: {stateVersion: '00', minorVersion: 1}},
+          desiredBy: {foo: {version: {stateVersion: '00', minorVersion: 1}}},
           id: 'query-hash1',
         },
       },
@@ -633,7 +650,6 @@ describe('view-syncer/service', () => {
         foo: {
           desiredQueryIDs: ['query-hash2'],
           id: 'foo',
-          patchVersion: {stateVersion: '00', minorVersion: 1},
         },
       },
       id: '9876',
@@ -645,7 +661,7 @@ describe('view-syncer/service', () => {
         },
         'query-hash2': {
           ast: USERS_QUERY,
-          desiredBy: {foo: {stateVersion: '00', minorVersion: 2}},
+          desiredBy: {foo: {version: {stateVersion: '00', minorVersion: 2}}},
           id: 'query-hash2',
         },
       },
@@ -670,12 +686,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "foo": [
                 {
@@ -911,6 +921,185 @@ describe('view-syncer/service', () => {
     `);
   });
 
+  test('delete client', async () => {
+    const {queue: client1} = connectWithQueueAndSource(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+
+    const {queue: client2, source: connectSource2} = connectWithQueueAndSource(
+      {...SYNC_CONTEXT, clientID: 'bar', wsID: 'ws2'},
+      [{op: 'put', hash: 'query-hash2', ast: USERS_QUERY}],
+    );
+
+    await nextPoke(client1);
+    await nextPoke(client2);
+
+    stateChanges.push({state: 'version-ready'});
+
+    await nextPoke(client1);
+    await nextPoke(client1);
+
+    await nextPoke(client2);
+    await nextPoke(client2);
+
+    expect(await cvrDB`SELECT * from cvr_abc.clients`).toMatchInlineSnapshot(
+      `
+      Result [
+        {
+          "clientGroupID": "9876",
+          "clientID": "foo",
+          "deleted": false,
+          "patchVersion": "00:01",
+        },
+        {
+          "clientGroupID": "9876",
+          "clientID": "bar",
+          "deleted": false,
+          "patchVersion": "00:02",
+        },
+      ]
+    `,
+    );
+
+    expect(await cvrDB`SELECT * from cvr_abc.desires`).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientGroupID": "9876",
+          "clientID": "foo",
+          "deleted": false,
+          "expiresAt": null,
+          "inactivatedAt": null,
+          "patchVersion": "00:01",
+          "queryHash": "query-hash1",
+          "ttl": null,
+        },
+        {
+          "clientGroupID": "9876",
+          "clientID": "bar",
+          "deleted": false,
+          "expiresAt": null,
+          "inactivatedAt": null,
+          "patchVersion": "00:02",
+          "queryHash": "query-hash2",
+          "ttl": null,
+        },
+      ]
+    `);
+
+    connectSource2.cancel();
+
+    await vs.deleteClients(SYNC_CONTEXT, [
+      'deleteClients',
+      {clientIDs: ['bar', 'no-such-client']},
+    ]);
+
+    expect(await nextPoke(client1)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "01",
+            "cookie": "01:01",
+            "pokeID": "01:01",
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "desiredQueriesPatches": {
+              "bar": [
+                {
+                  "hash": "query-hash2",
+                  "op": "del",
+                },
+              ],
+            },
+            "pokeID": "01:01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cookie": "01:01",
+            "pokeID": "01:01",
+          },
+        ],
+      ]
+    `);
+    expect(await nextPoke(client1)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "01:01",
+            "cookie": "01:02",
+            "pokeID": "01:02",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "gotQueriesPatch": [
+              {
+                "hash": "query-hash2",
+                "op": "del",
+              },
+            ],
+            "pokeID": "01:02",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cookie": "01:02",
+            "pokeID": "01:02",
+          },
+        ],
+      ]
+    `);
+
+    expect(await client1.dequeue()).toMatchInlineSnapshot(`
+      [
+        "deleteClients",
+        {
+          "clientIDs": [
+            "bar",
+            "no-such-client",
+          ],
+        },
+      ]
+    `);
+
+    expect(await cvrDB`SELECT * from cvr_abc.clients`).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientGroupID": "9876",
+          "clientID": "foo",
+          "deleted": false,
+          "patchVersion": "00:01",
+        },
+      ]
+    `);
+    expect(await cvrDB`SELECT * from cvr_abc.desires`).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientGroupID": "9876",
+          "clientID": "foo",
+          "deleted": false,
+          "expiresAt": null,
+          "inactivatedAt": null,
+          "patchVersion": "00:01",
+          "queryHash": "query-hash1",
+          "ttl": null,
+        },
+      ]
+    `);
+  });
+
   test('initial hydration, rows in multiple queries', async () => {
     const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
@@ -929,12 +1118,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "foo": [
                 {
@@ -1249,12 +1432,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "foo": [
                 {
@@ -1358,12 +1535,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "foo": [
                 {
@@ -1758,12 +1929,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "foo": [
                 {
@@ -1831,12 +1996,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "bar",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "bar": [
                 {
@@ -2012,12 +2171,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "foo": [
                 {
@@ -2186,12 +2339,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "foo": [
                 {
@@ -2240,12 +2387,10 @@ describe('view-syncer/service', () => {
     `);
 
     stateChanges.push({state: 'version-ready'});
-    const preAdvancement = (await nextPoke(client1))[0][1] as PokeStartBody;
+    const preAdvancement = (await nextPoke(client1))[2][1] as PokeEndBody;
     expect(preAdvancement).toEqual({
-      baseCookie: '00:01',
       cookie: '01',
       pokeID: '01',
-      schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
     });
 
     replicator.processTransaction(
@@ -2323,12 +2468,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "bar",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "bar": [
                 {
@@ -2412,12 +2551,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "bar",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "bar": [
                 {
@@ -2519,16 +2652,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-              {
-                "clientID": "bar",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "bar": [
                 {
@@ -2757,12 +2880,6 @@ describe('view-syncer/service', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "foo": [
                 {
@@ -3217,16 +3334,6 @@ describe('permissions', () => {
         [
           "pokePart",
           {
-            "clientsPatch": [
-              {
-                "clientID": "foo",
-                "op": "put",
-              },
-              {
-                "clientID": "bar",
-                "op": "put",
-              },
-            ],
             "desiredQueriesPatches": {
               "bar": [
                 {

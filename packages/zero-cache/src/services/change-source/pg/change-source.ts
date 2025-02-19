@@ -20,6 +20,7 @@ import {assert} from '../../../../../shared/src/asserts.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import {must} from '../../../../../shared/src/must.ts';
 import {
+  equals,
   intersection,
   symmetricDifferences,
 } from '../../../../../shared/src/set-utils.ts';
@@ -513,9 +514,9 @@ class ChangeMaker {
       case 'type':
         return []; // Nothing need be done for custom types.
       case 'origin':
-        // We do not set the `origin` option in the pgoutput parameters:
-        // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
-        throw new Error(`Unexpected ORIGIN message ${stringify(msg)}`);
+        // No need to detect replication loops since we are not a
+        // PG replication source.
+        return [];
       default:
         msg satisfies never;
         throw new Error(`Unexpected message type ${stringify(msg)}`);
@@ -803,7 +804,12 @@ export function relationDifferent(a: PublishedTableSpec, b: MessageRelation) {
     a.oid !== b.relationOid ||
     a.schema !== b.schema ||
     a.name !== b.name ||
-    !deepEqual(a.primaryKey, b.keyColumns)
+    // The MessageRelation's `keyColumns` field contains the columns in column
+    // declaration order, whereas the PublishedTableSpec's `primaryKey`
+    // contains the columns in primary key (i.e. index) order. Do an
+    // order-agnostic compare here since it is not possible to detect
+    // key-order changes from the MessageRelation message alone.
+    !equals(new Set(a.primaryKey), new Set(b.keyColumns))
   ) {
     return true;
   }

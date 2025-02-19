@@ -57,17 +57,20 @@ export function compareInstancesRows(a: InstancesRow, b: InstancesRow) {
 export type ClientsRow = {
   clientGroupID: string;
   clientID: string;
+  /** @deprecated */
   patchVersion: string;
+  /** @deprecated */
   deleted: boolean | null;
 };
 
 function createClientsTable(shardID: string) {
+  // patchVersion and deleted are not used. Remove after all readers are migrated.
   return `
 CREATE TABLE ${schema(shardID)}.clients (
   "clientGroupID"      TEXT,
   "clientID"           TEXT,
-  "patchVersion"       TEXT NOT NULL,  -- Version at which added or deleted
-  deleted              BOOL,           -- put vs del client patch
+  "patchVersion"       TEXT NOT NULL,  -- Deprecated
+  "deleted"            BOOL,           -- Deprecated
 
   PRIMARY KEY ("clientGroupID", "clientID"),
 
@@ -139,6 +142,10 @@ export type DesiresRow = {
   queryHash: string;
   patchVersion: string;
   deleted: boolean | null;
+  ttl: number | null;
+  inactivatedAt: number | null;
+  /** @deprecated */
+  expiresAt?: number | null;
 };
 
 function createDesiresTable(shardID: string) {
@@ -149,6 +156,9 @@ CREATE TABLE ${schema(shardID)}.desires (
   "queryHash"          TEXT,
   "patchVersion"       TEXT NOT NULL,
   "deleted"            BOOL,  -- put vs del "desired" query
+  "ttl"                INTERVAL,  -- Time to live for this client
+  "expiresAt"          TIMESTAMPTZ,  -- DEPRECATED Time at which this row expires
+  "inactivatedAt"      TIMESTAMPTZ,  -- Time at which this row was inactivated
 
   PRIMARY KEY ("clientGroupID", "clientID", "queryHash"),
 
@@ -169,6 +179,12 @@ CREATE TABLE ${schema(shardID)}.desires (
 -- For catchup patches.
 CREATE INDEX desires_patch_version
   ON ${schema(shardID)}.desires ("patchVersion");
+
+CREATE INDEX desires_expires_at
+  ON ${schema(shardID)}.desires ("expiresAt");
+
+CREATE INDEX desires_inactivated_at
+  ON ${schema(shardID)}.desires ("inactivatedAt");
 `;
 }
 

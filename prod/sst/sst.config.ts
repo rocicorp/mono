@@ -81,6 +81,9 @@ export default $config({
         ],
       },
       transform: {
+        service: {
+          healthCheckGracePeriodSeconds: 300, // same as health.startPeriod
+        },
         loadBalancer: {
           idleTimeout: 3600, // Keep idle connections alive
         },
@@ -148,6 +151,9 @@ export default $config({
             }),
       },
       transform: {
+        service: {
+          healthCheckGracePeriodSeconds: 300, // same as health.startPeriod
+        },
         target: {
           healthCheck: {
             enabled: true,

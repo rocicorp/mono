@@ -164,19 +164,6 @@ describe('view-syncer/client-handler', () => {
     for (const poker of pokers) {
       poker.addPatch({
         toVersion: {stateVersion: '11z', minorVersion: 1},
-        patch: {type: 'client', op: 'put', id: 'foo'},
-      });
-      poker.addPatch({
-        toVersion: {stateVersion: '120', minorVersion: 1},
-        patch: {type: 'client', op: 'put', id: 'bar'},
-      });
-      poker.addPatch({
-        toVersion: {stateVersion: '121'},
-        patch: {type: 'client', op: 'put', id: 'baz'},
-      });
-
-      poker.addPatch({
-        toVersion: {stateVersion: '11z', minorVersion: 1},
         patch: {
           type: 'query',
           op: 'put',
@@ -311,7 +298,6 @@ describe('view-syncer/client-handler', () => {
         'pokePart',
         {
           pokeID: '121',
-          clientsPatch: [{clientID: 'baz', op: 'put'}],
           lastMutationIDChanges: {foo: 124},
           desiredQueriesPatches: {
             foo: [{op: 'del', hash: 'barhash'}],
@@ -353,11 +339,6 @@ describe('view-syncer/client-handler', () => {
         'pokePart',
         {
           pokeID: '121',
-          clientsPatch: [
-            {clientID: 'foo', op: 'put'},
-            {clientID: 'bar', op: 'put'},
-            {clientID: 'baz', op: 'put'},
-          ],
           lastMutationIDChanges: {
             bar: 321,
             foo: 124,
@@ -426,10 +407,6 @@ describe('view-syncer/client-handler', () => {
       {stateVersion: '121'},
       schemaVersions,
     );
-    poker.addPatch({
-      toVersion: {stateVersion: '121'},
-      patch: {type: 'client', op: 'put', id: 'foo'},
-    });
     poker.end({stateVersion: '121'});
 
     subscription.cancel();

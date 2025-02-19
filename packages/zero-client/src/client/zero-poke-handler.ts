@@ -9,7 +9,6 @@ import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {getBrowserGlobalMethod} from '../../../shared/src/browser-env.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import {mapAST} from '../../../zero-protocol/src/ast.ts';
-import type {ClientsPatchOp} from '../../../zero-protocol/src/clients-patch.ts';
 import type {
   PokeEndBody,
   PokePartBody,
@@ -23,7 +22,6 @@ import {
   type NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
 import {
-  toClientsKey,
   toDesiredQueriesKey,
   toGotQueriesKey,
   toPrimaryKeyString,
@@ -209,24 +207,24 @@ export function mergePokes(
   }
   const {baseCookie} = pokeBuffer[0].pokeStart;
   const lastPoke = pokeBuffer[pokeBuffer.length - 1];
-  const cookie = lastPoke.pokeEnd.cookie ?? lastPoke.pokeStart.cookie;
+  const {cookie} = lastPoke.pokeEnd;
   const mergedPatch: PatchOperationInternal[] = [];
   const mergedLastMutationIDChanges: Record<string, number> = {};
 
-  let prevPokeStart = undefined;
+  let prevPokeEnd = undefined;
   for (const pokeAccumulator of pokeBuffer) {
     if (
-      prevPokeStart &&
+      prevPokeEnd &&
       pokeAccumulator.pokeStart.baseCookie &&
-      pokeAccumulator.pokeStart.baseCookie > prevPokeStart.cookie
+      pokeAccumulator.pokeStart.baseCookie > prevPokeEnd.cookie
     ) {
       throw Error(
-        `unexpected cookie gap ${JSON.stringify(
-          prevPokeStart,
-        )} ${JSON.stringify(pokeAccumulator.pokeStart)}`,
+        `unexpected cookie gap ${JSON.stringify(prevPokeEnd)} ${JSON.stringify(
+          pokeAccumulator.pokeStart,
+        )}`,
       );
     }
-    prevPokeStart = pokeAccumulator.pokeStart;
+    prevPokeEnd = pokeAccumulator.pokeEnd;
     for (const pokePart of pokeAccumulator.parts) {
       if (pokePart.lastMutationIDChanges) {
         for (const [clientID, lastMutationID] of Object.entries(
@@ -234,11 +232,6 @@ export function mergePokes(
         )) {
           mergedLastMutationIDChanges[clientID] = lastMutationID;
         }
-      }
-      if (pokePart.clientsPatch) {
-        mergedPatch.push(
-          ...pokePart.clientsPatch.map(clientsPatchOpToReplicachePatchOp),
-        );
       }
       if (pokePart.desiredQueriesPatches) {
         for (const [clientID, queriesPatch] of Object.entries(
@@ -283,25 +276,6 @@ export function mergePokes(
       cookie,
     },
   };
-}
-
-function clientsPatchOpToReplicachePatchOp(op: ClientsPatchOp): PatchOperation {
-  switch (op.op) {
-    case 'clear':
-      return op;
-    case 'del':
-      return {
-        op: 'del',
-        key: toClientsKey(op.clientID),
-      };
-    case 'put':
-    default:
-      return {
-        op: 'put',
-        key: toClientsKey(op.clientID),
-        value: true,
-      };
-  }
 }
 
 function queryPatchOpToReplicachePatchOp(

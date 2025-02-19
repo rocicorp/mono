@@ -63,11 +63,28 @@ export async function initViewSyncerSchema(
   const migrateV5ToV6: Migration = {
     migrateSchema: async (_, tx) => {
       await tx`
-      ALTER TABLE ${tx(schema)}."rows" 
+      ALTER TABLE ${tx(schema)}."rows"
         DROP CONSTRAINT fk_rows_client_group`;
       await tx`
-      ALTER TABLE ${tx(schema)}."rowsVersion" 
+      ALTER TABLE ${tx(schema)}."rowsVersion"
         DROP CONSTRAINT fk_rows_version_client_group`;
+    },
+  };
+
+  const migrateV6ToV7: Migration = {
+    migrateSchema: async (_, tx) => {
+      await tx`ALTER TABLE ${tx(schema)}.desires ADD "expiresAt" TIMESTAMPTZ`;
+      await tx`ALTER TABLE ${tx(
+        schema,
+      )}.desires ADD "inactivatedAt" TIMESTAMPTZ`;
+      await tx`ALTER TABLE ${tx(schema)}.desires ADD "ttl" INTERVAL`;
+
+      await tx`CREATE INDEX desires_expires_at ON ${tx(
+        schema,
+      )}.desires ("expiresAt")`;
+      await tx`CREATE INDEX desires_inactivated_at ON ${tx(
+        schema,
+      )}.desires ("inactivatedAt")`;
     },
   };
 
@@ -79,6 +96,7 @@ export async function initViewSyncerSchema(
     // the logic that updates and checks the rowsVersion table in v3.
     5: {minSafeVersion: 3},
     6: migrateV5ToV6,
+    7: migrateV6ToV7,
   };
 
   await runSchemaMigrations(
