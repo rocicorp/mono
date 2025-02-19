@@ -1,6 +1,8 @@
 import {PG_INSUFFICIENT_PRIVILEGE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import postgres from 'postgres';
+import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {
   createIndexStatement,
@@ -306,13 +308,38 @@ async function copy(
   lc.info?.(`Starting copy of ${tableName}:`, selectStmt);
 
   const cursor = from.unsafe(selectStmt).cursor(rowBatchSize);
+  let prevBatch = promiseVoid;
+
   for await (const rows of cursor) {
-    for (const row of rows) {
-      insertStmt.run([...liteValues(row, table), initialVersion]);
-    }
-    totalRows += rows.length;
-    lc.debug?.(`Copied ${totalRows} rows from ${table.schema}.${table.name}`);
+    await prevBatch;
+
+    // Parallelize the reading from postgres (`cursor`) with the processing
+    // of the results (`prevBatch`) by running the latter after I/O events.
+    // This allows the cursor to query the next batch from postgres before
+    // the CPU is consumed by the previous batch (of inserts).
+    prevBatch = runAfterIO(() => {
+      for (const row of rows) {
+        insertStmt.run([...liteValues(row, table), initialVersion]);
+      }
+      totalRows += rows.length;
+      lc.debug?.(`Copied ${totalRows} rows from ${table.schema}.${table.name}`);
+    });
   }
+  await prevBatch;
+
   lc.info?.(`Finished copying ${totalRows} rows into ${tableName}`);
   return totalRows;
+}
+
+async function runAfterIO(fn: () => void) {
+  const {promise, resolve, reject} = resolver();
+  setTimeout(() => {
+    try {
+      fn();
+      resolve();
+    } catch (e) {
+      reject(e);
+    }
+  }, 0);
+  return promise;
 }
