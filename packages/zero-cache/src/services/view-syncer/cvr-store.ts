@@ -459,6 +459,35 @@ export class CVRStore {
     });
   }
 
+  deleteClient(clientID: string) {
+    for (const name of ['desires', 'clients'] as const) {
+      this.#writes.add({
+        stats: {[name]: 1},
+        write: tx =>
+          tx`DELETE FROM ${this.#cvr(name)} WHERE "clientID" = ${clientID}`,
+      });
+    }
+  }
+
+  deleteClientGroup(clientGroupID: string) {
+    for (const name of [
+      'desires',
+      'clients',
+      'queries',
+      'instances',
+      'rows',
+      'rowsVersion',
+    ] as const) {
+      this.#writes.add({
+        stats: {[name]: 1},
+        write: tx =>
+          tx`DELETE FROM ${this.#cvr(
+            name,
+          )} WHERE "clientGroupID" = ${clientGroupID}`,
+      });
+    }
+  }
+
   putDesiredQuery(
     newVersion: CVRVersion,
     query: {id: string},
