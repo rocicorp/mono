@@ -8,6 +8,7 @@ import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import type {ErrorBody} from '../../../../zero-protocol/src/error.ts';
 import type {
+  PokeEndBody,
   PokePartBody,
   PokeStartBody,
 } from '../../../../zero-protocol/src/poke.ts';
@@ -2190,12 +2191,10 @@ describe('view-syncer/service', () => {
     `);
 
     stateChanges.push({state: 'version-ready'});
-    const preAdvancement = (await nextPoke(client1))[0][1] as PokeStartBody;
+    const preAdvancement = (await nextPoke(client1))[2][1] as PokeEndBody;
     expect(preAdvancement).toEqual({
-      baseCookie: '00:01',
       cookie: '01',
       pokeID: '01',
-      schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
     });
 
     replicator.processTransaction(
