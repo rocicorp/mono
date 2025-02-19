@@ -593,6 +593,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         lc.debug?.(`applying ${desiredQueriesPatch.length} query patches`);
         // cvr = ... For #syncQueryPipelineSet().
         cvr = await this.#updatePatchesForDesiredQueries(lc, cvr, updater => {
+          const now = Date.now();
           const patches: PatchToVersion[] = [];
           for (const patch of desiredQueriesPatch) {
             switch (patch.op) {
@@ -600,9 +601,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
                 patches.push(...updater.putDesiredQueries(clientID, [patch]));
                 break;
               case 'del':
-                patches.push(
-                  ...updater.deleteDesiredQueries(clientID, [patch.hash]),
-                );
+                updater.markDesiredQueryAsInactive(clientID, patch.hash, now);
                 break;
               case 'clear':
                 patches.push(...updater.clearDesiredQueries(clientID));
