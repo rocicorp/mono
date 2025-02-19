@@ -967,15 +967,21 @@ describe('view-syncer/service', () => {
           "clientGroupID": "9876",
           "clientID": "foo",
           "deleted": false,
+          "expiresAt": null,
+          "inactivatedAt": null,
           "patchVersion": "00:01",
           "queryHash": "query-hash1",
+          "ttl": null,
         },
         {
           "clientGroupID": "9876",
           "clientID": "bar",
           "deleted": false,
+          "expiresAt": null,
+          "inactivatedAt": null,
           "patchVersion": "00:02",
           "queryHash": "query-hash2",
+          "ttl": null,
         },
       ]
     `);
@@ -1084,8 +1090,11 @@ describe('view-syncer/service', () => {
           "clientGroupID": "9876",
           "clientID": "foo",
           "deleted": false,
+          "expiresAt": null,
+          "inactivatedAt": null,
           "patchVersion": "00:01",
           "queryHash": "query-hash1",
+          "ttl": null,
         },
       ]
     `);
