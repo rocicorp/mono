@@ -34,7 +34,8 @@ export const pokeStartBodySchema = v.object({
   // with initial cookie `null`, before the first request. So we have to be
   // able to send a base cookie with value `null` to match that state.
   baseCookie: nullableVersionSchema,
-  cookie: versionSchema,
+  // Deprecated: Replaced by pokeEnd.cookie.
+  cookie: versionSchema.optional(),
   /**
    * This field is always set if the poke contains a `rowsPatch`.
    * It may be absent for patches that only update clients and queries.
@@ -63,10 +64,8 @@ export const pokePartBodySchema = v.object({
 
 export const pokeEndBodySchema = v.object({
   pokeID: v.string(),
-  // If present, this should be the cookie stored with the client,
-  // instead of the cookie presented in pokeStart.
-  // TODO: Consider making this required and removing it from pokeStart.
-  cookie: versionSchema.optional(),
+  // Note: This should be ignored (and may be empty) if cancel === `true`.
+  cookie: versionSchema,
   // If `true`, the poke with id `pokeID` should be discarded without
   // applying it.
   cancel: v.boolean().optional(),

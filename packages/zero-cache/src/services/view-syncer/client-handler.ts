@@ -9,6 +9,7 @@ import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {rowSchema} from '../../../../zero-protocol/src/data.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import type {
+  PokeEndBody,
   PokePartBody,
   PokeStartBody,
 } from '../../../../zero-protocol/src/poke.ts';
@@ -230,7 +231,7 @@ export class ClientHandler {
 
       cancel: () => {
         if (pokeStarted) {
-          this.#pokes.push(['pokeEnd', {pokeID, cancel: true}]);
+          this.#pokes.push(['pokeEnd', {pokeID, cookie: '', cancel: true}]);
         }
       },
 
@@ -252,7 +253,9 @@ export class ClientHandler {
         flushBody();
         this.#pokes.push([
           'pokeEnd',
-          this.supportsRevisedCookieProtocol() ? {pokeID, cookie} : {pokeID},
+          this.supportsRevisedCookieProtocol()
+            ? {pokeID, cookie}
+            : ({pokeID} as PokeEndBody),
         ]);
         this.#baseVersion = finalVersion;
       },

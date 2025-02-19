@@ -126,14 +126,13 @@ test('previously confirmed mutations are not resent after a rate limit error', a
   await z.triggerPokeStart({
     pokeID: '1',
     baseCookie: null,
-    cookie: '1',
     schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
   });
   await z.triggerPokePart({
     pokeID: '1',
     lastMutationIDChanges: {[z.clientID]: 1},
   });
-  await z.triggerPokeEnd({pokeID: '1'});
+  await z.triggerPokeEnd({pokeID: '1', cookie: '1'});
   await tickAFewTimes(clock);
 
   // reset messages
