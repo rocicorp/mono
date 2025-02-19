@@ -237,7 +237,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       });
 
       this._cvrStore.putQuery(query);
-      this._cvrStore.insertDesiredQuery(
+      this._cvrStore.putDesiredQuery(
         newVersion,
         query,
         client,
@@ -272,7 +272,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     };
 
     // No need to put query... nothing changed.
-    this._cvrStore.insertDesiredQuery(
+    this._cvrStore.putDesiredQuery(
       newVersion,
       query,
       client,
@@ -310,7 +310,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
       delete query.desiredBy[clientID];
       this._cvrStore.putQuery(query);
-      this._cvrStore.insertDesiredQuery(
+      this._cvrStore.putDesiredQuery(
         newVersion,
         query,
         client,

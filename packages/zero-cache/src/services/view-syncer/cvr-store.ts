@@ -459,7 +459,7 @@ export class CVRStore {
     });
   }
 
-  insertDesiredQuery(
+  putDesiredQuery(
     newVersion: CVRVersion,
     query: {id: string},
     client: {id: string},
