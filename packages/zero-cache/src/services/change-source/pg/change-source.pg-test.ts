@@ -67,7 +67,18 @@ describe('change-source/pg', {timeout: 30000}, () => {
       times TIMESTAMP[],
       num NUMERIC
     );
-    CREATE PUBLICATION zero_foo FOR TABLE foo WHERE (id != 'exclude-me');
+    CREATE TABLE compound_key_same_order(
+      a TEXT NOT NULL,
+      b TEXT NOT NULL,
+      PRIMARY KEY (a, b)
+    );
+    CREATE TABLE compound_key_reverse_order(
+      a TEXT NOT NULL,
+      b TEXT NOT NULL,
+      PRIMARY KEY (b, a)
+    );
+    CREATE PUBLICATION zero_foo FOR TABLE foo WHERE (id != 'exclude-me'), 
+      TABLE compound_key_same_order, compound_key_reverse_order;
 
     CREATE SCHEMA IF NOT EXISTS zero;
     CREATE TABLE zero.boo(
@@ -314,6 +325,53 @@ describe('change-source/pg', {timeout: 30000}, () => {
       expect(results).toEqual([
         {confirmed: fromLexiVersion(versionToLexi(expected))},
       ]);
+    },
+  );
+
+  test.each([[withTriggers], [withoutTriggers]])(
+    'relations with compound keys %o',
+    async init => {
+      await init();
+      const {replicaVersion} = getSubscriptionState(
+        new StatementRunner(replicaDbFile.connect(lc)),
+      );
+
+      const {changes, acks} = await startStream('00');
+      const downstream = drainToQueue(changes);
+
+      await upstream.begin(async tx => {
+        await tx`INSERT INTO compound_key_same_order(a, b) VALUES('c', 'd')`;
+        await tx`INSERT INTO compound_key_reverse_order(a, b) VALUES('e', 'f')`;
+      });
+
+      const begin1 = (await downstream.dequeue()) as Begin;
+      expect(begin1).toMatchObject([
+        'begin',
+        {tag: 'begin'},
+        {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
+      ]);
+      expect(begin1[2].commitWatermark > replicaVersion).toBe(true);
+      expect(await downstream.dequeue()).toMatchObject([
+        'data',
+        {
+          tag: 'insert',
+          new: {a: 'c', b: 'd'},
+        },
+      ]);
+      expect(await downstream.dequeue()).toMatchObject([
+        'data',
+        {
+          tag: 'insert',
+          new: {a: 'e', b: 'f'},
+        },
+      ]);
+      const commit1 = (await downstream.dequeue()) as Commit;
+      expect(commit1).toMatchObject([
+        'commit',
+        {tag: 'commit'},
+        {watermark: begin1[2]?.commitWatermark},
+      ]);
+      acks.push(['status', {}, commit1[2]]);
     },
   );
 

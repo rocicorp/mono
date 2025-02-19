@@ -66,7 +66,6 @@ test('completed poke plays on first raf', async () => {
   pokeHandler.handlePokeStart({
     pokeID: 'poke1',
     baseCookie: '1',
-    cookie: '2',
     schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
   });
   pokeHandler.handlePokePart({
@@ -108,7 +107,7 @@ test('completed poke plays on first raf', async () => {
 
   expect(rafStub).toHaveBeenCalledTimes(0);
 
-  pokeHandler.handlePokeEnd({pokeID: 'poke1'});
+  pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '2'});
 
   expect(rafStub).toHaveBeenCalledTimes(1);
   expect(replicachePokeStub).toHaveBeenCalledTimes(0);
@@ -176,7 +175,6 @@ test('canceled poke is not applied', async () => {
     pokeHandler.handlePokeStart({
       pokeID,
       baseCookie: '1',
-      cookie: '2',
       schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
     });
     pokeHandler.handlePokePart({
@@ -216,7 +214,7 @@ test('canceled poke is not applied', async () => {
 
   expect(rafStub).toHaveBeenCalledTimes(0);
 
-  pokeHandler.handlePokeEnd({pokeID: 'poke1', cancel: true});
+  pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '', cancel: true});
 
   // raf is not scheduled because poke was canceled;
   expect(rafStub).toHaveBeenCalledTimes(0);
@@ -227,7 +225,7 @@ test('canceled poke is not applied', async () => {
 
   expect(rafStub).toHaveBeenCalledTimes(0);
 
-  pokeHandler.handlePokeEnd({pokeID: 'poke2'});
+  pokeHandler.handlePokeEnd({pokeID: 'poke2', cookie: '2'});
 
   expect(rafStub).toHaveBeenCalledTimes(1);
   expect(replicachePokeStub).toHaveBeenCalledTimes(0);
@@ -291,7 +289,6 @@ test('multiple pokes received before raf callback are merged', async () => {
   pokeHandler.handlePokeStart({
     pokeID: 'poke1',
     baseCookie: '1',
-    cookie: '2',
     schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
   });
   pokeHandler.handlePokePart({
@@ -328,7 +325,7 @@ test('multiple pokes received before raf callback are merged', async () => {
   });
 
   expect(rafStub).toHaveBeenCalledTimes(0);
-  pokeHandler.handlePokeEnd({pokeID: 'poke1'});
+  pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '2'});
 
   expect(rafStub).toHaveBeenCalledTimes(1);
   expect(replicachePokeStub).toHaveBeenCalledTimes(0);
@@ -336,7 +333,6 @@ test('multiple pokes received before raf callback are merged', async () => {
   pokeHandler.handlePokeStart({
     pokeID: 'poke2',
     baseCookie: '2',
-    cookie: '3',
     schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
   });
   pokeHandler.handlePokePart({
@@ -368,7 +364,7 @@ test('multiple pokes received before raf callback are merged', async () => {
 
   expect(rafStub).toHaveBeenCalledTimes(1);
 
-  pokeHandler.handlePokeEnd({pokeID: 'poke2'});
+  pokeHandler.handlePokeEnd({pokeID: 'poke2', cookie: '3'});
 
   expect(rafStub).toHaveBeenCalledTimes(1);
   expect(replicachePokeStub).toHaveBeenCalledTimes(0);
@@ -443,7 +439,6 @@ test('multiple pokes received before raf callback are merged, canceled pokes are
   pokeHandler.handlePokeStart({
     pokeID: 'poke1',
     baseCookie: '1',
-    cookie: '2',
     schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
   });
   pokeHandler.handlePokePart({
@@ -480,7 +475,7 @@ test('multiple pokes received before raf callback are merged, canceled pokes are
   });
 
   expect(rafStub).toHaveBeenCalledTimes(0);
-  pokeHandler.handlePokeEnd({pokeID: 'poke1'});
+  pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '2'});
 
   expect(rafStub).toHaveBeenCalledTimes(1);
   expect(replicachePokeStub).toHaveBeenCalledTimes(0);
@@ -488,7 +483,6 @@ test('multiple pokes received before raf callback are merged, canceled pokes are
   pokeHandler.handlePokeStart({
     pokeID: 'poke2',
     baseCookie: '2',
-    cookie: '3',
     schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
   });
   pokeHandler.handlePokePart({
@@ -520,7 +514,7 @@ test('multiple pokes received before raf callback are merged, canceled pokes are
 
   expect(rafStub).toHaveBeenCalledTimes(1);
 
-  pokeHandler.handlePokeEnd({pokeID: 'poke2', cancel: true});
+  pokeHandler.handlePokeEnd({pokeID: 'poke2', cookie: '', cancel: true});
 
   expect(rafStub).toHaveBeenCalledTimes(1);
   expect(replicachePokeStub).toHaveBeenCalledTimes(0);
@@ -528,7 +522,6 @@ test('multiple pokes received before raf callback are merged, canceled pokes are
   pokeHandler.handlePokeStart({
     pokeID: 'poke3',
     baseCookie: '2',
-    cookie: '3',
     schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
   });
   pokeHandler.handlePokePart({
@@ -547,7 +540,7 @@ test('multiple pokes received before raf callback are merged, canceled pokes are
 
   expect(rafStub).toHaveBeenCalledTimes(1);
 
-  pokeHandler.handlePokeEnd({pokeID: 'poke3'});
+  pokeHandler.handlePokeEnd({pokeID: 'poke3', cookie: '3'});
 
   const rafCallback0 = rafStub.mock.calls[0][0];
   await rafCallback0(UNUSED_RAF_ARG);
@@ -627,7 +620,6 @@ test('playback over series of rafs', async () => {
   pokeHandler.handlePokeStart({
     pokeID: 'poke1',
     baseCookie: '1',
-    cookie: '2',
     schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
   });
   pokeHandler.handlePokePart({
@@ -664,7 +656,7 @@ test('playback over series of rafs', async () => {
   });
 
   expect(rafStub).toHaveBeenCalledTimes(0);
-  pokeHandler.handlePokeEnd({pokeID: 'poke1'});
+  pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '2'});
 
   expect(rafStub).toHaveBeenCalledTimes(1);
   expect(replicachePokeStub).toHaveBeenCalledTimes(0);
@@ -707,7 +699,6 @@ test('playback over series of rafs', async () => {
   pokeHandler.handlePokeStart({
     pokeID: 'poke2',
     baseCookie: '2',
-    cookie: '3',
     schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
   });
   pokeHandler.handlePokePart({
@@ -739,7 +730,7 @@ test('playback over series of rafs', async () => {
 
   expect(rafStub).toHaveBeenCalledTimes(2);
 
-  pokeHandler.handlePokeEnd({pokeID: 'poke2'});
+  pokeHandler.handlePokeEnd({pokeID: 'poke2', cookie: '3'});
 
   expect(rafStub).toHaveBeenCalledTimes(2);
   expect(replicachePokeStub).toHaveBeenCalledTimes(1);
@@ -794,7 +785,7 @@ suite('onPokeErrors', () => {
     {
       name: 'pokeEnd before pokeStart',
       causeError: pokeHandler => {
-        pokeHandler.handlePokeEnd({pokeID: 'poke1'});
+        pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '2'});
       },
     },
     {
@@ -818,7 +809,7 @@ suite('onPokeErrors', () => {
           cookie: '2',
           schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
         });
-        pokeHandler.handlePokeEnd({pokeID: 'poke2'});
+        pokeHandler.handlePokeEnd({pokeID: 'poke2', cookie: '2'});
       },
     },
   ];
@@ -860,7 +851,6 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
   pokeHandler.handlePokeStart({
     pokeID: 'poke1',
     baseCookie: '1',
-    cookie: '2',
     schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
   });
   pokeHandler.handlePokePart({
@@ -898,7 +888,7 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
 
   expect(rafStub).toHaveBeenCalledTimes(0);
 
-  pokeHandler.handlePokeEnd({pokeID: 'poke1'});
+  pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '2'});
 
   expect(rafStub).toHaveBeenCalledTimes(1);
   expect(replicachePokeStub).toHaveBeenCalledTimes(0);
@@ -915,7 +905,6 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
   pokeHandler.handlePokeStart({
     pokeID: 'poke2',
     baseCookie: '2',
-    cookie: '3',
     schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
   });
   pokeHandler.handlePokePart({
@@ -933,6 +922,7 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
   });
   pokeHandler.handlePokeEnd({
     pokeID: 'poke2',
+    cookie: '3',
   });
 
   reject('error in poke');
@@ -967,7 +957,6 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
   pokeHandler.handlePokeStart({
     pokeID: 'poke1',
     baseCookie: '1',
-    cookie: '2',
     schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
   });
   pokeHandler.handlePokePart({
@@ -1005,7 +994,7 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
 
   expect(rafStub).toHaveBeenCalledTimes(0);
 
-  pokeHandler.handlePokeEnd({pokeID: 'poke1'});
+  pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '2'});
 
   expect(rafStub).toHaveBeenCalledTimes(1);
   expect(replicachePokeStub).toHaveBeenCalledTimes(0);
@@ -1013,7 +1002,6 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
   pokeHandler.handlePokeStart({
     pokeID: 'poke2',
     baseCookie: '3', // gap, should be 2
-    cookie: '4',
     schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
   });
   pokeHandler.handlePokePart({
@@ -1023,7 +1011,7 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
     },
   });
 
-  pokeHandler.handlePokeEnd({pokeID: 'poke2'});
+  pokeHandler.handlePokeEnd({pokeID: 'poke2', cookie: '4'});
 
   expect(rafStub).toHaveBeenCalledTimes(1);
   expect(replicachePokeStub).toHaveBeenCalledTimes(0);
@@ -1038,7 +1026,6 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
   pokeHandler.handlePokeStart({
     pokeID: 'poke3',
     baseCookie: '4',
-    cookie: '5',
     schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
   });
   pokeHandler.handlePokePart({
@@ -1056,6 +1043,7 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
   });
   pokeHandler.handlePokeEnd({
     pokeID: 'poke3',
+    cookie: '5',
   });
   await rafCallback0Result;
 
@@ -1089,7 +1077,6 @@ test('onDisconnect clears pending pokes', async () => {
   pokeHandler.handlePokeStart({
     pokeID: 'poke1',
     baseCookie: '1',
-    cookie: '2',
     schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
   });
   pokeHandler.handlePokePart({
@@ -1127,7 +1114,7 @@ test('onDisconnect clears pending pokes', async () => {
 
   expect(rafStub).toHaveBeenCalledTimes(0);
 
-  pokeHandler.handlePokeEnd({pokeID: 'poke1'});
+  pokeHandler.handlePokeEnd({pokeID: 'poke1', cookie: '2'});
 
   expect(rafStub).toHaveBeenCalledTimes(1);
   expect(replicachePokeStub).toHaveBeenCalledTimes(0);
@@ -1229,7 +1216,6 @@ test('mergePokes with all optionals defined', () => {
         pokeStart: {
           pokeID: 'poke1',
           baseCookie: '3',
-          cookie: '4',
           schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
         },
         parts: [
@@ -1311,13 +1297,13 @@ test('mergePokes with all optionals defined', () => {
         ],
         pokeEnd: {
           pokeID: 'poke1',
+          cookie: '4',
         },
       },
       {
         pokeStart: {
           pokeID: 'poke2',
           baseCookie: '4',
-          cookie: '5',
           schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
         },
         parts: [
@@ -1345,6 +1331,7 @@ test('mergePokes with all optionals defined', () => {
         ],
         pokeEnd: {
           pokeID: 'poke2',
+          cookie: '5',
         },
       },
     ],
@@ -1435,7 +1422,6 @@ test('mergePokes sparse', () => {
         pokeStart: {
           pokeID: 'poke1',
           baseCookie: '3',
-          cookie: '4',
           schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
         },
         parts: [
@@ -1487,13 +1473,13 @@ test('mergePokes sparse', () => {
         ],
         pokeEnd: {
           pokeID: 'poke1',
+          cookie: '4',
         },
       },
       {
         pokeStart: {
           pokeID: 'poke2',
           baseCookie: '4',
-          cookie: '5',
           schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
         },
         parts: [
@@ -1514,6 +1500,7 @@ test('mergePokes sparse', () => {
         ],
         pokeEnd: {
           pokeID: 'poke2',
+          cookie: '5',
         },
       },
     ],
@@ -1569,64 +1556,6 @@ test('mergePokes sparse', () => {
   });
 });
 
-test('mergePokes with cookie revisions', () => {
-  expect(
-    mergePokes(
-      [
-        {
-          pokeStart: {
-            pokeID: 'poke1',
-            baseCookie: '3',
-            cookie: '5',
-            schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
-          },
-          parts: [
-            {
-              pokeID: 'poke1',
-              lastMutationIDChanges: {c1: 1, c2: 2},
-            },
-          ],
-          pokeEnd: {
-            pokeID: 'poke1',
-            cookie: '4', // Not 5, but 4.
-          },
-        },
-        {
-          pokeStart: {
-            pokeID: 'poke2',
-            baseCookie: '4',
-            cookie: '7',
-            schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
-          },
-          parts: [
-            {
-              pokeID: 'poke2',
-              lastMutationIDChanges: {c4: 3},
-            },
-          ],
-          pokeEnd: {
-            pokeID: 'poke2',
-            cookie: '6', // Not 7, but 6.
-          },
-        },
-      ],
-      schema,
-      serverToClient(schema.tables),
-    ),
-  ).toEqual({
-    baseCookie: '3',
-    pullResponse: {
-      cookie: '6',
-      lastMutationIDChanges: {
-        c1: 1,
-        c2: 2,
-        c4: 3,
-      },
-      patch: [],
-    },
-  });
-});
-
 test('mergePokes throws error on cookie gaps', () => {
   expect(() => {
     mergePokes(
@@ -1635,7 +1564,6 @@ test('mergePokes throws error on cookie gaps', () => {
           pokeStart: {
             pokeID: 'poke1',
             baseCookie: '3',
-            cookie: '4',
             schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
           },
           parts: [
@@ -1646,13 +1574,13 @@ test('mergePokes throws error on cookie gaps', () => {
           ],
           pokeEnd: {
             pokeID: 'poke1',
+            cookie: '4',
           },
         },
         {
           pokeStart: {
             pokeID: 'poke2',
             baseCookie: '5', // gap, should be 4
-            cookie: '6',
             schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
           },
           parts: [
@@ -1663,6 +1591,7 @@ test('mergePokes throws error on cookie gaps', () => {
           ],
           pokeEnd: {
             pokeID: 'poke2',
+            cookie: '6',
           },
         },
       ],
