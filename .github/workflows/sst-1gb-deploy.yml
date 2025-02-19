@@ -85,7 +85,3 @@ jobs:
           cd prod/sst
           npm install
           npx sst deploy --stage 1gb
-      - name: Deploy Permissions
-        run: |
-          cd packages/zero
-          npx tsx src/deploy-permissions.ts --schema-path ../../apps/zbugs/schema.ts --upstream-db ${{ secrets.ONE_GB_ZERO_UPSTREAM_DB }}
