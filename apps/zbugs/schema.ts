@@ -336,6 +336,10 @@ export const permissions: ReturnType<typeof definePermissions> =
               loggedInUserIsAdmin,
               and(loggedInUserIsCreator, canSeeComment),
             ],
+            postMutation: [
+              loggedInUserIsAdmin,
+              and(loggedInUserIsCreator, canSeeComment),
+            ],
           },
           delete: [
             loggedInUserIsAdmin,

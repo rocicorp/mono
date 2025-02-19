@@ -380,7 +380,9 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
           op,
         )}, action ${action}, phase ${phase}, authData: ${JSON.stringify(
           authData,
-        )}`,
+        )}, rowPolicies: ${JSON.stringify(
+          applicableRowPolicy,
+        )}, cellPolicies: ${JSON.stringify(applicableCellPolicies)}`,
       );
       return false;
     }
