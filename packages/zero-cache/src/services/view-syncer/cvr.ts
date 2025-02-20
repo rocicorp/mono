@@ -2,6 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {compareUTF8} from 'compare-utf8';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
+import {hasOwn} from '../../../../shared/src/has-own.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {
   difference,
@@ -285,8 +286,12 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
   /**
    * Returns non active queries in the order that we want to remove them.
    */
-  getInactiveDesiredQueries(clientID: string): string[] {
-    return getInactiveDesiredQueries(this._cvr, clientID);
+  getInactiveQueries(): {
+    hash: string;
+    inactivatedAt: number;
+    ttl: number | undefined;
+  }[] {
+    return getInactiveQueries(this._cvr);
   }
 
   deleteDesiredQueries(clientID: string, queries: string[]): PatchToVersion[] {
@@ -759,44 +764,70 @@ function mergeRefCounts(
   return Object.values(merged).some(v => v > 0) ? merged : null;
 }
 
-export function getInactiveDesiredQueries(
-  cvr: CVR,
-  clientID: string,
-): string[] {
-  const client = cvr.clients[clientID];
-  if (!client) {
-    return [];
+export function getInactiveQueries(cvr: CVR): {
+  hash: string;
+  inactivatedAt: number;
+  ttl: number | undefined;
+}[] {
+  const inactive: Map<
+    string,
+    {
+      hash: string;
+      inactivatedAt: number;
+      ttl: number | undefined;
+    }
+  > = new Map();
+  for (const clientID in cvr.clients) {
+    if (hasOwn(cvr.clients, clientID)) {
+      const client = cvr.clients[clientID];
+      for (const queryID of client.desiredQueryIDs) {
+        const query = must(cvr.queries[queryID], `Query ${queryID} not found`);
+        if (query.internal) {
+          continue;
+        }
+        const {inactivatedAt, ttl} = must(query.desiredBy[clientID]);
+        // eslint-disable-next-line eqeqeq
+        if (inactivatedAt != null) {
+          const existing = inactive.get(queryID);
+          if (existing) {
+            // if one of them have no ttl, then we have no ttl
+            // eslint-disable-next-line eqeqeq
+            if (existing.ttl == null || ttl == null) {
+              existing.ttl = undefined;
+              existing.inactivatedAt = Math.max(
+                existing.inactivatedAt,
+                inactivatedAt,
+              );
+            } else {
+              // pick the one with the last expire
+              if (existing.inactivatedAt + existing.ttl < inactivatedAt + ttl) {
+                existing.inactivatedAt = inactivatedAt;
+                existing.ttl = ttl;
+              }
+            }
+          } else {
+            inactive.set(queryID, {
+              hash: queryID,
+              inactivatedAt,
+              ttl: ttl ?? undefined,
+            });
+          }
+        }
+      }
+    }
   }
 
-  const inactive: {
-    hash: string;
-    inactivatedAt: number;
-    ttl: number | undefined;
-  }[] = [];
-  for (const queryID of client.desiredQueryIDs) {
-    const query = must(cvr.queries[queryID], `Query ${queryID} not found`);
-    if (query.internal) {
-      continue;
-    }
-    const {inactivatedAt, ttl} = must(query.desiredBy[clientID]);
-    // eslint-disable-next-line eqeqeq
-    if (inactivatedAt != null) {
-      inactive.push({hash: queryID, inactivatedAt, ttl: ttl ?? undefined});
-    }
-  }
   // First sort all the queries that have TTL. Oldest first.
-  return inactive
-    .sort((a, b) => {
-      if (a.ttl === b.ttl) {
-        return a.inactivatedAt - b.inactivatedAt;
-      }
-      if (a.ttl === undefined) {
-        return 1;
-      }
-      if (b.ttl === undefined) {
-        return -1;
-      }
-      return a.inactivatedAt + a.ttl - b.inactivatedAt - b.ttl;
-    })
-    .map(({hash}) => hash);
+  return [...inactive.values()].sort((a, b) => {
+    if (a.ttl === b.ttl) {
+      return a.inactivatedAt - b.inactivatedAt;
+    }
+    if (a.ttl === undefined) {
+      return 1;
+    }
+    if (b.ttl === undefined) {
+      return -1;
+    }
+    return a.inactivatedAt + a.ttl - b.inactivatedAt - b.ttl;
+  });
 }
