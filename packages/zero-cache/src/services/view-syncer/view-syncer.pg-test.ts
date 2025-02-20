@@ -1123,6 +1123,8 @@ describe('view-syncer/service', () => {
   test('initial hydration, rows in multiple queries', async () => {
     const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+      // Test multiple queries that normalize to the same hash.
+      {op: 'put', hash: 'query-hash1.1', ast: ISSUES_QUERY},
       {op: 'put', hash: 'query-hash2', ast: ISSUES_QUERY2},
     ]);
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
@@ -1168,6 +1170,36 @@ describe('view-syncer/service', () => {
                     },
                   },
                   "hash": "query-hash1",
+                  "op": "put",
+                },
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": {
+                      "left": {
+                        "name": "id",
+                        "type": "column",
+                      },
+                      "op": "IN",
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                      "type": "simple",
+                    },
+                  },
+                  "hash": "query-hash1.1",
                   "op": "put",
                 },
                 {
@@ -1245,6 +1277,36 @@ describe('view-syncer/service', () => {
                   },
                 },
                 "hash": "query-hash1",
+                "op": "put",
+              },
+              {
+                "ast": {
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "issues",
+                  "where": {
+                    "left": {
+                      "name": "id",
+                      "type": "column",
+                    },
+                    "op": "IN",
+                    "right": {
+                      "type": "literal",
+                      "value": [
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                      ],
+                    },
+                    "type": "simple",
+                  },
+                },
+                "hash": "query-hash1.1",
                 "op": "put",
               },
               {
@@ -1367,6 +1429,7 @@ describe('view-syncer/service', () => {
           "patchVersion": "01",
           "refCounts": {
             "query-hash1": 1,
+            "query-hash1.1": 1,
             "query-hash2": 1,
           },
           "rowKey": {
@@ -1381,6 +1444,7 @@ describe('view-syncer/service', () => {
           "patchVersion": "01",
           "refCounts": {
             "query-hash1": 1,
+            "query-hash1.1": 1,
             "query-hash2": 1,
           },
           "rowKey": {
@@ -1395,6 +1459,7 @@ describe('view-syncer/service', () => {
           "patchVersion": "01",
           "refCounts": {
             "query-hash1": 1,
+            "query-hash1.1": 1,
             "query-hash2": 1,
           },
           "rowKey": {
@@ -1409,6 +1474,7 @@ describe('view-syncer/service', () => {
           "patchVersion": "01",
           "refCounts": {
             "query-hash1": 1,
+            "query-hash1.1": 1,
             "query-hash2": 1,
           },
           "rowKey": {

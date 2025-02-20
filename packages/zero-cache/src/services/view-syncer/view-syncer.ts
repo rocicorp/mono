@@ -708,8 +708,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const hydratedQueries = this.#pipelines.addedQueries();
 
       // Convert queries to their transformed ast's and hashes
-      const transformationHashToHash = new Map<string, string>();
       const now = Date.now();
+      const hashToIDs = new Map<string, string[]>();
       const serverQueries = Object.entries(cvr.queries).map(([id, q]) => {
         const {query, hash: transformationHash} = transformAndHashQuery(
           lc,
@@ -718,7 +718,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           this.#authData,
           q.internal,
         );
-        transformationHashToHash.set(transformationHash, id);
+        if (hashToIDs.has(transformationHash)) {
+          must(hashToIDs.get(transformationHash)).push(id);
+        } else {
+          hashToIDs.set(transformationHash, [id]);
+        }
         return {
           id,
           // TODO(mlaw): follow up to handle the case where we statically determine
@@ -751,7 +755,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           addQueries,
           removeQueries,
           unhydrateQueries,
-          transformationHashToHash,
+          hashToIDs,
         );
       } else {
         await this.#catchupClients(lc, cvr);
@@ -777,7 +781,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     addQueries: {id: string; ast: AST; transformationHash: string}[],
     removeQueries: {id: string; ast: AST; transformationHash: string}[],
     unhydrateQueries: string[],
-    transformationHashToHash: Map<string, string>,
+    hashToIDs: Map<string, string[]>,
   ) {
     return startAsyncSpan(tracer, 'vs.#addAndRemoveQueries', async () => {
       assert(
@@ -842,7 +846,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         generateRowChanges(),
         updater,
         pokers,
-        transformationHashToHash,
+        hashToIDs,
       );
 
       for (const patch of await updater.deleteUnreferencedRows(lc)) {
@@ -983,7 +987,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     changes: Iterable<RowChange>,
     updater: CVRQueryDrivenUpdater,
     pokers: PokeHandler[],
-    transformationHashToHash: Map<string, string>,
+    hashToIDs: Map<string, string[]>,
   ) {
     return startAsyncSpan(tracer, 'vs.#processChanges', async () => {
       const start = Date.now();
@@ -1016,21 +1020,18 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             rowKey,
             row,
           } = change;
-          const queryHash = must(
-            transformationHashToHash.get(transformationHash),
+          const queryIDs = must(
+            hashToIDs.get(transformationHash),
             'could not find the original hash for the transformation hash',
           );
           const rowID: RowID = {schema: '', table, rowKey: rowKey as RowKey};
 
           let parsedRow = rows.get(rowID);
-          let rc: number;
           if (!parsedRow) {
             parsedRow = {refCounts: {}};
             rows.set(rowID, parsedRow);
-            rc = 0;
-          } else {
-            rc = parsedRow.refCounts[queryHash] ?? 0;
           }
+          queryIDs.forEach(hash => (parsedRow.refCounts[hash] ??= 0));
 
           const updateVersion = (row: Row) => {
             if (!parsedRow.version) {
@@ -1042,20 +1043,18 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           switch (type) {
             case 'add':
               updateVersion(row);
-              rc++;
+              queryIDs.forEach(hash => parsedRow.refCounts[hash]++);
               break;
             case 'edit':
               updateVersion(row);
-              // No update to rc.
+              // No update to refCounts.
               break;
             case 'remove':
-              rc--;
+              queryIDs.forEach(hash => parsedRow.refCounts[hash]--);
               break;
             default:
               unreachable(type);
           }
-
-          parsedRow.refCounts[queryHash] = rc;
 
           if (rows.size % CURSOR_PAGE_SIZE === 0) {
             await processBatch();
@@ -1120,22 +1119,20 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
 
       lc.debug?.(`applying ${numChanges} to advance to ${version}`);
-      const transformationHashToHash = new Map<string, string>();
-      for (const query of Object.values(cvr.queries)) {
-        if (!query.transformationHash) {
+      const hashToIDs = new Map<string, string[]>();
+      for (const {id, transformationHash} of Object.values(cvr.queries)) {
+        if (!transformationHash) {
           continue;
         }
-        transformationHashToHash.set(query.transformationHash, query.id);
+        if (hashToIDs.has(transformationHash)) {
+          must(hashToIDs.get(transformationHash)).push(id);
+        } else {
+          hashToIDs.set(transformationHash, [id]);
+        }
       }
 
       try {
-        await this.#processChanges(
-          lc,
-          changes,
-          updater,
-          pokers,
-          transformationHashToHash,
-        );
+        await this.#processChanges(lc, changes, updater, pokers, hashToIDs);
       } catch (e) {
         if (e instanceof ResetPipelinesSignal) {
           pokers.forEach(poker => poker.cancel());

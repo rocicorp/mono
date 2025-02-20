@@ -201,11 +201,17 @@ export class PipelineDriver {
    * driver is {@link advance}d. The query and its pipeline can be removed with
    * {@link removeQuery()}.
    *
+   * If a query with an identical hash has already been added, this method
+   * is a no-op and no RowChanges are generated.
+   *
    * @return The rows from the initial hydration of the query.
    */
   *addQuery(hash: string, query: AST): Iterable<RowChange> {
     assert(this.initialized());
-    assert(!this.#pipelines.has(hash), `query ${hash} already added`);
+    if (this.#pipelines.has(hash)) {
+      this.#lc.info?.(`query ${hash} already added`, query);
+      return;
+    }
     const input = buildPipeline(query, {
       getSource: name => this.#getSource(name),
       createStorage: () => this.#createStorage(),

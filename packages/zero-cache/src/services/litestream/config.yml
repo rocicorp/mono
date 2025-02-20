@@ -1,7 +1,11 @@
 dbs:
   - path: ${ZERO_REPLICA_FILE}
+    monitor-interval: 1m
     replicas:
       - url: ${ZERO_LITESTREAM_BACKUP_URL}
+        retention: ${ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS}h
+        sync-interval: ${ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES}m
+
 logging:
   level: ${ZERO_LITESTREAM_LOG_LEVEL}
   type: ${ZERO_LOG_FORMAT}

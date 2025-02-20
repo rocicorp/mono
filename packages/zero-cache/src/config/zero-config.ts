@@ -326,8 +326,29 @@ export const zeroOptions = {
       ],
     },
 
+    incrementalBackupIntervalMinutes: {
+      type: v.number().default(5),
+      desc: [
+        `The interval between incremental backups of the replica. Shorter intervals`,
+        `reduce the amount of change history that needs to be replayed when catching`,
+        `up a new view-syncer, at the expense of increasing the number of files needed`,
+        `to download for the initial litestream restore.`,
+      ],
+    },
+
+    snapshotBackupIntervalHours: {
+      type: v.number().default(1),
+      desc: [
+        `The interval between snapshot backups of the replica. Snapshot backups`,
+        `make a full copy of the database to a new litestream generation. This`,
+        `improves restore time at the expense of bandwidth. Applications with a`,
+        `large database and low write rate can increase this interval to reduce`,
+        `network usage for backups (litestream defaults to 24 hours).`,
+      ],
+    },
+
     restoreParallelism: {
-      type: v.number().default(16),
+      type: v.number().default(32),
       desc: [
         `The number of WAL files to download in parallel when performing the`,
         `initial restore of the replica from the backup.`,

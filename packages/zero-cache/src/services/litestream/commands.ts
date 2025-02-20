@@ -43,14 +43,27 @@ function getLitestream(
   litestream: string;
   env: NodeJS.ProcessEnv;
 } {
-  const {executable, backupURL, logLevel, configPath} = config.litestream;
+  const {
+    executable,
+    backupURL,
+    logLevel,
+    configPath,
+    incrementalBackupIntervalMinutes,
+    snapshotBackupIntervalHours,
+  } = config.litestream;
   return {
     litestream: must(executable, `Missing --litestream-executable`),
     env: {
       ...process.env,
       ['ZERO_REPLICA_FILE']: config.replicaFile,
       ['ZERO_LITESTREAM_BACKUP_URL']: must(backupURL),
+      ['ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES']: String(
+        incrementalBackupIntervalMinutes,
+      ),
       ['ZERO_LITESTREAM_LOG_LEVEL']: logLevelOverride ?? logLevel,
+      ['ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS']: String(
+        snapshotBackupIntervalHours,
+      ),
       ['ZERO_LOG_FORMAT']: config.log.format,
       ['LITESTREAM_CONFIG']: configPath,
     },

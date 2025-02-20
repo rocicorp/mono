@@ -1,6 +1,8 @@
 import {PG_INSUFFICIENT_PRIVILEGE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import postgres from 'postgres';
+import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {
   createIndexStatement,
@@ -114,6 +116,9 @@ export async function initialSync(
     const initialVersion = toLexiVersion(lsn);
 
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
+    const start = Date.now();
+    let numTables: number;
+    let numRows: number;
     const copiers = startTableCopyWorkers(lc, upstreamDB, snapshot, numWorkers);
     let published: PublicationInfo;
     try {
@@ -126,26 +131,35 @@ export async function initialSync(
 
       // Now that tables have been validated, kick off the copiers.
       const {tables, indexes} = published;
+      numTables = tables.length;
       createLiteTables(tx, tables);
-      createLiteIndices(tx, indexes);
-      await Promise.all(
+
+      const rowCounts = await Promise.all(
         tables.map(table =>
-          copiers.process(db =>
-            copy(lc, table, db, tx, initialVersion, rowBatchSize).then(
-              () => [],
-            ),
+          copiers.processReadTask(db =>
+            copy(lc, table, db, tx, initialVersion, rowBatchSize),
           ),
         ),
       );
+      numRows = rowCounts.reduce((sum, count) => sum + count, 0);
+
+      const indexStart = Date.now();
+      createLiteIndices(tx, indexes);
+      lc.info?.(`Created indexes (${Date.now() - indexStart} ms)`);
     } finally {
       copiers.setDone();
       await copiers.done();
     }
+
     await setInitialSchema(upstreamDB, shard.id, published);
 
     initReplicationState(tx, publications, initialVersion);
     initChangeLog(tx);
-    lc.info?.(`Synced initial data from ${publications} up to ${lsn}`);
+    lc.info?.(
+      `Synced ${numRows.toLocaleString()} rows of ${numTables} tables in ${publications} up to ${lsn} (${
+        Date.now() - start
+      } ms)`,
+    );
   } finally {
     await replicationSession.end();
     await upstreamDB.end();
@@ -294,12 +308,38 @@ async function copy(
   lc.info?.(`Starting copy of ${tableName}:`, selectStmt);
 
   const cursor = from.unsafe(selectStmt).cursor(rowBatchSize);
+  let prevBatch = promiseVoid;
+
   for await (const rows of cursor) {
-    for (const row of rows) {
-      insertStmt.run([...liteValues(row, table), initialVersion]);
-    }
-    totalRows += rows.length;
-    lc.debug?.(`Copied ${totalRows} rows from ${table.schema}.${table.name}`);
+    await prevBatch;
+
+    // Parallelize the reading from postgres (`cursor`) with the processing
+    // of the results (`prevBatch`) by running the latter after I/O events.
+    // This allows the cursor to query the next batch from postgres before
+    // the CPU is consumed by the previous batch (of inserts).
+    prevBatch = runAfterIO(() => {
+      for (const row of rows) {
+        insertStmt.run([...liteValues(row, table), initialVersion]);
+      }
+      totalRows += rows.length;
+      lc.debug?.(`Copied ${totalRows} rows from ${table.schema}.${table.name}`);
+    });
   }
+  await prevBatch;
+
   lc.info?.(`Finished copying ${totalRows} rows into ${tableName}`);
+  return totalRows;
+}
+
+function runAfterIO(fn: () => void): Promise<void> {
+  const {promise, resolve, reject} = resolver();
+  setTimeout(() => {
+    try {
+      fn();
+      resolve();
+    } catch (e) {
+      reject(e);
+    }
+  }, 0);
+  return promise;
 }
