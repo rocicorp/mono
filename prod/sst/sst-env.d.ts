@@ -5,10 +5,6 @@
 
 declare module "sst" {
   export interface Resource {
-    ZeroPermissionsDeployer: {
-      name: string;
-      type: "sst.aws.Function";
-    };
     "replication-bucket": {
       name: string;
       type: "sst.aws.Bucket";
