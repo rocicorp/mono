@@ -39,6 +39,9 @@ export default $config({
         },
       },
     });
+        
+    const IS_EBS_STAGE = $app.stage.endsWith("_ebs");
+    
     // Common environment variables
     const commonEnv = {
       AWS_REGION: process.env.AWS_REGION!,
@@ -49,36 +52,89 @@ export default $config({
       AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID!,
       AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY!,
       ZERO_LOG_FORMAT: "json",
-      ZERO_REPLICA_FILE: "/data/sync-replica.db",
+      ZERO_REPLICA_FILE: IS_EBS_STAGE ? "/data/sync-replica.db" : "sync-replica.db",
       ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250219-01`,
       ZERO_IMAGE_URL: process.env.ZERO_IMAGE_URL!,
     };
-    const ecsVolumeRole = new aws.iam.Role(
-      `${$app.name}-${$app.stage}-ECSVolumeRole`,
-      {
-        assumeRolePolicy: JSON.stringify({
-          Version: "2012-10-17",
-          Statement: [
-            {
-              Effect: "Allow",
-              Principal: {
-                Service: ["ecs-tasks.amazonaws.com", "ecs.amazonaws.com"],
-              },
-              Action: "sts:AssumeRole",
-            },
-          ],
-        }),
-      },
-    );
 
-    new aws.iam.RolePolicyAttachment(
-      `${$app.name}-${$app.stage}-ECSVolumePolicyAttachment`,
-      {
-        role: ecsVolumeRole.name,
-        policyArn:
-          "arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRolePolicyForVolumes",
-      },
-    );
+
+    const ecsVolumeRole = IS_EBS_STAGE 
+      ? new aws.iam.Role(
+          `${$app.name}-${$app.stage}-ECSVolumeRole`,
+          {
+            assumeRolePolicy: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: {
+                    Service: ["ecs-tasks.amazonaws.com", "ecs.amazonaws.com"],
+                  },
+                  Action: "sts:AssumeRole",
+                },
+              ],
+            }),
+          },
+        )
+      : undefined;
+
+    if (ecsVolumeRole) {
+      new aws.iam.RolePolicyAttachment(
+        `${$app.name}-${$app.stage}-ECSVolumePolicyAttachment`,
+        {
+          role: ecsVolumeRole.name,
+          policyArn:
+            "arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRolePolicyForVolumes",
+        },
+      );
+    }
+
+    const addEbsVolumeConfig = (transform: any, ecsVolumeRole: aws.iam.Role | undefined) => {
+      return {
+        ...transform,
+        service: {
+          ...transform.service,
+          ...IS_EBS_STAGE ? {
+            volumeConfiguration: {
+              name: "replication-data",
+              managedEbsVolume: {
+                roleArn: ecsVolumeRole?.arn,
+                volumeType: "io2",
+                sizeInGb: 20,
+                iops: 3000,
+                fileSystemType: "ext4",
+              },
+            },
+          } : {},
+        },
+        taskDefinition: (args: any) => {
+          // Call original taskDefinition if it exists
+          if (transform.taskDefinition) {
+            transform.taskDefinition(args);
+          }
+
+          if (IS_EBS_STAGE) {
+            let value = $jsonParse(args.containerDefinitions);
+            value = value.apply((containerDefinitions: any) => {
+              containerDefinitions[0].mountPoints = [
+                {
+                  sourceVolume: "replication-data",
+                  containerPath: "/data",
+                },
+              ];
+              return containerDefinitions;
+            });
+            args.containerDefinitions = $jsonStringify(value);
+            args.volumes = [
+              {
+                configureAtLaunch: true,
+                name: "replication-data",
+              },
+            ];
+          }
+        },
+      };
+    };
 
     // Replication Manager Service
     const replicationManager = cluster.addService(`replication-manager`, {
@@ -108,7 +164,7 @@ export default $config({
           },
         ],
       },
-      transform: {
+      transform: addEbsVolumeConfig({
         service: {
           healthCheckGracePeriodSeconds: 300, // same as health.startPeriod
         },
@@ -126,38 +182,7 @@ export default $config({
           },
           deregistrationDelay: 1, // Drain as soon as a new instance is healthy.
         },
-        service: {
-          volumeConfiguration: {
-            name: "replication-data",
-            managedEbsVolume: {
-              roleArn: ecsVolumeRole.arn,
-              volumeType: "io2",
-              sizeInGb: 20,
-              iops: 3000,
-              fileSystemType: "ext4",
-            },
-          },
-        },
-        taskDefinition: (args) => {
-          let value = $jsonParse(args.containerDefinitions);
-          value = value.apply((containerDefinitions) => {
-            containerDefinitions[0].mountPoints = [
-              {
-                sourceVolume: "replication-data",
-                containerPath: "/data",
-              },
-            ];
-            return containerDefinitions;
-          });
-          args.containerDefinitions = $jsonStringify(value);
-          args.volumes = [
-            {
-              configureAtLaunch: true,
-              name: "replication-data",
-            },
-          ];
-        },
-      },
+      }, ecsVolumeRole),
     });
     // View Syncer Service
     const viewSyncer = cluster.addService(`view-syncer`, {
@@ -209,7 +234,7 @@ export default $config({
               ],
             }),
       },
-      transform: {
+      transform: addEbsVolumeConfig({
         service: {
           healthCheckGracePeriodSeconds: 300, // same as health.startPeriod
         },
@@ -233,38 +258,7 @@ export default $config({
           minCapacity: 1,
           maxCapacity: 10,
         },
-        service: {
-          volumeConfiguration: {
-            name: "replication-data",
-            managedEbsVolume: {
-              roleArn: ecsVolumeRole.arn,
-              volumeType: "io2",
-              sizeInGb: 20,
-              iops: 3000,
-              fileSystemType: "ext4",
-            },
-          },
-        },
-        taskDefinition: (args) => {
-          let value = $jsonParse(args.containerDefinitions);
-          value = value.apply((containerDefinitions) => {
-            containerDefinitions[0].mountPoints = [
-              {
-                sourceVolume: "replication-data",
-                containerPath: "/data",
-              },
-            ];
-            return containerDefinitions;
-          });
-          args.containerDefinitions = $jsonStringify(value);
-          args.volumes = [
-            {
-              configureAtLaunch: true,
-              name: "replication-data",
-            },
-          ];
-        },
-      },
+      }, ecsVolumeRole),
       // Set this to `true` to make SST wait for the view-syncer to be deployed
       // before proceeding (to permissions deployment, etc.). This makes the deployment
       // take a lot longer and is only necessary if there is an AST format change.

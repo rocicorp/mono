@@ -5,6 +5,7 @@ DROP TABLE IF EXISTS "user",
     "issueLabel",
     "emoji",
     "userPref",
+    "viewState",
     "zero.schemaVersions" CASCADE;
 
 -- user
