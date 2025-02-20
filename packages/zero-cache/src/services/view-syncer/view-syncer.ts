@@ -12,6 +12,7 @@ import {
 import {version} from '../../../../otel/src/version.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
+import {hasOwn} from '../../../../shared/src/has-own.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
@@ -64,6 +65,7 @@ import {
   versionToCookie,
   type CVRVersion,
   type NullableCVRVersion,
+  type QueryRecord,
   type RowID,
 } from './schema/types.ts';
 import {ResetPipelinesSignal} from './snapshotter.ts';
@@ -213,6 +215,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             }, DB=${this.#pipelines.replicaVersion}`;
             lc.info?.(`resetting CVR: ${message}`);
             throw new ErrorForClient({kind: ErrorKind.ClientNotFound, message});
+          }
+
+          // Check if any queries have expired.
+          if (hasExpiredQueries(cvr)) {
+            lc.info?.('queries have expired');
+            await this.#syncQueryPipelineSet(lc, cvr);
+            this.#pipelinesSynced = true;
+            return;
           }
 
           if (this.#pipelinesSynced) {
@@ -699,6 +709,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       // Convert queries to their transformed ast's and hashes
       const hashToIDs = new Map<string, string[]>();
+      const now = Date.now();
       const serverQueries = Object.entries(cvr.queries).map(([id, q]) => {
         const {query, hash: transformationHash} = transformAndHashQuery(
           lc,
@@ -718,16 +729,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           // the query cannot be run and is `undefined`.
           ast: query,
           transformationHash,
-          desired: q.internal || Object.keys(q.desiredBy).length > 0,
+          expired: expired(now, q),
         };
       });
 
       const addQueries = serverQueries.filter(
-        q => q.desired && !hydratedQueries.has(q.transformationHash),
+        q => !q.expired && !hydratedQueries.has(q.transformationHash),
       );
-      const removeQueries = serverQueries.filter(q => !q.desired);
+      const removeQueries = serverQueries.filter(q => q.expired);
       const desiredQueries = new Set(
-        serverQueries.filter(q => q.desired).map(q => q.transformationHash),
+        serverQueries.filter(q => !q.expired).map(q => q.transformationHash),
       );
       const unhydrateQueries = [...hydratedQueries].filter(
         transformationHash => !desiredQueries.has(transformationHash),
@@ -1256,4 +1267,34 @@ export function pickToken(
     message:
       'No token provided. An unauthenticated client cannot connect to an authenticated client group.',
   });
+}
+
+function expired(now: number, q: QueryRecord) {
+  if (q.internal) {
+    return false;
+  }
+  const {desiredBy} = q;
+  for (const clientID in desiredBy) {
+    if (hasOwn(desiredBy, clientID)) {
+      const {ttl, inactivatedAt} = desiredBy[clientID];
+      // eslint-disable-next-line eqeqeq
+      if (ttl == null || inactivatedAt == null) {
+        return false;
+      }
+      if (inactivatedAt + ttl > now) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function hasExpiredQueries(cvr: CVRSnapshot): boolean {
+  const now = Date.now();
+  for (const q of Object.values(cvr.queries)) {
+    if (expired(now, q)) {
+      return true;
+    }
+  }
+  return false;
 }
