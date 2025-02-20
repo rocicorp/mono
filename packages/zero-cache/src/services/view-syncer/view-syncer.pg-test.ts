@@ -58,7 +58,6 @@ import {
 import {DrainCoordinator} from './drain-coordinator.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
 import {initViewSyncerSchema} from './schema/init.ts';
-import type {ClientQueryRecord} from './schema/types.ts';
 import {Snapshotter} from './snapshotter.ts';
 import {pickToken, type SyncContext, ViewSyncerService} from './view-syncer.ts';
 
@@ -612,6 +611,8 @@ describe('view-syncer/service', () => {
   });
 
   test('responds to changeDesiredQueries patch', async () => {
+    const now = Date.UTC(2025, 1, 20);
+    vi.setSystemTime(now);
     connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
@@ -665,7 +666,7 @@ describe('view-syncer/service', () => {
           ast: ISSUES_QUERY,
           desiredBy: {
             foo: {
-              inactivatedAt: expect.any(Number),
+              inactivatedAt,
               ttl: undefined,
               version: {minorVersion: 2, stateVersion: '00'},
             },
@@ -686,14 +687,6 @@ describe('view-syncer/service', () => {
       },
       version: {stateVersion: '00', minorVersion: 2},
     });
-    expect(
-      (cvr.queries['query-hash1'] as ClientQueryRecord).desiredBy.foo
-        .inactivatedAt,
-    ).toBeGreaterThanOrEqual(inactivatedAt);
-    expect(
-      (cvr.queries['query-hash1'] as ClientQueryRecord).desiredBy.foo
-        .inactivatedAt,
-    ).toBeLessThanOrEqual(inactivatedAt + 10);
   });
 
   test('initial hydration', async () => {
@@ -3192,7 +3185,8 @@ describe('view-syncer/service', () => {
     drainCoordinator.drainNextIn(0);
     expect(drainCoordinator.shouldDrain()).toBe(true);
     const now = Date.now();
-    await sleep(3); // Bump time forward to verify that the timeout is reset later.
+    // Bump time forward to verify that the timeout is reset later.
+    vi.setSystemTime(now + 3);
 
     // Enqueue a dummy task so that the view-syncer can elect to drain.
     stateChanges.push({state: 'version-ready'});
@@ -3283,7 +3277,7 @@ describe('view-syncer/service', () => {
     beforeEach(() => {
       vi.setSystemTime(now);
       return () => {
-        vi.restoreAllMocks();
+        vi.useRealTimers();
       };
     });
 
@@ -3614,6 +3608,8 @@ describe('permissions', () => {
   });
 
   afterEach(async () => {
+    // Restores fake date if used.
+    vi.useRealTimers();
     await vs.stop();
     await viewSyncerDone;
     await testDBs.drop(cvrDB);
