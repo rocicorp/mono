@@ -52,6 +52,7 @@ import {CVRStore} from './cvr-store.ts';
 import {
   CVRConfigDrivenUpdater,
   CVRQueryDrivenUpdater,
+  getInactiveQueries,
   type CVRSnapshot,
   type RowUpdate,
 } from './cvr.ts';
@@ -102,6 +103,10 @@ export interface ViewSyncer {
 
 const DEFAULT_KEEPALIVE_MS = 5_000;
 
+// We have previously said that the goal is to have 20MB on the client.
+// If we assume each row is ~1KB, then we can have 20,000 rows.
+const DEFAULT_MAX_ROW_COUNT = 20_000;
+
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
 }
@@ -132,6 +137,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #authData: JWTPayload | undefined;
   #permissions: LoadedPermissions | null = null; // Guaranteed if #pipelinesSynced.
 
+  /**
+   * The {@linkcode maxRowCount} is used for the eviction of queries when the
+   * number of rows in the CVR exceeds this value. The eviction process will
+   * remove queries that are inactive.
+   */
+  maxRowCount: number;
+
   constructor(
     lc: LogContext,
     taskID: string,
@@ -142,6 +154,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     versionChanges: Subscription<ReplicaState>,
     drainCoordinator: DrainCoordinator,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
+    maxRowCount = DEFAULT_MAX_ROW_COUNT,
   ) {
     this.id = clientGroupID;
     this.#shardID = shardID;
@@ -160,6 +173,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // loop will then await #cvrStore.flushed() which rejects if necessary.
       () => this.#stateChanges.cancel(),
     );
+    this.maxRowCount = maxRowCount;
 
     // Wait for the first connection to init.
     this.keepalive();
@@ -218,10 +232,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           }
 
           // Check if any queries have expired.
-          if (hasExpiredQueries(cvr)) {
-            lc.info?.('queries have expired');
-            await this.#syncQueryPipelineSet(lc, cvr);
-            this.#pipelinesSynced = true;
+          if (await this.#removeExpiredQueries(lc, cvr)) {
+            return;
+          }
+
+          // Removes evictable queries if the row count exceeds the max.
+          if (await this.#evictQueries(lc, cvr)) {
             return;
           }
 
@@ -270,6 +286,77 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#lc.info?.('view-syncer stopped');
       this.#stopped.resolve();
     }
+  }
+
+  /**
+   * @returns true if any queries were removed.
+   */
+  async #removeExpiredQueries(
+    lc: LogContext,
+    cvr: CVRSnapshot,
+  ): Promise<boolean> {
+    if (hasExpiredQueries(cvr)) {
+      lc.info?.('queries have expired');
+      await this.#syncQueryPipelineSet(lc, cvr);
+      this.#pipelinesSynced = true;
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * @returns true if any queries were evicted.
+   */
+  #evictQueries(lc: LogContext, cvr: CVRSnapshot): Promise<boolean> {
+    return startAsyncSpan(tracer, 'vs.#evictQueries', async () => {
+      if (this.#cvrStore.rowCount <= this.maxRowCount) {
+        return false;
+      }
+
+      const inactiveQueries = getInactiveQueries(cvr);
+      if (inactiveQueries.length === 0) {
+        return false;
+      }
+
+      let anyEvicted = false;
+
+      // cvr = ... For #syncQueryPipelineSet().
+      cvr = await this.#updatePatchesForDesiredQueries(lc, cvr, updater => {
+        const patches: PatchToVersion[] = [];
+
+        for (const {hash} of inactiveQueries) {
+          // We only get here after we have removed the queries that have expired.
+          // The remaining ones are inactive but haven't expired. However, when we
+          // get here we want to remove them because we are above the desired row
+          // count.
+
+          // We need to remove it for all the clients that have this query.
+          for (const clientID in cvr.clients) {
+            if (hasOwn(cvr.clients, clientID)) {
+              const patchesDueToClient = updater.deleteDesiredQueries(
+                clientID,
+                [hash],
+              );
+              patches.push(...patchesDueToClient);
+            }
+          }
+
+          // We remove one query at a time. Once that has been removed we check again
+          // if we are still above the desired row count.
+          if (patches.length > 0) {
+            anyEvicted = true;
+            break;
+          }
+        }
+        return patches;
+      });
+
+      if (this.#pipelinesSynced) {
+        await this.#syncQueryPipelineSet(lc, cvr);
+      }
+
+      return anyEvicted;
+    });
   }
 
   #totalHydrationTimeMs(): number {

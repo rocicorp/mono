@@ -109,6 +109,7 @@ export class CVRStore {
   readonly #rowCache: RowRecordCache;
   readonly #loadAttemptIntervalMs: number;
   readonly #maxLoadAttempts: number;
+  #rowCount: number = 0;
 
   constructor(
     lc: LogContext,
@@ -642,6 +643,7 @@ export class CVRStore {
     };
     if (this.#pendingRowRecordUpdates.size) {
       const existingRowRecords = await this.getRowRecords();
+      this.#rowCount = existingRowRecords.size;
       for (const [id, row] of this.#pendingRowRecordUpdates.entries()) {
         if (this.#forceUpdates.has(id)) {
           continue;
@@ -716,12 +718,16 @@ export class CVRStore {
       stats.rows += this.#pendingRowRecordUpdates.size;
       return true;
     });
-    await this.#rowCache.apply(
+    this.#rowCount = await this.#rowCache.apply(
       this.#pendingRowRecordUpdates,
       newVersion,
       rowsFlushed,
     );
     return stats;
+  }
+
+  get rowCount(): number {
+    return this.#rowCount;
   }
 
   async flush(
