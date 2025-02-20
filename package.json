@@ -5,7 +5,8 @@
   "workspaces": [
     "apps/*",
     "packages/*",
-    "prod"
+    "prod",
+    "prod/functions"
   ],
   "type": "module",
   "scripts": {

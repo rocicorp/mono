@@ -1,0 +1,18 @@
+{
+  "name": "functions",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+  },
+  "dependencies": {
+    "@rocicorp/zero": "0.16.2025022000"
+  },
+  "exports": {
+    "./*": "./src/*.ts"
+  }
+}

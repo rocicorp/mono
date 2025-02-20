@@ -85,6 +85,10 @@
       "types": "./out/zero-cache/src/server/main.d.ts",
       "default": "./out/zero-cache/src/server/main.js"
     },
+    "./permissions": {
+      "types": "./out/zero/src/permissions.d.ts",
+      "default": "./out/zero/src/permissions.js"
+    },
     "./advanced": {
       "types": "./out/zero/src/advanced.d.ts",
       "default": "./out/advanced.js"
