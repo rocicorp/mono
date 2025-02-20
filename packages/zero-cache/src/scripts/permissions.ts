@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {basename, dirname, join, relative, resolve} from 'node:path';
+import {basename, dirname, join, relative, resolve, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {tsImport} from 'tsx/esm/api';
 import * as v from '../../../shared/src/valita.ts';
@@ -75,8 +75,10 @@ export async function loadPermissions(
   lc.info?.(`Loading permissions from ${schemaPath}`);
   const dir = dirname(fileURLToPath(import.meta.url));
   const absoluteSchemaPath = resolve(schemaPath);
+  const relativeDir = relative(dir, dirname(absoluteSchemaPath));
   let relativePath = join(
-    relative(dir, dirname(absoluteSchemaPath)),
+    // tsImport expects the relativePath to be a path and not just a filename.
+    relativeDir.length ? relativeDir : `.${sep}`,
     basename(absoluteSchemaPath),
   );
 
