@@ -4,6 +4,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Database as DB} from '../../../../zqlite/src/db.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import type {LogConfig} from '../../config/zero-config.ts';
 import {DbFile} from '../../test/lite.ts';
 import {initChangeLog} from '../replicator/schema/change-log.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
@@ -15,7 +16,6 @@ import {
 import {CREATE_STORAGE_TABLE, DatabaseStorage} from './database-storage.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
 import {ResetPipelinesSignal, Snapshotter} from './snapshotter.ts';
-import type {LogConfig} from '../../config/zero-config.ts';
 
 const logConfig: LogConfig = {
   format: 'text',
@@ -397,6 +397,11 @@ describe('view-syncer/pipeline-driver', () => {
           },
         ]
       `);
+
+    // Adding a query with the same hash should be a noop.
+    expect([
+      ...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS),
+    ]).toMatchInlineSnapshot(`[]`);
   });
 
   test('insert', () => {
