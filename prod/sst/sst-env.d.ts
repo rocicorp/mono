@@ -5,34 +5,34 @@
 
 declare module "sst" {
   export interface Resource {
-    "ZeroPermissionsDeployer": {
-      "name": string
-      "type": "sst.aws.Function"
-    }
+    ZeroPermissionsDeployer: {
+      name: string;
+      type: "sst.aws.Function";
+    };
     "replication-bucket": {
-      "name": string
-      "type": "sst.aws.Bucket"
-    }
+      name: string;
+      type: "sst.aws.Bucket";
+    };
     "replication-manager": {
-      "service": string
-      "type": "sst.aws.Service"
-      "url": string
-    }
+      service: string;
+      type: "sst.aws.Service";
+      url: string;
+    };
     "view-syncer": {
-      "service": string
-      "type": "sst.aws.Service"
-      "url": string
-    }
-    "vpc": {
-      "type": "sst.aws.Vpc"
-    }
+      service: string;
+      type: "sst.aws.Service";
+      url: string;
+    };
+    vpc: {
+      type: "sst.aws.Vpc";
+    };
     "zero-permissions-deployer": {
-      "name": string
-      "type": "sst.aws.Function"
-    }
+      name: string;
+      type: "sst.aws.Function";
+    };
   }
 }
 /// <reference path="sst-env.d.ts" />
 
-import "sst"
-export {}
+import "sst";
+export {};
