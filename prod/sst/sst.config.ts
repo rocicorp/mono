@@ -92,21 +92,19 @@ export default $config({
     const addEbsVolumeConfig = (transform: any, ecsVolumeRole: aws.iam.Role | undefined) => {
       return {
         ...transform,
-        service: {
+        service: IS_EBS_STAGE ? {
           ...transform.service,
-          ...IS_EBS_STAGE ? {
-            volumeConfiguration: {
-              name: "replication-data",
-              managedEbsVolume: {
-                roleArn: ecsVolumeRole?.arn,
-                volumeType: "io2",
-                sizeInGb: 20,
-                iops: 3000,
-                fileSystemType: "ext4",
-              },
+          volumeConfiguration: {
+            name: "replication-data",
+            managedEbsVolume: {
+              roleArn: ecsVolumeRole?.arn,
+              volumeType: "io2",
+              sizeInGb: 20,
+              iops: 3000,
+              fileSystemType: "ext4",
             },
-          } : {},
-        },
+          },
+        } : transform.service,
         taskDefinition: (args: any) => {
           // Call original taskDefinition if it exists
           if (transform.taskDefinition) {
@@ -127,8 +125,8 @@ export default $config({
             args.containerDefinitions = $jsonStringify(value);
             args.volumes = [
               {
-                configureAtLaunch: true,
                 name: "replication-data",
+                configureAtLaunch: true,
               },
             ];
           }
