@@ -94,17 +94,19 @@ test('row type', () => {
     .related('labels');
   type RT = ReturnType<typeof query.run>;
   expectTypeOf<RT>().toEqualTypeOf<
-    {
-      readonly id: string;
-      readonly title: string;
-      readonly description: string;
-      readonly closed: boolean;
-      readonly ownerId: string | null;
-      readonly labels: readonly {
+    Promise<
+      {
         readonly id: string;
-        readonly name: string;
-      }[];
-    }[]
+        readonly title: string;
+        readonly description: string;
+        readonly closed: boolean;
+        readonly ownerId: string | null;
+        readonly labels: readonly {
+          readonly id: string;
+          readonly name: string;
+        }[];
+      }[]
+    >
   >();
 });
 

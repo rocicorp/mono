@@ -35,7 +35,7 @@ const mockQuery = {
   },
 };
 
-test('building a schema', () => {
+test('building a schema', async () => {
   const user = table('user')
     .columns({
       id: string(),
@@ -121,7 +121,7 @@ test('building a schema', () => {
 
   const q = mockQuery as unknown as Query<typeof schema, 'user'>;
   const iq = mockQuery as unknown as Query<typeof schema, 'issue'>;
-  const r = q
+  const r = await q
     .related('recruiter', q => q.related('recruiter', q => q.one()).one())
     .one()
     .run();
@@ -150,7 +150,7 @@ test('building a schema', () => {
   >({} as any);
 
   // recruiter is a singular relationship
-  expectTypeOf(q.related('recruiter').run()).toEqualTypeOf<
+  expectTypeOf(await q.related('recruiter').run()).toEqualTypeOf<
     {
       readonly id: string;
       readonly name: string;
@@ -166,7 +166,7 @@ test('building a schema', () => {
   >();
 
   // recruiter is a singular relationship
-  expectTypeOf(q.related('recruiter', q => q).run()).toEqualTypeOf<
+  expectTypeOf(await q.related('recruiter', q => q).run()).toEqualTypeOf<
     {
       readonly id: string;
       readonly name: string;
@@ -181,7 +181,7 @@ test('building a schema', () => {
     }[]
   >();
 
-  const id1 = iq
+  const id1 = await iq
     .related('owner', q => q.related('ownedIssues', q => q.where('id', '1')))
     .run();
   expectTypeOf(id1).toEqualTypeOf<
@@ -204,7 +204,7 @@ test('building a schema', () => {
     }[]
   >({} as never);
 
-  const id = iq.related('labels').run();
+  const id = await iq.related('labels').run();
   expectTypeOf(id).toEqualTypeOf<
     {
       readonly id: string;
@@ -218,7 +218,7 @@ test('building a schema', () => {
   >();
 
   const lq = mockQuery as unknown as Query<typeof schema, 'label'>;
-  const ld = lq.related('issues').run();
+  const ld = await lq.related('issues').run();
   expectTypeOf(ld).toEqualTypeOf<
     {
       readonly id: number;
