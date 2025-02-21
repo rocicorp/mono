@@ -34,7 +34,8 @@ CREATE TABLE issue (
     "assigneeID" VARCHAR REFERENCES "user"(id),
     -- Size chosen because max we currently have in legacy data is ~9KB.
     "description" VARCHAR(10240) DEFAULT '',
-    "visibility" VARCHAR DEFAULT 'public' NOT NULL
+    "visibility" VARCHAR DEFAULT 'public' NOT NULL,
+    "testJson" JSONB DEFAULT '{}'
 );
 
 
