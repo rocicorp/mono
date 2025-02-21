@@ -84,4 +84,4 @@ jobs:
         run: |
           cd prod/sst
           npm install
-          npx sst deploy --stage 1gb_ebs
+          npx sst deploy --stage 1gb-ebs

@@ -40,7 +40,7 @@ export default $config({
       },
     });
         
-    const IS_EBS_STAGE = $app.stage.endsWith("_ebs");
+    const IS_EBS_STAGE = $app.stage.endsWith("-ebs");
     
     // Common environment variables
     const commonEnv = {
