@@ -23,6 +23,7 @@ export default $config({
     // VPC Configuration
     const vpc = new sst.aws.Vpc(`vpc`, {
       az: 2,
+      nat: "ec2", // Needed for deploying Lambdas
     });
     // ECS Cluster
     const cluster = new sst.aws.Cluster(`cluster`, {
@@ -181,17 +182,45 @@ export default $config({
       wait: false,
     });
 
-    new command.local.Command(
-      "zero-deploy-permissions",
-      {
-        // Pulumi operates with cwd at the package root.
-        dir: join(process.cwd(), "../../packages/zero/"),
-        create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/schema.ts`,
-        // Run the Command on every deploy ...
-        triggers: [Date.now()],
-      },
-      // after the view-syncer is deployed.
-      { dependsOn: viewSyncer },
-    );
+    if ($app.stage === "sandbox") {
+      // In sandbox, deploy permissions in a Lambda.
+      const permissionsDeployer = new sst.aws.Function(
+        "zero-permissions-deployer",
+        {
+          handler: "../functions/src/permissions.deploy",
+          vpc,
+          environment: { ["ZERO_UPSTREAM_DB"]: process.env.ZERO_UPSTREAM_DB },
+          copyFiles: [
+            { from: "../../apps/zbugs/schema.ts", to: "./schema.ts" },
+          ],
+          nodejs: { install: ["@rocicorp/zero"] },
+        },
+      );
+
+      new aws.lambda.Invocation(
+        "invoke-zero-permissions-deployer",
+        {
+          // Invoke the Lambda on every deploy.
+          input: Date.now().toString(),
+          functionName: permissionsDeployer.name,
+        },
+        { dependsOn: viewSyncer },
+      );
+    } else {
+      // In prod, deploy permissions via a local Command, to exercise both approaches.
+      new command.local.Command(
+        "zero-deploy-permissions",
+        {
+          // Pulumi operates with cwd at the package root.
+          dir: join(process.cwd(), "../../packages/zero/"),
+          create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/schema.ts`,
+          environment: { ["ZERO_UPSTREAM_DB"]: process.env.ZERO_UPSTREAM_DB },
+          // Run the Command on every deploy.
+          triggers: [Date.now()],
+        },
+        // after the view-syncer is deployed.
+        { dependsOn: viewSyncer },
+      );
+    }
   },
 });
