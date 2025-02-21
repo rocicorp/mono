@@ -11,5 +11,6 @@
   },
   "dependencies": {
     "@rocicorp/zero": "file:rocicorp-zero.tgz"
-  }
+  },
+  "prettier": "@rocicorp/prettier-config"
 }
