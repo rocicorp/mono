@@ -132,15 +132,21 @@ test('push edit change', () => {
   expect(c.pushes).toMatchInlineSnapshot(`
     [
       {
-        "oldRow": {
-          "a": "a",
-          "b": "b",
-          "c": "c",
+        "node": {
+          "relationships": {},
+          "row": {
+            "a": "a",
+            "b": "b2",
+            "c": "c2",
+          },
         },
-        "row": {
-          "a": "a",
-          "b": "b2",
-          "c": "c2",
+        "oldNode": {
+          "relationships": {},
+          "row": {
+            "a": "a",
+            "b": "b",
+            "c": "c",
+          },
         },
         "type": "edit",
       },

@@ -520,10 +520,15 @@ test('self-join', () => {
           },
           "relationshipName": "recruiter",
         },
-        "row": {
-          "id": 9,
-          "name": "abby",
-          "recruiterID": 8,
+        "node": {
+          "relationships": {
+            "recruiter": [],
+          },
+          "row": {
+            "id": 9,
+            "name": "abby",
+            "recruiterID": 8,
+          },
         },
         "type": "child",
       },
@@ -564,10 +569,24 @@ test('self-join', () => {
           },
           "relationshipName": "recruiter",
         },
-        "row": {
-          "id": 9,
-          "name": "abby",
-          "recruiterID": 8,
+        "node": {
+          "relationships": {
+            "recruiter": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": 8,
+                  "name": "sam",
+                  "recruiterID": 3,
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": 9,
+            "name": "abby",
+            "recruiterID": 8,
+          },
         },
         "type": "child",
       },
@@ -887,10 +906,32 @@ test('multi-join', () => {
           },
           "relationshipName": "userStates",
         },
-        "row": {
-          "id": 2,
-          "name": "erik",
-          "recruiterID": 1,
+        "node": {
+          "relationships": {
+            "userStates": [
+              {
+                "relationships": {
+                  "states": [
+                    {
+                      "relationships": {},
+                      "row": {
+                        "code": "HI",
+                      },
+                    },
+                  ],
+                },
+                "row": {
+                  "stateCode": "HI",
+                  "userID": 2,
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": 2,
+            "name": "erik",
+            "recruiterID": 1,
+          },
         },
         "type": "child",
       },
@@ -1039,10 +1080,32 @@ test('join with limit', () => {
           },
           "relationshipName": "userStates",
         },
-        "row": {
-          "id": 2,
-          "name": "erik",
-          "recruiterID": 1,
+        "node": {
+          "relationships": {
+            "userStates": [
+              {
+                "relationships": {
+                  "states": [
+                    {
+                      "relationships": {},
+                      "row": {
+                        "code": "HI",
+                      },
+                    },
+                  ],
+                },
+                "row": {
+                  "stateCode": "HI",
+                  "userID": 2,
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": 2,
+            "name": "erik",
+            "recruiterID": 1,
+          },
         },
         "type": "child",
       },

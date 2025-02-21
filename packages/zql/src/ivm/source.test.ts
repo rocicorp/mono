@@ -2560,16 +2560,22 @@ test('json is a valid type to read and write to/from a source', () => {
   expect(out.pushes).toMatchInlineSnapshot(`
     [
       {
-        "oldRow": {
-          "a": 4,
-          "j": {
-            "foo": "foo",
+        "node": {
+          "relationships": {},
+          "row": {
+            "a": 4,
+            "j": {
+              "foo": "bar",
+            },
           },
         },
-        "row": {
-          "a": 4,
-          "j": {
-            "foo": "bar",
+        "oldNode": {
+          "relationships": {},
+          "row": {
+            "a": 4,
+            "j": {
+              "foo": "foo",
+            },
           },
         },
         "type": "edit",

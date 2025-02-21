@@ -1314,15 +1314,21 @@ suite('take with no partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "oldRow": {
-                "created": 100,
-                "id": "i1",
-                "text": "a",
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 100,
+                  "id": "i1",
+                  "text": "a2",
+                },
               },
-              "row": {
-                "created": 100,
-                "id": "i1",
-                "text": "a2",
+              "oldNode": {
+                "relationships": {},
+                "row": {
+                  "created": 100,
+                  "id": "i1",
+                  "text": "a",
+                },
               },
               "type": "edit",
             },
@@ -1383,15 +1389,21 @@ suite('take with no partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "oldRow": {
-                "created": 400,
-                "id": "i4",
-                "text": "d",
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": "d2",
+                },
               },
-              "row": {
-                "created": 400,
-                "id": "i4",
-                "text": "d2",
+              "oldNode": {
+                "relationships": {},
+                "row": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": "d",
+                },
               },
               "type": "edit",
             },
@@ -1507,15 +1519,21 @@ suite('take with no partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "oldRow": {
-                "created": 200,
-                "id": "i2",
-                "text": "b",
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": "b2",
+                },
               },
-              "row": {
-                "created": 200,
-                "id": "i2",
-                "text": "b2",
+              "oldNode": {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": "b",
+                },
               },
               "type": "edit",
             },
@@ -1576,15 +1594,21 @@ suite('take with no partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "oldRow": {
-                "created": 300,
-                "id": "i3",
-                "text": "c",
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": "c2",
+                },
               },
-              "row": {
-                "created": 300,
-                "id": "i3",
-                "text": "c2",
+              "oldNode": {
+                "relationships": {},
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": "c",
+                },
               },
               "type": "edit",
             },
@@ -1645,15 +1669,21 @@ suite('take with no partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "oldRow": {
-                "created": 200,
-                "id": "i2",
-                "text": "b",
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 50,
+                  "id": "i2",
+                  "text": "b2",
+                },
               },
-              "row": {
-                "created": 50,
-                "id": "i2",
-                "text": "b2",
+              "oldNode": {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": "b",
+                },
               },
               "type": "edit",
             },
@@ -1823,15 +1853,21 @@ suite('take with no partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "oldRow": {
-                "created": 200,
-                "id": "i2",
-                "text": "b",
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 350,
+                  "id": "i2",
+                  "text": "b2",
+                },
               },
-              "row": {
-                "created": 350,
-                "id": "i2",
-                "text": "b2",
+              "oldNode": {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": "b",
+                },
               },
               "type": "edit",
             },
@@ -1986,15 +2022,21 @@ suite('take with no partition', () => {
       expect(pushes).toMatchInlineSnapshot(`
         [
           {
-            "oldRow": {
-              "created": 100,
-              "id": "i1",
-              "text": "a",
+            "node": {
+              "relationships": {},
+              "row": {
+                "created": 50,
+                "id": "i1",
+                "text": "a2",
+              },
             },
-            "row": {
-              "created": 50,
-              "id": "i1",
-              "text": "a2",
+            "oldNode": {
+              "relationships": {},
+              "row": {
+                "created": 100,
+                "id": "i1",
+                "text": "a",
+              },
             },
             "type": "edit",
           },
@@ -2650,17 +2692,23 @@ suite('take with partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "oldRow": {
-                "created": 100,
-                "id": "c1",
-                "issueID": "i1",
-                "text": "a",
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a2",
+                },
               },
-              "row": {
-                "created": 100,
-                "id": "c1",
-                "issueID": "i1",
-                "text": "a2",
+              "oldNode": {
+                "relationships": {},
+                "row": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
               },
               "type": "edit",
             },
@@ -2734,17 +2782,23 @@ suite('take with partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "oldRow": {
-                "created": 500,
-                "id": "c5",
-                "issueID": "i2",
-                "text": "e",
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e2",
+                },
               },
-              "row": {
-                "created": 500,
-                "id": "c5",
-                "issueID": "i2",
-                "text": "e2",
+              "oldNode": {
+                "relationships": {},
+                "row": {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e",
+                },
               },
               "type": "edit",
             },
@@ -2886,17 +2940,23 @@ suite('take with partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "oldRow": {
-                "created": 200,
-                "id": "c2",
-                "issueID": "i1",
-                "text": "b",
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b2",
+                },
               },
-              "row": {
-                "created": 200,
-                "id": "c2",
-                "issueID": "i1",
-                "text": "b2",
+              "oldNode": {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
               },
               "type": "edit",
             },
@@ -2970,17 +3030,23 @@ suite('take with partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "oldRow": {
-                "created": 300,
-                "id": "c3",
-                "issueID": "i1",
-                "text": "c",
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c2",
+                },
               },
-              "row": {
-                "created": 300,
-                "id": "c3",
-                "issueID": "i1",
-                "text": "c2",
+              "oldNode": {
+                "relationships": {},
+                "row": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
               },
               "type": "edit",
             },
@@ -3073,17 +3139,23 @@ suite('take with partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "oldRow": {
-                "created": 300,
-                "id": "c3",
-                "issueID": "i1",
-                "text": "c",
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 150,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c2",
+                },
               },
-              "row": {
-                "created": 150,
-                "id": "c3",
-                "issueID": "i1",
-                "text": "c2",
+              "oldNode": {
+                "relationships": {},
+                "row": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
               },
               "type": "edit",
             },
@@ -3268,17 +3340,23 @@ suite('take with partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "oldRow": {
-                "created": 200,
-                "id": "c2",
-                "issueID": "i1",
-                "text": "b",
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 50,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b2",
+                },
               },
-              "row": {
-                "created": 50,
-                "id": "c2",
-                "issueID": "i1",
-                "text": "b2",
+              "oldNode": {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
               },
               "type": "edit",
             },
@@ -3482,17 +3560,23 @@ suite('take with partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "oldRow": {
-                "created": 100,
-                "id": "c1",
-                "issueID": "i1",
-                "text": "a",
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 250,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a2",
+                },
               },
-              "row": {
-                "created": 250,
-                "id": "c1",
-                "issueID": "i1",
-                "text": "a2",
+              "oldNode": {
+                "relationships": {},
+                "row": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
               },
               "type": "edit",
             },

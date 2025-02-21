@@ -46,13 +46,19 @@ test('fan-out pushes along all paths', () => {
         "type": "add",
       },
       {
-        "oldRow": {
-          "a": 1,
-          "b": "foo",
+        "node": {
+          "relationships": {},
+          "row": {
+            "a": 1,
+            "b": "bar",
+          },
         },
-        "row": {
-          "a": 1,
-          "b": "bar",
+        "oldNode": {
+          "relationships": {},
+          "row": {
+            "a": 1,
+            "b": "foo",
+          },
         },
         "type": "edit",
       },
@@ -81,13 +87,19 @@ test('fan-out pushes along all paths', () => {
         "type": "add",
       },
       {
-        "oldRow": {
-          "a": 1,
-          "b": "foo",
+        "node": {
+          "relationships": {},
+          "row": {
+            "a": 1,
+            "b": "bar",
+          },
         },
-        "row": {
-          "a": 1,
-          "b": "bar",
+        "oldNode": {
+          "relationships": {},
+          "row": {
+            "a": 1,
+            "b": "foo",
+          },
         },
         "type": "edit",
       },
@@ -116,13 +128,19 @@ test('fan-out pushes along all paths', () => {
         "type": "add",
       },
       {
-        "oldRow": {
-          "a": 1,
-          "b": "foo",
+        "node": {
+          "relationships": {},
+          "row": {
+            "a": 1,
+            "b": "bar",
+          },
         },
-        "row": {
-          "a": 1,
-          "b": "bar",
+        "oldNode": {
+          "relationships": {},
+          "row": {
+            "a": 1,
+            "b": "foo",
+          },
         },
         "type": "edit",
       },

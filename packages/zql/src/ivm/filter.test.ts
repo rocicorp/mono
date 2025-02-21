@@ -244,13 +244,19 @@ test('edit', () => {
   expect(out.pushes).toMatchInlineSnapshot(`
     [
       {
-        "oldRow": {
-          "a": 2,
-          "x": 2,
+        "node": {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "x": 4,
+          },
         },
-        "row": {
-          "a": 2,
-          "x": 4,
+        "oldNode": {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "x": 2,
+          },
         },
         "type": "edit",
       },
