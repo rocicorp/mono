@@ -51,6 +51,11 @@ function getLitestream(
     incrementalBackupIntervalMinutes,
     snapshotBackupIntervalHours,
   } = config.litestream;
+
+  // Set the snapshot interval to something smaller than x hours so that
+  // the hourly check triggers on the hour, rather than the hour after.
+  const snapshotBackupIntervalMinutes = snapshotBackupIntervalHours * 60 - 5;
+
   return {
     litestream: must(executable, `Missing --litestream-executable`),
     env: {
@@ -61,8 +66,8 @@ function getLitestream(
         incrementalBackupIntervalMinutes,
       ),
       ['ZERO_LITESTREAM_LOG_LEVEL']: logLevelOverride ?? logLevel,
-      ['ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS']: String(
-        snapshotBackupIntervalHours,
+      ['ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_MINUTES']: String(
+        snapshotBackupIntervalMinutes,
       ),
       ['ZERO_LOG_FORMAT']: config.log.format,
       ['LITESTREAM_CONFIG']: configPath,
