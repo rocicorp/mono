@@ -257,7 +257,7 @@ function getRequiredOrDefault(type: OptionType) {
 
 export function parseOptions<T extends Options>(
   options: T,
-  argv: string[],
+  argv: string[] = process.argv.slice(2),
   envNamePrefix = '',
   processEnv = process.env,
   logger: OptionalLogger = console,
@@ -500,7 +500,7 @@ function parseArgs(
 
   // Then handle grouped flags
   for (const [groupName, group] of Object.entries(config)) {
-    if (typeof group === 'object' && group !== null) {
+    if (typeof group === 'object' && group !== null && !Array.isArray(group)) {
       result[groupName] = {};
       for (const [flagName, value] of Object.entries(group)) {
         const {field, env} = must(names.get(flagName));
