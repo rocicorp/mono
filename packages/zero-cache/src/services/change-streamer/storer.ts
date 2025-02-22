@@ -22,7 +22,8 @@ import {Subscriber} from './subscriber.ts';
 type QueueEntry =
   | ['change', WatermarkedChange]
   | ['subscriber', Subscriber]
-  | StatusMessage;
+  | StatusMessage
+  | 'stop';
 
 type PendingTransaction = {
   pool: TransactionPool;
@@ -70,7 +71,6 @@ export class Storer implements Service {
   readonly #replicaVersion: string;
   readonly #onConsumed: (c: Commit | StatusMessage) => void;
   readonly #queue = new Queue<QueueEntry>();
-  readonly stopped = resolver<false>();
 
   constructor(
     lc: LogContext,
@@ -132,9 +132,7 @@ export class Storer implements Service {
     let msg: QueueEntry | false;
 
     const catchupQueue: Subscriber[] = [];
-    while (
-      (msg = await Promise.race([this.#queue.dequeue(), this.stopped.promise]))
-    ) {
+    while ((msg = await this.#queue.dequeue()) !== 'stop') {
       const [msgType] = msg;
       if (msgType === 'subscriber') {
         const subscriber = msg[1];
@@ -325,7 +323,7 @@ export class Storer implements Service {
   }
 
   stop() {
-    this.stopped.resolve(false);
+    void this.#queue.enqueue('stop');
     return promiseVoid;
   }
 }
