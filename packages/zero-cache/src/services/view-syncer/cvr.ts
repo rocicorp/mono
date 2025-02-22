@@ -294,11 +294,14 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     return getInactiveQueries(this._cvr);
   }
 
-  deleteDesiredQueries(clientID: string, queries: string[]): PatchToVersion[] {
+  deleteDesiredQueries(
+    clientID: string,
+    queryHashes: string[],
+  ): PatchToVersion[] {
     const patches: PatchToVersion[] = [];
     const client = this.#ensureClient(clientID);
     const current = new Set(client.desiredQueryIDs);
-    const unwanted = new Set(queries);
+    const unwanted = new Set(queryHashes);
     const remove = intersection(unwanted, current);
     if (remove.size === 0) {
       return patches;

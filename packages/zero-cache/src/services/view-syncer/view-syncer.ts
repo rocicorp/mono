@@ -12,6 +12,7 @@ import {
 import {version} from '../../../../otel/src/version.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
+import {hasOwn} from '../../../../shared/src/has-own.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
@@ -51,6 +52,7 @@ import {CVRStore} from './cvr-store.ts';
 import {
   CVRConfigDrivenUpdater,
   CVRQueryDrivenUpdater,
+  getInactiveQueries,
   type CVRSnapshot,
   type RowUpdate,
 } from './cvr.ts';
@@ -64,6 +66,7 @@ import {
   versionToCookie,
   type CVRVersion,
   type NullableCVRVersion,
+  type QueryRecord,
   type RowID,
 } from './schema/types.ts';
 import {ResetPipelinesSignal} from './snapshotter.ts';
@@ -100,6 +103,10 @@ export interface ViewSyncer {
 
 const DEFAULT_KEEPALIVE_MS = 5_000;
 
+// We have previously said that the goal is to have 20MB on the client.
+// If we assume each row is ~1KB, then we can have 20,000 rows.
+const DEFAULT_MAX_ROW_COUNT = 20_000;
+
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
 }
@@ -130,6 +137,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #authData: JWTPayload | undefined;
   #permissions: LoadedPermissions | null = null; // Guaranteed if #pipelinesSynced.
 
+  /**
+   * The {@linkcode maxRowCount} is used for the eviction of queries when the
+   * number of rows in the CVR exceeds this value. The eviction process will
+   * remove queries that are inactive.
+   */
+  maxRowCount: number;
+
   constructor(
     lc: LogContext,
     taskID: string,
@@ -140,6 +154,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     versionChanges: Subscription<ReplicaState>,
     drainCoordinator: DrainCoordinator,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
+    maxRowCount = DEFAULT_MAX_ROW_COUNT,
   ) {
     this.id = clientGroupID;
     this.#shardID = shardID;
@@ -158,6 +173,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // loop will then await #cvrStore.flushed() which rejects if necessary.
       () => this.#stateChanges.cancel(),
     );
+    this.maxRowCount = maxRowCount;
 
     // Wait for the first connection to init.
     this.keepalive();
@@ -215,6 +231,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             throw new ErrorForClient({kind: ErrorKind.ClientNotFound, message});
           }
 
+          // Check if any queries have expired.
+          if (await this.#removeExpiredQueries(lc, cvr)) {
+            return;
+          }
+
+          // Removes evictable queries if the row count exceeds the max.
+          if (await this.#evictQueries(lc, cvr)) {
+            return;
+          }
+
           if (this.#pipelinesSynced) {
             const result = await this.#advancePipelines(lc, cvr);
             if (result === 'success') {
@@ -260,6 +286,77 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#lc.info?.('view-syncer stopped');
       this.#stopped.resolve();
     }
+  }
+
+  /**
+   * @returns true if any queries were removed.
+   */
+  async #removeExpiredQueries(
+    lc: LogContext,
+    cvr: CVRSnapshot,
+  ): Promise<boolean> {
+    if (hasExpiredQueries(cvr)) {
+      lc.info?.('queries have expired');
+      await this.#syncQueryPipelineSet(lc, cvr);
+      this.#pipelinesSynced = true;
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * @returns true if any queries were evicted.
+   */
+  #evictQueries(lc: LogContext, cvr: CVRSnapshot): Promise<boolean> {
+    return startAsyncSpan(tracer, 'vs.#evictQueries', async () => {
+      if (this.#cvrStore.rowCount <= this.maxRowCount) {
+        return false;
+      }
+
+      const inactiveQueries = getInactiveQueries(cvr);
+      if (inactiveQueries.length === 0) {
+        return false;
+      }
+
+      let anyEvicted = false;
+
+      // cvr = ... For #syncQueryPipelineSet().
+      cvr = await this.#updatePatchesForDesiredQueries(lc, cvr, updater => {
+        const patches: PatchToVersion[] = [];
+
+        for (const {hash} of inactiveQueries) {
+          // We only get here after we have removed the queries that have expired.
+          // The remaining ones are inactive but haven't expired. However, when we
+          // get here we want to remove them because we are above the desired row
+          // count.
+
+          // We need to remove it for all the clients that have this query.
+          for (const clientID in cvr.clients) {
+            if (hasOwn(cvr.clients, clientID)) {
+              const patchesDueToClient = updater.deleteDesiredQueries(
+                clientID,
+                [hash],
+              );
+              patches.push(...patchesDueToClient);
+            }
+          }
+
+          // We remove one query at a time. Once that has been removed we check again
+          // if we are still above the desired row count.
+          if (patches.length > 0) {
+            anyEvicted = true;
+            break;
+          }
+        }
+        return patches;
+      });
+
+      if (this.#pipelinesSynced) {
+        await this.#syncQueryPipelineSet(lc, cvr);
+      }
+
+      return anyEvicted;
+    });
   }
 
   #totalHydrationTimeMs(): number {
@@ -593,6 +690,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         lc.debug?.(`applying ${desiredQueriesPatch.length} query patches`);
         // cvr = ... For #syncQueryPipelineSet().
         cvr = await this.#updatePatchesForDesiredQueries(lc, cvr, updater => {
+          const now = Date.now();
           const patches: PatchToVersion[] = [];
           for (const patch of desiredQueriesPatch) {
             switch (patch.op) {
@@ -600,9 +698,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
                 patches.push(...updater.putDesiredQueries(clientID, [patch]));
                 break;
               case 'del':
-                patches.push(
-                  ...updater.deleteDesiredQueries(clientID, [patch.hash]),
-                );
+                updater.markDesiredQueryAsInactive(clientID, patch.hash, now);
                 break;
               case 'clear':
                 patches.push(...updater.clearDesiredQueries(clientID));
@@ -699,6 +795,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const hydratedQueries = this.#pipelines.addedQueries();
 
       // Convert queries to their transformed ast's and hashes
+      const now = Date.now();
       const hashToIDs = new Map<string, string[]>();
       const serverQueries = Object.entries(cvr.queries).map(([id, q]) => {
         const {query, hash: transformationHash} = transformAndHashQuery(
@@ -719,16 +816,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           // the query cannot be run and is `undefined`.
           ast: query,
           transformationHash,
-          desired: q.internal || Object.keys(q.desiredBy).length > 0,
+          expired: expired(now, q),
         };
       });
 
       const addQueries = serverQueries.filter(
-        q => q.desired && !hydratedQueries.has(q.transformationHash),
+        q => !q.expired && !hydratedQueries.has(q.transformationHash),
       );
-      const removeQueries = serverQueries.filter(q => !q.desired);
+      const removeQueries = serverQueries.filter(q => q.expired);
       const desiredQueries = new Set(
-        serverQueries.filter(q => q.desired).map(q => q.transformationHash),
+        serverQueries.filter(q => !q.expired).map(q => q.transformationHash),
       );
       const unhydrateQueries = [...hydratedQueries].filter(
         transformationHash => !desiredQueries.has(transformationHash),
@@ -1257,4 +1354,34 @@ export function pickToken(
     message:
       'No token provided. An unauthenticated client cannot connect to an authenticated client group.',
   });
+}
+
+function expired(now: number, q: QueryRecord) {
+  if (q.internal) {
+    return false;
+  }
+  const {desiredBy} = q;
+  for (const clientID in desiredBy) {
+    if (hasOwn(desiredBy, clientID)) {
+      const {ttl, inactivatedAt} = desiredBy[clientID];
+      // eslint-disable-next-line eqeqeq
+      if (ttl == null || inactivatedAt == null) {
+        return false;
+      }
+      if (inactivatedAt + ttl > now) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function hasExpiredQueries(cvr: CVRSnapshot): boolean {
+  const now = Date.now();
+  for (const q of Object.values(cvr.queries)) {
+    if (expired(now, q)) {
+      return true;
+    }
+  }
+  return false;
 }
