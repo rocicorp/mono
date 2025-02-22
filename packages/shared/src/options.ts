@@ -486,26 +486,34 @@ function parseArgs(
     partial: true,
   });
 
-  const result = {...config};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result: Record<string, any> = {};
   const envObj: Record<string, string> = {};
 
-  // Handle ungrouped flags first
-  if (ungrouped) {
-    for (const [flagName, value] of Object.entries(ungrouped)) {
-      const {field, env} = must(names.get(flagName));
-      result[field] = normalizeFlagValue(value);
-      envObj[env] = String(result[field]);
+  function addFlag(flagName: string, value: unknown, group?: string) {
+    const {field, env} = must(names.get(flagName));
+    const normalized = normalizeFlagValue(value);
+    if (group) {
+      result[group][field] = normalized;
+    } else {
+      result[field] = normalized;
     }
+    envObj[env] = String(normalized);
   }
 
-  // Then handle grouped flags
-  for (const [groupName, group] of Object.entries(config)) {
-    if (typeof group === 'object' && group !== null && !Array.isArray(group)) {
-      result[groupName] = {};
-      for (const [flagName, value] of Object.entries(group)) {
-        const {field, env} = must(names.get(flagName));
-        result[groupName][field] = normalizeFlagValue(value);
-        envObj[env] = String(result[groupName][field]);
+  for (const [flagName, value] of Object.entries(ungrouped ?? {})) {
+    addFlag(flagName, value);
+  }
+
+  // Then handle (potentially) grouped flags
+  for (const [name, value] of Object.entries(config)) {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      addFlag(name, value); // Flag, not a group
+    } else {
+      const group = name;
+      result[group] = {};
+      for (const [flagName, flagValue] of Object.entries(value)) {
+        addFlag(flagName, flagValue, group);
       }
     }
   }
