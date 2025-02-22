@@ -1,6 +1,7 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {
   Condition,
+  LiteralValue,
   SimpleCondition,
   SimpleOperator,
 } from '../../../zero-protocol/src/ast.ts';
@@ -8,8 +9,8 @@ import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import {getLikePredicate} from './like.ts';
 
 export type NonNullValue = Exclude<Value, null | undefined>;
-export type SimplePredicate = (rhs: Value) => boolean;
-export type SimplePredicateNoNull = (rhs: NonNullValue) => boolean;
+export type SimplePredicate = (lhs: Value) => boolean;
+export type SimplePredicateNoNull = (lhs: NonNullValue) => boolean;
 
 export type NoSubqueryCondition =
   | SimpleCondition
@@ -58,37 +59,39 @@ export function createPredicate(
     'static values should be resolved before creating predicates',
   );
 
-  switch (condition.op) {
+  const pred = createSimplePredicate(right.value, condition.op);
+  switch (left.type) {
+    case 'column':
+      return (row: Row) => pred(row[left.name]);
+    case 'literal': {
+      const val = pred(left.value);
+      return () => val;
+    }
+  }
+}
+
+export function createSimplePredicate(
+  right: LiteralValue,
+  op: SimpleOperator,
+): SimplePredicate {
+  switch (op) {
     case 'IS':
     case 'IS NOT': {
-      const impl = createIsPredicate(right.value, condition.op);
-      if (left.type === 'literal') {
-        const result = impl(left.value);
-        return () => result;
-      }
-      return (row: Row) => impl(row[left.name]);
+      return createIsPredicate(right, op);
     }
   }
 
-  if (right.value === null || right.value === undefined) {
-    return (_row: Row) => false;
+  if (right === null || right === undefined) {
+    return () => false;
   }
 
-  const impl = createPredicateImpl(right.value, condition.op);
-  if (left.type === 'literal') {
-    if (left.value === null || left.value === undefined) {
-      return (_row: Row) => false;
-    }
-    const result = impl(left.value);
-    return () => result;
-  }
+  const impl = createPredicateImpl(right, op);
 
-  return (row: Row) => {
-    const lhs = row[left.name];
-    if (lhs === null || lhs === undefined) {
+  return (left: Value | undefined) => {
+    if (left === null || left === undefined) {
       return false;
     }
-    return impl(lhs);
+    return impl(left);
   };
 }
 

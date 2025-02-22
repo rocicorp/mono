@@ -52,15 +52,17 @@ authAtom.onChange(auth => {
 let didPreload = false;
 
 export function preload(z: Zero<Schema>) {
+  return;
   if (didPreload) {
-    return;
   }
 
   didPreload = true;
 
   const baseIssueQuery = z.query.issue
     .related('labels')
-    .related('viewState', q => q.where('userID', z.userID));
+    .related('viewState', q => q.where('userID', z.userID))
+    .orderBy('modified', 'desc')
+    .limit(100);
 
   const {cleanup, complete} = baseIssueQuery.preload();
   complete.then(() => {
