@@ -964,11 +964,14 @@ test('ungrouped config', () => {
     enabled: v.boolean().optional(),
     name: v.string(),
     pids: v.array(v.number()).default([]),
+    topLevelCamel: v.string().optional(),
   };
 
   const result = parseOptions(
     ungroupedOptions,
     [
+      '--top-level-camel',
+      'case',
       '--name',
       'test',
       '--format',
@@ -989,6 +992,7 @@ test('ungrouped config', () => {
     enabled: true,
     name: 'test',
     pids: [123, 456],
+    topLevelCamel: 'case',
   });
 
   const envResult = parseOptions(ungroupedOptions, ['--name', 'test2'], 'x', {
