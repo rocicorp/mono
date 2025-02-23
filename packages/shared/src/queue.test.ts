@@ -173,21 +173,23 @@ describe('Queue', () => {
 
   test('a consumer blocks until tasks are available', async () => {
     const queue = new Queue<number>();
-    const promise = queue.dequeue().then(head => {
+    const promise = (async () => {
+      const head = await queue.dequeue();
       const tasks = queue.drain();
       expect(head).toEqual(1);
       expect(tasks).toEqual([]);
-    });
+    })();
     queue.enqueue(1);
     await promise;
   });
 
   test('drain will get all tasks that were accumulated in the prior tick', async () => {
     const queue = new Queue<number>();
-    const promise = queue.dequeue().then(head => {
+    const promise = (async () => {
+      const head = await queue.dequeue();
       const tasks = queue.drain();
       expect([head, ...tasks]).toEqual([1, 2, 3]);
-    });
+    })();
     queue.enqueue(1);
     queue.enqueue(2);
     queue.enqueue(3);
@@ -197,20 +199,22 @@ describe('Queue', () => {
   test('a consumer is called if tasks are already available', async () => {
     const queue = new Queue<number>();
     queue.enqueue(1);
-    const promise = queue.dequeue().then(head => {
+    const promise = (async () => {
+      const head = await queue.dequeue();
       const tasks = queue.drain();
       expect([head, ...tasks]).toEqual([1]);
-    });
+    })();
     await promise;
   });
 
   test('drain will get all tasks that were accumulated in the prior tick | 2', async () => {
     const queue = new Queue<number>();
     queue.enqueue(1);
-    const promise = queue.dequeue().then(head => {
+    const promise = (async () => {
+      const head = await queue.dequeue();
       const tasks = queue.drain();
       expect([head, ...tasks]).toEqual([1, 2, 3]);
-    });
+    })();
     queue.enqueue(2);
     queue.enqueue(3);
     await promise;

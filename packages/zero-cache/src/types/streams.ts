@@ -201,13 +201,14 @@ export async function streamOut<T extends JSONValue>(
         // lc.debug?.(`pipelining`, data);
         sink.send(data);
 
-        void acks.dequeue().then(({ack}) => {
+        void (async () => {
+          const {ack} = await acks.dequeue();
           // lc.debug?.(`received ack`, ack);
           if (ack !== id) {
             throw new Error(`Unexpected ack for ${id}: ${ack}`);
           }
           consumed();
-        });
+        })();
       }
     } else {
       lc.debug?.(`started synchronous outbound stream`);

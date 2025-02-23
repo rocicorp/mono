@@ -18,7 +18,7 @@ export class Queue<T> {
       clearTimeout(consumer.timeoutID);
       return;
     }
-    this.#produced.push({produced: Promise.resolve(value), value});
+    this.#produced.push({value});
   }
 
   enqueueRejection(reason?: unknown): void {
@@ -28,7 +28,7 @@ export class Queue<T> {
       clearTimeout(consumer.timeoutID);
       return;
     }
-    this.#produced.push({produced: Promise.reject(reason)});
+    this.#produced.push({rejection: reason});
   }
 
   /**
@@ -60,10 +60,10 @@ export class Queue<T> {
    *                  if nothing is produced for the consumer.
    * @returns A Promise that resolves to the next enqueued value.
    */
-  dequeue(timeoutValue?: T, timeoutMs: number = 0): Promise<T> {
+  dequeue(timeoutValue?: T, timeoutMs: number = 0): Promise<T> | T {
     const produced = this.#produced.shift();
     if (produced) {
-      return produced.produced;
+      return produced.value ?? Promise.reject(produced.rejection);
     }
     const r = resolver<T>();
     const timeoutID =
@@ -144,7 +144,6 @@ type Consumer<T> = {
   timeoutID: ReturnType<typeof setTimeout> | undefined;
 };
 
-type Produced<T> = {
-  produced: Promise<T>;
-  value?: T | undefined;
-};
+type Produced<T> =
+  | {value: T; rejection?: undefined}
+  | {value?: undefined; rejection: unknown};
