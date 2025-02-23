@@ -50,7 +50,7 @@ export class StaticQuery<
     throw new Error('AuthQuery cannot be materialized');
   }
 
-  run(): HumanReadable<TReturn> {
+  run(): Promise<HumanReadable<TReturn>> {
     throw new Error('AuthQuery cannot be run');
   }
 

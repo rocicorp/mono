@@ -708,7 +708,7 @@ test('non int limit', () => {
   }).toThrow('Limit must be an integer');
 });
 
-test('run', () => {
+test('run', async () => {
   const queryDelegate = new QueryDelegateImpl();
   addData(queryDelegate);
 
@@ -718,9 +718,9 @@ test('run', () => {
     'issue 1',
   );
 
-  const singleFilterRows = issueQuery1.run();
-  const doubleFilterRows = issueQuery1.where('closed', '=', false).run();
-  const doubleFilterWithNoResultsRows = issueQuery1
+  const singleFilterRows = await issueQuery1.run();
+  const doubleFilterRows = await issueQuery1.where('closed', '=', false).run();
+  const doubleFilterWithNoResultsRows = await issueQuery1
     .where('closed', '=', true)
     .run();
 
