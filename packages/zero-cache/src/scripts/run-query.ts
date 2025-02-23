@@ -7,7 +7,7 @@ import {parseOptions} from '../../../shared/src/options.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {buildPipeline} from '../../../zql/src/builder/builder.ts';
-import {Catch} from '../../../zql/src/ivm/catch.ts';
+import {Catch, type CaughtNode} from '../../../zql/src/ivm/catch.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import {
   newQuery,
@@ -25,13 +25,16 @@ import {
   zeroOptions,
   type LogConfig,
 } from '../config/zero-config.ts';
+import {readFileSync} from 'fs';
 
 const options = {
   replicaFile: zeroOptions.replicaFile,
   debug: {
     ast: {
       type: v.string().optional(),
-      desc: ['AST for the query to be transformed or timed.'],
+      desc: [
+        'AST for the query to be transformed or timed. If starts with "@" then it is a path to a file.',
+      ],
     },
     query: {
       type: v.string().optional(),
@@ -100,7 +103,13 @@ let start: number;
 let end: number;
 const suppressError: Record<string, unknown> = {};
 if (config.debug.ast) {
-  [start, end] = runAst(JSON.parse(config.debug.ast) as AST);
+  if (config.debug.ast.startsWith('@')) {
+    const contents = readFileSync(config.debug.ast.slice(1), 'utf-8');
+    const ast = JSON.parse(contents) as AST;
+    [start, end] = runAst(ast);
+  } else {
+    [start, end] = runAst(JSON.parse(config.debug.ast) as AST);
+  }
 } else if (config.debug.query) {
   [start, end] = runQuery(config.debug.query);
 } else {
