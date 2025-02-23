@@ -451,10 +451,10 @@ async function setup(permissions: PermissionsConfig | undefined) {
     void (async function () {
       try {
         for await (const msg of source) {
-          await queue.enqueue(msg);
+          queue.enqueue(msg);
         }
       } catch (e) {
-        await queue.enqueueRejection(e);
+        queue.enqueueRejection(e);
       }
     })();
 

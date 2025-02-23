@@ -110,7 +110,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
     const queue = new Queue<ChangeStreamMessage>();
     void (async () => {
       for await (const msg of sub) {
-        void queue.enqueue(msg);
+        queue.enqueue(msg);
       }
     })();
     return queue;

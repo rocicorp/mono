@@ -1,10 +1,10 @@
-import type {PushBody} from '../../../../zero-protocol/src/push.ts';
-import type {MutationError} from './mutagen.ts';
-import type {Service} from '../service.ts';
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
-import {must} from '../../../../shared/src/must.ts';
 import type {LogContext} from '@rocicorp/logger';
+import {must} from '../../../../shared/src/must.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
+import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import type {PushBody} from '../../../../zero-protocol/src/push.ts';
+import type {Service} from '../service.ts';
+import type {MutationError} from './mutagen.ts';
 
 export interface Pusher {
   enqueuePush(push: PushBody, jwt: string | undefined): void;
@@ -41,7 +41,7 @@ export class PusherService implements Service {
   }
 
   enqueuePush(push: PushBody, jwt: string | undefined) {
-    void this.#queue.enqueue({push, jwt});
+    this.#queue.enqueue({push, jwt});
   }
 
   run(): Promise<void> {
@@ -50,7 +50,7 @@ export class PusherService implements Service {
   }
 
   stop(): Promise<void> {
-    void this.#queue.enqueue('stop');
+    this.#queue.enqueue('stop');
     return must(this.#stopped, 'Stop was called before `run`');
   }
 }

@@ -47,7 +47,7 @@ describe('change-source/tables/ddl', () => {
       .on('heartbeat', (lsn, _time, respond) => {
         respond && void service.acknowledge(lsn);
       })
-      .on('data', (_lsn, msg) => void messages.enqueue(msg));
+      .on('data', (_lsn, msg) => messages.enqueue(msg));
 
     void service.subscribe(
       new PgoutputPlugin({

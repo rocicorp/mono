@@ -97,7 +97,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     const queue = new Queue<ChangeStreamMessage | 'timeout'>();
     void (async () => {
       for await (const msg of sub) {
-        void queue.enqueue(msg);
+        queue.enqueue(msg);
       }
     })();
     return queue;

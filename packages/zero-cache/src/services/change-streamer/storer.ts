@@ -116,15 +116,15 @@ export class Storer implements Service {
   }
 
   store(entry: WatermarkedChange) {
-    void this.#queue.enqueue(['change', entry]);
+    this.#queue.enqueue(['change', entry]);
   }
 
   status(s: StatusMessage) {
-    void this.#queue.enqueue(s);
+    this.#queue.enqueue(s);
   }
 
   catchup(sub: Subscriber) {
-    void this.#queue.enqueue(['subscriber', sub]);
+    this.#queue.enqueue(['subscriber', sub]);
   }
 
   async run() {
@@ -323,7 +323,7 @@ export class Storer implements Service {
   }
 
   stop() {
-    void this.#queue.enqueue('stop');
+    this.#queue.enqueue('stop');
     return promiseVoid;
   }
 }
