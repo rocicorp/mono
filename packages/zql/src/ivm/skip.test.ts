@@ -1155,15 +1155,21 @@ suite('push', () => {
           "type": "add",
         },
         {
-          "oldRow": {
-            "date": "2014-01-24",
-            "id": 1,
-            "x": 1,
+          "node": {
+            "relationships": {},
+            "row": {
+              "date": "2014-01-24",
+              "id": 1,
+              "x": 2,
+            },
           },
-          "row": {
-            "date": "2014-01-24",
-            "id": 1,
-            "x": 2,
+          "oldNode": {
+            "relationships": {},
+            "row": {
+              "date": "2014-01-24",
+              "id": 1,
+              "x": 1,
+            },
           },
           "type": "edit",
         },
@@ -1213,13 +1219,19 @@ suite('push', () => {
           "type": "add",
         },
         {
-          "oldRow": {
-            "date": "2014-01-25",
-            "id": 1,
+          "node": {
+            "relationships": {},
+            "row": {
+              "date": "2014-01-26",
+              "id": 1,
+            },
           },
-          "row": {
-            "date": "2014-01-26",
-            "id": 1,
+          "oldNode": {
+            "relationships": {},
+            "row": {
+              "date": "2014-01-25",
+              "id": 1,
+            },
           },
           "type": "edit",
         },
