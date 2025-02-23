@@ -182,7 +182,7 @@ export async function streamOut<T extends JSONValue>(
       if (typeof data !== 'string') {
         throw new Error('Expected string message');
       }
-      void acks.enqueue(v.parse(JSON.parse(data), ackSchema));
+      acks.enqueue(v.parse(JSON.parse(data), ackSchema));
     } catch (e) {
       lc.error?.(`error parsing ack`, e);
       closer.close(e);

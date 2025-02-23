@@ -1,6 +1,5 @@
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import {assert} from './asserts.ts';
-import {promiseVoid} from './resolved-promises.ts';
 
 /**
  * A Queue allows the consumers to await (possibly future) values,
@@ -12,34 +11,24 @@ export class Queue<T> {
   // Produced entries waiting to be consumed.
   readonly #produced: Produced<T>[] = [];
 
-  /**
-   * @returns A Promise that resolves when the value is consumed.
-   */
-  enqueue(value: T): Promise<void> {
+  enqueue(value: T): void {
     const consumer = this.#consumers.shift();
     if (consumer) {
       consumer.resolver.resolve(value);
       clearTimeout(consumer.timeoutID);
-      return promiseVoid;
+      return;
     }
-    return this.#enqueueProduced(Promise.resolve(value), value);
+    this.#produced.push({produced: Promise.resolve(value), value});
   }
 
-  /** @returns A Promise that resolves when the rejection is consumed. */
-  enqueueRejection(reason?: unknown): Promise<void> {
+  enqueueRejection(reason?: unknown): void {
     const consumer = this.#consumers.shift();
     if (consumer) {
       consumer.resolver.reject(reason);
       clearTimeout(consumer.timeoutID);
-      return Promise.resolve();
+      return;
     }
-    return this.#enqueueProduced(Promise.reject(reason));
-  }
-
-  #enqueueProduced(produced: Promise<T>, value?: T): Promise<void> {
-    const {promise, resolve: consumed} = resolver<void>();
-    this.#produced.push({produced, value, consumed});
-    return promise;
+    this.#produced.push({produced: Promise.reject(reason)});
   }
 
   /**
@@ -59,7 +48,6 @@ export class Queue<T> {
       const p = this.#produced[i];
       if (p.value === value) {
         this.#produced.splice(i, 1);
-        p.consumed();
         count++;
       }
     }
@@ -75,7 +63,6 @@ export class Queue<T> {
   dequeue(timeoutValue?: T, timeoutMs: number = 0): Promise<T> {
     const produced = this.#produced.shift();
     if (produced) {
-      produced.consumed();
       return produced.produced;
     }
     const r = resolver<T>();
@@ -111,7 +98,6 @@ export class Queue<T> {
     const ret: (T | undefined)[] = [];
     for (const p of this.#produced) {
       ret.push(p.value);
-      p.consumed();
     }
     this.#produced.length = 0;
 
@@ -160,6 +146,5 @@ type Consumer<T> = {
 
 type Produced<T> = {
   produced: Promise<T>;
-  value: T | undefined;
-  consumed: () => void;
+  value?: T | undefined;
 };
