@@ -87,10 +87,7 @@ export default $config({
       );
     }
 
-    const addEbsVolumeConfig = (
-      transform: any,
-      ecsVolumeRole: aws.iam.Role | undefined,
-    ) => {
+    const addEbsVolumeConfig = (transform: any) => {
       return {
         ...transform,
         service: IS_EBS_STAGE
@@ -165,28 +162,25 @@ export default $config({
           },
         ],
       },
-      transform: addEbsVolumeConfig(
-        {
-          service: {
-            healthCheckGracePeriodSeconds: 300, // same as health.startPeriod
-          },
-          loadBalancer: {
-            idleTimeout: 3600, // Keep idle connections alive
-          },
-          target: {
-            healthCheck: {
-              enabled: true,
-              path: "/keepalive",
-              protocol: "HTTP",
-              interval: 5,
-              healthyThreshold: 2,
-              timeout: 3,
-            },
-            deregistrationDelay: 1, // Drain as soon as a new instance is healthy.
-          },
+      transform: addEbsVolumeConfig({
+        service: {
+          healthCheckGracePeriodSeconds: 300,
         },
-        ecsVolumeRole,
-      ),
+        loadBalancer: {
+          idleTimeout: 3600,
+        },
+        target: {
+          healthCheck: {
+            enabled: true,
+            path: "/keepalive",
+            protocol: "HTTP",
+            interval: 5,
+            healthyThreshold: 2,
+            timeout: 3,
+          },
+          deregistrationDelay: 1,
+        },
+      }),
     });
     // View Syncer Service
     const viewSyncer = cluster.addService(`view-syncer`, {
@@ -238,34 +232,31 @@ export default $config({
               ],
             }),
       },
-      transform: addEbsVolumeConfig(
-        {
-          service: {
-            healthCheckGracePeriodSeconds: 300, // same as health.startPeriod
-          },
-          target: {
-            healthCheck: {
-              enabled: true,
-              path: "/keepalive",
-              protocol: "HTTP",
-              interval: 5,
-              healthyThreshold: 2,
-              timeout: 3,
-            },
-            stickiness: {
-              enabled: true,
-              type: "lb_cookie",
-              cookieDuration: 120,
-            },
-            loadBalancingAlgorithmType: "least_outstanding_requests",
-          },
-          autoScalingTarget: {
-            minCapacity: 1,
-            maxCapacity: 10,
-          },
+      transform: addEbsVolumeConfig({
+        service: {
+          healthCheckGracePeriodSeconds: 300,
         },
-        ecsVolumeRole,
-      ),
+        target: {
+          healthCheck: {
+            enabled: true,
+            path: "/keepalive",
+            protocol: "HTTP",
+            interval: 5,
+            healthyThreshold: 2,
+            timeout: 3,
+          },
+          stickiness: {
+            enabled: true,
+            type: "lb_cookie",
+            cookieDuration: 120,
+          },
+          loadBalancingAlgorithmType: "least_outstanding_requests",
+        },
+        autoScalingTarget: {
+          minCapacity: 1,
+          maxCapacity: 10,
+        },
+      }),
       // Set this to `true` to make SST wait for the view-syncer to be deployed
       // before proceeding (to permissions deployment, etc.). This makes the deployment
       // take a lot longer and is only necessary if there is an AST format change.
