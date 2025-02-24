@@ -4,6 +4,16 @@
 require("dotenv").config();
 
 import { join } from "node:path";
+import { createDefu } from 'defu';
+
+const defu = createDefu((obj, key, value) => {
+  // Don't merge functions, just use the last one
+  if (typeof obj[key] === 'function' || typeof value === 'function') {
+    obj[key] = value;
+    return true;
+  }
+  return false;
+});
 
 export default $config({
   app(input) {
@@ -87,51 +97,60 @@ export default $config({
       );
     }
 
-    const addEbsVolumeConfig = (transform: any) => {
-      return {
-        ...transform,
-        service: IS_EBS_STAGE
-          ? {
-              ...transform.service,
-              volumeConfiguration: {
-                name: "replication-data",
-                managedEbsVolume: {
-                  roleArn: ecsVolumeRole?.arn,
-                  volumeType: "io2",
-                  sizeInGb: 20,
-                  iops: 3000,
-                  fileSystemType: "ext4",
-                },
-              },
-            }
-          : transform.service,
-        taskDefinition: (args: any) => {
-          // Call original taskDefinition if it exists
-          if (transform.taskDefinition) {
-            transform.taskDefinition(args);
-          }
-
-          if (IS_EBS_STAGE) {
-            let value = $jsonParse(args.containerDefinitions);
-            value = value.apply((containerDefinitions: any) => {
-              containerDefinitions[0].mountPoints = [
-                {
-                  sourceVolume: "replication-data",
-                  containerPath: "/data",
-                },
-              ];
-              return containerDefinitions;
-            });
-            args.containerDefinitions = $jsonStringify(value);
-            args.volumes = [
-              {
-                name: "replication-data",
-                configureAtLaunch: true,
-              },
-            ];
-          }
+    // Common base transform configuration
+    const BASE_TRANSFORM: any = {
+      service: {
+        healthCheckGracePeriodSeconds: 300,
+      },
+      loadBalancer: {
+        idleTimeout: 3600,
+      },
+      target: {
+        healthCheck: {
+          enabled: true,
+          path: "/keepalive",
+          protocol: "HTTP",
+          interval: 5,
+          healthyThreshold: 2,
+          timeout: 3,
         },
-      };
+        deregistrationDelay: 1,
+      },
+    };
+
+    // EBS-specific transform configuration
+    const EBS_TRANSFORM: any = !IS_EBS_STAGE ? {} : {
+      service: {
+        volumeConfiguration: {
+          name: "replication-data",
+          managedEbsVolume: {
+            roleArn: ecsVolumeRole?.arn,
+            volumeType: "io2",
+            sizeInGb: 20,
+            iops: 3000,
+            fileSystemType: "ext4",
+          },
+        },
+      },
+      taskDefinition: (args: any) => {
+        let value = $jsonParse(args.containerDefinitions);
+        value = value.apply((containerDefinitions: any) => {
+          containerDefinitions[0].mountPoints = [
+            {
+              sourceVolume: "replication-data",
+              containerPath: "/data",
+            },
+          ];
+          return containerDefinitions;
+        });
+        args.containerDefinitions = $jsonStringify(value);
+        args.volumes = [
+          {
+            name: "replication-data",
+            configureAtLaunch: true,
+          },
+        ];
+      },
     };
 
     // Replication Manager Service
@@ -162,25 +181,7 @@ export default $config({
           },
         ],
       },
-      transform: addEbsVolumeConfig({
-        service: {
-          healthCheckGracePeriodSeconds: 300,
-        },
-        loadBalancer: {
-          idleTimeout: 3600,
-        },
-        target: {
-          healthCheck: {
-            enabled: true,
-            path: "/keepalive",
-            protocol: "HTTP",
-            interval: 5,
-            healthyThreshold: 2,
-            timeout: 3,
-          },
-          deregistrationDelay: 1,
-        },
-      }),
+      transform: defu(EBS_TRANSFORM, BASE_TRANSFORM),
     });
     // View Syncer Service
     const viewSyncer = cluster.addService(`view-syncer`, {
@@ -232,19 +233,10 @@ export default $config({
               ],
             }),
       },
-      transform: addEbsVolumeConfig({
-        service: {
-          healthCheckGracePeriodSeconds: 300,
-        },
+      transform: defu(EBS_TRANSFORM, {
+        ...BASE_TRANSFORM,
         target: {
-          healthCheck: {
-            enabled: true,
-            path: "/keepalive",
-            protocol: "HTTP",
-            interval: 5,
-            healthyThreshold: 2,
-            timeout: 3,
-          },
+          ...BASE_TRANSFORM.target,
           stickiness: {
             enabled: true,
             type: "lb_cookie",
