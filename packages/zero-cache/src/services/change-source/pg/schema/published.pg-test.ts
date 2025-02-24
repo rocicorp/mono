@@ -875,10 +875,13 @@ describe('tables/published', () => {
       CREATE TABLE test.issues (
         issue_id INTEGER PRIMARY KEY,
         org_id INTEGER,
-        component_id INTEGER
+        component_id INTEGER,
+        stored INTEGER GENERATED ALWAYS AS (issue_id + 1) STORED
       );
       CREATE INDEX issues_org_id ON test.issues (org_id);
-      CREATE INDEX issues_component_id ON test.issues (component_id);
+      -- Indexes with INCLUDE'd generated columns are fine, as INCLUDE'd
+      -- columns are ignored by the replica.
+      CREATE INDEX issues_component_id ON test.issues (component_id) INCLUDE (stored);
       CREATE PUBLICATION zero_data FOR TABLE test.issues;
       CREATE PUBLICATION zero_two FOR TABLE test.issues;
       `,
@@ -1259,10 +1262,12 @@ describe('tables/published', () => {
       CREATE TABLE test.issues (
         issue_id INTEGER PRIMARY KEY,
         org_id INTEGER CHECK (org_id > 0),
-        component_id INTEGER
+        component_id INTEGER,
+        excluded INTEGER GENERATED ALWAYS AS (issue_id + 1) STORED
       );
       CREATE INDEX idx_with_expression ON test.issues (org_id, (component_id + 1));
       CREATE INDEX partial_idx ON test.issues (component_id) WHERE org_id > 1000;
+      CREATE INDEX idx_with_gen ON test.issues (issue_id, org_id, component_id, excluded);
       CREATE PUBLICATION zero_data FOR TABLE test.issues;
       `,
       expectedResult: {
