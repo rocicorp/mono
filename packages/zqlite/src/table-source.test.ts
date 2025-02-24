@@ -1,4 +1,5 @@
 import {describe, expect, test} from 'vitest';
+import type {LogConfig} from '../../otel/src/log-options.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import type {Ordering} from '../../zero-protocol/src/ast.ts';
@@ -14,7 +15,6 @@ import {
   TableSource,
   UnsupportedValueError,
 } from './table-source.ts';
-import type {LogConfig} from '../../otel/src/log-options.ts';
 
 const columns = {
   id: {type: 'string'},
@@ -199,7 +199,13 @@ describe('fetching from a table source', () => {
 });
 
 describe('fetched value types', () => {
-  type Foo = {id: string; a: number; b: number; c: boolean; d: JSONValue};
+  type Foo = {
+    id: string;
+    a: number | null;
+    b: number | null;
+    c: boolean | null;
+    d: JSONValue | null;
+  };
   const columns = {
     id: {type: 'string'},
     a: {type: 'number'},
@@ -215,6 +221,11 @@ describe('fetched value types', () => {
   };
 
   const cases: Case[] = [
+    {
+      name: 'nulls',
+      input: ['0', null, null, null, null],
+      output: {id: '0', a: null, b: null, c: null, d: null},
+    },
     {
       name: 'number, float, false boolean, json string',
       input: ['1', 1, 2.123, 0, '"json string"'],
