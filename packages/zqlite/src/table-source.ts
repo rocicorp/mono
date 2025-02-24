@@ -1,4 +1,7 @@
 import type {SQLQuery} from '@databases/sql';
+import type {LogContext} from '@rocicorp/logger';
+import type {LogConfig} from '../../otel/src/log-options.ts';
+import {timeSampled} from '../../otel/src/maybe-time.ts';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import {difference} from '../../shared/src/set-utils.ts';
@@ -49,9 +52,6 @@ import {Database, Statement} from './db.ts';
 import {compile, format, sql} from './internal/sql.ts';
 import {StatementCache} from './internal/statement-cache.ts';
 import {runtimeDebugFlags, runtimeDebugStats} from './runtime-debug.ts';
-import type {LogConfig} from '../../otel/src/log-options.ts';
-import {timeSampled} from '../../otel/src/maybe-time.ts';
-import type {LogContext} from '@rocicorp/logger';
 
 type Connection = {
   input: Input;
@@ -839,6 +839,9 @@ export function fromSQLiteTypes(
 }
 
 function fromSQLiteType(valueType: ValueType, v: Value): Value {
+  if (v === null) {
+    return null;
+  }
   switch (valueType) {
     case 'boolean':
       return !!v;
