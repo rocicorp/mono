@@ -4,11 +4,11 @@
 require("dotenv").config();
 
 import { join } from "node:path";
-import { createDefu } from 'defu';
+import { createDefu } from "defu";
 
 const defu = createDefu((obj, key, value) => {
   // Don't merge functions, just use the last one
-  if (typeof obj[key] === 'function' || typeof value === 'function') {
+  if (typeof obj[key] === "function" || typeof value === "function") {
     obj[key] = value;
     return true;
   }
@@ -119,39 +119,41 @@ export default $config({
     };
 
     // EBS-specific transform configuration
-    const EBS_TRANSFORM: any = !IS_EBS_STAGE ? {} : {
-      service: {
-        volumeConfiguration: {
-          name: "replication-data",
-          managedEbsVolume: {
-            roleArn: ecsVolumeRole?.arn,
-            volumeType: "io2",
-            sizeInGb: 20,
-            iops: 3000,
-            fileSystemType: "ext4",
-          },
-        },
-      },
-      taskDefinition: (args: any) => {
-        let value = $jsonParse(args.containerDefinitions);
-        value = value.apply((containerDefinitions: any) => {
-          containerDefinitions[0].mountPoints = [
-            {
-              sourceVolume: "replication-data",
-              containerPath: "/data",
+    const EBS_TRANSFORM: any = !IS_EBS_STAGE
+      ? {}
+      : {
+          service: {
+            volumeConfiguration: {
+              name: "replication-data",
+              managedEbsVolume: {
+                roleArn: ecsVolumeRole?.arn,
+                volumeType: "io2",
+                sizeInGb: 20,
+                iops: 3000,
+                fileSystemType: "ext4",
+              },
             },
-          ];
-          return containerDefinitions;
-        });
-        args.containerDefinitions = $jsonStringify(value);
-        args.volumes = [
-          {
-            name: "replication-data",
-            configureAtLaunch: true,
           },
-        ];
-      },
-    };
+          taskDefinition: (args: any) => {
+            let value = $jsonParse(args.containerDefinitions);
+            value = value.apply((containerDefinitions: any) => {
+              containerDefinitions[0].mountPoints = [
+                {
+                  sourceVolume: "replication-data",
+                  containerPath: "/data",
+                },
+              ];
+              return containerDefinitions;
+            });
+            args.containerDefinitions = $jsonStringify(value);
+            args.volumes = [
+              {
+                name: "replication-data",
+                configureAtLaunch: true,
+              },
+            ];
+          },
+        };
 
     // Replication Manager Service
     const replicationManager = cluster.addService(`replication-manager`, {
@@ -233,10 +235,8 @@ export default $config({
               ],
             }),
       },
-      transform: defu(EBS_TRANSFORM, {
-        ...BASE_TRANSFORM,
+      transform: defu(EBS_TRANSFORM, BASE_TRANSFORM, {
         target: {
-          ...BASE_TRANSFORM.target,
           stickiness: {
             enabled: true,
             type: "lb_cookie",
