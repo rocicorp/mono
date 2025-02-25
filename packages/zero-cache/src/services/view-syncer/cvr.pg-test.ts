@@ -32,6 +32,7 @@ import {
 } from './schema/cvr.ts';
 import type {CVRVersion, RowID} from './schema/types.ts';
 
+const APP_ID = 'dapp';
 const SHARD_ID = 'jkl';
 
 const LAST_CONNECT = Date.UTC(2024, 2, 1);
@@ -649,7 +650,7 @@ describe('view-syncer/cvr', () => {
       },
     } satisfies CVRSnapshot);
 
-    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, APP_ID, SHARD_ID);
 
     // This removes and adds desired queries to the existing fooClient.
     expect(updater.deleteDesiredQueries('fooClient', ['oneHash', 'twoHash']))
@@ -818,7 +819,7 @@ describe('view-syncer/cvr', () => {
           id: 'lmids',
           internal: true,
           ast: {
-            table: `zero_${SHARD_ID}.clients`,
+            table: `${APP_ID}_${SHARD_ID}.clients`,
             schema: '',
             where: {
               type: 'simple',
@@ -935,7 +936,7 @@ describe('view-syncer/cvr', () => {
         {
           clientAST: {
             schema: '',
-            table: `zero_${SHARD_ID}.clients`,
+            table: `${APP_ID}_${SHARD_ID}.clients`,
             where: {
               left: {
                 type: 'column',
@@ -1066,7 +1067,12 @@ describe('view-syncer/cvr', () => {
 
     // Add the deleted desired query back. This ensures that the
     // desired query update statement is an UPSERT.
-    const updater2 = new CVRConfigDrivenUpdater(cvrStore2, reloaded, SHARD_ID);
+    const updater2 = new CVRConfigDrivenUpdater(
+      cvrStore2,
+      reloaded,
+      APP_ID,
+      SHARD_ID,
+    );
     expect(
       updater2.putDesiredQueries('fooClient', [
         {hash: 'oneHash', ast: {table: 'issues'}, ttl: undefined},
@@ -1155,7 +1161,7 @@ describe('view-syncer/cvr', () => {
       ON_FAILURE,
     );
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
-    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, APP_ID, SHARD_ID);
 
     // Same desired query set. Nothing should change except last active time.
     expect(
@@ -4221,7 +4227,12 @@ describe('view-syncer/cvr', () => {
         }
       `);
 
-      const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
+      const updater = new CVRConfigDrivenUpdater(
+        cvrStore,
+        cvr,
+        APP_ID,
+        SHARD_ID,
+      );
       updater.markDesiredQueryAsInactive('fooClient', 'oneHash', now);
 
       const {cvr: updated} = await updater.flush(lc, true, LAST_CONNECT, now);
@@ -4363,7 +4374,12 @@ describe('view-syncer/cvr', () => {
         },
       });
 
-      const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
+      const updater = new CVRConfigDrivenUpdater(
+        cvrStore,
+        cvr,
+        APP_ID,
+        SHARD_ID,
+      );
       updater.markDesiredQueryAsInactive('fooClient', 'oneHash', now);
 
       const {cvr: updated} = await updater.flush(lc, true, LAST_CONNECT, now);
@@ -4495,7 +4511,7 @@ describe('view-syncer/cvr', () => {
       ON_FAILURE,
     );
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
-    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, APP_ID, SHARD_ID);
 
     expect(updater.deleteClient('client-b')).toMatchInlineSnapshot(`
       [
@@ -4874,7 +4890,7 @@ describe('view-syncer/cvr', () => {
       }
     `);
 
-    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, APP_ID, SHARD_ID);
 
     // No patches because client-b is from a different group.
     expect(updater.deleteClient('client-b')).toEqual([]);
@@ -5081,7 +5097,12 @@ describe('view-syncer/cvr', () => {
 
     {
       const cvr = await cvrStore.load(lc, LAST_CONNECT);
-      const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
+      const updater = new CVRConfigDrivenUpdater(
+        cvrStore,
+        cvr,
+        APP_ID,
+        SHARD_ID,
+      );
 
       updater.deleteClientGroup('def456');
       const {cvr: updated2} = await updater.flush(
