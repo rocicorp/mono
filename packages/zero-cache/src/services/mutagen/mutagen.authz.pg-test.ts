@@ -350,7 +350,13 @@ beforeEach(async () => {
     .prepare(`UPDATE "zero.permissions" SET permissions = ?, hash = ?`)
     .run(perms, h128(perms).toString(16));
 
-  authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, SHARD_ID);
+  authorizer = new WriteAuthorizerImpl(
+    lc,
+    zeroConfig,
+    replica,
+    'zero',
+    SHARD_ID,
+  );
   lmid = 0;
 });
 

@@ -42,7 +42,8 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines = new PipelineDriver(
       lc,
       logConfig,
-      new Snapshotter(lc, dbFile.path),
+      new Snapshotter(lc, dbFile.path, 'zeroz'),
+      'zeroz',
       new DatabaseStorage(storage).createClientGroupStorage('foo-client-group'),
       'pipeline-driver.test.ts',
     );
@@ -51,14 +52,14 @@ describe('view-syncer/pipeline-driver', () => {
     initReplicationState(db, ['zero_data'], '123');
     initChangeLog(db);
     db.exec(`
-      CREATE TABLE "zero.schemaVersions" (
+      CREATE TABLE "zeroz.schemaVersions" (
         -- Note: Using "INT" to avoid the special semantics of "INTEGER PRIMARY KEY" in SQLite.
         "lock"                INT PRIMARY KEY,
         "minSupportedVersion" INT,
         "maxSupportedVersion" INT,
         _0_version            TEXT NOT NULL
       );
-      INSERT INTO "zero.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
+      INSERT INTO "zeroz.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
         VALUES (1, 1, 1, '123');
       CREATE TABLE issues (
         id TEXT PRIMARY KEY,
@@ -286,7 +287,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
   const zeroMessages = new ReplicationMessages(
     {schemaVersions: 'lock'},
-    'zero',
+    'zeroz',
   );
 
   test('replica version', () => {
