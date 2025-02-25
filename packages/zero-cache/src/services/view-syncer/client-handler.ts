@@ -24,6 +24,7 @@ import {
   type SchemaVersions,
 } from '../../types/schema-versions.ts';
 import type {Subscription} from '../../types/subscription.ts';
+import {unescapedSchema as schema} from '../change-source/pg/schema/shard.ts';
 import {
   cmpVersions,
   cookieToVersion,
@@ -94,7 +95,6 @@ export class ClientHandler {
     clientGroupID: string,
     clientID: string,
     wsID: string,
-    appID: string,
     shardID: string,
     baseCookie: string | null,
     protocolVersion: number,
@@ -104,7 +104,7 @@ export class ClientHandler {
     this.#clientGroupID = clientGroupID;
     this.clientID = clientID;
     this.wsID = wsID;
-    this.#zeroClientsTable = `${appID}_${shardID}.clients`;
+    this.#zeroClientsTable = `${schema(shardID)}.clients`;
     this.#lc = lc;
     this.#downstream = downstream;
     this.#baseVersion = cookieToVersion(baseCookie);
@@ -304,7 +304,7 @@ export class ClientHandler {
   }
 }
 
-// Note: The {APP_ID}_{SHARD_ID}.clients table is set up in replicator/initial-sync.ts.
+// Note: The zero_{SHARD_ID}.clients table is set up in replicator/initial-sync.ts.
 const lmidRowSchema = v.object({
   clientGroupID: v.string(),
   clientID: v.string(),
