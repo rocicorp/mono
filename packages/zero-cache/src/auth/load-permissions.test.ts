@@ -14,11 +14,11 @@ describe('auth/load-permissions', () => {
   beforeEach(() => {
     replica = new Database(createSilentLogContext(), ':memory:');
     replica.exec(/* sql */ `
-      CREATE TABLE "zero.permissions" (
+      CREATE TABLE "zero_app.permissions" (
         permissions JSON,
         hash TEXT
       );
-      INSERT INTO "zero.permissions" (permissions) VALUES (NULL);
+      INSERT INTO "zero_app.permissions" (permissions) VALUES (NULL);
       `);
     db = new StatementRunner(replica);
   });
@@ -27,13 +27,13 @@ describe('auth/load-permissions', () => {
     const permissions =
       typeof perms === 'string' ? perms : JSON.stringify(perms);
     replica
-      .prepare(`UPDATE "zero.permissions" SET permissions = ?, hash = ?`)
+      .prepare(`UPDATE "zero_app.permissions" SET permissions = ?, hash = ?`)
       .run(permissions, h128(permissions).toString(16));
   }
 
   test('loads supported permissions', () => {
     setPermissions({tables: {}});
-    expect(loadPermissions(lc, db, 'zero')).toMatchInlineSnapshot(`
+    expect(loadPermissions(lc, db, 'zero_app')).toMatchInlineSnapshot(`
       {
         "hash": "4fa6194de2f465d532971ce1b9b513e9",
         "permissions": {
@@ -46,7 +46,7 @@ describe('auth/load-permissions', () => {
   test('invalid permissions', () => {
     setPermissions(`{"tablez":{}}`);
     expect(() =>
-      loadPermissions(lc, db, 'zero'),
+      loadPermissions(lc, db, 'zero_app'),
     ).toThrowErrorMatchingInlineSnapshot(
       `
       [Error: Could not parse upstream permissions: '{"tablez":{}}'.
@@ -58,7 +58,7 @@ describe('auth/load-permissions', () => {
   test('permissions invalid JSON', () => {
     setPermissions(`I'm not JSON`);
     expect(() =>
-      loadPermissions(lc, db, 'zero'),
+      loadPermissions(lc, db, 'zero_app'),
     ).toThrowErrorMatchingInlineSnapshot(
       `
       [Error: Could not parse upstream permissions: 'I'm not JSON'.
@@ -70,7 +70,7 @@ describe('auth/load-permissions', () => {
   test('invalid long permissions', () => {
     setPermissions(`{"baz": 108, "foo":"ba${'a'.repeat(1000)}r"}`);
     expect(() =>
-      loadPermissions(lc, db, 'zero'),
+      loadPermissions(lc, db, 'zero_app'),
     ).toThrowErrorMatchingInlineSnapshot(
       `
       [Error: Could not parse upstream permissions: '{"baz": 108, "foo":"baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...'.
