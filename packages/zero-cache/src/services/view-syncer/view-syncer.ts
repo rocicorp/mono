@@ -106,6 +106,7 @@ function randomID() {
 
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
+  readonly #appID: string;
   readonly #shardID: string;
   readonly #lc: LogContext;
   readonly #pipelines: PipelineDriver;
@@ -132,6 +133,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   constructor(
     lc: LogContext,
+    appID: string,
     taskID: string,
     clientGroupID: string,
     shardID: string,
@@ -142,6 +144,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
   ) {
     this.id = clientGroupID;
+    this.#appID = appID;
     this.#shardID = shardID;
     this.#lc = lc;
     this.#pipelines = pipelineDriver;
@@ -371,6 +374,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.id,
         clientID,
         wsID,
+        this.#appID,
         this.#shardID,
         baseCookie,
         protocolVersion,
@@ -435,6 +439,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     const updater = new CVRConfigDrivenUpdater(
       this.#cvrStore,
       cvr,
+      this.#appID,
       this.#shardID,
     );
 

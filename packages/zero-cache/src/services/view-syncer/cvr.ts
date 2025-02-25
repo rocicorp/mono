@@ -13,7 +13,6 @@ import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {stringify, type JSONObject} from '../../types/bigint-json.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {rowIDString} from '../../types/row-key.ts';
-import {unescapedSchema as schema} from '../change-source/pg/schema/shard.ts';
 import type {Patch, PatchToVersion} from './client-handler.ts';
 import type {CVRFlushStats, CVRStore} from './cvr-store.ts';
 import {KeyColumns} from './key-columns.ts';
@@ -154,10 +153,17 @@ export class CVRUpdater {
  * but the `stateVersion` of the CVR does not change.
  */
 export class CVRConfigDrivenUpdater extends CVRUpdater {
+  readonly #appID: string;
   readonly #shardID;
 
-  constructor(cvrStore: CVRStore, cvr: CVRSnapshot, shardID: string) {
+  constructor(
+    cvrStore: CVRStore,
+    cvr: CVRSnapshot,
+    appID: string,
+    shardID: string,
+  ) {
     super(cvrStore, cvr, cvr.replicaVersion);
+    this.#appID = appID;
     this.#shardID = shardID;
   }
 
@@ -178,7 +184,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         id: CLIENT_LMID_QUERY_ID,
         ast: {
           schema: '',
-          table: `${schema(this.#shardID)}.clients`,
+          table: `${this.#appID}_${this.#shardID}.clients`,
           where: {
             type: 'simple',
             left: {
