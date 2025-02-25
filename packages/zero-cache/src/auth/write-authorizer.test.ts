@@ -58,8 +58,8 @@ beforeEach(() => {
   replica.exec(/*sql*/ `
     CREATE TABLE foo (id TEXT PRIMARY KEY, a TEXT, b TEXT_NOT_SUPPORTED);
     INSERT INTO foo (id, a) VALUES ('1', 'a');
-    CREATE TABLE "the_app.permissions" (permissions JSON, hash TEXT);
-    INSERT INTO "the_app.permissions" (permissions) VALUES (NULL);
+    CREATE TABLE "zero.permissions" (permissions JSON, hash TEXT);
+    INSERT INTO "zero.permissions" (permissions) VALUES (NULL);
     `);
 });
 
@@ -68,7 +68,7 @@ function setPermissions(permissions: PermissionsConfig) {
   replica
     .prepare(
       /* sql */ `
-    UPDATE "the_app.permissions" SET permissions = ?, hash = ?`,
+    UPDATE "zero.permissions" SET permissions = ?, hash = ?`,
     )
     .run(json, h128(json).toString(16));
 }
@@ -78,13 +78,7 @@ describe('normalize ops', () => {
   // upsert where row exists
   // upsert where row does not exist
   test('upsert converted to update if row exists', () => {
-    const authorizer = new WriteAuthorizerImpl(
-      lc,
-      zeroConfig,
-      replica,
-      'the_app',
-      'cg',
-    );
+    const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
     const normalized = authorizer.normalizeOps([
       {
         op: 'upsert',
@@ -103,13 +97,7 @@ describe('normalize ops', () => {
     ]);
   });
   test('upsert converted to insert if row does not exist', () => {
-    const authorizer = new WriteAuthorizerImpl(
-      lc,
-      zeroConfig,
-      replica,
-      'the_app',
-      'cg',
-    );
+    const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
     const normalized = authorizer.normalizeOps([
       {
         op: 'upsert',
@@ -135,13 +123,7 @@ describe('default deny', () => {
       tables: {},
     });
 
-    const authorizer = new WriteAuthorizerImpl(
-      lc,
-      zeroConfig,
-      replica,
-      'the_app',
-      'cg',
-    );
+    const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
 
     expect(
       authorizer.canPostMutation({sub: '2'}, [
@@ -178,13 +160,7 @@ describe('default deny', () => {
       },
     });
 
-    const authorizer = new WriteAuthorizerImpl(
-      lc,
-      zeroConfig,
-      replica,
-      'the_app',
-      'cg',
-    );
+    const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
 
     const op: InsertOp = {
       op: 'insert',
@@ -215,13 +191,7 @@ describe('default deny', () => {
       },
     });
 
-    const authorizer = new WriteAuthorizerImpl(
-      lc,
-      zeroConfig,
-      replica,
-      'the_app',
-      'cg',
-    );
+    const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
 
     const op: UpdateOp = {
       op: 'update',
@@ -251,13 +221,7 @@ describe('default deny', () => {
       },
     });
 
-    const authorizer = new WriteAuthorizerImpl(
-      lc,
-      zeroConfig,
-      replica,
-      'the_app',
-      'cg',
-    );
+    const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
 
     const op: UpdateOp = {
       op: 'update',
@@ -287,13 +251,7 @@ describe('pre & post mutation', () => {
       },
     });
 
-    const authorizer = new WriteAuthorizerImpl(
-      lc,
-      zeroConfig,
-      replica,
-      'the_app',
-      'cg',
-    );
+    const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
 
     const op: DeleteOp = {
       op: 'delete',
@@ -322,13 +280,7 @@ describe('pre & post mutation', () => {
       },
     });
 
-    const authorizer = new WriteAuthorizerImpl(
-      lc,
-      zeroConfig,
-      replica,
-      'the_app',
-      'cg',
-    );
+    const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
 
     const op: InsertOp = {
       op: 'insert',
@@ -359,13 +311,7 @@ describe('pre & post mutation', () => {
       },
     });
 
-    const authorizer = new WriteAuthorizerImpl(
-      lc,
-      zeroConfig,
-      replica,
-      'the_app',
-      'cg',
-    );
+    const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
 
     const op: UpdateOp = {
       op: 'update',
@@ -395,13 +341,7 @@ describe('pre & post mutation', () => {
       },
     });
 
-    const authorizer = new WriteAuthorizerImpl(
-      lc,
-      zeroConfig,
-      replica,
-      'the_app',
-      'cg',
-    );
+    const authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
 
     const op: UpdateOp = {
       op: 'update',

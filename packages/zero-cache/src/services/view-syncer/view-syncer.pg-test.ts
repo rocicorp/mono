@@ -61,7 +61,6 @@ import {initViewSyncerSchema} from './schema/init.ts';
 import {Snapshotter} from './snapshotter.ts';
 import {pickToken, type SyncContext, ViewSyncerService} from './view-syncer.ts';
 
-const APP_ID = 'this_app';
 const SHARD_ID = 'abc';
 const logConfig: LogConfig = {
   format: 'text',
@@ -72,7 +71,7 @@ const logConfig: LogConfig = {
 
 const EXPECTED_LMIDS_AST: AST = {
   schema: '',
-  table: 'this_app_abc.clients',
+  table: 'zero_abc.clients',
   where: {
     type: 'simple',
     op: '=',
@@ -328,7 +327,7 @@ async function setup(permissions: PermissionsConfig | undefined) {
   replica.pragma('journal_mode = WAL2');
   replica.pragma('busy_timeout = 1');
   replica.exec(`
-  CREATE TABLE "this_app_abc.clients" (
+  CREATE TABLE "zero_abc.clients" (
     "clientGroupID"  TEXT,
     "clientID"       TEXT,
     "lastMutationID" INTEGER,
@@ -336,13 +335,13 @@ async function setup(permissions: PermissionsConfig | undefined) {
     _0_version       TEXT NOT NULL,
     PRIMARY KEY ("clientGroupID", "clientID")
   );
-  CREATE TABLE "this_app.schemaVersions" (
+  CREATE TABLE "zero.schemaVersions" (
     "lock"                INT PRIMARY KEY,
     "minSupportedVersion" INT,
     "maxSupportedVersion" INT,
     _0_version            TEXT NOT NULL
   );
-  CREATE TABLE "this_app.permissions" (
+  CREATE TABLE "zero.permissions" (
     "lock"        INT PRIMARY KEY,
     "permissions" JSON,
     "hash"        TEXT,
@@ -380,11 +379,11 @@ async function setup(permissions: PermissionsConfig | undefined) {
     _0_version TEXT NOT NULL
   );
 
-  INSERT INTO "this_app_abc.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
+  INSERT INTO "zero_abc.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
     VALUES ('9876', 'foo', 42, '01');
-  INSERT INTO "this_app.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
+  INSERT INTO "zero.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
     VALUES (1, 2, 3, '01'); 
-  INSERT INTO "this_app.permissions" ("lock", "permissions", "hash", _0_version)
+  INSERT INTO "zero.permissions" ("lock", "permissions", "hash", _0_version)
     VALUES (1, NULL, NULL, '01');
 
   INSERT INTO users (id, name, _0_version) VALUES ('100', 'Alice', '01');
@@ -417,7 +416,6 @@ async function setup(permissions: PermissionsConfig | undefined) {
   ).createClientGroupStorage(serviceID);
   const vs = new ViewSyncerService(
     lc,
-    APP_ID,
     TASK_ID,
     serviceID,
     SHARD_ID,
@@ -425,8 +423,7 @@ async function setup(permissions: PermissionsConfig | undefined) {
     new PipelineDriver(
       lc.withContext('component', 'pipeline-driver'),
       logConfig,
-      new Snapshotter(lc, replicaDbFile.path, APP_ID),
-      APP_ID,
+      new Snapshotter(lc, replicaDbFile.path),
       operatorStorage,
       'view-syncer.pg-test.ts',
     ),
@@ -436,7 +433,7 @@ async function setup(permissions: PermissionsConfig | undefined) {
   if (permissions) {
     const json = JSON.stringify(permissions);
     replica
-      .prepare(`UPDATE "this_app.permissions" SET permissions = ?, hash = ?`)
+      .prepare(`UPDATE "zero.permissions" SET permissions = ?, hash = ?`)
       .run(json, h128(json).toString(16));
   }
   const viewSyncerDone = vs.run();
@@ -509,12 +506,12 @@ const messages = new ReplicationMessages({
   users: 'id',
   issueLabels: ['issueID', 'labelID'],
 });
-const appMessages = new ReplicationMessages(
+const zeroMessages = new ReplicationMessages(
   {
     schemaVersions: 'lock',
     permissions: 'lock',
   },
-  'this_app',
+  'zero',
 );
 
 describe('view-syncer/service', () => {
@@ -866,7 +863,7 @@ describe('view-syncer/service', () => {
           },
           "rowVersion": "01",
           "schema": "",
-          "table": "this_app_abc.clients",
+          "table": "zero_abc.clients",
         },
         {
           "clientGroupID": "9876",
@@ -1405,7 +1402,7 @@ describe('view-syncer/service', () => {
           },
           "rowVersion": "01",
           "schema": "",
-          "table": "this_app_abc.clients",
+          "table": "zero_abc.clients",
         },
         {
           "clientGroupID": "9876",
@@ -1770,7 +1767,7 @@ describe('view-syncer/service', () => {
           },
           "rowVersion": "01",
           "schema": "",
-          "table": "this_app_abc.clients",
+          "table": "zero_abc.clients",
         },
         {
           "clientGroupID": "9876",
@@ -1920,7 +1917,7 @@ describe('view-syncer/service', () => {
           },
           "rowVersion": "01",
           "schema": "",
-          "table": "this_app_abc.clients",
+          "table": "zero_abc.clients",
         },
         {
           "clientGroupID": "9876",
@@ -2152,7 +2149,7 @@ describe('view-syncer/service', () => {
         big: 9007199254740991n,
       }),
       messages.delete('issues', {id: '2'}),
-      appMessages.update('schemaVersions', {
+      zeroMessages.update('schemaVersions', {
         lock: true,
         minSupportedVersion: 3,
       }),
@@ -3663,7 +3660,7 @@ describe('permissions', () => {
     };
     replicator.processTransaction(
       '05',
-      appMessages.update('permissions', {
+      zeroMessages.update('permissions', {
         lock: 1,
         permissions: relaxed,
         hash: h128(JSON.stringify(relaxed)).toString(16),

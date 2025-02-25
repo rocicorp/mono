@@ -19,10 +19,9 @@ export type LoadedPermissions = {
 export function loadPermissions(
   lc: LogContext,
   replica: StatementRunner,
-  appID: string,
 ): LoadedPermissions {
   const {permissions, hash} = replica.get(
-    `SELECT permissions, hash FROM "${appID}.permissions"`,
+    `SELECT permissions, hash FROM "zero.permissions"`,
   );
   if (permissions === null) {
     lc.warn?.(
@@ -55,16 +54,15 @@ export function loadPermissions(
 export function reloadPermissionsIfChanged(
   lc: LogContext,
   replica: StatementRunner,
-  appID: string,
   current: LoadedPermissions | null,
 ): {permissions: LoadedPermissions; changed: boolean} {
   if (current === null) {
-    return {permissions: loadPermissions(lc, replica, appID), changed: true};
+    return {permissions: loadPermissions(lc, replica), changed: true};
   }
-  const {hash} = replica.get(`SELECT hash FROM "${appID}.permissions"`);
+  const {hash} = replica.get(`SELECT hash FROM "zero.permissions"`);
   return hash === current.hash
     ? {permissions: current, changed: false}
-    : {permissions: loadPermissions(lc, replica, appID), changed: true};
+    : {permissions: loadPermissions(lc, replica), changed: true};
 }
 
 export function getSchema(lc: LogContext, replica: Database): Schema {

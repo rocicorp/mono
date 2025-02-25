@@ -17,7 +17,6 @@ import * as v from '../../../shared/src/valita.ts';
 import {getZeroConfig} from '../config/zero-config.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {MutagenService} from '../services/mutagen/mutagen.ts';
-import {PusherService} from '../services/mutagen/pusher.ts';
 import type {ReplicaState} from '../services/replicator/replicator.ts';
 import {DatabaseStorage} from '../services/view-syncer/database-storage.ts';
 import {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
@@ -34,6 +33,7 @@ import {Subscription} from '../types/subscription.ts';
 import {replicaFileModeSchema, replicaFileName} from '../workers/replicator.ts';
 import {Syncer} from '../workers/syncer.ts';
 import {createLogContext} from './logging.ts';
+import {PusherService} from '../services/mutagen/pusher.ts';
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
@@ -102,8 +102,6 @@ export default function runWorker(
     path.join(tmpDir, `sync-worker-${pid}-${randInt(1000000, 9999999)}`),
   );
 
-  const appID = 'zero'; // TODO: --app-id
-
   const viewSyncerFactory = (
     id: string,
     sub: Subscription<ReplicaState>,
@@ -115,7 +113,6 @@ export default function runWorker(
       .withContext('instance', randomID());
     return new ViewSyncerService(
       logger,
-      appID,
       must(config.taskID, 'main must set --task-id'),
       id,
       config.shard.id,
@@ -123,8 +120,7 @@ export default function runWorker(
       new PipelineDriver(
         logger,
         config.log,
-        new Snapshotter(logger, replicaFile, appID),
-        appID,
+        new Snapshotter(logger, replicaFile),
         operatorStorage.createClientGroupStorage(id),
         id,
       ),
@@ -136,7 +132,6 @@ export default function runWorker(
   const mutagenFactory = (id: string) =>
     new MutagenService(
       lc.withContext('component', 'mutagen').withContext('clientGroupID', id),
-      appID,
       config.shard.id,
       id,
       upstreamDB,

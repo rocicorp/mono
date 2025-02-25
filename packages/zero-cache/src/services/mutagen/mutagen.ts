@@ -60,7 +60,6 @@ export class MutagenService implements Mutagen, Service {
 
   constructor(
     lc: LogContext,
-    appID: string,
     shardID: string,
     clientGroupID: string,
     upstream: PostgresDB,
@@ -77,7 +76,6 @@ export class MutagenService implements Mutagen, Service {
       this.#lc,
       config,
       this.#replica,
-      appID,
       clientGroupID,
     );
 

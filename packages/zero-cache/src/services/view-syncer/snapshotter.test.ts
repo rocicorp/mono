@@ -31,20 +31,20 @@ describe('view-syncer/snapshotter', () => {
     db.pragma('journal_mode = WAL2');
     db.exec(
       `
-        CREATE TABLE "my_app.permissions" (
+        CREATE TABLE "zero.permissions" (
           "lock"        INT PRIMARY KEY,
           "permissions" JSON,
           "hash"        TEXT,
           _0_version    TEXT NOT NULL
         );
-        INSERT INTO "my_app.permissions" ("lock", "_0_version") VALUES (1, '01');
-        CREATE TABLE "my_app.schemaVersions" (
+        INSERT INTO "zero.permissions" ("lock", "_0_version") VALUES (1, '01');
+        CREATE TABLE "zero.schemaVersions" (
           "lock"                INT PRIMARY KEY,
           "minSupportedVersion" INTEGER,
           "maxSupportedVersion" INTEGER,
           _0_version            TEXT NOT NULL
         );
-        INSERT INTO "my_app.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
+        INSERT INTO "zero.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
           VALUES (1, 1, 1, '01');  
         CREATE TABLE issues(id INT PRIMARY KEY, owner INTEGER, desc TEXT, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
         CREATE TABLE users(id INT PRIMARY KEY, handle TEXT, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
@@ -64,7 +64,7 @@ describe('view-syncer/snapshotter', () => {
     tableSpecs = computeZqlSpecs(lc, db);
 
     replicator = fakeReplicator(lc, db);
-    s = new Snapshotter(lc, dbFile.path, 'my_app').init();
+    s = new Snapshotter(lc, dbFile.path).init();
   });
 
   afterEach(() => {
@@ -110,14 +110,14 @@ describe('view-syncer/snapshotter', () => {
     issues: 'id',
     users: 'id',
     comments: 'id',
-    ['my_app.permissions']: 'lock',
+    ['zero.permissions']: 'lock',
   });
 
-  const appMessages = new ReplicationMessages(
+  const zeroMessages = new ReplicationMessages(
     {
       schemaVersions: 'lock',
     },
-    'my_app',
+    'zero',
   );
 
   test('schemaVersions change', () => {
@@ -129,7 +129,7 @@ describe('view-syncer/snapshotter', () => {
 
     replicator.processTransaction(
       '07',
-      appMessages.update('schemaVersions', {
+      zeroMessages.update('schemaVersions', {
         lock: true,
         minSupportedVersion: 1,
         maxSupportedVersion: 2,
@@ -162,15 +162,15 @@ describe('view-syncer/snapshotter', () => {
             "maxSupportedVersion": 1,
             "minSupportedVersion": 1,
           },
-          "table": "my_app.schemaVersions",
+          "table": "zero.schemaVersions",
         },
       ]
     `);
   });
 
   test('concurrent snapshot diffs', () => {
-    const s1 = new Snapshotter(lc, dbFile.path, 'my_app').init();
-    const s2 = new Snapshotter(lc, dbFile.path, 'my_app').init();
+    const s1 = new Snapshotter(lc, dbFile.path).init();
+    const s2 = new Snapshotter(lc, dbFile.path).init();
 
     expect(s1.current().version).toBe('01');
     expect(s2.current().version).toBe('01');
@@ -443,7 +443,7 @@ describe('view-syncer/snapshotter', () => {
 
     replicator.processTransaction(
       '07',
-      messages.update('my_app.permissions', {
+      messages.update('zero.permissions', {
         lock: 1,
         permissions: '{"tables":{}}',
         hash: '12345',
