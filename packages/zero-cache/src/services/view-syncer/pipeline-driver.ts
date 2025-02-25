@@ -68,6 +68,7 @@ export class PipelineDriver {
   readonly #lc: LogContext;
   readonly #snapshotter: Snapshotter;
   readonly #storage: ClientGroupStorage;
+  readonly #appID: string;
   readonly #clientGroupID: string;
   readonly #logConfig: LogConfig;
   #tableSpecs: Map<string, LiteAndZqlSpec> | null = null;
@@ -78,12 +79,14 @@ export class PipelineDriver {
     lc: LogContext,
     logConfig: LogConfig,
     snapshotter: Snapshotter,
+    appID: string,
     storage: ClientGroupStorage,
     clientGroupID: string,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
     this.#snapshotter = snapshotter;
     this.#storage = storage;
+    this.#appID = appID;
     this.#clientGroupID = clientGroupID;
     this.#logConfig = logConfig;
   }
@@ -136,11 +139,15 @@ export class PipelineDriver {
   }
 
   /**
-   * Returns the current upstream zero.permissions, or `null` if none are defined.
+   * Returns the current upstream {app}.permissions, or `null` if none are defined.
    */
   currentPermissions(): LoadedPermissions {
     assert(this.initialized(), 'Not yet initialized');
-    return loadPermissions(this.#lc, this.#snapshotter.current().db);
+    return loadPermissions(
+      this.#lc,
+      this.#snapshotter.current().db,
+      this.#appID,
+    );
   }
 
   advanceWithoutDiff(): string {
