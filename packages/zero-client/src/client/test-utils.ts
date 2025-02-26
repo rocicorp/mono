@@ -74,7 +74,7 @@ export class MockSocket extends EventTarget {
 
 export class TestZero<
   const S extends Schema,
-  MD extends CustomMutatorDefs<S> = CustomMutatorDefs<S>,
+  MD extends CustomMutatorDefs<S> | undefined = undefined,
 > extends Zero<S, MD> {
   #connectionStateResolvers: Set<{
     state: ConnectionState;
@@ -222,7 +222,7 @@ let testZeroCounter = 0;
 
 export function zeroForTest<
   const S extends Schema,
-  MD extends CustomMutatorDefs<S> = CustomMutatorDefs<S>,
+  MD extends CustomMutatorDefs<S> | undefined = undefined,
 >(
   options: Partial<ZeroOptions<S, MD>> = {},
   errorOnUpdateNeeded = true,

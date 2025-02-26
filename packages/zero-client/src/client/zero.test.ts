@@ -3034,7 +3034,7 @@ test('custom mutations get pushed', async () => {
         foo: (tx, {foo}: {foo: number}) =>
           tx.mutate.issues.insert({id: foo.toString(), value: foo}),
       },
-    },
+    } as const satisfies CustomMutatorDefs<typeof schema>,
   });
   await z.triggerConnected();
   const mockSocket = await z.socket;
