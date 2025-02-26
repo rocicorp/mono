@@ -30,7 +30,6 @@ RUN cp /usr/local/lib/node_modules/@rocicorp/zero/out/zero-cache/src/services/li
 
 ENV ZERO_LITESTREAM_EXECUTABLE=/usr/local/bin/litestream
 ENV ZERO_LITESTREAM_CONFIG_PATH=/etc/litestream.yml
-ENV ZERO_LOG_LEVEL=debug
 ENV ZERO_LOG_FORMAT=json
 ENV ZERO_SERVER_VERSION=${ZERO_VERSION}
 
