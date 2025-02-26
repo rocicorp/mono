@@ -224,7 +224,6 @@ suite('EXISTS', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       {
-        "row/["i1"]": 1,
         "row/["i1"]/["c1"]": 1,
       }
     `);
@@ -603,9 +602,7 @@ suite('EXISTS', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       {
-        "row/["i1"]": 1,
         "row/["i1"]/["c1"]": 1,
-        "row/["i3"]": 1,
         "row/["i3"]/["c2"]": 1,
       }
     `);
@@ -885,7 +882,6 @@ suite('NOT EXISTS', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       {
-        "row/["i1"]": 1,
         "row/["i1"]/["c1"]": 1,
       }
     `);
@@ -1209,9 +1205,7 @@ suite('NOT EXISTS', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       {
-        "row/["i1"]": 1,
         "row/["i1"]/["c1"]": 1,
-        "row/["i3"]": 1,
         "row/["i3"]/["c2"]": 1,
       }
     `);

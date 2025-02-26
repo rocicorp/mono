@@ -19,14 +19,15 @@ import {
 import type {SourceSchema} from './schema.ts';
 import {first} from './stream.ts';
 
-type SizeStorageKey = `row/${string}/${string}`;
-type CacheStorageKey = `row/${string}`;
+type SizeStorageKeyPrefix = `row/${string}/`;
+
+type SizeStorageKey = `${SizeStorageKeyPrefix}${string}`;
 
 interface ExistsStorage {
-  get(key: SizeStorageKey | CacheStorageKey): number | undefined;
-  set(key: SizeStorageKey | CacheStorageKey, value: number): void;
-  del(key: SizeStorageKey | CacheStorageKey): void;
-  scan({prefix}: {prefix: `${CacheStorageKey}/`}): Iterable<[string, number]>;
+  get(key: SizeStorageKey): number | undefined;
+  set(key: SizeStorageKey, value: number): void;
+  del(key: SizeStorageKey): void;
+  scan({prefix}: {prefix: SizeStorageKeyPrefix}): Iterable<[string, number]>;
 }
 
 /**
@@ -39,9 +40,11 @@ export class Exists implements Operator {
   readonly #storage: ExistsStorage;
   readonly #not: boolean;
   readonly #parentJoinKey: CompoundKey;
-  readonly #skipCache: boolean;
+  readonly #noSizeReuse: boolean;
 
   #output: Output = throwOutput;
+
+  #inPush = false;
 
   constructor(
     input: Input,
@@ -58,8 +61,8 @@ export class Exists implements Operator {
     this.#not = type === 'NOT EXISTS';
     this.#parentJoinKey = parentJoinKey;
 
-    // If the parentJoinKey is the primary key, no sense in caching.
-    this.#skipCache = areEqual(
+    // If the parentJoinKey is the primary key, no sense in trying to reuse.
+    this.#noSizeReuse = areEqual(
       parentJoinKey,
       this.#input.getSchema().primaryKey,
     );
@@ -97,125 +100,121 @@ export class Exists implements Operator {
   }
 
   push(change: Change) {
-    switch (change.type) {
-      // add, remove and edit cannot change the size of the
-      // this.#relationshipName relationship, so simply #pushWithFilter
-      case 'add':
-      case 'edit': {
-        this.#pushWithFilter(change);
-        return;
-      }
-      case 'remove': {
-        const size = this.#getSize(change.node);
-        // If size is undefined, this operator has not output
-        // this row before and so it is unnecessary to output a remove for
-        // it.  Which is fortunate, since #fetchSize would
-        // not be able to fetch a Node for this change since it is
-        // removed from the source.
-        if (size === undefined) {
-          return;
-        }
-
-        this.#pushWithFilter(change, size);
-        this.#delSize(change.node);
-        return;
-      }
-      case 'child':
-        // Only add and remove child changes for the
-        // this.#relationshipName relationship, can change the size
-        // of the this.#relationshipName relationship, for other
-        // child changes simply #pushWithFilter
-        if (
-          change.child.relationshipName !== this.#relationshipName ||
-          change.child.change.type === 'edit' ||
-          change.child.change.type === 'child'
-        ) {
+    this.#inPush = true;
+    try {
+      switch (change.type) {
+        // add, remove and edit cannot change the size of the
+        // this.#relationshipName relationship, so simply #pushWithFilter
+        case 'add':
+        case 'edit': {
           this.#pushWithFilter(change);
           return;
         }
-        switch (change.child.change.type) {
-          case 'add': {
-            let size = this.#getSize(change.node);
-            if (size !== undefined) {
-              size++;
-              this.#setCachedSize(change.node, size);
-              this.#setSize(change.node, size);
-            } else {
-              size = this.#fetchSize(change.node);
-            }
-            if (size === 1) {
-              if (this.#not) {
-                // Since the add child change currently being processed is not
-                // pushed to output, the added child needs to be excluded from
-                // the remove being pushed to output (since the child has
-                // never been added to the output).
-                this.#output.push({
-                  type: 'remove',
-                  node: {
-                    row: change.node.row,
-                    relationships: {
-                      ...change.node.relationships,
-                      [this.#relationshipName]: () => [],
-                    },
-                  },
-                });
-              } else {
-                this.#output.push({
-                  type: 'add',
-                  node: change.node,
-                });
-              }
-            } else {
-              this.#pushWithFilter(change, size);
-            }
+        case 'remove': {
+          const size = this.#getSize(change.node);
+          // If size is undefined, this operator has not output
+          // this row before and so it is unnecessary to output a remove for
+          // it.
+          if (size === undefined) {
             return;
           }
-          case 'remove': {
-            let size = this.#getSize(change.node);
-            if (size !== undefined) {
-              // Work around for issue https://bugs.rocicorp.dev/issue/3204
-              // assert(size > 0);
-              if (size === 0) {
-                return;
-              }
-              size--;
-              this.#setCachedSize(change.node, size);
-              this.#setSize(change.node, size);
-            } else {
-              size = this.#fetchSize(change.node);
-            }
-            if (size === 0) {
-              if (this.#not) {
-                this.#output.push({
-                  type: 'add',
-                  node: change.node,
-                });
-              } else {
-                // Since the remove child change currently being processed is
-                // not pushed to output, the removed child needs to be added to
-                // the remove being pushed to output.
-                this.#output.push({
-                  type: 'remove',
-                  node: {
-                    row: change.node.row,
-                    relationships: {
-                      ...change.node.relationships,
-                      [this.#relationshipName]: () => [
-                        change.child.change.node,
-                      ],
-                    },
-                  },
-                });
-              }
-            } else {
-              this.#pushWithFilter(change, size);
-            }
-            return;
-          }
+          this.#pushWithFilter(change, size);
+          this.#delSize(change.node);
+          return;
         }
-        return;
-      default:
-        unreachable(change);
+        case 'child':
+          // Only add and remove child changes for the
+          // this.#relationshipName relationship, can change the size
+          // of the this.#relationshipName relationship, for other
+          // child changes simply #pushWithFilter
+          if (
+            change.child.relationshipName !== this.#relationshipName ||
+            change.child.change.type === 'edit' ||
+            change.child.change.type === 'child'
+          ) {
+            this.#pushWithFilter(change);
+            return;
+          }
+          switch (change.child.change.type) {
+            case 'add': {
+              let size = this.#getSize(change.node);
+              if (size !== undefined) {
+                size++;
+                this.#setSize(change.node, size);
+              } else {
+                size = this.#fetchSize(change.node);
+              }
+              if (size === 1) {
+                if (this.#not) {
+                  // Since the add child change currently being processed is not
+                  // pushed to output, the added child needs to be excluded from
+                  // the remove being pushed to output (since the child has
+                  // never been added to the output).
+                  this.#output.push({
+                    type: 'remove',
+                    node: {
+                      row: change.node.row,
+                      relationships: {
+                        ...change.node.relationships,
+                        [this.#relationshipName]: () => [],
+                      },
+                    },
+                  });
+                } else {
+                  this.#output.push({
+                    type: 'add',
+                    node: change.node,
+                  });
+                }
+              } else {
+                this.#pushWithFilter(change, size);
+              }
+              return;
+            }
+            case 'remove': {
+              let size = this.#getSize(change.node);
+              if (size !== undefined) {
+                assert(size > 0);
+                size--;
+                this.#setSize(change.node, size);
+              } else {
+                size = this.#fetchSize(change.node);
+              }
+              if (size === 0) {
+                if (this.#not) {
+                  this.#output.push({
+                    type: 'add',
+                    node: change.node,
+                  });
+                } else {
+                  // Since the remove child change currently being processed is
+                  // not pushed to output, the removed child needs to be added to
+                  // the remove being pushed to output.
+                  this.#output.push({
+                    type: 'remove',
+                    node: {
+                      row: change.node.row,
+                      relationships: {
+                        ...change.node.relationships,
+                        [this.#relationshipName]: () => [
+                          change.child.change.node,
+                        ],
+                      },
+                    },
+                  });
+                }
+              } else {
+                this.#pushWithFilter(change, size);
+              }
+              return;
+            }
+          }
+          return;
+        default:
+          unreachable(change);
+      }
+    } finally {
+      this.#inPush = false;
     }
   }
 
@@ -250,30 +249,8 @@ export class Exists implements Operator {
     this.#storage.set(this.#makeSizeStorageKey(node), size);
   }
 
-  #setCachedSize(node: Node, size: number) {
-    if (this.#skipCache) {
-      return;
-    }
-
-    this.#storage.set(this.#makeCacheStorageKey(node), size);
-  }
-
-  #getCachedSize(node: Node): number | undefined {
-    if (this.#skipCache) {
-      return undefined;
-    }
-
-    return this.#storage.get(this.#makeCacheStorageKey(node));
-  }
-
   #delSize(node: Node) {
     this.#storage.del(this.#makeSizeStorageKey(node));
-    if (!this.#skipCache) {
-      const cacheKey = this.#makeCacheStorageKey(node);
-      if (first(this.#storage.scan({prefix: `${cacheKey}/`})) === undefined) {
-        this.#storage.del(cacheKey);
-      }
-    }
   }
 
   #getOrFetchSize(node: Node): number {
@@ -284,11 +261,17 @@ export class Exists implements Operator {
     return this.#fetchSize(node);
   }
 
-  #fetchSize(node: Node) {
-    const cachedSize = this.#getCachedSize(node);
-    if (cachedSize !== undefined) {
-      this.#setSize(node, cachedSize);
-      return cachedSize;
+  #fetchSize(node: Node): number {
+    if (!this.#noSizeReuse && !this.#inPush) {
+      const cachedSizeEntry = first(
+        this.#storage.scan({
+          prefix: this.#makeSizeStorageKeyPrefix(node),
+        }),
+      );
+      if (cachedSizeEntry !== undefined) {
+        this.#setSize(node, cachedSizeEntry[1]);
+        return cachedSizeEntry[1];
+      }
     }
 
     const relationship = node.relationships[this.#relationshipName];
@@ -298,23 +281,20 @@ export class Exists implements Operator {
       size++;
     }
 
-    this.#setCachedSize(node, size);
     this.#setSize(node, size);
     return size;
   }
 
-  #makeCacheStorageKey(node: Node): CacheStorageKey {
-    return `row/${JSON.stringify(
-      this.#getKeyValues(node, this.#parentJoinKey),
-    )}`;
+  #makeSizeStorageKeyPrefix(node: Node): SizeStorageKeyPrefix {
+    return `row/${
+      this.#noSizeReuse
+        ? ''
+        : JSON.stringify(this.#getKeyValues(node, this.#parentJoinKey))
+    }/`;
   }
 
   #makeSizeStorageKey(node: Node): SizeStorageKey {
-    return `row/${
-      this.#skipCache
-        ? ''
-        : JSON.stringify(this.#getKeyValues(node, this.#parentJoinKey))
-    }/${JSON.stringify(
+    return `${this.#makeSizeStorageKeyPrefix(node)}${JSON.stringify(
       this.#getKeyValues(node, this.#input.getSchema().primaryKey),
     )}`;
   }
