@@ -154,6 +154,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#cvrStore = new CVRStore(
       lc,
       db,
+      appID,
       shardID,
       taskID,
       clientGroupID,

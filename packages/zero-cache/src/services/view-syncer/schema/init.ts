@@ -11,12 +11,13 @@ import {createRowsVersionTable, cvrSchema, setupCVRTables} from './cvr.ts';
 export async function initViewSyncerSchema(
   log: LogContext,
   db: PostgresDB,
+  appID: string,
   shardID: string,
 ): Promise<void> {
-  const schema = cvrSchema(shardID);
+  const schema = cvrSchema(appID, shardID);
 
   const setupMigration: Migration = {
-    migrateSchema: (lc, tx) => setupCVRTables(lc, tx, shardID),
+    migrateSchema: (lc, tx) => setupCVRTables(lc, tx, appID, shardID),
     minSafeVersion: 1,
   };
 
@@ -28,7 +29,7 @@ export async function initViewSyncerSchema(
 
   const migrateV2ToV3: Migration = {
     migrateSchema: async (_, tx) => {
-      await tx.unsafe(createRowsVersionTable(shardID));
+      await tx.unsafe(createRowsVersionTable(appID, shardID));
     },
 
     /** Populates the cvr.rowsVersion table with versions from cvr.instances. */
@@ -102,7 +103,7 @@ export async function initViewSyncerSchema(
   await runSchemaMigrations(
     log,
     'view-syncer',
-    cvrSchema(shardID),
+    cvrSchema(appID, shardID),
     db,
     setupMigration,
     schemaVersionMigrationMap,

@@ -113,6 +113,7 @@ export class CVRStore {
   constructor(
     lc: LogContext,
     db: PostgresDB,
+    appID: string,
     shardID: string,
     taskID: string,
     cvrID: string,
@@ -123,12 +124,13 @@ export class CVRStore {
     setTimeoutFn = setTimeout,
   ) {
     this.#db = db;
-    this.#schema = cvrSchema(shardID);
+    this.#schema = cvrSchema(appID, shardID);
     this.#taskID = taskID;
     this.#id = cvrID;
     this.#rowCache = new RowRecordCache(
       lc,
       db,
+      appID,
       shardID,
       cvrID,
       failService,

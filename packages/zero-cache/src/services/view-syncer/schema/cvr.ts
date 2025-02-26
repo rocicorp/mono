@@ -15,17 +15,17 @@ import {
   versionString,
 } from './types.ts';
 
-export function cvrSchema(shardID: string) {
-  return `cvr_${shardID}`;
+export function cvrSchema(appID: string, shardID: string) {
+  return `${appID}_${shardID}/cvr`;
 }
 
 // For readability in the sql statements.
-function schema(shardID: string) {
-  return ident(cvrSchema(shardID));
+function schema(appID: string, shardID: string) {
+  return ident(cvrSchema(appID, shardID));
 }
 
-function createSchema(shardID: string) {
-  return `CREATE SCHEMA IF NOT EXISTS ${schema(shardID)};`;
+function createSchema(appID: string, shardID: string) {
+  return `CREATE SCHEMA IF NOT EXISTS ${schema(appID, shardID)};`;
 }
 
 export type InstancesRow = {
@@ -37,9 +37,9 @@ export type InstancesRow = {
   grantedAt: number | null;
 };
 
-function createInstancesTable(shardID: string) {
+function createInstancesTable(appID: string, shardID: string) {
   return `
-CREATE TABLE ${schema(shardID)}.instances (
+CREATE TABLE ${schema(appID, shardID)}.instances (
   "clientGroupID"  TEXT PRIMARY KEY,
   "version"        TEXT NOT NULL,        -- Sortable representation of CVRVersion, e.g. "5nbqa2w:09"
   "lastActive"     TIMESTAMPTZ NOT NULL, -- For garbage collection
@@ -63,10 +63,10 @@ export type ClientsRow = {
   deleted: boolean | null;
 };
 
-function createClientsTable(shardID: string) {
+function createClientsTable(appID: string, shardID: string) {
   // patchVersion and deleted are not used. Remove after all readers are migrated.
   return `
-CREATE TABLE ${schema(shardID)}.clients (
+CREATE TABLE ${schema(appID, shardID)}.clients (
   "clientGroupID"      TEXT,
   "clientID"           TEXT,
   "patchVersion"       TEXT NOT NULL,  -- Deprecated
@@ -76,12 +76,12 @@ CREATE TABLE ${schema(shardID)}.clients (
 
   CONSTRAINT fk_clients_client_group
     FOREIGN KEY("clientGroupID")
-    REFERENCES ${schema(shardID)}.instances("clientGroupID")
+    REFERENCES ${schema(appID, shardID)}.instances("clientGroupID")
 );
 
 -- For catchup patches.
 CREATE INDEX client_patch_version
-  ON ${schema(shardID)}.clients ("patchVersion");
+  ON ${schema(appID, shardID)}.clients ("patchVersion");
 `;
 }
 export function compareClientsRows(a: ClientsRow, b: ClientsRow) {
@@ -103,9 +103,9 @@ export type QueriesRow = {
   deleted: boolean | null;
 };
 
-function createQueriesTable(shardID: string) {
+function createQueriesTable(appID: string, shardID: string) {
   return `
-CREATE TABLE ${schema(shardID)}.queries (
+CREATE TABLE ${schema(appID, shardID)}.queries (
   "clientGroupID"         TEXT,
   "queryHash"             TEXT,
   "clientAST"             JSONB NOT NULL,
@@ -119,12 +119,12 @@ CREATE TABLE ${schema(shardID)}.queries (
 
   CONSTRAINT fk_queries_client_group
     FOREIGN KEY("clientGroupID")
-    REFERENCES ${schema(shardID)}.instances("clientGroupID")
+    REFERENCES ${schema(appID, shardID)}.instances("clientGroupID")
 );
 
 -- For catchup patches.
 CREATE INDEX queries_patch_version 
-  ON ${schema(shardID)}.queries ("patchVersion" NULLS FIRST);
+  ON ${schema(appID, shardID)}.queries ("patchVersion" NULLS FIRST);
 `;
 }
 
@@ -148,9 +148,9 @@ export type DesiresRow = {
   expiresAt?: number | null;
 };
 
-function createDesiresTable(shardID: string) {
+function createDesiresTable(appID: string, shardID: string) {
   return `
-CREATE TABLE ${schema(shardID)}.desires (
+CREATE TABLE ${schema(appID, shardID)}.desires (
   "clientGroupID"      TEXT,
   "clientID"           TEXT,
   "queryHash"          TEXT,
@@ -165,26 +165,26 @@ CREATE TABLE ${schema(shardID)}.desires (
   CONSTRAINT fk_desires_client
     FOREIGN KEY("clientGroupID", "clientID")
     REFERENCES ${ident(
-      cvrSchema(shardID),
+      cvrSchema(appID, shardID),
     )}.clients("clientGroupID", "clientID"),
 
   CONSTRAINT fk_desires_query
     FOREIGN KEY("clientGroupID", "queryHash")
     REFERENCES ${ident(
-      cvrSchema(shardID),
+      cvrSchema(appID, shardID),
     )}.queries("clientGroupID", "queryHash")
     ON DELETE CASCADE
 );
 
 -- For catchup patches.
 CREATE INDEX desires_patch_version
-  ON ${schema(shardID)}.desires ("patchVersion");
+  ON ${schema(appID, shardID)}.desires ("patchVersion");
 
 CREATE INDEX desires_expires_at
-  ON ${schema(shardID)}.desires ("expiresAt");
+  ON ${schema(appID, shardID)}.desires ("expiresAt");
 
 CREATE INDEX desires_inactivated_at
-  ON ${schema(shardID)}.desires ("inactivatedAt");
+  ON ${schema(appID, shardID)}.desires ("inactivatedAt");
 `;
 }
 
@@ -267,9 +267,9 @@ export function compareRowsRows(a: RowsRow, b: RowsRow) {
  * `cvr.rows` TABLE needs to be updated without affecting the
  * `SELECT ... FOR UPDATE` lock when `cvr.instances` is updated.
  */
-function createRowsTable(shardID: string) {
+function createRowsTable(appID: string, shardID: string) {
   return `
-CREATE TABLE ${schema(shardID)}.rows (
+CREATE TABLE ${schema(appID, shardID)}.rows (
   "clientGroupID"    TEXT,
   "schema"           TEXT,
   "table"            TEXT,
@@ -283,11 +283,11 @@ CREATE TABLE ${schema(shardID)}.rows (
 
 -- For catchup patches.
 CREATE INDEX row_patch_version 
-  ON ${schema(shardID)}.rows ("patchVersion");
+  ON ${schema(appID, shardID)}.rows ("patchVersion");
 
 -- For listing rows returned by one or more query hashes. e.g.
 -- SELECT * FROM cvr_shard.rows WHERE "refCounts" ?| array[...queryHashes...];
-CREATE INDEX row_ref_counts ON ${schema(shardID)}.rows 
+CREATE INDEX row_ref_counts ON ${schema(appID, shardID)}.rows 
   USING GIN ("refCounts");
 `;
 }
@@ -307,9 +307,9 @@ CREATE INDEX row_ref_counts ON ${schema(shardID)}.rows
  * `cvr.rows` TABLE needs to be updated without affecting the
  * `SELECT ... FOR UPDATE` lock when `cvr.instances` is updated.
  */
-export function createRowsVersionTable(shardID: string) {
+export function createRowsVersionTable(appID: string, shardID: string) {
   return `
-CREATE TABLE ${schema(shardID)}."rowsVersion" (
+CREATE TABLE ${schema(appID, shardID)}."rowsVersion" (
   "clientGroupID" TEXT PRIMARY KEY,
   "version"       TEXT NOT NULL
 );
@@ -321,25 +321,26 @@ export type RowsVersionRow = {
   version: string;
 };
 
-function createTables(shardID: string) {
+function createTables(appID: string, shardID: string) {
   return (
-    createSchema(shardID) +
-    createInstancesTable(shardID) +
-    createClientsTable(shardID) +
-    createQueriesTable(shardID) +
-    createDesiresTable(shardID) +
-    createRowsTable(shardID) +
-    createRowsVersionTable(shardID)
+    createSchema(appID, shardID) +
+    createInstancesTable(appID, shardID) +
+    createClientsTable(appID, shardID) +
+    createQueriesTable(appID, shardID) +
+    createDesiresTable(appID, shardID) +
+    createRowsTable(appID, shardID) +
+    createRowsVersionTable(appID, shardID)
   );
 }
 
 export async function setupCVRTables(
   lc: LogContext,
   db: postgres.TransactionSql,
+  appID: string,
   shardID: string,
 ) {
   lc.info?.(`Setting up CVR tables`);
-  await db.unsafe(createTables(shardID));
+  await db.unsafe(createTables(appID, shardID));
 }
 
 function stringifySorted(r: RowKey) {
