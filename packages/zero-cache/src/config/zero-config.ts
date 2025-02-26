@@ -326,6 +326,17 @@ export const zeroOptions = {
       ],
     },
 
+    checkpointThresholdMB: {
+      type: v.number().default(40),
+      desc: [
+        `The size of the WAL file at which to perform an SQlite checkpoint to apply`,
+        `the writes in the WAL to the main database file. Each checkpoint creates`,
+        `a new WAL segment file that will be backed up by litestream. Smaller thresholds`,
+        `may improve read performance, at the expense of creating more files to download`,
+        `when restoring the replica from the backup.`,
+      ],
+    },
+
     incrementalBackupIntervalMinutes: {
       type: v.number().default(15),
       desc: [

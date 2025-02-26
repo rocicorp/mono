@@ -48,6 +48,7 @@ function getLitestream(
     backupURL,
     logLevel,
     configPath,
+    checkpointThresholdMB,
     incrementalBackupIntervalMinutes,
     snapshotBackupIntervalHours,
   } = config.litestream;
@@ -55,6 +56,8 @@ function getLitestream(
   // Set the snapshot interval to something smaller than x hours so that
   // the hourly check triggers on the hour, rather than the hour after.
   const snapshotBackupIntervalMinutes = snapshotBackupIntervalHours * 60 - 5;
+  const minCheckpointPageCount = checkpointThresholdMB * 250; // SQLite page size is 4k
+  const maxCheckpointPageCount = minCheckpointPageCount * 10;
 
   return {
     litestream: must(executable, `Missing --litestream-executable`),
@@ -62,6 +65,12 @@ function getLitestream(
       ...process.env,
       ['ZERO_REPLICA_FILE']: config.replicaFile,
       ['ZERO_LITESTREAM_BACKUP_URL']: must(backupURL),
+      ['ZERO_LITESTREAM_MIN_CHECKPOINT_PAGE_COUNT']: String(
+        minCheckpointPageCount,
+      ),
+      ['ZERO_LITESTREAM_MAX_CHECKPOINT_PAGE_COUNT']: String(
+        maxCheckpointPageCount,
+      ),
       ['ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES']: String(
         incrementalBackupIntervalMinutes,
       ),

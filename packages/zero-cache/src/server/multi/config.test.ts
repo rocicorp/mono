@@ -64,6 +64,7 @@ test('parse options', () => {
           "tableCopyWorkers": 5,
         },
         "litestream": {
+          "checkpointThresholdMB": 40,
           "configPath": "./src/services/litestream/config.yml",
           "incrementalBackupIntervalMinutes": 15,
           "logLevel": "warn",
@@ -130,6 +131,7 @@ test('parse options', () => {
         "ZERO_CVR_MAX_CONNS": "30",
         "ZERO_INITIAL_SYNC_ROW_BATCH_SIZE": "10000",
         "ZERO_INITIAL_SYNC_TABLE_COPY_WORKERS": "5",
+        "ZERO_LITESTREAM_CHECKPOINT_THRESHOLD_MB": "40",
         "ZERO_LITESTREAM_CONFIG_PATH": "./src/services/litestream/config.yml",
         "ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES": "15",
         "ZERO_LITESTREAM_LOG_LEVEL": "warn",
@@ -454,6 +456,14 @@ test('zero-cache --help', () => {
        ZERO_LITESTREAM_BACKUP_URL env                                                                                                                             
                                                                 The location of the litestream backup, usually an s3:// URL.                                      
                                                                 If set, the litestream-executable must also be specified.                                         
+                                                                                                                                                                  
+     --litestream-checkpoint-threshold-mb number                default: 40                                                                                       
+       ZERO_LITESTREAM_CHECKPOINT_THRESHOLD_MB env                                                                                                                
+                                                                The size of the WAL file at which to perform an SQlite checkpoint to apply                        
+                                                                the writes in the WAL to the main database file. Each checkpoint creates                          
+                                                                a new WAL segment file that will be backed up by litestream. Smaller thresholds                   
+                                                                may improve read performance, at the expense of creating more files to download                   
+                                                                when restoring the replica from the backup.                                                       
                                                                                                                                                                   
      --litestream-incremental-backup-interval-minutes number    default: 15                                                                                       
        ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES env                                                                                                    

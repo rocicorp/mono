@@ -219,6 +219,14 @@ test('zero-cache --help', () => {
                                                                 The location of the litestream backup, usually an s3:// URL.                                      
                                                                 If set, the litestream-executable must also be specified.                                         
                                                                                                                                                                   
+     --litestream-checkpoint-threshold-mb number                default: 40                                                                                       
+       ZERO_LITESTREAM_CHECKPOINT_THRESHOLD_MB env                                                                                                                
+                                                                The size of the WAL file at which to perform an SQlite checkpoint to apply                        
+                                                                the writes in the WAL to the main database file. Each checkpoint creates                          
+                                                                a new WAL segment file that will be backed up by litestream. Smaller thresholds                   
+                                                                may improve read performance, at the expense of creating more files to download                   
+                                                                when restoring the replica from the backup.                                                       
+                                                                                                                                                                  
      --litestream-incremental-backup-interval-minutes number    default: 15                                                                                       
        ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES env                                                                                                    
                                                                 The interval between incremental backups of the replica. Shorter intervals                        
