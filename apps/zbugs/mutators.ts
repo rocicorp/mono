@@ -18,7 +18,7 @@ type AddEmojiArgs = {
   creatorID: string;
 };
 
-export const mutators: CustomMutatorDefs<typeof schema> = {
+export const mutators = {
   issue: {
     async create(
       tx,
@@ -238,7 +238,7 @@ export const mutators: CustomMutatorDefs<typeof schema> = {
       await tx.mutate.viewState.upsert({issueID, userID, viewed});
     },
   },
-};
+} as const satisfies CustomMutatorDefs<typeof schema>;
 
 async function userIsAdminOrCreator(
   tx: ServerTransaction<typeof schema, unknown>,

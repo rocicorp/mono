@@ -54,17 +54,20 @@ export const EmojiPanel = memo(
 
       const addEmoji = useCallback(
         (unicode: string, annotation: string) => {
-          const id = nanoid();
-          z.mutate.emoji.insert({
-            id,
-            value: unicode,
+          const args = {
+            unicode,
             annotation,
             subjectID,
             creatorID: z.userID,
             created: Date.now(),
-          });
+          } as const;
+          if (commentID !== undefined) {
+            z.mutate.emoji.addToComment(args);
+          } else {
+            z.mutate.emoji.addToIssue(args);
+          }
         },
-        [subjectID, z],
+        [subjectID, commentID, z],
       );
 
       const removeEmoji = useCallback(
