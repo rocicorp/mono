@@ -92,6 +92,10 @@
     "./change-protocol/v0": {
       "types": "./out/zero/src/change-protocol/v0.d.ts",
       "default": "./out/zero/src/change-protocol/v0.js"
+    },
+    "./pg": {
+      "types": "./out/zero-pg/src/mod.d.ts",
+      "default": "./out/pg.js"
     }
   },
   "bin": {

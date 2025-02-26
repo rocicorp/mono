@@ -52,12 +52,13 @@ async function getExternal(includePeerDeps: boolean): Promise<string[]> {
     'datadog',
     'replicache',
     'shared',
+    'zero-advanced',
     'zero-cache',
     'zero-client',
+    'zero-pg',
     'zero-protocol',
     'zero-react',
     'zero-solid',
-    'zero-advanced',
     'zql',
     'zqlite',
   ]) {
@@ -102,6 +103,7 @@ async function buildZeroClient() {
         react: basePath('src/react.ts'),
         solid: basePath('src/solid.ts'),
         advanced: basePath('src/advanced.ts'),
+        pg: basePath('src/pg.ts'),
       };
   const result = await esbuild.build({
     ...sharedOptions(minify, metafile),
