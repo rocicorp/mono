@@ -37,7 +37,7 @@ class Transaction implements DBTransaction<postgres.TransactionSql> {
 }
 
 const mutatorSql = postgres(process.env.ZERO_UPSTREAM_DB as string);
-createPushHandler({
+export const pushHandler = createPushHandler({
   dbConnectionProvider: () => new Connection(mutatorSql),
   mutators,
   schema,

@@ -8,3 +8,4 @@ export type {
   ConnectionProvider,
   Row,
 } from '../../zql/src/mutate/custom.ts';
+export type {PushHandler} from './web.ts';
