@@ -269,7 +269,7 @@ export const zeroOptions = {
   },
 
   autoReset: {
-    type: v.boolean().optional(),
+    type: v.boolean().default(true),
     desc: [
       `Automatically wipe and resync the replica when replication is halted.`,
       `This situation can occur for configurations in which the upstream database`,
