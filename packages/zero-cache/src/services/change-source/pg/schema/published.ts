@@ -184,9 +184,7 @@ const publicationInfoSchema = publishedSchema.extend({
 export type PublicationInfo = v.Infer<typeof publicationInfoSchema>;
 
 /**
- * Retrieves published tables and columns. By default, includes all
- * publications that start with "zero_" or "_zero_", but this can be
- * overridden by specifying a specific set of `publications`.
+ * Retrieves published tables and columns.
  */
 export async function getPublicationInfo(
   sql: postgres.Sql,

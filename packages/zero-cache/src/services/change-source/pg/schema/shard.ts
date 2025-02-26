@@ -15,59 +15,66 @@ import {
   type PublicationInfo,
   type PublishedSchema,
 } from './published.ts';
-import {validate} from './validation.ts';
+import {ALLOWED_APP_ID_CHARACTERS, validate} from './validation.ts';
 
 // Creates a function that appends `_SHARD_ID` to the input.
 export function append(shardID: string) {
   return (name: string) => id(name + '_' + shardID);
 }
 
-export function schemaFor(shardID: string) {
-  return append(shardID)('zero');
+export function schemaFor(appID: string, shardID: string) {
+  return append(shardID)(appID);
 }
 
-export function unescapedSchema(shardID: string) {
-  return `zero_${shardID}`;
+export function unescapedSchema(appID: string, shardID: string) {
+  return `${appID}_${shardID}`;
 }
 
-export const APP_PUBLICATION_PREFIX = 'zero_';
-export const INTERNAL_PUBLICATION_PREFIX = '_zero_';
+export function internalPublicationPrefix(appID: string) {
+  return `_${appID}_`;
+}
 
-const DEFAULT_PUBLICATION_PREFIX = INTERNAL_PUBLICATION_PREFIX + 'public_';
-export const METADATA_PUBLICATION_PREFIX =
-  INTERNAL_PUBLICATION_PREFIX + 'metadata_';
+function defaultPublicationName(appID: string, shardID: string) {
+  return `_${appID}_public_${shardID}`;
+}
+
+function metadataPublicationName(appID: string, shardID: string) {
+  return `_${appID}_metadata_${shardID}`;
+}
 
 // The GLOBAL_SETUP must be idempotent as it can be run multiple times for different shards.
 // Exported for testing.
-export const GLOBAL_SETUP = `
-  CREATE SCHEMA IF NOT EXISTS zero;
+export function globalSetup(appID: string): string {
+  // Sanity check; should already be validated upstream.
+  assert(ALLOWED_APP_ID_CHARACTERS.test(appID), `Invalid App ID ${appID}`);
 
-  CREATE TABLE IF NOT EXISTS zero."schemaVersions" (
+  return `
+  CREATE SCHEMA IF NOT EXISTS ${appID};
+
+  CREATE TABLE IF NOT EXISTS ${appID}."schemaVersions" (
     "minSupportedVersion" INT4,
     "maxSupportedVersion" INT4,
 
     -- Ensure that there is only a single row in the table.
     -- Application code can be agnostic to this column, and
     -- simply invoke UPDATE statements on the version columns.
-    "lock" BOOL PRIMARY KEY DEFAULT true,
-    CONSTRAINT zero_schema_versions_single_row_constraint CHECK (lock)
+    "lock" BOOL PRIMARY KEY DEFAULT true CHECK (lock)
   );
 
-  INSERT INTO zero."schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion")
+  INSERT INTO ${appID}."schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion")
     VALUES (true, 1, 1) ON CONFLICT DO NOTHING;
 
-  CREATE TABLE IF NOT EXISTS zero.permissions (
+  CREATE TABLE IF NOT EXISTS ${appID}.permissions (
     "permissions" JSONB,
     "hash"        TEXT,
 
     -- Ensure that there is only a single row in the table.
     -- Application code can be agnostic to this column, and
     -- simply invoke UPDATE statements on the version columns.
-    "lock" BOOL PRIMARY KEY DEFAULT true,
-    CONSTRAINT zero_permissions_single_row_constraint CHECK (lock)
+    "lock" BOOL PRIMARY KEY DEFAULT true CHECK (lock)
   );
 
-  CREATE OR REPLACE FUNCTION zero.set_permissions_hash()
+  CREATE OR REPLACE FUNCTION ${appID}.set_permissions_hash()
   RETURNS TRIGGER AS $$
   BEGIN
       NEW.hash = md5(NEW.permissions::text);
@@ -76,15 +83,16 @@ export const GLOBAL_SETUP = `
   $$ LANGUAGE plpgsql;
 
   CREATE OR REPLACE TRIGGER on_set_permissions 
-    BEFORE INSERT OR UPDATE ON zero.permissions
+    BEFORE INSERT OR UPDATE ON ${appID}.permissions
     FOR EACH ROW
-    EXECUTE FUNCTION zero.set_permissions_hash();
+    EXECUTE FUNCTION ${appID}.set_permissions_hash();
 
-  INSERT INTO zero.permissions (permissions) VALUES (NULL) ON CONFLICT DO NOTHING;
+  INSERT INTO ${appID}.permissions (permissions) VALUES (NULL) ON CONFLICT DO NOTHING;
 `;
+}
 
-export async function ensureGlobalTables(db: PostgresDB) {
-  await db.unsafe(GLOBAL_SETUP);
+export async function ensureGlobalTables(db: PostgresDB, appID: string) {
+  await db.unsafe(globalSetup(appID));
 }
 
 export function getClientsTableDefinition(schema: string) {
@@ -97,11 +105,16 @@ export function getClientsTableDefinition(schema: string) {
   );`;
 }
 
-export function shardSetup(shardID: string, publications: string[]): string {
-  const sharded = append(shardID);
-  const schema = schemaFor(shardID);
+export function shardSetup(
+  appID: string,
+  shardID: string,
+  publications: string[],
+): string {
+  assert(ALLOWED_APP_ID_CHARACTERS.test(appID), `Invalid App ID ${appID}`);
 
-  const metadataPublication = METADATA_PUBLICATION_PREFIX + shardID;
+  const schema = schemaFor(appID, shardID);
+
+  const metadataPublication = metadataPublicationName(appID, shardID);
 
   publications.push(metadataPublication);
   publications.sort();
@@ -112,7 +125,7 @@ export function shardSetup(shardID: string, publications: string[]): string {
   ${getClientsTableDefinition(schema)}
 
   CREATE PUBLICATION ${id(metadataPublication)}
-    FOR TABLE zero."schemaVersions", zero."permissions", TABLE ${schema}."clients";
+    FOR TABLE ${appID}."schemaVersions", ${appID}."permissions", TABLE ${schema}."clients";
 
   CREATE TABLE ${schema}."shardConfig" (
     "publications"  TEXT[] NOT NULL,
@@ -120,8 +133,7 @@ export function shardSetup(shardID: string, publications: string[]): string {
     "initialSchema" JSON,
 
     -- Ensure that there is only a single row in the table.
-    "lock" BOOL PRIMARY KEY DEFAULT true,
-    CONSTRAINT ${sharded('single_row_shard_config')} CHECK (lock)
+    "lock" BOOL PRIMARY KEY DEFAULT true CHECK (lock)
   );
 
   INSERT INTO ${schema}."shardConfig" 
@@ -134,10 +146,10 @@ export function shardSetup(shardID: string, publications: string[]): string {
   `;
 }
 
-export function dropShard(shardID: string): string {
-  const schema = schemaFor(shardID);
-  const metadataPublication = METADATA_PUBLICATION_PREFIX + shardID;
-  const defaultPublication = DEFAULT_PUBLICATION_PREFIX + shardID;
+export function dropShard(appID: string, shardID: string): string {
+  const schema = schemaFor(appID, shardID);
+  const metadataPublication = metadataPublicationName(appID, shardID);
+  const defaultPublication = defaultPublicationName(appID, shardID);
 
   // DROP SCHEMA ... CASCADE does not drop dependent PUBLICATIONS,
   // so PUBLICATIONs must be dropped explicitly.
@@ -159,10 +171,14 @@ export type InternalShardConfig = v.Infer<typeof internalShardConfigSchema>;
 // triggerSetup is run separately in a sub-transaction (i.e. SAVEPOINT) so
 // that a failure (e.g. due to lack of superuser permissions) can be handled
 // by continuing in a degraded mode (ddlDetection = false).
-function triggerSetup(shardID: string, publications: string[]): string {
-  const schema = schemaFor(shardID);
+function triggerSetup(
+  appID: string,
+  shardID: string,
+  publications: string[],
+): string {
+  const schema = schemaFor(appID, shardID);
   return (
-    createEventTriggerStatements(shardID, publications) +
+    createEventTriggerStatements(appID, shardID, publications) +
     `UPDATE ${schema}."shardConfig" SET "ddlDetection" = true;`
   );
 }
@@ -170,21 +186,23 @@ function triggerSetup(shardID: string, publications: string[]): string {
 // Called in initial-sync to store the exact schema that was initially synced.
 export async function setInitialSchema(
   db: PostgresDB,
+  appID: string,
   shardID: string,
   {tables, indexes}: PublishedSchema,
 ) {
-  const schema = unescapedSchema(shardID);
+  const schema = unescapedSchema(appID, shardID);
   const synced: PublishedSchema = {tables, indexes};
   await db`UPDATE ${db(schema)}."shardConfig" SET "initialSchema" = ${synced}`;
 }
 
 export async function getInternalShardConfig(
   db: PostgresDB,
+  appID: string,
   shardID: string,
 ): Promise<InternalShardConfig> {
   const result = await db`
     SELECT "publications", "ddlDetection", "initialSchema" 
-      FROM ${db(unescapedSchema(shardID))}."shardConfig";
+      FROM ${db(unescapedSchema(appID, shardID))}."shardConfig";
   `;
   assert(result.length === 1);
   return v.parse(result[0], internalShardConfigSchema, 'passthrough');
@@ -197,20 +215,18 @@ export async function getInternalShardConfig(
 export async function setupTablesAndReplication(
   lc: LogContext,
   tx: PostgresTransaction,
+  appID: string,
   {id, publications}: ShardConfig,
 ) {
   // Validate requested publications.
   for (const pub of publications) {
-    // Note: Having all publications follow a naming convention facilitates
-    //       looking up all zero publications, e.g. for cross-shard logic
-    //       such as permissions validation.
-    if (!pub.startsWith(APP_PUBLICATION_PREFIX)) {
+    if (pub.startsWith('_')) {
       throw new Error(
-        `Publication ${pub} does not start with ${APP_PUBLICATION_PREFIX}`,
+        `Publication names starting with "_" are reserved for internal use.\n` +
+          `Please use a different name for publication "${pub}".`,
       );
     }
   }
-
   const allPublications: string[] = [];
 
   // Setup application publications.
@@ -227,7 +243,7 @@ export async function setupTablesAndReplication(
     }
     allPublications.push(...publications);
   } else {
-    const defaultPublication = DEFAULT_PUBLICATION_PREFIX + id;
+    const defaultPublication = defaultPublicationName(appID, id);
     // Note: For re-syncing, this publication is dropped in dropShard(), so an existence
     //       check is unnecessary.
     await tx`
@@ -238,13 +254,15 @@ export async function setupTablesAndReplication(
   }
 
   // Setup the global tables and shard tables / publications.
-  await tx.unsafe(GLOBAL_SETUP + shardSetup(id, allPublications));
+  await tx.unsafe(globalSetup(appID) + shardSetup(appID, id, allPublications));
 
   const pubs = await getPublicationInfo(tx, allPublications);
   await replicaIdentitiesForTablesWithoutPrimaryKeys(pubs)?.apply(lc, tx);
 
   try {
-    await tx.savepoint(sub => sub.unsafe(triggerSetup(id, allPublications)));
+    await tx.savepoint(sub =>
+      sub.unsafe(triggerSetup(appID, id, allPublications)),
+    );
   } catch (e) {
     if (
       !(

@@ -33,6 +33,7 @@ import {
   setInitialSchema,
   validatePublications,
 } from './schema/shard.ts';
+import {ALLOWED_APP_ID_CHARACTERS} from './schema/validation.ts';
 import type {ShardConfig} from './shard-config.ts';
 
 export type InitialSyncOptions = {
@@ -43,17 +44,23 @@ export type InitialSyncOptions = {
 // https://www.postgresql.org/docs/current/warm-standby.html#STREAMING-REPLICATION-SLOTS-MANIPULATION
 const ALLOWED_SHARD_ID_CHARACTERS = /^[a-z0-9_]+$/;
 
-export function replicationSlot(shardID: string): string {
-  return `zero_${shardID}`;
+export function replicationSlot(appID: string, shardID: string): string {
+  return `${appID}_${shardID}`;
 }
 
 export async function initialSync(
   lc: LogContext,
+  appID: string,
   shard: ShardConfig,
   tx: Database,
   upstreamURI: string,
   syncOptions: InitialSyncOptions,
 ) {
+  if (!ALLOWED_APP_ID_CHARACTERS.test(appID)) {
+    throw new Error(
+      'The App ID may only consist of lower-case letters, numbers, and the underscore character',
+    );
+  }
   if (!ALLOWED_SHARD_ID_CHARACTERS.test(shard.id)) {
     throw new Error(
       'A shard ID may only consist of lower-case letters, numbers, and the underscore character',
@@ -71,7 +78,7 @@ export async function initialSync(
     // Kill the active_pid on the existing slot before altering publications,
     // as deleting a publication associated with an existing subscriber causes
     // weirdness; the active_pid becomes null and thus unable to be terminated.
-    const slotName = replicationSlot(shard.id);
+    const slotName = replicationSlot(appID, shard.id);
     const slots = await upstreamDB<{pid: string | null}[]>`
     SELECT pg_terminate_backend(active_pid), active_pid as pid
       FROM pg_replication_slots WHERE slot_name = ${slotName}`;
@@ -79,7 +86,12 @@ export async function initialSync(
       lc.info?.(`signaled subscriber ${slots[0].pid} to shut down`);
     }
 
-    const {publications} = await ensurePublishedTables(lc, upstreamDB, shard);
+    const {publications} = await ensurePublishedTables(
+      lc,
+      upstreamDB,
+      appID,
+      shard,
+    );
     lc.info?.(`Upstream is setup with publications [${publications}]`);
 
     const {database, host} = upstreamDB.options;
@@ -151,7 +163,7 @@ export async function initialSync(
       await copiers.done();
     }
 
-    await setInitialSchema(upstreamDB, shard.id, published);
+    await setInitialSchema(upstreamDB, appID, shard.id, published);
 
     initReplicationState(tx, publications, initialVersion);
     initChangeLog(tx);
@@ -189,14 +201,15 @@ async function checkUpstreamConfig(upstreamDB: PostgresDB) {
 async function ensurePublishedTables(
   lc: LogContext,
   upstreamDB: PostgresDB,
+  appID: string,
   shard: ShardConfig,
 ): Promise<{publications: string[]}> {
   const {database, host} = upstreamDB.options;
   lc.info?.(`Ensuring upstream PUBLICATION on ${database}@${host}`);
 
-  await initShardSchema(lc, upstreamDB, shard);
+  await initShardSchema(lc, upstreamDB, appID, shard);
 
-  return getInternalShardConfig(upstreamDB, shard.id);
+  return getInternalShardConfig(upstreamDB, appID, shard.id);
 }
 
 /* eslint-disable @typescript-eslint/naming-convention */

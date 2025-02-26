@@ -21,10 +21,11 @@ import {
 export async function initShardSchema(
   lc: LogContext,
   db: PostgresDB,
+  appID: string,
   shardConfig: ShardConfig,
 ): Promise<void> {
-  await db.unsafe(dropShard(shardConfig.id));
-  return runShardMigrations(lc, db, shardConfig);
+  await db.unsafe(dropShard(appID, shardConfig.id));
+  return runShardMigrations(lc, db, appID, shardConfig);
 }
 
 /**
@@ -33,23 +34,30 @@ export async function initShardSchema(
 export async function updateShardSchema(
   lc: LogContext,
   db: PostgresDB,
+  appID: string,
   shardConfig: ShardConfig,
 ): Promise<void> {
   const {id} = shardConfig;
-  const {schemaVersion} = await getVersionHistory(db, unescapedSchema(id));
+  const {schemaVersion} = await getVersionHistory(
+    db,
+    unescapedSchema(appID, id),
+  );
   if (schemaVersion === 0) {
-    throw new AutoResetSignal(`upstream shard ${id} is not initialized`);
+    throw new AutoResetSignal(
+      `upstream shard ${appID}_${id} is not initialized`,
+    );
   }
-  return runShardMigrations(lc, db, shardConfig);
+  return runShardMigrations(lc, db, appID, shardConfig);
 }
 
 async function runShardMigrations(
   lc: LogContext,
   db: PostgresDB,
+  appID: string,
   shard: ShardConfig,
 ): Promise<void> {
   const setupMigration: Migration = {
-    migrateSchema: (lc, tx) => setupTablesAndReplication(lc, tx, shard),
+    migrateSchema: (lc, tx) => setupTablesAndReplication(lc, tx, appID, shard),
     minSafeVersion: 1,
   };
 
@@ -65,7 +73,7 @@ async function runShardMigrations(
   await runSchemaMigrations(
     lc,
     `upstream-shard-${shard.id}`,
-    unescapedSchema(shard.id),
+    unescapedSchema(appID, shard.id),
     db,
     setupMigration,
     schemaVersionMigrationMap,

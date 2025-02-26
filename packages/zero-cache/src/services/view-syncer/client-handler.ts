@@ -291,14 +291,14 @@ export class ClientHandler {
       );
       if (clientGroupID !== this.#clientGroupID) {
         this.#lc.error?.(
-          `Received zero.clients row for wrong clientGroupID. Ignoring.`,
+          `Received clients row for wrong clientGroupID. Ignoring.`,
           clientGroupID,
         );
       } else {
         lmids[clientID] = lastMutationID;
       }
     } else {
-      // The 'constrain' and 'del' ops for zero.clients can be ignored.
+      // The 'constrain' and 'del' ops for clients can be ignored.
       patch.op satisfies 'constrain' | 'del';
     }
   }

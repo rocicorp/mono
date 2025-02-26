@@ -143,10 +143,11 @@ export function append(shardID: string) {
  * completely own (and maintain) the entirety of its trigger/function stack.
  */
 function createEventFunctionStatements(
+  appID: string,
   shardID: string,
   publications: string[],
 ) {
-  const schema = append(shardID)('zero'); // e.g. "zero_SHARD_ID"
+  const schema = append(shardID)(appID); // e.g. "{APP_ID}_{SHARD_ID}"
   return `
 CREATE SCHEMA IF NOT EXISTS ${schema};
 
@@ -315,20 +316,23 @@ export const TAGS = [
 ] as const;
 
 export function createEventTriggerStatements(
+  appID: string,
   shardID: string,
   publications: string[],
 ) {
   // Unlike functions, which are namespaced in shard-specific schemas,
   // EVENT TRIGGER names are in the global namespace and instead have the shardID appended.
   const sharded = append(shardID);
-  const schema = sharded('zero');
+  const schema = sharded(appID);
 
-  const triggers = [createEventFunctionStatements(shardID, publications)];
+  const triggers = [
+    createEventFunctionStatements(appID, shardID, publications),
+  ];
 
   // A single ddl_command_start trigger covering all relevant tags.
   triggers.push(`
-DROP EVENT TRIGGER IF EXISTS ${sharded('zero_ddl_start')};
-CREATE EVENT TRIGGER ${sharded('zero_ddl_start')}
+DROP EVENT TRIGGER IF EXISTS ${sharded(`${appID}_ddl_start`)};
+CREATE EVENT TRIGGER ${sharded(`${appID}_ddl_start`)}
   ON ddl_command_start
   WHEN TAG IN (${lit(TAGS)})
   EXECUTE PROCEDURE ${schema}.emit_ddl_start();
@@ -346,8 +350,8 @@ END
 $$ LANGUAGE plpgsql;
 
 
-DROP EVENT TRIGGER IF EXISTS ${sharded(`zero_${tagID}`)};
-CREATE EVENT TRIGGER ${sharded(`zero_${tagID}`)}
+DROP EVENT TRIGGER IF EXISTS ${sharded(`${appID}_${tagID}`)};
+CREATE EVENT TRIGGER ${sharded(`${appID}_${tagID}`)}
   ON ddl_command_end
   WHEN TAG IN (${lit(tag)})
   EXECUTE PROCEDURE ${schema}.emit_${tagID}();

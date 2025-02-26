@@ -31,12 +31,14 @@ import {initSyncSchema} from './sync-schema.ts';
 export async function initializeCustomChangeSource(
   lc: LogContext,
   upstreamURI: string,
+  appID: string,
   shard: ShardConfig,
   replicaDbFile: string,
 ): Promise<{replicationConfig: ReplicationConfig; changeSource: ChangeSource}> {
   await initSyncSchema(
     lc,
     `replica-${shard.id}`,
+    appID,
     shard,
     replicaDbFile,
     upstreamURI,
@@ -132,6 +134,7 @@ class CustomChangeSource implements ChangeSource {
  */
 export async function initialSync(
   lc: LogContext,
+  appID: string,
   shard: ShardConfig,
   tx: Database,
   upstreamURI: string,
@@ -173,7 +176,7 @@ export async function initialSync(
         break;
       case 'commit':
         processor.processMessage(lc, change);
-        validateInitiallySyncedData(lc, tx, id);
+        validateInitiallySyncedData(lc, tx, appID, id);
         lc.info?.(`finished initial-sync of ${num} changes`);
         return;
 
@@ -196,20 +199,21 @@ export async function initialSync(
 // Verify that the upstream tables expected by the sync logic
 // have been properly initialized.
 function getRequiredTables(
+  appID: string,
   shardID: string,
 ): Record<string, Record<string, SchemaValue>> {
   return {
-    [`zero_${shardID}.clients`]: {
+    [`${appID}_${shardID}.clients`]: {
       clientGroupID: {type: 'string'},
       clientID: {type: 'string'},
       lastMutationID: {type: 'number'},
       userID: {type: 'string'},
     },
-    [`zero.permissions`]: {
+    [`${appID}.permissions`]: {
       permissions: {type: 'json'},
       hash: {type: 'string'},
     },
-    [`zero.schemaVersions`]: {
+    [`${appID}.schemaVersions`]: {
       minSupportedVersion: {type: 'number'},
       maxSupportedVersion: {type: 'number'},
     },
@@ -219,10 +223,11 @@ function getRequiredTables(
 function validateInitiallySyncedData(
   lc: LogContext,
   db: Database,
+  appID: string,
   shardID: string,
 ) {
   const tables = computeZqlSpecs(lc, db);
-  const required = getRequiredTables(shardID);
+  const required = getRequiredTables(appID, shardID);
   for (const [name, columns] of Object.entries(required)) {
     const table = tables.get(name)?.zqlSpec;
     if (!table) {
