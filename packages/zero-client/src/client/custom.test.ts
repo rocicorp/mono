@@ -7,11 +7,11 @@ import {
   type Transaction,
 } from './custom.ts';
 import {zeroForTest} from './test-utils.ts';
-import {nanoid} from '../util/nanoid.ts';
 import {createDb} from './test/create-db.ts';
 import {IVMSourceRepo} from './ivm-source-repo.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 import {must} from '../../../shared/src/must.ts';
+import type {InsertValue} from '../../../zql/src/mutate/custom.ts';
 type Schema = typeof schema;
 
 test('argument types are preserved on the generated mutator interface', () => {
@@ -88,14 +88,8 @@ test('custom mutators write to the local store', async () => {
             tx.mutate.issue.delete({id: id2}),
           ]);
         },
-        create: async tx => {
-          await tx.mutate.issue.insert({
-            id: nanoid(),
-            title: '',
-            closed: false,
-            ownerId: '',
-            description: '',
-          });
+        create: async (tx, args: InsertValue<typeof schema.tables.issue>) => {
+          await tx.mutate.issue.insert(args);
         },
       },
       customNamespace: {
@@ -103,10 +97,10 @@ test('custom mutators write to the local store', async () => {
           await tx.mutate.issue.update({id, title: '🤡'});
         },
       },
-    },
+    } as const satisfies CustomMutatorDefs<Schema>,
   });
 
-  await z.mutate.issue.insert({
+  await z.mutate.issue.create({
     id: '1',
     title: 'foo',
     closed: false,
@@ -125,7 +119,13 @@ test('custom mutators write to the local store', async () => {
   issues = await z.query.issue.run();
   expect(issues[0].title).toEqual('🤡');
 
-  await z.mutate.issue.create();
+  await z.mutate.issue.create({
+    id: '2',
+    title: 'foo',
+    closed: false,
+    ownerId: '',
+    description: '',
+  });
   issues = await z.query.issue.run();
   expect(issues.length).toEqual(2);
 
@@ -139,6 +139,9 @@ test('custom mutators can query the local store during an optimistic mutation', 
     schema,
     mutators: {
       issue: {
+        create: async (tx, args: InsertValue<typeof schema.tables.issue>) => {
+          await tx.mutate.issue.insert(args);
+        },
         closeAll: async tx => {
           const issues = await tx.query.issue.run();
           await Promise.all(
@@ -148,12 +151,12 @@ test('custom mutators can query the local store during an optimistic mutation', 
           );
         },
       },
-    },
+    } as const satisfies CustomMutatorDefs<Schema>,
   });
 
   await Promise.all(
     Array.from({length: 10}, async (_, i) => {
-      await z.mutate.issue.insert({
+      await z.mutate.issue.create({
         id: i.toString().padStart(3, '0'),
         title: `issue ${i}`,
         closed: false,
