@@ -53,6 +53,7 @@ test('parse options', () => {
     {
       "config": {
         "auth": {},
+        "autoReset": true,
         "change": {
           "maxConns": 1,
         },
@@ -127,6 +128,7 @@ test('parse options', () => {
         },
       },
       "env": {
+        "ZERO_AUTO_RESET": "true",
         "ZERO_CHANGE_MAX_CONNS": "1",
         "ZERO_CVR_MAX_CONNS": "30",
         "ZERO_INITIAL_SYNC_ROW_BATCH_SIZE": "10000",
@@ -420,7 +422,7 @@ test('zero-cache --help', () => {
                                                                 the replication-manager URI, which runs a change-streamer                                         
                                                                 on port 4849.                                                                                     
                                                                                                                                                                   
-     --auto-reset boolean                                       optional                                                                                          
+     --auto-reset boolean                                       default: true                                                                                     
        ZERO_AUTO_RESET env                                                                                                                                        
                                                                 Automatically wipe and resync the replica when replication is halted.                             
                                                                 This situation can occur for configurations in which the upstream database                        

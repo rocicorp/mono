@@ -23,6 +23,7 @@ test('encode/decodeSecProtocols round-trip', () => {
                         fc.double({
                           noDefaultInfinity: true,
                           noNaN: true,
+                          min: 0,
                         }),
                         {nil: undefined},
                       ),

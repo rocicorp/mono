@@ -47,17 +47,17 @@ export class StaticQuery<
   }
 
   materialize(): TypedView<HumanReadable<TReturn>> {
-    throw new Error('AuthQuery cannot be materialized');
+    throw new Error('StaticQuery cannot be materialized');
   }
 
-  run(): HumanReadable<TReturn> {
-    throw new Error('AuthQuery cannot be run');
+  run(): Promise<HumanReadable<TReturn>> {
+    return Promise.reject(new Error('StaticQuery cannot be run'));
   }
 
   preload(): {
     cleanup: () => void;
     complete: Promise<void>;
   } {
-    throw new Error('AuthQuery cannot be preloaded');
+    throw new Error('StaticQuery cannot be preloaded');
   }
 }
