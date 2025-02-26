@@ -23,6 +23,7 @@ import {
   compareInstancesRows,
   compareQueriesRows,
   compareRowsRows,
+  cvrSchema,
   type DesiresRow,
   type InstancesRow,
   type QueriesRow,
@@ -33,7 +34,7 @@ import {
 import type {CVRVersion, RowID} from './schema/types.ts';
 
 const APP_ID = 'dapp';
-const SHARD_ID = 'jkl';
+const SHARD_ID = '3';
 
 const LAST_CONNECT = Date.UTC(2024, 2, 1);
 
@@ -65,7 +66,9 @@ describe('view-syncer/cvr', () => {
       }
       for (const [table, rows] of Object.entries(state)) {
         for (const row of rows) {
-          await tx`INSERT INTO ${tx('cvr_jkl.' + table)} ${tx(row)}`;
+          await tx`INSERT INTO ${tx(
+            `${cvrSchema(APP_ID, SHARD_ID)}.` + table,
+          )} ${tx(row)}`;
         }
       }
     });
@@ -73,7 +76,11 @@ describe('view-syncer/cvr', () => {
 
   async function expectState(db: PostgresDB, state: Partial<DBState>) {
     for (const table of Object.keys(state)) {
-      const res = [...(await db`SELECT * FROM ${db('cvr_jkl.' + table)}`)];
+      const res = [
+        ...(await db`SELECT * FROM ${db(
+          `${cvrSchema(APP_ID, SHARD_ID)}.` + table,
+        )}`),
+      ];
       const tableState = [...(state[table as keyof DBState] || [])];
       switch (table) {
         case 'instances': {
@@ -111,11 +118,11 @@ describe('view-syncer/cvr', () => {
 
   async function getAllState(db: PostgresDB): Promise<DBState> {
     const [instances, clients, queries, desires, rows] = await Promise.all([
-      db`SELECT * FROM ${db('cvr_jkl.instances')}`,
-      db`SELECT * FROM ${db('cvr_jkl.clients')}`,
-      db`SELECT * FROM ${db('cvr_jkl.queries')}`,
-      db`SELECT * FROM ${db('cvr_jkl.desires')}`,
-      db`SELECT * FROM ${db('cvr_jkl.rows')}`,
+      db`SELECT * FROM ${db('dapp_3/cvr.instances')}`,
+      db`SELECT * FROM ${db('dapp_3/cvr.clients')}`,
+      db`SELECT * FROM ${db('dapp_3/cvr.queries')}`,
+      db`SELECT * FROM ${db('dapp_3/cvr.desires')}`,
+      db`SELECT * FROM ${db('dapp_3/cvr.rows')}`,
     ]);
     return {
       instances,
@@ -135,7 +142,7 @@ describe('view-syncer/cvr', () => {
 
   beforeEach(async () => {
     db = await testDBs.create('cvr_test_db');
-    await db.begin(tx => setupCVRTables(lc, tx, SHARD_ID));
+    await db.begin(tx => setupCVRTables(lc, tx, APP_ID, SHARD_ID));
   });
 
   afterEach(async () => {
@@ -166,6 +173,7 @@ describe('view-syncer/cvr', () => {
     const pgStore = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -199,6 +207,7 @@ describe('view-syncer/cvr', () => {
     const pgStore2 = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -274,6 +283,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -370,6 +380,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -420,6 +431,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -464,6 +476,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -473,7 +486,7 @@ describe('view-syncer/cvr', () => {
     const updater = new CVRUpdater(cvrStore, cvr, cvr.replicaVersion);
 
     // Simulate an external modification, incrementing the patch version.
-    await db`UPDATE cvr_jkl.instances SET version = '1a9:03' WHERE "clientGroupID" = 'abc123'`;
+    await db`UPDATE "dapp_3/cvr".instances SET version = '1a9:03' WHERE "clientGroupID" = 'abc123'`;
 
     await expect(
       updater.flush(
@@ -486,7 +499,7 @@ describe('view-syncer/cvr', () => {
 
     // The last active time should not have been modified.
     expect(
-      await db`SELECT "lastActive" FROM cvr_jkl.instances WHERE "clientGroupID" = 'abc123'`,
+      await db`SELECT "lastActive" FROM "dapp_3/cvr".instances WHERE "clientGroupID" = 'abc123'`,
     ).toEqual([{lastActive: Date.UTC(2024, 3, 23)}]);
   });
 
@@ -512,6 +525,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -522,7 +536,7 @@ describe('view-syncer/cvr', () => {
 
     // Simulate an ownership change.
     await db`
-    UPDATE cvr_jkl.instances SET "owner"     = 'other-task', 
+    UPDATE "dapp_3/cvr".instances SET "owner"     = 'other-task', 
                              "grantedAt" = ${LAST_CONNECT + 1}
     WHERE "clientGroupID" = 'abc123'`;
 
@@ -537,7 +551,7 @@ describe('view-syncer/cvr', () => {
 
     // The last active time should not have been modified.
     expect(
-      await db`SELECT "lastActive" FROM cvr_jkl.instances WHERE "clientGroupID" = 'abc123'`,
+      await db`SELECT "lastActive" FROM "dapp_3/cvr".instances WHERE "clientGroupID" = 'abc123'`,
     ).toEqual([{lastActive: Date.UTC(2024, 3, 23)}]);
   });
 
@@ -606,6 +620,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -1057,6 +1072,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -1155,6 +1171,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -1185,6 +1202,7 @@ describe('view-syncer/cvr', () => {
     const doCVRStore2 = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -1343,6 +1361,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -1575,6 +1594,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -1829,6 +1849,7 @@ describe('view-syncer/cvr', () => {
     let cvrStore = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -2023,7 +2044,15 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    cvrStore = new CVRStore(lc, db, SHARD_ID, 'my-task', 'abc123', ON_FAILURE);
+    cvrStore = new CVRStore(
+      lc,
+      db,
+      APP_ID,
+      SHARD_ID,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
     cvr = await cvrStore.load(lc, LAST_CONNECT);
     expect(cvr).toEqual(updated);
 
@@ -2368,6 +2397,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -2636,6 +2666,7 @@ describe('view-syncer/cvr', () => {
     const doCVRStore2 = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -2885,6 +2916,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -3025,6 +3057,7 @@ describe('view-syncer/cvr', () => {
     const doCVRStore2 = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -3277,6 +3310,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -3563,6 +3597,7 @@ describe('view-syncer/cvr', () => {
     const doCVRStore2 = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -3662,6 +3697,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -3806,6 +3842,7 @@ describe('view-syncer/cvr', () => {
     const doCVRStore2 = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -3965,6 +4002,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -4035,6 +4073,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -4181,6 +4220,7 @@ describe('view-syncer/cvr', () => {
       const cvrStore = new CVRStore(
         lc,
         db,
+        APP_ID,
         SHARD_ID,
         'my-task',
         'abc123',
@@ -4346,6 +4386,7 @@ describe('view-syncer/cvr', () => {
       const cvrStore = new CVRStore(
         lc,
         db,
+        APP_ID,
         SHARD_ID,
         'my-task',
         'abc123',
@@ -4505,6 +4546,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',
@@ -4829,6 +4871,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
+      APP_ID,
       SHARD_ID,
       'my-task',
       'abc123',

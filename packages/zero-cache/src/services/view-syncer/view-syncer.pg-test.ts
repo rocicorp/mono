@@ -62,7 +62,7 @@ import {Snapshotter} from './snapshotter.ts';
 import {pickToken, type SyncContext, ViewSyncerService} from './view-syncer.ts';
 
 const APP_ID = 'this_app';
-const SHARD_ID = 'abc';
+const SHARD_ID = '2';
 const logConfig: LogConfig = {
   format: 'text',
   level: 'debug',
@@ -72,7 +72,7 @@ const logConfig: LogConfig = {
 
 const EXPECTED_LMIDS_AST: AST = {
   schema: '',
-  table: 'this_app_abc.clients',
+  table: 'this_app_2.clients',
   where: {
     type: 'simple',
     op: '=',
@@ -328,7 +328,7 @@ async function setup(permissions: PermissionsConfig | undefined) {
   replica.pragma('journal_mode = WAL2');
   replica.pragma('busy_timeout = 1');
   replica.exec(`
-  CREATE TABLE "this_app_abc.clients" (
+  CREATE TABLE "this_app_2.clients" (
     "clientGroupID"  TEXT,
     "clientID"       TEXT,
     "lastMutationID" INTEGER,
@@ -380,7 +380,7 @@ async function setup(permissions: PermissionsConfig | undefined) {
     _0_version TEXT NOT NULL
   );
 
-  INSERT INTO "this_app_abc.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
+  INSERT INTO "this_app_2.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
     VALUES ('9876', 'foo', 42, '01');
   INSERT INTO "this_app.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
     VALUES (1, 2, 3, '01'); 
@@ -407,7 +407,7 @@ async function setup(permissions: PermissionsConfig | undefined) {
   `);
 
   const cvrDB = await testDBs.create('view_syncer_service_test');
-  await initViewSyncerSchema(lc, cvrDB, SHARD_ID);
+  await initViewSyncerSchema(lc, cvrDB, APP_ID, SHARD_ID);
 
   const replicator = fakeReplicator(lc, replica);
   const stateChanges: Subscription<ReplicaState> = Subscription.create();
@@ -588,6 +588,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
+      APP_ID,
       SHARD_ID,
       TASK_ID,
       serviceID,
@@ -642,6 +643,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
+      APP_ID,
       SHARD_ID,
       TASK_ID,
       serviceID,
@@ -852,7 +854,8 @@ describe('view-syncer/service', () => {
       ]
     `);
 
-    expect(await cvrDB`SELECT * from cvr_abc.rows`).toMatchInlineSnapshot(`
+    expect(await cvrDB`SELECT * from "this_app_2/cvr".rows`)
+      .toMatchInlineSnapshot(`
       Result [
         {
           "clientGroupID": "9876",
@@ -866,7 +869,7 @@ describe('view-syncer/service', () => {
           },
           "rowVersion": "01",
           "schema": "",
-          "table": "this_app_abc.clients",
+          "table": "this_app_2.clients",
         },
         {
           "clientGroupID": "9876",
@@ -945,7 +948,9 @@ describe('view-syncer/service', () => {
     await nextPoke(client2);
     await nextPoke(client2);
 
-    expect(await cvrDB`SELECT * from cvr_abc.clients`).toMatchInlineSnapshot(
+    expect(
+      await cvrDB`SELECT * from "this_app_2/cvr".clients`,
+    ).toMatchInlineSnapshot(
       `
       Result [
         {
@@ -964,7 +969,8 @@ describe('view-syncer/service', () => {
     `,
     );
 
-    expect(await cvrDB`SELECT * from cvr_abc.desires`).toMatchInlineSnapshot(`
+    expect(await cvrDB`SELECT * from "this_app_2/cvr".desires`)
+      .toMatchInlineSnapshot(`
       Result [
         {
           "clientGroupID": "9876",
@@ -1077,7 +1083,8 @@ describe('view-syncer/service', () => {
       ]
     `);
 
-    expect(await cvrDB`SELECT * from cvr_abc.clients`).toMatchInlineSnapshot(`
+    expect(await cvrDB`SELECT * from "this_app_2/cvr".clients`)
+      .toMatchInlineSnapshot(`
       Result [
         {
           "clientGroupID": "9876",
@@ -1087,7 +1094,8 @@ describe('view-syncer/service', () => {
         },
       ]
     `);
-    expect(await cvrDB`SELECT * from cvr_abc.desires`).toMatchInlineSnapshot(`
+    expect(await cvrDB`SELECT * from "this_app_2/cvr".desires`)
+      .toMatchInlineSnapshot(`
       Result [
         {
           "clientGroupID": "9876",
@@ -1391,7 +1399,8 @@ describe('view-syncer/service', () => {
       ]
     `);
 
-    expect(await cvrDB`SELECT * from cvr_abc.rows`).toMatchInlineSnapshot(`
+    expect(await cvrDB`SELECT * from "this_app_2/cvr".rows`)
+      .toMatchInlineSnapshot(`
       Result [
         {
           "clientGroupID": "9876",
@@ -1405,7 +1414,7 @@ describe('view-syncer/service', () => {
           },
           "rowVersion": "01",
           "schema": "",
-          "table": "this_app_abc.clients",
+          "table": "this_app_2.clients",
         },
         {
           "clientGroupID": "9876",
@@ -1756,7 +1765,8 @@ describe('view-syncer/service', () => {
       ]
     `);
 
-    expect(await cvrDB`SELECT * from cvr_abc.rows`).toMatchInlineSnapshot(`
+    expect(await cvrDB`SELECT * from "this_app_2/cvr".rows`)
+      .toMatchInlineSnapshot(`
       Result [
         {
           "clientGroupID": "9876",
@@ -1770,7 +1780,7 @@ describe('view-syncer/service', () => {
           },
           "rowVersion": "01",
           "schema": "",
-          "table": "this_app_abc.clients",
+          "table": "this_app_2.clients",
         },
         {
           "clientGroupID": "9876",
@@ -1906,7 +1916,8 @@ describe('view-syncer/service', () => {
       ]
     `);
 
-    expect(await cvrDB`SELECT * from cvr_abc.rows`).toMatchInlineSnapshot(`
+    expect(await cvrDB`SELECT * from "this_app_2/cvr".rows`)
+      .toMatchInlineSnapshot(`
       Result [
         {
           "clientGroupID": "9876",
@@ -1920,7 +1931,7 @@ describe('view-syncer/service', () => {
           },
           "rowVersion": "01",
           "schema": "",
-          "table": "this_app_abc.clients",
+          "table": "this_app_2.clients",
         },
         {
           "clientGroupID": "9876",
@@ -2887,6 +2898,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
+      APP_ID,
       SHARD_ID,
       TASK_ID,
       serviceID,
@@ -3050,6 +3062,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
+      APP_ID,
       SHARD_ID,
       TASK_ID,
       serviceID,
@@ -3106,6 +3119,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
+      APP_ID,
       SHARD_ID,
       TASK_ID,
       serviceID,

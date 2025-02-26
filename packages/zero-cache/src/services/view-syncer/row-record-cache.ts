@@ -98,6 +98,7 @@ export class RowRecordCache {
   constructor(
     lc: LogContext,
     db: PostgresDB,
+    appID: string,
     shardID: string,
     cvrID: string,
     failService: (e: unknown) => void,
@@ -106,7 +107,7 @@ export class RowRecordCache {
   ) {
     this.#lc = lc;
     this.#db = db;
-    this.#schema = cvrSchema(shardID);
+    this.#schema = cvrSchema(appID, shardID);
     this.#cvrID = cvrID;
     this.#failService = failService;
     this.#deferredRowFlushThreshold = deferredRowFlushThreshold;

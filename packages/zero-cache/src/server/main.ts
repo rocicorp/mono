@@ -43,6 +43,7 @@ export default async function runWorker(
   const config = getZeroConfig(env);
   const lc = createLogContext(config, {worker: 'dispatcher'});
   const taskID = must(config.taskID, `main must set --task-id`);
+  const appID = 'zero'; // TODO: --app-id
 
   const processes = new ProcessManager(lc, parent ?? process);
 
@@ -110,7 +111,7 @@ export default async function runWorker(
     // but it is done here in the main thread because it is wasteful to have all of
     // the Syncers attempt the migration in parallel.
     const cvrDB = pgClient(lc, config.cvr.db);
-    await initViewSyncerSchema(lc, cvrDB, config.shard.id);
+    await initViewSyncerSchema(lc, cvrDB, appID, config.shard.id);
     void cvrDB.end();
   }
 
