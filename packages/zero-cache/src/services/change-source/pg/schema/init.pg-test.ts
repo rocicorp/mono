@@ -9,6 +9,7 @@ import {expectTablesToMatch, initDB, testDBs} from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
 import {initShardSchema, updateShardSchema} from './init.ts';
 
+const APP_ID = 'zappz';
 const SHARD_ID = 'shard_schema_test_id';
 
 // Update as necessary.
@@ -45,20 +46,20 @@ describe('change-streamer/pg/schema/init', () => {
     {
       name: 'initial db',
       upstreamPostState: {
-        [`zero_${SHARD_ID}.shardConfig`]: [
+        [`${APP_ID}_${SHARD_ID}.shardConfig`]: [
           {
             lock: true,
             publications: [
-              '_zero_metadata_shard_schema_test_id',
-              '_zero_public_shard_schema_test_id',
+              `_${APP_ID}_metadata_shard_schema_test_id`,
+              `_${APP_ID}_public_shard_schema_test_id`,
             ],
             ddlDetection: true,
             initialSchema: null,
           },
         ],
-        [`zero_${SHARD_ID}.clients`]: [],
-        [`zero_${SHARD_ID}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
-        ['zero.schemaVersions']: [
+        [`${APP_ID}_${SHARD_ID}.clients`]: [],
+        [`${APP_ID}_${SHARD_ID}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
+        [`${APP_ID}.schemaVersions`]: [
           {minSupportedVersion: 1, maxSupportedVersion: 1},
         ],
       },
@@ -67,21 +68,24 @@ describe('change-streamer/pg/schema/init', () => {
       name: 'db with table and publication',
       upstreamSetup: `
         CREATE TABLE foo(id TEXT PRIMARY KEY);
-        CREATE PUBLICATION zero_foo FOR TABLE foo;
+        CREATE PUBLICATION ${APP_ID}_foo FOR TABLE foo;
       `,
-      requestedPublications: ['zero_foo'],
+      requestedPublications: [`${APP_ID}_foo`],
       upstreamPostState: {
-        [`zero_${SHARD_ID}.shardConfig`]: [
+        [`${APP_ID}_${SHARD_ID}.shardConfig`]: [
           {
             lock: true,
-            publications: ['_zero_metadata_shard_schema_test_id', 'zero_foo'],
+            publications: [
+              `_${APP_ID}_metadata_shard_schema_test_id`,
+              `${APP_ID}_foo`,
+            ],
             ddlDetection: true,
             initialSchema: null,
           },
         ],
-        [`zero_${SHARD_ID}.clients`]: [],
-        [`zero_${SHARD_ID}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
-        ['zero.schemaVersions']: [
+        [`${APP_ID}_${SHARD_ID}.clients`]: [],
+        [`${APP_ID}_${SHARD_ID}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
+        [`${APP_ID}.schemaVersions`]: [
           {minSupportedVersion: 1, maxSupportedVersion: 1},
         ],
       },
@@ -89,27 +93,27 @@ describe('change-streamer/pg/schema/init', () => {
     {
       name: 'db with existing schemaVersions',
       upstreamSetup: `
-          CREATE SCHEMA IF NOT EXISTS zero;
-          CREATE TABLE zero."schemaVersions" 
+          CREATE SCHEMA IF NOT EXISTS ${APP_ID};
+          CREATE TABLE ${APP_ID}."schemaVersions" 
             ("lock" BOOL PRIMARY KEY, "minSupportedVersion" INT4, "maxSupportedVersion" INT4);
-          INSERT INTO zero."schemaVersions" 
+          INSERT INTO ${APP_ID}."schemaVersions" 
             ("lock", "minSupportedVersion", "maxSupportedVersion") VALUES (true, 2, 3);
         `,
       upstreamPostState: {
-        [`zero_${SHARD_ID}.shardConfig`]: [
+        [`${APP_ID}_${SHARD_ID}.shardConfig`]: [
           {
             lock: true,
             publications: [
-              '_zero_metadata_shard_schema_test_id',
-              '_zero_public_shard_schema_test_id',
+              `_${APP_ID}_metadata_shard_schema_test_id`,
+              `_${APP_ID}_public_shard_schema_test_id`,
             ],
             ddlDetection: true,
             initialSchema: null,
           },
         ],
-        [`zero_${SHARD_ID}.clients`]: [],
-        [`zero_${SHARD_ID}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
-        ['zero.schemaVersions']: [
+        [`${APP_ID}_${SHARD_ID}.clients`]: [],
+        [`${APP_ID}_${SHARD_ID}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
+        [`${APP_ID}.schemaVersions`]: [
           {minSupportedVersion: 2, maxSupportedVersion: 3},
         ],
       },
@@ -121,16 +125,16 @@ describe('change-streamer/pg/schema/init', () => {
       await initDB(upstream, c.upstreamSetup, c.upstreamPreState);
 
       if (c.existingVersionHistory) {
-        const schema = `zero_${SHARD_ID}`;
+        const schema = `${APP_ID}_${SHARD_ID}`;
         await createVersionHistoryTable(upstream, schema);
         await upstream`INSERT INTO ${upstream(schema)}."versionHistory"
           ${upstream(c.existingVersionHistory)}`;
-        await updateShardSchema(lc, upstream, {
+        await updateShardSchema(lc, upstream, APP_ID, {
           id: SHARD_ID,
           publications: c.requestedPublications ?? [],
         });
       } else {
-        await initShardSchema(lc, upstream, {
+        await initShardSchema(lc, upstream, APP_ID, {
           id: SHARD_ID,
           publications: c.requestedPublications ?? [],
         });

@@ -33,6 +33,7 @@ import {replicationSlot} from './initial-sync.ts';
 import {fromLexiVersion} from './lsn.ts';
 import {dropEventTriggerStatements} from './schema/ddl-test-utils.ts';
 
+const APP_ID = 'zroo';
 const SHARD_ID = 'change_source_test_id';
 
 describe('change-source/pg', {timeout: 30000}, () => {
@@ -80,17 +81,18 @@ describe('change-source/pg', {timeout: 30000}, () => {
     CREATE PUBLICATION zero_foo FOR TABLE foo WHERE (id != 'exclude-me'), 
       TABLE compound_key_same_order, compound_key_reverse_order;
 
-    CREATE SCHEMA IF NOT EXISTS zero;
-    CREATE TABLE zero.boo(
+    CREATE SCHEMA IF NOT EXISTS my;
+    CREATE TABLE my.boo(
       a TEXT PRIMARY KEY, b TEXT, c TEXT, d TEXT
     );
-    CREATE PUBLICATION zero_zero FOR TABLES IN SCHEMA zero;
+    CREATE PUBLICATION zero_zero FOR TABLES IN SCHEMA my;
     `);
 
     source = (
       await initializePostgresChangeSource(
         lc,
         upstreamURI,
+        APP_ID,
         {id: SHARD_ID, publications: ['zero_foo', 'zero_zero']},
         replicaDbFile.path,
         {tableCopyWorkers: 5, rowBatchSize: 10000},
@@ -124,8 +126,8 @@ describe('change-source/pg', {timeout: 30000}, () => {
 
   async function withoutTriggers() {
     await upstream.unsafe(
-      `UPDATE zero_${SHARD_ID}."shardConfig" SET "ddlDetection" = false;` +
-        dropEventTriggerStatements(SHARD_ID),
+      `UPDATE ${APP_ID}_${SHARD_ID}."shardConfig" SET "ddlDetection" = false;` +
+        dropEventTriggerStatements(APP_ID, SHARD_ID),
     );
   }
 
@@ -185,9 +187,9 @@ describe('change-source/pg', {timeout: 30000}, () => {
                ARRAY['2019-01-12T00:30:35.654321'::timestamp, '2019-01-12T00:30:35.123456'::timestamp],
                123456789012
                )`;
-        // zero.schemaVersions
+        // schemaVersions
         await tx`
-      UPDATE zero."schemaVersions" SET "maxSupportedVersion" = 2;
+      UPDATE ${tx(APP_ID)}."schemaVersions" SET "maxSupportedVersion" = 2;
       `;
       });
 
@@ -255,9 +257,9 @@ describe('change-source/pg', {timeout: 30000}, () => {
         // Should be excluded by zero_all.
         await tx`INSERT INTO foo(id) VALUES ('exclude-me')`;
         await tx`INSERT INTO foo(id) VALUES ('include-me')`;
-        // zero.clients change that should be included in _zero_{SHARD_ID}_client.
+        // clients change that should be included.
         await tx.unsafe(
-          `INSERT INTO zero_${SHARD_ID}.clients("clientGroupID", "clientID", "lastMutationID")
+          `INSERT INTO ${APP_ID}_${SHARD_ID}.clients("clientGroupID", "clientID", "lastMutationID")
             VALUES ('foo', 'bar', 23)`,
         );
       });
@@ -295,7 +297,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
           new: {id: 'include-me'},
         },
       ]);
-      // Only zero.client updates for this SHARD_ID are replicated.
+      // Only client updates for this shard are replicated.
       expect(await downstream.dequeue()).toMatchObject([
         'data',
         {
@@ -320,7 +322,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
       // Postgres stores 1 + the LSN of the confirmed ACK.
       const results = await upstream<{confirmed: string}[]>`
     SELECT confirmed_flush_lsn as confirmed FROM pg_replication_slots
-        WHERE slot_name = ${replicationSlot(SHARD_ID)}`;
+        WHERE slot_name = ${replicationSlot(APP_ID, SHARD_ID)}`;
       const expected = versionFromLexi(commit1[2].watermark) + 1n;
       expect(results).toEqual([
         {confirmed: fromLexiVersion(versionToLexi(expected))},
@@ -472,8 +474,8 @@ describe('change-source/pg', {timeout: 30000}, () => {
 
     // Create a table without a primary key but suitable index.
     const beforeState = await upstream.unsafe(`
-      CREATE TABLE zero.join_table(id1 TEXT NOT NULL, id2 TEXT NOT NULL);
-      CREATE UNIQUE INDEX join_key ON zero.join_table(id1, id2);
+      CREATE TABLE my.join_table(id1 TEXT NOT NULL, id2 TEXT NOT NULL);
+      CREATE UNIQUE INDEX join_key ON my.join_table(id1, id2);
       ${getReplicaIdentityStatement}
     `);
     expect(beforeState).toEqual([
@@ -594,36 +596,36 @@ describe('change-source/pg', {timeout: 30000}, () => {
     ],
     [
       // New table.
-      `CREATE TABLE zero.oof(a TEXT PRIMARY KEY);` +
-        `INSERT INTO zero.oof(a) VALUES ('1');`,
+      `CREATE TABLE my.oof(a TEXT PRIMARY KEY);` +
+        `INSERT INTO my.oof(a) VALUES ('1');`,
       null,
     ],
     [
       // New table that's dropped.
-      `CREATE TABLE zero.oof(a TEXT PRIMARY KEY);` +
-        `INSERT INTO zero.oof(a) VALUES ('1');`,
-      `DROP TABLE zero.oof;`,
+      `CREATE TABLE my.oof(a TEXT PRIMARY KEY);` +
+        `INSERT INTO my.oof(a) VALUES ('1');`,
+      `DROP TABLE my.oof;`,
     ],
     [
       // Rename table and rename back.
-      `ALTER TABLE zero.boo RENAME TO oof;` +
-        `INSERT INTO zero.oof(a) VALUES ('1');`,
-      `ALTER TABLE zero.oof RENAME TO boo;`,
+      `ALTER TABLE my.boo RENAME TO oof;` +
+        `INSERT INTO my.oof(a) VALUES ('1');`,
+      `ALTER TABLE my.oof RENAME TO boo;`,
     ],
     [
       // Drop a column and add it back.
-      `ALTER TABLE zero.boo DROP d;` +
-        `ALTER TABLE zero.boo ADD d TEXT;` +
-        `INSERT INTO zero.boo(a) VALUES ('1');`,
+      `ALTER TABLE my.boo DROP d;` +
+        `ALTER TABLE my.boo ADD d TEXT;` +
+        `INSERT INTO my.boo(a) VALUES ('1');`,
       null,
     ],
     [
       // Shift columns so that they look similar.
-      `ALTER TABLE zero.boo DROP b;` +
-        `ALTER TABLE zero.boo RENAME c TO b;` +
-        `ALTER TABLE zero.boo RENAME d TO c;` +
-        `ALTER TABLE zero.boo ADD d TEXT;` +
-        `INSERT INTO zero.boo(a) VALUES ('1');`,
+      `ALTER TABLE my.boo DROP b;` +
+        `ALTER TABLE my.boo RENAME c TO b;` +
+        `ALTER TABLE my.boo RENAME d TO c;` +
+        `ALTER TABLE my.boo ADD d TEXT;` +
+        `INSERT INTO my.boo(a) VALUES ('1');`,
       null,
     ],
   ])(
@@ -714,7 +716,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
 
     const results = await upstream<{pid: number}[]>`
       SELECT active_pid as pid from pg_replication_slots WHERE
-        slot_name = ${replicationSlot(SHARD_ID)}`;
+        slot_name = ${replicationSlot(APP_ID, SHARD_ID)}`;
     const {pid} = results[0];
 
     await upstream`SELECT pg_terminate_backend(${pid})`;
@@ -755,6 +757,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
       await initializePostgresChangeSource(
         lc,
         upstreamURI,
+        APP_ID,
         {id: SHARD_ID, publications: ['zero_different_publication']},
         replicaDbFile.path,
         {tableCopyWorkers: 5, rowBatchSize: 10000},

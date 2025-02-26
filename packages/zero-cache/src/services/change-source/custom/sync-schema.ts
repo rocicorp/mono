@@ -11,12 +11,13 @@ import {initialSync} from './change-source.ts';
 export async function initSyncSchema(
   log: LogContext,
   debugName: string,
+  appID: string,
   shard: ShardConfig,
   dbPath: string,
   upstreamURI: string,
 ): Promise<void> {
   const setupMigration: Migration = {
-    migrateSchema: (log, tx) => initialSync(log, shard, tx, upstreamURI),
+    migrateSchema: (log, tx) => initialSync(log, appID, shard, tx, upstreamURI),
     minSafeVersion: 1,
   };
 

@@ -16,6 +16,7 @@ import type {DataChange} from '../protocol/current/data.ts';
 import type {ChangeStreamMessage} from '../protocol/current/downstream.ts';
 import {initializePostgresChangeSource} from './change-source.ts';
 
+const APP_ID = 'orez';
 const SHARD_ID = 'change_source_end_to_mid_test_id';
 
 /**
@@ -60,19 +61,18 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       uuid UUID
     );
 
-    -- Use the internal zero schema to test tables in a different schema,
-    -- since the set of allowed schemas is restricted.
-    CREATE SCHEMA IF NOT EXISTS zero;
+    CREATE SCHEMA IF NOT EXISTS my;
 
     CREATE UNIQUE INDEX foo_key ON foo (id);
     CREATE PUBLICATION zero_some_public FOR TABLE foo (id, int);
-    CREATE PUBLICATION zero_all_test FOR TABLES IN SCHEMA zero;
+    CREATE PUBLICATION zero_all_test FOR TABLES IN SCHEMA my;
     `);
 
     const source = (
       await initializePostgresChangeSource(
         lc,
         upstreamURI,
+        APP_ID,
         {id: SHARD_ID, publications: ['zero_some_public', 'zero_all_test']},
         replicaDbFile.path,
         {tableCopyWorkers: 5, rowBatchSize: 10000},
@@ -135,15 +135,15 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
   test.each([
     [
       'create table',
-      `CREATE TABLE zero.baz (
+      `CREATE TABLE my.baz (
         id INT8 CONSTRAINT baz_pkey PRIMARY KEY,
         gen INT8 GENERATED ALWAYS AS (id + 1) STORED  -- Should be excluded
        );`,
       [{tag: 'create-table'}, {tag: 'create-index'}],
-      {['zero.baz']: []},
+      {['my.baz']: []},
       [
         {
-          name: 'zero.baz',
+          name: 'my.baz',
           columns: {
             id: {
               characterMaximumLength: null,
@@ -165,20 +165,20 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [
         {
           columns: {id: 'ASC'},
-          name: 'zero.baz_pkey',
-          tableName: 'zero.baz',
+          name: 'my.baz_pkey',
+          tableName: 'my.baz',
           unique: true,
         },
       ],
     ],
     [
       'rename table',
-      'ALTER TABLE zero.baz RENAME TO bar;',
+      'ALTER TABLE my.baz RENAME TO bar;',
       [{tag: 'rename-table'}],
-      {['zero.bar']: []},
+      {['my.bar']: []},
       [
         {
-          name: 'zero.bar',
+          name: 'my.bar',
           columns: {
             id: {
               characterMaximumLength: null,
@@ -200,17 +200,17 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [
         {
           columns: {id: 'ASC'},
-          name: 'zero.baz_pkey',
-          tableName: 'zero.bar',
+          name: 'my.baz_pkey',
+          tableName: 'my.bar',
           unique: true,
         },
       ],
     ],
     [
       'add column',
-      'ALTER TABLE zero.bar ADD name INT8;',
+      'ALTER TABLE my.bar ADD name INT8;',
       [{tag: 'add-column'}],
-      {['zero.bar']: []},
+      {['my.bar']: []},
       [
         {
           columns: {
@@ -236,16 +236,16 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               pos: 3,
             },
           },
-          name: 'zero.bar',
+          name: 'my.bar',
         },
       ],
       [],
     ],
     [
       'rename column',
-      'ALTER TABLE zero.bar RENAME name TO handle;',
+      'ALTER TABLE my.bar RENAME name TO handle;',
       [{tag: 'update-column'}],
-      {['zero.bar']: []},
+      {['my.bar']: []},
       [
         {
           columns: {
@@ -271,16 +271,16 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               pos: 3,
             },
           },
-          name: 'zero.bar',
+          name: 'my.bar',
         },
       ],
       [],
     ],
     [
       'change column data type',
-      'ALTER TABLE zero.bar ALTER handle TYPE TEXT;',
+      'ALTER TABLE my.bar ALTER handle TYPE TEXT;',
       [{tag: 'update-column'}],
-      {['zero.bar']: []},
+      {['my.bar']: []},
       [
         {
           columns: {
@@ -306,7 +306,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               pos: 3,
             },
           },
-          name: 'zero.bar',
+          name: 'my.bar',
         },
       ],
       [],
@@ -314,8 +314,8 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'change the primary key',
       `
-      ALTER TABLE zero.bar DROP CONSTRAINT baz_pkey;
-      ALTER TABLE zero.bar ADD PRIMARY KEY (handle);
+      ALTER TABLE my.bar DROP CONSTRAINT baz_pkey;
+      ALTER TABLE my.bar ADD PRIMARY KEY (handle);
       `,
       [
         {tag: 'drop-index'},
@@ -332,7 +332,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         },
         {tag: 'create-index'},
       ],
-      {['zero.bar']: []},
+      {['my.bar']: []},
       [
         {
           columns: {
@@ -358,23 +358,23 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               pos: 3,
             },
           },
-          name: 'zero.bar',
+          name: 'my.bar',
         },
       ],
       [
         {
           columns: {handle: 'ASC'},
-          name: 'zero.bar_pkey',
-          tableName: 'zero.bar',
+          name: 'my.bar_pkey',
+          tableName: 'my.bar',
           unique: true,
         },
       ],
     ],
     [
       'add unique column to automatically generate index',
-      'ALTER TABLE zero.bar ADD username TEXT UNIQUE;',
+      'ALTER TABLE my.bar ADD username TEXT UNIQUE;',
       [{tag: 'add-column'}, {tag: 'create-index'}],
-      {['zero.bar']: []},
+      {['my.bar']: []},
       [
         {
           columns: {
@@ -407,13 +407,13 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               pos: 4,
             },
           },
-          name: 'zero.bar',
+          name: 'my.bar',
         },
       ],
       [
         {
-          name: 'zero.bar_username_key',
-          tableName: 'zero.bar',
+          name: 'my.bar_username_key',
+          tableName: 'my.bar',
           columns: {username: 'ASC'},
           unique: true,
         },
@@ -421,9 +421,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     ],
     [
       'rename unique column with associated index',
-      'ALTER TABLE zero.bar RENAME username TO login;',
+      'ALTER TABLE my.bar RENAME username TO login;',
       [{tag: 'update-column'}],
-      {['zero.bar']: []},
+      {['my.bar']: []},
       [
         {
           columns: {
@@ -456,13 +456,13 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               pos: 4,
             },
           },
-          name: 'zero.bar',
+          name: 'my.bar',
         },
       ],
       [
         {
-          name: 'zero.bar_username_key',
-          tableName: 'zero.bar',
+          name: 'my.bar_username_key',
+          tableName: 'my.bar',
           columns: {login: 'ASC'},
           unique: true,
         },
@@ -470,9 +470,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     ],
     [
       'retype unique column with associated index',
-      'ALTER TABLE zero.bar ALTER login TYPE VARCHAR(180);',
+      'ALTER TABLE my.bar ALTER login TYPE VARCHAR(180);',
       [{tag: 'update-column'}],
-      {['zero.bar']: []},
+      {['my.bar']: []},
       [
         {
           columns: {
@@ -505,13 +505,13 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               pos: 4,
             },
           },
-          name: 'zero.bar',
+          name: 'my.bar',
         },
       ],
       [
         {
-          name: 'zero.bar_username_key',
-          tableName: 'zero.bar',
+          name: 'my.bar_username_key',
+          tableName: 'my.bar',
           columns: {login: 'ASC'},
           unique: true,
         },
@@ -519,9 +519,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     ],
     [
       'drop column with index',
-      'ALTER TABLE zero.bar DROP login;',
+      'ALTER TABLE my.bar DROP login;',
       [{tag: 'drop-index'}, {tag: 'drop-column'}],
-      {['zero.bar']: []},
+      {['my.bar']: []},
       [
         {
           columns: {
@@ -547,16 +547,16 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               pos: 3,
             },
           },
-          name: 'zero.bar',
+          name: 'my.bar',
         },
       ],
       [],
     ],
     [
       'add multiple columns',
-      'ALTER TABLE zero.bar ADD foo TEXT, ADD bar TEXT;',
+      'ALTER TABLE my.bar ADD foo TEXT, ADD bar TEXT;',
       [{tag: 'add-column'}, {tag: 'add-column'}],
-      {['zero.bar']: []},
+      {['my.bar']: []},
       [
         {
           columns: {
@@ -596,16 +596,16 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               pos: 5,
             },
           },
-          name: 'zero.bar',
+          name: 'my.bar',
         },
       ],
       [],
     ],
     [
       'alter, add, and drop columns',
-      'ALTER TABLE zero.bar ALTER foo SET NOT NULL, ADD boo TEXT, DROP bar;',
+      'ALTER TABLE my.bar ALTER foo SET NOT NULL, ADD boo TEXT, DROP bar;',
       [{tag: 'drop-column'}, {tag: 'update-column'}, {tag: 'add-column'}],
-      {['zero.bar']: []},
+      {['my.bar']: []},
       [
         {
           columns: {
@@ -645,7 +645,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               pos: 5,
             },
           },
-          name: 'zero.bar',
+          name: 'my.bar',
         },
       ],
       [],
