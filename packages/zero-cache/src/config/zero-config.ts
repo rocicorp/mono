@@ -34,8 +34,8 @@ const shardOptions = {
     type: v.array(v.string()).optional(() => []),
     desc: [
       `Postgres {bold PUBLICATION}s that define the partition of the upstream`,
-      `replicated to the shard. All publication names must begin with the prefix`,
-      `{bold zero_}, and all tables must be in the {bold public} schema.`,
+      `replicated to the shard. Publication names may not begin with an underscore,`,
+      `as zero reserves that prefix for internal use.`,
       ``,
       `If unspecified, zero-cache will create and use an internal publication that`,
       `publishes all tables in the {bold public} schema, i.e.:`,

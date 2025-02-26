@@ -353,8 +353,8 @@ test('zero-cache --help', () => {
      --shard-publications string[]                              default: []                                                                                       
        ZERO_SHARD_PUBLICATIONS env                                                                                                                                
                                                                 Postgres PUBLICATIONs that define the partition of the upstream                                   
-                                                                replicated to the shard. All publication names must begin with the prefix                         
-                                                                zero_, and all tables must be in the public schema.                                               
+                                                                replicated to the shard. Publication names may not begin with an underscore,                      
+                                                                as zero reserves that prefix for internal use.                                                    
                                                                                                                                                                   
                                                                 If unspecified, zero-cache will create and use an internal publication that                       
                                                                 publishes all tables in the public schema, i.e.:                                                  
