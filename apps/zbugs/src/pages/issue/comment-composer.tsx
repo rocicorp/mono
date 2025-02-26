@@ -1,4 +1,3 @@
-import {nanoid} from 'nanoid';
 import {useEffect, useState} from 'react';
 import {Button} from '../../components/button.tsx';
 import {useLogin} from '../../hooks/use-login.tsx';
@@ -23,18 +22,16 @@ export function CommentComposer({
   const save = () => {
     setCurrentBody(body ?? '');
     if (!id) {
-      z.mutate.comment.insert({
-        id: nanoid(),
+      z.mutate.comment.add({
         issueID,
         creatorID: z.userID,
         body: currentBody,
-        created: Date.now(),
       });
       onDone?.();
       return;
     }
 
-    z.mutate.comment.update({id, body: currentBody});
+    z.mutate.comment.edit({id, body: currentBody});
     onDone?.();
   };
 

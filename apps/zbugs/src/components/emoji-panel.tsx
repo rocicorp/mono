@@ -11,7 +11,6 @@ import {
   useRole,
   useTransitionStatus,
 } from '@floating-ui/react';
-import {nanoid} from 'nanoid';
 import {
   forwardRef,
   memo,
@@ -72,7 +71,7 @@ export const EmojiPanel = memo(
 
       const removeEmoji = useCallback(
         (id: string) => {
-          z.mutate.emoji.delete({id});
+          z.mutate.emoji.remove(id);
         },
         [z],
       );

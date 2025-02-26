@@ -73,6 +73,16 @@ export const mutators = {
       await tx.mutate.issue.update(change);
     },
 
+    async delete(tx, id: string) {
+      if (tx.location === 'server') {
+        if (!(await userIsAdmin(tx, await getUserIDFromToken(tx)))) {
+          throw new Error('Only admins may delete issues');
+        }
+      }
+
+      await tx.mutate.issue.delete({id});
+    },
+
     async addLabel(
       tx,
       {
@@ -221,21 +231,28 @@ export const mutators = {
   },
 
   viewState: {
-    async set(
-      tx,
-      {
-        issueID,
-        userID,
-        viewed,
-      }: {issueID: string; userID: string; viewed: number},
-    ) {
+    async set(tx, {issueID, userID}: {issueID: string; userID: string}) {
       if (tx.location === 'server') {
         const loggedInUser = await getUserIDFromToken(tx);
         if (loggedInUser !== userID) {
           throw new Error('Cannot set view state for another user');
         }
       }
-      await tx.mutate.viewState.upsert({issueID, userID, viewed});
+      await tx.mutate.viewState.upsert({issueID, userID, viewed: Date.now()});
+    },
+  },
+
+  userPref: {
+    async set(
+      tx,
+      {key, value, userID}: {key: string; value: string; userID: string},
+    ) {
+      if (tx.location === 'server') {
+        if ((await getUserIDFromToken(tx)) !== userID) {
+          throw new Error('Cannot set preferences for another user');
+        }
+      }
+      await tx.mutate.userPref.upsert({key, value, userID});
     },
   },
 } as const satisfies CustomMutatorDefs<typeof schema>;

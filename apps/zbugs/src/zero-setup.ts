@@ -53,7 +53,7 @@ authAtom.onChange(auth => {
 
 let didPreload = false;
 
-export function preload(z: Zero<Schema>) {
+export function preload(z: Zero<Schema, Mutators>) {
   if (didPreload) {
     return;
   }
