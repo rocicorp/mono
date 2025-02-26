@@ -5,14 +5,15 @@
   "workspaces": [
     "apps/*",
     "packages/*",
-    "prod"
+    "prod",
+    "tools/*"
   ],
   "type": "module",
   "scripts": {
     "download-deps": "bash ./deps/download.sh",
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "test": "turbo run test",
+    "test": "turbo run --concurrency 1 test",
     "lint": "turbo run lint",
     "format": "turbo run format",
     "check-format": "turbo run check-format",

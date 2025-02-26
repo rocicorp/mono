@@ -1,10 +1,10 @@
+import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {existsSync} from 'fs';
-import {writeFile, readFile} from 'fs/promises';
+import {readFile, writeFile} from 'fs/promises';
+import {initialSync} from '../../../../zero-cache/src/services/change-source/pg/initial-sync.ts';
+import {getConnectionURI} from '../../../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../../../zero-cache/src/types/pg.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
-import {initialSync} from '../../../../zero-cache/src/services/change-source/pg/initial-sync.ts';
-import {consoleLogSink, LogContext} from '@rocicorp/logger';
-import {getConnectionURI} from '../../../../zero-cache/src/test/db.ts';
 
 const PG_URL =
   'https://github.com/lerocha/chinook-database/releases/download/v1.4.5/Chinook_PostgreSql.sql';
@@ -37,6 +37,7 @@ export async function writeChinook(pg: PostgresDB, replica: Database) {
 
   await initialSync(
     new LogContext('debug', {}, consoleLogSink),
+    'zero',
     {id: 'chinook_test', publications: []},
     replica,
     getConnectionURI(pg),

@@ -16,6 +16,7 @@ import type {PostgresDB} from '../../../types/pg.ts';
 import {replicationSlot} from './initial-sync.ts';
 import {initSyncSchema} from './sync-schema.ts';
 
+const APP_ID = 'zeroz';
 const SHARD_ID = 'sync_schema_test_id';
 
 // Update as necessary.
@@ -45,14 +46,14 @@ describe('change-streamer/pg/sync-schema', () => {
     {
       name: 'initial tables',
       upstreamPostState: {
-        [`zero_${SHARD_ID}.clients`]: [],
-        ['zero.schemaVersions']: [
+        [`${APP_ID}_${SHARD_ID}.clients`]: [],
+        [`${APP_ID}.schemaVersions`]: [
           {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
         ],
       },
       replicaPostState: {
-        [`zero_${SHARD_ID}.clients`]: [],
-        ['zero.schemaVersions']: [
+        [`${APP_ID}_${SHARD_ID}.clients`]: [],
+        [`${APP_ID}.schemaVersions`]: [
           {
             lock: 1,
             minSupportedVersion: 1,
@@ -78,14 +79,14 @@ describe('change-streamer/pg/sync-schema', () => {
         ],
       },
       upstreamPostState: {
-        [`zero_${SHARD_ID}.clients`]: [],
-        ['zero.schemaVersions']: [
+        [`${APP_ID}_${SHARD_ID}.clients`]: [],
+        [`${APP_ID}.schemaVersions`]: [
           {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
         ],
       },
       replicaPostState: {
-        [`zero_${SHARD_ID}.clients`]: [],
-        ['zero.schemaVersions']: [
+        [`${APP_ID}_${SHARD_ID}.clients`]: [],
+        [`${APP_ID}.schemaVersions`]: [
           {
             lock: 1,
             minSupportedVersion: 1,
@@ -127,6 +128,7 @@ describe('change-streamer/pg/sync-schema', () => {
         await initSyncSchema(
           createSilentLogContext(),
           'test',
+          APP_ID,
           {id: SHARD_ID, publications: c.requestedPublications ?? []},
           replicaFile.path,
           getConnectionURI(upstream),
@@ -143,9 +145,10 @@ describe('change-streamer/pg/sync-schema', () => {
         // Slot should still exist.
         const slots =
           await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${replicationSlot(
+            APP_ID,
             SHARD_ID,
           )}`.values();
-        expect(slots[0]).toEqual([replicationSlot(SHARD_ID)]);
+        expect(slots[0]).toEqual([replicationSlot(APP_ID, SHARD_ID)]);
       },
       10000,
     );

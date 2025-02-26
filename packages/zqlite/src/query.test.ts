@@ -94,23 +94,25 @@ test('row type', () => {
     .related('labels');
   type RT = ReturnType<typeof query.run>;
   expectTypeOf<RT>().toEqualTypeOf<
-    {
-      readonly id: string;
-      readonly title: string;
-      readonly description: string;
-      readonly closed: boolean;
-      readonly ownerId: string | null;
-      readonly labels: readonly {
+    Promise<
+      {
         readonly id: string;
-        readonly name: string;
-      }[];
-    }[]
+        readonly title: string;
+        readonly description: string;
+        readonly closed: boolean;
+        readonly ownerId: string | null;
+        readonly labels: readonly {
+          readonly id: string;
+          readonly name: string;
+        }[];
+      }[]
+    >
   >();
 });
 
-test('basic query', () => {
+test('basic query', async () => {
   const query = newQuery(queryDelegate, schema, 'issue');
-  const data = query.run();
+  const data = await query.run();
   expect(data).toMatchInlineSnapshot(`
     [
       {
@@ -138,8 +140,8 @@ test('basic query', () => {
   `);
 });
 
-test('null compare', () => {
-  let rows = newQuery(queryDelegate, schema, 'issue')
+test('null compare', async () => {
+  let rows = await newQuery(queryDelegate, schema, 'issue')
     .where('ownerId', 'IS', null)
     .run();
 
@@ -155,7 +157,7 @@ test('null compare', () => {
     ]
   `);
 
-  rows = newQuery(queryDelegate, schema, 'issue')
+  rows = await newQuery(queryDelegate, schema, 'issue')
     .where('ownerId', 'IS NOT', null)
     .run();
 
@@ -179,11 +181,11 @@ test('null compare', () => {
   `);
 });
 
-test('or', () => {
+test('or', async () => {
   const query = newQuery(queryDelegate, schema, 'issue').where(({or, cmp}) =>
     or(cmp('ownerId', '=', '0001'), cmp('ownerId', '=', '0002')),
   );
-  const data = query.run();
+  const data = await query.run();
   expect(data).toMatchInlineSnapshot(`
     [
       {
@@ -251,7 +253,7 @@ test('where exists retracts when an edit causes a row to no longer match', () =>
   expect(view.data).toMatchInlineSnapshot(`[]`);
 });
 
-test('schema applied `one`', () => {
+test('schema applied `one`', async () => {
   // test only one item is returned when `one` is applied to a relationship in the schema
   const commentSource = must(queryDelegate.getSource('comment'));
   const revisionSource = must(queryDelegate.getSource('revision'));
@@ -288,7 +290,7 @@ test('schema applied `one`', () => {
     .related('owner')
     .related('comments', q => q.related('author').related('revisions'))
     .where('id', '=', '0001');
-  const data = query.run();
+  const data = await query.run();
   expect(data).toMatchInlineSnapshot(`
     [
       {

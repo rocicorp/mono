@@ -188,7 +188,7 @@ export interface Query<
 
   materialize(): TypedView<HumanReadable<TReturn>>;
 
-  run(): HumanReadable<TReturn>;
+  run(): Promise<HumanReadable<TReturn>>;
 
   preload(): {
     cleanup: () => void;

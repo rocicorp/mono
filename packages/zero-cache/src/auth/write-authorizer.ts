@@ -72,6 +72,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   readonly #tables = new Map<string, TableSource>();
   readonly #statementRunner: StatementRunner;
   readonly #lc: LogContext;
+  readonly #appID: string;
   readonly #clientGroupID: string;
   readonly #logConfig: LogConfig;
 
@@ -81,8 +82,10 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     lc: LogContext,
     config: ZeroConfig,
     replica: Database,
+    appID: string,
     cgID: string,
   ) {
+    this.#appID = appID;
     this.#clientGroupID = cgID;
     this.#lc = lc.withContext('class', 'WriteAuthorizerImpl');
     this.#logConfig = config.log;
@@ -107,6 +110,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     this.#loadedPermissions = reloadPermissionsIfChanged(
       this.#lc,
       this.#statementRunner,
+      this.#appID,
       this.#loadedPermissions,
     ).permissions;
   }
@@ -380,7 +384,9 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
           op,
         )}, action ${action}, phase ${phase}, authData: ${JSON.stringify(
           authData,
-        )}`,
+        )}, rowPolicies: ${JSON.stringify(
+          applicableRowPolicy,
+        )}, cellPolicies: ${JSON.stringify(applicableCellPolicies)}`,
       );
       return false;
     }

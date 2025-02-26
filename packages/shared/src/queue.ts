@@ -11,34 +11,24 @@ export class Queue<T> {
   // Produced entries waiting to be consumed.
   readonly #produced: Produced<T>[] = [];
 
-  /**
-   * @returns A Promise that resolves when the value is consumed.
-   */
-  enqueue(value: T): Promise<void> {
+  enqueue(value: T): void {
     const consumer = this.#consumers.shift();
     if (consumer) {
       consumer.resolver.resolve(value);
       clearTimeout(consumer.timeoutID);
-      return Promise.resolve();
+      return;
     }
-    return this.#enqueueProduced(Promise.resolve(value), value);
+    this.#produced.push({value});
   }
 
-  /** @returns A Promise that resolves when the rejection is consumed. */
-  enqueueRejection(reason?: unknown): Promise<void> {
+  enqueueRejection(reason?: unknown): void {
     const consumer = this.#consumers.shift();
     if (consumer) {
       consumer.resolver.reject(reason);
       clearTimeout(consumer.timeoutID);
-      return Promise.resolve();
+      return;
     }
-    return this.#enqueueProduced(Promise.reject(reason));
-  }
-
-  #enqueueProduced(produced: Promise<T>, value?: T): Promise<void> {
-    const {promise, resolve: consumed} = resolver<void>();
-    this.#produced.push({produced, value, consumed});
-    return promise;
+    this.#produced.push({rejection: reason});
   }
 
   /**
@@ -58,7 +48,6 @@ export class Queue<T> {
       const p = this.#produced[i];
       if (p.value === value) {
         this.#produced.splice(i, 1);
-        p.consumed();
         count++;
       }
     }
@@ -71,11 +60,10 @@ export class Queue<T> {
    *                  if nothing is produced for the consumer.
    * @returns A Promise that resolves to the next enqueued value.
    */
-  dequeue(timeoutValue?: T, timeoutMs: number = 0): Promise<T> {
+  dequeue(timeoutValue?: T, timeoutMs: number = 0): Promise<T> | T {
     const produced = this.#produced.shift();
     if (produced) {
-      produced.consumed();
-      return produced.produced;
+      return produced.value ?? Promise.reject(produced.rejection);
     }
     const r = resolver<T>();
     const timeoutID =
@@ -99,7 +87,7 @@ export class Queue<T> {
    * ```ts
    * // A consumer that, when awoken, drains
    * // all entries in the queue in order to
-   * // proces them in a batch.
+   * // process them in a batch.
    * for (;;) {
    *   const value = await queue.dequeue();
    *   const rest = queue.drain();
@@ -110,7 +98,6 @@ export class Queue<T> {
     const ret: (T | undefined)[] = [];
     for (const p of this.#produced) {
       ret.push(p.value);
-      p.consumed();
     }
     this.#produced.length = 0;
 
@@ -157,8 +144,6 @@ type Consumer<T> = {
   timeoutID: ReturnType<typeof setTimeout> | undefined;
 };
 
-type Produced<T> = {
-  produced: Promise<T>;
-  value: T | undefined;
-  consumed: () => void;
-};
+type Produced<T> =
+  | {value: T; rejection?: undefined}
+  | {value?: undefined; rejection: unknown};

@@ -4,6 +4,16 @@
 require("dotenv").config();
 
 import { join } from "node:path";
+import { createDefu } from "defu";
+
+const defu = createDefu((obj, key, value) => {
+  // Don't merge functions, just use the last one
+  if (typeof obj[key] === "function" || typeof value === "function") {
+    obj[key] = value;
+    return true;
+  }
+  return false;
+});
 
 export default $config({
   app(input) {
@@ -23,6 +33,7 @@ export default $config({
     // VPC Configuration
     const vpc = new sst.aws.Vpc(`vpc`, {
       az: 2,
+      nat: "ec2", // Needed for deploying Lambdas
     });
     // ECS Cluster
     const cluster = new sst.aws.Cluster(`cluster`, {
@@ -38,6 +49,9 @@ export default $config({
         },
       },
     });
+
+    const IS_EBS_STAGE = $app.stage.endsWith("-ebs");
+
     // Common environment variables
     const commonEnv = {
       AWS_REGION: process.env.AWS_REGION!,
@@ -48,10 +62,99 @@ export default $config({
       AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID!,
       AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY!,
       ZERO_LOG_FORMAT: "json",
-      ZERO_REPLICA_FILE: "sync-replica.db",
-      ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250211-00`,
+      ZERO_REPLICA_FILE: IS_EBS_STAGE
+        ? "/data/sync-replica.db"
+        : "sync-replica.db",
+      ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250219-01`,
       ZERO_IMAGE_URL: process.env.ZERO_IMAGE_URL!,
     };
+
+    const ecsVolumeRole = IS_EBS_STAGE
+      ? new aws.iam.Role(`${$app.name}-${$app.stage}-ECSVolumeRole`, {
+          assumeRolePolicy: JSON.stringify({
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Effect: "Allow",
+                Principal: {
+                  Service: ["ecs-tasks.amazonaws.com", "ecs.amazonaws.com"],
+                },
+                Action: "sts:AssumeRole",
+              },
+            ],
+          }),
+        })
+      : undefined;
+
+    if (ecsVolumeRole) {
+      new aws.iam.RolePolicyAttachment(
+        `${$app.name}-${$app.stage}-ECSVolumePolicyAttachment`,
+        {
+          role: ecsVolumeRole.name,
+          policyArn:
+            "arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRolePolicyForVolumes",
+        },
+      );
+    }
+
+    // Common base transform configuration
+    const BASE_TRANSFORM: any = {
+      service: {
+        healthCheckGracePeriodSeconds: 300,
+      },
+      loadBalancer: {
+        idleTimeout: 3600,
+      },
+      target: {
+        healthCheck: {
+          enabled: true,
+          path: "/keepalive",
+          protocol: "HTTP",
+          interval: 5,
+          healthyThreshold: 2,
+          timeout: 3,
+        },
+        deregistrationDelay: 1,
+      },
+    };
+
+    // EBS-specific transform configuration
+    const EBS_TRANSFORM: any = !IS_EBS_STAGE
+      ? {}
+      : {
+          service: {
+            volumeConfiguration: {
+              name: "replication-data",
+              managedEbsVolume: {
+                roleArn: ecsVolumeRole?.arn,
+                volumeType: "io2",
+                sizeInGb: 20,
+                iops: 3000,
+                fileSystemType: "ext4",
+              },
+            },
+          },
+          taskDefinition: (args: any) => {
+            let value = $jsonParse(args.containerDefinitions);
+            value = value.apply((containerDefinitions: any) => {
+              containerDefinitions[0].mountPoints = [
+                {
+                  sourceVolume: "replication-data",
+                  containerPath: "/data",
+                },
+              ];
+              return containerDefinitions;
+            });
+            args.containerDefinitions = $jsonStringify(value);
+            args.volumes = [
+              {
+                name: "replication-data",
+                configureAtLaunch: true,
+              },
+            ];
+          },
+        };
+
     // Replication Manager Service
     const replicationManager = cluster.addService(`replication-manager`, {
       cpu: "2 vCPU",
@@ -80,22 +183,7 @@ export default $config({
           },
         ],
       },
-      transform: {
-        loadBalancer: {
-          idleTimeout: 3600, // Keep idle connections alive
-        },
-        target: {
-          healthCheck: {
-            enabled: true,
-            path: "/keepalive",
-            protocol: "HTTP",
-            interval: 5,
-            healthyThreshold: 2,
-            timeout: 3,
-          },
-          deregistrationDelay: 1, // Drain as soon as a new instance is healthy.
-        },
-      },
+      transform: defu(EBS_TRANSFORM, BASE_TRANSFORM),
     });
     // View Syncer Service
     const viewSyncer = cluster.addService(`view-syncer`, {
@@ -147,16 +235,8 @@ export default $config({
               ],
             }),
       },
-      transform: {
+      transform: defu(EBS_TRANSFORM, BASE_TRANSFORM, {
         target: {
-          healthCheck: {
-            enabled: true,
-            path: "/keepalive",
-            protocol: "HTTP",
-            interval: 5,
-            healthyThreshold: 2,
-            timeout: 3,
-          },
           stickiness: {
             enabled: true,
             type: "lb_cookie",
@@ -168,24 +248,52 @@ export default $config({
           minCapacity: 1,
           maxCapacity: 10,
         },
-      },
+      }),
       // Set this to `true` to make SST wait for the view-syncer to be deployed
       // before proceeding (to permissions deployment, etc.). This makes the deployment
       // take a lot longer and is only necessary if there is an AST format change.
       wait: false,
     });
 
-    new command.local.Command(
-      "zero-deploy-permissions",
-      {
-        // Pulumi operates with cwd at the package root.
-        dir: join(process.cwd(), "../../packages/zero/"),
-        create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/schema.ts`,
-        // Run the Command on every deploy ...
-        triggers: [Date.now()],
-      },
-      // after the view-syncer is deployed.
-      { dependsOn: viewSyncer },
-    );
+    if ($app.stage === "sandbox") {
+      // In sandbox, deploy permissions in a Lambda.
+      const permissionsDeployer = new sst.aws.Function(
+        "zero-permissions-deployer",
+        {
+          handler: "../functions/src/permissions.deploy",
+          vpc,
+          environment: { ["ZERO_UPSTREAM_DB"]: process.env.ZERO_UPSTREAM_DB },
+          copyFiles: [
+            { from: "../../apps/zbugs/schema.ts", to: "./schema.ts" },
+          ],
+          nodejs: { install: ["@rocicorp/zero"] },
+        },
+      );
+
+      new aws.lambda.Invocation(
+        "invoke-zero-permissions-deployer",
+        {
+          // Invoke the Lambda on every deploy.
+          input: Date.now().toString(),
+          functionName: permissionsDeployer.name,
+        },
+        { dependsOn: viewSyncer },
+      );
+    } else {
+      // In prod, deploy permissions via a local Command, to exercise both approaches.
+      new command.local.Command(
+        "zero-deploy-permissions",
+        {
+          // Pulumi operates with cwd at the package root.
+          dir: join(process.cwd(), "../../packages/zero/"),
+          create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/schema.ts`,
+          environment: { ["ZERO_UPSTREAM_DB"]: process.env.ZERO_UPSTREAM_DB },
+          // Run the Command on every deploy.
+          triggers: [Date.now()],
+        },
+        // after the view-syncer is deployed.
+        { dependsOn: viewSyncer },
+      );
+    }
   },
 });

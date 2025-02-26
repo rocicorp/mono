@@ -46,6 +46,7 @@ export default async function runWorker(
   );
 
   const {autoReset} = config;
+  const appID = 'zero'; // TODO: --app-id
   let changeStreamer: ChangeStreamerService | undefined;
 
   for (const first of [true, false]) {
@@ -56,6 +57,7 @@ export default async function runWorker(
           ? await initializePostgresChangeSource(
               lc,
               upstream.db,
+              appID,
               shard,
               replicaFile,
               initialSync,
@@ -63,6 +65,7 @@ export default async function runWorker(
           : await initializeCustomChangeSource(
               lc,
               upstream.db,
+              appID,
               shard,
               replicaFile,
             );

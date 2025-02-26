@@ -52,6 +52,7 @@ export class MutagenService implements Mutagen, Service {
   readonly id: string;
   readonly #lc: LogContext;
   readonly #upstream: PostgresDB;
+  readonly #appID: string;
   readonly #shardID: string;
   readonly #stopped = resolver();
   readonly #replica: Database;
@@ -60,6 +61,7 @@ export class MutagenService implements Mutagen, Service {
 
   constructor(
     lc: LogContext,
+    appID: string,
     shardID: string,
     clientGroupID: string,
     upstream: PostgresDB,
@@ -68,6 +70,7 @@ export class MutagenService implements Mutagen, Service {
     this.id = clientGroupID;
     this.#lc = lc;
     this.#upstream = upstream;
+    this.#appID = appID;
     this.#shardID = shardID;
     this.#replica = new Database(this.#lc, config.replicaFile, {
       fileMustExist: true,
@@ -76,6 +79,7 @@ export class MutagenService implements Mutagen, Service {
       this.#lc,
       config,
       this.#replica,
+      appID,
       clientGroupID,
     );
 
@@ -102,6 +106,7 @@ export class MutagenService implements Mutagen, Service {
       this.#lc,
       authData,
       this.#upstream,
+      this.#appID,
       this.#shardID,
       this.id,
       mutation,
@@ -126,6 +131,7 @@ export async function processMutation(
   lc: LogContext,
   authData: JWTPayload | undefined,
   db: PostgresDB,
+  appID: string,
   shardID: string,
   clientGroupID: string,
   mutation: Mutation,
@@ -194,6 +200,7 @@ export async function processMutation(
               lc,
               tx,
               authData,
+              appID,
               shardID,
               clientGroupID,
               schemaVersion,
@@ -245,6 +252,7 @@ async function processMutationWithTx(
   lc: LogContext,
   tx: PostgresTransaction,
   authData: JWTPayload | undefined,
+  appID: string,
   shardID: string,
   clientGroupID: string,
   schemaVersion: number,
@@ -298,6 +306,7 @@ async function processMutationWithTx(
   tasks.unshift(() =>
     checkSchemaVersionAndIncrementLastMutationID(
       tx,
+      appID,
       shardID,
       clientGroupID,
       schemaVersion,
@@ -365,6 +374,7 @@ function getDeleteSQL(
 
 async function checkSchemaVersionAndIncrementLastMutationID(
   tx: PostgresTransaction,
+  appID: string,
   shardID: string,
   clientGroupID: string,
   schemaVersion: number,
@@ -373,20 +383,20 @@ async function checkSchemaVersionAndIncrementLastMutationID(
 ) {
   const [[{lastMutationID}], supportedVersionRange] = await Promise.all([
     tx<{lastMutationID: bigint}[]>`
-    INSERT INTO ${tx(
-      schema(shardID),
-    )}.clients as current ("clientGroupID", "clientID", "lastMutationID")
-    VALUES (${clientGroupID}, ${clientID}, ${1})
-    ON CONFLICT ("clientGroupID", "clientID")
-    DO UPDATE SET "lastMutationID" = current."lastMutationID" + 1
-    RETURNING "lastMutationID"
+    INSERT INTO ${tx(schema(appID, shardID))}.clients 
+      as current ("clientGroupID", "clientID", "lastMutationID")
+          VALUES (${clientGroupID}, ${clientID}, ${1})
+      ON CONFLICT ("clientGroupID", "clientID")
+      DO UPDATE SET "lastMutationID" = current."lastMutationID" + 1
+      RETURNING "lastMutationID"
   `,
     tx<
       {
         minSupportedVersion: number;
         maxSupportedVersion: number;
       }[]
-    >`SELECT "minSupportedVersion", "maxSupportedVersion" FROM zero."schemaVersions"`,
+    >`SELECT "minSupportedVersion", "maxSupportedVersion" 
+        FROM ${tx(appID)}."schemaVersions"`,
   ]);
 
   // ABORT if the resulting lastMutationID is not equal to the receivedMutationID.

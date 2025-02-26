@@ -12,7 +12,10 @@ import {assert} from '../../shared/src/asserts.ts';
  * release. The server (`zero-cache`) must be deployed before clients start
  * running the new code.
  */
-export const PROTOCOL_VERSION = 5;
+// History:
+// -- Version 5 adds support for `pokeEnd.cookie`.
+// -- Version 6 makes `pokeStart.cookie` optional.
+export const PROTOCOL_VERSION = 6;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version
@@ -24,7 +27,6 @@ export const PROTOCOL_VERSION = 5;
  * from protocol versions before `MIN_SERVER_SUPPORTED_PROTOCOL_VERSION` are
  * closed with a `VersionNotSupported` error.
  */
-// TODO: Bump to 5 before returning responses with pokeEnd.cookie.
 export const MIN_SERVER_SUPPORTED_SYNC_PROTOCOL = 2;
 
 assert(MIN_SERVER_SUPPORTED_SYNC_PROTOCOL < PROTOCOL_VERSION);

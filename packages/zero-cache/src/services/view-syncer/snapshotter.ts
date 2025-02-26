@@ -87,12 +87,14 @@ import {
 export class Snapshotter {
   readonly #lc: LogContext;
   readonly #dbFile: string;
+  readonly #appID: string;
   #curr: Snapshot | undefined;
   #prev: Snapshot | undefined;
 
-  constructor(lc: LogContext, dbFile: string) {
+  constructor(lc: LogContext, dbFile: string, appID: string) {
     this.#lc = lc;
     this.#dbFile = dbFile;
+    this.#appID = appID;
   }
 
   /**
@@ -102,7 +104,7 @@ export class Snapshotter {
    */
   init(): this {
     assert(this.#curr === undefined, 'Already initialized');
-    this.#curr = Snapshot.create(this.#lc, this.#dbFile);
+    this.#curr = Snapshot.create(this.#lc, this.#dbFile, this.#appID);
     this.#lc.debug?.(`Initial snapshot at version ${this.#curr.version}`);
     return this;
   }
@@ -156,14 +158,14 @@ export class Snapshotter {
    */
   advance(tables: Map<string, LiteAndZqlSpec>): SnapshotDiff {
     const {prev, curr} = this.advanceWithoutDiff();
-    return new Diff(tables, prev, curr);
+    return new Diff(this.#appID, tables, prev, curr);
   }
 
   advanceWithoutDiff() {
     assert(this.#curr !== undefined, 'Snapshotter has not been initialized');
     const next = this.#prev
       ? this.#prev.resetToHead()
-      : Snapshot.create(this.#lc, this.#curr.db.db.name);
+      : Snapshot.create(this.#lc, this.#curr.db.db.name, this.#appID);
     this.#prev = this.#curr;
     this.#curr = next;
     return {prev: this.#prev, curr: this.#curr};
@@ -230,14 +232,14 @@ export class ResetPipelinesSignal extends Error {
   }
 }
 
-function getSchemaVersions(db: StatementRunner): SchemaVersions {
+function getSchemaVersions(db: StatementRunner, appID: string): SchemaVersions {
   return db.get(
-    'SELECT minSupportedVersion, maxSupportedVersion FROM "zero.schemaVersions"',
+    `SELECT minSupportedVersion, maxSupportedVersion FROM "${appID}.schemaVersions"`,
   );
 }
 
 class Snapshot {
-  static create(lc: LogContext, dbFile: string) {
+  static create(lc: LogContext, dbFile: string, appID: string) {
     const conn = new Database(lc, dbFile);
     conn.pragma('synchronous = OFF'); // Applied changes are ephemeral; COMMIT is never called.
     const [{journal_mode: mode}] = conn.pragma('journal_mode') as [
@@ -253,27 +255,25 @@ class Snapshot {
     );
 
     const db = new StatementRunner(conn);
+    return new Snapshot(db, appID);
+  }
+
+  readonly db: StatementRunner;
+  readonly #appID: string;
+  readonly version: string;
+  readonly schemaVersions: SchemaVersions;
+
+  constructor(db: StatementRunner, appID: string) {
     db.beginConcurrent();
     // Note: The subsequent read is necessary to acquire the read lock
     // (which results in the logical creation of the snapshot). Calling
     // `BEGIN CONCURRENT` alone does not result in acquiring the read lock.
     const {stateVersion} = getReplicationState(db);
-    const schemaVersions = getSchemaVersions(db);
-    return new Snapshot(db, stateVersion, schemaVersions);
-  }
 
-  readonly db: StatementRunner;
-  readonly version: string;
-  readonly schemaVersions: SchemaVersions;
-
-  constructor(
-    db: StatementRunner,
-    version: string,
-    schemaVersions: SchemaVersions,
-  ) {
     this.db = db;
-    this.version = version;
-    this.schemaVersions = schemaVersions;
+    this.#appID = appID;
+    this.version = stateVersion;
+    this.schemaVersions = getSchemaVersions(db, appID);
   }
 
   numChangesSince(prevVersion: string) {
@@ -326,24 +326,24 @@ class Snapshot {
 
   resetToHead(): Snapshot {
     this.db.rollback();
-    this.db.beginConcurrent();
-    const {stateVersion} = getReplicationState(this.db);
-    const schemaVersions = getSchemaVersions(this.db);
-    return new Snapshot(this.db, stateVersion, schemaVersions);
+    return new Snapshot(this.db, this.#appID);
   }
 }
 
 class Diff implements SnapshotDiff {
+  readonly #permissionsTable: string;
   readonly tables: Map<string, LiteAndZqlSpec>;
   readonly prev: Snapshot;
   readonly curr: Snapshot;
   readonly changes: number;
 
   constructor(
+    appID: string,
     tables: Map<string, LiteAndZqlSpec>,
     prev: Snapshot,
     curr: Snapshot,
   ) {
+    this.#permissionsTable = `${appID}.permissions`;
     this.tables = tables;
     this.prev = prev;
     this.curr = curr;
@@ -402,11 +402,11 @@ class Diff implements SnapshotDiff {
             }
 
             if (
-              table === 'zero.permissions' &&
+              table === this.#permissionsTable &&
               prevValue.permissions !== nextValue.permissions
             ) {
               throw new ResetPipelinesSignal(
-                `zero.permissions have changed ${prevValue.hash} => ${nextValue.hash}`,
+                `Permissions have changed ${prevValue.hash} => ${nextValue.hash}`,
               );
             }
 

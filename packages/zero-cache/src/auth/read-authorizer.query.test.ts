@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 /* eslint-disable arrow-body-style */
+import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
 import {h128} from '../../../shared/src/hash.ts';
@@ -47,7 +48,6 @@ import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {LogConfig, ZeroConfig} from '../config/zero-config.ts';
 import {transformQuery} from './read-authorizer.ts';
 import {WriteAuthorizerImpl} from './write-authorizer.ts';
-import {LogContext} from '@rocicorp/logger';
 
 const logConfig: LogConfig = {
   format: 'text',
@@ -481,11 +481,11 @@ let writeAuthorizer: WriteAuthorizerImpl;
 beforeEach(() => {
   replica = new Database(lc, ':memory:');
   replica.exec(`
-    CREATE TABLE "zero.permissions" (permissions JSON, hash TEXT);
+    CREATE TABLE "app.permissions" (permissions JSON, hash TEXT);
   `);
   const permsJSON = JSON.stringify(permissions);
   replica
-    .prepare(`INSERT INTO "zero.permissions" (permissions, hash) VALUES (?, ?)`)
+    .prepare(`INSERT INTO "app.permissions" (permissions, hash) VALUES (?, ?)`)
     .run(permsJSON, h128(permsJSON).toString(16));
 
   const sources = new Map<string, Source>();
@@ -540,7 +540,13 @@ beforeEach(() => {
     must(queryDelegate.getSource(table.name));
   }
 
-  writeAuthorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
+  writeAuthorizer = new WriteAuthorizerImpl(
+    lc,
+    zeroConfig,
+    replica,
+    'app',
+    'cg',
+  );
 });
 const lc = createSilentLogContext();
 

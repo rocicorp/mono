@@ -22,6 +22,7 @@ describe('change-source/tables/ddl', () => {
   let notices: Queue<postgres.Notice>;
   let service: LogicalReplicationService;
 
+  const APP_ID = 'zap';
   const SHARD_ID = '0';
 
   beforeEach(async () => {
@@ -34,7 +35,7 @@ describe('change-source/tables/ddl', () => {
     await upstream.unsafe(STARTING_SCHEMA);
 
     await upstream.unsafe(
-      createEventTriggerStatements(SHARD_ID, ['zero_all', 'zero_sum']),
+      createEventTriggerStatements(APP_ID, SHARD_ID, ['zero_all', 'zero_sum']),
     );
 
     await upstream`SELECT pg_create_logical_replication_slot(${SLOT_NAME}, 'pgoutput')`;
@@ -47,7 +48,7 @@ describe('change-source/tables/ddl', () => {
       .on('heartbeat', (lsn, _time, respond) => {
         respond && void service.acknowledge(lsn);
       })
-      .on('data', (_lsn, msg) => void messages.enqueue(msg));
+      .on('data', (_lsn, msg) => messages.enqueue(msg));
 
     void service.subscribe(
       new PgoutputPlugin({

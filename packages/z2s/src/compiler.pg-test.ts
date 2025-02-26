@@ -240,7 +240,7 @@ describe('compiling ZQL to SQL', () => {
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(query.run()).toEqual(pgResult);
+    expect(await query.run()).toEqual(pgResult);
   });
 
   test('multiple where clauses', async () => {
@@ -252,7 +252,7 @@ describe('compiling ZQL to SQL', () => {
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(query.run()).toEqual(pgResult);
+    expect(await query.run()).toEqual(pgResult);
   });
 
   test('whereExists with related table', async () => {
@@ -264,7 +264,7 @@ describe('compiling ZQL to SQL', () => {
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(query.run()).toEqual(pgResult);
+    expect(await query.run()).toEqual(pgResult);
   });
 
   test('order by and limit', async () => {
@@ -274,7 +274,7 @@ describe('compiling ZQL to SQL', () => {
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(query.run()).toEqual(pgResult);
+    expect(await query.run()).toEqual(pgResult);
   });
 
   test('1 to 1 foreign key relationship', async () => {
@@ -284,7 +284,7 @@ describe('compiling ZQL to SQL', () => {
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(query.run()).toEqualNullish(pgResult);
+    expect(await query.run()).toEqualNullish(pgResult);
   });
 
   test('1 to many foreign key relationship', async () => {
@@ -294,7 +294,7 @@ describe('compiling ZQL to SQL', () => {
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(query.run()).toEqualNullish(pgResult);
+    expect(await query.run()).toEqualNullish(pgResult);
   });
 
   test('junction relationship', async () => {
@@ -304,7 +304,7 @@ describe('compiling ZQL to SQL', () => {
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(query.run()).toEqualNullish(pgResult);
+    expect(await query.run()).toEqualNullish(pgResult);
   });
 
   test('nested related with where clauses', async () => {
@@ -318,7 +318,7 @@ describe('compiling ZQL to SQL', () => {
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(query.run()).toEqual(pgResult);
+    expect(await query.run()).toEqual(pgResult);
   });
 
   test('complex query combining multiple features', async () => {
@@ -335,6 +335,6 @@ describe('compiling ZQL to SQL', () => {
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(query.run()).toEqual(pgResult);
+    expect(await query.run()).toEqual(pgResult);
   });
 });

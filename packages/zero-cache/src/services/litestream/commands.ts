@@ -43,14 +43,41 @@ function getLitestream(
   litestream: string;
   env: NodeJS.ProcessEnv;
 } {
-  const {executable, backupURL, logLevel, configPath} = config.litestream;
+  const {
+    executable,
+    backupURL,
+    logLevel,
+    configPath,
+    checkpointThresholdMB,
+    incrementalBackupIntervalMinutes,
+    snapshotBackupIntervalHours,
+  } = config.litestream;
+
+  // Set the snapshot interval to something smaller than x hours so that
+  // the hourly check triggers on the hour, rather than the hour after.
+  const snapshotBackupIntervalMinutes = snapshotBackupIntervalHours * 60 - 5;
+  const minCheckpointPageCount = checkpointThresholdMB * 250; // SQLite page size is 4k
+  const maxCheckpointPageCount = minCheckpointPageCount * 10;
+
   return {
     litestream: must(executable, `Missing --litestream-executable`),
     env: {
       ...process.env,
       ['ZERO_REPLICA_FILE']: config.replicaFile,
       ['ZERO_LITESTREAM_BACKUP_URL']: must(backupURL),
+      ['ZERO_LITESTREAM_MIN_CHECKPOINT_PAGE_COUNT']: String(
+        minCheckpointPageCount,
+      ),
+      ['ZERO_LITESTREAM_MAX_CHECKPOINT_PAGE_COUNT']: String(
+        maxCheckpointPageCount,
+      ),
+      ['ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES']: String(
+        incrementalBackupIntervalMinutes,
+      ),
       ['ZERO_LITESTREAM_LOG_LEVEL']: logLevelOverride ?? logLevel,
+      ['ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_MINUTES']: String(
+        snapshotBackupIntervalMinutes,
+      ),
       ['ZERO_LOG_FORMAT']: config.log.format,
       ['LITESTREAM_CONFIG']: configPath,
     },

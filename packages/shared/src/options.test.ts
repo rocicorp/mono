@@ -963,11 +963,25 @@ test('ungrouped config', () => {
     format: v.union(v.literal('text'), v.literal('json')).default('text'),
     enabled: v.boolean().optional(),
     name: v.string(),
+    pids: v.array(v.number()).default([]),
+    topLevelCamel: v.string().optional(),
   };
 
   const result = parseOptions(
     ungroupedOptions,
-    ['--name', 'test', '--format', 'json', '--enabled', 'true'],
+    [
+      '--top-level-camel',
+      'case',
+      '--name',
+      'test',
+      '--format',
+      'json',
+      '--enabled',
+      'true',
+      '--pids',
+      '123',
+      '456',
+    ],
     'Z_',
     {},
   );
@@ -977,6 +991,8 @@ test('ungrouped config', () => {
     format: 'json',
     enabled: true,
     name: 'test',
+    pids: [123, 456],
+    topLevelCamel: 'case',
   });
 
   const envResult = parseOptions(ungroupedOptions, ['--name', 'test2'], 'x', {
@@ -987,5 +1003,6 @@ test('ungrouped config', () => {
     port: 4848,
     format: 'text',
     name: 'test2',
+    pids: [],
   });
 });

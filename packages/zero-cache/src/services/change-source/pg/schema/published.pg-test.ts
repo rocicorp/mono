@@ -875,10 +875,13 @@ describe('tables/published', () => {
       CREATE TABLE test.issues (
         issue_id INTEGER PRIMARY KEY,
         org_id INTEGER,
-        component_id INTEGER
+        component_id INTEGER,
+        stored INTEGER GENERATED ALWAYS AS (issue_id + 1) STORED
       );
       CREATE INDEX issues_org_id ON test.issues (org_id);
-      CREATE INDEX issues_component_id ON test.issues (component_id);
+      -- Indexes with INCLUDE'd generated columns are fine, as INCLUDE'd
+      -- columns are ignored by the replica.
+      CREATE INDEX issues_component_id ON test.issues (component_id) INCLUDE (stored);
       CREATE PUBLICATION zero_data FOR TABLE test.issues;
       CREATE PUBLICATION zero_two FOR TABLE test.issues;
       `,
@@ -1259,11 +1262,18 @@ describe('tables/published', () => {
       CREATE TABLE test.issues (
         issue_id INTEGER PRIMARY KEY,
         org_id INTEGER CHECK (org_id > 0),
-        component_id INTEGER
+        component_id INTEGER,
+        excluded INTEGER GENERATED ALWAYS AS (issue_id + 1) STORED
+      );
+      CREATE TABLE test.users (
+        user_id INTEGER PRIMARY KEY,
+        birthday TIMESTAMPTZ
       );
       CREATE INDEX idx_with_expression ON test.issues (org_id, (component_id + 1));
       CREATE INDEX partial_idx ON test.issues (component_id) WHERE org_id > 1000;
-      CREATE PUBLICATION zero_data FOR TABLE test.issues;
+      CREATE INDEX idx_with_gen ON test.issues (issue_id, org_id, component_id, excluded);
+      CREATE INDEX birthday_idx ON test.users (user_id, birthday);
+      CREATE PUBLICATION zero_data FOR TABLE test.issues, TABLE test.users (user_id);
       `,
       expectedResult: {
         publications: [
@@ -1313,6 +1323,25 @@ describe('tables/published', () => {
             primaryKey: ['issue_id'],
             publications: {['zero_data']: {rowFilter: null}},
           },
+          {
+            oid: expect.any(Number),
+            schema: 'test',
+            name: 'users',
+            replicaIdentity: 'd',
+            columns: {
+              ['user_id']: {
+                pos: 1,
+                dataType: 'int4',
+                typeOID: 23,
+                pgTypeClass: PostgresTypeClass.Base,
+                characterMaximumLength: null,
+                notNull: true,
+                dflt: null,
+              },
+            },
+            primaryKey: ['user_id'],
+            publications: {['zero_data']: {rowFilter: null}},
+          },
         ],
         indexes: [
           {
@@ -1320,6 +1349,15 @@ describe('tables/published', () => {
             tableName: 'issues',
             name: 'issues_pkey',
             columns: {['issue_id']: 'ASC'},
+            unique: true,
+            isReplicaIdentity: false,
+            isImmediate: true,
+          },
+          {
+            schema: 'test',
+            tableName: 'users',
+            name: 'users_pkey',
+            columns: {['user_id']: 'ASC'},
             unique: true,
             isReplicaIdentity: false,
             isImmediate: true,

@@ -38,16 +38,17 @@ const zeroConfig = {
   log: logConfig,
 } as unknown as ZeroConfig;
 
+const APP_ID = 'fooz';
 const SHARD_ID = '0';
 const CG_ID = 'abc';
 const TEST_SCHEMA_VERSION = 1;
 
 const sqlSchema = /* sql */ `
-CREATE TABLE "zero.permissions" (
+CREATE TABLE "${APP_ID}.permissions" (
   permissions JSON,
   hash TEXT
 );
-INSERT INTO "zero.permissions" (permissions) VALUES (NULL);
+INSERT INTO "${APP_ID}.permissions" (permissions) VALUES (NULL);
 
 CREATE TABLE "user" (
   id text PRIMARY KEY,
@@ -131,7 +132,7 @@ INSERT INTO "dataTypeTest" (
 `;
 
 async function createUpstreamTables(db: PostgresDB) {
-  await db.unsafe(sqlSchema + zeroSchema(SHARD_ID));
+  await db.unsafe(sqlSchema + zeroSchema(APP_ID, SHARD_ID));
 }
 
 function createReplicaTables(db: Database) {
@@ -347,10 +348,16 @@ beforeEach(async () => {
 
   const perms = JSON.stringify(permissionsConfig);
   replica
-    .prepare(`UPDATE "zero.permissions" SET permissions = ?, hash = ?`)
+    .prepare(`UPDATE "${APP_ID}.permissions" SET permissions = ?, hash = ?`)
     .run(perms, h128(perms).toString(16));
 
-  authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, SHARD_ID);
+  authorizer = new WriteAuthorizerImpl(
+    lc,
+    zeroConfig,
+    replica,
+    APP_ID,
+    SHARD_ID,
+  );
   lmid = 0;
 });
 
@@ -371,6 +378,7 @@ function procMutation(
       ? undefined
       : {sub: uid, role: uid === 'admn' ? 'admin' : 'user'},
     upstream,
+    APP_ID,
     SHARD_ID,
     CG_ID,
     {

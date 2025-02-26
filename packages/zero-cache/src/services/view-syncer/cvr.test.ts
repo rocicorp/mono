@@ -1,0 +1,233 @@
+import {expect, test} from 'vitest';
+import {getInactiveQueries, type CVR} from './cvr.ts';
+import type {ClientQueryRecord} from './schema/types.ts';
+
+type QueryDef = {
+  hash: string;
+  ttl: number | undefined;
+  inactivatedAt: number | undefined;
+};
+
+function makeCVR(clients: Record<string, QueryDef[]>): CVR {
+  const cvr: CVR = {
+    clients: Object.fromEntries(
+      Object.entries(clients).map(([clientID, queries]) => [
+        clientID,
+        {
+          desiredQueryIDs: queries.map(({hash}) => hash),
+          id: clientID,
+        },
+      ]),
+    ),
+    id: 'abc123',
+    lastActive: Date.UTC(2024, 1, 20),
+    queries: {},
+    replicaVersion: '120',
+    version: {
+      stateVersion: '1aa',
+    },
+  };
+
+  for (const [clientID, queries] of Object.entries(clients)) {
+    for (const {hash, ttl, inactivatedAt} of queries) {
+      cvr.queries[hash] ??= {
+        ast: {
+          table: 'issues',
+        },
+        desiredBy: {},
+        id: hash,
+        patchVersion: undefined,
+        transformationHash: undefined,
+        transformationVersion: undefined,
+      };
+      (cvr.queries[hash] as ClientQueryRecord).desiredBy[clientID] = {
+        inactivatedAt,
+        ttl,
+        version: {
+          minorVersion: 1,
+          stateVersion: '1a9',
+        },
+      };
+    }
+  }
+
+  return cvr;
+}
+
+test.each([
+  {
+    clients: {
+      clientX: [
+        {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
+        {hash: 'h2', ttl: 1000, inactivatedAt: 2000},
+        {hash: 'h3', ttl: 1000, inactivatedAt: 3000},
+      ],
+    },
+    expected: [
+      {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
+      {hash: 'h2', ttl: 1000, inactivatedAt: 2000},
+      {hash: 'h3', ttl: 1000, inactivatedAt: 3000},
+    ],
+  },
+  {
+    clients: {
+      clientX: [
+        {hash: 'h1', ttl: 2000, inactivatedAt: 1000},
+        {hash: 'h2', ttl: 1000, inactivatedAt: 1000},
+        {hash: 'h3', ttl: 3000, inactivatedAt: 1000},
+      ],
+    },
+    expected: [
+      {hash: 'h2', ttl: 1000, inactivatedAt: 1000},
+      {hash: 'h1', ttl: 2000, inactivatedAt: 1000},
+      {hash: 'h3', ttl: 3000, inactivatedAt: 1000},
+    ],
+  },
+  {
+    clients: {
+      clientX: [
+        {hash: 'h1', ttl: undefined, inactivatedAt: 1000},
+        {hash: 'h2', ttl: 2000, inactivatedAt: 1000},
+        {hash: 'h3', ttl: undefined, inactivatedAt: 3000},
+      ],
+    },
+    expected: [
+      {hash: 'h2', ttl: 2000, inactivatedAt: 1000},
+      {hash: 'h1', ttl: undefined, inactivatedAt: 1000},
+      {hash: 'h3', ttl: undefined, inactivatedAt: 3000},
+    ],
+  },
+  {
+    clients: {
+      clientX: [
+        {hash: 'h1', ttl: 500, inactivatedAt: undefined},
+        {hash: 'h2', ttl: undefined, inactivatedAt: undefined},
+        {hash: 'h3', ttl: 1000, inactivatedAt: 500},
+      ],
+    },
+    expected: [{hash: 'h3', ttl: 1000, inactivatedAt: 500}],
+  },
+  {
+    clients: {
+      clientX: [
+        {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
+        {hash: 'h2', ttl: undefined, inactivatedAt: 2000},
+        {hash: 'h3', ttl: undefined, inactivatedAt: undefined},
+      ],
+    },
+    expected: [
+      {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
+      {hash: 'h2', ttl: undefined, inactivatedAt: 2000},
+    ],
+  },
+
+  // Multiple clients
+  {
+    clients: {
+      clientX: [
+        {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
+        {hash: 'h2', ttl: 1000, inactivatedAt: 2000},
+      ],
+      clientY: [
+        {hash: 'h3', ttl: 1000, inactivatedAt: 3000},
+        {hash: 'h4', ttl: 1000, inactivatedAt: 4000},
+      ],
+    },
+    expected: [
+      {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
+      {hash: 'h2', ttl: 1000, inactivatedAt: 2000},
+      {hash: 'h3', ttl: 1000, inactivatedAt: 3000},
+      {hash: 'h4', ttl: 1000, inactivatedAt: 4000},
+    ],
+  },
+
+  // When multiple clients have the same query, the query that expires last should be used
+  {
+    clients: {
+      clientX: [
+        {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
+        {hash: 'h2', ttl: 1000, inactivatedAt: 2000},
+        {hash: 'h3', ttl: 1000, inactivatedAt: 3000},
+      ],
+      clientY: [
+        {hash: 'h1', ttl: 1000, inactivatedAt: 6000},
+        {hash: 'h2', ttl: 1000, inactivatedAt: 5000},
+        {hash: 'h3', ttl: 1000, inactivatedAt: 4000},
+      ],
+    },
+    expected: [
+      {hash: 'h3', ttl: 1000, inactivatedAt: 4000},
+      {hash: 'h2', ttl: 1000, inactivatedAt: 5000},
+      {hash: 'h1', ttl: 1000, inactivatedAt: 6000},
+    ],
+  },
+
+  {
+    clients: {
+      clientX: [
+        {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
+        {hash: 'h2', ttl: 1000, inactivatedAt: 2000},
+      ],
+      clientY: [
+        {hash: 'h1', ttl: 500, inactivatedAt: 1500},
+        {hash: 'h2', ttl: 1500, inactivatedAt: 1500},
+      ],
+    },
+    expected: [
+      {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
+      {hash: 'h2', ttl: 1000, inactivatedAt: 2000},
+    ],
+  },
+
+  {
+    clients: {
+      clientX: [
+        {hash: 'h1', ttl: 2000, inactivatedAt: 1000},
+        {hash: 'h2', ttl: 1000, inactivatedAt: 3000},
+      ],
+      clientY: [
+        {hash: 'h1', ttl: 3000, inactivatedAt: 2000},
+        {hash: 'h2', ttl: undefined, inactivatedAt: 4000},
+      ],
+    },
+    expected: [
+      {hash: 'h1', ttl: 3000, inactivatedAt: 2000},
+      {hash: 'h2', ttl: undefined, inactivatedAt: 4000},
+    ],
+  },
+  {
+    clients: {
+      clientX: [
+        {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
+        {hash: 'h2', ttl: undefined, inactivatedAt: 2000},
+      ],
+      clientY: [
+        {hash: 'h1', ttl: undefined, inactivatedAt: 3000},
+        {hash: 'h2', ttl: 2000, inactivatedAt: 1500},
+      ],
+    },
+    expected: [
+      {hash: 'h2', ttl: undefined, inactivatedAt: 2000},
+      {hash: 'h1', ttl: undefined, inactivatedAt: 3000},
+    ],
+  },
+  {
+    clients: {
+      clientX: [
+        {hash: 'h1', ttl: 1000, inactivatedAt: undefined},
+        {hash: 'h2', ttl: 2000, inactivatedAt: 1000},
+      ],
+      clientY: [
+        {hash: 'h1', ttl: undefined, inactivatedAt: 2000},
+        {hash: 'h2', ttl: undefined, inactivatedAt: undefined},
+      ],
+    },
+    expected: [
+      {hash: 'h2', ttl: 2000, inactivatedAt: 1000},
+      {hash: 'h1', ttl: undefined, inactivatedAt: 2000},
+    ],
+  },
+])('getInactiveQueries %o', ({clients, expected}) => {
+  const cvr = makeCVR(clients);
+  expect(getInactiveQueries(cvr)).toEqual(expected);
+});

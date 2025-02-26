@@ -99,7 +99,7 @@ describe('change-streamer/service', () => {
     const queue = new Queue<Downstream>();
     void (async () => {
       for await (const msg of sub) {
-        void queue.enqueue(msg);
+        queue.enqueue(msg);
       }
     })();
     return queue;
@@ -642,7 +642,7 @@ describe('change-streamer/service', () => {
     const requests = new Queue<string>();
     const source = {
       startStream: vi.fn().mockImplementation(req => {
-        void requests.enqueue(req);
+        requests.enqueue(req);
         return resolver().promise;
       }),
     };

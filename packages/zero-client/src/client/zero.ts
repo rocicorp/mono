@@ -68,6 +68,7 @@ import {
   type NameMapper,
   clientToServer,
 } from '../../../zero-schema/src/name-mapper.ts';
+import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {nanoid} from '../util/nanoid.ts';
@@ -81,6 +82,11 @@ import {
   makeCRUDMutate,
   makeCRUDMutator,
 } from './crud.ts';
+import type {
+  CustomMutatorDefs,
+  CustomMutatorImpl,
+  MakeCustomMutatorInterfaces,
+} from './custom.ts';
 import {makeReplicacheMutator} from './custom.ts';
 import {DeleteClientsManager} from './delete-clients-manager.ts';
 import {shouldEnableAnalytics} from './enable-analytics.ts';
@@ -123,12 +129,6 @@ import {
 import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
-import type {
-  CustomMutatorDefs,
-  CustomMutatorImpl,
-  MakeCustomMutatorInterfaces,
-} from './custom.ts';
-import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -548,7 +548,7 @@ export class Zero<
 
     this.#zeroContext = new ZeroContext(
       this.#ivmSources.main,
-      (ast, gotCallback) => this.#queryManager.add(ast, gotCallback),
+      (ast, ttl, gotCallback) => this.#queryManager.add(ast, ttl, gotCallback),
       batchViewUpdates,
     );
 

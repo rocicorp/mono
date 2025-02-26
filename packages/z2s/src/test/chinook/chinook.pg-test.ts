@@ -104,15 +104,17 @@ beforeAll(async () => {
     memoryQueries[table] = newQuery(memoryQueryDelegate, schema, table) as any;
   });
 
-  tables.forEach(table => {
-    const rows = zqliteQueries[table].run();
-    for (const row of rows) {
-      memorySources[table].push({
-        type: 'add',
-        row,
-      });
-    }
-  });
+  await Promise.all(
+    tables.map(async table => {
+      const rows = await zqliteQueries[table].run();
+      for (const row of rows) {
+        memorySources[table].push({
+          type: 'add',
+          row,
+        });
+      }
+    }),
+  );
 });
 
 describe('basic select', () => {
@@ -177,8 +179,8 @@ async function checkZqlAndSql(
   memoryQuery: Query<Schema, keyof Schema['tables']>,
 ) {
   const pgResult = await runZqlAsSql(pg, zqliteQuery);
-  const zqliteResult = zqliteQuery.run();
-  const zqlMemResult = memoryQuery.run();
+  const zqliteResult = await zqliteQuery.run();
+  const zqlMemResult = await memoryQuery.run();
   // In failure output:
   // `-` is PG
   // `+` is ZQLite

@@ -20,6 +20,7 @@ import {assert} from '../../../../../shared/src/asserts.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import {must} from '../../../../../shared/src/must.ts';
 import {
+  equals,
   intersection,
   symmetricDifferences,
 } from '../../../../../shared/src/set-utils.ts';
@@ -67,7 +68,7 @@ import {updateShardSchema} from './schema/init.ts';
 import {getPublicationInfo, type PublishedSchema} from './schema/published.ts';
 import {
   getInternalShardConfig,
-  INTERNAL_PUBLICATION_PREFIX,
+  internalPublicationPrefix,
   replicaIdentitiesForTablesWithoutPrimaryKeys,
   type InternalShardConfig,
 } from './schema/shard.ts';
@@ -86,6 +87,7 @@ registerPostgresTypeParsers();
 export async function initializePostgresChangeSource(
   lc: LogContext,
   upstreamURI: string,
+  appID: string,
   shard: ShardConfig,
   replicaDbFile: string,
   syncOptions: InitialSyncOptions,
@@ -93,6 +95,7 @@ export async function initializePostgresChangeSource(
   await initSyncSchema(
     lc,
     `replica-${shard.id}`,
+    appID,
     shard,
     replicaDbFile,
     upstreamURI,
@@ -107,7 +110,7 @@ export async function initializePostgresChangeSource(
     // Verify that the publications match what has been synced.
     const requested = [...shard.publications].sort();
     const replicated = replicationConfig.publications
-      .filter(p => !p.startsWith(INTERNAL_PUBLICATION_PREFIX))
+      .filter(p => !p.startsWith(internalPublicationPrefix(appID)))
       .sort();
     if (!deepEqual(requested, replicated)) {
       throw new Error(
@@ -120,7 +123,7 @@ export async function initializePostgresChangeSource(
   // initial sync if not.
   const db = pgClient(lc, upstreamURI);
   try {
-    await checkAndUpdateUpstream(lc, db, shard);
+    await checkAndUpdateUpstream(lc, db, appID, shard);
   } finally {
     await db.end();
   }
@@ -128,6 +131,7 @@ export async function initializePostgresChangeSource(
   const changeSource = new PostgresChangeSource(
     lc,
     upstreamURI,
+    appID,
     shard.id,
     replicationConfig,
   );
@@ -138,9 +142,10 @@ export async function initializePostgresChangeSource(
 async function checkAndUpdateUpstream(
   lc: LogContext,
   db: PostgresDB,
+  appID: string,
   shard: ShardConfig,
 ) {
-  const slot = replicationSlot(shard.id);
+  const slot = replicationSlot(appID, shard.id);
   const result = await db<{restartLSN: LSN | null}[]>`
   SELECT restart_lsn as "restartLSN" FROM pg_replication_slots WHERE slot_name = ${slot}`;
   if (result.length === 0) {
@@ -153,7 +158,7 @@ async function checkAndUpdateUpstream(
     );
   }
   // Perform any shard schema updates
-  await updateShardSchema(lc, db, {
+  await updateShardSchema(lc, db, appID, {
     id: shard.id,
     publications: shard.publications,
   });
@@ -168,29 +173,36 @@ const MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE = 5;
 class PostgresChangeSource implements ChangeSource {
   readonly #lc: LogContext;
   readonly #upstreamUri: string;
+  readonly #appID: string;
   readonly #shardID: string;
   readonly #replicationConfig: ReplicationConfig;
 
   constructor(
     lc: LogContext,
     upstreamUri: string,
+    appID: string,
     shardID: string,
     replicationConfig: ReplicationConfig,
   ) {
     this.#lc = lc.withContext('component', 'change-source');
     this.#upstreamUri = upstreamUri;
+    this.#appID = appID;
     this.#shardID = shardID;
     this.#replicationConfig = replicationConfig;
   }
 
   async startStream(clientWatermark: string): Promise<ChangeStream> {
     const db = pgClient(this.#lc, this.#upstreamUri);
-    const slot = replicationSlot(this.#shardID);
+    const slot = replicationSlot(this.#appID, this.#shardID);
 
     try {
       await this.#stopExistingReplicationSlotSubscriber(db, slot);
 
-      const config = await getInternalShardConfig(db, this.#shardID);
+      const config = await getInternalShardConfig(
+        db,
+        this.#appID,
+        this.#shardID,
+      );
       this.#lc.info?.(`starting replication stream@${slot}`);
 
       // Enabling ssl according to the logic in:
@@ -513,9 +525,9 @@ class ChangeMaker {
       case 'type':
         return []; // Nothing need be done for custom types.
       case 'origin':
-        // We do not set the `origin` option in the pgoutput parameters:
-        // https://www.postgresql.org/docs/current/protocol-logical-replication.html#PROTOCOL-LOGICAL-REPLICATION-PARAMS
-        throw new Error(`Unexpected ORIGIN message ${stringify(msg)}`);
+        // No need to detect replication loops since we are not a
+        // PG replication source.
+        return [];
       default:
         msg satisfies never;
         throw new Error(`Unexpected message type ${stringify(msg)}`);
@@ -803,7 +815,12 @@ export function relationDifferent(a: PublishedTableSpec, b: MessageRelation) {
     a.oid !== b.relationOid ||
     a.schema !== b.schema ||
     a.name !== b.name ||
-    !deepEqual(a.primaryKey, b.keyColumns)
+    // The MessageRelation's `keyColumns` field contains the columns in column
+    // declaration order, whereas the PublishedTableSpec's `primaryKey`
+    // contains the columns in primary key (i.e. index) order. Do an
+    // order-agnostic compare here since it is not possible to detect
+    // key-order changes from the MessageRelation message alone.
+    !equals(new Set(a.primaryKey), new Set(b.keyColumns))
   ) {
     return true;
   }

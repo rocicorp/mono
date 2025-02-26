@@ -2,47 +2,12 @@
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import {beforeEach, describe, expect, test} from 'vitest';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
-import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
-import {
-  boolean,
-  number,
-  string,
-  table,
-} from '../../zero-schema/src/builder/table-builder.ts';
+
 import type {DBTransaction} from './db.ts';
 import {makeSchemaCRUD} from './custom.ts';
 import {Transaction} from './test/util.ts';
 import type {SchemaCRUD} from '../../zql/src/mutate/custom.ts';
-
-const schema = createSchema(1, {
-  tables: [
-    table('basic')
-      .columns({
-        id: string(),
-        a: number(),
-        b: string(),
-        c: boolean().optional(),
-      })
-      .primaryKey('id'),
-    table('names')
-      .from('divergent_names')
-      .columns({
-        id: string().from('divergent_id'),
-        a: number().from('divergent_a'),
-        b: string().from('divergent_b'),
-        c: boolean().from('divergent_c').optional(),
-      })
-      .primaryKey('id'),
-    table('compoundPk')
-      .columns({
-        a: string(),
-        b: number(),
-        c: string().optional(),
-      })
-      .primaryKey('a', 'b'),
-  ],
-  relationships: [],
-});
+import {schema, schemaSql} from './test/schema.ts';
 
 describe('makeSchemaCRUD', () => {
   let pg: PostgresDB;
@@ -50,28 +15,7 @@ describe('makeSchemaCRUD', () => {
 
   beforeEach(async () => {
     pg = await testDBs.create('makeSchemaCRUD-test');
-    await pg.unsafe(`
-      CREATE TABLE basic (
-        id TEXT PRIMARY KEY,
-        a INTEGER,
-        b TEXT,
-        C BOOLEAN
-      );
-
-      CREATE TABLE divergent_names (
-        divergent_id TEXT PRIMARY KEY,
-        divergent_a INTEGER,
-        divergent_b TEXT,
-        divergent_c BOOLEAN
-      );
-
-      CREATE TABLE "compoundPk" (
-        a TEXT,
-        b INTEGER,
-        c TEXT,
-        PRIMARY KEY (a, b)
-      );
-    `);
+    await pg.unsafe(schemaSql);
 
     crudProvider = makeSchemaCRUD(schema);
   });

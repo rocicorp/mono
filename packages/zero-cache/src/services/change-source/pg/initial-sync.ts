@@ -1,6 +1,8 @@
 import {PG_INSUFFICIENT_PRIVILEGE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import postgres from 'postgres';
+import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {
   createIndexStatement,
@@ -31,6 +33,7 @@ import {
   setInitialSchema,
   validatePublications,
 } from './schema/shard.ts';
+import {ALLOWED_APP_ID_CHARACTERS} from './schema/validation.ts';
 import type {ShardConfig} from './shard-config.ts';
 
 export type InitialSyncOptions = {
@@ -41,17 +44,23 @@ export type InitialSyncOptions = {
 // https://www.postgresql.org/docs/current/warm-standby.html#STREAMING-REPLICATION-SLOTS-MANIPULATION
 const ALLOWED_SHARD_ID_CHARACTERS = /^[a-z0-9_]+$/;
 
-export function replicationSlot(shardID: string): string {
-  return `zero_${shardID}`;
+export function replicationSlot(appID: string, shardID: string): string {
+  return `${appID}_${shardID}`;
 }
 
 export async function initialSync(
   lc: LogContext,
+  appID: string,
   shard: ShardConfig,
   tx: Database,
   upstreamURI: string,
   syncOptions: InitialSyncOptions,
 ) {
+  if (!ALLOWED_APP_ID_CHARACTERS.test(appID)) {
+    throw new Error(
+      'The App ID may only consist of lower-case letters, numbers, and the underscore character',
+    );
+  }
   if (!ALLOWED_SHARD_ID_CHARACTERS.test(shard.id)) {
     throw new Error(
       'A shard ID may only consist of lower-case letters, numbers, and the underscore character',
@@ -69,7 +78,7 @@ export async function initialSync(
     // Kill the active_pid on the existing slot before altering publications,
     // as deleting a publication associated with an existing subscriber causes
     // weirdness; the active_pid becomes null and thus unable to be terminated.
-    const slotName = replicationSlot(shard.id);
+    const slotName = replicationSlot(appID, shard.id);
     const slots = await upstreamDB<{pid: string | null}[]>`
     SELECT pg_terminate_backend(active_pid), active_pid as pid
       FROM pg_replication_slots WHERE slot_name = ${slotName}`;
@@ -77,7 +86,12 @@ export async function initialSync(
       lc.info?.(`signaled subscriber ${slots[0].pid} to shut down`);
     }
 
-    const {publications} = await ensurePublishedTables(lc, upstreamDB, shard);
+    const {publications} = await ensurePublishedTables(
+      lc,
+      upstreamDB,
+      appID,
+      shard,
+    );
     lc.info?.(`Upstream is setup with publications [${publications}]`);
 
     const {database, host} = upstreamDB.options;
@@ -114,6 +128,9 @@ export async function initialSync(
     const initialVersion = toLexiVersion(lsn);
 
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
+    const start = Date.now();
+    let numTables: number;
+    let numRows: number;
     const copiers = startTableCopyWorkers(lc, upstreamDB, snapshot, numWorkers);
     let published: PublicationInfo;
     try {
@@ -126,26 +143,35 @@ export async function initialSync(
 
       // Now that tables have been validated, kick off the copiers.
       const {tables, indexes} = published;
+      numTables = tables.length;
       createLiteTables(tx, tables);
-      createLiteIndices(tx, indexes);
-      await Promise.all(
+
+      const rowCounts = await Promise.all(
         tables.map(table =>
-          copiers.process(db =>
-            copy(lc, table, db, tx, initialVersion, rowBatchSize).then(
-              () => [],
-            ),
+          copiers.processReadTask(db =>
+            copy(lc, table, db, tx, initialVersion, rowBatchSize),
           ),
         ),
       );
+      numRows = rowCounts.reduce((sum, count) => sum + count, 0);
+
+      const indexStart = Date.now();
+      createLiteIndices(tx, indexes);
+      lc.info?.(`Created indexes (${Date.now() - indexStart} ms)`);
     } finally {
       copiers.setDone();
       await copiers.done();
     }
-    await setInitialSchema(upstreamDB, shard.id, published);
+
+    await setInitialSchema(upstreamDB, appID, shard.id, published);
 
     initReplicationState(tx, publications, initialVersion);
     initChangeLog(tx);
-    lc.info?.(`Synced initial data from ${publications} up to ${lsn}`);
+    lc.info?.(
+      `Synced ${numRows.toLocaleString()} rows of ${numTables} tables in ${publications} up to ${lsn} (${
+        Date.now() - start
+      } ms)`,
+    );
   } finally {
     await replicationSession.end();
     await upstreamDB.end();
@@ -175,14 +201,15 @@ async function checkUpstreamConfig(upstreamDB: PostgresDB) {
 async function ensurePublishedTables(
   lc: LogContext,
   upstreamDB: PostgresDB,
+  appID: string,
   shard: ShardConfig,
 ): Promise<{publications: string[]}> {
   const {database, host} = upstreamDB.options;
   lc.info?.(`Ensuring upstream PUBLICATION on ${database}@${host}`);
 
-  await initShardSchema(lc, upstreamDB, shard);
+  await initShardSchema(lc, upstreamDB, appID, shard);
 
-  return getInternalShardConfig(upstreamDB, shard.id);
+  return getInternalShardConfig(upstreamDB, appID, shard.id);
 }
 
 /* eslint-disable @typescript-eslint/naming-convention */
@@ -294,12 +321,38 @@ async function copy(
   lc.info?.(`Starting copy of ${tableName}:`, selectStmt);
 
   const cursor = from.unsafe(selectStmt).cursor(rowBatchSize);
+  let prevBatch = promiseVoid;
+
   for await (const rows of cursor) {
-    for (const row of rows) {
-      insertStmt.run([...liteValues(row, table), initialVersion]);
-    }
-    totalRows += rows.length;
-    lc.debug?.(`Copied ${totalRows} rows from ${table.schema}.${table.name}`);
+    await prevBatch;
+
+    // Parallelize the reading from postgres (`cursor`) with the processing
+    // of the results (`prevBatch`) by running the latter after I/O events.
+    // This allows the cursor to query the next batch from postgres before
+    // the CPU is consumed by the previous batch (of inserts).
+    prevBatch = runAfterIO(() => {
+      for (const row of rows) {
+        insertStmt.run([...liteValues(row, table), initialVersion]);
+      }
+      totalRows += rows.length;
+      lc.debug?.(`Copied ${totalRows} rows from ${table.schema}.${table.name}`);
+    });
   }
+  await prevBatch;
+
   lc.info?.(`Finished copying ${totalRows} rows into ${tableName}`);
+  return totalRows;
+}
+
+function runAfterIO(fn: () => void): Promise<void> {
+  const {promise, resolve, reject} = resolver();
+  setTimeout(() => {
+    try {
+      fn();
+      resolve();
+    } catch (e) {
+      reject(e);
+    }
+  }, 0);
+  return promise;
 }

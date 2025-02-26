@@ -12,13 +12,24 @@ test('encode/decodeSecProtocols round-trip', () => {
             {
               desiredQueriesPatch: fc.array(
                 fc.oneof(
-                  fc.record({
-                    op: fc.constant<'put'>('put'),
-                    hash: fc.string(),
-                    ast: fc.constant({
-                      table: 'table',
-                    }),
-                  }),
+                  fc.record(
+                    {
+                      op: fc.constant<'put'>('put'),
+                      hash: fc.string(),
+                      ast: fc.constant({
+                        table: 'table',
+                      }),
+                      ttl: fc.option(
+                        fc.double({
+                          noDefaultInfinity: true,
+                          noNaN: true,
+                          min: 0,
+                        }),
+                        {nil: undefined},
+                      ),
+                    },
+                    {requiredKeys: ['op', 'hash', 'ast']},
+                  ),
                   fc.record({
                     op: fc.constant<'del'>('del'),
                     hash: fc.string(),

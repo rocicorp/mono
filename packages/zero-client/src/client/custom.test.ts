@@ -114,23 +114,23 @@ test('custom mutators write to the local store', async () => {
     description: '',
   });
 
-  let issues = z.query.issue.run();
+  let issues = await z.query.issue.run();
   expect(issues[0].title).toEqual('foo');
 
   await z.mutate.issue.setTitle({id: '1', title: 'bar'});
-  issues = z.query.issue.run();
+  issues = await z.query.issue.run();
   expect(issues[0].title).toEqual('bar');
 
   await z.mutate.customNamespace.clown('1');
-  issues = z.query.issue.run();
+  issues = await z.query.issue.run();
   expect(issues[0].title).toEqual('🤡');
 
   await z.mutate.issue.create();
-  issues = z.query.issue.run();
+  issues = await z.query.issue.run();
   expect(issues.length).toEqual(2);
 
   await z.mutate.issue.deleteTwoIssues({id1: issues[0].id, id2: issues[1].id});
-  issues = z.query.issue.run();
+  issues = await z.query.issue.run();
   expect(issues.length).toEqual(0);
 });
 
@@ -140,12 +140,11 @@ test('custom mutators can query the local store during an optimistic mutation', 
     mutators: {
       issue: {
         closeAll: async tx => {
+          const issues = await tx.query.issue.run();
           await Promise.all(
-            tx.query.issue
-              .run()
-              .map(issue =>
-                tx.mutate.issue.update({id: issue.id, closed: true}),
-              ),
+            issues.map(issue =>
+              tx.mutate.issue.update({id: issue.id, closed: true}),
+            ),
           );
         },
       },
@@ -163,12 +162,12 @@ test('custom mutators can query the local store during an optimistic mutation', 
       });
     }),
   );
-  let issues = z.query.issue.where('closed', false).run();
+  let issues = await z.query.issue.where('closed', false).run();
   expect(issues.length).toEqual(10);
 
   await z.mutate.issue.closeAll();
 
-  issues = z.query.issue.where('closed', false).run();
+  issues = await z.query.issue.where('closed', false).run();
   expect(issues.length).toEqual(0);
 });
 
@@ -238,7 +237,7 @@ describe('rebasing custom mutators', () => {
       title: 'foo',
     });
 
-    expect(tx1.query.issue.run()).toMatchInlineSnapshot(`
+    expect(await tx1.query.issue.run()).toMatchInlineSnapshot(`
       [
         {
           "closed": false,
@@ -280,7 +279,7 @@ describe('rebasing custom mutators', () => {
       repo,
     ) as unknown as Transaction<Schema>;
 
-    expect(tx2.query.issue.run()).toMatchInlineSnapshot(`
+    expect(await tx2.query.issue.run()).toMatchInlineSnapshot(`
       [
         {
           "closed": false,

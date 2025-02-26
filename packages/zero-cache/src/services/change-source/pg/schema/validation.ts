@@ -7,6 +7,8 @@ import {Default} from '../../../../db/postgres-replica-identity-enum.ts';
 import type {PublishedTableSpec} from '../../../../db/specs.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/replication-state.ts';
 
+export const ALLOWED_APP_ID_CHARACTERS = /^[a-z0-9_]+$/;
+
 const ALLOWED_IDENTIFIER_CHARS = /^[A-Za-z_]+[A-Za-z0-9_-]*$/;
 
 export function validate(lc: LogContext, table: PublishedTableSpec) {

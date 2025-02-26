@@ -22,15 +22,6 @@ export class StaticQuery<
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
 > extends AbstractQuery<TSchema, TTable, TReturn> {
-  constructor(
-    schema: TSchema,
-    tableName: TTable,
-    ast: AST = {table: tableName},
-    format?: Format | undefined,
-  ) {
-    super(schema, tableName, ast, format);
-  }
-
   expressionBuilder() {
     return new ExpressionBuilder(this._exists);
   }
@@ -45,9 +36,10 @@ export class StaticQuery<
     schema: TSchema,
     tableName: TTable,
     ast: AST,
+    ttl: number | undefined,
     format: Format | undefined,
   ): Query<TSchema, TTable, TReturn> {
-    return new StaticQuery(schema, tableName, ast, format);
+    return new StaticQuery(schema, tableName, ast, ttl, format);
   }
 
   get ast() {
@@ -55,17 +47,17 @@ export class StaticQuery<
   }
 
   materialize(): TypedView<HumanReadable<TReturn>> {
-    throw new Error('AuthQuery cannot be materialized');
+    throw new Error('StaticQuery cannot be materialized');
   }
 
-  run(): HumanReadable<TReturn> {
-    throw new Error('AuthQuery cannot be run');
+  run(): Promise<HumanReadable<TReturn>> {
+    return Promise.reject(new Error('StaticQuery cannot be run'));
   }
 
   preload(): {
     cleanup: () => void;
     complete: Promise<void>;
   } {
-    throw new Error('AuthQuery cannot be preloaded');
+    throw new Error('StaticQuery cannot be preloaded');
   }
 }

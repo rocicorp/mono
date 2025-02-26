@@ -1,0 +1,23 @@
+{
+  "name": "load-generator",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "go": "tsx src/main.ts",
+    "check-types": "tsc",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+  },
+  "dependencies": {
+    "@rocicorp/logger": "^5.3.0",
+    "dotenv": "^16.4.5",
+    "pg-format": "npm:pg-format-fix@^1.0.5",
+    "postgres": "^3.4.4"
+  },
+  "devDependencies": {
+    "shared": "0.0.0"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}

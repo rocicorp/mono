@@ -34,8 +34,8 @@ const shardOptions = {
     type: v.array(v.string()).optional(() => []),
     desc: [
       `Postgres {bold PUBLICATION}s that define the partition of the upstream`,
-      `replicated to the shard. All publication names must begin with the prefix`,
-      `{bold zero_}, and all tables must be in the {bold public} schema.`,
+      `replicated to the shard. Publication names may not begin with an underscore,`,
+      `as zero reserves that prefix for internal use.`,
       ``,
       `If unspecified, zero-cache will create and use an internal publication that`,
       `publishes all tables in the {bold public} schema, i.e.:`,
@@ -269,7 +269,7 @@ export const zeroOptions = {
   },
 
   autoReset: {
-    type: v.boolean().optional(),
+    type: v.boolean().default(true),
     desc: [
       `Automatically wipe and resync the replica when replication is halted.`,
       `This situation can occur for configurations in which the upstream database`,
@@ -326,8 +326,40 @@ export const zeroOptions = {
       ],
     },
 
+    checkpointThresholdMB: {
+      type: v.number().default(40),
+      desc: [
+        `The size of the WAL file at which to perform an SQlite checkpoint to apply`,
+        `the writes in the WAL to the main database file. Each checkpoint creates`,
+        `a new WAL segment file that will be backed up by litestream. Smaller thresholds`,
+        `may improve read performance, at the expense of creating more files to download`,
+        `when restoring the replica from the backup.`,
+      ],
+    },
+
+    incrementalBackupIntervalMinutes: {
+      type: v.number().default(15),
+      desc: [
+        `The interval between incremental backups of the replica. Shorter intervals`,
+        `reduce the amount of change history that needs to be replayed when catching`,
+        `up a new view-syncer, at the expense of increasing the number of files needed`,
+        `to download for the initial litestream restore.`,
+      ],
+    },
+
+    snapshotBackupIntervalHours: {
+      type: v.number().default(12),
+      desc: [
+        `The interval between snapshot backups of the replica. Snapshot backups`,
+        `make a full copy of the database to a new litestream generation. This`,
+        `improves restore time at the expense of bandwidth. Applications with a`,
+        `large database and low write rate can increase this interval to reduce`,
+        `network usage for backups (litestream defaults to 24 hours).`,
+      ],
+    },
+
     restoreParallelism: {
-      type: v.number().default(16),
+      type: v.number().default(48),
       desc: [
         `The number of WAL files to download in parallel when performing the`,
         `initial restore of the replica from the backup.`,

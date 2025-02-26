@@ -666,7 +666,6 @@ describe('integration', {timeout: 30000}, () => {
         'pokePart',
         {
           pokeID: '00:01',
-          clientsPatch: [{op: 'put', clientID: 'def'}],
           desiredQueriesPatches: {
             def: [{op: 'put', hash: 'query-hash1', ast: FOO_QUERY}],
           },
@@ -720,7 +719,7 @@ describe('integration', {timeout: 30000}, () => {
       if (backend === 'pg') {
         await upDB`
           INSERT INTO foo(id, far_id, b, j1, j2, j3, j4) 
-            VALUES ('voo', 'doo', false, '"foo"', 'false', '456.789', '{"bar":"baz"}');
+            VALUES ('voo', 'doo', null, '"foo"', 'false', '456.789', '{"bar":"baz"}');
           UPDATE foo SET far_id = 'not_baz' WHERE id = 'bar';
         `.simple();
       } else {
@@ -738,7 +737,7 @@ describe('integration', {timeout: 30000}, () => {
               new: {
                 id: 'voo',
                 ['far_id']: 'doo',
-                b: false,
+                b: null,
                 j1: 'foo',
                 j2: false,
                 j3: 456.789,
@@ -803,7 +802,7 @@ describe('integration', {timeout: 30000}, () => {
               value: {
                 id: 'voo',
                 ['far_id']: 'doo',
-                b: false,
+                b: null,
                 j1: 'foo',
                 j2: false,
                 j3: 456.789,

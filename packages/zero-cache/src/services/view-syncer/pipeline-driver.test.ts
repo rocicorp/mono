@@ -4,6 +4,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Database as DB} from '../../../../zqlite/src/db.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import type {LogConfig} from '../../config/zero-config.ts';
 import {DbFile} from '../../test/lite.ts';
 import {initChangeLog} from '../replicator/schema/change-log.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
@@ -15,7 +16,6 @@ import {
 import {CREATE_STORAGE_TABLE, DatabaseStorage} from './database-storage.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
 import {ResetPipelinesSignal, Snapshotter} from './snapshotter.ts';
-import type {LogConfig} from '../../config/zero-config.ts';
 
 const logConfig: LogConfig = {
   format: 'text',
@@ -42,7 +42,8 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines = new PipelineDriver(
       lc,
       logConfig,
-      new Snapshotter(lc, dbFile.path),
+      new Snapshotter(lc, dbFile.path, 'zeroz'),
+      'zeroz',
       new DatabaseStorage(storage).createClientGroupStorage('foo-client-group'),
       'pipeline-driver.test.ts',
     );
@@ -51,14 +52,14 @@ describe('view-syncer/pipeline-driver', () => {
     initReplicationState(db, ['zero_data'], '123');
     initChangeLog(db);
     db.exec(`
-      CREATE TABLE "zero.schemaVersions" (
+      CREATE TABLE "zeroz.schemaVersions" (
         -- Note: Using "INT" to avoid the special semantics of "INTEGER PRIMARY KEY" in SQLite.
         "lock"                INT PRIMARY KEY,
         "minSupportedVersion" INT,
         "maxSupportedVersion" INT,
         _0_version            TEXT NOT NULL
       );
-      INSERT INTO "zero.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
+      INSERT INTO "zeroz.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
         VALUES (1, 1, 1, '123');
       CREATE TABLE issues (
         id TEXT PRIMARY KEY,
@@ -286,7 +287,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
   const zeroMessages = new ReplicationMessages(
     {schemaVersions: 'lock'},
-    'zero',
+    'zeroz',
   );
 
   test('replica version', () => {
@@ -397,6 +398,11 @@ describe('view-syncer/pipeline-driver', () => {
           },
         ]
       `);
+
+    // Adding a query with the same hash should be a noop.
+    expect([
+      ...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS),
+    ]).toMatchInlineSnapshot(`[]`);
   });
 
   test('insert', () => {

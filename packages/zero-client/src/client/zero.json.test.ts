@@ -33,7 +33,7 @@ test('we can create rows with json columns and query those rows', async () => {
     artists: ['artist 2', 'artist 3'],
   });
 
-  const tracks = z.query.track.run();
+  const tracks = await z.query.track.run();
 
   expect(tracks).toEqual([
     {id: 'track-1', title: 'track 1', artists: ['artist 1', 'artist 2']},

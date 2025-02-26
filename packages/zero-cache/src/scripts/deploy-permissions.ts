@@ -12,11 +12,7 @@ import {
 import {validator} from '../../../zero-schema/src/name-mapper.ts';
 import {ZERO_ENV_VAR_PREFIX} from '../config/zero-config.ts';
 import {getPublicationInfo} from '../services/change-source/pg/schema/published.ts';
-import {
-  APP_PUBLICATION_PREFIX,
-  ensureGlobalTables,
-  INTERNAL_PUBLICATION_PREFIX,
-} from '../services/change-source/pg/schema/shard.ts';
+import {ensureGlobalTables} from '../services/change-source/pg/schema/shard.ts';
 import {liteTableName} from '../types/names.ts';
 import {pgClient, type PostgresDB} from '../types/pg.ts';
 import {deployPermissionsOptions, loadPermissions} from './permissions.ts';
@@ -33,10 +29,11 @@ async function validatePermissions(
   db: PostgresDB,
   permissions: PermissionsConfig,
 ) {
+  // TODO: Get and verify publication names from the shardConfig.
   const pubnames = await db.unsafe<{pubname: string}[]>(`
   SELECT pubname FROM pg_publication 
-    WHERE pubname LIKE '${APP_PUBLICATION_PREFIX}%'
-       OR pubname LIKE '${INTERNAL_PUBLICATION_PREFIX}%'`);
+    WHERE pubname LIKE 'zero_%'
+       OR pubname LIKE '_zero_%'`);
   if (pubnames.length === 0) {
     // If zero-cache has not yet initialized the upstream publications,
     // we can't validate the permissions against what's been published.
@@ -94,7 +91,7 @@ async function deployPermissions(
 ) {
   const db = pgClient(lc, upstreamURI);
   try {
-    await ensureGlobalTables(db);
+    await ensureGlobalTables(db, 'zero');
 
     const {hash, changed} = await db.begin(async tx => {
       if (force) {

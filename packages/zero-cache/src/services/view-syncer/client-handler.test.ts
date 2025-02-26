@@ -13,6 +13,7 @@ import {ErrorForClient} from '../../types/error-for-client.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {ClientHandler, ensureSafeJSON, type Patch} from './client-handler.ts';
 
+const APP_ID = 'zapp';
 const SHARD_ID = 'xyz';
 
 describe('view-syncer/client-handler', () => {
@@ -37,6 +38,7 @@ describe('view-syncer/client-handler', () => {
       'g1',
       'id1',
       'ws1',
+      APP_ID,
       SHARD_ID,
       '121',
       PROTOCOL_VERSION,
@@ -126,6 +128,7 @@ describe('view-syncer/client-handler', () => {
         'g1',
         'id1',
         'ws1',
+        APP_ID,
         SHARD_ID,
         '121',
         PROTOCOL_VERSION,
@@ -138,6 +141,7 @@ describe('view-syncer/client-handler', () => {
         'g1',
         'id2',
         'ws2',
+        APP_ID,
         SHARD_ID,
         '120:01',
         PROTOCOL_VERSION,
@@ -150,6 +154,7 @@ describe('view-syncer/client-handler', () => {
         'g1',
         'id3',
         'ws3',
+        APP_ID,
         SHARD_ID,
         '11z',
         PROTOCOL_VERSION,
@@ -162,19 +167,6 @@ describe('view-syncer/client-handler', () => {
       client.startPoke(poke1Version, schemaVersions),
     );
     for (const poker of pokers) {
-      poker.addPatch({
-        toVersion: {stateVersion: '11z', minorVersion: 1},
-        patch: {type: 'client', op: 'put', id: 'foo'},
-      });
-      poker.addPatch({
-        toVersion: {stateVersion: '120', minorVersion: 1},
-        patch: {type: 'client', op: 'put', id: 'bar'},
-      });
-      poker.addPatch({
-        toVersion: {stateVersion: '121'},
-        patch: {type: 'client', op: 'put', id: 'baz'},
-      });
-
       poker.addPatch({
         toVersion: {stateVersion: '11z', minorVersion: 1},
         patch: {
@@ -192,7 +184,7 @@ describe('view-syncer/client-handler', () => {
           op: 'put',
           id: {
             schema: '',
-            table: 'zero_xyz.clients',
+            table: 'zapp_xyz.clients',
             rowKey: {clientID: 'bar'},
           },
           contents: {
@@ -233,7 +225,7 @@ describe('view-syncer/client-handler', () => {
           op: 'put',
           id: {
             schema: '',
-            table: 'zero_xyz.clients',
+            table: 'zapp_xyz.clients',
             rowKey: {clientID: 'foo'},
           },
           contents: {
@@ -267,7 +259,7 @@ describe('view-syncer/client-handler', () => {
           op: 'put',
           id: {
             schema: '',
-            table: 'zero_xyz.clients',
+            table: 'zapp_xyz.clients',
             rowKey: {clientID: 'foo'},
           },
           contents: {
@@ -311,7 +303,6 @@ describe('view-syncer/client-handler', () => {
         'pokePart',
         {
           pokeID: '121',
-          clientsPatch: [{clientID: 'baz', op: 'put'}],
           lastMutationIDChanges: {foo: 124},
           desiredQueriesPatches: {
             foo: [{op: 'del', hash: 'barhash'}],
@@ -353,11 +344,6 @@ describe('view-syncer/client-handler', () => {
         'pokePart',
         {
           pokeID: '121',
-          clientsPatch: [
-            {clientID: 'foo', op: 'put'},
-            {clientID: 'bar', op: 'put'},
-            {clientID: 'baz', op: 'put'},
-          ],
           lastMutationIDChanges: {
             bar: 321,
             foo: 124,
@@ -415,6 +401,7 @@ describe('view-syncer/client-handler', () => {
       'g1',
       'id1',
       'ws1',
+      APP_ID,
       SHARD_ID,
       '120',
       PROTOCOL_VERSION,
@@ -426,10 +413,6 @@ describe('view-syncer/client-handler', () => {
       {stateVersion: '121'},
       schemaVersions,
     );
-    poker.addPatch({
-      toVersion: {stateVersion: '121'},
-      patch: {type: 'client', op: 'put', id: 'foo'},
-    });
     poker.end({stateVersion: '121'});
 
     subscription.cancel();
@@ -460,7 +443,7 @@ describe('view-syncer/client-handler', () => {
       {
         type: 'row',
         op: 'put',
-        id: {schema: '', table: 'zero_xyz.clients', rowKey: {clientID: 'boo'}},
+        id: {schema: '', table: 'zapp_xyz.clients', rowKey: {clientID: 'boo'}},
         contents: {
           clientGroupID: 'g1',
           clientID: 'boo',
@@ -482,6 +465,7 @@ describe('view-syncer/client-handler', () => {
         'g1',
         'id1',
         'ws1',
+        APP_ID,
         SHARD_ID,
         '121',
         PROTOCOL_VERSION,

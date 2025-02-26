@@ -68,6 +68,7 @@ export class PipelineDriver {
   readonly #lc: LogContext;
   readonly #snapshotter: Snapshotter;
   readonly #storage: ClientGroupStorage;
+  readonly #appID: string;
   readonly #clientGroupID: string;
   readonly #logConfig: LogConfig;
   #tableSpecs: Map<string, LiteAndZqlSpec> | null = null;
@@ -78,12 +79,14 @@ export class PipelineDriver {
     lc: LogContext,
     logConfig: LogConfig,
     snapshotter: Snapshotter,
+    appID: string,
     storage: ClientGroupStorage,
     clientGroupID: string,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
     this.#snapshotter = snapshotter;
     this.#storage = storage;
+    this.#appID = appID;
     this.#clientGroupID = clientGroupID;
     this.#logConfig = logConfig;
   }
@@ -136,11 +139,15 @@ export class PipelineDriver {
   }
 
   /**
-   * Returns the current upstream zero.permissions, or `null` if none are defined.
+   * Returns the current upstream {app}.permissions, or `null` if none are defined.
    */
   currentPermissions(): LoadedPermissions {
     assert(this.initialized(), 'Not yet initialized');
-    return loadPermissions(this.#lc, this.#snapshotter.current().db);
+    return loadPermissions(
+      this.#lc,
+      this.#snapshotter.current().db,
+      this.#appID,
+    );
   }
 
   advanceWithoutDiff(): string {
@@ -201,11 +208,17 @@ export class PipelineDriver {
    * driver is {@link advance}d. The query and its pipeline can be removed with
    * {@link removeQuery()}.
    *
+   * If a query with an identical hash has already been added, this method
+   * is a no-op and no RowChanges are generated.
+   *
    * @return The rows from the initial hydration of the query.
    */
   *addQuery(hash: string, query: AST): Iterable<RowChange> {
     assert(this.initialized());
-    assert(!this.#pipelines.has(hash), `query ${hash} already added`);
+    if (this.#pipelines.has(hash)) {
+      this.#lc.info?.(`query ${hash} already added`, query);
+      return;
+    }
     const input = buildPipeline(query, {
       getSource: name => this.#getSource(name),
       createStorage: () => this.#createStorage(),
