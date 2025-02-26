@@ -1,4 +1,3 @@
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {TableSchema} from '../../zero-schema/src/table-schema.ts';
 import type {
@@ -24,7 +23,9 @@ export type CustomMutatorDefs<S extends Schema, TDBTransaction> = {
 
 export type CustomMutatorImpl<S extends Schema, TDBTransaction> = (
   tx: ServerTransaction<S, TDBTransaction>,
-  args: ReadonlyJSONValue,
+  // TODO: this should be `ReadOnlyJSONValue`, no?
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  args: any,
 ) => Promise<void>;
 
 type Options<

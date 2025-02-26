@@ -9,5 +9,5 @@
     },
     "declaration": true
   },
-  "include": ["."]
+  "include": [".", "../schema.ts", "../mutators.ts"]
 }

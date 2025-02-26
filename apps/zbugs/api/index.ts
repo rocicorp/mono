@@ -7,7 +7,6 @@ import Fastify, {type FastifyReply, type FastifyRequest} from 'fastify';
 import {SignJWT} from 'jose';
 import {nanoid} from 'nanoid';
 import postgres from 'postgres';
-import {createPushHandler} from '@rocicorp/zero/pg';
 
 declare module 'fastify' {
   interface FastifyInstance {
