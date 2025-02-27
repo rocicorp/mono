@@ -1,4 +1,4 @@
-import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
+import type {DiffOperation} from '../../../replicache/src/btree/node.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
@@ -83,7 +83,10 @@ export class ZeroContext implements QueryDelegate {
     return result as T;
   }
 
-  processChanges(changes: NoIndexDiff) {
+  processChanges(
+    changes: Iterable<DiffOperation<string>>,
+    changesApplied: () => void,
+  ) {
     this.batchViewUpdates(() => {
       try {
         for (const diff of changes) {
@@ -127,6 +130,7 @@ export class ZeroContext implements QueryDelegate {
               unreachable(diff);
           }
         }
+        changesApplied();
       } finally {
         this.#endTransaction();
       }

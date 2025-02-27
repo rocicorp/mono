@@ -76,7 +76,7 @@ import {refresh} from './persist/refresh.ts';
 import {ProcessScheduler} from './process-scheduler.ts';
 import type {Puller} from './puller.ts';
 import {type Pusher, PushError} from './pusher.ts';
-import type {ReplicacheOptions} from './replicache-options.ts';
+import type {ReplicacheOptions, ZeroOption} from './replicache-options.ts';
 import {
   getKVStoreProvider,
   httpStatusUnauthorized,
@@ -97,7 +97,6 @@ import {
 } from './subscriptions.ts';
 import * as HandlePullResponseResultEnum from './sync/handle-pull-response-result-type-enum.ts';
 import type {ClientGroupID, ClientID} from './sync/ids.ts';
-import type {Diff} from './sync/patch.ts';
 import {PullError} from './sync/pull-error.ts';
 import {beginPullV1, handlePullResponseV1, maybeEndPull} from './sync/pull.ts';
 import {push, PUSH_VERSION_DD31} from './sync/push.ts';
@@ -123,6 +122,7 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.ts';
+import type {DiffsMap} from './sync/diff.ts';
 
 declare const TESTING: boolean;
 
@@ -201,7 +201,7 @@ export interface ReplicacheImplOptions {
 }
 
 // eslint-disable-next-line @typescript-eslint/ban-types
-export class ReplicacheImpl<MD extends MutatorDefs = {}> {
+export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
   /** The URL to use when doing a pull request. */
   pullURL: string;
 
@@ -295,6 +295,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   readonly perdag: Store;
   readonly #idbDatabases: IDBDatabasesStore;
   readonly #lc: LogContext;
+  readonly #zero: ZeroOption<TZeroData> | undefined;
 
   readonly #closeAbortController = new AbortController();
 
@@ -387,7 +388,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   onRecoverMutations = (r: Promise<boolean>) => r;
 
   constructor(
-    options: ReplicacheOptions<MD>,
+    options: ReplicacheOptions<MD, TZeroData>,
     implOptions: ReplicacheImplOptions = {},
   ) {
     validateOptions(options);
@@ -416,6 +417,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       enableClientGroupForking = true,
       onClientsDeleted = () => {},
     } = implOptions;
+    this.#zero = options.zero;
     this.auth = auth ?? '';
     this.pullURL = pullURL;
     this.pushURL = pushURL;
@@ -555,6 +557,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
     // Now we have a profileID, a clientID, a clientGroupID and DB!
     resolveReady();
+    await this.#zero?.init?.(headHash, this.memdag);
 
     if (this.#enablePullAndPushInOpen) {
       this.pull().catch(noop);
@@ -746,7 +749,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       const lc = this.#lc
         .withContext('maybeEndPull')
         .withContext('requestID', requestID);
-      const {replayMutations, diffs} = await maybeEndPull<LocalMeta>(
+      const {replayMutations, diffs, mainHead} = await maybeEndPull<LocalMeta>(
         this.memdag,
         lc,
         syncHead,
@@ -757,12 +760,20 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
       if (!replayMutations || replayMutations.length === 0) {
         // All done.
+        await this.#zero?.advance(mainHead, diffs.get('') ?? []);
         await this.#subscriptions.fire(diffs);
         void this.#schedulePersist();
         return;
       }
 
       // Replay.
+      const zeroData = await this.#zero?.getTxData?.(
+        'pullEnd',
+        mainHead, // TODO: this expected head is wrong since we don't advance to mainHead in all cases
+        // only when no replay mutations exist...
+        syncHead,
+        undefined,
+      );
       for (const mutation of replayMutations) {
         // TODO(greg): I'm not sure why this was in Replicache#_mutate...
         // Ensure that we run initial pending subscribe functions before starting a
@@ -781,6 +792,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
             lc,
             isLocalMetaDD31(meta) ? meta.clientID : clientID,
             FormatVersion.Latest,
+            zeroData,
           ),
         );
       }
@@ -1058,14 +1070,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    *
    * @experimental This method is under development and its semantics will change.
    */
-  async poke(
-    poke: PokeInternal,
-    pullApplied: (
-      store: Store,
-      syncHead: Hash,
-      patches: readonly Diff[],
-    ) => Promise<void>,
-  ): Promise<void> {
+  async poke(poke: PokeInternal): Promise<void> {
     await this.#ready;
     // TODO(MP) Previously we created a request ID here and included it with the
     // PullRequest to the server so we could tie events across client and server
@@ -1101,10 +1106,10 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     );
 
     switch (result.type) {
-      case HandlePullResponseResultEnum.Applied:
-        await pullApplied(this.memdag, result.syncHead, result.diffs);
+      case HandlePullResponseResultEnum.Applied: {
         await this.maybeEndPull(result.syncHead, requestID);
         break;
+      }
       case HandlePullResponseResultEnum.CookieMismatch:
         throw new Error(
           'unexpected base cookie for poke: ' + JSON.stringify(poke),
@@ -1176,6 +1181,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           this.#mutatorRegistry,
           () => this.#closed,
           FormatVersion.Latest,
+          this.#zero?.getTxData,
         );
       } catch (e) {
         if (e instanceof ClientStateNotFoundError) {
@@ -1199,9 +1205,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     if (this.#closed) {
       return;
     }
-    let diffs;
+    let refreshResult: [Hash, DiffsMap] | undefined;
     try {
-      diffs = await refresh(
+      refreshResult = await refresh(
         this.#lc,
         this.memdag,
         this.perdag,
@@ -1210,6 +1216,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         this.#subscriptions,
         () => this.closed,
         FormatVersion.Latest,
+        this.#zero,
       );
     } catch (e) {
       if (e instanceof ClientStateNotFoundError) {
@@ -1220,8 +1227,12 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         throw e;
       }
     }
-    if (diffs !== undefined) {
-      await this.#subscriptions.fire(diffs);
+    if (refreshResult !== undefined) {
+      await this.#zero?.advance(
+        refreshResult[0],
+        refreshResult[1].get('') ?? [],
+      );
+      await this.#subscriptions.fire(refreshResult[1]);
     }
   }
 
@@ -1490,13 +1501,14 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           clientID,
           await dbWrite.getMutationID(),
           'initial',
+          await this.#zero?.getTxData('initial', headHash, headHash, dagWrite),
           dbWrite,
           this.#lc,
         );
         const result: R = await mutatorImpl(tx, args);
         throwIfClosed(dbWrite);
         const lastMutationID = await dbWrite.getMutationID();
-        const diffs = await dbWrite.commitWithDiffs(
+        const [diffs, newHead] = await dbWrite.commitWithDiffs(
           DEFAULT_HEAD_NAME,
           this.#subscriptions,
         );
@@ -1506,6 +1518,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
         // Send is not supposed to reject
         this.#pushConnectionLoop.send(false).catch(() => void 0);
+        await this.#zero?.advance(newHead, diffs.get('') ?? []);
         await this.#subscriptions.fire(diffs);
         void this.#schedulePersist();
         return result;

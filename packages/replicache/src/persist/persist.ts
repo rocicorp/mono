@@ -36,6 +36,7 @@ import {
   setClient,
 } from './clients.ts';
 import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.ts';
+import type {ZeroOption} from '../replicache-options.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 
@@ -65,6 +66,7 @@ export async function persistDD31(
   mutators: MutatorDefs,
   closed: () => boolean,
   formatVersion: FormatVersion,
+  getZeroData: ZeroOption<unknown>['getTxData'] | undefined,
   onGatherMemOnlyChunksForTest = () => Promise.resolve(),
 ): Promise<void> {
   if (closed()) {
@@ -103,45 +105,76 @@ export async function persistDD31(
   if (closed()) {
     return;
   }
-  const [newMemdagMutations, memdagBaseSnapshot, gatheredChunks] =
-    await withRead(memdag, async memdagRead => {
-      const memdagHeadCommit = await commitFromHead(
-        DEFAULT_HEAD_NAME,
-        memdagRead,
-      );
-      const newMutations = await localMutationsGreaterThan(
-        memdagHeadCommit,
-        {[clientID]: perdagLMID || 0},
-        memdagRead,
-      );
-      const memdagBaseSnapshot = await baseSnapshotFromCommit(
-        memdagHeadCommit,
-        memdagRead,
-      );
-      assertSnapshotCommitDD31(memdagBaseSnapshot);
+  const [
+    newMemdagMutations,
+    memdagBaseSnapshot,
+    gatheredChunks,
+    memdagHeadCommit,
+  ] = await withRead(memdag, async memdagRead => {
+    const memdagHeadCommit = await commitFromHead(
+      DEFAULT_HEAD_NAME,
+      memdagRead,
+    );
+    const newMutations = await localMutationsGreaterThan(
+      memdagHeadCommit,
+      {[clientID]: perdagLMID || 0},
+      memdagRead,
+    );
+    const memdagBaseSnapshot = await baseSnapshotFromCommit(
+      memdagHeadCommit,
+      memdagRead,
+    );
+    assertSnapshotCommitDD31(memdagBaseSnapshot);
 
-      let gatheredChunks: ReadonlyMap<Hash, Chunk> | undefined;
-      if (
-        compareCookiesForSnapshots(memdagBaseSnapshot, perdagBaseSnapshot) > 0
-      ) {
-        await onGatherMemOnlyChunksForTest();
-        // Might need to persist snapshot, we will have to double check
-        // after gathering the snapshot chunks from memdag
-        const memdagBaseSnapshotHash = memdagBaseSnapshot.chunk.hash;
-        // Gather all memory only chunks from base snapshot on the memdag.
-        const visitor = new GatherMemoryOnlyVisitor(memdagRead);
-        await visitor.visit(memdagBaseSnapshotHash);
-        gatheredChunks = visitor.gatheredChunks;
-      }
+    let gatheredChunks: ReadonlyMap<Hash, Chunk> | undefined;
+    if (
+      compareCookiesForSnapshots(memdagBaseSnapshot, perdagBaseSnapshot) > 0
+    ) {
+      await onGatherMemOnlyChunksForTest();
+      // Might need to persist snapshot, we will have to double check
+      // after gathering the snapshot chunks from memdag
+      const memdagBaseSnapshotHash = memdagBaseSnapshot.chunk.hash;
+      // Gather all memory only chunks from base snapshot on the memdag.
+      const visitor = new GatherMemoryOnlyVisitor(memdagRead);
+      await visitor.visit(memdagBaseSnapshotHash);
+      gatheredChunks = visitor.gatheredChunks;
+    }
 
-      return [newMutations, memdagBaseSnapshot, gatheredChunks];
-    });
+    return [newMutations, memdagBaseSnapshot, gatheredChunks, memdagHeadCommit];
+  });
 
   if (closed()) {
     return;
   }
 
+  // TODO: do memdag reads outside of perdag withWrite tx.
+  // or perdag write nested in memdag read possible?
+
+  // option 1:
+  // - do the diff against memdagBaseSnapshot outside the `withWrite`
+  //   this works for the case where the memdagSnapshot is newer than perdag.
+  //
+  // Then comes the case where the memdagSnapshot is equal or less than
+  // the perdag snapshot.
+  //
+  // Problem:
+  // We need to read from memdag within a perdag idb transaction
+  // so that the perdag does not move forward while calculating the new IVM head
+  // - We can busy loop creating heads and entering perdag tx until the
+  // bases match.
+  // -
+
   let memdagBaseSnapshotPersisted = false;
+  const zeroDataFromMemdagBaseSnapshot =
+    getZeroData === undefined
+      ? undefined
+      : await getZeroData(
+          'persist',
+          memdagHeadCommit.chunk.hash,
+          memdagBaseSnapshot.chunk.hash,
+          undefined,
+        );
+
   await withWrite(perdag, async perdagWrite => {
     const [mainClientGroup, latestPerdagMainClientGroupHeadCommit] =
       await getClientGroupInfo(perdagWrite, mainClientGroupID);
@@ -209,9 +242,25 @@ export async function persistDD31(
           mutationIDs,
           lc,
           formatVersion,
+          zeroDataFromMemdagBaseSnapshot,
         );
       }
     }
+
+    let zeroDataFromPerdagBaseSnapshot: unknown;
+    if (!memdagBaseSnapshotPersisted) {
+      zeroDataFromPerdagBaseSnapshot =
+        getZeroData === undefined
+          ? undefined
+          : await getZeroData(
+              'persist',
+              memdagHeadCommit.chunk.hash,
+              newMainClientGroupHeadHash,
+              undefined,
+              perdagWrite,
+            );
+    }
+
     // rebase new memdag mutations onto perdag
     newMainClientGroupHeadHash = await rebase(
       newMemdagMutations,
@@ -221,6 +270,7 @@ export async function persistDD31(
       mutationIDs,
       lc,
       formatVersion,
+      zeroDataFromPerdagBaseSnapshot,
     );
 
     const newMainClientGroup = {
@@ -257,6 +307,7 @@ async function rebase(
   mutationIDs: Record<ClientID, number>,
   lc: LogContext,
   formatVersion: FormatVersion,
+  zeroData: unknown | undefined,
 ): Promise<Hash> {
   for (let i = mutations.length - 1; i >= 0; i--) {
     const mutationCommit = mutations[i];
@@ -276,6 +327,7 @@ async function rebase(
           lc,
           meta.clientID,
           formatVersion,
+          zeroData,
         )
       ).chunk.hash;
     }

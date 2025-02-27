@@ -1,6 +1,5 @@
 import {LogContext, type LogLevel} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
-import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import {
   ReplicacheImpl,
   type ReplicacheImplOptions,
@@ -87,6 +86,7 @@ import type {
   CustomMutatorDefs,
   CustomMutatorImpl,
   MakeCustomMutatorInterfaces,
+  RepTxZeroData,
 } from './custom.ts';
 import {makeReplicacheMutator} from './custom.ts';
 import {DeleteClientsManager} from './delete-clients-manager.ts';
@@ -98,7 +98,6 @@ import {
   toWSString,
 } from './http-string.ts';
 import {IVMSourceRepo} from './ivm-source-repo.ts';
-import {ENTITIES_KEY_PREFIX} from './keys.ts';
 import {type LogOptions, createLogOptions} from './log-options.ts';
 import {
   DID_NOT_CONNECT_VALUE,
@@ -130,6 +129,9 @@ import {
 import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
+import type {WriteTransaction} from './replicache-types.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {ZeroRep} from './zero-rep.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -454,13 +456,25 @@ export class Zero<
         mutatorsForNamespace as Record<string, CustomMutatorImpl<Schema>>,
       )) {
         (replicacheMutators as MutatorDefs)[customMutatorKey(namespace, name)] =
-          makeReplicacheMutator(mutator, schema, this.#ivmSources);
+          makeReplicacheMutator(mutator, schema) as (
+            repTx: WriteTransaction,
+            args: ReadonlyJSONValue,
+          ) => Promise<void>;
       }
     }
 
     this.storageKey = storageKey ?? '';
 
-    const replicacheOptions: ReplicacheOptions<WithCRUD<MutatorDefs>> = {
+    this.#zeroContext = new ZeroContext(
+      this.#ivmSources.main,
+      (ast, ttl, gotCallback) => this.#queryManager.add(ast, ttl, gotCallback),
+      batchViewUpdates,
+    );
+
+    const replicacheOptions: ReplicacheOptions<
+      WithCRUD<MutatorDefs>,
+      RepTxZeroData
+    > = {
       // The schema stored in IDB is dependent upon both the application schema
       // and the AST schema (i.e. PROTOCOL_VERSION).
       schemaVersion: `${schema.version}.${PROTOCOL_VERSION}`,
@@ -477,6 +491,7 @@ export class Zero<
       },
       licenseKey: 'zero-client-static-key',
       kvStore,
+      zero: new ZeroRep(this.#zeroContext, this.#ivmSources),
     };
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
@@ -567,20 +582,6 @@ export class Zero<
       this.#lc,
     );
 
-    this.#zeroContext = new ZeroContext(
-      this.#ivmSources.main,
-      (ast, ttl, gotCallback) => this.#queryManager.add(ast, ttl, gotCallback),
-      batchViewUpdates,
-    );
-
-    rep.experimentalWatch(
-      diff => this.#zeroContext.processChanges(diff as NoIndexDiff),
-      {
-        prefix: ENTITIES_KEY_PREFIX,
-        initialValuesInFirstDiff: true,
-      },
-    );
-
     this.query = this.#registerQueries(schema);
 
     reportReloadReason(this.#lc);
@@ -597,7 +598,7 @@ export class Zero<
     this.#metrics.tags.push(`version:${this.version}`);
 
     this.#pokeHandler = new PokeHandler(
-      poke => this.#rep.poke(poke, this.#ivmSources.advanceSyncHead),
+      poke => this.#rep.poke(poke),
       () => this.#onPokeError(),
       rep.clientID,
       schema,

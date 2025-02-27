@@ -1,0 +1,91 @@
+import type {
+  InternalDiff,
+  InternalDiffOperation,
+} from '../../../replicache/src/btree/node.ts';
+import type {Read} from '../../../replicache/src/dag/store.ts';
+import {readFromHash} from '../../../replicache/src/db/read.ts';
+import type {Hash} from '../../../replicache/src/hash.ts';
+import {withRead} from '../../../replicache/src/with-transactions.ts';
+import type {ZeroContext} from './context.ts';
+import * as FormatVersion from '../../../replicache/src/format-version-enum.ts';
+import type {IVMSourceBranch, IVMSourceRepo} from './ivm-source-repo.ts';
+import {ENTITIES_KEY_PREFIX} from './keys.ts';
+import {must} from '../../../shared/src/must.ts';
+import type {DetailedReason} from '../../../replicache/src/transactions.ts';
+import {diffBinarySearch} from '../../../replicache/src/subscriptions.ts';
+import type {LazyStore} from '../../../replicache/src/dag/lazy-store.ts';
+
+export class ZeroRep {
+  readonly #context: ZeroContext;
+  readonly #ivmSources: IVMSourceRepo;
+  #store: LazyStore | undefined;
+
+  constructor(context: ZeroContext, ivmSources: IVMSourceRepo) {
+    this.#context = context;
+    this.#ivmSources = ivmSources;
+  }
+
+  async init(hash: Hash, store: LazyStore) {
+    const diffs: InternalDiffOperation[] = [];
+    await withRead(store, async dagRead => {
+      const read = await readFromHash(hash, dagRead, FormatVersion.Latest);
+      for await (const entry of read.map.scan(ENTITIES_KEY_PREFIX)) {
+        if (!entry[0].startsWith(ENTITIES_KEY_PREFIX)) {
+          break;
+        }
+        diffs.push({
+          op: 'add',
+          key: entry[0],
+          newValue: entry[1],
+        });
+      }
+    });
+    this.#store = store;
+
+    this.#context.processChanges(diffs, () => {
+      this.#ivmSources.main.hash = hash;
+      this.#ivmSources.main.resolveReady();
+    });
+  }
+
+  getTxData = async (
+    reason: DetailedReason,
+    expectedHead: Hash,
+    desiredHead: Hash,
+    read: Read | undefined,
+    sourceRead?: Read | undefined,
+  ): Promise<IVMSourceBranch> => {
+    await this.#ivmSources.main.ready;
+    return this.#ivmSources.getSourcesForTransaction(
+      reason,
+      must(this.#store),
+      expectedHead,
+      desiredHead,
+      read,
+      sourceRead,
+    );
+  };
+
+  advance = async (hash: Hash, diffs: InternalDiff): Promise<void> => {
+    await this.#ivmSources.main.ready;
+    // console.log('advanced to', hash);
+    this.#context.processChanges(
+      entityDiffs(diffs),
+      () => (this.#ivmSources.main.hash = hash),
+    );
+  };
+}
+
+function* entityDiffs(diffs: InternalDiff) {
+  for (
+    let i = diffBinarySearch(diffs, ENTITIES_KEY_PREFIX, diff => diff.key);
+    i < diffs.length;
+    i++
+  ) {
+    if (diffs[i].key.startsWith(ENTITIES_KEY_PREFIX)) {
+      yield diffs[i];
+    } else {
+      break;
+    }
+  }
+}
