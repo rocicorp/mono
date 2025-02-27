@@ -15,7 +15,7 @@ import {
 } from '../../../../zqlite/src/runtime-debug.ts';
 import {TableSource} from '../../../../zqlite/src/table-source.ts';
 import {
-  loadPermissions,
+  reloadPermissionsIfChanged,
   type LoadedPermissions,
 } from '../../auth/load-permissions.ts';
 import type {LogConfig} from '../../config/zero-config.ts';
@@ -74,6 +74,7 @@ export class PipelineDriver {
   #tableSpecs: Map<string, LiteAndZqlSpec> | null = null;
   #streamer: Streamer | null = null;
   #replicaVersion: string | null = null;
+  #permissions: LoadedPermissions | null = null;
 
   constructor(
     lc: LogContext,
@@ -141,13 +142,22 @@ export class PipelineDriver {
   /**
    * Returns the current upstream {app}.permissions, or `null` if none are defined.
    */
-  currentPermissions(): LoadedPermissions {
+  currentPermissions(): LoadedPermissions | null {
     assert(this.initialized(), 'Not yet initialized');
-    return loadPermissions(
+    const res = reloadPermissionsIfChanged(
       this.#lc,
       this.#snapshotter.current().db,
       this.#appID,
+      this.#permissions,
     );
+    if (res.changed) {
+      this.#permissions = res.permissions;
+      this.#lc.debug?.(
+        'Reloaded permissions',
+        JSON.stringify(this.#permissions),
+      );
+    }
+    return this.#permissions;
   }
 
   advanceWithoutDiff(): string {

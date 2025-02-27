@@ -33,11 +33,9 @@ export function transformAndHashQuery(
   lc.debug?.(
     `read authorizer transformed query ${JSON.stringify(
       query,
-    )} to ${JSON.stringify(
-      transformed,
-    )} using PermissionsConfig ${JSON.stringify(
-      permissionRules,
-    )} and authData ${JSON.stringify(authData)}`,
+    )} to ${JSON.stringify(transformed)} and authData ${JSON.stringify(
+      authData,
+    )}`,
   );
   return {
     query: transformed,

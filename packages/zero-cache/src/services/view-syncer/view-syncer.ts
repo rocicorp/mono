@@ -29,7 +29,6 @@ import type {
 } from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
-import type {LoadedPermissions} from '../../auth/load-permissions.ts';
 import {transformAndHashQuery} from '../../auth/read-authorizer.ts';
 import {stringify} from '../../types/bigint-json.ts';
 import {ErrorForClient, getLogLevel} from '../../types/error-for-client.ts';
@@ -129,7 +128,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
   #authData: JWTPayload | undefined;
-  #permissions: LoadedPermissions | null = null; // Guaranteed if #pipelinesSynced.
 
   constructor(
     lc: LogContext,
@@ -239,7 +237,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
           // stateVersion is at or beyond CVR version for the first time.
           lc.info?.(`init pipelines@${version} (cvr@${cvrVer})`);
-          this.#permissions = this.#pipelines.currentPermissions();
           this.#hydrateUnchangedQueries(lc, cvr);
           await this.#syncQueryPipelineSet(lc, cvr);
           this.#pipelinesSynced = true;
@@ -665,7 +662,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         transformAndHashQuery(
           lc,
           ast,
-          must(this.#permissions).permissions ?? {tables: {}},
+          must(this.#pipelines.currentPermissions()).permissions ?? {
+            tables: {},
+          },
           this.#authData,
           query.internal,
         );
@@ -710,7 +709,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         const {query, hash: transformationHash} = transformAndHashQuery(
           lc,
           q.ast,
-          must(this.#permissions).permissions ?? {tables: {}},
+          must(this.#pipelines.currentPermissions()).permissions ?? {
+            tables: {},
+          },
           this.#authData,
           q.internal,
         );
