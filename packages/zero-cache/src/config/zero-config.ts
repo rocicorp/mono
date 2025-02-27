@@ -195,7 +195,7 @@ export const zeroOptions = {
     },
 
     maxConns: {
-      type: v.number().default(1),
+      type: v.number().default(5),
       desc: [
         `The maximum number of connections to open to the change database.`,
         `This is used by the {bold change-streamer} for catching up`,

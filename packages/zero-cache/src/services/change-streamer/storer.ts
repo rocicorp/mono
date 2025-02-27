@@ -306,10 +306,8 @@ export class Storer implements Service {
             } ms)`,
           );
         } else {
-          const [{lastWatermark}] = await this.#db<{lastWatermark: string}[]>`
-            SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}`;
           this.#lc.warn?.(
-            `subscriber at watermark ${sub.watermark} is ahead of latest watermark: ${lastWatermark}`,
+            `subscriber at watermark ${sub.watermark} is ahead of latest watermark`,
           );
         }
         // Flushes the backlog of messages buffered during catchup and
