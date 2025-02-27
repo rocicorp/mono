@@ -128,6 +128,7 @@ export class IVMSourceRepo {
     }
 
     // Set the branch which can be used for rebasing optimistic mutations.
+    console.log('FORKING SYNC HEAD FOR REBASE');
     this.#rebase = must(this.#sync).fork();
   };
 }

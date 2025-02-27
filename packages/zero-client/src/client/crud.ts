@@ -276,6 +276,7 @@ export async function insertImpl(
     );
     await tx.set(key, val);
     if (ivmBranch) {
+      console.log('REBASING', arg.value);
       must(ivmBranch.getSource(arg.tableName)).push({
         type: 'add',
         row: arg.value,
