@@ -85,3 +85,21 @@ jobs:
           cd prod/sst
           npm install
           npx sst deploy --stage gigabugs-ebs
+      - name: Deploy SST app non ebs
+        env:
+          ZERO_SHARD_ID: '1'
+          ZERO_UPSTREAM_DB: ${{ secrets.GIGABUGS_ZERO_UPSTREAM_DB }}
+          ZERO_CVR_DB: ${{ secrets.GIGABUGS_ZERO_CVR_DB }}2
+          ZERO_CHANGE_DB: ${{ secrets.GIGABUGS_ZERO_CHANGE_DB }}2
+          ZERO_AUTH_SECRET: ${{ secrets.GIGABUGS_ZERO_JWT_SECRET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ vars.AWS_DEFAULT_REGION }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          ZERO_IMAGE_URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_DEFAULT_REGION }}.amazonaws.com/${{ env.ECR_IMAGE_ZERO_CACHE }}:${{ env.SHA }}
+          DOMAIN_NAME: 'zgigabugs2-sync.rocicorp.dev'
+          DOMAIN_CERT: 'arn:aws:acm:us-east-1:712907626835:certificate/b0dd8b0b-2007-42e7-b61d-6573b571b19c'
+        run: |
+          cd prod/sst
+          npm install
+          npx sst deploy --stage gigabugs

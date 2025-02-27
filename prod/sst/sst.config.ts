@@ -67,6 +67,7 @@ export default $config({
         : "sync-replica.db",
       ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250219-01`,
       ZERO_IMAGE_URL: process.env.ZERO_IMAGE_URL!,
+      ZERO_SHARD_ID: process.env.ZERO_SHARD_ID || "0",
     };
 
     const ecsVolumeRole = IS_EBS_STAGE
