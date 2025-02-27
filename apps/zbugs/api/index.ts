@@ -7,6 +7,8 @@ import Fastify, {type FastifyReply, type FastifyRequest} from 'fastify';
 import {SignJWT} from 'jose';
 import {nanoid} from 'nanoid';
 import postgres from 'postgres';
+import {pushHandler} from './push.ts';
+import type {ReadonlyJSONObject} from '@rocicorp/zero';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -99,6 +101,16 @@ fastify.get<{
     .redirect(
       request.query.redirect ? decodeURIComponent(request.query.redirect) : '/',
     );
+});
+
+fastify.post('/api/push', async function (request, reply) {
+  const response = await pushHandler(
+    {
+      authorization: request.headers.authorization,
+    },
+    request.body as ReadonlyJSONObject,
+  );
+  reply.send(response);
 });
 
 export default async function handler(
