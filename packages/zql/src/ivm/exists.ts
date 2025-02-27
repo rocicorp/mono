@@ -145,6 +145,10 @@ export class Exists implements Operator {
             }
             if (size === 1) {
               if (this.#not) {
+                // Since the add child change currently being processed is not
+                // pushed to output, the added child needs to be excluded from
+                // the remove being pushed to output (since the child has
+                // never been added to the output).
                 this.#output.push({
                   type: 'remove',
                   node: {
@@ -187,6 +191,9 @@ export class Exists implements Operator {
                   node: change.node,
                 });
               } else {
+                // Since the remove child change currently being processed is
+                // not pushed to output, the removed child needs to be added to
+                // the remove being pushed to output.
                 this.#output.push({
                   type: 'remove',
                   node: {
