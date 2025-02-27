@@ -115,6 +115,7 @@ export async function createAndPersistClientWithPendingLocalDD31({
     mutators,
     () => false,
     formatVersion,
+    undefined,
   );
 
   return localMetas;
@@ -157,6 +158,7 @@ export async function persistSnapshotDD31(
     mutators,
     () => false,
     formatVersion,
+    undefined,
   );
 }
 
