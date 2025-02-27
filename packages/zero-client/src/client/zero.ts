@@ -511,8 +511,14 @@ export class Zero<
     this.#rep.onClientStateNotFound = onClientStateNotFoundCallback;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const {mutate, mutateBatch} = makeCRUDMutate<S>(schema, rep.mutate) as any;
+    let {mutate, mutateBatch} = makeCRUDMutate<S>(schema, rep.mutate) as any;
 
+    // custom mutators are incompatible with CRUD mutators.
+    // CRUD mutators are to be removed in a future release.
+    if (options.mutators) {
+      mutate = {};
+      mutateBatch = undefined;
+    }
     for (const [namespace, mutatorsForNamespace] of Object.entries(
       options.mutators ?? {},
     )) {
@@ -684,7 +690,7 @@ export class Zero<
    * ```
    */
   readonly mutate: MD extends CustomMutatorDefs<S>
-    ? DBMutator<S> & MakeCustomMutatorInterfaces<S, MD>
+    ? MakeCustomMutatorInterfaces<S, MD>
     : DBMutator<S>;
 
   /**
