@@ -9,6 +9,7 @@
     "src/build-schema.ts",
     "src/zero-cache-dev.ts",
     "src/deploy-permissions.ts",
-    "src/change-protocol/*"
+    "src/change-protocol/*",
+    "src/pg.ts"
   ]
 }
