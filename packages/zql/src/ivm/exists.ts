@@ -144,19 +144,27 @@ export class Exists implements Operator {
               size = this.#fetchSize(change.node);
             }
             if (size === 1) {
-              const type = this.#not ? 'remove' : 'add';
-              // The node for the remove pushed below will contain the child
-              // added by this change in its
-              // relationships[this.#relationshipName],
-              // so this child add needs to be sent first.  This balance
-              // is important for outputs doing ref counting,
-              if (type === 'remove') {
-                this.#output.push(change);
+              if (this.#not) {
+                // Since the add child change currently being processed is not
+                // pushed to output, the added child needs to be excluded from
+                // the remove being pushed to output (since the child has
+                // never been added to the output).
+                this.#output.push({
+                  type: 'remove',
+                  node: {
+                    row: change.node.row,
+                    relationships: {
+                      ...change.node.relationships,
+                      [this.#relationshipName]: () => [],
+                    },
+                  },
+                });
+              } else {
+                this.#output.push({
+                  type: 'add',
+                  node: change.node,
+                });
               }
-              this.#output.push({
-                type,
-                node: change.node,
-              });
             } else {
               this.#pushWithFilter(change, size);
             }
@@ -177,18 +185,28 @@ export class Exists implements Operator {
               size = this.#fetchSize(change.node);
             }
             if (size === 0) {
-              const type = this.#not ? 'add' : 'remove';
-              // The node for the remove pushed below will not contain the child
-              // removed by this change in its
-              // relationships[this.#relationshipName],
-              // so this child remove needs to be sent.
-              if (type === 'remove') {
-                this.#output.push(change);
+              if (this.#not) {
+                this.#output.push({
+                  type: 'add',
+                  node: change.node,
+                });
+              } else {
+                // Since the remove child change currently being processed is
+                // not pushed to output, the removed child needs to be added to
+                // the remove being pushed to output.
+                this.#output.push({
+                  type: 'remove',
+                  node: {
+                    row: change.node.row,
+                    relationships: {
+                      ...change.node.relationships,
+                      [this.#relationshipName]: () => [
+                        change.child.change.node,
+                      ],
+                    },
+                  },
+                });
               }
-              this.#output.push({
-                type,
-                node: change.node,
-              });
             } else {
               this.#pushWithFilter(change, size);
             }
