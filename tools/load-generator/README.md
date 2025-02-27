@@ -5,6 +5,7 @@ This tool generates load against a Zero database by making random updates to spe
 ## Building the Docker Image
 
 To build the Docker image for the load generator:
+
 ```bash
 # From the root of the repository
 docker build -t load-generator -f tools/load-generator/Dockerfile .
@@ -28,14 +29,14 @@ docker run -e ZERO_UPSTREAM_DB="postgresql://user:password@host.docker.internal:
 
 The load generator accepts the following environment variables:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `ZERO_UPSTREAM_DB` | Connection string for the PostgreSQL database | Required |
-| `ZERO_QPS` | Queries per second to generate | `20` |
-| `ZERO_PERTURB_TABLE` | Table to modify | Required |
-| `ZERO_PERTURB_KEY` | Primary key column name | Required |
-| `ZERO_PERTURB_BOOLS` | Comma-separated list of boolean columns to toggle | Optional |
-| `ZERO_PERTURB_INTS` | Comma-separated list of integer columns to increment | Optional |
+| Variable             | Description                                          | Default  |
+| -------------------- | ---------------------------------------------------- | -------- |
+| `ZERO_UPSTREAM_DB`   | Connection string for the PostgreSQL database        | Required |
+| `ZERO_QPS`           | Queries per second to generate                       | `20`     |
+| `ZERO_PERTURB_TABLE` | Table to modify                                      | Required |
+| `ZERO_PERTURB_KEY`   | Primary key column name                              | Required |
+| `ZERO_PERTURB_BOOLS` | Comma-separated list of boolean columns to toggle    | Optional |
+| `ZERO_PERTURB_INTS`  | Comma-separated list of integer columns to increment | Optional |
 
 ## Examples
 
