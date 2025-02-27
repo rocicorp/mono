@@ -48,7 +48,6 @@ export function loadPermissions(
       {cause: e},
     );
   }
-  lc.debug?.(`Loaded permissions (hash: ${hash})`);
   return {permissions: parsed, hash};
 }
 
