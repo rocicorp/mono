@@ -10,6 +10,12 @@ import {must} from '../../../shared/src/must.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Diff} from '../../../replicache/src/sync/patch.ts';
 import {readFromHash} from '../../../replicache/src/db/read.ts';
+import type {TransactionReason} from '../../../replicache/src/transactions.ts';
+import type {RepTxZeroData} from './custom.ts';
+import {diff} from '../../../replicache/src/sync/diff.ts';
+import type {MaybePromise} from '../../../shared/src/types.ts';
+import {Lock} from '@rocicorp/lock';
+import {assert} from '../../../shared/src/asserts.ts';
 
 /**
  * Provides handles to IVM sources at different heads.
@@ -20,33 +26,163 @@ import {readFromHash} from '../../../replicache/src/db/read.ts';
 export class IVMSourceRepo {
   readonly #main: IVMSourceBranch;
   readonly #tables: Record<string, TableSchema>;
+
+  // We have a lock here because `refresh` and `maybePullEnd` could both
+  // be running simultaneously. We don't want to create the sync head twice.
+  readonly #initSyncHeadLock: Lock;
+
   /**
    * Sync is lazily created when the first response from the server is received.
    */
-  #sync: IVMSourceBranch | undefined;
-  /**
-   * Rebase is created when the sync head is advanced and points to a fork
-   * of the sync head. This is used to rebase optimistic mutations.
-   */
-  #rebase: IVMSourceBranch | undefined;
+  #sync: IVMSyncBranch | undefined;
 
   constructor(tables: Record<string, TableSchema>) {
-    this.#main = new IVMSourceBranch(tables);
+    this.#main = new IVMSourceBranch(tables, undefined);
     this.#tables = tables;
+    this.#initSyncHeadLock = new Lock();
   }
 
   get main() {
     return this.#main;
   }
 
-  /**
-   * Used for reads in `zero.TransactionImpl`.
-   * Writes in `zero.TransactionImpl` also get applied to the rebase branch.
-   *
-   * The rebase branch is always forked off of the sync branch when a rebase begins.
-   */
-  get rebase() {
-    return must(this.#rebase, 'rebase branch does not exist!');
+  getSourcesForTransaction(
+    reason: TransactionReason,
+    customHead:
+      | {
+          store: Store;
+          hash: Hash;
+        }
+      | undefined,
+  ): MaybePromise<RepTxZeroData> {
+    if (reason === 'initial') {
+      // Mutators read from main and do not write to main for `initial` mutations.
+      // Main is updated via `experimentalWatch` between each mutation.
+      // There is no concept of running many custom mutators in the same transaction at the moment.
+      // If that changes we'll have to revisit.
+      return {
+        read: this.#main,
+        write: undefined,
+      };
+    }
+
+    if (reason === 'rebase') {
+      if (customHead === undefined) {
+        const forked = must(this.#sync, 'sync head does not yet exist').fork();
+        return {
+          read: forked,
+          write: forked,
+        };
+      }
+
+      return this.#createSourcesForRefresh(customHead);
+    }
+
+    throw new Error(
+      'Authoritative transaction is being run on the client. This is impossible.',
+    );
+  }
+
+  async #createSourcesForRefresh({
+    store,
+    hash,
+  }: {
+    store: Store;
+    hash: Hash;
+  }): Promise<RepTxZeroData> {
+    if (this.#sync === undefined) {
+      await this.#initSyncHead(store, hash);
+    }
+    assert(this.#sync !== undefined);
+    // fork sync now so it cannot change while
+    // we await the diffs.
+    const fork = this.#sync.fork();
+
+    const diffsFromSync = await withRead(store, async dagRead => {
+      const head = await dagRead.getHead(must(fork.hash));
+      return diff(
+        must(head, 'could not find sync head'),
+        hash,
+        dagRead,
+        {
+          shouldComputeDiffs: () => true,
+          shouldComputeDiffsForIndex(_name) {
+            return false;
+          },
+        },
+        FormatVersion.Latest,
+      );
+    });
+
+    const diffs = diffsFromSync.get('');
+    if (diffs === undefined) {
+      return {read: fork, write: fork};
+    }
+
+    for (const patch of diffs) {
+      if (!patch.key.startsWith(ENTITIES_KEY_PREFIX)) {
+        continue;
+      }
+
+      const name = sourceNameFromKey(patch.key);
+      const source = must(fork.getSource(name));
+      switch (patch.op) {
+        case 'add': {
+          source.push({
+            type: 'add',
+            row: patch.newValue as Row,
+          });
+          break;
+        }
+        case 'change': {
+          source.push({
+            type: 'edit',
+            row: patch.newValue as Row,
+            oldRow: patch.oldValue as Row,
+          });
+          break;
+        }
+        case 'del': {
+          source.push({
+            type: 'remove',
+            row: patch.oldValue as Row,
+          });
+          break;
+        }
+      }
+    }
+
+    return {read: fork, write: fork};
+  }
+
+  async #initSyncHead(store: Store, syncHeadHash: Hash) {
+    await this.#initSyncHeadLock.withLock(async () => {
+      if (this.#sync !== undefined) {
+        // sync head was created by someone else while we were waiting for the lock.
+        return;
+      }
+
+      await withRead(store, async dagRead => {
+        const syncSources = new IVMSyncBranch(this.#tables, syncHeadHash);
+        const read = await readFromHash(
+          syncHeadHash,
+          dagRead,
+          FormatVersion.Latest,
+        );
+        for await (const entry of read.map.scan(ENTITIES_KEY_PREFIX)) {
+          if (!entry[0].startsWith(ENTITIES_KEY_PREFIX)) {
+            break;
+          }
+          const name = sourceNameFromKey(entry[0]);
+          const source = must(syncSources.getSource(name));
+          source.push({
+            type: 'add',
+            row: entry[1] as Row,
+          });
+        }
+        this.#sync = syncSources;
+      });
+    });
   }
 
   advanceSyncHead = async (
@@ -69,72 +205,58 @@ export class IVMSourceRepo {
      *
      */
     if (this.#sync === undefined) {
-      await withRead(store, async dagRead => {
-        const syncSources = new IVMSourceBranch(this.#tables);
-        const read = await readFromHash(
-          syncHeadHash,
-          dagRead,
-          FormatVersion.Latest,
-        );
-        for await (const entry of read.map.scan(ENTITIES_KEY_PREFIX)) {
-          if (!entry[0].startsWith(ENTITIES_KEY_PREFIX)) {
-            break;
-          }
-          const name = sourceNameFromKey(entry[0]);
-          const source = must(syncSources.getSource(name));
-          source.push({
-            type: 'add',
-            row: entry[1] as Row,
-          });
-        }
-        this.#sync = syncSources;
-      });
-    } else {
-      // sync head already exists so we advance it from the array of diffs.
-      for (const patch of patches) {
-        if (patch.op === 'clear') {
-          this.#sync.clear();
-          continue;
-        }
+      await this.#initSyncHead(store, syncHeadHash);
+    }
+    assert(this.#sync !== undefined);
 
-        const {key} = patch;
-        if (!key.startsWith(ENTITIES_KEY_PREFIX)) {
-          continue;
-        }
-        const name = sourceNameFromKey(key);
-        const source = must(this.#sync.getSource(name));
-        switch (patch.op) {
-          case 'del':
-            source.push({
-              type: 'remove',
-              row: patch.oldValue as Row,
-            });
-            break;
-          case 'add':
-            source.push({
-              type: 'add',
-              row: patch.newValue as Row,
-            });
-            break;
-          case 'change':
-            source.push({
-              type: 'edit',
-              row: patch.newValue as Row,
-              oldRow: patch.oldValue as Row,
-            });
-            break;
-        }
-      }
+    if (this.#sync.hash === syncHeadHash) {
+      // If the hashes are the same, the sync head is already up to date.
+      return;
     }
 
-    // Set the branch which can be used for rebasing optimistic mutations.
-    this.#rebase = must(this.#sync).fork();
+    // sync head already exists so we advance it from the array of diffs.
+    for (const patch of patches) {
+      if (patch.op === 'clear') {
+        this.#sync.clear();
+        continue;
+      }
+
+      const {key} = patch;
+      if (!key.startsWith(ENTITIES_KEY_PREFIX)) {
+        continue;
+      }
+      const name = sourceNameFromKey(key);
+      const source = must(this.#sync.getSource(name));
+      switch (patch.op) {
+        case 'del':
+          source.push({
+            type: 'remove',
+            row: patch.oldValue as Row,
+          });
+          break;
+        case 'add':
+          source.push({
+            type: 'add',
+            row: patch.newValue as Row,
+          });
+          break;
+        case 'change':
+          source.push({
+            type: 'edit',
+            row: patch.newValue as Row,
+            oldRow: patch.oldValue as Row,
+          });
+          break;
+      }
+    }
+    this.#sync.hash = syncHeadHash;
   };
 }
 
 export class IVMSourceBranch {
   readonly #sources: Map<string, MemorySource | undefined>;
   readonly #tables: Record<string, TableSchema>;
+  hash: Hash | undefined;
 
   constructor(
     tables: Record<string, TableSchema>,
@@ -175,6 +297,36 @@ export class IVMSourceBranch {
   fork() {
     return new IVMSourceBranch(
       this.#tables,
+      new Map(
+        wrapIterable(this.#sources.entries()).map(([name, source]) => [
+          name,
+          source?.fork(),
+        ]),
+      ),
+    );
+  }
+}
+
+class IVMSyncBranch extends IVMSourceBranch {
+  readonly #sources: Map<string, MemorySource | undefined>;
+  readonly #tables: Record<string, TableSchema>;
+  hash: Hash;
+
+  constructor(
+    tables: Record<string, TableSchema>,
+    hash: Hash,
+    sources: Map<string, MemorySource | undefined> = new Map(),
+  ) {
+    super(tables, sources);
+    this.hash = hash;
+    this.#sources = sources;
+    this.#tables = tables;
+  }
+
+  fork() {
+    return new IVMSyncBranch(
+      this.#tables,
+      this.hash,
       new Map(
         wrapIterable(this.#sources.entries()).map(([name, source]) => [
           name,

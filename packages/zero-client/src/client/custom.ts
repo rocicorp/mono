@@ -5,7 +5,7 @@ import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {ClientID} from '../types/client-state.ts';
 import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
 import type {WriteTransaction} from './replicache-types.ts';
-import type {IVMSourceBranch, IVMSourceRepo} from './ivm-source-repo.ts';
+import type {IVMSourceBranch} from './ivm-source-repo.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {ZeroContext} from './context.ts';
@@ -80,12 +80,13 @@ export type MakeCustomMutatorInterface<
   ? (...args: Args) => Promise<void>
   : never;
 
+export type RepTxZeroData = {
+  readonly read: IVMSourceBranch;
+  readonly write: IVMSourceBranch | undefined;
+};
+
 export class TransactionImpl implements Transaction<Schema> {
-  constructor(
-    repTx: WriteTransaction,
-    schema: Schema,
-    ivmSourceRepo: IVMSourceRepo,
-  ) {
+  constructor(repTx: WriteTransaction<RepTxZeroData>, schema: Schema) {
     must(repTx.reason === 'initial' || repTx.reason === 'rebase');
     this.clientID = repTx.clientID;
     this.mutationID = repTx.mutationID;
@@ -98,12 +99,9 @@ export class TransactionImpl implements Transaction<Schema> {
       // Mutators do not write to the main IVM sources during optimistic mutations
       // so we pass undefined here.
       // ExperimentalWatch handles updating main.
-      this.reason === 'optimistic' ? undefined : ivmSourceRepo.rebase,
+      repTx.zeroData.write,
     );
-    this.query = makeSchemaQuery(
-      schema,
-      this.reason === 'optimistic' ? ivmSourceRepo.main : ivmSourceRepo.rebase,
-    );
+    this.query = makeSchemaQuery(schema, repTx.zeroData.read);
   }
 
   readonly clientID: ClientID;
@@ -117,10 +115,12 @@ export class TransactionImpl implements Transaction<Schema> {
 export function makeReplicacheMutator(
   mutator: CustomMutatorImpl<Schema>,
   schema: Schema,
-  ivmSourceRepo: IVMSourceRepo,
 ) {
-  return (repTx: WriteTransaction, args: ReadonlyJSONValue): Promise<void> => {
-    const tx = new TransactionImpl(repTx, schema, ivmSourceRepo);
+  return (
+    repTx: WriteTransaction<RepTxZeroData>,
+    args: ReadonlyJSONValue,
+  ): Promise<void> => {
+    const tx = new TransactionImpl(repTx, schema);
     return mutator(tx, args);
   };
 }

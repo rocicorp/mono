@@ -39,6 +39,7 @@ import {
   type ChunkWithSize,
   GatherNotCachedVisitor,
 } from './gather-not-cached-visitor.ts';
+import type {ZeroOption} from '../replicache-options.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 
@@ -69,6 +70,7 @@ export async function refresh(
   diffConfig: DiffComputationConfig,
   closed: () => boolean,
   formatVersion: FormatVersion,
+  zero: ZeroOption<unknown> | undefined,
 ): Promise<DiffsMap | undefined> {
   if (closed()) {
     return;
@@ -230,6 +232,10 @@ export async function refresh(
         await Promise.all(ps);
 
         let newMemdagHeadHash = perdagClientGroupHeadHash;
+        const zeroData = await zero?.getRepTxData?.('rebase', {
+          store: memdag,
+          hash: newMemdagHeadHash,
+        });
         for (let i = newMemdagMutations.length - 1; i >= 0; i--) {
           newMemdagHeadHash = (
             await rebaseMutationAndPutCommit(
@@ -240,6 +246,7 @@ export async function refresh(
               lc,
               newMemdagMutations[i].meta.clientID,
               formatVersion,
+              zeroData,
             )
           ).chunk.hash;
         }

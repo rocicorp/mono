@@ -87,6 +87,7 @@ import type {
   CustomMutatorDefs,
   CustomMutatorImpl,
   MakeCustomMutatorInterfaces,
+  RepTxZeroData,
 } from './custom.ts';
 import {makeReplicacheMutator} from './custom.ts';
 import {DeleteClientsManager} from './delete-clients-manager.ts';
@@ -130,6 +131,8 @@ import {
 import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
+import type {WriteTransaction} from './replicache-types.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -454,13 +457,19 @@ export class Zero<
         mutatorsForNamespace as Record<string, CustomMutatorImpl<Schema>>,
       )) {
         (replicacheMutators as MutatorDefs)[customMutatorKey(namespace, name)] =
-          makeReplicacheMutator(mutator, schema, this.#ivmSources);
+          makeReplicacheMutator(mutator, schema) as (
+            repTx: WriteTransaction,
+            args: ReadonlyJSONValue,
+          ) => Promise<void>;
       }
     }
 
     this.storageKey = storageKey ?? '';
 
-    const replicacheOptions: ReplicacheOptions<WithCRUD<MutatorDefs>> = {
+    const replicacheOptions: ReplicacheOptions<
+      WithCRUD<MutatorDefs>,
+      RepTxZeroData
+    > = {
       // The schema stored in IDB is dependent upon both the application schema
       // and the AST schema (i.e. PROTOCOL_VERSION).
       schemaVersion: `${schema.version}.${PROTOCOL_VERSION}`,
@@ -477,6 +486,10 @@ export class Zero<
       },
       licenseKey: 'zero-client-static-key',
       kvStore,
+      zero: {
+        getRepTxData: (reason, customHead) =>
+          this.#ivmSources.getSourcesForTransaction(reason, customHead),
+      },
     };
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
