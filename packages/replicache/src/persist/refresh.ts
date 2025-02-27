@@ -240,6 +240,7 @@ export async function refresh(
               lc,
               newMemdagMutations[i].meta.clientID,
               formatVersion,
+              'refresh',
             )
           ).chunk.hash;
         }

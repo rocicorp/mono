@@ -276,6 +276,7 @@ async function rebase(
           lc,
           meta.clientID,
           formatVersion,
+          'persist',
         )
       ).chunk.hash;
     }

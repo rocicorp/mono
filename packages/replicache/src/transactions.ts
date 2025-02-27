@@ -23,6 +23,7 @@ import {rejectIfClosed, throwIfClosed} from './transaction-closed-error.ts';
 export type TransactionEnvironment = 'client' | 'server';
 export type TransactionLocation = TransactionEnvironment;
 export type TransactionReason = 'initial' | 'rebase' | 'authoritative';
+export type RebaseReason = 'refresh' | 'pullEnd' | 'persist';
 
 /**
  * Basic deep readonly type. It works for {@link JSONValue}.
@@ -281,6 +282,7 @@ export interface WriteTransaction extends ReadTransaction {
    * The reason for the transaction. This can be `initial`, `rebase` or `authoriative`.
    */
   readonly reason: TransactionReason;
+  readonly rebaseReason: RebaseReason | undefined;
 
   /**
    * Sets a single `value` in the database. The value will be frozen (using
@@ -307,12 +309,14 @@ export class WriteTransactionImpl
   // use `declare` to specialize the type.
   declare readonly dbtx: Write;
   readonly reason: TransactionReason;
+  readonly rebaseReason: RebaseReason | undefined;
   readonly mutationID: number;
 
   constructor(
     clientID: ClientID,
     mutationID: number,
     reason: TransactionReason,
+    rebaseReason: RebaseReason | undefined,
     dbWrite: Write,
     lc: LogContext,
     rpcName = 'openWriteTransaction',
@@ -320,6 +324,7 @@ export class WriteTransactionImpl
     super(clientID, dbWrite, lc, rpcName);
     this.mutationID = mutationID;
     this.reason = reason;
+    this.rebaseReason = rebaseReason;
   }
 
   put(key: string, value: ReadonlyJSONValue): Promise<void> {

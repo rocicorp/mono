@@ -5,7 +5,7 @@ import type {Write as DagWrite} from '../dag/store.ts';
 import * as FormatVersion from '../format-version-enum.ts';
 import type {Hash} from '../hash.ts';
 import type {ClientID} from '../sync/ids.ts';
-import {WriteTransactionImpl} from '../transactions.ts';
+import {WriteTransactionImpl, type RebaseReason} from '../transactions.ts';
 import type {MutatorDefs} from '../types.ts';
 import {
   Commit,
@@ -28,6 +28,7 @@ async function rebaseMutation(
   lc: LogContext,
   mutationClientID: ClientID,
   formatVersion: FormatVersion,
+  rebaseReason: RebaseReason,
 ): Promise<Write> {
   const localMeta = mutation.meta;
   const name = localMeta.mutatorName;
@@ -87,6 +88,7 @@ async function rebaseMutation(
     mutationClientID,
     await dbWrite.getMutationID(),
     'rebase',
+    rebaseReason,
     dbWrite,
     lc,
   );
@@ -104,6 +106,7 @@ export async function rebaseMutationAndPutCommit(
   // is a LocalMetaDD31.  As part of DD31 cleanup we can remove this arg.
   mutationClientID: ClientID,
   formatVersion: FormatVersion,
+  rebaseReason: RebaseReason,
 ): Promise<Commit<Meta>> {
   const tx = await rebaseMutation(
     mutation,
@@ -113,6 +116,7 @@ export async function rebaseMutationAndPutCommit(
     lc,
     mutationClientID,
     formatVersion,
+    rebaseReason,
   );
   return tx.putCommit();
 }
@@ -128,6 +132,7 @@ export async function rebaseMutationAndCommit(
   // is a LocalMetaDD31.  As part of DD31 cleanup we can remove this arg.
   mutationClientID: ClientID,
   formatVersion: FormatVersion,
+  rebaseReason: RebaseReason,
 ): Promise<Hash> {
   const dbWrite = await rebaseMutation(
     mutation,
@@ -137,6 +142,7 @@ export async function rebaseMutationAndCommit(
     lc,
     mutationClientID,
     formatVersion,
+    rebaseReason,
   );
   return dbWrite.commit(headName);
 }

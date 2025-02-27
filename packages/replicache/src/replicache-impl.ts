@@ -781,6 +781,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
             lc,
             isLocalMetaDD31(meta) ? meta.clientID : clientID,
             FormatVersion.Latest,
+            'pullEnd',
           ),
         );
       }
@@ -1490,6 +1491,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           clientID,
           await dbWrite.getMutationID(),
           'initial',
+          undefined,
           dbWrite,
           this.#lc,
         );
