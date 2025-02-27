@@ -28,6 +28,7 @@ async function rebaseMutation(
   lc: LogContext,
   mutationClientID: ClientID,
   formatVersion: FormatVersion,
+  zeroData: unknown | undefined,
 ): Promise<Write> {
   const localMeta = mutation.meta;
   const name = localMeta.mutatorName;
@@ -87,6 +88,7 @@ async function rebaseMutation(
     mutationClientID,
     await dbWrite.getMutationID(),
     'rebase',
+    zeroData,
     dbWrite,
     lc,
   );
@@ -104,6 +106,7 @@ export async function rebaseMutationAndPutCommit(
   // is a LocalMetaDD31.  As part of DD31 cleanup we can remove this arg.
   mutationClientID: ClientID,
   formatVersion: FormatVersion,
+  zeroData: unknown | undefined,
 ): Promise<Commit<Meta>> {
   const tx = await rebaseMutation(
     mutation,
@@ -113,6 +116,7 @@ export async function rebaseMutationAndPutCommit(
     lc,
     mutationClientID,
     formatVersion,
+    zeroData,
   );
   return tx.putCommit();
 }
@@ -128,6 +132,7 @@ export async function rebaseMutationAndCommit(
   // is a LocalMetaDD31.  As part of DD31 cleanup we can remove this arg.
   mutationClientID: ClientID,
   formatVersion: FormatVersion,
+  zeroData: unknown | undefined,
 ): Promise<Hash> {
   const dbWrite = await rebaseMutation(
     mutation,
@@ -137,6 +142,7 @@ export async function rebaseMutationAndCommit(
     lc,
     mutationClientID,
     formatVersion,
+    zeroData,
   );
   return dbWrite.commit(headName);
 }
