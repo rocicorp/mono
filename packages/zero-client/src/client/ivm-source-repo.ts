@@ -10,6 +10,7 @@ import {must} from '../../../shared/src/must.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Diff} from '../../../replicache/src/sync/patch.ts';
 import {readFromHash} from '../../../replicache/src/db/read.ts';
+import type {Durability} from '../../../replicache/src/transactions.ts';
 
 /**
  * Provides handles to IVM sources at different heads.
@@ -24,11 +25,19 @@ export class IVMSourceRepo {
    * Sync is lazily created when the first response from the server is received.
    */
   #sync: IVMSourceBranch | undefined;
+
   /**
-   * Rebase is created when the sync head is advanced and points to a fork
-   * of the sync head. This is used to rebase optimistic mutations.
+   * Rebase is created when a rebase begins by forking from `sync`.
+   *
+   * Rebases happen in two places:
+   * 1. On `pullEnd` (see replicache-impl.ts::maybeEndPull) to rebase local mutations into the mem-dag
+   * 2. On `persist` (see persist.ts::rebase) to rebase local mutations into the per-dag
+   *
+   * `pullEnd` and `persist` rebases could be happening concurrently
+   * hence we need two rebase branches.
    */
-  #rebase: IVMSourceBranch | undefined;
+  #memdagRebase: IVMSourceBranch | undefined;
+  #perdagRebase: IVMSourceBranch | undefined;
 
   constructor(tables: Record<string, TableSchema>) {
     this.#main = new IVMSourceBranch(tables);
@@ -45,8 +54,11 @@ export class IVMSourceRepo {
    *
    * The rebase branch is always forked off of the sync branch when a rebase begins.
    */
-  get rebase() {
-    return must(this.#rebase, 'rebase branch does not exist!');
+  getRebaseBranch(durability: Durability) {
+    console.log('GETTING REBASE BRANCH', durability);
+    return durability === 'durable'
+      ? must(this.#perdagRebase, 'perdag rebase branch does not exist!')
+      : must(this.#memdagRebase, 'memdag rebase branch does not exist!');
   }
 
   advanceSyncHead = async (
@@ -129,7 +141,8 @@ export class IVMSourceRepo {
 
     // Set the branch which can be used for rebasing optimistic mutations.
     console.log('FORKING SYNC HEAD FOR REBASE');
-    this.#rebase = must(this.#sync).fork();
+    this.#memdagRebase = must(this.#sync).fork();
+    this.#perdagRebase = must(this.#sync).fork();
   };
 }
 

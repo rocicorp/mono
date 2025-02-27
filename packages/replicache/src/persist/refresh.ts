@@ -230,6 +230,16 @@ export async function refresh(
         await Promise.all(ps);
 
         let newMemdagHeadHash = perdagClientGroupHeadHash;
+        /**
+         * ~~ the plan here for IVM forking:
+         * 1. Diff `memdag@sync_head` vs `memdag@perdagClientGroupHeadHAsh`
+         * 2. Fork `ivm_sources@sync_head` to `ivm_sources@rebase`
+         * 3. Apply diffs to `ivm_sources@rebase`
+         * 4. Rebase mutations
+         *
+         * We need more information rather than just durability.
+         * "detailedReason" : 'persist', 'refresh', 'pullEnd'
+         */
         for (let i = newMemdagMutations.length - 1; i >= 0; i--) {
           newMemdagHeadHash = (
             await rebaseMutationAndPutCommit(

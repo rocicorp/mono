@@ -736,7 +736,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
 
   async maybeEndPull(syncHead: Hash, requestID: string): Promise<void> {
+    console.log('MAYBE END PULL');
     for (;;) {
+      console.log('MAYBE END PULL LOOP');
       if (this.#closed) {
         return;
       }
@@ -758,6 +760,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       if (!replayMutations || replayMutations.length === 0) {
         // All done.
         await this.#subscriptions.fire(diffs);
+        // ~~ fork off the ivm sources in persist
         void this.#schedulePersist();
         return;
       }
@@ -1490,6 +1493,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           clientID,
           await dbWrite.getMutationID(),
           'initial',
+          'lazy',
           dbWrite,
           this.#lc,
         );

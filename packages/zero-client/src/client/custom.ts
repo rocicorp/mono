@@ -89,11 +89,15 @@ export class TransactionImpl implements ClientTransaction<Schema> {
       // Mutators do not write to the main IVM sources during optimistic mutations
       // so we pass undefined here.
       // ExperimentalWatch handles updating main.
-      this.reason === 'optimistic' ? undefined : ivmSourceRepo.rebase,
+      this.reason === 'optimistic'
+        ? undefined
+        : ivmSourceRepo.getRebaseBranch(repTx.durability),
     );
     this.query = makeSchemaQuery(
       schema,
-      this.reason === 'optimistic' ? ivmSourceRepo.main : ivmSourceRepo.rebase,
+      this.reason === 'optimistic'
+        ? ivmSourceRepo.main
+        : ivmSourceRepo.getRebaseBranch(repTx.durability),
     );
   }
 

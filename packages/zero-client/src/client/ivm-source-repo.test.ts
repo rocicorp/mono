@@ -129,7 +129,7 @@ describe('advanceSyncHead', () => {
     await repo.advanceSyncHead(dagStore, syncHash, []);
 
     expect([
-      ...must(repo.rebase.getSource('issue'))
+      ...must(repo.getRebaseBranch('lazy').getSource('issue'))
         .connect([['id', 'asc']])
         .fetch({}),
     ]).toMatchInlineSnapshot(`
@@ -205,7 +205,7 @@ describe('advanceSyncHead', () => {
     ]);
 
     expect([
-      ...must(repo.rebase.getSource('issue'))
+      ...must(repo.getRebaseBranch('lazy').getSource('issue'))
         .connect([['id', 'asc']])
         .fetch({}),
     ]).toMatchInlineSnapshot(`
@@ -431,7 +431,7 @@ describe('advanceSyncHead', () => {
 
       await repo.advanceSyncHead(dagStore, syncHash, diffs);
       expect([
-        ...must(repo.rebase.getSource('issue'))
+        ...must(repo.getRebaseBranch('lazy').getSource('issue'))
           .connect([['id', 'asc']])
           .fetch({}),
       ]).toEqual(expected);

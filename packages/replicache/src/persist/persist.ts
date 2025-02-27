@@ -258,6 +258,8 @@ async function rebase(
   lc: LogContext,
   formatVersion: FormatVersion,
 ): Promise<Hash> {
+  // ~~ fork, give the fork a name (basis), clean up fork in finally.
+  // ~~ repl transaction must know the basis then so it can look up correct rebase fork.
   for (let i = mutations.length - 1; i >= 0; i--) {
     const mutationCommit = mutations[i];
     const {meta} = mutationCommit;

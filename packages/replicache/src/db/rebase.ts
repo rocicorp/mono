@@ -17,6 +17,7 @@ import {
   isLocalMetaDD31,
 } from './commit.ts';
 import {Write, newWriteLocal} from './write.ts';
+import {LazyWrite} from '../dag/lazy-store.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 
@@ -87,6 +88,7 @@ async function rebaseMutation(
     mutationClientID,
     await dbWrite.getMutationID(),
     'rebase',
+    dagWrite instanceof LazyWrite ? 'lazy' : 'durable',
     dbWrite,
     lc,
   );

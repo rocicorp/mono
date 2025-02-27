@@ -201,7 +201,7 @@ describe('rebasing custom mutators', () => {
     });
 
     expect([
-      ...must(repo.rebase.getSource('issue'))
+      ...must(repo.getRebaseBranch('lazy').getSource('issue'))
         .connect([['id', 'asc']])
         .fetch({}),
     ]).toMatchInlineSnapshot(`
@@ -294,3 +294,5 @@ describe('rebasing custom mutators', () => {
     `);
   });
 });
+
+// TODO: test the durable branch
