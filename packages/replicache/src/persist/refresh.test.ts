@@ -190,6 +190,7 @@ describe('refresh', () => {
       testSubscriptionsManagerOptions,
       () => false,
       formatVersion,
+      undefined,
     );
     assert(diffs);
     expect(Object.fromEntries(diffs)).to.deep.equal({});
@@ -239,6 +240,7 @@ describe('refresh', () => {
       testSubscriptionsManagerOptions,
       () => false,
       formatVersion,
+      undefined,
     );
     assert(diffs);
     const hashes = [
@@ -275,6 +277,7 @@ describe('refresh', () => {
       testSubscriptionsManagerOptions,
       () => false,
       formatVersion,
+      undefined,
     );
     assert(diffs);
 
@@ -322,6 +325,7 @@ describe('refresh', () => {
       testSubscriptionsManagerOptions,
       () => false,
       formatVersion,
+      undefined,
     );
     expect(result).undefined;
     await assertRefreshHashes(perdag, clientID, client.refreshHashes);
@@ -352,6 +356,7 @@ describe('refresh', () => {
       testSubscriptionsManagerOptions,
       () => false,
       formatVersion,
+      undefined,
     );
     expect(result).undefined;
     await assertRefreshHashes(perdag, clientID, client.refreshHashes);
@@ -383,6 +388,7 @@ describe('refresh', () => {
       testSubscriptionsManagerOptions,
       () => false,
       formatVersion,
+      undefined,
     );
     assert(diffs);
     expect(Object.fromEntries(diffs)).to.deep.equal({
@@ -446,6 +452,7 @@ describe('refresh', () => {
       testSubscriptionsManagerOptions,
       () => false,
       formatVersion,
+      undefined,
     );
     assert(diffs);
     expect(Object.fromEntries(diffs)).to.deep.equal({
@@ -511,6 +518,7 @@ describe('refresh', () => {
       testSubscriptionsManagerOptions,
       () => false,
       formatVersion,
+      undefined,
     );
     expect(result).undefined;
     await assertRefreshHashes(perdag, clientID, client.refreshHashes);
@@ -564,6 +572,7 @@ describe('refresh', () => {
         testSubscriptionsManagerOptions,
         () => false,
         formatVersion,
+        undefined,
       );
     } catch (e) {
       expectedE = e;
@@ -819,6 +828,7 @@ describe('refresh', () => {
       testSubscriptionsManagerOptions,
       () => false,
       formatVersion,
+      undefined,
     );
     assert(diffs);
     expect(Object.fromEntries(diffs)).to.deep.equal({

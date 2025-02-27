@@ -34,7 +34,8 @@ export interface ReadTransaction extends ReplicacheReadTransaction {
   readonly env?: Env | undefined;
 }
 
-export interface WriteTransaction extends ReplicacheWriteTransaction {
+export interface WriteTransaction<TZeroData = unknown>
+  extends ReplicacheWriteTransaction<TZeroData> {
   /**
    * When a mutator is run on the server, the `AuthData` for the connection
    * that pushed the mutation (i.e. the `AuthData` returned by the
