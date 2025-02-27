@@ -64,7 +64,7 @@ test('zero-cache --help', () => {
        ZERO_CHANGE_DB env                                                                                                                                         
                                                                 Yet another Postgres database, used to store a replication log.                                   
                                                                                                                                                                   
-     --change-max-conns number                                  default: 1                                                                                        
+     --change-max-conns number                                  default: 5                                                                                        
        ZERO_CHANGE_MAX_CONNS env                                                                                                                                  
                                                                 The maximum number of connections to open to the change database.                                 
                                                                 This is used by the change-streamer for catching up                                               

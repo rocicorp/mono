@@ -55,7 +55,7 @@ test('parse options', () => {
         "auth": {},
         "autoReset": true,
         "change": {
-          "maxConns": 1,
+          "maxConns": 5,
         },
         "cvr": {
           "maxConns": 30,
@@ -129,7 +129,7 @@ test('parse options', () => {
       },
       "env": {
         "ZERO_AUTO_RESET": "true",
-        "ZERO_CHANGE_MAX_CONNS": "1",
+        "ZERO_CHANGE_MAX_CONNS": "5",
         "ZERO_CVR_MAX_CONNS": "30",
         "ZERO_INITIAL_SYNC_ROW_BATCH_SIZE": "10000",
         "ZERO_INITIAL_SYNC_TABLE_COPY_WORKERS": "5",
@@ -304,7 +304,7 @@ test('zero-cache --help', () => {
        ZERO_CHANGE_DB env                                                                                                                                         
                                                                 Yet another Postgres database, used to store a replication log.                                   
                                                                                                                                                                   
-     --change-max-conns number                                  default: 1                                                                                        
+     --change-max-conns number                                  default: 5                                                                                        
        ZERO_CHANGE_MAX_CONNS env                                                                                                                                  
                                                                 The maximum number of connections to open to the change database.                                 
                                                                 This is used by the change-streamer for catching up                                               
