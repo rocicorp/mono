@@ -8,9 +8,11 @@ export interface AdvancedQuery<
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
 > extends Query<TSchema, TTable, TReturn> {
-  materialize(): TypedView<HumanReadable<TReturn>>;
-  materialize<T>(factory: ViewFactory<TSchema, TTable, TReturn, T>): T;
+  materialize(ttl?: number): TypedView<HumanReadable<TReturn>>;
+  materialize<T>(
+    factory: ViewFactory<TSchema, TTable, TReturn, T>,
+    ttl?: number,
+  ): T;
   get format(): Format;
   hash(): string;
-  withTTL(ttl: number): AdvancedQuery<TSchema, TTable, TReturn>;
 }

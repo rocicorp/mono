@@ -42,13 +42,10 @@ export function useQuery<
   } else if (options) {
     ({enabled = true, ttl} = options);
   }
-  let advancedQuery = query as AdvancedQuery<TSchema, TTable, TReturn>;
-  if (ttl !== undefined) {
-    advancedQuery = advancedQuery.withTTL(ttl);
-  }
+  const advancedQuery = query as AdvancedQuery<TSchema, TTable, TReturn>;
 
   const z = useZero();
-  const view = viewStore.getView(z.clientID, advancedQuery, enabled);
+  const view = viewStore.getView(z.clientID, advancedQuery, enabled, ttl);
   // https://react.dev/reference/react/useSyncExternalStore
   return useSyncExternalStore(
     view.subscribeReactInternals,
@@ -182,6 +179,7 @@ export class ViewStore {
     clientID: string,
     query: AdvancedQuery<TSchema, TTable, TReturn>,
     enabled: boolean,
+    ttl: number | undefined,
   ): {
     getSnapshot: () => QueryResult<TReturn>;
     subscribeReactInternals: (internals: () => void) => () => void;
@@ -198,6 +196,7 @@ export class ViewStore {
     if (!existing) {
       existing = new ViewWrapper(
         query,
+        ttl,
         view => {
           const lastView = this.#views.get(hash);
           // I don't think this can happen
@@ -256,17 +255,20 @@ class ViewWrapper<
   readonly #query: AdvancedQuery<TSchema, TTable, TReturn>;
   #snapshot: QueryResult<TReturn>;
   #reactInternals: Set<() => void>;
+  readonly #ttl: number | undefined;
 
   constructor(
     query: AdvancedQuery<TSchema, TTable, TReturn>,
+    ttl: number | undefined,
     onMaterialized: (view: ViewWrapper<TSchema, TTable, TReturn>) => void,
     onDematerialized: () => void,
   ) {
-    this.#snapshot = getDefaultSnapshot(query.format.singular);
+    this.#query = query;
+    this.#ttl = ttl;
     this.#onMaterialized = onMaterialized;
     this.#onDematerialized = onDematerialized;
+    this.#snapshot = getDefaultSnapshot(query.format.singular);
     this.#reactInternals = new Set();
-    this.#query = query;
     this.#materializeIfNeeded();
   }
 
@@ -289,7 +291,7 @@ class ViewWrapper<
       return;
     }
 
-    this.#view = this.#query.materialize();
+    this.#view = this.#query.materialize(this.#ttl);
     this.#view.addListener(this.#onData);
 
     this.#onMaterialized(this);

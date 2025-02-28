@@ -27,13 +27,11 @@ export function useQuery<
   // Wrap in in createMemo to ensure a new view is created if the querySignal changes.
   const view = createMemo(() => {
     const ttl = normalize(options)?.ttl;
-    let query = querySignal() as AdvancedQuery<TSchema, TTable, TReturn>;
-    if (ttl !== undefined) {
-      query = query.withTTL(ttl);
-    }
+    const query = querySignal() as AdvancedQuery<TSchema, TTable, TReturn>;
 
     const view = (query as AdvancedQuery<TSchema, TTable, TReturn>).materialize(
       solidViewFactory,
+      ttl,
     );
 
     onCleanup(() => {

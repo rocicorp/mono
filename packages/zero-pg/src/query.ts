@@ -1,4 +1,3 @@
-import {assert} from '../../shared/src/asserts.ts';
 import {first} from '../../shared/src/iterables.ts';
 import {compile} from '../../z2s/src/compiler.ts';
 import {formatPg} from '../../z2s/src/sql.ts';
@@ -62,7 +61,7 @@ export class Z2SQuery<
     ast: AST = {table: tableName},
     format?: Format | undefined,
   ) {
-    super(schema, tableName, ast, undefined, format);
+    super(schema, tableName, ast, format);
     this.#dbTransaction = dbTransaction;
   }
 
@@ -76,10 +75,8 @@ export class Z2SQuery<
     schema: TSchema,
     tableName: TTable,
     ast: AST,
-    ttl: number | undefined,
     format: Format | undefined,
   ): Z2SQuery<TSchema, TTable, TReturn> {
-    assert(ttl === undefined, 'TTL is not supported in Z2S');
     return new Z2SQuery(schema, tableName, this.#dbTransaction, ast, format);
   }
 
