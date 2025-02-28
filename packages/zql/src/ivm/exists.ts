@@ -20,16 +20,18 @@ import type {SourceSchema} from './schema.ts';
 import {first} from './stream.ts';
 
 type SizeStorageKeyPrefix = `row/${string}/`;
-// Key is of format
-// `row/${JSON.stringify(parentJoinKeyValues)}/${JSON.stringify(primaryKeyValues)}`
-// This format allows us to look up an existing cached size for a
-// given set of `parentJoinKeyValues` by scanning for prefix
-// `row/${JSON.stringify(parentJoinKeyValues)}/`, and to look up the cached
-// size for a specific row by the full key.
-// If the parent join and primary key are the same, then format is changed to
-// `row//${JSON.stringify(primaryKeyValues)}` to shorten the key, since there
-// is no point in looking up an existing cached size by
-// `parentJoinKeyValues` if the specific rows cached size is missing.
+/**
+ * Key is of format
+ * `row/${JSON.stringify(parentJoinKeyValues)}/${JSON.stringify(primaryKeyValues)}`
+ * This format allows us to look up an existing cached size for a given set of
+ * `parentJoinKeyValues` by scanning for prefix
+ * `row/${JSON.stringify(parentJoinKeyValues)}/` and using the first result, and
+ * to look up the cached size for a specific row by the full key.
+ * If the parent join and primary key are the same, then format is changed to
+ * `row//${JSON.stringify(primaryKeyValues)}` to shorten the key, since there
+ * is no point in looking up an existing cached size by
+ * `parentJoinKeyValues` if the specific rows cached size is missing.
+ */
 type SizeStorageKey = `${SizeStorageKeyPrefix}${string}`;
 
 interface ExistsStorage {
@@ -53,6 +55,14 @@ export class Exists implements Operator {
 
   #output: Output = throwOutput;
 
+  /**
+   * This instance variable is `true` when this operator is processing a `push`,
+   * and is used to disable reuse of cached sizes across rows with the
+   * same parent join key value.
+   * This is necessary because during a push relationships can be inconsistent
+   * due to push communicating changes (which may change multiple Nodes) one
+   * Node at a time.
+   */
   #inPush = false;
 
   constructor(
