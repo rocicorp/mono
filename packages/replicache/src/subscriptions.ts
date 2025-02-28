@@ -22,6 +22,7 @@ import {
   SubscriptionTransactionWrapper,
 } from './transactions.ts';
 import type {QueryInternal} from './types.ts';
+import type {Hash} from './hash.ts';
 
 type InvokeKind = Enum<typeof InvokeKind>;
 
@@ -32,6 +33,7 @@ export interface Subscription<R> {
     tx: ReadTransaction,
     kind: InvokeKind,
     diffs: DiffsMap | undefined,
+    hash: Hash,
   ): Promise<R>;
 
   matches(diffs: DiffsMap): boolean;
@@ -131,7 +133,7 @@ export {SubscriptionImpl as SubscriptionImplForTesting};
  *
  * @experimental This type is experimental and may change in the future.
  */
-export type WatchNoIndexCallback = (diff: NoIndexDiff) => void;
+export type WatchNoIndexCallback = (diff: NoIndexDiff, hash: Hash) => void;
 
 export type WatchCallbackForOptions<Options extends WatchOptions> =
   Options extends WatchIndexOptions ? WatchIndexCallback : WatchNoIndexCallback;
@@ -215,6 +217,7 @@ export class WatchSubscription implements Subscription<Diff | undefined> {
     tx: ReadTransaction,
     kind: InvokeKind,
     diffs: DiffsMap | undefined,
+    hash: Hash,
   ): Promise<Diff | undefined> {
     const invoke = async <Key extends IndexKey | string>(
       indexName: string | undefined,
@@ -366,7 +369,7 @@ type SubscriptionSet = Set<UnknownSubscription>;
 
 export interface SubscriptionsManager extends DiffComputationConfig {
   clear(): void;
-  fire(diffs: DiffsMap): Promise<void>;
+  fire(diffs: DiffsMap, hash: Hash): Promise<void>;
   hasPendingSubscriptionRuns: boolean;
   add<R>(subscription: Subscription<R>): () => void;
 }
@@ -405,15 +408,21 @@ export class SubscriptionsManagerImpl implements SubscriptionsManager {
     this.#subscriptions.clear();
   }
 
-  fire(diffs: DiffsMap): Promise<void> {
+  fire(diffs: DiffsMap, hash: Hash): Promise<void> {
     const subscriptions = subscriptionsForDiffs(this.#subscriptions, diffs);
-    return this.#fireSubscriptions(subscriptions, InvokeKind.Regular, diffs);
+    return this.#fireSubscriptions(
+      subscriptions,
+      InvokeKind.Regular,
+      diffs,
+      hash,
+    );
   }
 
   async #fireSubscriptions(
     subscriptions: Iterable<UnknownSubscription>,
     kind: InvokeKind,
     diffs: DiffsMap | undefined,
+    hash: Hash,
   ) {
     if (this.#signal.aborted) {
       return;

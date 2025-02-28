@@ -313,6 +313,7 @@ export function maybeEndPull<M extends LocalMeta>(
   formatVersion: FormatVersion,
 ): Promise<{
   syncHead: Hash;
+  mainHead: Hash;
   replayMutations: Commit<M>[];
   diffs: DiffsMap;
 }> {
@@ -382,6 +383,7 @@ export function maybeEndPull<M extends LocalMeta>(
     if (pending.length > 0) {
       return {
         syncHead: syncHeadHash,
+        mainHead: mainHeadHash,
         replayMutations: pending,
         // The changed keys are not reported when further replays are
         // needed. The diffs will be reported at the end when there
@@ -456,6 +458,7 @@ export function maybeEndPull<M extends LocalMeta>(
 
     return {
       syncHead: syncHeadHash,
+      mainHead: mainHeadHash,
       replayMutations: [],
       diffs: diffsMap,
     };

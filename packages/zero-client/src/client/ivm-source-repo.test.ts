@@ -18,6 +18,7 @@ import type {Diff} from '../../../replicache/src/sync/patch.ts';
 import type {Node} from '../../../zql/src/ivm/data.ts';
 import {createDb} from './test/create-db.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {Hash} from '../../../replicache/src/hash.ts';
 
 test('fork', () => {
   const main = new IVMSourceBranch({
@@ -40,7 +41,7 @@ test('fork', () => {
   });
 
   // Fork should have same initial data
-  const fork = main.fork();
+  const fork = main.fork('test' as Hash);
   const forkConnection = fork.getSource('users')!.connect([['id', 'asc']]);
   expect([...forkConnection.fetch({})]).toMatchInlineSnapshot(`
     [

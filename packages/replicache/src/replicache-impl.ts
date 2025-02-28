@@ -123,6 +123,7 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.ts';
+import type {DiffsMap} from './sync/diff.ts';
 
 declare const TESTING: boolean;
 
@@ -746,7 +747,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       const lc = this.#lc
         .withContext('maybeEndPull')
         .withContext('requestID', requestID);
-      const {replayMutations, diffs} = await maybeEndPull<LocalMeta>(
+      const {replayMutations, diffs, mainHead} = await maybeEndPull<LocalMeta>(
         this.memdag,
         lc,
         syncHead,
@@ -757,7 +758,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
       if (!replayMutations || replayMutations.length === 0) {
         // All done.
-        await this.#subscriptions.fire(diffs);
+        await this.#subscriptions.fire(diffs, mainHead);
         void this.#schedulePersist();
         return;
       }
@@ -1199,9 +1200,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     if (this.#closed) {
       return;
     }
-    let diffs;
+    let refreshResult: [DiffsMap, Hash] | undefined;
     try {
-      diffs = await refresh(
+      refreshResult = await refresh(
         this.#lc,
         this.memdag,
         this.perdag,
@@ -1220,8 +1221,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         throw e;
       }
     }
-    if (diffs !== undefined) {
-      await this.#subscriptions.fire(diffs);
+    if (refreshResult !== undefined) {
+      await this.#subscriptions.fire(refreshResult[0], refreshResult[1]);
     }
   }
 
@@ -1496,7 +1497,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         const result: R = await mutatorImpl(tx, args);
         throwIfClosed(dbWrite);
         const lastMutationID = await dbWrite.getMutationID();
-        const diffs = await dbWrite.commitWithDiffs(
+        const [diffs, newHeadHash] = await dbWrite.commitWithDiffs(
           DEFAULT_HEAD_NAME,
           this.#subscriptions,
         );
@@ -1506,7 +1507,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
         // Send is not supposed to reject
         this.#pushConnectionLoop.send(false).catch(() => void 0);
-        await this.#subscriptions.fire(diffs);
+        await this.#subscriptions.fire(diffs, newHeadHash);
         void this.#schedulePersist();
         return result;
       } catch (ex) {

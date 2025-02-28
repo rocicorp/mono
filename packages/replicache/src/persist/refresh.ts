@@ -54,6 +54,7 @@ type RefreshResult =
       type: 'complete';
       diffs: DiffsMap;
       newPerdagClientHeadHash: Hash;
+      newMemdagHeadHash: Hash;
     };
 
 /**
@@ -69,7 +70,7 @@ export async function refresh(
   diffConfig: DiffComputationConfig,
   closed: () => boolean,
   formatVersion: FormatVersion,
-): Promise<DiffsMap | undefined> {
+): Promise<[DiffsMap, Hash] | undefined> {
   if (closed()) {
     return;
   }
@@ -261,6 +262,7 @@ export async function refresh(
           type: 'complete',
           diffs,
           newPerdagClientHeadHash: perdagClientGroupHeadHash,
+          newMemdagHeadHash,
         };
       });
     });
@@ -289,7 +291,7 @@ export async function refresh(
     return undefined;
   }
   await setRefreshHashes([result.newPerdagClientHeadHash]);
-  return result.diffs;
+  return [result.diffs, result.newMemdagHeadHash];
 }
 
 function shouldAbortRefresh(
