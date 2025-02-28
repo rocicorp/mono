@@ -1237,9 +1237,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       lc.debug?.(
-        `Trying to evict inactive queries, rowCount: ${
-          rowCountBeforeEvictions
-        } > maxRowCount: ${this.maxRowCount}`,
+        `Trying to evict inactive queries, rowCount: ${rowCountBeforeEvictions} > maxRowCount: ${this.maxRowCount}`,
       );
 
       const inactiveQueries = getInactiveQueries(cvr);
