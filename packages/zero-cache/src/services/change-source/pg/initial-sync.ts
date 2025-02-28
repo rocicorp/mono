@@ -149,7 +149,7 @@ export async function initialSync(
       await copiers.done();
     }
 
-    await setInitialSchema(upstreamDB, shard, published);
+    await setInitialSchema(upstreamDB, shard, initialVersion, published);
 
     initReplicationState(tx, publications, initialVersion);
     initChangeLog(tx);

@@ -121,7 +121,12 @@ export async function initializePostgresChangeSource(
   // initial sync if not.
   const db = pgClient(lc, upstreamURI);
   try {
-    await checkAndUpdateUpstream(lc, db, shard);
+    await checkAndUpdateUpstream(
+      lc,
+      db,
+      shard,
+      replicationConfig.replicaVersion,
+    );
   } finally {
     await db.end();
   }
@@ -140,6 +145,7 @@ async function checkAndUpdateUpstream(
   lc: LogContext,
   db: PostgresDB,
   shard: ShardConfig,
+  replicaVersion: string,
 ) {
   const slot = replicationSlot(shard);
   const result = await db<{restartLSN: LSN | null}[]>`
@@ -154,7 +160,14 @@ async function checkAndUpdateUpstream(
     );
   }
   // Perform any shard schema updates
-  await updateShardSchema(lc, db, shard);
+  await updateShardSchema(lc, db, shard, replicaVersion);
+
+  const expected = await getInternalShardConfig(db, shard);
+  if (expected.replicaVersion !== replicaVersion) {
+    throw new AutoResetSignal(
+      `local replicaVersion ${replicaVersion} does not match upstream replicaVersion ${expected.replicaVersion}`,
+    );
+  }
 }
 
 const MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE = 5;

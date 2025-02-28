@@ -114,6 +114,7 @@ export function shardSetup(
   CREATE TABLE ${shard}."${SHARD_CONFIG_TABLE}" (
     "publications"  TEXT[] NOT NULL,
     "ddlDetection"  BOOL NOT NULL,
+    "replicaVersion" TEXT,
     "initialSchema" JSON,
 
     -- Ensure that there is only a single row in the table.
@@ -121,11 +122,12 @@ export function shardSetup(
   );
 
   INSERT INTO ${shard}."${SHARD_CONFIG_TABLE}" 
-    ("lock", "publications", "ddlDetection", "initialSchema")
+    ("lock", "publications", "ddlDetection", "replicaVersion", "initialSchema")
     VALUES (true, 
       ARRAY[${literal(pubs)}], 
       false,  -- set in SAVEPOINT with triggerSetup() statements
-      null    -- set in initial-sync at consistent_point LSN.
+      null,   -- set in initial-sync at consistent_point LSN.
+      null    -- set in initial-sync at consistent_ponit LSN.
     );
   `;
 }
@@ -147,6 +149,7 @@ export function dropShard(appID: string, shardID: string | number): string {
 const internalShardConfigSchema = v.object({
   publications: v.array(v.string()),
   ddlDetection: v.boolean(),
+  replicaVersion: v.string().nullable(),
   initialSchema: publishedSchema.nullable(),
 });
 
@@ -167,11 +170,15 @@ function triggerSetup(shard: ShardConfig): string {
 export async function setInitialSchema(
   db: PostgresDB,
   shard: ShardID,
+  replicaVersion: string,
   {tables, indexes}: PublishedSchema,
 ) {
   const schema = upstreamSchema(shard);
   const synced: PublishedSchema = {tables, indexes};
-  await db`UPDATE ${db(schema)}."shardConfig" SET "initialSchema" = ${synced}`;
+  await db`
+  UPDATE ${db(schema)}."shardConfig" 
+     SET "replicaVersion" = ${replicaVersion},
+          "initialSchema" = ${synced}`;
 }
 
 export async function getInternalShardConfig(
@@ -179,7 +186,7 @@ export async function getInternalShardConfig(
   shard: ShardID,
 ): Promise<InternalShardConfig> {
   const result = await db`
-    SELECT "publications", "ddlDetection", "initialSchema" 
+    SELECT "publications", "ddlDetection", "replicaVersion", "initialSchema"
       FROM ${db(upstreamSchema(shard))}."shardConfig";
   `;
   assert(result.length === 1);
