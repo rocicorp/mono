@@ -6,18 +6,18 @@ import {
   type Migration,
 } from '../../../db/migration.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
-import {createRowsVersionTable, cvrSchema, setupCVRTables} from './cvr.ts';
+import {cvrSchema, type ShardID} from '../../../types/shards.ts';
+import {createRowsVersionTable, setupCVRTables} from './cvr.ts';
 
 export async function initViewSyncerSchema(
   log: LogContext,
   db: PostgresDB,
-  appID: string,
-  shardID: string,
+  shard: ShardID,
 ): Promise<void> {
-  const schema = cvrSchema(appID, shardID);
+  const schema = cvrSchema(shard);
 
   const setupMigration: Migration = {
-    migrateSchema: (lc, tx) => setupCVRTables(lc, tx, appID, shardID),
+    migrateSchema: (lc, tx) => setupCVRTables(lc, tx, shard),
     minSafeVersion: 1,
   };
 
@@ -29,7 +29,7 @@ export async function initViewSyncerSchema(
 
   const migrateV2ToV3: Migration = {
     migrateSchema: async (_, tx) => {
-      await tx.unsafe(createRowsVersionTable(appID, shardID));
+      await tx.unsafe(createRowsVersionTable(shard));
     },
 
     /** Populates the cvr.rowsVersion table with versions from cvr.instances. */
@@ -103,7 +103,7 @@ export async function initViewSyncerSchema(
   await runSchemaMigrations(
     log,
     'view-syncer',
-    cvrSchema(appID, shardID),
+    cvrSchema(shard),
     db,
     setupMigration,
     schemaVersionMigrationMap,

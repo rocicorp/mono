@@ -19,12 +19,12 @@ import {TransactionPool} from '../../db/transaction-pool.ts';
 import {ErrorForClient, ErrorWithLevel} from '../../types/error-for-client.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
 import {rowIDString} from '../../types/row-key.ts';
+import {cvrSchema, type ShardID} from '../../types/shards.ts';
 import type {Patch, PatchToVersion} from './client-handler.ts';
 import type {CVR, CVRSnapshot} from './cvr.ts';
 import {RowRecordCache} from './row-record-cache.ts';
 import {
   type ClientsRow,
-  cvrSchema,
   type DesiresRow,
   type InstancesRow,
   type QueriesRow,
@@ -113,8 +113,7 @@ export class CVRStore {
   constructor(
     lc: LogContext,
     db: PostgresDB,
-    appID: string,
-    shardID: string,
+    shard: ShardID,
     taskID: string,
     cvrID: string,
     failService: (e: unknown) => void,
@@ -124,14 +123,13 @@ export class CVRStore {
     setTimeoutFn = setTimeout,
   ) {
     this.#db = db;
-    this.#schema = cvrSchema(appID, shardID);
+    this.#schema = cvrSchema(shard);
     this.#taskID = taskID;
     this.#id = cvrID;
     this.#rowCache = new RowRecordCache(
       lc,
       db,
-      appID,
-      shardID,
+      shard,
       cvrID,
       failService,
       deferredRowFlushThreshold,

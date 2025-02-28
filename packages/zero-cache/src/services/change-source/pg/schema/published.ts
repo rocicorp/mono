@@ -4,7 +4,7 @@ import {equals} from '../../../../../../shared/src/set-utils.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
 import {publishedIndexSpec, publishedTableSpec} from '../../../../db/specs.ts';
 
-export function publishedTableQuery(publications: string[]) {
+export function publishedTableQuery(publications: readonly string[]) {
   // Notes:
   // * There's a bug in PG15 in which generated columns are incorrectly
   //   included in pg_publication_tables.attnames, (even though the generated
@@ -83,7 +83,7 @@ SELECT COALESCE(json_agg("table"), '[]'::json) as "tables" FROM tables
   `;
 }
 
-export function indexDefinitionsQuery(publications: string[]) {
+export function indexDefinitionsQuery(publications: readonly string[]) {
   // Note: pg_attribute contains column names for tables and for indexes.
   // However, the latter does not get updated when a column in a table is
   // renamed.

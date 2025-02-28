@@ -13,6 +13,7 @@ import {
   type RowValue,
 } from '../../types/row-key.ts';
 import {type SchemaVersions} from '../../types/schema-versions.ts';
+import type {AppID} from '../../types/shards.ts';
 import {id} from '../../types/sql.ts';
 import {
   RESET_OP,
@@ -91,7 +92,7 @@ export class Snapshotter {
   #curr: Snapshot | undefined;
   #prev: Snapshot | undefined;
 
-  constructor(lc: LogContext, dbFile: string, appID: string) {
+  constructor(lc: LogContext, dbFile: string, {appID}: AppID) {
     this.#lc = lc;
     this.#dbFile = dbFile;
     this.#appID = appID;

@@ -7,6 +7,7 @@ import {
   type LexiVersion,
 } from '../../types/lexi-version.ts';
 import type {PostgresDB} from '../../types/pg.ts';
+import type {ShardID} from '../../types/shards.ts';
 import type {Sink, Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {orTimeout} from '../../types/timeout.ts';
@@ -43,7 +44,7 @@ import {Subscriber} from './subscriber.ts';
  */
 export async function initializeStreamer(
   lc: LogContext,
-  shardID: string,
+  shard: ShardID,
   taskID: string,
   changeDB: PostgresDB,
   changeSource: ChangeSource,
@@ -52,19 +53,19 @@ export async function initializeStreamer(
   setTimeoutFn = setTimeout,
 ): Promise<ChangeStreamerService> {
   // Make sure the ChangeLog DB is set up.
-  await initChangeStreamerSchema(lc, changeDB, shardID);
+  await initChangeStreamerSchema(lc, changeDB, shard);
   await ensureReplicationConfig(
     lc,
     changeDB,
     replicationConfig,
-    shardID,
+    shard,
     autoReset,
   );
 
   const {replicaVersion} = replicationConfig;
   return new ChangeStreamerImpl(
     lc,
-    shardID,
+    shard,
     taskID,
     changeDB,
     replicaVersion,
@@ -253,7 +254,7 @@ const MAX_SERVING_DELAY = 30_000;
 class ChangeStreamerImpl implements ChangeStreamerService {
   readonly id: string;
   readonly #lc: LogContext;
-  readonly #shardID: string;
+  readonly #shard: ShardID;
   readonly #changeDB: PostgresDB;
   readonly #replicaVersion: string;
   readonly #source: ChangeSource;
@@ -278,7 +279,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
   constructor(
     lc: LogContext,
-    shardID: string,
+    shard: ShardID,
     taskID: string,
     changeDB: PostgresDB,
     replicaVersion: string,
@@ -288,13 +289,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   ) {
     this.id = `change-streamer`;
     this.#lc = lc.withContext('component', 'change-streamer');
-    this.#shardID = shardID;
+    this.#shard = shard;
     this.#changeDB = changeDB;
     this.#replicaVersion = replicaVersion;
     this.#source = source;
     this.#storer = new Storer(
       lc,
-      shardID,
+      shard,
       taskID,
       changeDB,
       replicaVersion,
@@ -385,7 +386,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
     switch (tag) {
       case 'reset-required':
-        await markResetRequired(this.#changeDB, this.#shardID);
+        await markResetRequired(this.#changeDB, this.#shard);
         if (this.#autoReset) {
           this.#lc.warn?.('shutting down for auto-reset');
           await this.stop(new AutoResetSignal());

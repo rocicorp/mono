@@ -30,6 +30,7 @@ import {
   singleProcessMode,
   type Worker,
 } from '../types/processes.ts';
+import {getShardID} from '../types/shards.ts';
 import {Subscription} from '../types/subscription.ts';
 import {replicaFileModeSchema, replicaFileName} from '../workers/replicator.ts';
 import {Syncer} from '../workers/syncer.ts';
@@ -102,7 +103,7 @@ export default function runWorker(
     path.join(tmpDir, `sync-worker-${pid}-${randInt(1000000, 9999999)}`),
   );
 
-  const appID = 'zero'; // TODO: --app-id
+  const shard = getShardID(config);
 
   const viewSyncerFactory = (
     id: string,
@@ -115,16 +116,15 @@ export default function runWorker(
       .withContext('instance', randomID());
     return new ViewSyncerService(
       logger,
-      appID,
+      shard,
       must(config.taskID, 'main must set --task-id'),
       id,
-      config.shard.id,
       cvrDB,
       new PipelineDriver(
         logger,
         config.log,
-        new Snapshotter(logger, replicaFile, appID),
-        appID,
+        new Snapshotter(logger, replicaFile, shard),
+        shard,
         operatorStorage.createClientGroupStorage(id),
         id,
       ),
@@ -136,8 +136,7 @@ export default function runWorker(
   const mutagenFactory = (id: string) =>
     new MutagenService(
       lc.withContext('component', 'mutagen').withContext('clientGroupID', id),
-      appID,
-      config.shard.id,
+      shard,
       id,
       upstreamDB,
       config,

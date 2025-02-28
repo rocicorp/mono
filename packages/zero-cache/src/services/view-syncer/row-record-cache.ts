@@ -8,10 +8,10 @@ import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
 import {rowIDString} from '../../types/row-key.ts';
+import {cvrSchema, type ShardID} from '../../types/shards.ts';
 import {checkVersion} from './cvr-store.ts';
 import type {CVRSnapshot} from './cvr.ts';
 import {
-  cvrSchema,
   rowRecordToRowsRow,
   type RowsRow,
   rowsRowToRowRecord,
@@ -98,8 +98,7 @@ export class RowRecordCache {
   constructor(
     lc: LogContext,
     db: PostgresDB,
-    appID: string,
-    shardID: string,
+    shard: ShardID,
     cvrID: string,
     failService: (e: unknown) => void,
     deferredRowFlushThreshold = 100,
@@ -107,7 +106,7 @@ export class RowRecordCache {
   ) {
     this.#lc = lc;
     this.#db = db;
-    this.#schema = cvrSchema(appID, shardID);
+    this.#schema = cvrSchema(shard);
     this.#cvrID = cvrID;
     this.#failService = failService;
     this.#deferredRowFlushThreshold = deferredRowFlushThreshold;

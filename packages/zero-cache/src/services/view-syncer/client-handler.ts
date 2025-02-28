@@ -23,17 +23,18 @@ import {
   getErrorForClientIfSchemaVersionNotSupported,
   type SchemaVersions,
 } from '../../types/schema-versions.ts';
+import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import {
   cmpVersions,
   cookieToVersion,
+  versionToCookie,
+  versionToNullableCookie,
   type CVRVersion,
   type DelQueryPatch,
   type NullableCVRVersion,
   type PutQueryPatch,
   type RowID,
-  versionToCookie,
-  versionToNullableCookie,
 } from './schema/types.ts';
 
 export type PutRowPatch = {
@@ -94,8 +95,7 @@ export class ClientHandler {
     clientGroupID: string,
     clientID: string,
     wsID: string,
-    appID: string,
-    shardID: string,
+    shard: ShardID,
     baseCookie: string | null,
     protocolVersion: number,
     schemaVersion: number,
@@ -104,7 +104,7 @@ export class ClientHandler {
     this.#clientGroupID = clientGroupID;
     this.clientID = clientID;
     this.wsID = wsID;
-    this.#zeroClientsTable = `${appID}_${shardID}.clients`;
+    this.#zeroClientsTable = `${upstreamSchema(shard)}.clients`;
     this.#lc = lc;
     this.#downstream = downstream;
     this.#baseVersion = cookieToVersion(baseCookie);

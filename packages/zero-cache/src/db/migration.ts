@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
 import {assert} from '../../../shared/src/asserts.ts';
+import {must} from '../../../shared/src/must.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {PostgresDB, PostgresTransaction} from '../types/pg.ts';
 
@@ -80,7 +81,7 @@ export async function runSchemaMigrations(
     );
 
     let versions = await db.begin(async tx => {
-      const versions = await getVersionHistory(tx, schemaName);
+      const versions = await ensureVersionHistory(tx, schemaName);
       if (codeVersion < versions.minSafeVersion) {
         throw new Error(
           `Cannot run ${debugName} at schema v${codeVersion} because rollback limit is v${versions.minSafeVersion}`,
@@ -112,7 +113,7 @@ export async function runSchemaMigrations(
 
           versions = await db.begin(async tx => {
             // Fetch meta from within the transaction to make the migration atomic.
-            let versions = await getVersionHistory(tx, schemaName);
+            let versions = await ensureVersionHistory(tx, schemaName);
             if (versions.dataVersion < dest) {
               versions = await runMigration(
                 log,
@@ -200,24 +201,38 @@ export async function createVersionHistoryTable(
     );`.simple();
 }
 
-export async function getVersionHistory(
+async function ensureVersionHistory(
   sql: postgres.Sql,
   schemaName: string,
 ): Promise<VersionHistory> {
+  return must(await getVersionHistory(sql, schemaName, true));
+}
+
+export async function getVersionHistory(
+  sql: postgres.Sql,
+  schemaName: string,
+  create = false,
+): Promise<VersionHistory | null> {
   const exists = await sql`
   SELECT nspname, relname FROM pg_class 
     JOIN pg_namespace ON relnamespace = pg_namespace.oid
     WHERE nspname = ${schemaName} AND relname = ${'versionHistory'}`;
 
   if (exists.length === 0) {
-    await createVersionHistoryTable(sql, schemaName);
+    if (create) {
+      await createVersionHistoryTable(sql, schemaName);
+    } else {
+      return null;
+    }
   }
   const rows = await sql`
     SELECT "dataVersion", "schemaVersion", "minSafeVersion" 
        FROM ${sql(schemaName)}."versionHistory"`;
 
   if (rows.length === 0) {
-    return {schemaVersion: 0, dataVersion: 0, minSafeVersion: 0};
+    return create
+      ? {schemaVersion: 0, dataVersion: 0, minSafeVersion: 0}
+      : null;
   }
   return v.parse(rows[0], versionHistory);
 }

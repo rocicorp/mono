@@ -10,13 +10,14 @@ import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
 import type {JSONValue} from '../../types/bigint-json.ts';
 import type {PostgresDB} from '../../types/pg.ts';
+import {cdcSchema, type ShardID} from '../../types/shards.ts';
 import {type Commit} from '../change-source/protocol/current/downstream.ts';
 import type {StatusMessage} from '../change-source/protocol/current/status.ts';
 import type {Service} from '../service.ts';
 import type {WatermarkedChange} from './change-streamer-service.ts';
 import {type ChangeEntry} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
-import {cdcSchema, type ReplicationState} from './schema/tables.ts';
+import {type ReplicationState} from './schema/tables.ts';
 import {Subscriber} from './subscriber.ts';
 
 type QueueEntry =
@@ -65,7 +66,7 @@ type PendingTransaction = {
 export class Storer implements Service {
   readonly id = 'storer';
   readonly #lc: LogContext;
-  readonly #shardID: string;
+  readonly #shard: ShardID;
   readonly #taskID: string;
   readonly #db: PostgresDB;
   readonly #replicaVersion: string;
@@ -74,14 +75,14 @@ export class Storer implements Service {
 
   constructor(
     lc: LogContext,
-    shardID: string,
+    shard: ShardID,
     taskID: string,
     db: PostgresDB,
     replicaVersion: string,
     onConsumed: (c: Commit | StatusMessage) => void,
   ) {
     this.#lc = lc;
-    this.#shardID = shardID;
+    this.#shard = shard;
     this.#taskID = taskID;
     this.#db = db;
     this.#replicaVersion = replicaVersion;
@@ -90,7 +91,7 @@ export class Storer implements Service {
 
   // For readability in SQL statements.
   #cdc(table: string) {
-    return this.#db(`${cdcSchema(this.#shardID)}.${table}`);
+    return this.#db(`${cdcSchema(this.#shard)}.${table}`);
   }
 
   async assumeOwnership() {
