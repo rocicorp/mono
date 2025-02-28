@@ -242,7 +242,9 @@ describe('change-streamer/storer', () => {
     const [sub] = createSubscriber('01');
     storer.catchup(sub, 'backup');
 
-    expect(await fatalErrors.dequeue()).toMatchInlineSnapshot(`[AutoResetSignal: backup replica at watermark 01 is behind change db: 03)]`);
+    expect(await fatalErrors.dequeue()).toMatchInlineSnapshot(
+      `[AutoResetSignal: backup replica at watermark 01 is behind change db: 03)]`,
+    );
   });
 
   test('queued if transaction in progress', async () => {
