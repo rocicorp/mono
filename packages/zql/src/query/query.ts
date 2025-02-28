@@ -42,11 +42,11 @@ export type GetFilterType<
     // https://github.com/rocicorp/mono/pull/3576#discussion_r1925792608
     SchemaValueToTSType<TSchema['columns'][TColumn]> | null
   : TOperator extends 'IN' | 'NOT IN'
-  ? // We don't want to compare to null in where clauses because it causes
-    // confusing results:
-    // https://zero.rocicorp.dev/docs/reading-data#comparing-to-null
-    readonly Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>[]
-  : Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>;
+    ? // We don't want to compare to null in where clauses because it causes
+      // confusing results:
+      // https://zero.rocicorp.dev/docs/reading-data#comparing-to-null
+      readonly Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>[]
+    : Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>;
 
 export type AvailableRelationships<
   TTable extends string,
@@ -99,8 +99,8 @@ export type Row<T extends TableSchema | Query<ZeroSchema, string, any>> =
         >;
       }
     : T extends Query<ZeroSchema, string, infer TReturn>
-    ? TReturn
-    : never;
+      ? TReturn
+      : never;
 
 export interface Query<
   TSchema extends ZeroSchema,
@@ -190,11 +190,19 @@ export interface Query<
 
   run(): Promise<HumanReadable<TReturn>>;
 
-  preload(): {
+  preload(options?: PreloadOptions): {
     cleanup: () => void;
     complete: Promise<void>;
   };
 }
+
+export type PreloadOptions = {
+  /**
+   * Time To Live. This is the amount of time to keep the rows associated with
+   * this query after {@linkcode cleanup} has been called.
+   */
+  ttl?: number | undefined;
+};
 
 export type HumanReadable<T> = undefined extends T ? Expand<T> : Expand<T>[];
 // Note: opaque types expand incorrectly.

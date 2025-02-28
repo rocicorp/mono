@@ -666,7 +666,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     // first see if there is any inactive query with a ttl.
     const next = nextEvictionTime(cvr);
     if (next === undefined) {
-      lc.debug?.('no queries with ttl');
+      lc.debug?.('no inactive queries with ttl');
       // no inactive queries with a ttl. Cancel existing timeout if any.
       if (this.#expiredQueriesTimer) {
         clearTimeout(this.#expiredQueriesTimer);
@@ -1230,9 +1230,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   // This must be called from within the #lock.
   #evictInactiveQueries(lc: LogContext, cvr: CVRSnapshot): Promise<void> {
+    lc = lc.withContext('method', '#evictInactiveQueries');
     return startAsyncSpan(tracer, 'vs.#evictInactiveQueries', async () => {
       const {rowCount: rowCountBeforeEvictions} = this.#cvrStore;
       if (rowCountBeforeEvictions <= this.maxRowCount) {
+        lc.debug?.(
+          `rowCount: ${rowCountBeforeEvictions} <= maxRowCount: ${this.maxRowCount}`,
+        );
         return;
       }
 

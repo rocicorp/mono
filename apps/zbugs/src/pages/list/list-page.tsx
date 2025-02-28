@@ -14,6 +14,7 @@ import React, {
 import {useDebouncedCallback} from 'use-debounce';
 import {useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
+import {hours, minutes} from '../../../../../packages/shared/src/time.ts';
 import {Button} from '../../components/button.tsx';
 import {Filter, type Selection} from '../../components/filter.tsx';
 import {IssueLink} from '../../components/issue-link.tsx';
@@ -56,6 +57,8 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const sortDirection =
     qs.get('sortDir')?.toLowerCase() === 'asc' ? 'asc' : 'desc';
 
+  let ttl = hours(1);
+
   let q = z.query.issue
     .orderBy(sortField, sortDirection)
     .orderBy('id', sortDirection)
@@ -78,6 +81,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   }
 
   if (textFilter) {
+    ttl = minutes(10);
     q = q.where(({or, cmp, exists}) =>
       or(
         cmp('title', 'ILIKE', `%${escapeLike(textFilter)}%`),
@@ -93,7 +97,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     q = q.whereExists('labels', q => q.where('name', label));
   }
 
-  const [issues, issuesResult] = useQuery(q);
+  const [issues, issuesResult] = useQuery(q, {ttl});
   if (issues.length > 0 || issuesResult.type === 'complete') {
     onReady();
   }

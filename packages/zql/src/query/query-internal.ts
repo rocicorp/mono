@@ -12,4 +12,5 @@ export interface AdvancedQuery<
   materialize<T>(factory: ViewFactory<TSchema, TTable, TReturn, T>): T;
   get format(): Format;
   hash(): string;
+  withTTL(ttl: number): AdvancedQuery<TSchema, TTable, TReturn>;
 }

@@ -35,6 +35,7 @@ import type {
   GetFilterType,
   HumanReadable,
   Operator,
+  PreloadOptions,
   PullRow,
   Query,
 } from './query.ts';
@@ -65,7 +66,7 @@ function newQueryWithDetails<
   ast: AST,
   ttl: number | undefined,
   format: Format | undefined,
-): Query<TSchema, TTable, TReturn> {
+): QueryImpl<TSchema, TTable, TReturn> {
   return new QueryImpl(delegate, schema, tableName, ast, ttl, format);
 }
 
@@ -95,6 +96,8 @@ export function staticParam(
 
 export const SUBQ_PREFIX = 'zsubq_';
 
+const ttlSymbol = Symbol();
+
 export abstract class AbstractQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
@@ -120,6 +123,20 @@ export abstract class AbstractQuery<
     this.#ast = ast;
     this.#ttl = ttl;
     this.#format = format ?? {singular: false, relationships: {}};
+  }
+
+  protected get [ttlSymbol](): number | undefined {
+    return this.#ttl;
+  }
+
+  withTTL(ttl: number): AbstractQuery<TSchema, TTable, TReturn> {
+    return this._newQuery(
+      this.#schema,
+      this.#tableName,
+      this.#ast,
+      ttl,
+      this.#format,
+    );
   }
 
   get format(): Format {
@@ -152,7 +169,7 @@ export abstract class AbstractQuery<
     ast: AST,
     ttl: number | undefined,
     format: Format | undefined,
-  ): Query<TSchema, TTable, TReturn>;
+  ): AbstractQuery<TSchema, TTable, TReturn>;
 
   one(): Query<TSchema, TTable, TReturn | undefined> {
     return this._newQuery(
@@ -597,7 +614,7 @@ export class QueryImpl<
     ast: AST,
     ttl: number | undefined,
     format: Format | undefined,
-  ): Query<TSchema, TTable, TReturn> {
+  ): QueryImpl<TSchema, TTable, TReturn> {
     return newQueryWithDetails(
       this.#delegate,
       schema,
@@ -612,7 +629,7 @@ export class QueryImpl<
     const ast = this._completeAst();
     const queryCompleteResolver = resolver<true>();
     let queryGot = false;
-    const ttl = undefined;
+    const ttl = this[ttlSymbol];
     const removeServerQuery = this.#delegate.addServerQuery(ast, ttl, got => {
       if (got) {
         queryGot = true;
@@ -652,14 +669,13 @@ export class QueryImpl<
     return Promise.resolve(ret);
   }
 
-  preload(): {
+  preload(options?: PreloadOptions): {
     cleanup: () => void;
     complete: Promise<void>;
   } {
     const {resolve, promise: complete} = resolver<void>();
     const ast = this._completeAst();
-    const ttl = undefined;
-    const unsub = this.#delegate.addServerQuery(ast, ttl, got => {
+    const unsub = this.#delegate.addServerQuery(ast, options?.ttl, got => {
       if (got) {
         resolve();
       }

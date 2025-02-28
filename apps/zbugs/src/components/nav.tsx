@@ -4,6 +4,7 @@ import {memo, useCallback, useEffect, useMemo, useState} from 'react';
 import {useRoute, useSearch} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {useQuery} from 'zero-react/src/use-query.js';
+import {minutes} from '../../../../packages/shared/src/time.ts';
 import logoURL from '../assets/images/logo.svg';
 import markURL from '../assets/images/mark.svg';
 import {useLogin} from '../hooks/use-login.tsx';
@@ -33,6 +34,7 @@ export const Nav = memo(() => {
   const zero = useZero();
   const [user] = useQuery(
     zero.query.user.where('id', login.loginState?.decoded.sub ?? '').one(),
+    {ttl: minutes(10)},
   );
 
   const [showIssueModal, setShowIssueModal] = useState(false);

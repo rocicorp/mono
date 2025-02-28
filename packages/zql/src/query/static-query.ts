@@ -38,7 +38,7 @@ export class StaticQuery<
     ast: AST,
     ttl: number | undefined,
     format: Format | undefined,
-  ): Query<TSchema, TTable, TReturn> {
+  ): StaticQuery<TSchema, TTable, TReturn> {
     return new StaticQuery(schema, tableName, ast, ttl, format);
   }
 

@@ -17,20 +17,38 @@ export type QueryResult<TReturn> = readonly [
   QueryResultDetails,
 ];
 
+export type UseQueryOptions = {
+  enabled?: boolean | undefined;
+  /**
+   * Time to live. This determines how long to cache the results of this query.
+   * If undefined (or 0) the query will be cached as long as it is not removed and
+   * there is enough space
+   */
+  ttl?: number | undefined;
+};
+
 export function useQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 >(
-  q: Query<TSchema, TTable, TReturn>,
-  enable: boolean = true,
+  query: Query<TSchema, TTable, TReturn>,
+  options?: UseQueryOptions | boolean,
 ): QueryResult<TReturn> {
+  let enabled = true;
+  let ttl: number | undefined;
+  if (typeof options === 'boolean') {
+    enabled = options;
+  } else if (options) {
+    ({enabled = true, ttl} = options);
+  }
+  let advancedQuery = query as AdvancedQuery<TSchema, TTable, TReturn>;
+  if (ttl !== undefined) {
+    advancedQuery = advancedQuery.withTTL(ttl);
+  }
+
   const z = useZero();
-  const view = viewStore.getView(
-    z.clientID,
-    q as AdvancedQuery<TSchema, TTable, TReturn>,
-    enable,
-  );
+  const view = viewStore.getView(z.clientID, advancedQuery, enabled);
   // https://react.dev/reference/react/useSyncExternalStore
   return useSyncExternalStore(
     view.subscribeReactInternals,

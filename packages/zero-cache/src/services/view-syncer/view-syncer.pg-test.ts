@@ -3330,7 +3330,7 @@ describe('view-syncer/service', () => {
     `);
   });
 
-  describe('expired queries', {timeout: 30_000}, () => {
+  describe('expired queries', () => {
     test('expired query is removed', async () => {
       const ttl = 100;
       const client = connect(SYNC_CONTEXT, [

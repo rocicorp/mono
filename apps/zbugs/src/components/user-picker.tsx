@@ -1,6 +1,7 @@
 import {type Row} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {useEffect, useMemo, useState} from 'react';
+import {hours} from '../../../../packages/shared/src/time.ts';
 import {type Schema} from '../../schema.ts';
 import avatarIcon from '../assets/icons/avatar-default.svg';
 import {avatarURLWithSize} from '../avatar-url-with-size.ts';
@@ -45,7 +46,7 @@ export function UserPicker({
     }
   }
 
-  const [unsortedUsers] = useQuery(q);
+  const [unsortedUsers] = useQuery(q, {ttl: hours(1)});
   // TODO: Support case-insensitive sorting in ZQL.
   const users = useMemo(
     () => unsortedUsers.toSorted((a, b) => a.login.localeCompare(b.login)),
