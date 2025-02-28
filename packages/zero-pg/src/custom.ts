@@ -1,4 +1,3 @@
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {TableSchema} from '../../zero-schema/src/table-schema.ts';
 import type {
@@ -8,11 +7,12 @@ import type {
   TransactionBase,
   ConnectionProvider,
   DBTransaction,
+  Transaction,
 } from '../../zql/src/mutate/custom.ts';
 import {PushProcessor, type PushHandler} from './web.ts';
 import {formatPg, sql} from '../../z2s/src/sql.ts';
 
-export interface Transaction<S extends Schema, TWrappedTransaction>
+interface ServerTransaction<S extends Schema, TWrappedTransaction>
   extends TransactionBase<S> {
   readonly location: 'server';
   readonly reason: 'authoritative';
@@ -30,9 +30,10 @@ export type CustomMutatorDefs<S extends Schema, TDBTransaction> = {
   };
 };
 
-export type CustomMutatorImpl<S extends Schema, TDBTransaction> = (
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type CustomMutatorImpl<S extends Schema, TDBTransaction, TArgs = any> = (
   tx: Transaction<S, TDBTransaction>,
-  args: ReadonlyJSONValue,
+  args: TArgs,
 ) => Promise<void>;
 
 type Options<
@@ -66,7 +67,7 @@ export function createPushHandler<
 }
 
 export class TransactionImpl<S extends Schema, TWrappedTransaction>
-  implements Transaction<S, TWrappedTransaction>
+  implements ServerTransaction<S, TWrappedTransaction>
 {
   readonly location = 'server';
   readonly reason = 'authoritative';

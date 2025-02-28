@@ -1,10 +1,10 @@
-import {nanoid} from 'nanoid';
 import {useEffect, useState} from 'react';
 import {Button} from '../../components/button.tsx';
 import {useLogin} from '../../hooks/use-login.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
 import {maxCommentLength} from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
+import {nanoid} from 'nanoid';
 
 export function CommentComposer({
   id,
@@ -23,7 +23,7 @@ export function CommentComposer({
   const save = () => {
     setCurrentBody(body ?? '');
     if (!id) {
-      z.mutate.comment.insert({
+      z.mutate.comment.add({
         id: nanoid(),
         issueID,
         creatorID: z.userID,
@@ -34,7 +34,7 @@ export function CommentComposer({
       return;
     }
 
-    z.mutate.comment.update({id, body: currentBody});
+    z.mutate.comment.edit({id, body: currentBody});
     onDone?.();
   };
 
