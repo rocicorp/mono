@@ -3,10 +3,9 @@ import {testDBs} from '../../zero-cache/src/test/db.ts';
 import {beforeEach, describe, expect, test} from 'vitest';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
 
-import type {DBTransaction} from './db.ts';
 import {makeSchemaCRUD} from './custom.ts';
 import {Transaction} from './test/util.ts';
-import type {SchemaCRUD} from '../../zql/src/mutate/custom.ts';
+import type {DBTransaction, SchemaCRUD} from '../../zql/src/mutate/custom.ts';
 import {schema, schemaSql} from './test/schema.ts';
 
 describe('makeSchemaCRUD', () => {

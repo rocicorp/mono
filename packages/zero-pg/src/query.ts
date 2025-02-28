@@ -1,14 +1,13 @@
 import {first} from '../../shared/src/iterables.ts';
 import {compile} from '../../z2s/src/compiler.ts';
 import {formatPg} from '../../z2s/src/sql.ts';
-import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import type {SchemaQuery, DBTransaction} from '../../zql/src/mutate/custom.ts';
+import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
-import type {SchemaQuery} from '../../zql/src/mutate/custom.ts';
 import {AbstractQuery} from '../../zql/src/query/query-impl.ts';
 import type {HumanReadable, PullRow, Query} from '../../zql/src/query/query.ts';
 import type {TypedView} from '../../zql/src/query/typed-view.ts';
-import type {DBTransaction} from './db.ts';
 
 export function makeSchemaQuery<S extends Schema>(
   schema: S,
