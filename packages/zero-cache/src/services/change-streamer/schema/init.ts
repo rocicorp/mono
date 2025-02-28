@@ -40,7 +40,14 @@ export async function initChangeStreamerSchema(
   shard: ShardID,
 ): Promise<void> {
   const schema = cdcSchema(shard);
-  await migrateFromLegacySchemas(log, db, schema, `cdc_${shard.appID}`, 'cdc');
+  const {appID} = shard;
+  await migrateFromLegacySchemas(
+    log,
+    db,
+    schema,
+    appID === 'zero' ? `cdc_0` : `cdc_${appID}`,
+    'cdc',
+  );
 
   const setupMigration: Migration = {
     migrateSchema: (lc, tx) => setupCDCTables(lc, tx, shard),
