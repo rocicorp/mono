@@ -6,7 +6,7 @@ import type {Pusher} from './pusher.ts';
 import type {MutatorDefs, RequestOptions} from './types.ts';
 import type {DetailedReason} from './transactions.ts';
 import type {Hash} from './hash.ts';
-import type {Store} from './dag/store.ts';
+import type {Read, Store} from './dag/store.ts';
 import type {MaybePromise} from '../../shared/src/types.ts';
 
 /**
@@ -246,6 +246,7 @@ export type ZeroOption<T> = {
       | {
           store: Store;
           hash: Hash;
+          read?: Read;
         }
       | undefined,
   ): MaybePromise<T>;
