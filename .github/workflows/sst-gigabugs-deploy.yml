@@ -2,7 +2,8 @@ name: Build and Deploy Gigabugs Zero-Cache AWS SST
 
 on:
   push:
-    branches: [disabled] #[gigabugs]
+    # branches: [gigabugs]
+    branches: [disabled]
 env:
   # Setting an environment variable with the value of a configuration variable
   ECR_IMAGE_ZERO_CACHE: zero-zgigabugs
