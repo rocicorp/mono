@@ -24,6 +24,7 @@ export class IVMSourceRepo {
    * Sync is lazily created when the first response from the server is received.
    */
   #sync: IVMSourceBranch | undefined;
+
   /**
    * Rebase is created when the sync head is advanced and points to a fork
    * of the sync head. This is used to rebase optimistic mutations.
@@ -128,20 +129,23 @@ export class IVMSourceRepo {
     }
 
     // Set the branch which can be used for rebasing optimistic mutations.
-    this.#rebase = must(this.#sync).fork();
+    this.#rebase = must(this.#sync).fork(syncHeadHash);
   };
 }
 
 export class IVMSourceBranch {
   readonly #sources: Map<string, MemorySource | undefined>;
   readonly #tables: Record<string, TableSchema>;
+  hash: Hash | undefined;
 
   constructor(
     tables: Record<string, TableSchema>,
     sources: Map<string, MemorySource | undefined> = new Map(),
+    hash?: Hash | undefined,
   ) {
     this.#tables = tables;
     this.#sources = sources;
+    this.hash = hash;
   }
 
   getSource(name: string): MemorySource | undefined {
@@ -172,7 +176,7 @@ export class IVMSourceBranch {
    * 3. We need to create a new `sync` head because we got a new server snapshot.
    *    The old `sync` head is forked and the new server snapshot is applied to the fork.
    */
-  fork() {
+  fork(hash: Hash) {
     return new IVMSourceBranch(
       this.#tables,
       new Map(
@@ -181,6 +185,7 @@ export class IVMSourceBranch {
           source?.fork(),
         ]),
       ),
+      hash,
     );
   }
 }
