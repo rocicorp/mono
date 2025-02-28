@@ -34,13 +34,13 @@ function makeCVR(clients: Record<string, QueryDef[]>): CVR {
         ast: {
           table: 'issues',
         },
-        desiredBy: {},
+        clientState: {},
         id: hash,
         patchVersion: undefined,
         transformationHash: undefined,
         transformationVersion: undefined,
       };
-      (cvr.queries[hash] as ClientQueryRecord).desiredBy[clientID] = {
+      (cvr.queries[hash] as ClientQueryRecord).clientState[clientID] = {
         inactivatedAt,
         ttl,
         version: {

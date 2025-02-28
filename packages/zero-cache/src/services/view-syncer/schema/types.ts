@@ -162,24 +162,23 @@ export const internalQueryRecordSchema = baseQueryRecordSchema.extend({
 
 export type InternalQueryRecord = v.Infer<typeof internalQueryRecordSchema>;
 
-const clientLRUSchema = v.object({
-  // /** @deprecated */
-  expiresAt: v.number().nullable().optional(),
-
+const clientStateSchema = v.object({
   /**
    * The time at which the query was last inactivated. If this undefined or
    * missing then the query is active.
+   *
+   * Desired queries are always active and have an undefined inactivatedAt.
    */
-  inactivatedAt: v.number().nullable().optional(),
+  inactivatedAt: v.number().optional(),
 
   /**
    * TTL, time to live in milliseconds. If the query is not updated within this time.
    * The time to live is the time after it has become inactive.
    */
-  ttl: v.number().nullable().optional(),
+  ttl: v.number().optional(),
 
   /**
-   * The version at which the desired query info changed (i.e. individual `patchVersion`s).
+   * The version at which the client state changed (i.e. individual `patchVersion`s).
    */
   version: cvrVersionSchema,
 });
@@ -187,13 +186,16 @@ const clientLRUSchema = v.object({
 export const clientQueryRecordSchema = baseQueryRecordSchema.extend({
   internal: v.literal(false).optional(),
 
+  /**
+   * The client state for this query, which includes the inactivatedAt, ttl and
+   * version. The client state is stored in a record with the client ID as the
+   * key.
+   */
+  clientState: v.record(clientStateSchema),
+
   // For queries, the `patchVersion` indicates when query was added to the got set,
   // and is absent if not yet gotten.
   patchVersion: cvrVersionSchema.optional(),
-
-  // Maps each of the desiring client's IDs to the version at which
-  // the queryID was added to their desired query set (i.e. individual `patchVersion`s).
-  desiredBy: v.record(clientLRUSchema),
 });
 
 export type ClientQueryRecord = v.Infer<typeof clientQueryRecordSchema>;
