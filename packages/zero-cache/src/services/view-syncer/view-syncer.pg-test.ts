@@ -3332,7 +3332,7 @@ describe('view-syncer/service', () => {
 
   describe('expired queries', {timeout: 10_000}, () => {
     test('expired query is removed', async () => {
-      const ttl = 50;
+      const ttl = 100;
       const client = connect(SYNC_CONTEXT, [
         {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
       ]);
@@ -3550,7 +3550,7 @@ describe('view-syncer/service', () => {
     });
 
     test('expired query is readded', async () => {
-      const ttl = 50;
+      const ttl = 100;
       const client = connect(SYNC_CONTEXT, [
         {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
       ]);
@@ -3849,7 +3849,7 @@ describe('view-syncer/service', () => {
     });
 
     test('query is added twice with longer ttl', async () => {
-      const ttl = 50;
+      const ttl = 100;
       const client = connect(SYNC_CONTEXT, [
         {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
       ]);
@@ -4125,7 +4125,7 @@ describe('view-syncer/service', () => {
     });
 
     test('query is added twice with shorter ttl', async () => {
-      const ttl = 50;
+      const ttl = 100;
       const client = connect(SYNC_CONTEXT, [
         {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl: ttl * 2},
       ]);
