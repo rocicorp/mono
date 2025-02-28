@@ -160,6 +160,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
         z.mutate.viewState.set({
           issueID: displayed.id,
           userID: z.userID,
+          viewed: Date.now(),
         });
       }, 1000);
       return () => clearTimeout(handle);

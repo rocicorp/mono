@@ -27,19 +27,22 @@ import type {InternalDiff} from '../../../replicache/src/btree/node.ts';
  * Provides handles to IVM sources at the `sync` and `main` heads to be used
  * by mutators and queries.
  *
- * Initial mutations are run against the `main` head.
- * All queries in the user's application also run against the `main` head.
+ *  `sync` tracks replicache's sync head.
+ * `main` tracks replicache's main head.
  *
- * Rebases usually happen against the `sync` head. Rebases can happen for three reasons:
+ * Initial mutations are run against the `main` head.
+ * All UI queries also run against the `main` head.
+ *
+ * Rebases usually happen against the `sync` head.
+ * Rebases can happen for three reasons:
  * 1. pullEnd
  * 2. persist
  * 3. refresh
  *
- * `pullEnd` and `persist` always rebased against the sync head.
- * (is this correct for persist?)
+ * `pullEnd` and `persist` always rebase against the sync head.
  *
- * When the rebase is run, the caller receives a fork of the sync head.
- * Given that, the rebase does not change the sync head held by this class but
+ * When a rebase is run, the caller doing the rebase receives a fork of the sync head.
+ * Given that, a rebase does not change the sync head held by this class but
  * changes the fork used by the caller.
  *
  * The fork is discarded once the rebase completes. The `main`
@@ -49,20 +52,20 @@ import type {InternalDiff} from '../../../replicache/src/btree/node.ts';
  * `refresh` is the special case. Refresh brings data from IDB into
  * the current tab. The data in IDB may contain mutations from
  * other clients that are not yet in the sync head. This means
- * what we need to rebase our local changes into is not the sync head but
- * some commit to is ahead of the sync head.
+ * what we need to rebase our local changes onto is not the sync head but
+ * some commit that is ahead of the sync head.
  *
- * `refresh` is handled by computing a diff from `syncHead` to `expectedHead`.
+ * To deal with this, `refresh` is handled by computing a diff from `syncHead` to `expectedHead`.
  * `sync` is forked and the diff is applied to the fork. Mutations are then
- * rebased against the fork.
+ * rebased against that fork.
  *
  * The two important methods on this class:
  * - advanceSyncHead
  * - getSourcesForTransaction
  *
- * advanceSyncHead is called on `pullEnd` to update the client to match the server state.
- * getSourcesForTransaction is called by refresh, persist, pullEnd to get the IVM sources
- * to use in the rebase.
+ * - advanceSyncHead is called on `pullEnd` and is the only way sync head can be changed.
+ * - getSourcesForTransaction is called by refresh, persist, pullEnd to get the IVM sources
+ * to use in a rebase.
  */
 export class IVMSourceRepo {
   readonly #main: IVMSourceBranch;

@@ -16,6 +16,7 @@ type AddEmojiArgs = {
   annotation: string;
   subjectID: string;
   creatorID: string;
+  created: number;
 };
 
 export const mutators = {
@@ -27,24 +28,29 @@ export const mutators = {
         title,
         description,
         creatorID,
+        created,
+        modified,
       }: {
         id: string;
         title: string;
         description?: string;
         creatorID: string;
+        created: number;
+        modified: number;
       },
     ) {
       if (tx.location === 'server') {
         creatorID = await getUserIDFromToken(tx);
+        created = modified = Date.now();
       }
 
       await tx.mutate.issue.insert({
         id,
         title,
         description: description ?? '',
-        created: Date.now(),
+        created,
         creatorID,
-        modified: Date.now(),
+        modified,
         open: true,
         visibility: 'public',
       });
@@ -157,14 +163,17 @@ export const mutators = {
         issueID,
         creatorID,
         body,
+        created,
       }: {
         id: string;
         issueID: string;
         creatorID: string;
         body: string;
+        created: number;
       },
     ) {
       if (tx.location === 'server') {
+        created = Date.now();
         const userID = await getUserIDFromToken(tx);
 
         assert(
@@ -183,7 +192,7 @@ export const mutators = {
         issueID,
         creatorID,
         body,
-        created: Date.now(),
+        created,
       });
     },
 
@@ -233,14 +242,21 @@ export const mutators = {
   },
 
   viewState: {
-    async set(tx, {issueID, userID}: {issueID: string; userID: string}) {
+    async set(
+      tx,
+      {
+        issueID,
+        userID,
+        viewed,
+      }: {issueID: string; userID: string; viewed: number},
+    ) {
       if (tx.location === 'server') {
         const loggedInUser = await getUserIDFromToken(tx);
         if (loggedInUser !== userID) {
           throw new Error('Cannot set view state for another user');
         }
       }
-      await tx.mutate.viewState.upsert({issueID, userID, viewed: Date.now()});
+      await tx.mutate.viewState.upsert({issueID, userID, viewed});
     },
   },
 
@@ -284,9 +300,10 @@ async function userIsAdminOrCreator(
 async function addEmoji(
   tx: Transaction<typeof schema, unknown>,
   subjectType: 'issue' | 'comment',
-  {id, unicode, annotation, subjectID, creatorID}: AddEmojiArgs,
+  {id, unicode, annotation, subjectID, creatorID, created}: AddEmojiArgs,
 ) {
   if (tx.location === 'server') {
+    created = Date.now();
     const userID = await getUserIDFromToken(tx);
     assert(
       userID === creatorID,
@@ -310,7 +327,7 @@ async function addEmoji(
     annotation,
     subjectID,
     creatorID,
-    created: Date.now(),
+    created,
   });
 }
 

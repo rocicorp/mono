@@ -28,6 +28,7 @@ export function CommentComposer({
         issueID,
         creatorID: z.userID,
         body: currentBody,
+        created: Date.now(),
       });
       onDone?.();
       return;
