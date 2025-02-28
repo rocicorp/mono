@@ -47,11 +47,11 @@ import type {
   ChangeSource,
   ChangeStream,
 } from '../../change-streamer/change-streamer-service.ts';
+import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {
-  AutoResetSignal,
-  type ReplicationConfig,
-} from '../../change-streamer/schema/tables.ts';
-import {getSubscriptionState} from '../../replicator/schema/replication-state.ts';
+  getSubscriptionState,
+  type SubscriptionState,
+} from '../../replicator/schema/replication-state.ts';
 import type {
   DataChange,
   Identifier,
@@ -90,7 +90,7 @@ export async function initializePostgresChangeSource(
   shard: ShardConfig,
   replicaDbFile: string,
   syncOptions: InitialSyncOptions,
-): Promise<{replicationConfig: ReplicationConfig; changeSource: ChangeSource}> {
+): Promise<{subscriptionState: SubscriptionState; changeSource: ChangeSource}> {
   await initSyncSchema(
     lc,
     `replica-${shard.appID}-${shard.shardNum}`,
@@ -101,13 +101,13 @@ export async function initializePostgresChangeSource(
   );
 
   const replica = new Database(lc, replicaDbFile);
-  const replicationConfig = getSubscriptionState(new StatementRunner(replica));
+  const subscriptionState = getSubscriptionState(new StatementRunner(replica));
   replica.close();
 
   if (shard.publications.length) {
     // Verify that the publications match what has been synced.
     const requested = [...shard.publications].sort();
-    const replicated = replicationConfig.publications
+    const replicated = subscriptionState.publications
       .filter(p => !p.startsWith(internalPublicationPrefix(shard)))
       .sort();
     if (!deepEqual(requested, replicated)) {
@@ -125,7 +125,7 @@ export async function initializePostgresChangeSource(
       lc,
       db,
       shard,
-      replicationConfig.replicaVersion,
+      subscriptionState.replicaVersion,
     );
   } finally {
     await db.end();
@@ -135,10 +135,10 @@ export async function initializePostgresChangeSource(
     lc,
     upstreamURI,
     shard,
-    replicationConfig.replicaVersion,
+    subscriptionState.replicaVersion,
   );
 
-  return {replicationConfig, changeSource};
+  return {subscriptionState, changeSource};
 }
 
 async function checkAndUpdateUpstream(

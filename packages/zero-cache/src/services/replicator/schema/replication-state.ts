@@ -50,6 +50,8 @@ const subscriptionStateSchema = v
     publications: v.parse(JSON.parse(s.publications), stringArray),
   }));
 
+export type SubscriptionState = v.Infer<typeof subscriptionStateSchema>;
+
 const replicationStateSchema = v.object({
   stateVersion: v.string(),
 });
@@ -75,7 +77,7 @@ export function initReplicationState(
   ).run(watermark);
 }
 
-export function getSubscriptionState(db: StatementRunner) {
+export function getSubscriptionState(db: StatementRunner): SubscriptionState {
   const result = db.get(
     `
       SELECT c.replicaVersion, c.publications, s.stateVersion as watermark
