@@ -235,6 +235,7 @@ export async function refresh(
         const zeroData = await zero?.getRepTxData?.('refresh', {
           store: memdag,
           hash: newMemdagHeadHash,
+          read: memdagWrite,
         });
         for (let i = newMemdagMutations.length - 1; i >= 0; i--) {
           newMemdagHeadHash = (

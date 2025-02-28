@@ -3,6 +3,7 @@ import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import {wrapIterable} from '../../../shared/src/iterables.ts';
 import {
   mustGetHeadHash,
+  type Read,
   type Store,
 } from '../../../replicache/src/dag/store.ts';
 import {withRead} from '../../../replicache/src/with-transactions.ts';
@@ -50,6 +51,10 @@ export class IVMSourceRepo {
     return this.#main;
   }
 
+  /**
+   * When replicache starts a rebase or mutation, it calls
+   * this method to create the IVM sources at the expected head.
+   */
   getSourcesForTransaction(
     reason: DetailedReason,
     expectedHead:
@@ -79,7 +84,7 @@ export class IVMSourceRepo {
       case 'refresh': {
         assert(
           expectedHead !== undefined,
-          'expectedHead must be specified for ' + reason,
+          () => 'expectedHead must be specified for ' + reason,
         );
         if (this.#sync === undefined) {
           return this.#createSourcesForHead(expectedHead);
@@ -91,11 +96,10 @@ export class IVMSourceRepo {
           return {read: fork, write: fork};
         }
 
-        console.warn(
-          `Expected sync head ${expectedHead.hash} but got ${
-            this.#sync.hash
-          } for ${reason}`,
-        );
+        // On refresh the hashes may not match.
+        // This is because IDB will have mutations included in it
+        // that are not yet in the sync head.
+        assert(reason === 'refresh');
         return this.#createSourcesForHead(expectedHead);
       }
     }
@@ -104,10 +108,14 @@ export class IVMSourceRepo {
   async #createSourcesForHead({
     store,
     hash,
+    read,
   }: {
     store: Store;
     hash: Hash;
+    read?: Read;
   }): Promise<RepTxZeroData> {
+    // If the sync head does not exist yet, create it.
+    // It will be fast-forwarded to the desired head.
     if (this.#sync === undefined) {
       await this.#initSyncHead(store, undefined);
     }
@@ -116,10 +124,9 @@ export class IVMSourceRepo {
     // we await the diffs.
     const fork = this.#sync.fork();
 
-    const diffsFromSync = await withRead(store, async dagRead => {
-      const head = await dagRead.getHead(must(fork.hash));
-      return diff(
-        must(head, 'could not find sync head'),
+    const readFn = (dagRead: Read) =>
+      diff(
+        fork.hash,
         hash,
         dagRead,
         {
@@ -130,7 +137,8 @@ export class IVMSourceRepo {
         },
         FormatVersion.Latest,
       );
-    });
+    const diffsFromSync =
+      read === undefined ? await withRead(store, readFn) : await readFn(read);
 
     const diffs = diffsFromSync.get('');
     if (diffs === undefined) {
@@ -214,7 +222,7 @@ export class IVMSourceRepo {
     /**
      * The sync head may not exist yet as we do not create it on construction of Zero.
      * One reason it is not created eagerly is that the `main` head must exist immediately
-     * on startup of Zero since a user can immediately construct queries without awaiting. E.g.,
+     * on startup of Zero since a user can construct queries without awaiting. E.g.,
      *
      * ```ts
      * const z = new Zero();
@@ -222,8 +230,7 @@ export class IVMSourceRepo {
      * ```
      *
      * Since the main `IVM Sources` must exist immediately on construction of Zero,
-     * we cannot wait for `sync` to be populated then forked off to `main`.
-     *
+     * we cannot wait for `sync` to be populated then forked off into `main`.
      */
     if (this.#sync === undefined) {
       await this.#initSyncHead(store, syncHeadHash);
@@ -235,7 +242,7 @@ export class IVMSourceRepo {
       return;
     }
 
-    // sync head already exists so we advance it from the array of diffs.
+    // Sync head was behind. Advance it via the provided diffs.
     for (const patch of patches) {
       if (patch.op === 'clear') {
         this.#sync.clear();
@@ -309,11 +316,8 @@ export class IVMSourceBranch {
    * This is a cheap operation since the b-trees are shared until a write is performed
    * and then only the modified nodes are copied.
    *
-   * This is used when:
-   * 1. We need to rebase a change. We fork the `sync` branch and run the mutations against the fork.
-   * 2. We need to create `main` at startup.
-   * 3. We need to create a new `sync` head because we got a new server snapshot.
-   *    The old `sync` head is forked and the new server snapshot is applied to the fork.
+   * IVM branches are forked when we need to rebase mutations.
+   * The mutations modify the fork rather than original branch.
    */
   fork() {
     return new IVMSourceBranch(
