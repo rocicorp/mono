@@ -101,7 +101,8 @@ export default $config({
     // Common base transform configuration
     const BASE_TRANSFORM: any = {
       service: {
-        healthCheckGracePeriodSeconds: 300,
+        // 10 minutes should be more than enough time for gigabugs initial-sync.
+        healthCheckGracePeriodSeconds: 600,
       },
       loadBalancer: {
         idleTimeout: 3600,
