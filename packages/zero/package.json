@@ -95,7 +95,7 @@
     },
     "./pg": {
       "types": "./out/zero-pg/src/mod.d.ts",
-      "default": "./out/pg.js"
+      "default": "./out/zero/src/pg.js"
     }
   },
   "bin": {

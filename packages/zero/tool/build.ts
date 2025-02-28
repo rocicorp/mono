@@ -103,7 +103,6 @@ async function buildZeroClient() {
         react: basePath('src/react.ts'),
         solid: basePath('src/solid.ts'),
         advanced: basePath('src/advanced.ts'),
-        pg: basePath('src/pg.ts'),
       };
   const result = await esbuild.build({
     ...sharedOptions(minify, metafile),
