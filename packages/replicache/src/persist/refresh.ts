@@ -232,7 +232,7 @@ export async function refresh(
         await Promise.all(ps);
 
         let newMemdagHeadHash = perdagClientGroupHeadHash;
-        const zeroData = await zero?.getRepTxData?.('rebase', {
+        const zeroData = await zero?.getRepTxData?.('refresh', {
           store: memdag,
           hash: newMemdagHeadHash,
         });
