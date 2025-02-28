@@ -1413,6 +1413,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           tables: tableSpecs,
           indexes: c.replicatedIndexes,
         },
+        replicaVersion: WATERMARK_REGEX,
       });
 
       const {publications, tables} = await getPublicationInfo(

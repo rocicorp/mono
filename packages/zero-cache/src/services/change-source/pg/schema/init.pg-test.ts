@@ -14,8 +14,8 @@ const SHARD_NUM = 23;
 
 // Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
-  dataVersion: 5,
-  schemaVersion: 5,
+  dataVersion: 6,
+  schemaVersion: 6,
   minSafeVersion: 1,
   lock: 'v',
 } as const;
@@ -109,6 +109,44 @@ describe('change-streamer/pg/schema/init', () => {
         ],
       },
     },
+    {
+      name: 'v5 to v6',
+      upstreamSetup: `
+        CREATE SCHEMA ${APP_ID}_${SHARD_NUM};
+        CREATE TABLE ${APP_ID}_${SHARD_NUM}."shardConfig" (
+          "publications"  TEXT[] NOT NULL,
+          "ddlDetection"  BOOL NOT NULL,
+          "initialSchema" JSON,
+
+          -- Ensure that there is only a single row in the table.
+          "lock" BOOL PRIMARY KEY DEFAULT true CHECK (lock)
+        );
+
+        INSERT INTO ${APP_ID}_${SHARD_NUM}."shardConfig" 
+          ("lock", "publications", "ddlDetection", "initialSchema")
+          VALUES (true, 
+            ARRAY['_${APP_ID}_metadata_23', '_${APP_ID}_public_23'], 
+            true,
+            null
+          );
+  `,
+      existingVersionHistory: {
+        schemaVersion: 5,
+        dataVersion: 5,
+        minSafeVersion: 1,
+      },
+      upstreamPostState: {
+        [`${APP_ID}_${SHARD_NUM}.shardConfig`]: [
+          {
+            lock: true,
+            publications: [`_${APP_ID}_metadata_23`, `_${APP_ID}_public_23`],
+            ddlDetection: true,
+            initialSchema: null,
+            replicaVersion: '123',
+          },
+        ],
+      },
+    },
   ];
 
   for (const c of cases) {
@@ -120,11 +158,16 @@ describe('change-streamer/pg/schema/init', () => {
         await createVersionHistoryTable(upstream, schema);
         await upstream`INSERT INTO ${upstream(schema)}."versionHistory"
           ${upstream(c.existingVersionHistory)}`;
-        await updateShardSchema(lc, upstream, {
-          appID: APP_ID,
-          shardNum: SHARD_NUM,
-          publications: c.requestedPublications ?? [],
-        });
+        await updateShardSchema(
+          lc,
+          upstream,
+          {
+            appID: APP_ID,
+            shardNum: SHARD_NUM,
+            publications: c.requestedPublications ?? [],
+          },
+          '123',
+        );
       } else {
         await initShardSchema(lc, upstream, {
           appID: APP_ID,

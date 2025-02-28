@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {assert} from '../../../../../../shared/src/asserts.ts';
 import {
   getVersionHistory,
   runSchemaMigrations,
@@ -31,6 +32,7 @@ export async function updateShardSchema(
   lc: LogContext,
   db: PostgresDB,
   shard: ShardConfig,
+  replicaVersion: string,
 ): Promise<void> {
   const {appID, shardNum} = shard;
   const versionHistory = await getVersionHistory(db, upstreamSchema(shard));
@@ -39,7 +41,7 @@ export async function updateShardSchema(
       `upstream shard ${appID}_${shardNum} is not initialized`,
     );
   }
-  await runShardMigrations(lc, db, shard);
+  await runShardMigrations(lc, db, shard, replicaVersion);
 
   // The decommission check is run in updateShardSchema so that it happens
   // after initial sync, and not when the shard schema is initially set up.
@@ -50,6 +52,7 @@ async function runShardMigrations(
   lc: LogContext,
   db: PostgresDB,
   shard: ShardConfig,
+  replicaVersion?: string,
 ): Promise<void> {
   const setupMigration: Migration = {
     migrateSchema: (lc, tx) => setupTablesAndReplication(lc, tx, shard),
@@ -72,6 +75,26 @@ async function runShardMigrations(
     // indicate that it was created with the {APP_ID} configuration and should
     // not be decommissioned as a legacy shard.
     5: {},
+
+    6: {
+      migrateSchema: async (lc, tx) => {
+        assert(
+          replicaVersion,
+          `replicaVersion is always passed for incremental migrations`,
+        );
+        await Promise.all([
+          tx`
+          ALTER TABLE ${tx(upstreamSchema(shard))}."shardConfig" 
+            ADD "replicaVersion" TEXT`,
+          tx`
+          UPDATE ${tx(upstreamSchema(shard))}."shardConfig" 
+            SET ${tx({replicaVersion})}`,
+        ]);
+        lc.info?.(
+          `Recorded replicaVersion ${replicaVersion} in upstream shardConfig`,
+        );
+      },
+    },
   };
 
   await runSchemaMigrations(
