@@ -164,7 +164,7 @@ export class RowRecordCache {
     rowRecords: Map<RowID, RowRecord | null>,
     rowsVersion: CVRVersion,
     flushed: boolean,
-  ) {
+  ): Promise<number> {
     const cache = await this.#ensureLoaded();
     for (const [id, row] of rowRecords.entries()) {
       if (row === null || row.refCounts === null) {
@@ -182,6 +182,7 @@ export class RowRecordCache {
       this.#flushing = resolver();
       this.#setTimeout(() => this.#flush(), 0);
     }
+    return cache.size;
   }
 
   async #flush() {

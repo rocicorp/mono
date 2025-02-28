@@ -74,7 +74,7 @@ function asQuery(row: QueriesRow): QueryRecord {
         id: row.queryHash,
         ast,
         patchVersion: maybeVersion(row.patchVersion),
-        desiredBy: {},
+        clientState: {},
         transformationHash: row.transformationHash ?? undefined,
         transformationVersion: maybeVersion(row.transformationVersion),
       } satisfies ClientQueryRecord);
@@ -109,6 +109,7 @@ export class CVRStore {
   readonly #rowCache: RowRecordCache;
   readonly #loadAttemptIntervalMs: number;
   readonly #maxLoadAttempts: number;
+  #rowCount: number = 0;
 
   constructor(
     lc: LogContext,
@@ -211,7 +212,7 @@ export class CVRStore {
           EXTRACT(EPOCH FROM "ttl") * 1000 AS "ttl",
           "inactivatedAt"
           FROM ${this.#cvr('desires')}
-          WHERE "clientGroupID" = ${id} AND (deleted IS NULL OR deleted = FALSE)`,
+          WHERE "clientGroupID" = ${id}`,
       ]);
 
     if (instance.length === 0) {
@@ -281,11 +282,17 @@ export class CVRStore {
         lc.error?.(`Client ${row.clientID} not found`, cvr);
         throw new Error(`Client ${row.clientID} not found`);
       }
-      client.desiredQueryIDs.push(row.queryHash);
+      if (!row.deleted && row.inactivatedAt === null) {
+        client.desiredQueryIDs.push(row.queryHash);
+      }
 
       const query = cvr.queries[row.queryHash];
-      if (query && !query.internal) {
-        query.desiredBy[row.clientID] = {
+      if (
+        query &&
+        !query.internal &&
+        (!row.deleted || row.inactivatedAt !== null)
+      ) {
+        query.clientState[row.clientID] = {
           inactivatedAt: row.inactivatedAt ?? undefined,
           ttl: row.ttl ?? undefined,
           version: versionFromString(row.patchVersion),
@@ -642,6 +649,7 @@ export class CVRStore {
     };
     if (this.#pendingRowRecordUpdates.size) {
       const existingRowRecords = await this.getRowRecords();
+      this.#rowCount = existingRowRecords.size;
       for (const [id, row] of this.#pendingRowRecordUpdates.entries()) {
         if (this.#forceUpdates.has(id)) {
           continue;
@@ -716,12 +724,16 @@ export class CVRStore {
       stats.rows += this.#pendingRowRecordUpdates.size;
       return true;
     });
-    await this.#rowCache.apply(
+    this.#rowCount = await this.#rowCache.apply(
       this.#pendingRowRecordUpdates,
       newVersion,
       rowsFlushed,
     );
     return stats;
+  }
+
+  get rowCount(): number {
+    return this.#rowCount;
   }
 
   async flush(

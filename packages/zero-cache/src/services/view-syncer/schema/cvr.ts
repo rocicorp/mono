@@ -141,8 +141,6 @@ export type DesiresRow = {
   deleted: boolean | null;
   ttl: number | null;
   inactivatedAt: number | null;
-  /** @deprecated */
-  expiresAt?: number | null;
 };
 
 function createDesiresTable(shard: ShardID) {
