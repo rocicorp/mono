@@ -765,7 +765,10 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
       }
 
       // Replay.
-      const zeroData = await this.#zero?.getRepTxData?.('rebase', undefined);
+      const zeroData = await this.#zero?.getRepTxData?.('pullEnd', {
+        store: this.memdag,
+        hash: syncHead,
+      });
       for (const mutation of replayMutations) {
         // TODO(greg): I'm not sure why this was in Replicache#_mutate...
         // Ensure that we run initial pending subscribe functions before starting a
@@ -1180,7 +1183,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
           this.#mutatorRegistry,
           () => this.#closed,
           FormatVersion.Latest,
-          await this.#zero?.getRepTxData('rebase', undefined),
+          this.#zero?.getRepTxData,
         );
       } catch (e) {
         if (e instanceof ClientStateNotFoundError) {

@@ -4,7 +4,7 @@ import type {StoreProvider} from './kv/store.ts';
 import type {Puller} from './puller.ts';
 import type {Pusher} from './pusher.ts';
 import type {MutatorDefs, RequestOptions} from './types.ts';
-import type {TransactionReason} from './transactions.ts';
+import type {DetailedReason} from './transactions.ts';
 import type {Hash} from './hash.ts';
 import type {Store} from './dag/store.ts';
 import type {MaybePromise} from '../../shared/src/types.ts';
@@ -239,13 +239,10 @@ export type ZeroOption<T> = {
    * When a refresh, persist, or pull end occurs zero must fork its IVM sources
    * for use in rebase operations. Replicache will call zero at the start of
    * these operations to get the current IVM sources.
-   *
-   * If `customHead` is provided, the fork is based on the given head of the memDag.
-   * If not, the fork is based on the `sync head`.
    */
   getRepTxData(
-    reason: TransactionReason,
-    customHead:
+    reason: DetailedReason,
+    expectedHead:
       | {
           store: Store;
           hash: Hash;
