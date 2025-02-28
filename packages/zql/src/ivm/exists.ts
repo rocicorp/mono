@@ -20,7 +20,16 @@ import type {SourceSchema} from './schema.ts';
 import {first} from './stream.ts';
 
 type SizeStorageKeyPrefix = `row/${string}/`;
-
+// Key is of format
+// `row/${JSON.stringify(parentJoinKeyValues)}/${JSON.stringify(primaryKeyValues)}`
+// This format allows us to look up an existing cached size for a
+// given set of `parentJoinKeyValues` by scanning for prefix
+// `row/${JSON.stringify(parentJoinKeyValues)}/`, and to look up the cached
+// size for a specific row by the full key.
+// If the parent join and primary key are the same, then format is changed to
+// `row//${JSON.stringify(primaryKeyValues)}` to shorten the key, since there
+// is no point in looking up an existing cached size by
+// `parentJoinKeyValues` if the specific rows cached size is missing.
 type SizeStorageKey = `${SizeStorageKeyPrefix}${string}`;
 
 interface ExistsStorage {
