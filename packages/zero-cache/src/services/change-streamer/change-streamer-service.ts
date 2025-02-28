@@ -17,6 +17,7 @@ import {
   type ChangeStreamMessage,
 } from '../change-source/protocol/current/downstream.ts';
 import type {ChangeSourceUpstream} from '../change-source/protocol/current/upstream.ts';
+import type {SubscriptionState} from '../replicator/schema/replication-state.ts';
 import {
   DEFAULT_MAX_RETRY_DELAY_MS,
   RunningState,
@@ -34,7 +35,6 @@ import {
   AutoResetSignal,
   ensureReplicationConfig,
   markResetRequired,
-  type ReplicationConfig,
 } from './schema/tables.ts';
 import {Storer} from './storer.ts';
 import {Subscriber} from './subscriber.ts';
@@ -48,7 +48,7 @@ export async function initializeStreamer(
   taskID: string,
   changeDB: PostgresDB,
   changeSource: ChangeSource,
-  replicationConfig: ReplicationConfig,
+  subscriptionState: SubscriptionState,
   autoReset: boolean,
   setTimeoutFn = setTimeout,
 ): Promise<ChangeStreamerService> {
@@ -57,12 +57,12 @@ export async function initializeStreamer(
   await ensureReplicationConfig(
     lc,
     changeDB,
-    replicationConfig,
+    subscriptionState,
     shard,
     autoReset,
   );
 
-  const {replicaVersion} = replicationConfig;
+  const {replicaVersion} = subscriptionState;
   return new ChangeStreamerImpl(
     lc,
     shard,

@@ -53,7 +53,7 @@ export default async function runWorker(
   for (const first of [true, false]) {
     try {
       // Note: This performs initial sync of the replica if necessary.
-      const {changeSource, replicationConfig} =
+      const {changeSource, subscriptionState} =
         upstream.type === 'pg'
           ? await initializePostgresChangeSource(
               lc,
@@ -75,7 +75,7 @@ export default async function runWorker(
         must(taskID, `main must set --task-id`),
         changeDB,
         changeSource,
-        replicationConfig,
+        subscriptionState,
         autoReset ?? false,
       );
       break;

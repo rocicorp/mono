@@ -6,6 +6,7 @@ import {equals} from '../../../../../shared/src/set-utils.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../../types/shards.ts';
 import type {Change} from '../../change-source/protocol/current/data.ts';
+import type {SubscriptionState} from '../../replicator/schema/replication-state.ts';
 
 // For readability in the sql statements.
 function schema(shard: ShardID) {
@@ -109,12 +110,11 @@ export async function markResetRequired(db: PostgresDB, shard: ShardID) {
 export async function ensureReplicationConfig(
   lc: LogContext,
   db: PostgresDB,
-  config: ReplicationConfig,
+  subscriptionState: SubscriptionState,
   shard: ShardID,
   autoReset: boolean,
 ) {
-  // Restrict the fields of the supplied `config`.
-  const {publications, replicaVersion} = config;
+  const {publications, replicaVersion, watermark} = subscriptionState;
   const replicaConfig = {publications, replicaVersion};
   const replicationState: Partial<ReplicationState> = {
     lastWatermark: replicaVersion,
@@ -139,6 +139,13 @@ export async function ensureReplicationConfig(
         replicaVersion !== replicaConfig.replicaVersion ||
         !equals(new Set(publications), new Set(replicaConfig.publications))
       ) {
+        if (replicaConfig.replicaVersion !== watermark) {
+          throw new AutoResetSignal(
+            `Cannot reset change db@${replicaVersion} to ` +
+              `service replica@${replicaConfig.replicaVersion} ` +
+              `from watermark ${watermark}`,
+          );
+        }
         lc.info?.(
           `Data in cdc tables @${replicaVersion} is incompatible ` +
             `with replica @${replicaConfig.replicaVersion}. Clearing tables.`,

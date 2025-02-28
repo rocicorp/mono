@@ -19,6 +19,7 @@ import {initChangeLog} from '../../replicator/schema/change-log.ts';
 import {
   getSubscriptionState,
   initReplicationState,
+  type SubscriptionState,
 } from '../../replicator/schema/replication-state.ts';
 import {changeStreamMessageSchema} from '../protocol/current/downstream.ts';
 import {type ChangeSourceUpstream} from '../protocol/current/upstream.ts';
@@ -33,7 +34,7 @@ export async function initializeCustomChangeSource(
   upstreamURI: string,
   shard: ShardConfig,
   replicaDbFile: string,
-): Promise<{replicationConfig: ReplicationConfig; changeSource: ChangeSource}> {
+): Promise<{subscriptionState: SubscriptionState; changeSource: ChangeSource}> {
   await initSyncSchema(
     lc,
     `replica-${shard.appID}-${shard.shardNum}`,
@@ -43,13 +44,13 @@ export async function initializeCustomChangeSource(
   );
 
   const replica = new Database(lc, replicaDbFile);
-  const replicationConfig = getSubscriptionState(new StatementRunner(replica));
+  const subscriptionState = getSubscriptionState(new StatementRunner(replica));
   replica.close();
 
   if (shard.publications.length) {
     // Verify that the publications match what has been synced.
     const requested = [...shard.publications].sort();
-    const replicated = replicationConfig.publications.sort();
+    const replicated = subscriptionState.publications.sort();
     if (!deepEqual(requested, replicated)) {
       throw new Error(
         `Invalid ShardConfig. Requested publications [${requested}] do not match synced publications: [${replicated}]`,
@@ -61,10 +62,10 @@ export async function initializeCustomChangeSource(
     lc,
     upstreamURI,
     shard,
-    replicationConfig,
+    subscriptionState,
   );
 
-  return {replicationConfig, changeSource};
+  return {subscriptionState, changeSource};
 }
 
 class CustomChangeSource implements ChangeSource {
